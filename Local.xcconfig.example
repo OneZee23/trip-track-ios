@@ -1,0 +1,7 @@
+// Copy this file to Local.xcconfig and fill in your values.
+// Local.xcconfig is gitignored — your personal settings stay private.
+//
+// After editing, run: xcodegen generate
+
+PRODUCT_BUNDLE_IDENTIFIER = com.yourname.TripTrack
+DEVELOPMENT_TEAM = YOUR_TEAM_ID

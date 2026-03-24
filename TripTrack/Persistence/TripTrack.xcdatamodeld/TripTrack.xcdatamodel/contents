@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23231" systemVersion="24A335" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="YES" userDefinedModelVersionIdentifier="">
+    <entity name="TripEntity" representedClassName="TripEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="averageSpeed" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="badgesJSON" optional="YES" attributeType="String"/>
+        <attribute name="distance" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="elevation" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="endDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="fuelUsed" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isPrivate" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="maxSpeed" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="previewPolyline" optional="YES" attributeType="Binary"/>
+        <attribute name="region" optional="YES" attributeType="String"/>
+        <attribute name="startDate" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="title" optional="YES" attributeType="String"/>
+        <attribute name="tripDescription" optional="YES" attributeType="String"/>
+        <attribute name="vehicleId" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="xpEarned" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="photos" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="TripPhotoEntity" inverseName="trip" inverseEntity="TripPhotoEntity"/>
+        <relationship name="trackPoints" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="TrackPointEntity" inverseName="trip" inverseEntity="TrackPointEntity"/>
+        <fetchIndex name="byStartDate">
+            <fetchIndexElement property="startDate" type="Binary" order="descending"/>
+        </fetchIndex>
+        <fetchIndex name="byId">
+            <fetchIndexElement property="id" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="TripPhotoEntity" representedClassName="TripPhotoEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="caption" optional="YES" attributeType="String"/>
+        <attribute name="filename" attributeType="String" defaultValueString=""/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="sortOrder" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="timestamp" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="trip" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="TripEntity" inverseName="photos" inverseEntity="TripEntity"/>
+    </entity>
+    <entity name="TrackPointEntity" representedClassName="TrackPointEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="altitude" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="course" attributeType="Double" defaultValueString="-1" usesScalarValueType="YES"/>
+        <attribute name="horizontalAccuracy" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="latitude" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="longitude" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="speed" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="timestamp" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="trip" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="TripEntity" inverseName="trackPoints" inverseEntity="TripEntity"/>
+    </entity>
+    <entity name="VehicleEntity" representedClassName="VehicleEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="avatarEmoji" optional="YES" attributeType="String" defaultValueString="🏎️"/>
+        <attribute name="cityConsumption" optional="YES" attributeType="Double" defaultValueString="10.0" usesScalarValueType="YES"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="fuelPrice" optional="YES" attributeType="Double" defaultValueString="56" usesScalarValueType="YES"/>
+        <attribute name="highwayConsumption" optional="YES" attributeType="Double" defaultValueString="6.0" usesScalarValueType="YES"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="YES" attributeType="String" defaultValueString=""/>
+        <attribute name="odometerKm" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="stickersJSON" optional="YES" attributeType="String"/>
+        <attribute name="vehicleLevel" optional="YES" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
+    </entity>
+    <entity name="UserSettingsEntity" representedClassName="UserSettingsEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="avatarEmoji" optional="YES" attributeType="String" defaultValueString="🏎️"/>
+        <attribute name="bestStreak" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="currentStreak" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="distanceUnit" optional="YES" attributeType="String" defaultValueString="km"/>
+        <attribute name="fuelConsumption" optional="YES" attributeType="Double" defaultValueString="7.8" usesScalarValueType="YES"/>
+        <attribute name="fuelCurrency" optional="YES" attributeType="String" defaultValueString="₽"/>
+        <attribute name="fuelPrice" optional="YES" attributeType="Double" defaultValueString="56" usesScalarValueType="YES"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="language" optional="YES" attributeType="String" defaultValueString="ru"/>
+        <attribute name="lastTripDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="profileLevel" optional="YES" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="profileXP" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="selectedVehicleId" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="themeMode" optional="YES" attributeType="String" defaultValueString="dark"/>
+        <attribute name="volumeUnit" optional="YES" attributeType="String" defaultValueString="liters"/>
+    </entity>
+    <entity name="VisitedGeohashEntity" representedClassName="VisitedGeohashEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="firstVisited" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="hash6" optional="YES" attributeType="String"/>
+        <attribute name="lastVisited" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="visitCount" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <fetchIndex name="byHash6">
+            <fetchIndexElement property="hash6" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="RoadEntity" representedClassName="RoadEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="distanceKm" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="endGeohash" optional="YES" attributeType="String"/>
+        <attribute name="firstDriven" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="geohashSequence" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lastDriven" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="level" optional="YES" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="rarity" optional="YES" attributeType="String" defaultValueString="common"/>
+        <attribute name="startGeohash" optional="YES" attributeType="String"/>
+        <attribute name="timesDriven" optional="YES" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
+    </entity>
+</model>

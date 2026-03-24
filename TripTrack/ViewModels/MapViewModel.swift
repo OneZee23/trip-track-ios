@@ -1,0 +1,430 @@
+import SwiftUI
+import MapKit
+import Combine
+
+@MainActor
+final class MapViewModel: ObservableObject {
+    // MARK: - Map State
+    @Published var userTrackingMode: MKUserTrackingMode = .follow
+    @Published var isDarkMap: Bool = false
+
+    // MARK: - Recording State
+    @Published var isRecording: Bool = false
+    @Published var speed: Double = 0        // km/h
+    @Published var altitude: Double = 0     // meters
+    @Published var distance: Double = 0     // km
+    @Published var duration: String = "00:00"
+    @Published var gpsAccuracy: Double = 0  // meters
+    @Published var trackOverlays: [MKOverlay] = []
+    @Published var pendingBadges: [(badge: Badge, count: Int)] = []
+    @Published var showBadgeCelebration: Bool = false
+    @Published var lastCompletedTrip: Trip?
+    @Published var lastCompletionData: TripCompletionData?
+    @Published var isPaused: Bool = false
+    @Published var discardedJunkTrip: Bool = false
+
+    // MARK: - Zoom
+    @Published var zoomDelta: Double = 0
+    @Published var autoZoomEnabled: Bool = true
+    @Published var targetCameraDistance: Double = 0   // 0 = no auto-zoom active
+    @Published var currentCameraDistance: Double = 1000
+    private var lastManualZoomTime: Date = .distantPast
+
+    private static let minCameraDistance: Double = 200
+    private static let maxCameraDistance: Double = 15_000_000
+
+    var canZoomIn: Bool { currentCameraDistance > Self.minCameraDistance }
+    var canZoomOut: Bool { currentCameraDistance < Self.maxCameraDistance }
+
+    // MARK: - Cached Stats (loaded once, refreshed on stop)
+    @Published var cachedTotalKm: Double = 0
+    @Published var cachedTripCount: Int = 0
+
+    /// Reads selectedVehicleId from settings entity at recording start
+    private var selectedVehicleId: UUID? {
+        gamificationManager.fetchSettingsEntity()?.selectedVehicleId
+    }
+
+    // MARK: - Dependencies
+    var locationManager: LocationManager
+    let tripManager: TripManager
+    let trackManager = SmoothTrackManager()
+    let gamificationManager = GamificationManager()
+    let territoryManager = TerritoryManager()
+    let roadCollectionManager = RoadCollectionManager()
+
+    private var cancellables = Set<AnyCancellable>()
+    private var durationTimer: AnyCancellable?
+    private var recordingStartDate: Date?
+    private var pausedAccumulated: TimeInterval = 0
+    private var pauseStartDate: Date?
+    private var sunCheckTimer: AnyCancellable?
+    private var speedDecayTimer: AnyCancellable?
+    private var lastSpeedUpdate: Date = .distantPast
+    private var speedBuffer: [Double] = []
+    private var lastAutoZoomTime: Date = .distantPast
+    private var mainTrackOverlay: MKPolyline?
+    private var headOverlay: GlowingHeadOverlay?
+    private var lastOverlayUpdate: Date = .distantPast
+
+    init() {
+        let manager = LocationManager()
+        self.locationManager = manager
+        self.tripManager = TripManager(locationManager: manager)
+
+        setupRecordingBindings()
+        setupSunBasedTheme()
+        refreshTripStats()
+
+        // Start GPS immediately so sun theme + location are ready faster
+        locationManager.startRealGPS()
+
+        Task { @MainActor [tripManager, gamificationManager, territoryManager] in
+            tripManager.backfillPreviewPolylines()
+            tripManager.migrateRegionsIfNeeded()
+
+            let allTrips = tripManager.fetchTrips()
+            let settingsEntity = gamificationManager.fetchSettingsEntity()
+            gamificationManager.backfillIfNeeded(trips: allTrips, settingsEntity: settingsEntity)
+
+            territoryManager.backfillIfNeeded()
+            gamificationManager.backfillBadgesIfNeeded(trips: allTrips)
+        }
+    }
+
+    // MARK: - Location
+
+    func requestLocationPermission() {
+        locationManager.startRealGPS()
+    }
+
+    func stopLocationUpdates() {
+        locationManager.stopRealGPS()
+    }
+
+    // MARK: - Tracking Mode
+
+    func cycleTrackingMode() {
+        switch userTrackingMode {
+        case .none:
+            userTrackingMode = .follow
+        case .follow:
+            userTrackingMode = .followWithHeading
+        case .followWithHeading:
+            userTrackingMode = .none
+        @unknown default:
+            userTrackingMode = .none
+        }
+
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+
+    func zoomIn() {
+        lastManualZoomTime = Date()
+        zoomDelta = 1
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    func zoomOut() {
+        lastManualZoomTime = Date()
+        zoomDelta = -1
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    /// Maps speed (km/h) to camera distance (meters) using smooth cubic interpolation.
+    /// 0 km/h → 800m, 40 → 1500m, 80 → 2500m, 120+ → 4000m.
+    private func cameraDistanceForSpeed(_ speedKmh: Double) -> Double {
+        let t = min(max(speedKmh, 0), 140) / 140.0
+        // Smooth ease-in-out cubic: slow changes at low/high speed, faster in mid range
+        let smooth = t * t * (3 - 2 * t)
+        return 800 + smooth * 3200
+    }
+
+    private func updateAutoZoom() {
+        guard autoZoomEnabled, isRecording else {
+            targetCameraDistance = 0
+            return
+        }
+        // Don't override manual zoom for 5 seconds
+        guard Date().timeIntervalSince(lastManualZoomTime) > 5 else { return }
+        // Cooldown: don't re-zoom more often than every 3 seconds
+        guard Date().timeIntervalSince(lastAutoZoomTime) > 3 else { return }
+
+        let newDistance = cameraDistanceForSpeed(speed)
+        // Only update if significant change (>40%) to avoid constant re-zooming
+        if targetCameraDistance == 0 || abs(newDistance - targetCameraDistance) / targetCameraDistance > 0.4 {
+            targetCameraDistance = newDistance
+            lastAutoZoomTime = Date()
+        }
+    }
+
+    // MARK: - Recording
+
+    func toggleRecording() {
+        if isRecording {
+            stopRecording()
+        } else {
+            startRecording()
+        }
+    }
+
+    func togglePause() {
+        guard isRecording else { return }
+        isPaused.toggle()
+        tripManager.isPaused = isPaused
+        if isPaused {
+            pauseStartDate = Date()
+            durationTimer?.cancel()
+            durationTimer = nil
+        } else {
+            if let pauseStart = pauseStartDate {
+                pausedAccumulated += Date().timeIntervalSince(pauseStart)
+                pauseStartDate = nil
+            }
+            durationTimer = Timer.publish(every: 1, on: .main, in: .common)
+                .autoconnect()
+                .sink { [weak self] _ in
+                    self?.updateDuration()
+                }
+        }
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+
+    private func startRecording() {
+        // Reset state
+        isPaused = false
+        tripManager.isPaused = false
+        recordingStartDate = Date()
+        pausedAccumulated = 0
+        pauseStartDate = nil
+
+        // Reset track
+        trackManager.reset()
+        trackManager.startAnimation()
+        mainTrackOverlay = nil
+        headOverlay = nil
+        trackOverlays = []
+
+        // Start trip in CoreData
+        tripManager.startTrip(vehicleId: selectedVehicleId)
+        isRecording = true
+
+        // Switch to follow with heading
+        userTrackingMode = .followWithHeading
+
+        // Duration timer
+        durationTimer = Timer.publish(every: 1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.updateDuration()
+            }
+
+        // Sun-based theme check during recording
+        sunCheckTimer = Timer.publish(every: 300, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self, let loc = self.locationManager.currentLocation else { return }
+                self.updateThemeForSun(coordinate: loc.coordinate)
+            }
+
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+    }
+
+    private func stopRecording() {
+        let completedTrip = tripManager.stopTrip()
+        trackManager.stopAnimation()
+        isRecording = false
+        isPaused = false
+        tripManager.isPaused = false
+        targetCameraDistance = 0
+        durationTimer?.cancel()
+        durationTimer = nil
+        sunCheckTimer?.cancel()
+        sunCheckTimer = nil
+        speedDecayTimer?.cancel()
+        speedDecayTimer = nil
+        mainTrackOverlay = nil
+        headOverlay = nil
+        trackOverlays = []
+        speed = 0
+        altitude = 0
+        distance = 0
+        duration = "00:00"
+
+        // Auto-delete junk trips (< 500m AND < 2 min)
+        if let trip = completedTrip,
+           trip.distance < 500 && trip.duration < 120 {
+            tripManager.deleteTrip(id: trip.id)
+            discardedJunkTrip = true
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.warning)
+            refreshTripStats()
+            return
+        }
+
+        // Refresh cached stats after trip ends
+        refreshTripStats()
+
+        // Store completed trip for summary screen
+        lastCompletedTrip = completedTrip
+
+        // Process gamification (fetch with track points for badge altitude/latitude checks)
+        if let trip = completedTrip {
+            let allTrips = tripManager.fetchTripsWithTrackPoints()
+            let settingsEntity = gamificationManager.fetchSettingsEntity()
+            let vehicleEntity = gamificationManager.fetchVehicleEntity(id: trip.vehicleId)
+
+            let completionData = gamificationManager.processCompletedTrip(
+                trip: trip,
+                allTrips: allTrips,
+                settingsEntity: settingsEntity,
+                vehicleEntity: vehicleEntity
+            )
+
+            // Save earned badge IDs to trip entity
+            let earnedIds = completionData.newBadges.map(\.id)
+            tripManager.saveBadgesJSON(tripId: trip.id, badgeIds: earnedIds)
+
+            // Process road collection
+            var finalData = completionData
+            finalData.roadCard = roadCollectionManager.processTrip(trip)
+            lastCompletionData = finalData
+
+            // Store badges to show after summary sheet is dismissed
+            pendingBadges = completionData.newBadges.map { badge in
+                let count = completionData.repeatedBadgeCounts[badge.id] ?? 1
+                return (badge: badge, count: count)
+            }
+        }
+
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+    }
+
+    func refreshTripStats() {
+        cachedTotalKm = tripManager.fetchTotalDistance() / 1000.0
+        cachedTripCount = tripManager.fetchTripCount()
+    }
+
+    private func setupRecordingBindings() {
+        // Location updates → speed + track points
+        locationManager.$currentLocation
+            .compactMap { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] update in
+                guard let self else { return }
+                let rawSpeed = max(0, update.speed)
+                let speedKmh = rawSpeed < 1.0 ? 0 : rawSpeed * 3.6
+
+                // Median filter: smooth out GPS noise using last 5 readings
+                self.speedBuffer.append(speedKmh)
+                if self.speedBuffer.count > 5 { self.speedBuffer.removeFirst() }
+                let sorted = self.speedBuffer.sorted()
+                self.speed = sorted[sorted.count / 2]
+
+                self.lastSpeedUpdate = Date()
+                self.altitude = update.altitude
+                self.gpsAccuracy = update.horizontalAccuracy
+
+                if self.isRecording && !self.isPaused {
+                    self.trackManager.addPoint(update.coordinate)
+                    self.territoryManager.recordVisit(coordinate: update.coordinate)
+                    self.updateAutoZoom()
+                }
+            }
+            .store(in: &cancellables)
+
+        // Speed decay: if no GPS update for 2s, gradually reduce speed to 0
+        speedDecayTimer = Timer.publish(every: 0.5, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self, self.isRecording, self.speed > 0 else { return }
+                let elapsed = Date().timeIntervalSince(self.lastSpeedUpdate)
+                if elapsed > 2.0 {
+                    // Gradual decay over ~1.5 seconds (3 ticks at 0.5s interval)
+                    let decayed = self.speed * 0.4
+                    self.speed = decayed < 1 ? 0 : decayed
+                    self.speedBuffer.removeAll()
+                }
+            }
+
+        // Main track overlay (confirmed points — solid line, throttled to max 2x/sec)
+        trackManager.$confirmedPoints
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] points in
+                guard let self, self.isRecording, points.count >= 2 else { return }
+                let now = Date()
+                guard now.timeIntervalSince(self.lastOverlayUpdate) >= 0.5 else { return }
+                self.lastOverlayUpdate = now
+                var coords = points
+                self.mainTrackOverlay = MKPolyline(coordinates: &coords, count: coords.count)
+                self.updateTrackOverlays()
+            }
+            .store(in: &cancellables)
+
+        // Head segment overlay (animated, glowing)
+        trackManager.$headSegmentPoints
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] points in
+                guard let self, self.isRecording, points.count >= 2 else { return }
+                self.headOverlay = GlowingHeadOverlay(coordinates: points)
+                self.updateTrackOverlays()
+            }
+            .store(in: &cancellables)
+
+        // Trip distance
+        tripManager.$activeTrip
+            .compactMap { $0?.distanceKm }
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$distance)
+    }
+
+    private func updateTrackOverlays() {
+        var overlays: [MKOverlay] = []
+        if let main = mainTrackOverlay { overlays.append(main) }
+        if let head = headOverlay { overlays.append(head) }
+        trackOverlays = overlays
+    }
+
+    private func updateDuration() {
+        guard isRecording, let start = recordingStartDate else {
+            duration = "00:00"
+            return
+        }
+        let totalSeconds = Int(Date().timeIntervalSince(start) - pausedAccumulated)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            duration = String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            duration = String(format: "%02d:%02d", minutes, seconds)
+        }
+    }
+
+    // MARK: - Sun-Based Theme
+
+    private func setupSunBasedTheme() {
+        // Check once when first location arrives
+        locationManager.$currentLocation
+            .compactMap { $0 }
+            .first()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] update in
+                self?.updateThemeForSun(coordinate: update.coordinate)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func updateThemeForSun(coordinate: CLLocationCoordinate2D) {
+        isDarkMap = SunCalculator.isNight(at: coordinate)
+    }
+
+    func checkSunTheme() {
+        guard let loc = locationManager.currentLocation else { return }
+        updateThemeForSun(coordinate: loc.coordinate)
+    }
+}

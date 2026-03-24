@@ -1,0 +1,41 @@
+# Xcode
+*.xcodeproj/
+xcuserdata/
+*.xcworkspace/
+DerivedData/
+build/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Local config (bundle ID, team ID — personal to each dev)
+Local.xcconfig
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Claude Code
+.claude/
+
+# CocoaPods / SPM
+Pods/
+.build/
+Package.resolved
+
+# Secrets / certificates
+*.env*
+*.key
+*.pem
+*.p12
+*.mobileprovision
+*.cer
