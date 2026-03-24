@@ -217,8 +217,9 @@ xcodebuild test -scheme TripTrack -configuration Debug -destination 'platform=iO
 
 | Документ | Описание |
 |----------|----------|
-| [Business Requirements](./BUSINESS_REQUIREMENTS.md) | Продуктовые требования, сценарии, целевая аудитория |
-| [Technical Solution](./TECHNICAL_SOLUTION.md) | Архитектура, модель данных, технические решения |
+| [Business Requirements](./mvp/business-requirements.md) | Продуктовые требования, сценарии, целевая аудитория |
+| [Technical Solution](./mvp/technical-solution.md) | Архитектура, модель данных, технические решения |
+| [App Store Metadata](./mvp/appstore-metadata.md) | Текущие metadata, review notes и privacy URLs для релиза |
 | [CLAUDE.md](./CLAUDE.md) | Инструкции для Claude Code: архитектура, правила, паттерны |
 
 ---

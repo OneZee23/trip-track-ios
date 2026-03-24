@@ -348,7 +348,7 @@ struct ProfileView: View {
                     assetIcon: "GitHubIcon",
                     iconColor: c.text,
                     label: "GitHub",
-                    url: "https://github.com/OneZee23/trip-track",
+                    url: "https://github.com/OneZee23/trip-track-ios",
                     c: c
                 )
             }

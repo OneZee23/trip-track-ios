@@ -131,7 +131,7 @@ The app uses location services in the foreground and background to record GPS ro
 2026 OneZee
 
 ## Support URL
-https://github.com/OneZee23/trip-track/issues
+https://github.com/OneZee23/trip-track-ios/issues
 
 ## Privacy Policy URL
-https://onezee23.github.io/trip-track/docs/privacy-policy.html
+https://onezee23.github.io/trip-track-ios/docs/privacy-policy.html
