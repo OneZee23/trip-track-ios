@@ -16,13 +16,14 @@ struct TrackingView: View {
                     userTrackingMode: $viewModel.userTrackingMode,
                     overlays: viewModel.trackOverlays,
                     isDarkMap: viewModel.isDarkMap,
-                    bottomInset: viewModel.isRecording ? (tabBarHeight + 120) : idleHUDInset,
+                    bottomInset: viewModel.isRecording ? 0 : idleHUDInset,
                     zoomDelta: $viewModel.zoomDelta,
-                    targetCameraDistance: viewModel.targetCameraDistance,
                     isRecording: viewModel.isRecording,
                     onCameraDistanceChanged: { viewModel.currentCameraDistance = $0 }
                 )
                 .ignoresSafeArea()
+                .allowsHitTesting(!viewModel.isRecording)
+                .modifier(PixelateModifier(active: viewModel.isRecording, scale: 3.0))
             }
 
             // Loading overlay while map initializes
@@ -30,21 +31,28 @@ struct TrackingView: View {
                 CarLoadingView()
             }
 
-            if viewModel.isRecording {
-                recordingOverlay
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                        removal: .opacity
-                    ))
-            } else {
-                idleOverlay
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                        removal: .opacity
-                    ))
+            recordingOverlay
+                .opacity(viewModel.isRecording ? 1 : 0)
+                .allowsHitTesting(viewModel.isRecording)
+
+            idleOverlay
+                .opacity(viewModel.isRecording ? 0 : 1)
+                .allowsHitTesting(!viewModel.isRecording)
+
+            // Shared top bar — always same position
+            VStack {
+                HStack {
+                    backButton
+                    Spacer()
+                    GPSIndicatorView(accuracy: viewModel.gpsAccuracy)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, safeAreaTop + 4)
+                Spacer()
             }
+            .ignoresSafeArea(edges: .top)
         }
-        .animation(.spring(response: 0.5, dampingFraction: 0.82), value: viewModel.isRecording)
+        .animation(.easeInOut(duration: 0.5), value: viewModel.isRecording)
         .onAppear {
             viewModel.requestLocationPermission()
             if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -83,54 +91,135 @@ struct TrackingView: View {
 
     private var recordingOverlay: some View {
         VStack(spacing: 0) {
-            // Top bar: back (left), GPS (right) — flush to safe area top
-            HStack {
-                backButton
-                Spacer()
-                GPSIndicatorView(accuracy: viewModel.gpsAccuracy)
+            // Stats panel — compact, fixed height
+            VStack(spacing: 12) {
+                // Space for shared top bar
+                Color.clear.frame(height: 44)
+
+                // Speed — large
+                VStack(spacing: 2) {
+                    Text("\(Int(viewModel.speed))")
+                        .font(.system(size: 56, weight: .heavy, design: .rounded))
+                        .foregroundStyle(speedColor)
+                        .contentTransition(.numericText())
+                        .animation(.easeInOut(duration: 0.2), value: Int(viewModel.speed))
+                    Text("km/h")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+
+                // Stats row: distance | time | altitude
+                HStack(spacing: 0) {
+                    statItem(
+                        value: String(format: "%.1f", viewModel.distance),
+                        unit: "km",
+                        icon: "arrow.right"
+                    )
+                    Divider()
+                        .frame(height: 28)
+                        .background(.white.opacity(0.2))
+                    statItem(
+                        value: viewModel.duration,
+                        unit: nil,
+                        icon: "clock"
+                    )
+                    Divider()
+                        .frame(height: 28)
+                        .background(.white.opacity(0.2))
+                    statItem(
+                        value: "\(Int(viewModel.altitude))",
+                        unit: "m",
+                        icon: "mountain.2"
+                    )
+                }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, safeAreaTop + 4)
+            .padding(.bottom, 16)
+            .background(Color(red: 0.08, green: 0.08, blue: 0.09))
 
+            // Mini-map takes remaining space (visible behind via ZStack)
             Spacer()
 
-            // Map controls — right side
-            HStack {
-                Spacer()
-                mapControls
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 12)
-            }
+            // Controls: stop (center) + pause (left)
+            VStack(spacing: 12) {
+                HStack(alignment: .center, spacing: 20) {
+                    // Pause — small circle
+                    Button {
+                        viewModel.togglePause()
+                    } label: {
+                        Image(systemName: viewModel.isPaused ? "play.fill" : "pause.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(viewModel.isPaused ? .black : .white)
+                            .frame(width: 48, height: 48)
+                            .background(
+                                viewModel.isPaused ? Color.green : Color.white.opacity(0.15),
+                                in: Circle()
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(viewModel.isPaused ? Color.green.opacity(0.5) : Color.white.opacity(0.2), lineWidth: 2)
+                            )
+                    }
 
-            // HUD + Stop — flush to bottom edge
-            CompactTrackingHUD(
-                speed: viewModel.speed,
-                altitude: viewModel.altitude,
-                distance: viewModel.distance,
-                duration: viewModel.duration,
-                isPaused: viewModel.isPaused,
-                onPause: { viewModel.togglePause() }
-            )
+                    // Stop — large circle with ring (like Start Trip)
+                    Button {
+                        Haptics.success()
+                        viewModel.toggleRecording()
+                    } label: {
+                        ZStack {
+                            // Outer ring
+                            Circle()
+                                .stroke(AppTheme.red.opacity(0.4), lineWidth: 3)
+                                .frame(width: 82, height: 82)
 
-            Button {
-                Haptics.success()
-                viewModel.toggleRecording()
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 16))
-                    Text(lang.language == .ru ? "Завершить" : "Stop trip")
-                        .font(.system(size: 17, weight: .semibold))
+                            // Inner filled circle
+                            Circle()
+                                .fill(AppTheme.red)
+                                .frame(width: 68, height: 68)
+
+                            // Stop icon
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+
+                    // Spacer to balance pause button
+                    Color.clear.frame(width: 48, height: 48)
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(AppTheme.red, in: RoundedRectangle(cornerRadius: 16))
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            .padding(.top, 12)
+            .padding(.bottom, safeAreaBottom + 8)
+            .frame(maxWidth: .infinity)
+            .background(Color(red: 0.08, green: 0.08, blue: 0.09))
         }
-        .ignoresSafeArea(edges: .bottom)
+        .ignoresSafeArea(edges: [.top, .bottom])
+    }
+
+    private func statItem(value: String, unit: String?, icon: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.4))
+            Text(value)
+                .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white)
+                .contentTransition(.numericText())
+            if let unit {
+                Text(unit)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var speedColor: Color {
+        let s = viewModel.speed
+        if s < 40 { return .green }
+        if s < 80 { return AppTheme.accent }
+        return AppTheme.red
     }
 
     // MARK: - Back Button (shared between idle and recording)
@@ -151,16 +240,9 @@ struct TrackingView: View {
 
     private var idleOverlay: some View {
         VStack(spacing: 0) {
-            // Top bar: back (left), GPS (center) — flush to safe area top
-            HStack {
-                backButton
-                Spacer()
-                GPSIndicatorView(accuracy: viewModel.gpsAccuracy)
-                Spacer()
-                Color.clear.frame(width: 44, height: 44)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
+            // Space for shared top bar
+            Color.clear
+                .frame(height: safeAreaTop + 52)
 
             Spacer()
 
@@ -256,6 +338,25 @@ struct TrackingView: View {
 
     private var idleHUDInset: CGFloat {
         tabBarHeight + 380
+    }
+}
+
+// MARK: - Pixel Art Effect
+
+private struct PixelateModifier: ViewModifier {
+    let active: Bool
+    let scale: CGFloat
+
+    func body(content: Content) -> some View {
+        if active {
+            content
+                .compositingGroup()
+                .scaleEffect(1.0 / scale, anchor: .center)
+                .compositingGroup()
+                .scaleEffect(scale, anchor: .center)
+        } else {
+            content
+        }
     }
 }
 

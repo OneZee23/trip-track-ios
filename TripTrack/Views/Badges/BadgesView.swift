@@ -11,6 +11,7 @@ struct BadgesView: View {
     @State private var hiddenCount: Int = 0
     @State private var showHiddenInfo: Bool = false
     @State private var earnCounts: [String: Int] = [:]
+    @State private var lastEarnedDates: [String: Date] = [:]
 
     struct BadgeSection: Identifiable {
         let id: String
@@ -111,6 +112,7 @@ struct BadgesView: View {
                     language: lang.language,
                     colorScheme: scheme,
                     earnCount: badge.isRepeatable ? BadgeManager.earnCount(for: badge.id) : nil,
+                    lastEarnedDate: lastEarnedDates[badge.id],
                     onDismiss: { selectedBadge = nil }
                 )
             }
@@ -135,6 +137,17 @@ struct BadgesView: View {
         sections = result
         hiddenCount = Badge.all.filter { $0.isHidden && !unlockedSet.contains($0.id) }.count
         earnCounts = BadgeManager.allEarnCounts()
+
+        // Compute last earned dates from trips
+        var dates: [String: Date] = [:]
+        for trip in trips {
+            for id in trip.earnedBadgeIds {
+                if dates[id] == nil || trip.startDate > dates[id]! {
+                    dates[id] = trip.startDate
+                }
+            }
+        }
+        lastEarnedDates = dates
     }
 }
 

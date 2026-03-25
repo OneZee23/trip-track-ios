@@ -9,36 +9,9 @@ struct MapViewRepresentable: UIViewRepresentable {
     var isDarkMap: Bool = false
     var bottomInset: CGFloat = 0
     @Binding var zoomDelta: Double
-    var targetCameraDistance: Double = 0
     var isRecording: Bool = false
     var onAnnotationSelected: ((MKPointAnnotation) -> Void)?
     var onCameraDistanceChanged: ((Double) -> Void)?
-
-    init(
-        userTrackingMode: Binding<MKUserTrackingMode>,
-        annotations: [MKPointAnnotation] = [],
-        selectedAnnotation: MKPointAnnotation? = nil,
-        overlays: [MKOverlay] = [],
-        isDarkMap: Bool = false,
-        bottomInset: CGFloat = 0,
-        zoomDelta: Binding<Double> = .constant(0),
-        targetCameraDistance: Double = 0,
-        isRecording: Bool = false,
-        onAnnotationSelected: ((MKPointAnnotation) -> Void)? = nil,
-        onCameraDistanceChanged: ((Double) -> Void)? = nil
-    ) {
-        self._userTrackingMode = userTrackingMode
-        self.annotations = annotations
-        self.selectedAnnotation = selectedAnnotation
-        self.overlays = overlays
-        self.isDarkMap = isDarkMap
-        self.bottomInset = bottomInset
-        self._zoomDelta = zoomDelta
-        self.targetCameraDistance = targetCameraDistance
-        self.isRecording = isRecording
-        self.onAnnotationSelected = onAnnotationSelected
-        self.onCameraDistanceChanged = onCameraDistanceChanged
-    }
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -47,10 +20,9 @@ struct MapViewRepresentable: UIViewRepresentable {
         mapView.showsUserLocation = true
         mapView.userTrackingMode = userTrackingMode
 
-        // Bottom inset so tracking mode centers user above panel
         mapView.layoutMargins = UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
 
-        // Initial camera from system cached location — avoids "world map" flash
+        // Initial camera from system cached location
         if let cachedLocation = CLLocationManager().location {
             let camera = MKMapCamera(
                 lookingAtCenter: cachedLocation.coordinate,
@@ -78,7 +50,7 @@ struct MapViewRepresentable: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
 
-        // Sync tracking mode — native MapKit behavior for all modes
+        // Tracking mode sync
         if !context.coordinator.suppressTrackingCallback,
            mapView.userTrackingMode != userTrackingMode {
             mapView.setUserTrackingMode(userTrackingMode, animated: true)
@@ -89,6 +61,12 @@ struct MapViewRepresentable: UIViewRepresentable {
         if mapView.layoutMargins != newInsets {
             mapView.layoutMargins = newInsets
         }
+
+        // Lock map interaction during recording (static mini-map)
+        mapView.isScrollEnabled = !isRecording
+        mapView.isZoomEnabled = !isRecording
+        mapView.isRotateEnabled = !isRecording
+        mapView.isPitchEnabled = !isRecording
 
         // Dark/light map
         let style: UIUserInterfaceStyle = isDarkMap ? .dark : .light
@@ -114,8 +92,8 @@ struct MapViewRepresentable: UIViewRepresentable {
             }
         }
 
-        // Manual zoom buttons
-        if zoomDelta != 0 {
+        // Manual zoom buttons (idle mode only)
+        if zoomDelta != 0, !isRecording {
             let coordinator = context.coordinator
             let camera = (mapView.camera.copy() as? MKMapCamera) ?? mapView.camera
             let factor = zoomDelta > 0 ? 0.5 : 2.0
@@ -164,29 +142,6 @@ struct MapViewRepresentable: UIViewRepresentable {
             DispatchQueue.main.async { self.zoomDelta = 0 }
         }
 
-        // Speed-based auto-zoom via CameraZoomRange (small EMA steps preserve tracking mode)
-        let coordinator = context.coordinator
-        if targetCameraDistance > 0 {
-            let changed = abs(targetCameraDistance - coordinator.lastAppliedZoom)
-                / max(coordinator.lastAppliedZoom, 1) > 0.03
-            if changed {
-                coordinator.lastAppliedZoom = targetCameraDistance
-                let range = MKMapView.CameraZoomRange(
-                    minCenterCoordinateDistance: targetCameraDistance,
-                    maxCenterCoordinateDistance: targetCameraDistance
-                )
-                mapView.setCameraZoomRange(range, animated: false)
-
-                // Unlock after a moment so user can still pinch-zoom
-                coordinator.zoomUnlockGeneration += 1
-                let gen = coordinator.zoomUnlockGeneration
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak coordinator] in
-                    guard let coordinator, coordinator.zoomUnlockGeneration == gen else { return }
-                    mapView.setCameraZoomRange(nil, animated: false)
-                }
-            }
-        }
-
         // Diff overlays
         let existingOverlays = mapView.overlays
         let oldSet = Set(existingOverlays.map { ObjectIdentifier($0 as AnyObject) })
@@ -209,8 +164,6 @@ struct MapViewRepresentable: UIViewRepresentable {
         var suppressTrackingCallback = false
         var restoreTrackingWork: DispatchWorkItem?
         var savedTrackingMode: MKUserTrackingMode?
-        var lastAppliedZoom: Double = 0
-        var zoomUnlockGeneration: Int = 0
 
         init(_ parent: MapViewRepresentable) {
             self.parent = parent

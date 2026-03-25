@@ -9,7 +9,7 @@ struct TripDetailView: View {
     @State private var pickedImages: [UIImage] = []
     @State private var selectedPhotoIndex: Int?
     @State private var selectedDetailBadge: Badge?
-    @State private var badgeEarnCounts: [String: Int] = [:]
+    @State private var badgeLastEarnedDates: [String: Date] = [:]
     @State private var photoToDelete: TripPhoto?
     @State private var toastItem: ToastItem?
     @State private var isEditingTitle = false
@@ -107,7 +107,7 @@ struct TripDetailView: View {
         .navigationBarHidden(true)
         .onAppear {
             trip = viewModel.tripDetail(id: tripId)
-            badgeEarnCounts = BadgeManager.allEarnCounts()
+            badgeLastEarnedDates = BadgeManager.lastEarnedDates(for: trip?.earnedBadgeIds ?? [], using: mapVM.tripManager)
         }
         .sheet(isPresented: $showPhotoPicker) {
             PhotoPickerView(selectedImages: $pickedImages)
@@ -140,7 +140,7 @@ struct TripDetailView: View {
                     isUnlocked: true,
                     language: lang.language,
                     colorScheme: scheme,
-                    earnCount: badge.isRepeatable ? BadgeManager.earnCount(for: badge.id) : nil,
+                    lastEarnedDate: badgeLastEarnedDates[badge.id],
                     onDismiss: { selectedDetailBadge = nil }
                 )
             }
@@ -409,8 +409,6 @@ struct TripDetailView: View {
                     badgeIds: trip.earnedBadgeIds,
                     maxVisible: 8,
                     size: 36,
-                    showCounts: true,
-                    earnCounts: badgeEarnCounts,
                     onTap: { badge in selectedDetailBadge = badge }
                 )
             }

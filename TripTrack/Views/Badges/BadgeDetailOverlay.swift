@@ -6,6 +6,7 @@ struct BadgeDetailOverlay: View {
     let language: LanguageManager.Language
     let colorScheme: ColorScheme
     var earnCount: Int? = nil
+    var lastEarnedDate: Date? = nil
     let onDismiss: () -> Void
     @State private var appear = false
 
@@ -83,6 +84,12 @@ struct BadgeDetailOverlay: View {
                     (isUnlocked ? AppTheme.green.opacity(0.1) : c.cardAlt),
                     in: Capsule()
                 )
+
+                if isUnlocked, let date = lastEarnedDate {
+                    Text(date.formatted(.dateTime.day().month(.wide).year()))
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textSecondary)
+                }
 
                 Text(badge.category.title(language))
                     .font(.system(size: 11))

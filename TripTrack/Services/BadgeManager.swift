@@ -168,6 +168,24 @@ enum BadgeManager {
         return BadgeEvalResult(allEarned: allEarned, repeatedBadgeCounts: counts)
     }
 
+    // MARK: - Last Earned Dates
+
+    static func lastEarnedDates(for badgeIds: [String], using tripManager: TripManager) -> [String: Date] {
+        guard !badgeIds.isEmpty else { return [:] }
+        let badgeSet = Set(badgeIds)
+        var result: [String: Date] = [:]
+
+        let trips = tripManager.fetchTrips()
+        for trip in trips {
+            for id in trip.earnedBadgeIds where badgeSet.contains(id) {
+                if result[id] == nil || trip.startDate > result[id]! {
+                    result[id] = trip.startDate
+                }
+            }
+        }
+        return result
+    }
+
     // MARK: - Weekend Warrior Check
 
     private static func checkWeekendWarrior(trips: [Trip]) -> Bool {

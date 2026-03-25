@@ -23,14 +23,9 @@ final class MapViewModel: ObservableObject {
     @Published var isPaused: Bool = false
     @Published var discardedJunkTrip: Bool = false
 
-    // MARK: - Camera
+    // MARK: - Camera (idle mode only)
     @Published var zoomDelta: Double = 0
-    @Published var targetCameraDistance: Double = 0  // 0 = no auto-zoom
     @Published var currentCameraDistance: Double = 1000
-    private var lastManualZoomTime: Date = .distantPast
-
-    private var smoothedCameraDistance: Double = 0
-    private static let cameraDistEMAAlpha: Double = 0.15
 
     private static let minCameraDistance: Double = 200
     private static let maxCameraDistance: Double = 15_000_000
@@ -123,64 +118,13 @@ final class MapViewModel: ObservableObject {
     }
 
     func zoomIn() {
-        lastManualZoomTime = Date()
-        targetCameraDistance = 0
         zoomDelta = 1
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     func zoomOut() {
-        lastManualZoomTime = Date()
-        targetCameraDistance = 0
         zoomDelta = -1
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-    }
-
-    // MARK: - Speed-Based Zoom
-
-    private static let speedZoomBreakpoints: [(speed: Double, dist: Double)] = [
-        (0, 400), (30, 700), (60, 1500), (100, 3200), (150, 5000)
-    ]
-
-    private func cameraDistanceForSpeed(_ speedKmh: Double) -> Double {
-        let s = min(max(speedKmh, 0), 150)
-        let breakpoints = Self.speedZoomBreakpoints
-        var lo = breakpoints[0], hi = breakpoints[1]
-        for i in 1..<breakpoints.count {
-            if s <= breakpoints[i].speed {
-                lo = breakpoints[i - 1]
-                hi = breakpoints[i]
-                break
-            }
-            if i == breakpoints.count - 1 {
-                lo = breakpoints[i - 1]
-                hi = breakpoints[i]
-            }
-        }
-        let t = (s - lo.speed) / (hi.speed - lo.speed)
-        let smooth = t * t * (3 - 2 * t)
-        return lo.dist + smooth * (hi.dist - lo.dist)
-    }
-
-    /// Updates target zoom based on speed. Called on every GPS update during recording.
-    private func updateSpeedZoom() {
-        guard isRecording, !isPaused else { return }
-        guard Date().timeIntervalSince(lastManualZoomTime) > 5 else { return }
-
-        let targetDist = cameraDistanceForSpeed(speed)
-        if smoothedCameraDistance == 0 {
-            smoothedCameraDistance = targetDist
-        } else {
-            smoothedCameraDistance += Self.cameraDistEMAAlpha * (targetDist - smoothedCameraDistance)
-        }
-
-        targetCameraDistance = smoothedCameraDistance
-    }
-
-    private func resetZoomState() {
-        smoothedSpeed = 0
-        smoothedCameraDistance = 0
-        targetCameraDistance = 0
     }
 
     // MARK: - Recording
@@ -224,7 +168,7 @@ final class MapViewModel: ObservableObject {
         pausedAccumulated = 0
         pauseStartDate = nil
 
-        resetZoomState()
+        smoothedSpeed = 0
 
         // Reset track
         trackManager.reset()
@@ -237,10 +181,8 @@ final class MapViewModel: ObservableObject {
         tripManager.startTrip(vehicleId: selectedVehicleId)
         isRecording = true
 
-        // Native tracking mode — MapKit handles following, we handle zoom
-        userTrackingMode = .followWithHeading
-        smoothedCameraDistance = cameraDistanceForSpeed(0)
-        targetCameraDistance = smoothedCameraDistance
+        // Simple follow mode — no zoom management
+        userTrackingMode = .follow
 
         // Duration timer
         durationTimer = Timer.publish(every: 1, on: .main, in: .common)
@@ -268,7 +210,6 @@ final class MapViewModel: ObservableObject {
         isPaused = false
         tripManager.isPaused = false
         userTrackingMode = .follow
-        resetZoomState()
         durationTimer?.cancel()
         durationTimer = nil
         sunCheckTimer?.cancel()
@@ -360,7 +301,6 @@ final class MapViewModel: ObservableObject {
                 if self.isRecording && !self.isPaused {
                     self.trackManager.addPoint(update.coordinate)
                     self.territoryManager.recordVisit(coordinate: update.coordinate)
-                    self.updateSpeedZoom()
                 }
             }
             .store(in: &cancellables)
@@ -376,7 +316,6 @@ final class MapViewModel: ObservableObject {
                     let decayed = self.speed * 0.4
                     self.speed = decayed < 1 ? 0 : decayed
                     self.smoothedSpeed = self.speed
-                    self.updateSpeedZoom()
                 }
             }
 
