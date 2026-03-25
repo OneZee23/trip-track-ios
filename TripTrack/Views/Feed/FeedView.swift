@@ -15,6 +15,7 @@ struct FeedView: View {
     @State private var showSettings = false
     @State private var showProfile = false
     @State private var showGarage = false
+    @State private var tripToDelete: Trip?
     @State private var collapsedSections: Set<String> = []
 
     init(tripManager: TripManager, selectedTab: Binding<Int>) {
@@ -152,6 +153,26 @@ struct FeedView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
+        .confirmationDialog(
+            AppStrings.deleteTrip(lang.language),
+            isPresented: Binding(
+                get: { tripToDelete != nil },
+                set: { if !$0 { tripToDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(AppStrings.delete(lang.language), role: .destructive) {
+                if let trip = tripToDelete {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        feedVM.softDeleteTrip(trip)
+                    }
+                }
+                tripToDelete = nil
+            }
+            Button(AppStrings.cancel(lang.language), role: .cancel) {
+                tripToDelete = nil
+            }
+        }
 
         // Recording banner overlay
         if mapVM.isRecording {
@@ -224,26 +245,22 @@ struct FeedView: View {
 
     private func tripCard(_ trip: Trip, c: AppTheme.Colors) -> some View {
         SwipeToDeleteCard(
-            onDelete: {
-                Haptics.action()
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    feedVM.softDeleteTrip(trip)
-                }
-            }
-        ) {
-            Button {
+            onTap: {
                 Haptics.tap()
                 selectedTripId = trip.id
-            } label: {
-                FeedTripCardView(
-                    trip: trip,
-                    vehicleName: activeVehicle?.name,
-                    vehicleEmoji: activeVehicle?.avatarEmoji ?? settings.avatarEmoji,
-                    vehicle: activeVehicle,
-                    fuelCurrency: "₽"
-                )
+            },
+            onDelete: {
+                Haptics.action()
+                tripToDelete = trip
             }
-            .buttonStyle(PressableCardStyle())
+        ) {
+            FeedTripCardView(
+                trip: trip,
+                vehicleName: activeVehicle?.name,
+                vehicleEmoji: activeVehicle?.avatarEmoji ?? settings.avatarEmoji,
+                vehicle: activeVehicle,
+                fuelCurrency: "₽"
+            )
         }
         .onAppear {
             feedVM.loadMoreIfNeeded(currentTrip: trip)

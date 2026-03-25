@@ -19,6 +19,7 @@ struct TrackingView: View {
                     bottomInset: viewModel.isRecording ? (tabBarHeight + 120) : idleHUDInset,
                     zoomDelta: $viewModel.zoomDelta,
                     targetCameraDistance: viewModel.targetCameraDistance,
+                    isRecording: viewModel.isRecording,
                     onCameraDistanceChanged: { viewModel.currentCameraDistance = $0 }
                 )
                 .ignoresSafeArea()

@@ -10,6 +10,7 @@ struct MapViewRepresentable: UIViewRepresentable {
     var bottomInset: CGFloat = 0
     @Binding var zoomDelta: Double
     var targetCameraDistance: Double = 0
+    var isRecording: Bool = false
     var onAnnotationSelected: ((MKPointAnnotation) -> Void)?
     var onCameraDistanceChanged: ((Double) -> Void)?
 
@@ -22,6 +23,7 @@ struct MapViewRepresentable: UIViewRepresentable {
         bottomInset: CGFloat = 0,
         zoomDelta: Binding<Double> = .constant(0),
         targetCameraDistance: Double = 0,
+        isRecording: Bool = false,
         onAnnotationSelected: ((MKPointAnnotation) -> Void)? = nil,
         onCameraDistanceChanged: ((Double) -> Void)? = nil
     ) {
@@ -33,6 +35,7 @@ struct MapViewRepresentable: UIViewRepresentable {
         self.bottomInset = bottomInset
         self._zoomDelta = zoomDelta
         self.targetCameraDistance = targetCameraDistance
+        self.isRecording = isRecording
         self.onAnnotationSelected = onAnnotationSelected
         self.onCameraDistanceChanged = onCameraDistanceChanged
     }
@@ -41,16 +44,27 @@ struct MapViewRepresentable: UIViewRepresentable {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
 
-        // Native blue dot with heading cone
         mapView.showsUserLocation = true
         mapView.userTrackingMode = userTrackingMode
 
-        // Map configuration
+        // Bottom inset so tracking mode centers user above panel
+        mapView.layoutMargins = UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+
+        // Initial camera from system cached location — avoids "world map" flash
+        if let cachedLocation = CLLocationManager().location {
+            let camera = MKMapCamera(
+                lookingAtCenter: cachedLocation.coordinate,
+                fromDistance: 500,
+                pitch: 0,
+                heading: 0
+            )
+            mapView.camera = camera
+        }
+
         mapView.preferredConfiguration = MKStandardMapConfiguration(
             elevationStyle: .realistic
         )
 
-        // Native controls
         mapView.showsCompass = false
         mapView.showsScale = true
         mapView.isPitchEnabled = true
@@ -64,19 +78,19 @@ struct MapViewRepresentable: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
 
-        // Sync tracking mode SwiftUI -> UIKit (skip during zoom animation)
+        // Sync tracking mode — native MapKit behavior for all modes
         if !context.coordinator.suppressTrackingCallback,
            mapView.userTrackingMode != userTrackingMode {
             mapView.setUserTrackingMode(userTrackingMode, animated: true)
         }
 
-        // Shift map center upward when bottom panel overlaps
+        // Bottom inset
         let newInsets = UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
         if mapView.layoutMargins != newInsets {
             mapView.layoutMargins = newInsets
         }
 
-        // Sync dark/light based on sun
+        // Dark/light map
         let style: UIUserInterfaceStyle = isDarkMap ? .dark : .light
         if mapView.overrideUserInterfaceStyle != style {
             mapView.overrideUserInterfaceStyle = style
@@ -84,20 +98,10 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         // Diff annotations
         let existing = mapView.annotations.compactMap { $0 as? MKPointAnnotation }
-
-        let toRemove = existing.filter { e in
-            !annotations.contains(where: { $0 === e })
-        }
-        if !toRemove.isEmpty {
-            mapView.removeAnnotations(toRemove)
-        }
-
-        let toAdd = annotations.filter { n in
-            !existing.contains(where: { $0 === n })
-        }
-        if !toAdd.isEmpty {
-            mapView.addAnnotations(toAdd)
-        }
+        let toRemove = existing.filter { e in !annotations.contains(where: { $0 === e }) }
+        if !toRemove.isEmpty { mapView.removeAnnotations(toRemove) }
+        let toAdd = annotations.filter { n in !existing.contains(where: { $0 === n }) }
+        if !toAdd.isEmpty { mapView.addAnnotations(toAdd) }
 
         // Sync selection
         if let selected = selectedAnnotation {
@@ -110,7 +114,7 @@ struct MapViewRepresentable: UIViewRepresentable {
             }
         }
 
-        // Handle zoom delta
+        // Manual zoom buttons
         if zoomDelta != 0 {
             let coordinator = context.coordinator
             let camera = (mapView.camera.copy() as? MKMapCamera) ?? mapView.camera
@@ -118,26 +122,20 @@ struct MapViewRepresentable: UIViewRepresentable {
             camera.centerCoordinateDistance = max(100, camera.centerCoordinateDistance * factor)
             let isFollowing = userTrackingMode != .none
 
-            // Clear any zoom range lock from previous zoom
             mapView.setCameraZoomRange(nil, animated: false)
 
             if isFollowing, mapView.userLocation.location != nil {
                 camera.centerCoordinate = mapView.userLocation.coordinate
-
-                // Cancel any pending restore from previous zoom press
                 coordinator.restoreTrackingWork?.cancel()
 
-                // Only disable tracking on the first press in a sequence
                 if coordinator.savedTrackingMode == nil {
                     coordinator.savedTrackingMode = userTrackingMode
                     coordinator.suppressTrackingCallback = true
                     mapView.setUserTrackingMode(.none, animated: false)
                 }
 
-                // Apply zoom immediately (no completion-based chaining)
                 mapView.camera = camera
 
-                // Schedule restore — will be cancelled if another zoom comes quickly
                 let modeToRestore = coordinator.savedTrackingMode ?? userTrackingMode
                 let restoreWork = DispatchWorkItem { [weak coordinator] in
                     guard let coordinator, coordinator.savedTrackingMode != nil else { return }
@@ -158,7 +156,6 @@ struct MapViewRepresentable: UIViewRepresentable {
                 coordinator.restoreTrackingWork = restoreWork
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: restoreWork)
             } else {
-                // Free mode → zoom toward screen center
                 UIView.animate(withDuration: 0.3) {
                     mapView.camera = camera
                 }
@@ -167,23 +164,25 @@ struct MapViewRepresentable: UIViewRepresentable {
             DispatchQueue.main.async { self.zoomDelta = 0 }
         }
 
-        // Auto-zoom based on speed — smooth navigation-style animation.
+        // Speed-based auto-zoom via CameraZoomRange (small EMA steps preserve tracking mode)
         let coordinator = context.coordinator
         if targetCameraDistance > 0 {
-            let targetChanged = abs(targetCameraDistance - coordinator.lastAnimatedTargetDistance)
-                / max(coordinator.lastAnimatedTargetDistance, 1) > 0.3
-            if targetChanged {
-                let current = mapView.camera.centerCoordinateDistance
-                if abs(current - targetCameraDistance) / current > 0.2 {
-                    coordinator.lastAnimatedTargetDistance = targetCameraDistance
-                    let camera = (mapView.camera.copy() as? MKMapCamera) ?? mapView.camera
-                    camera.centerCoordinateDistance = targetCameraDistance
-                    if userTrackingMode != .none, mapView.userLocation.location != nil {
-                        camera.centerCoordinate = mapView.userLocation.coordinate
-                    }
-                    UIView.animate(withDuration: 2.5, delay: 0, options: [.curveEaseInOut, .beginFromCurrentState]) {
-                        mapView.camera = camera
-                    }
+            let changed = abs(targetCameraDistance - coordinator.lastAppliedZoom)
+                / max(coordinator.lastAppliedZoom, 1) > 0.03
+            if changed {
+                coordinator.lastAppliedZoom = targetCameraDistance
+                let range = MKMapView.CameraZoomRange(
+                    minCenterCoordinateDistance: targetCameraDistance,
+                    maxCenterCoordinateDistance: targetCameraDistance
+                )
+                mapView.setCameraZoomRange(range, animated: false)
+
+                // Unlock after a moment so user can still pinch-zoom
+                coordinator.zoomUnlockGeneration += 1
+                let gen = coordinator.zoomUnlockGeneration
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak coordinator] in
+                    guard let coordinator, coordinator.zoomUnlockGeneration == gen else { return }
+                    mapView.setCameraZoomRange(nil, animated: false)
                 }
             }
         }
@@ -210,7 +209,8 @@ struct MapViewRepresentable: UIViewRepresentable {
         var suppressTrackingCallback = false
         var restoreTrackingWork: DispatchWorkItem?
         var savedTrackingMode: MKUserTrackingMode?
-        var lastAnimatedTargetDistance: Double = 0
+        var lastAppliedZoom: Double = 0
+        var zoomUnlockGeneration: Int = 0
 
         init(_ parent: MapViewRepresentable) {
             self.parent = parent

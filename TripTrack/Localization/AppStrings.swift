@@ -303,6 +303,12 @@ enum AppStrings {
     static func delete(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Удалить" : "Delete"
     }
+    static func deleteTrip(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Удалить поездку?" : "Delete trip?"
+    }
+    static func cancel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Отмена" : "Cancel"
+    }
     static func noResults(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Ничего не найдено" : "No results"
     }

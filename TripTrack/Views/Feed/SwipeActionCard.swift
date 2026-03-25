@@ -2,11 +2,13 @@ import SwiftUI
 
 /// Swipe-to-reveal delete button in iOS Notes style — rounded pill behind the card
 struct SwipeToDeleteCard<Content: View>: View {
+    let onTap: () -> Void
     let onDelete: () -> Void
     @ViewBuilder let content: () -> Content
 
     @State private var offset: CGFloat = 0
     @State private var revealed = false
+    @State private var isSwiping = false
 
     private let buttonWidth: CGFloat = 72
 
@@ -33,13 +35,21 @@ struct SwipeToDeleteCard<Content: View>: View {
             // Main content — slides left
             content()
                 .offset(x: offset)
-                .gesture(
+                .onTapGesture {
+                    if revealed {
+                        close()
+                    } else if !isSwiping {
+                        onTap()
+                    }
+                }
+                .simultaneousGesture(
                     DragGesture(minimumDistance: 24)
                         .onChanged { value in
                             let h = abs(value.translation.width)
                             let v = abs(value.translation.height)
                             guard h > v * 1.8 else { return }
 
+                            isSwiping = true
                             let drag = value.translation.width
                             if revealed {
                                 let newOffset = -buttonWidth + drag
@@ -55,6 +65,9 @@ struct SwipeToDeleteCard<Content: View>: View {
                             guard h > v else {
                                 withAnimation(.easeOut(duration: 0.2)) {
                                     offset = revealed ? -buttonWidth : 0
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    isSwiping = false
                                 }
                                 return
                             }
@@ -75,6 +88,9 @@ struct SwipeToDeleteCard<Content: View>: View {
                                         offset = 0
                                     }
                                 }
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                isSwiping = false
                             }
                         }
                 )
