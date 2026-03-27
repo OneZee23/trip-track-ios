@@ -18,8 +18,7 @@ struct VehicleCardView: View {
                     RoundedRectangle(cornerRadius: 14)
                         .fill(frameColor.opacity(0.12))
                         .frame(width: 52, height: 52)
-                    Text(vehicle.avatarEmoji)
-                        .font(.system(size: 28))
+                    vehicle.avatarView(size: 44)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {

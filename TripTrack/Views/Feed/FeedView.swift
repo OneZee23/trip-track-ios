@@ -135,6 +135,11 @@ struct FeedView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToTrip)) { notif in
+            if let tripId = notif.object as? UUID {
+                selectedTripId = tripId
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .switchToFeedWithRegionFilter)) { notif in
             if let region = notif.object as? String {
                 feedVM.setRegionFilter(region)

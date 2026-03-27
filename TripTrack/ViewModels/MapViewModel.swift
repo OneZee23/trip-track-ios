@@ -21,6 +21,10 @@ final class MapViewModel: ObservableObject {
     @Published var lastCompletedTrip: Trip?
     @Published var lastCompletionData: TripCompletionData?
     @Published var isPaused: Bool = false
+
+    // Pending state for celebration-first flow
+    private var pendingCompletedTrip: Trip?
+    private var pendingCompletionData: TripCompletionData?
     @Published var discardedJunkTrip: Bool = false
 
     // MARK: - Camera (idle mode only)
@@ -222,8 +226,6 @@ final class MapViewModel: ObservableObject {
     }
 
     private func stopRecording() {
-        LiveActivityManager.shared.endActivity()
-
         let completedTrip = tripManager.stopTrip()
         trackManager.stopAnimation()
         isRecording = false
@@ -247,6 +249,7 @@ final class MapViewModel: ObservableObject {
         // Auto-delete junk trips (< 500m AND < 2 min)
         if let trip = completedTrip,
            trip.distance < 500 && trip.duration < 120 {
+            LiveActivityManager.shared.endActivity()
             tripManager.deleteTrip(id: trip.id)
             discardedJunkTrip = true
             let generator = UINotificationFeedbackGenerator()
@@ -258,8 +261,16 @@ final class MapViewModel: ObservableObject {
         // Refresh cached stats after trip ends
         refreshTripStats()
 
-        // Store completed trip for summary screen
-        lastCompletedTrip = completedTrip
+        // End Live Activity with trip summary (stays on lock screen for 5 min)
+        if let trip = completedTrip {
+            LiveActivityManager.shared.endActivityWithSummary(
+                distance: trip.distanceKm,
+                duration: trip.formattedDuration,
+                avgSpeed: trip.averageSpeedKmh
+            )
+        } else {
+            LiveActivityManager.shared.endActivity()
+        }
 
         // Process gamification — use lightweight fetch (no track points for historical trips).
         // The completedTrip already has track points from the recording session.
@@ -286,17 +297,39 @@ final class MapViewModel: ObservableObject {
             // Process road collection
             var finalData = completionData
             finalData.roadCard = roadCollectionManager.processTrip(trip)
-            lastCompletionData = finalData
 
-            // Store badges to show after summary sheet is dismissed
+            // Collect badges for celebration
             pendingBadges = completionData.newBadges.map { badge in
                 let count = completionData.repeatedBadgeCounts[badge.id] ?? 1
                 return (badge: badge, count: count)
             }
+
+            if !pendingBadges.isEmpty {
+                // Badges earned → show celebration FIRST, then summary after dismiss
+                pendingCompletedTrip = completedTrip
+                pendingCompletionData = finalData
+                showBadgeCelebration = true
+            } else {
+                // No badges → show summary directly
+                lastCompletionData = finalData
+                lastCompletedTrip = completedTrip
+            }
+        } else {
+            // No trip data — shouldn't happen, but safe fallback
+            lastCompletedTrip = completedTrip
         }
 
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
+    }
+
+    /// Called after badge celebration is dismissed to show the trip summary
+    func showPendingSummary() {
+        guard let trip = pendingCompletedTrip else { return }
+        lastCompletionData = pendingCompletionData
+        lastCompletedTrip = trip
+        pendingCompletedTrip = nil
+        pendingCompletionData = nil
     }
 
     func refreshTripStats() {

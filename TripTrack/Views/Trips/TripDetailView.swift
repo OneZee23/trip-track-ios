@@ -218,7 +218,8 @@ struct TripDetailView: View {
 
         var vehiclePart = ""
         if let vehicle = tripVehicle {
-            vehiclePart = " · \(vehicle.avatarEmoji) \(vehicle.name)"
+            let emoji = vehicle.isPixelAvatar ? "🚗" : vehicle.avatarEmoji
+            vehiclePart = " · \(emoji) \(vehicle.name)"
         }
 
         return Text("\(datePart), \(timePart)\(vehiclePart)")

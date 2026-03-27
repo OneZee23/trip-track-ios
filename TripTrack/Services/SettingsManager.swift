@@ -26,6 +26,7 @@ final class SettingsManager: ObservableObject {
         self.persistenceController = persistenceController
         loadSettings()
         loadVehicles()
+        ensureDefaultVehicle()
     }
 
     // MARK: - Settings
@@ -84,6 +85,29 @@ final class SettingsManager: ObservableObject {
         request.sortDescriptors = [NSSortDescriptor(keyPath: \VehicleEntity.name, ascending: true)]
 
         vehicles = (try? context.fetch(request))?.compactMap { vehicleFromEntity($0) } ?? []
+    }
+
+    private func ensureDefaultVehicle() {
+        guard vehicles.isEmpty else { return }
+
+        let randomAvatar = Vehicle.pixelCarAssets.randomElement() ?? "pixel_car_orange"
+        let savedLang = UserDefaults.standard.string(forKey: "appLanguage")
+        let name = savedLang == "ru" ? "Телега" : "Telega"
+
+        let context = persistenceController.container.viewContext
+        let entity = VehicleEntity(context: context)
+        let vehicleId = UUID()
+        entity.id = vehicleId
+        entity.name = name
+        entity.avatarEmoji = randomAvatar
+        entity.odometerKm = 0
+        entity.vehicleLevel = 1
+        entity.createdAt = Date()
+        persistenceController.save()
+
+        selectedVehicleId = vehicleId
+        saveSettings()
+        loadVehicles()
     }
 
     func addVehicle(name: String, emoji: String) {

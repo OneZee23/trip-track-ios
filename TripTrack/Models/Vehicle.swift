@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 struct Vehicle: Identifiable {
     let id: UUID
@@ -41,6 +42,20 @@ struct Vehicle: Identifiable {
 
     static let defaultAvatars = ["🏎️", "🚗", "🏍️", "🚙", "🛻", "🏁", "🗺️", "⛽"]
 
+    // Pixel car assets — exclusive to default "Телега" vehicle, not selectable by user
+    static let pixelCarAssets = [
+        "pixel_car_orange", "pixel_car_green", "pixel_car_black",
+        "pixel_car_gray", "pixel_car_blue", "pixel_car_red"
+    ]
+
+    var isPixelAvatar: Bool {
+        avatarEmoji.hasPrefix("pixel_car_")
+    }
+
+    var avatarImageName: String? {
+        isPixelAvatar ? avatarEmoji : nil
+    }
+
     var levelTitle: String {
         VehicleLevelSystem.title(level: level, lang: .en)
     }
@@ -56,5 +71,18 @@ struct Vehicle: Identifiable {
     var kmToNextLevel: Double? {
         guard level < VehicleLevelSystem.maxLevel else { return nil }
         return VehicleLevelSystem.kmForNextLevel(level) - odometerKm
+    }
+
+    @ViewBuilder
+    func avatarView(size: CGFloat) -> some View {
+        if let imageName = avatarImageName {
+            Image(imageName)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+        } else {
+            Text(avatarEmoji)
+                .font(.system(size: size * 0.6))
+        }
     }
 }

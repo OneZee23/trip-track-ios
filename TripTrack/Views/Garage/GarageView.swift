@@ -139,8 +139,7 @@ struct GarageView: View {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(isActive ? AppTheme.accentBg : c.cardAlt)
                         .frame(width: 44, height: 44)
-                    Text(vehicle.avatarEmoji)
-                        .font(.system(size: 24))
+                    vehicle.avatarView(size: 36)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -185,29 +184,37 @@ struct GarageView: View {
                         }
                     }
                 }
+
+                // Edit menu
+                Menu {
+                    Button {
+                        renameText = vehicle.name
+                        renameVehicleId = vehicle.id
+                    } label: {
+                        Label(isRu ? "Переименовать" : "Rename", systemImage: "pencil")
+                    }
+
+                    Button(role: .destructive) {
+                        settings.deleteVehicle(id: vehicle.id)
+                        if settings.selectedVehicleId == vehicle.id {
+                            settings.selectedVehicleId = settings.vehicles.first?.id
+                            settings.saveSettings()
+                        }
+                    } label: {
+                        Label(isRu ? "Удалить" : "Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
         .buttonStyle(.plain)
-        .contextMenu {
-            Button {
-                renameText = vehicle.name
-                renameVehicleId = vehicle.id
-            } label: {
-                Label(isRu ? "Переименовать" : "Rename", systemImage: "pencil")
-            }
-
-            Button(role: .destructive) {
-                settings.deleteVehicle(id: vehicle.id)
-                if settings.selectedVehicleId == vehicle.id {
-                    settings.selectedVehicleId = settings.vehicles.first?.id
-                    settings.saveSettings()
-                }
-            } label: {
-                Label(isRu ? "Удалить" : "Delete", systemImage: "trash")
-            }
-        }
     }
 
     // MARK: - Empty State

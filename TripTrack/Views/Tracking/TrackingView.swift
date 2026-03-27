@@ -77,8 +77,9 @@ struct TrackingView: View {
             TripCompleteSummaryView(
                 trip: trip,
                 completionData: viewModel.lastCompletionData,
-                onAddPhoto: { dismissSummary() },
-                onAddNotes: { dismissSummary() },
+                onPhotoSaved: { image in
+                    _ = viewModel.tripManager.addPhoto(to: trip.id, image: image)
+                },
                 onDone: { dismissSummary() }
             )
             .presentationDetents([.large])
@@ -311,12 +312,6 @@ struct TrackingView: View {
 
     private func dismissSummary() {
         viewModel.lastCompletedTrip = nil
-        if !viewModel.pendingBadges.isEmpty {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(500))
-                viewModel.showBadgeCelebration = true
-            }
-        }
     }
 
     private var trackingIcon: String {

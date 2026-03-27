@@ -5,6 +5,7 @@ struct IdleHUDView: View {
     let tripCount: Int
     let onStartTrip: () -> Void
     @EnvironmentObject private var lang: LanguageManager
+    @State private var isPressing = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,19 +50,35 @@ struct IdleHUDView: View {
                 Spacer().frame(height: 20)
             }
 
-            // Start button
-            Button(action: onStartTrip) {
-                HStack(spacing: 10) {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 16))
-                    Text(AppStrings.startTrip(lang.language))
-                        .font(.system(size: 18, weight: .bold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 18)
-                .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 16))
+            // Start button — long press to begin recording
+            HStack(spacing: 10) {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 16))
+                Text(AppStrings.startTrip(lang.language))
+                    .font(.system(size: 18, weight: .bold))
             }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 16))
+            .scaleEffect(isPressing ? 0.95 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: isPressing)
+            .gesture(
+                LongPressGesture(minimumDuration: 0.3)
+                    .onChanged { _ in
+                        isPressing = true
+                    }
+                    .onEnded { _ in
+                        isPressing = false
+                        let generator = UIImpactFeedbackGenerator(style: .heavy)
+                        generator.impactOccurred()
+                        onStartTrip()
+                    }
+            )
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onEnded { _ in isPressing = false }
+            )
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }

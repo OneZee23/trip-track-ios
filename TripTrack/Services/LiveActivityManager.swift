@@ -113,6 +113,33 @@ final class LiveActivityManager {
         lastUpdateDate = nil
     }
 
+    func endActivityWithSummary(distance: Double, duration: String, avgSpeed: Double) {
+        guard let activity = currentActivity else { return }
+
+        print("[LiveActivity] Ending with summary id=\(activity.id)")
+
+        let finalState = TripActivityAttributes.ContentState(
+            speedKmh: 0,
+            distanceKm: distance,
+            isPaused: false,
+            pausedDuration: 0,
+            isFinished: true,
+            finalDuration: duration,
+            averageSpeedKmh: avgSpeed
+        )
+
+        Task {
+            await activity.update(.init(state: finalState, staleDate: nil))
+            await activity.end(
+                .init(state: finalState, staleDate: nil),
+                dismissalPolicy: .after(Date().addingTimeInterval(300))
+            )
+        }
+
+        currentActivity = nil
+        lastUpdateDate = nil
+    }
+
     // MARK: - Cleanup
 
     private func endAllActivities() {

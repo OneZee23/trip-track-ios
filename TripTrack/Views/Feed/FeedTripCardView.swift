@@ -38,8 +38,12 @@ struct FeedTripCardView: View {
                         .fill(AppTheme.accentBg)
                         .frame(width: 36, height: 36)
                         .overlay {
-                            Text(vehicleEmoji)
-                                .font(.system(size: 18))
+                            if let vehicle, vehicle.isPixelAvatar {
+                                vehicle.avatarView(size: 30)
+                            } else {
+                                Text(vehicleEmoji)
+                                    .font(.system(size: 18))
+                            }
                         }
 
                     VStack(alignment: .leading, spacing: 2) {

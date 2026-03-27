@@ -5,6 +5,9 @@ extension Notification.Name {
     static let switchToFeedWithRegionFilter = Notification.Name("switchToFeedWithRegionFilter")
     static let switchToFeedTab = Notification.Name("switchToFeedTab")
     static let feedScrollToTop = Notification.Name("feedScrollToTop")
+    static let switchToTrackingTab = Notification.Name("switchToTrackingTab")
+    static let openTripDetail = Notification.Name("openTripDetail")
+    static let navigateToTrip = Notification.Name("navigateToTrip")
 }
 
 struct ContentView: View {
@@ -45,6 +48,11 @@ struct ContentView: View {
                 onDismiss: {
                     mapVM.pendingBadges = []
                     mapVM.showBadgeCelebration = false
+                    // Show trip summary after celebration (if there's a pending trip)
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(300))
+                        mapVM.showPendingSummary()
+                    }
                 }
             )
             .environmentObject(lang)
@@ -60,6 +68,19 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .switchToFeedTab)) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {
                 selectedTab = 0
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToTrackingTab)) { _ in
+            selectedTab = 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openTripDetail)) { notification in
+            if let tripId = notification.object as? UUID {
+                // Switch to feed tab and navigate to trip detail
+                selectedTab = 0
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(300))
+                    NotificationCenter.default.post(name: .navigateToTrip, object: tripId)
+                }
             }
         }
         .onAppear {

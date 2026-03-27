@@ -1,16 +1,18 @@
 import SwiftUI
 import MapKit
+import PhotosUI
 
 struct TripCompleteSummaryView: View {
     let trip: Trip
     var completionData: TripCompletionData?
-    let onAddPhoto: () -> Void
-    let onAddNotes: () -> Void
+    let onPhotoSaved: (UIImage) -> Void
     let onDone: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @State private var showXP = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var savedPhotoCount = 0
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -83,24 +85,14 @@ struct TripCompleteSummaryView: View {
                 gamificationSection(data: data, c: c)
             }
 
-            // Action buttons
+            // Photo button
             HStack(spacing: 12) {
-                Button(action: onAddPhoto) {
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                     Label(
-                        lang.language == .ru ? "Фото" : "Photo",
-                        systemImage: "camera.fill"
-                    )
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .background(AppTheme.accentBg, in: RoundedRectangle(cornerRadius: 12))
-                }
-
-                Button(action: onAddNotes) {
-                    Label(
-                        lang.language == .ru ? "Заметка" : "Note",
-                        systemImage: "pencil"
+                        savedPhotoCount > 0
+                            ? (lang.language == .ru ? "Фото (\(savedPhotoCount))" : "Photo (\(savedPhotoCount))")
+                            : (lang.language == .ru ? "Добавить фото" : "Add photo"),
+                        systemImage: savedPhotoCount > 0 ? "checkmark.circle.fill" : "camera.fill"
                     )
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AppTheme.accent)
@@ -111,6 +103,17 @@ struct TripCompleteSummaryView: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
+            .onChange(of: selectedPhotoItem) { _, item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        onPhotoSaved(image)
+                        savedPhotoCount += 1
+                    }
+                    selectedPhotoItem = nil
+                }
+            }
 
             // Done button
             Button(action: onDone) {

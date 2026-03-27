@@ -12,5 +12,9 @@ struct TripActivityAttributes: ActivityAttributes {
         var isPaused: Bool
         /// Accumulated paused seconds — used to offset the timer display
         var pausedDuration: TimeInterval
+        /// Trip finished — show summary instead of live data
+        var isFinished: Bool = false
+        var finalDuration: String?
+        var averageSpeedKmh: Double?
     }
 }
