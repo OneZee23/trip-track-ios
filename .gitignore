@@ -27,6 +27,9 @@ Local.xcconfig
 # Claude Code
 .claude/
 
+# App Store docs (private)
+docs/APP_STORE_SUBMISSION.md
+
 # CocoaPods / SPM
 Pods/
 .build/
