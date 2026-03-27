@@ -51,6 +51,9 @@ targets:
       - path: TripTrackLiveActivity
         excludes:
           - Info.plist
+          - "**/*.xcassets/*"
+      - path: TripTrackLiveActivity/Assets.xcassets
+        type: asset
       - path: TripTrackShared
     settings:
       base:

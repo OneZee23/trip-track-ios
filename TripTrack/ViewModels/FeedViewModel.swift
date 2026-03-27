@@ -77,9 +77,12 @@ final class FeedViewModel: ObservableObject {
     // MARK: - Actions
 
     func loadTrips() {
-        allTrips = tripManager.fetchTrips()
-        // Geocoding retry is now handled automatically by TripManager
-        // via CacheManager.networkRestored publisher
+        var fetched = tripManager.fetchTrips()
+        // Exclude trip pending soft-delete (not yet committed to CoreData)
+        if let pendingId = pendingDeleteTrip?.id {
+            fetched.removeAll { $0.id == pendingId }
+        }
+        allTrips = fetched
         rebuildCalendarCaches()
         applyFilters()
     }

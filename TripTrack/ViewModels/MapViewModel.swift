@@ -165,11 +165,16 @@ final class MapViewModel: ObservableObject {
                 }
         }
         // Update Live Activity with pause state
+        var elapsed: TimeInterval?
+        if isPaused, let start = recordingStartDate {
+            elapsed = Date().timeIntervalSince(start) - pausedAccumulated
+        }
         LiveActivityManager.shared.updateActivity(
             speed: speed,
             distance: distance,
             isPaused: isPaused,
-            pausedDuration: pausedAccumulated
+            pausedDuration: pausedAccumulated,
+            elapsedAtPause: elapsed
         )
 
         let generator = UIImpactFeedbackGenerator(style: .light)
@@ -198,9 +203,14 @@ final class MapViewModel: ObservableObject {
         isRecording = true
 
         // Start Live Activity on Lock Screen / Dynamic Island
+        let settings = SettingsManager.shared
+        let vehicle = settings.vehicles.first { $0.id == selectedVehicleId } ?? settings.vehicles.first
+        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
         LiveActivityManager.shared.startActivity(
             tripId: tripManager.activeTrip?.id ?? UUID(),
-            startDate: recordingStartDate ?? Date()
+            startDate: recordingStartDate ?? Date(),
+            vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
+            vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
         )
 
         // Simple follow mode — no zoom management
@@ -462,6 +472,7 @@ final class MapViewModel: ObservableObject {
 
     private func updateThemeForSun(coordinate: CLLocationCoordinate2D) {
         isDarkMap = SunCalculator.isNight(at: coordinate)
+        UserDefaults.standard.set(isDarkMap, forKey: "liveActivityDarkMode")
     }
 
     func checkSunTheme() {

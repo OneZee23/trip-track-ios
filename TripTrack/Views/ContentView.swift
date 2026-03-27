@@ -8,6 +8,7 @@ extension Notification.Name {
     static let switchToTrackingTab = Notification.Name("switchToTrackingTab")
     static let openTripDetail = Notification.Name("openTripDetail")
     static let navigateToTrip = Notification.Name("navigateToTrip")
+    static let dismissTripSummary = Notification.Name("dismissTripSummary")
 }
 
 struct ContentView: View {
@@ -82,6 +83,12 @@ struct ContentView: View {
                     NotificationCenter.default.post(name: .navigateToTrip, object: tripId)
                 }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dismissTripSummary)) { _ in
+            // Dismiss any showing summary/celebration when deep-linking to trip detail
+            mapVM.lastCompletedTrip = nil
+            mapVM.showBadgeCelebration = false
+            mapVM.pendingBadges = []
         }
         .onAppear {
             if UserDefaults.standard.bool(forKey: "needsDemoTrip") {

@@ -12,49 +12,46 @@ final class LiveActivityManager {
     private init() {
         let authInfo = ActivityAuthorizationInfo()
         print("[LiveActivity] areActivitiesEnabled: \(authInfo.areActivitiesEnabled)")
-        print("[LiveActivity] frequentPushesEnabled: \(authInfo.frequentPushesEnabled)")
 
         let existing = Activity<TripActivityAttributes>.activities
         print("[LiveActivity] Found \(existing.count) orphaned activities on init")
-        for activity in existing {
-            print("[LiveActivity]   orphan id=\(activity.id) state=\(activity.activityState)")
-        }
-        // Cleanup is done in startActivity() via endAllActivities() — NOT here,
-        // because Task{} in init would race with startActivity() and kill the new activity.
     }
 
-    // MARK: - Public API
+    /// Current language & dark mode — read fresh on every update
+    private var currentLanguage: String {
+        UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
+    }
 
-    func startActivity(tripId: UUID, startDate: Date) {
+    private var currentIsDarkMode: Bool {
+        UserDefaults.standard.bool(forKey: "liveActivityDarkMode")
+    }
+
+    // MARK: - Start
+
+    func startActivity(tripId: UUID, startDate: Date, vehicleName: String, vehicleAvatar: String) {
         let authInfo = ActivityAuthorizationInfo()
-        print("[LiveActivity] startActivity called — areActivitiesEnabled: \(authInfo.areActivitiesEnabled)")
-
         guard authInfo.areActivitiesEnabled else {
-            print("[LiveActivity] ⚠️ Activities are DISABLED. User needs to enable in Settings > TripTrack > Live Activities")
+            print("[LiveActivity] ⚠️ Activities DISABLED")
             return
         }
 
-        // End any existing activities synchronously first, then start new one
         currentActivity = nil
         lastUpdateDate = nil
 
         Task {
-            // Await cleanup of all orphaned activities before starting
             for activity in Activity<TripActivityAttributes>.activities {
-                print("[LiveActivity] Ending orphan id=\(activity.id)")
-                await activity.end(
-                    .init(state: activity.content.state, staleDate: nil),
-                    dismissalPolicy: .immediate
-                )
+                await activity.end(.init(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate)
             }
 
-            // Now start the new activity
-            let attributes = TripActivityAttributes(tripId: tripId, startDate: startDate)
+            let attributes = TripActivityAttributes(
+                tripId: tripId,
+                startDate: startDate,
+                vehicleName: vehicleName,
+                vehicleAvatar: vehicleAvatar
+            )
             let initialState = TripActivityAttributes.ContentState(
-                speedKmh: 0,
-                distanceKm: 0,
-                isPaused: false,
-                pausedDuration: 0
+                speedKmh: 0, distanceKm: 0, isPaused: false, pausedDuration: 0,
+                language: currentLanguage, isDarkMode: currentIsDarkMode
             )
 
             do {
@@ -65,77 +62,68 @@ final class LiveActivityManager {
                 )
                 self.currentActivity = activity
                 self.lastUpdateDate = Date()
-                print("[LiveActivity] ✅ Started activity id=\(activity.id)")
+                print("[LiveActivity] ✅ Started id=\(activity.id)")
             } catch {
-                print("[LiveActivity] ❌ Failed to start: \(error)")
+                print("[LiveActivity] ❌ Failed: \(error)")
             }
         }
     }
 
-    func updateActivity(speed: Double, distance: Double, isPaused: Bool, pausedDuration: TimeInterval) {
+    // MARK: - Update
+
+    func updateActivity(speed: Double, distance: Double, isPaused: Bool, pausedDuration: TimeInterval, elapsedAtPause: TimeInterval? = nil) {
         guard let activity = currentActivity else { return }
 
-        // Throttle updates, but always push pause/stop state changes
+        // Throttle, but always push pause state changes
         if let lastUpdate = lastUpdateDate,
            Date().timeIntervalSince(lastUpdate) < throttleInterval {
-            let currentState = activity.content.state
-            if currentState.isPaused == isPaused {
+            if activity.content.state.isPaused == isPaused {
                 return
             }
         }
 
         let state = TripActivityAttributes.ContentState(
-            speedKmh: speed,
-            distanceKm: distance,
-            isPaused: isPaused,
-            pausedDuration: pausedDuration
+            speedKmh: speed, distanceKm: distance, isPaused: isPaused,
+            pausedDuration: pausedDuration, elapsedAtPause: elapsedAtPause,
+            language: currentLanguage, isDarkMode: currentIsDarkMode
         )
 
-        Task {
-            await activity.update(.init(state: state, staleDate: nil))
-        }
-
+        Task { await activity.update(.init(state: state, staleDate: nil)) }
         lastUpdateDate = Date()
     }
 
+    // MARK: - End
+
     func endActivity() {
-        guard let activity = currentActivity else { return }
-
-        print("[LiveActivity] Ending activity id=\(activity.id)")
-        Task {
-            await activity.end(
-                .init(state: activity.content.state, staleDate: nil),
-                dismissalPolicy: .immediate
-            )
+        // End tracked activity
+        if let activity = currentActivity {
+            Task {
+                await activity.end(.init(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate)
+            }
+            currentActivity = nil
+            lastUpdateDate = nil
         }
-
-        currentActivity = nil
-        lastUpdateDate = nil
+        // Also end any lingering activities (e.g. finished summary still showing)
+        Task {
+            for activity in Activity<TripActivityAttributes>.activities {
+                await activity.end(.init(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate)
+            }
+        }
     }
 
     func endActivityWithSummary(distance: Double, duration: String, avgSpeed: Double) {
         guard let activity = currentActivity else { return }
 
-        print("[LiveActivity] Ending with summary id=\(activity.id)")
-
         let finalState = TripActivityAttributes.ContentState(
-            speedKmh: 0,
-            distanceKm: distance,
-            isPaused: false,
-            pausedDuration: 0,
-            isFinished: true,
-            finalDuration: duration,
-            averageSpeedKmh: avgSpeed
+            speedKmh: 0, distanceKm: distance, isPaused: false, pausedDuration: 0,
+            isFinished: true, finalDuration: duration, averageSpeedKmh: avgSpeed,
+            language: currentLanguage, isDarkMode: currentIsDarkMode
         )
 
         Task {
             await activity.update(.init(state: finalState, staleDate: nil))
-            await activity.end(
-                .init(state: finalState, staleDate: nil),
-                dismissalPolicy: .after(Date().addingTimeInterval(300))
-            )
+            await activity.end(.init(state: finalState, staleDate: nil), dismissalPolicy: .after(Date().addingTimeInterval(300)))
         }
-
         currentActivity = nil
         lastUpdateDate = nil
     }
@@ -143,38 +131,13 @@ final class LiveActivityManager {
     // MARK: - Cleanup
 
     private func endAllActivities() {
-        // End tracked activity
         if let activity = currentActivity {
-            Task {
-                await activity.end(
-                    .init(state: activity.content.state, staleDate: nil),
-                    dismissalPolicy: .immediate
-                )
-            }
+            Task { await activity.end(.init(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate) }
             currentActivity = nil
             lastUpdateDate = nil
         }
-
-        // End any orphaned activities from previous sessions
         for activity in Activity<TripActivityAttributes>.activities {
-            Task {
-                await activity.end(
-                    .init(state: activity.content.state, staleDate: nil),
-                    dismissalPolicy: .immediate
-                )
-            }
-        }
-    }
-
-    private func cleanupOrphanedActivities() {
-        Task {
-            for activity in Activity<TripActivityAttributes>.activities {
-                print("[LiveActivity] Cleaning orphan id=\(activity.id)")
-                await activity.end(
-                    .init(state: activity.content.state, staleDate: nil),
-                    dismissalPolicy: .immediate
-                )
-            }
+            Task { await activity.end(.init(state: activity.content.state, staleDate: nil), dismissalPolicy: .immediate) }
         }
     }
 }

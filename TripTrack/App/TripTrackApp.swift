@@ -34,10 +34,17 @@ struct TripTrackApp: App {
         case "recording":
             NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
         case "trip":
+            // Dismiss the finished Live Activity since user tapped through
+            LiveActivityManager.shared.endActivity()
+            // Dismiss any summary/celebration screens that might be showing
+            NotificationCenter.default.post(name: .dismissTripSummary, object: nil)
             // Extract trip ID from path: triptrack://trip/{uuid}
             let tripIdString = url.pathComponents.dropFirst().first ?? ""
             if let tripId = UUID(uuidString: tripIdString) {
-                NotificationCenter.default.post(name: .openTripDetail, object: tripId)
+                // Small delay to let dismissals complete
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(name: .openTripDetail, object: tripId)
+                }
             }
         default:
             break

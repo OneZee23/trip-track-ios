@@ -54,6 +54,7 @@ struct TrackingView: View {
         }
         .animation(.easeInOut(duration: 0.5), value: viewModel.isRecording)
         .onAppear {
+            viewModel.refreshTripStats()
             viewModel.requestLocationPermission()
             if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                let window = scene.windows.first {

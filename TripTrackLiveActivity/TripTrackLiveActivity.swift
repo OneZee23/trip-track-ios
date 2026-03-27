@@ -2,10 +2,51 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
+// MARK: - Colors
+
+private let accentOrange = Color(red: 1.0, green: 0.584, blue: 0.0)
+private let accentRed = Color(red: 1.0, green: 0.231, blue: 0.188)
+private let lightBg = Color(red: 0.949, green: 0.949, blue: 0.969)
+private let darkBg = Color(red: 0.11, green: 0.11, blue: 0.12)
+
+// MARK: - Adaptive colors
+
+private struct WidgetColors {
+    let bg: Color
+    let text: Color
+    let textSecondary: Color
+    let textTertiary: Color
+    let cellBg: Color
+    let buttonBg: Color
+
+    static func from(isDark: Bool) -> WidgetColors {
+        isDark ? .dark : .light
+    }
+
+    static let light = WidgetColors(
+        bg: lightBg,
+        text: Color.black.opacity(0.85),
+        textSecondary: Color.black.opacity(0.45),
+        textTertiary: Color.black.opacity(0.3),
+        cellBg: Color.black.opacity(0.04),
+        buttonBg: Color.black.opacity(0.05)
+    )
+
+    static let dark = WidgetColors(
+        bg: darkBg,
+        text: Color.white.opacity(0.9),
+        textSecondary: Color.white.opacity(0.5),
+        textTertiary: Color.white.opacity(0.35),
+        cellBg: Color.white.opacity(0.08),
+        buttonBg: Color.white.opacity(0.1)
+    )
+}
+
+// MARK: - Widget
+
 struct TripTrackLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: TripActivityAttributes.self) { context in
-            // Lock Screen banner
             if context.state.isFinished {
                 FinishedLockScreenView(context: context)
                     .widgetURL(URL(string: "triptrack://trip/\(context.attributes.tripId.uuidString)"))
@@ -15,139 +56,99 @@ struct TripTrackLiveActivity: Widget {
             }
         } dynamicIsland: { context in
             DynamicIsland {
-                // Expanded
                 DynamicIslandExpandedRegion(.leading) {
                     if context.state.isFinished {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.green)
-                            Text("Done")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title3).foregroundStyle(accentOrange)
                     } else {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(Int(context.state.speedKmh))")
-                                .font(.title2.bold())
-                            + Text(" km/h")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                            Text("\(Int(context.state.speedKmh))").font(.title2.bold())
+                            + Text(" km/h").font(.caption).foregroundColor(.secondary)
                         }
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(formattedDistance(context.state.distanceKm))
-                            .font(.title2.bold())
-                        + Text(" km")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        Text(fmtDist(context.state.distanceKm)).font(.title2.bold())
+                        + Text(context.state.isRu ? " км" : " km").font(.caption).foregroundColor(.secondary)
                     }
                 }
                 DynamicIslandExpandedRegion(.center) {
                     if context.state.isFinished {
-                        if let dur = context.state.finalDuration {
-                            Text(dur)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
+                        Text(context.state.finalDuration ?? "").font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     } else {
-                        durationView(context: context)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        timerText(context: context).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     if !context.state.isFinished {
-                        HStack(spacing: 16) {
+                        HStack(spacing: 12) {
                             Button(intent: PauseTripIntent()) {
-                                Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
-                                    .font(.body.bold())
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 8)
+                                HStack(spacing: 6) {
+                                    Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
+                                        .font(.system(size: 13, weight: .bold))
+                                    Text(context.state.isPaused
+                                         ? (context.state.isRu ? "Продолжить" : "Resume")
+                                         : (context.state.isRu ? "Пауза" : "Pause"))
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                .frame(maxWidth: .infinity).padding(.vertical, 7)
                             }
                             .buttonStyle(.plain)
                             .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
 
                             Button(intent: StopTripIntent()) {
-                                Image(systemName: "stop.fill")
-                                    .font(.body.bold())
-                                    .foregroundStyle(.red)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 8)
+                                Image(systemName: "square.fill")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(accentRed)
+                                    .frame(width: 48).padding(.vertical, 7)
                             }
                             .buttonStyle(.plain)
-                            .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                            .background(accentRed.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
                 }
             } compactLeading: {
                 if context.state.isFinished {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(accentOrange)
                 } else {
                     Label {
-                        Text("\(Int(context.state.speedKmh))")
-                            .font(.caption.bold())
+                        Text("\(Int(context.state.speedKmh))").font(.caption.bold())
                     } icon: {
-                        Image(systemName: "location.fill")
-                            .foregroundStyle(.blue)
+                        Image(systemName: "location.fill").foregroundStyle(accentOrange)
                     }
                 }
             } compactTrailing: {
-                Text(formattedDistance(context.state.distanceKm) + " km")
-                    .font(.caption)
+                Text(fmtDist(context.state.distanceKm) + (context.state.isRu ? " км" : " km")).font(.caption)
             } minimal: {
-                if context.state.isFinished {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                } else {
-                    Image(systemName: "location.fill")
-                        .foregroundStyle(.blue)
-                }
+                Image(systemName: context.state.isFinished ? "checkmark.circle.fill" : "location.fill")
+                    .foregroundStyle(accentOrange)
             }
             .widgetURL(context.state.isFinished
                 ? URL(string: "triptrack://trip/\(context.attributes.tripId.uuidString)")
-                : URL(string: "triptrack://recording")
-            )
+                : URL(string: "triptrack://recording"))
         }
     }
-
-    // MARK: - Duration View
 
     @ViewBuilder
-    private func durationView(context: ActivityViewContext<TripActivityAttributes>) -> some View {
-        if context.state.isPaused {
-            let elapsed = Date().timeIntervalSince(context.attributes.startDate) - context.state.pausedDuration
-            Text(formatDuration(elapsed))
-                .monospacedDigit()
+    private func timerText(context: ActivityViewContext<TripActivityAttributes>) -> some View {
+        if context.state.isPaused, let elapsed = context.state.elapsedAtPause {
+            Text(fmtTime(elapsed)).monospacedDigit()
+        } else if context.state.isPaused {
+            Text("--:--").monospacedDigit()
         } else {
-            let adjustedStart = context.attributes.startDate.addingTimeInterval(context.state.pausedDuration)
-            Text(timerInterval: adjustedStart...(.distantFuture), countsDown: false)
-                .monospacedDigit()
+            let adj = context.attributes.startDate.addingTimeInterval(context.state.pausedDuration)
+            Text(timerInterval: adj...(.distantFuture), countsDown: false).monospacedDigit()
         }
     }
 
-    // MARK: - Helpers
-
-    private func formattedDistance(_ km: Double) -> String {
-        if km < 10 {
-            return String(format: "%.1f", km)
-        }
-        return String(format: "%.0f", km)
+    private func fmtDist(_ km: Double) -> String {
+        km < 10 ? String(format: "%.1f", km) : String(format: "%.0f", km)
     }
 
-    private func formatDuration(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds))
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        let s = total % 60
-        if h > 0 {
-            return String(format: "%d:%02d:%02d", h, m, s)
-        }
-        return String(format: "%02d:%02d", m, s)
+    private func fmtTime(_ s: TimeInterval) -> String {
+        let t = max(0, Int(s)); let h = t / 3600, m = (t % 3600) / 60, sec = t % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
     }
 }
 
@@ -155,187 +156,221 @@ struct TripTrackLiveActivity: Widget {
 
 private struct LiveLockScreenView: View {
     let context: ActivityViewContext<TripActivityAttributes>
+    private var isRu: Bool { context.state.isRu }
+    private var isPixel: Bool { context.attributes.vehicleAvatar.hasPrefix("pixel_car_") }
+    private var c: WidgetColors { .from(isDark: context.state.isDarkMode) }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Branding header
-            HStack(spacing: 4) {
-                Image(systemName: "location.fill")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.blue)
+            // Row 1: Header + TripTrack label
+            HStack(spacing: 10) {
+                // Car icon
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(accentOrange.opacity(0.1))
+                        .frame(width: 36, height: 36)
+                    if isPixel {
+                        Image(context.attributes.vehicleAvatar)
+                            .resizable().scaledToFit()
+                            .frame(width: 28, height: 28)
+                    } else {
+                        Text(context.attributes.vehicleAvatar)
+                            .font(.system(size: 18))
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 5) {
+                        Text(context.state.isPaused
+                             ? (context.state.isRu ? "На паузе" : "Paused")
+                             : (context.state.isRu ? "Запись маршрута" : "Recording"))
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(c.text)
+                            .lineLimit(1)
+                        if !context.state.isPaused {
+                            Circle().fill(accentRed).frame(width: 6, height: 6)
+                        }
+                    }
+                    HStack(spacing: 4) {
+                        Image(systemName: "car.fill").font(.system(size: 10))
+                        Text(context.attributes.vehicleName).font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(c.textSecondary)
+                    .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                // TripTrack branding
                 Text("TripTrack")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.bottom, 10)
 
-            // Main content
-            HStack(spacing: 12) {
-                // Speed
-                VStack(spacing: 2) {
-                    Text("\(Int(context.state.speedKmh))")
-                        .font(.title.bold())
-                        .monospacedDigit()
-                    Text("km/h")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 64)
-
-                // Divider
-                Rectangle()
-                    .fill(.secondary.opacity(0.3))
-                    .frame(width: 1, height: 36)
-
-                // Distance + Duration
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "road.lanes")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text(formattedDistance(context.state.distanceKm) + " km")
-                            .font(.subheadline.bold())
-                            .monospacedDigit()
+            // Row 2: Stats
+            HStack(spacing: 8) {
+                statCell(
+                    label: isRu ? "ВРЕМЯ В ПУТИ" : "TIME",
+                    value: { timerValue }
+                )
+                statCell(
+                    label: isRu ? "ПРОЙДЕНО" : "DIST",
+                    value: {
+                        HStack(alignment: .lastTextBaseline, spacing: 2) {
+                            Text(fmtDist(context.state.distanceKm))
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(c.text)
+                            Text(context.state.isRu ? "км" : "km")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(c.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    HStack(spacing: 4) {
-                        Image(systemName: "timer")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        durationView
-                            .font(.subheadline)
-                            .monospacedDigit()
-                    }
-                }
+                )
+            }
+            .padding(.bottom, 8)
 
-                Spacer()
-
-                // Buttons
-                HStack(spacing: 8) {
-                    Button(intent: PauseTripIntent()) {
+            // Row 3: Controls
+            HStack(spacing: 8) {
+                Button(intent: PauseTripIntent()) {
+                    HStack(spacing: 6) {
                         Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
-                            .font(.title3)
-                            .frame(width: 40, height: 40)
+                            .font(.system(size: 13, weight: .bold))
+                        Text(context.state.isPaused
+                             ? (context.state.isRu ? "Продолжить" : "Resume")
+                             : (context.state.isRu ? "Пауза" : "Pause"))
+                            .font(.system(size: 13, weight: .semibold))
                     }
-                    .buttonStyle(.plain)
-                    .background(.ultraThinMaterial, in: Circle())
-
-                    Button(intent: StopTripIntent()) {
-                        Image(systemName: "stop.fill")
-                            .font(.title3)
-                            .foregroundStyle(.red)
-                            .frame(width: 40, height: 40)
-                    }
-                    .buttonStyle(.plain)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .foregroundStyle(c.text)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 36)
                 }
+                .buttonStyle(.plain)
+                .background(c.buttonBg, in: RoundedRectangle(cornerRadius: 12))
+
+                Button(intent: StopTripIntent()) {
+                    Image(systemName: "square.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(accentRed)
+                        .frame(width: 52, height: 36)
+                }
+                .buttonStyle(.plain)
+                .background(accentRed.opacity(context.state.isDarkMode ? 0.2 : 0.08), in: RoundedRectangle(cornerRadius: 12))
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 14)
+        .activityBackgroundTint(c.bg)
     }
 
-    // MARK: - Duration
+    private func statCell<V: View>(label: String, @ViewBuilder value: () -> V) -> some View {
+        VStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: 9, weight: .heavy))
+                .foregroundStyle(c.textTertiary)
+                .tracking(0.4)
+            value()
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 52)
+        .background(c.cellBg, in: RoundedRectangle(cornerRadius: 12))
+    }
 
     @ViewBuilder
-    private var durationView: some View {
-        if context.state.isPaused {
-            let elapsed = Date().timeIntervalSince(context.attributes.startDate) - context.state.pausedDuration
-            Text(formatDuration(elapsed))
-        } else {
-            let adjustedStart = context.attributes.startDate.addingTimeInterval(context.state.pausedDuration)
-            Text(timerInterval: adjustedStart...(.distantFuture), countsDown: false)
+    private var timerValue: some View {
+        Group {
+            if context.state.isPaused, let elapsed = context.state.elapsedAtPause {
+                Text(fmtTime(elapsed))
+            } else if context.state.isPaused {
+                Text("--:--")
+            } else {
+                let adj = context.attributes.startDate.addingTimeInterval(context.state.pausedDuration)
+                Text(timerInterval: adj...(.distantFuture), countsDown: false)
+            }
         }
+        .font(.system(size: 20, weight: .bold, design: .rounded))
+        .monospacedDigit()
+        .foregroundStyle(c.text)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
     }
 
-    private func formattedDistance(_ km: Double) -> String {
+    private func fmtDist(_ km: Double) -> String {
         km < 10 ? String(format: "%.1f", km) : String(format: "%.0f", km)
     }
 
-    private func formatDuration(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds))
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        let s = total % 60
-        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%02d:%02d", m, s)
+    private func fmtTime(_ s: TimeInterval) -> String {
+        let t = max(0, Int(s)); let h = t / 3600, m = (t % 3600) / 60, sec = t % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
     }
 }
 
-// MARK: - Finished Trip Lock Screen
+// MARK: - Finished Lock Screen
 
 private struct FinishedLockScreenView: View {
     let context: ActivityViewContext<TripActivityAttributes>
+    private var isRu: Bool { context.state.isRu }
+    private var c: WidgetColors { .from(isDark: context.state.isDarkMode) }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Branding header
-            HStack(spacing: 4) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.green)
-                Text("TripTrack")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
+            // TripTrack label top-right
+            HStack {
                 Spacer()
-                Text("Tap to view details")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                Text("TripTrack")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 6)
+            .padding(.top, 6)
 
-            // Summary
-            HStack(spacing: 0) {
-                // Distance
-                VStack(spacing: 2) {
-                    Text(formattedDistance(context.state.distanceKm))
-                        .font(.title2.bold())
-                        .monospacedDigit()
-                    Text("km")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-
-                Rectangle()
-                    .fill(.secondary.opacity(0.3))
-                    .frame(width: 1, height: 32)
-
-                // Duration
-                VStack(spacing: 2) {
-                    Text(context.state.finalDuration ?? "--:--")
-                        .font(.title2.bold())
-                        .monospacedDigit()
-                    Text("time")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-
-                Rectangle()
-                    .fill(.secondary.opacity(0.3))
-                    .frame(width: 1, height: 32)
-
-                // Avg Speed
-                VStack(spacing: 2) {
-                    Text(String(format: "%.0f", context.state.averageSpeedKmh ?? 0))
-                        .font(.title2.bold())
-                        .monospacedDigit()
-                    Text("avg km/h")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
+            // Check icon
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(accentOrange.opacity(0.1))
+                    .frame(width: 44, height: 44)
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(accentOrange)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .padding(.bottom, 8)
+
+            Text(context.state.isRu ? "Маршрут сохранен" : "Route saved")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(c.text)
+                .padding(.bottom, 3)
+
+            Text(summaryText)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(c.textSecondary)
+                .padding(.bottom, 10)
+
+            // CTA
+            HStack {
+                Text(context.state.isRu ? "Открыть автодневник" : "Open trip diary")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .frame(height: 38)
+            .background(accentOrange, in: RoundedRectangle(cornerRadius: 12))
         }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 14)
+        .activityBackgroundTint(c.bg)
     }
 
-    private func formattedDistance(_ km: Double) -> String {
-        km < 10 ? String(format: "%.1f", km) : String(format: "%.0f", km)
+    private var summaryText: String {
+        let d = context.state.distanceKm < 10
+            ? String(format: "%.1f", context.state.distanceKm)
+            : String(format: "%.0f", context.state.distanceKm)
+        let u = isRu ? "км" : "km"
+        return "\(context.attributes.vehicleName) • \(d) \(u) • \(context.state.finalDuration ?? "--:--")"
     }
 }
