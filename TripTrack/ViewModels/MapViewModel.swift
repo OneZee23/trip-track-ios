@@ -73,9 +73,6 @@ final class MapViewModel: ObservableObject {
         setupSunBasedTheme()
         refreshTripStats()
 
-        // Start GPS immediately so sun theme + location are ready faster
-        locationManager.startRealGPS()
-
         Task { @MainActor [tripManager, gamificationManager, territoryManager] in
             tripManager.backfillPreviewPolylines()
             tripManager.migrateRegionsIfNeeded()
@@ -241,9 +238,14 @@ final class MapViewModel: ObservableObject {
         // Store completed trip for summary screen
         lastCompletedTrip = completedTrip
 
-        // Process gamification (fetch with track points for badge altitude/latitude checks)
+        // Process gamification — use lightweight fetch (no track points for historical trips).
+        // The completedTrip already has track points from the recording session.
         if let trip = completedTrip {
-            let allTrips = tripManager.fetchTripsWithTrackPoints()
+            var allTrips = tripManager.fetchTrips()
+            // Replace the lightweight version with the full trip (has track points)
+            if let idx = allTrips.firstIndex(where: { $0.id == trip.id }) {
+                allTrips[idx] = trip
+            }
             let settingsEntity = gamificationManager.fetchSettingsEntity()
             let vehicleEntity = gamificationManager.fetchVehicleEntity(id: trip.vehicleId)
 
@@ -275,8 +277,9 @@ final class MapViewModel: ObservableObject {
     }
 
     func refreshTripStats() {
-        cachedTotalKm = tripManager.fetchTotalDistance() / 1000.0
-        cachedTripCount = tripManager.fetchTripCount()
+        let stats = tripManager.fetchTripStats()
+        cachedTotalKm = stats.totalDistance / 1000.0
+        cachedTripCount = stats.count
     }
 
     private func setupRecordingBindings() {
@@ -289,9 +292,15 @@ final class MapViewModel: ObservableObject {
                 let rawSpeed = max(0, update.speed)
                 let speedKmh = rawSpeed < 1.0 ? 0 : rawSpeed * 3.6
 
-                // EMA filter: smooth speed transitions
-                let alpha = Self.speedEMAAlpha
-                self.smoothedSpeed = alpha * speedKmh + (1 - alpha) * self.smoothedSpeed
+                // After a background gap (>3s without updates), reset EMA
+                // so speed immediately shows the real value
+                let gap = Date().timeIntervalSince(self.lastSpeedUpdate)
+                if gap > 3.0 {
+                    self.smoothedSpeed = speedKmh
+                } else {
+                    let alpha = Self.speedEMAAlpha
+                    self.smoothedSpeed = alpha * speedKmh + (1 - alpha) * self.smoothedSpeed
+                }
                 self.speed = self.smoothedSpeed
 
                 self.lastSpeedUpdate = Date()

@@ -28,7 +28,7 @@ struct GPSIndicatorView: View {
             }
             scheduleAutoDismiss()
         }
-        .overlay(alignment: .top) {
+        .overlay(alignment: .topTrailing) {
             if showTooltip {
                 tooltipCard
                     .offset(y: 44)

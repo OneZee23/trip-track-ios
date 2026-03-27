@@ -15,8 +15,13 @@ struct LightRoutePreview: View {
         Canvas { context, size in
             guard coordinates.count >= 2 else { return }
 
-            // Simplify for performance (RDP in degrees, ~3m)
-            let simplified = GeometryUtils.simplifyRDP(coordinates, epsilon: 0.00003)
+            // Skip RDP if already simplified (e.g. previewCoordinates from feed cards ~20 points)
+            let simplified: [CLLocationCoordinate2D]
+            if coordinates.count > 30 {
+                simplified = GeometryUtils.simplifyRDP(coordinates, epsilon: 0.00003)
+            } else {
+                simplified = coordinates
+            }
             guard simplified.count >= 2 else { return }
 
             // Compute bounding box
@@ -65,24 +70,43 @@ struct LightRoutePreview: View {
 
             context.stroke(
                 path,
-                with: .color(accentColor.opacity(0.8)),
-                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                with: .color(accentColor.opacity(0.7)),
+                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
             )
 
             // Start dot (green)
             let startPt = toPoint(simplified[0])
-            let dotSize: CGFloat = 6
+            let dotSize: CGFloat = 5
             context.fill(
                 Path(ellipseIn: CGRect(x: startPt.x - dotSize/2, y: startPt.y - dotSize/2, width: dotSize, height: dotSize)),
                 with: .color(.green)
             )
 
-            // End dot (red)
+            // End marker: checkered flag (adaptive direction)
             let endPt = toPoint(simplified[simplified.count - 1])
-            context.fill(
-                Path(ellipseIn: CGRect(x: endPt.x - dotSize/2, y: endPt.y - dotSize/2, width: dotSize, height: dotSize)),
-                with: .color(.red)
-            )
+            let poleH: CGFloat = 10
+            let flagW: CGFloat = 7
+            let flagH: CGFloat = 5
+            let cellW = flagW / 2
+            let cellH = flagH / 2
+
+            // Flip flag downward if endpoint is near top edge
+            let drawUp = endPt.y > poleH + flagH + 2
+
+            // Flagpole
+            var polePath = Path()
+            polePath.move(to: CGPoint(x: endPt.x, y: endPt.y))
+            polePath.addLine(to: CGPoint(x: endPt.x, y: endPt.y + (drawUp ? -poleH : poleH)))
+            context.stroke(polePath, with: .color(.primary), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+
+            // Checkered pattern (2x2)
+            let flagOrigin = drawUp
+                ? CGPoint(x: endPt.x, y: endPt.y - poleH)
+                : CGPoint(x: endPt.x, y: endPt.y + poleH)
+            context.fill(Path(CGRect(x: flagOrigin.x, y: flagOrigin.y, width: cellW, height: cellH)), with: .color(.black))
+            context.fill(Path(CGRect(x: flagOrigin.x + cellW, y: flagOrigin.y + cellH, width: cellW, height: cellH)), with: .color(.black))
+            context.fill(Path(CGRect(x: flagOrigin.x + cellW, y: flagOrigin.y, width: cellW, height: cellH)), with: .color(.white))
+            context.fill(Path(CGRect(x: flagOrigin.x, y: flagOrigin.y + cellH, width: cellW, height: cellH)), with: .color(.white))
         }
         .background(c.cardAlt)
     }

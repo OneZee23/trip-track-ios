@@ -67,7 +67,11 @@ struct IdleHUDView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 24)
-                .fill(Color(red: 0.08, green: 0.08, blue: 0.09))
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(Color(red: 0.08, green: 0.08, blue: 0.09).opacity(0.75))
+                )
         )
         .environment(\.colorScheme, .dark)
         .padding(.horizontal, 20)

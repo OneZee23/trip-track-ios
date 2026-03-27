@@ -77,6 +77,7 @@ class LocationManager: ObservableObject {
         }
 
         // Полностью останавливаем GPS — он включится снова при входе на экран записи
+        realGPS.isRecording = false
         realGPS.stop()
         mode = .real
         isTracking = false
@@ -85,6 +86,7 @@ class LocationManager: ObservableObject {
     private func startRealTracking() {
         mode = .real
         // Switch to high-accuracy recording mode
+        realGPS.isRecording = true
         realGPS.setRecordingMode()
 
         activeProviderCancellable = realGPS.locationPublisher

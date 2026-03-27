@@ -137,8 +137,15 @@ struct RegionsView: View {
                         .foregroundStyle(c.textSecondary)
                         .tracking(0.5)
 
-                    // Accent progress bar (visual only, shows proportion relative to a milestone)
-                    let progressFraction = min(Double(tileCount) / max(Double(tileCount + 100), 1.0), 1.0)
+                    // Accent progress bar — milestone-based
+                    let nextMilestone: Int = {
+                        if tileCount < 100 { return 100 }
+                        if tileCount < 500 { return 500 }
+                        if tileCount < 1000 { return 1000 }
+                        if tileCount < 5000 { return 5000 }
+                        return 10000
+                    }()
+                    let progressFraction = min(Double(tileCount) / Double(nextMilestone), 1.0)
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule()
@@ -150,6 +157,10 @@ struct RegionsView: View {
                         }
                     }
                     .frame(height: 4)
+
+                    Text("\(tileCount)/\(nextMilestone)")
+                        .font(.system(size: 10, weight: .medium).monospacedDigit())
+                        .foregroundStyle(c.textTertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 

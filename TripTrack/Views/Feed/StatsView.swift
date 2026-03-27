@@ -406,7 +406,15 @@ struct StatsView: View {
     // MARK: - Calculations
 
     private func calculateAll() {
-        allTrips = tripManager.fetchTrips()
+        // Use StatsCache to avoid re-fetching when no trips changed
+        let count = tripManager.fetchTripCount()
+        let lastDate = tripManager.fetchLastTripDate()
+        if let cached = StatsCache.tripsIfValid(currentCount: count, currentLastDate: lastDate) {
+            allTrips = cached
+        } else {
+            allTrips = tripManager.fetchTrips()
+            StatsCache.update(trips: allTrips, count: count, lastDate: lastDate)
+        }
 
         let now = Date()
         let thisMonthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now))!

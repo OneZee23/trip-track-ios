@@ -11,7 +11,6 @@ struct Trip: Identifiable {
     var trackPoints: [TrackPoint]
     var photos: [TripPhoto]
 
-    // New fields
     var title: String?
     var tripDescription: String?
     var fuelUsed: Double

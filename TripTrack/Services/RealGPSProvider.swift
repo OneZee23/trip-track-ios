@@ -6,17 +6,20 @@ import Combine
 class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private let locationSubject = PassthroughSubject<LocationUpdate, Never>()
-    
+
     private(set) var currentLocation: LocationUpdate?
-    
+
     var locationPublisher: AnyPublisher<LocationUpdate, Never> {
         locationSubject.eraseToAnyPublisher()
     }
-    
+
     private let maxAccuracy: Double = 100.0 // meters
     private let maxSpeedMs: Double = 83.3 // ~300 km/h
     private let maxLocationAge: TimeInterval = 10.0 // seconds
-    
+
+    /// Whether we're actively recording a trip (used to force-resume if iOS pauses updates)
+    var isRecording = false
+
     override init() {
         super.init()
         manager.delegate = self
@@ -74,6 +77,18 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         print("Location error: \(error.localizedDescription)")
+    }
+
+    func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
+        print("⚠️ iOS paused location updates (isRecording: \(isRecording))")
+        if isRecording {
+            // Force resume — we must keep tracking during an active trip
+            manager.startUpdatingLocation()
+        }
+    }
+
+    func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
+        print("✅ iOS resumed location updates")
     }
     
     private func isValidLocation(_ location: CLLocation) -> Bool {

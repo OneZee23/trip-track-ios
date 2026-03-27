@@ -15,6 +15,8 @@ struct TripDetailView: View {
     @State private var isEditingTitle = false
     @State private var editedTitle: String = ""
     @State private var originalTitle: String = ""
+    @State private var cachedCoordinates: [CLLocationCoordinate2D] = []
+    @State private var cachedSpeeds: [Double] = []
     @FocusState private var isTitleFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -38,11 +40,12 @@ struct TripDetailView: View {
                         GeometryReader { geo in
                             let offset = geo.frame(in: .named("detailScroll")).minY
                             let stretch = max(0, offset)
+                            let stretchScale = (mapBaseHeight + stretch) / mapBaseHeight
                             ZStack {
-                                if trip.trackPoints.count > 1 {
+                                if cachedCoordinates.count > 1 {
                                     RouteMapView(
-                                        coordinates: trip.trackPoints.map(\.coordinate),
-                                        speeds: trip.trackPoints.map(\.speed),
+                                        coordinates: cachedCoordinates,
+                                        speeds: cachedSpeeds,
                                         isInteractive: true
                                     )
                                 } else {
@@ -54,7 +57,8 @@ struct TripDetailView: View {
                                         }
                                 }
                             }
-                            .frame(height: mapBaseHeight + stretch)
+                            .frame(height: mapBaseHeight)
+                            .scaleEffect(x: 1, y: stretchScale, anchor: .top)
                             .offset(y: -stretch)
                         }
                         .frame(height: mapBaseHeight)
@@ -105,8 +109,13 @@ struct TripDetailView: View {
         .background(EnableSwipeBack())
         .ignoresSafeArea()
         .navigationBarHidden(true)
-        .onAppear {
+        .task(id: tripId) {
+            guard trip == nil else { return }
             trip = viewModel.tripDetail(id: tripId)
+            if let t = trip {
+                cachedCoordinates = t.trackPoints.map(\.coordinate)
+                cachedSpeeds = t.trackPoints.map(\.speed)
+            }
             badgeLastEarnedDates = BadgeManager.lastEarnedDates(for: trip?.earnedBadgeIds ?? [], using: mapVM.tripManager)
         }
         .sheet(isPresented: $showPhotoPicker) {
@@ -114,12 +123,11 @@ struct TripDetailView: View {
         }
         .onChange(of: pickedImages) { newImages in
             for image in newImages {
-                _ = mapVM.tripManager.addPhoto(to: tripId, image: image)
+                if let photo = mapVM.tripManager.addPhoto(to: tripId, image: image) {
+                    trip?.photos.append(photo)
+                }
             }
-            if !newImages.isEmpty {
-                trip = viewModel.tripDetail(id: tripId)
-                pickedImages = []
-            }
+            pickedImages = []
         }
         .fullScreenCover(isPresented: Binding(
             get: { selectedPhotoIndex != nil },
@@ -158,7 +166,7 @@ struct TripDetailView: View {
                 if let photo = photoToDelete {
                     Haptics.action()
                     mapVM.tripManager.deletePhoto(id: photo.id, from: tripId)
-                    trip = viewModel.tripDetail(id: tripId)
+                    trip?.photos.removeAll { $0.id == photo.id }
                     toastItem = ToastItem(
                         type: .success,
                         message: AppStrings.photoDeleted(lang.language)

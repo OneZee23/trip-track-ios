@@ -15,6 +15,7 @@ struct ScratchMapView: UIViewRepresentable {
         mapView.isPitchEnabled = true
         mapView.isRotateEnabled = true
         mapView.preferredConfiguration = MKStandardMapConfiguration(elevationStyle: .flat)
+        mapView.alpha = 0 // Start hidden, fade in after fog renders
         return mapView
     }
 
@@ -22,7 +23,7 @@ struct ScratchMapView: UIViewRepresentable {
         let coordinator = context.coordinator
         mapView.overrideUserInterfaceStyle = isDark ? .dark : .light
 
-        let hashesChanged = visitedGeohashes != coordinator.lastGeohashes
+        let hashesChanged = coordinator.lastGeohashes == nil || visitedGeohashes != coordinator.lastGeohashes
         let themeChanged = coordinator.isDark != isDark
         coordinator.isDark = isDark
 
@@ -66,6 +67,13 @@ struct ScratchMapView: UIViewRepresentable {
                     coordinator.currentFogRenderer = renderer
                     coordinator.currentFogOverlay = fog
                     mapView.addOverlay(fog, level: .aboveLabels)
+
+                    // Wait for MapKit to render fog tiles, then fade in
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        UIView.animate(withDuration: 0.5, delay: 0, options: .curveEaseOut) {
+                            mapView.alpha = 1
+                        }
+                    }
                 }
             }
 
@@ -104,7 +112,7 @@ struct ScratchMapView: UIViewRepresentable {
         var currentFogOverlay: FogOverlay?
         var currentFogRenderer: FogOverlayRenderer?
         var currentPolylines: [MKPolyline] = []
-        var lastGeohashes: Set<String> = []
+        var lastGeohashes: Set<String>? = nil // nil = never loaded, forces first update
         var fogGenerationToken: UInt = 0
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {

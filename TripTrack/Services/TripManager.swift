@@ -32,6 +32,13 @@ final class TripManager: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Auto-retry geocoding when network comes back
+        CacheManager.shared.networkRestored
+            .sink { [weak self] in
+                self?.retryGeocodingForUntitledTrips()
+            }
+            .store(in: &cancellables)
+
         cleanupOrphanedTrips()
     }
 
@@ -44,6 +51,7 @@ final class TripManager: ObservableObject {
         entity.maxSpeed = 0
         entity.averageSpeed = 0
         entity.vehicleId = vehicleId
+        entity.lastModifiedAt = Date()
         persistenceController.save()
 
         activeTripEntity = entity
@@ -66,6 +74,7 @@ final class TripManager: ObservableObject {
 
         guard let entity = activeTripEntity else { return nil }
         entity.endDate = Date()
+        entity.lastModifiedAt = Date()
         updateEntityStats(entity)
         generatePreviewPolyline(for: entity)
         persistenceController.save()
@@ -85,9 +94,37 @@ final class TripManager: ObservableObject {
     func fetchTrips() -> [Trip] {
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "endDate != nil")
+        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
         request.fetchBatchSize = 25
+
+        guard let entities = try? context.fetch(request) else { return [] }
+        return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
+    }
+
+    /// Paginated fetch — CoreData-level limit/offset for scalable feed loading.
+    func fetchTrips(limit: Int, offset: Int) -> [Trip] {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
+        request.fetchLimit = limit
+        request.fetchOffset = offset
+        request.fetchBatchSize = limit
+
+        guard let entities = try? context.fetch(request) else { return [] }
+        return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
+    }
+
+    /// Fetch trips modified since a given date — for incremental server sync.
+    func fetchTripsModifiedSince(_ date: Date) -> [Trip] {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "lastModifiedAt > %@ AND syncStatus != %d",
+            date as NSDate, SyncStatus.synced.rawValue
+        )
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.lastModifiedAt, ascending: true)]
 
         guard let entities = try? context.fetch(request) else { return [] }
         return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
@@ -96,7 +133,7 @@ final class TripManager: ObservableObject {
     func fetchTripsWithTrackPoints() -> [Trip] {
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "endDate != nil")
+        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
 
         guard let entities = try? context.fetch(request) else { return [] }
@@ -106,14 +143,53 @@ final class TripManager: ObservableObject {
     func fetchTripCount() -> Int {
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "endDate != nil")
+        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
         return (try? context.count(for: request)) ?? 0
+    }
+
+    func fetchLastTripDate() -> Date? {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
+        request.fetchLimit = 1
+        return (try? context.fetch(request).first)?.startDate
+    }
+
+    /// Combined stats query — single CoreData fetch for count + total distance.
+    func fetchTripStats() -> (count: Int, totalDistance: Double) {
+        let context = persistenceController.container.viewContext
+        let predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
+
+        let countRequest: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        countRequest.predicate = predicate
+        let count = (try? context.count(for: countRequest)) ?? 0
+
+        let sumRequest = NSFetchRequest<NSDictionary>(entityName: "TripEntity")
+        sumRequest.predicate = predicate
+        sumRequest.resultType = .dictionaryResultType
+        let sumDesc = NSExpressionDescription()
+        sumDesc.name = "totalDistance"
+        sumDesc.expression = NSExpression(forFunction: "sum:", arguments: [NSExpression(forKeyPath: "distance")])
+        sumDesc.expressionResultType = .doubleAttributeType
+        sumRequest.propertiesToFetch = [sumDesc]
+
+        let distance: Double
+        if let results = try? context.fetch(sumRequest),
+           let dict = results.first,
+           let total = dict["totalDistance"] as? Double {
+            distance = total
+        } else {
+            distance = 0
+        }
+
+        return (count, distance)
     }
 
     func fetchTotalDistance() -> Double {
         let context = persistenceController.container.viewContext
         let request = NSFetchRequest<NSDictionary>(entityName: "TripEntity")
-        request.predicate = NSPredicate(format: "endDate != nil")
+        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
         request.resultType = .dictionaryResultType
 
         let sumDesc = NSExpressionDescription()
@@ -134,8 +210,29 @@ final class TripManager: ObservableObject {
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
 
         if let entity = try? context.fetch(request).first {
-            PhotoStorageService.deletePhotos(for: id)
+            // Soft delete: mark for server-side deletion, hide from UI.
+            // Photos cleaned up when server confirms or on periodic purge.
+            entity.syncStatus = SyncStatus.pendingDelete.rawValue
+            entity.lastModifiedAt = Date()
+            persistenceController.save()
+        }
+    }
+
+    /// Physically remove soft-deleted trips. Called after server confirms deletion
+    /// or during local cleanup when no server is configured.
+    func purgeSoftDeletedTrips() {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "syncStatus == %d", SyncStatus.pendingDelete.rawValue)
+
+        guard let entities = try? context.fetch(request) else { return }
+        for entity in entities {
+            if let id = entity.id {
+                PhotoStorageService.deletePhotos(for: id)
+            }
             context.delete(entity)
+        }
+        if !entities.isEmpty {
             persistenceController.save()
         }
     }
@@ -305,44 +402,93 @@ final class TripManager: ObservableObject {
         }
     }
 
-    // MARK: - Geocoding
+    // MARK: - Geocoding (with persistent cache)
+
+    /// TTL for geocoding cache entries (90 days)
+    private static let geocodeCacheTTL: TimeInterval = 90 * 24 * 3600
 
     private func geocodeAndNameTrip(entity: TripEntity) {
         guard let points = entity.trackPoints?.array as? [TrackPointEntity],
               let first = points.first, let last = points.last else { return }
 
+        let startCoord = CLLocationCoordinate2D(latitude: first.latitude, longitude: first.longitude)
+        let endCoord = CLLocationCoordinate2D(latitude: last.latitude, longitude: last.longitude)
         let startLoc = CLLocation(latitude: first.latitude, longitude: first.longitude)
         let endLoc = CLLocation(latitude: last.latitude, longitude: last.longitude)
+
+        // Try cache first
+        let cachedStart = lookupGeocodeCache(for: startCoord)
+        let cachedEnd = lookupGeocodeCache(for: endCoord)
+
+        // If both cached, skip network entirely
+        if let cs = cachedStart {
+            let isCircular = startLoc.distance(from: endLoc) < 20_000
+            if isCircular {
+                Task { @MainActor [weak self] in
+                    guard !entity.isDeleted else { return }
+                    entity.title = cs.locality ?? Self.dateFallbackTitle(for: entity.startDate)
+                    entity.region = cs.region
+                    entity.lastModifiedAt = Date()
+                    self?.persistenceController.save()
+                }
+                return
+            }
+            if let ce = cachedEnd {
+                let title = Self.buildTitle(start: cs.locality, end: ce.locality, fallbackDate: entity.startDate)
+                Task { @MainActor [weak self] in
+                    guard !entity.isDeleted else { return }
+                    entity.title = title
+                    entity.region = cs.region
+                    entity.lastModifiedAt = Date()
+                    self?.persistenceController.save()
+                }
+                return
+            }
+        }
+
+        // Skip network if offline
+        if CacheManager.shared.isOffline { return }
 
         CLGeocoder().reverseGeocodeLocation(startLoc) { [weak self] startPMs, _ in
             let startName = Self.localityName(from: startPMs?.first)
             let startRegion = Self.regionName(from: startPMs?.first)
 
-            // Circular route (< 20 km between start and finish)
-            if startLoc.distance(from: endLoc) < 20_000 {
-                Task { @MainActor [weak self] in
+            Task { @MainActor [weak self] in
+                self?.saveGeocodeCache(for: startCoord, locality: startName, region: startRegion)
+
+                // Circular route (< 20 km between start and finish)
+                if startLoc.distance(from: endLoc) < 20_000 {
                     guard !entity.isDeleted else { return }
                     entity.title = startName ?? Self.dateFallbackTitle(for: entity.startDate)
                     entity.region = startRegion
+                    entity.lastModifiedAt = Date()
                     self?.persistenceController.save()
+                    return
                 }
-                return
-            }
 
-            // A → B route
-            CLGeocoder().reverseGeocodeLocation(endLoc) { [weak self] endPMs, _ in
-                let endName = Self.localityName(from: endPMs?.first)
-                let title: String = switch (startName, endName) {
-                case let (s?, e?): "\(s) → \(e)"
-                case let (s?, nil): s
-                case let (nil, e?): e
-                case (nil, nil): Self.dateFallbackTitle(for: entity.startDate)
-                }
-                Task { @MainActor [weak self] in
+                // Check end cache before making second network call
+                if let ce = cachedEnd {
                     guard !entity.isDeleted else { return }
-                    entity.title = title
+                    entity.title = Self.buildTitle(start: startName, end: ce.locality, fallbackDate: entity.startDate)
                     entity.region = startRegion
+                    entity.lastModifiedAt = Date()
                     self?.persistenceController.save()
+                    return
+                }
+
+                // A → B route — geocode end point
+                CLGeocoder().reverseGeocodeLocation(endLoc) { [weak self] endPMs, _ in
+                    let endName = Self.localityName(from: endPMs?.first)
+
+                    Task { @MainActor [weak self] in
+                        self?.saveGeocodeCache(for: endCoord, locality: endName, region: Self.regionName(from: endPMs?.first))
+
+                        guard !entity.isDeleted else { return }
+                        entity.title = Self.buildTitle(start: startName, end: endName, fallbackDate: entity.startDate)
+                        entity.region = startRegion
+                        entity.lastModifiedAt = Date()
+                        self?.persistenceController.save()
+                    }
                 }
             }
         }
@@ -356,6 +502,15 @@ final class TripManager: ObservableObject {
         placemark?.administrativeArea
     }
 
+    private static func buildTitle(start: String?, end: String?, fallbackDate: Date?) -> String {
+        switch (start, end) {
+        case let (s?, e?): "\(s) → \(e)"
+        case let (s?, nil): s
+        case let (nil, e?): e
+        case (nil, nil): dateFallbackTitle(for: fallbackDate)
+        }
+    }
+
     /// Reverse-geocode only the region for an entity's first track point.
     private func geocodeRegion(for entity: TripEntity, completion: @escaping () -> Void) {
         guard !entity.isDeleted,
@@ -365,17 +520,93 @@ final class TripManager: ObservableObject {
             return
         }
 
-        let location = CLLocation(latitude: first.latitude, longitude: first.longitude)
-        CLGeocoder().reverseGeocodeLocation(location) { [weak self] placemarks, _ in
-            if let adminArea = placemarks?.first?.administrativeArea {
-                Task { @MainActor [weak self] in
-                    guard !entity.isDeleted else { return }
-                    entity.region = adminArea
-                    self?.persistenceController.save()
-                }
+        let coord = CLLocationCoordinate2D(latitude: first.latitude, longitude: first.longitude)
+
+        // Check cache first
+        if let cached = lookupGeocodeCache(for: coord), cached.region != nil {
+            Task { @MainActor [weak self] in
+                guard !entity.isDeleted else { return }
+                entity.region = cached.region
+                entity.lastModifiedAt = Date()
+                self?.persistenceController.save()
             }
             completion()
+            return
         }
+
+        // Skip network if offline
+        guard !CacheManager.shared.isOffline else {
+            completion()
+            return
+        }
+
+        let location = CLLocation(latitude: first.latitude, longitude: first.longitude)
+        CLGeocoder().reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+            let adminArea = placemarks?.first?.administrativeArea
+            let locality = Self.localityName(from: placemarks?.first)
+
+            Task { @MainActor [weak self] in
+                self?.saveGeocodeCache(for: coord, locality: locality, region: adminArea)
+
+                if let adminArea {
+                    guard !entity.isDeleted else { return }
+                    entity.region = adminArea
+                    entity.lastModifiedAt = Date()
+                    self?.persistenceController.save()
+                }
+                completion()
+            }
+        }
+    }
+
+    // MARK: - Geocode Cache (CoreData)
+
+    private struct GeocodeCacheResult {
+        let locality: String?
+        let region: String?
+    }
+
+    private func lookupGeocodeCache(for coord: CLLocationCoordinate2D) -> GeocodeCacheResult? {
+        let geohash = GeohashEncoder.encode(latitude: coord.latitude, longitude: coord.longitude, precision: 5)
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<GeocodeCacheEntity> = GeocodeCacheEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "geohash5 == %@", geohash)
+        request.fetchLimit = 1
+
+        guard let entity = try? context.fetch(request).first else { return nil }
+
+        // Check TTL — defer delete to avoid synchronous save during lookup
+        if let cachedAt = entity.cachedAt,
+           Date().timeIntervalSince(cachedAt) > Self.geocodeCacheTTL {
+            context.delete(entity)
+            persistenceController.saveAsync()
+            return nil
+        }
+
+        return GeocodeCacheResult(locality: entity.locality, region: entity.region)
+    }
+
+    private func saveGeocodeCache(for coord: CLLocationCoordinate2D, locality: String?, region: String?) {
+        let geohash = GeohashEncoder.encode(latitude: coord.latitude, longitude: coord.longitude, precision: 5)
+        let context = persistenceController.container.viewContext
+
+        // Upsert: check if entry already exists
+        let request: NSFetchRequest<GeocodeCacheEntity> = GeocodeCacheEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "geohash5 == %@", geohash)
+        request.fetchLimit = 1
+
+        let entity: GeocodeCacheEntity
+        if let existing = try? context.fetch(request).first {
+            entity = existing
+        } else {
+            entity = GeocodeCacheEntity(context: context)
+            entity.geohash5 = geohash
+        }
+
+        entity.locality = locality
+        entity.region = region
+        entity.cachedAt = Date()
+        persistenceController.save()
     }
 
     // MARK: - Region Migration
@@ -384,7 +615,7 @@ final class TripManager: ObservableObject {
     func migrateRegionsIfNeeded() {
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "endDate != nil AND region == nil")
+        request.predicate = NSPredicate(format: "endDate != nil AND region == nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
 
         guard let entities = try? context.fetch(request), !entities.isEmpty else { return }
 
@@ -538,6 +769,7 @@ final class TripManager: ObservableObject {
             if let data = try? JSONEncoder().encode(badgeIds),
                let json = String(data: data, encoding: .utf8) {
                 entity.badgesJSON = json
+                entity.lastModifiedAt = Date()
                 persistenceController.save()
             }
         }
@@ -588,8 +820,10 @@ final class TripManager: ObservableObject {
         photoEntity.filename = filename
         photoEntity.caption = caption
         photoEntity.timestamp = Date()
+        photoEntity.lastModifiedAt = Date()
         photoEntity.sortOrder = Int16(entity.photos?.count ?? 0)
         photoEntity.trip = entity
+        entity.lastModifiedAt = Date()
 
         persistenceController.save()
 
@@ -603,6 +837,10 @@ final class TripManager: ObservableObject {
 
         if let entity = try? context.fetch(request).first {
             PhotoStorageService.deletePhoto(filename: entity.filename ?? "")
+            // Update parent trip's lastModifiedAt for sync tracking
+            if let trip = entity.trip {
+                trip.lastModifiedAt = Date()
+            }
             context.delete(entity)
             persistenceController.save()
         }
@@ -615,6 +853,7 @@ final class TripManager: ObservableObject {
 
         if let entity = try? context.fetch(request).first {
             entity.tripDescription = notes
+            entity.lastModifiedAt = Date()
             persistenceController.save()
         }
     }
@@ -626,13 +865,22 @@ final class TripManager: ObservableObject {
 
         if let entity = try? context.fetch(request).first {
             entity.title = title.isEmpty ? nil : title
+            entity.lastModifiedAt = Date()
             persistenceController.save()
         }
     }
 
     // MARK: - Geocoding Retry
 
+    private var lastGeocodingRetry: Date = .distantPast
+
     func retryGeocodingForUntitledTrips() {
+        // Don't attempt if offline — will be retried automatically on network restore
+        guard !CacheManager.shared.isOffline else { return }
+        // Throttle: skip if retried less than 60s ago
+        guard Date().timeIntervalSince(lastGeocodingRetry) > 60 else { return }
+        lastGeocodingRetry = Date()
+
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = NSPredicate(format: "title == nil AND trackPoints.@count > 0")

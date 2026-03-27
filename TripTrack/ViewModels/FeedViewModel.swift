@@ -78,12 +78,14 @@ final class FeedViewModel: ObservableObject {
 
     func loadTrips() {
         allTrips = tripManager.fetchTrips()
-        // Retry geocoding deferred to avoid blocking current runloop cycle
-        DispatchQueue.main.async { [weak self] in
-            self?.tripManager.retryGeocodingForUntitledTrips()
-        }
+        // Geocoding retry is now handled automatically by TripManager
+        // via CacheManager.networkRestored publisher
         rebuildCalendarCaches()
         applyFilters()
+    }
+
+    func retryGeocodingIfNeeded() {
+        tripManager.retryGeocodingForUntitledTrips()
     }
 
     /// Soft-delete: hides from UI, shows undo toast, commits after delay

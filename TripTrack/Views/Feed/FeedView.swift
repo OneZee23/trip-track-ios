@@ -110,7 +110,10 @@ struct FeedView: View {
         }
         .toast(item: $feedVM.toastItem)
         .refreshable { feedVM.language = lang.language; feedVM.loadTrips() }
-        .onAppear { if !didLoad { didLoad = true; feedVM.language = lang.language; feedVM.loadTrips() } }
+        .onAppear {
+            if !didLoad { didLoad = true; feedVM.language = lang.language; feedVM.loadTrips() }
+            feedVM.retryGeocodingIfNeeded()
+        }
         .sheet(isPresented: $feedVM.showFilters) {
             FilterSheetView(
                 filters: $feedVM.filters,

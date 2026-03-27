@@ -82,8 +82,9 @@ struct FeedTripCardView: View {
 
                 // Route preview on map
                 if trip.previewCoordinates.count > 1 {
-                    CardMapPreview(
-                        coordinates: trip.previewCoordinates
+                    MapSnapshotPreview(
+                        coordinates: trip.previewCoordinates,
+                        tripId: trip.id
                     )
                     .frame(height: 80)
                     .clipShape(RoundedRectangle(cornerRadius: 12))

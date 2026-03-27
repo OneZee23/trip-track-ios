@@ -15,6 +15,8 @@
         <attribute name="startDate" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="title" optional="YES" attributeType="String"/>
         <attribute name="tripDescription" optional="YES" attributeType="String"/>
+        <attribute name="lastModifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="syncStatus" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="vehicleId" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="xpEarned" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <relationship name="photos" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="TripPhotoEntity" inverseName="trip" inverseEntity="TripPhotoEntity"/>
@@ -30,7 +32,9 @@
         <attribute name="caption" optional="YES" attributeType="String"/>
         <attribute name="filename" attributeType="String" defaultValueString=""/>
         <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lastModifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="sortOrder" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="syncStatus" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="timestamp" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="trip" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="TripEntity" inverseName="photos" inverseEntity="TripEntity"/>
     </entity>
@@ -52,9 +56,11 @@
         <attribute name="fuelPrice" optional="YES" attributeType="Double" defaultValueString="56" usesScalarValueType="YES"/>
         <attribute name="highwayConsumption" optional="YES" attributeType="Double" defaultValueString="6.0" usesScalarValueType="YES"/>
         <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lastModifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="name" optional="YES" attributeType="String" defaultValueString=""/>
         <attribute name="odometerKm" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="stickersJSON" optional="YES" attributeType="String"/>
+        <attribute name="syncStatus" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="vehicleLevel" optional="YES" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
     </entity>
     <entity name="UserSettingsEntity" representedClassName="UserSettingsEntity" syncable="YES" codeGenerationType="class">
@@ -67,10 +73,12 @@
         <attribute name="fuelPrice" optional="YES" attributeType="Double" defaultValueString="56" usesScalarValueType="YES"/>
         <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="language" optional="YES" attributeType="String" defaultValueString="ru"/>
+        <attribute name="lastModifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="lastTripDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="profileLevel" optional="YES" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
         <attribute name="profileXP" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="selectedVehicleId" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="syncStatus" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="themeMode" optional="YES" attributeType="String" defaultValueString="dark"/>
         <attribute name="volumeUnit" optional="YES" attributeType="String" defaultValueString="liters"/>
     </entity>
@@ -81,6 +89,15 @@
         <attribute name="visitCount" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <fetchIndex name="byHash6">
             <fetchIndexElement property="hash6" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="GeocodeCacheEntity" representedClassName="GeocodeCacheEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="cachedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="geohash5" attributeType="String" defaultValueString=""/>
+        <attribute name="locality" optional="YES" attributeType="String"/>
+        <attribute name="region" optional="YES" attributeType="String"/>
+        <fetchIndex name="byGeohash5">
+            <fetchIndexElement property="geohash5" type="Binary" order="ascending"/>
         </fetchIndex>
     </entity>
     <entity name="RoadEntity" representedClassName="RoadEntity" syncable="YES" codeGenerationType="class">

@@ -110,4 +110,30 @@ struct PersistenceController {
             }
         }
     }
+
+    // MARK: - Background Context (for future sync operations)
+
+    /// Create an isolated background context for sync/import operations.
+    /// Changes merge into viewContext automatically via `automaticallyMergesChangesFromParent`.
+    func newBackgroundContext() -> NSManagedObjectContext {
+        let context = container.newBackgroundContext()
+        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        return context
+    }
+
+    /// Execute a block on a background context. Saves automatically if changes exist.
+    func performBackgroundTask(_ block: @escaping (NSManagedObjectContext) -> Void) {
+        container.performBackgroundTask { context in
+            context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+            block(context)
+            guard context.hasChanges else { return }
+            do {
+                try context.save()
+            } catch {
+                #if DEBUG
+                print("⚠️ CoreData background save failed: \(error)")
+                #endif
+            }
+        }
+    }
 }

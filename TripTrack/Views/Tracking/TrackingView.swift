@@ -136,7 +136,8 @@ struct TrackingView: View {
             .padding(.horizontal, 16)
             .padding(.top, safeAreaTop + 4)
             .padding(.bottom, 16)
-            .background(Color(red: 0.08, green: 0.08, blue: 0.09))
+            .background(Color(red: 0.08, green: 0.08, blue: 0.09).opacity(0.85))
+            .background(.ultraThinMaterial)
 
             // Mini-map takes remaining space (visible behind via ZStack)
             Spacer()
@@ -192,7 +193,8 @@ struct TrackingView: View {
             .padding(.top, 12)
             .padding(.bottom, safeAreaBottom + 8)
             .frame(maxWidth: .infinity)
-            .background(Color(red: 0.08, green: 0.08, blue: 0.09))
+            .background(Color(red: 0.08, green: 0.08, blue: 0.09).opacity(0.85))
+            .background(.ultraThinMaterial)
         }
         .ignoresSafeArea(edges: [.top, .bottom])
     }
