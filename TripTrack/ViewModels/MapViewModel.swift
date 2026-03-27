@@ -69,6 +69,13 @@ final class MapViewModel: ObservableObject {
         self.locationManager = manager
         self.tripManager = TripManager(locationManager: manager)
 
+        // Wire up Live Activity intent handlers
+        TripIntentHandler.shared.onPause = { [weak self] in self?.togglePause() }
+        TripIntentHandler.shared.onStop = { [weak self] in
+            guard let self, self.isRecording else { return }
+            self.toggleRecording()
+        }
+
         setupRecordingBindings()
         setupSunBasedTheme()
         refreshTripStats()
@@ -153,6 +160,14 @@ final class MapViewModel: ObservableObject {
                     self?.updateDuration()
                 }
         }
+        // Update Live Activity with pause state
+        LiveActivityManager.shared.updateActivity(
+            speed: speed,
+            distance: distance,
+            isPaused: isPaused,
+            pausedDuration: pausedAccumulated
+        )
+
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()
     }
@@ -178,6 +193,12 @@ final class MapViewModel: ObservableObject {
         tripManager.startTrip(vehicleId: selectedVehicleId)
         isRecording = true
 
+        // Start Live Activity on Lock Screen / Dynamic Island
+        LiveActivityManager.shared.startActivity(
+            tripId: tripManager.activeTrip?.id ?? UUID(),
+            startDate: recordingStartDate ?? Date()
+        )
+
         // Simple follow mode — no zoom management
         userTrackingMode = .follow
 
@@ -201,6 +222,8 @@ final class MapViewModel: ObservableObject {
     }
 
     private func stopRecording() {
+        LiveActivityManager.shared.endActivity()
+
         let completedTrip = tripManager.stopTrip()
         trackManager.stopAnimation()
         isRecording = false
@@ -310,6 +333,14 @@ final class MapViewModel: ObservableObject {
                 if self.isRecording && !self.isPaused {
                     self.trackManager.addPoint(update.coordinate)
                     self.territoryManager.recordVisit(coordinate: update.coordinate)
+
+                    // Update Live Activity with current tracking data
+                    LiveActivityManager.shared.updateActivity(
+                        speed: self.speed,
+                        distance: self.distance,
+                        isPaused: false,
+                        pausedDuration: self.pausedAccumulated
+                    )
                 }
             }
             .store(in: &cancellables)

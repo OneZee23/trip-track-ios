@@ -22,6 +22,9 @@ targets:
           - Info.plist
       - path: TripTrack/Resources/Assets.xcassets
         type: asset
+      - path: TripTrackShared
+    dependencies:
+      - target: TripTrackLiveActivityExtension
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig
@@ -41,6 +44,32 @@ targets:
     entitlements:
       path: TripTrack/TripTrack.entitlements
 
+  TripTrackLiveActivityExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: TripTrackLiveActivity
+        excludes:
+          - Info.plist
+      - path: TripTrackShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.LiveActivity
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Live"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
+        APP_INTENTS_DEPLOYMENT_POSTPROCESSING: NO
+    configFiles:
+      Debug: Local.xcconfig
+      Release: Local.xcconfig
+    entitlements:
+      path: TripTrackLiveActivity/TripTrackLiveActivity.entitlements
+
   TripTrackTests:
     type: bundle.unit-test
     platform: iOS
@@ -58,6 +87,7 @@ schemes:
     build:
       targets:
         TripTrack: all
+        TripTrackLiveActivityExtension: all
     run:
       config: Debug
     test:
