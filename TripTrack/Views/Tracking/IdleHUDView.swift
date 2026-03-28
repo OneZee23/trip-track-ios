@@ -5,12 +5,6 @@ struct IdleHUDView: View {
     let tripCount: Int
     let onStartTrip: () -> Void
     @EnvironmentObject private var lang: LanguageManager
-    @State private var isPressing = false
-    @State private var holdProgress: CGFloat = 0
-    @State private var holdTimer: Timer?
-    @State private var pulseScale: CGFloat = 1.0
-    private let holdDuration: CGFloat = 0.4
-
     var body: some View {
         VStack(spacing: 0) {
             // Pulsing accent ring with pixel car
@@ -54,51 +48,29 @@ struct IdleHUDView: View {
                 Spacer().frame(height: 20)
             }
 
-            // Start button — hold to begin recording
-            ZStack {
-                // Progress border that fills during hold
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(AppTheme.accent)
-
-                // White progress overlay on top
-                RoundedRectangle(cornerRadius: 16)
-                    .trim(from: 0, to: holdProgress)
-                    .stroke(.white.opacity(0.35), lineWidth: 3)
-
+            // Start button
+            Button {
+                let generator = UIImpactFeedbackGenerator(style: .heavy)
+                generator.impactOccurred()
+                onStartTrip()
+            } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: isPressing ? "circle.fill" : "play.fill")
-                        .font(.system(size: isPressing ? 10 : 16))
-                        .contentTransition(.symbolEffect(.replace))
-                    Text(isPressing
-                         ? (lang.language == .ru ? "Удерживайте..." : "Hold...")
-                         : AppStrings.startTrip(lang.language))
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 16))
+                    Text(AppStrings.startTrip(lang.language))
                         .font(.system(size: 18, weight: .bold))
                 }
                 .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(AppTheme.accent)
+                )
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .scaleEffect(isPressing ? 0.97 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: isPressing)
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        guard !isPressing else { return }
-                        isPressing = true
-                        startHoldTimer()
-                    }
-                    .onEnded { _ in
-                        cancelHold()
-                    }
-            )
+            .buttonStyle(.plain)
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
-            .onAppear {
-                // Subtle pulse hint on the button
-                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                    pulseScale = 1.02
-                }
-            }
         }
         .background(
             RoundedRectangle(cornerRadius: 24)
@@ -124,36 +96,6 @@ struct IdleHUDView: View {
         Self.kmFormatter.string(from: NSNumber(value: km)) ?? "\(Int(km))"
     }
 
-    // MARK: - Hold-to-Start Logic
-
-    private func startHoldTimer() {
-        holdProgress = 0
-        let step: CGFloat = 0.03
-        let increment = step / holdDuration
-
-        holdTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(step), repeats: true) { timer in
-            holdProgress += increment
-            if holdProgress >= 1.0 {
-                timer.invalidate()
-                holdTimer = nil
-                isPressing = false
-                holdProgress = 0
-
-                let generator = UIImpactFeedbackGenerator(style: .heavy)
-                generator.impactOccurred()
-                onStartTrip()
-            }
-        }
-    }
-
-    private func cancelHold() {
-        holdTimer?.invalidate()
-        holdTimer = nil
-        isPressing = false
-        withAnimation(.easeOut(duration: 0.2)) {
-            holdProgress = 0
-        }
-    }
 }
 
 // MARK: - Quick Stat Card
