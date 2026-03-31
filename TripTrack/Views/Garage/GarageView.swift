@@ -66,6 +66,7 @@ struct GarageView: View {
                             isRu: isRu,
                             settings: settings
                         )
+                        .id(active.id)
                     }
 
                     // 3. Units settings

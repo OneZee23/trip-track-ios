@@ -230,10 +230,8 @@ struct TripDetailView: View {
     private var tripVehicle: Vehicle? {
         if let vid = trip?.vehicleId {
             return settings.vehicles.first { $0.id == vid }
-        } else if let sid = settings.selectedVehicleId {
-            return settings.vehicles.first { $0.id == sid }
         }
-        return settings.vehicles.first
+        return nil
     }
 
     private func titleSection(trip: Trip, c: AppTheme.Colors) -> some View {
@@ -382,10 +380,8 @@ struct TripDetailView: View {
         let vehicle: Vehicle?
         if let vid = trip.vehicleId {
             vehicle = settings.vehicles.first { $0.id == vid }
-        } else if let sid = settings.selectedVehicleId {
-            vehicle = settings.vehicles.first { $0.id == sid }
         } else {
-            vehicle = settings.vehicles.first
+            vehicle = nil
         }
         guard let v = vehicle, v.cityConsumption > 0, trip.distanceKm > 0.1 else { return nil }
         let fuel = v.fuelCost(distanceKm: trip.distanceKm, avgSpeedKmh: trip.averageSpeedKmh)

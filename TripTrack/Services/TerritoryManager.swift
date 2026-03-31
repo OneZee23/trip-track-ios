@@ -57,8 +57,15 @@ final class TerritoryManager: ObservableObject {
 
     /// Build exploration data using trip geocoded info.
     /// Returns city-level + region-level exploration cards.
+    ///
+    /// City tiles: only track points within ~15 km of the trip start/end
+    /// are attributed to the departure/destination city. Highway points
+    /// between cities are not counted for any city (but still count for
+    /// the region).
     func getExploration(from trips: [Trip]) -> [ExplorationPlace] {
         guard !visitedCache.isEmpty else { return [] }
+
+        let cityRadiusMeters: Double = 15_000
 
         // 1. Map each trip's tiles to its geocoded city/region
         var cityTiles: [String: Set<String>] = [:]  // city -> set of hash6
@@ -69,8 +76,13 @@ final class TerritoryManager: ObservableObject {
         for trip in trips {
             guard !trip.trackPoints.isEmpty else { continue }
 
-            let city = extractCity(from: trip)
+            let cities = extractCities(from: trip)
             let region = trip.region
+
+            let startCoord = trip.trackPoints.first!.coordinate
+            let endCoord = trip.trackPoints.last!.coordinate
+            let startLoc = CLLocation(latitude: startCoord.latitude, longitude: startCoord.longitude)
+            let endLoc = CLLocation(latitude: endCoord.latitude, longitude: endCoord.longitude)
 
             for point in trip.trackPoints {
                 let hash6 = GeohashEncoder.encode(
@@ -80,21 +92,31 @@ final class TerritoryManager: ObservableObject {
                 )
                 guard visitedCache.contains(hash6) else { continue }
 
-                if let city {
-                    cityTiles[city, default: []].insert(hash6)
+                let pointLoc = CLLocation(latitude: point.latitude, longitude: point.longitude)
+
+                // Attribute to start city only if within radius
+                if let startCity = cities.start,
+                   pointLoc.distance(from: startLoc) <= cityRadiusMeters {
+                    cityTiles[startCity, default: []].insert(hash6)
                     unmatchedTiles.remove(hash6)
-                    if let region { cityToRegion[city] = region }
+                    if let region { cityToRegion[startCity] = region }
                 }
+
+                // Attribute to end city only if within radius
+                if let endCity = cities.end, endCity != cities.start,
+                   pointLoc.distance(from: endLoc) <= cityRadiusMeters {
+                    cityTiles[endCity, default: []].insert(hash6)
+                    unmatchedTiles.remove(hash6)
+                    if let region { cityToRegion[endCity] = region }
+                }
+
+                // Region gets ALL tiles regardless of city proximity
                 if let region {
                     regionTiles[region, default: []].insert(hash6)
                     unmatchedTiles.remove(hash6)
                 }
             }
         }
-
-        // Tiles from trips without a city name but with a region —
-        // try to assign to the dominant city in that region
-        // (so they don't get lost)
 
         // 2. Build city cards
         var places: [ExplorationPlace] = []
@@ -135,24 +157,28 @@ final class TerritoryManager: ObservableObject {
         return places
     }
 
-    private func extractCity(from trip: Trip) -> String? {
-        guard let title = trip.title, !title.isEmpty else { return nil }
+    /// Extract start and end city names from trip title.
+    /// "Krasnodar → Gelendzhik" → (start: "Krasnodar", end: "Gelendzhik")
+    /// "Krasnodar" → (start: "Krasnodar", end: nil) — circular trip
+    private func extractCities(from trip: Trip) -> (start: String?, end: String?) {
+        guard let title = trip.title, !title.isEmpty else { return (nil, nil) }
 
-        // Skip date-format titles like "18 Mar, 21:08" — they aren't city names
+        // Skip date-format titles like "18 Mar, 21:08"
         if title.contains(":") && title.count < 20 {
-            return nil
+            return (nil, nil)
         }
         // Skip titles that start with a digit (likely a date)
         if let first = title.first, first.isNumber {
-            return nil
+            return (nil, nil)
         }
 
-        // "Krasnodar → Sochi" → "Krasnodar"
         if let arrow = title.range(of: " → ") {
-            return String(title[..<arrow.lowerBound])
+            let start = String(title[..<arrow.lowerBound])
+            let end = String(title[arrow.upperBound...])
+            return (start, end.isEmpty ? nil : end)
         }
 
-        return title
+        return (title, nil)
     }
 
     // MARK: - Backfill from existing trips

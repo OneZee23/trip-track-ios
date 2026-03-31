@@ -77,8 +77,17 @@ struct ScratchMapView: UIViewRepresentable {
                 }
             }
 
-            // Zoom to visited area with reasonable bounds
-            if !visitedGeohashes.isEmpty {
+            // Center on user location with ~150 km visible span;
+            // fall back to bounding box of visited tiles if location unavailable.
+            if let userLoc = mapView.userLocation.location,
+               userLoc.horizontalAccuracy >= 0 {
+                let region = MKCoordinateRegion(
+                    center: userLoc.coordinate,
+                    latitudinalMeters: 150_000,
+                    longitudinalMeters: 150_000
+                )
+                mapView.setRegion(region, animated: false)
+            } else if !visitedGeohashes.isEmpty {
                 var unionRect = MKMapRect.null
                 for hash in visitedGeohashes {
                     let center = GeohashEncoder.centerCoordinate(of: hash)
@@ -86,7 +95,6 @@ struct ScratchMapView: UIViewRepresentable {
                     let pointRect = MKMapRect(origin: point, size: MKMapSize(width: 1, height: 1))
                     unionRect = unionRect.union(pointRect)
                 }
-                // Expand by 30% for breathing room
                 let expandedRect = unionRect.insetBy(
                     dx: -unionRect.size.width * 0.15,
                     dy: -unionRect.size.height * 0.15

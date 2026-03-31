@@ -244,15 +244,16 @@ struct FeedView: View {
         .buttonStyle(.plain)
     }
 
-    private var activeVehicle: Vehicle? {
-        if let id = settings.selectedVehicleId {
-            return settings.vehicles.first { $0.id == id }
+    private func vehicleForTrip(_ trip: Trip) -> Vehicle? {
+        if let vid = trip.vehicleId {
+            return settings.vehicles.first { $0.id == vid }
         }
-        return settings.vehicles.first
+        return nil
     }
 
     private func tripCard(_ trip: Trip, c: AppTheme.Colors) -> some View {
-        SwipeToDeleteCard(
+        let vehicle = vehicleForTrip(trip)
+        return SwipeToDeleteCard(
             onTap: {
                 Haptics.tap()
                 selectedTripId = trip.id
@@ -264,9 +265,9 @@ struct FeedView: View {
         ) {
             FeedTripCardView(
                 trip: trip,
-                vehicleName: activeVehicle?.name,
-                vehicleEmoji: activeVehicle?.avatarEmoji ?? settings.avatarEmoji,
-                vehicle: activeVehicle,
+                vehicleName: vehicle?.name,
+                vehicleEmoji: vehicle?.avatarEmoji ?? settings.avatarEmoji,
+                vehicle: vehicle,
                 fuelCurrency: "₽"
             )
         }

@@ -120,18 +120,18 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         /// Maps speed (m/s) to a color based on km/h thresholds.
-        ///  0-30 km/h  = green  (#2EAE50)
-        /// 30-60 km/h  = yellow (#F5BE1E)
-        /// 60-90 km/h  = orange (#EB571E)
-        ///   90+ km/h  = red    (#DC3C32)
+        ///  0-50  km/h = green  (#2EAE50)
+        /// 50-90  km/h = yellow (#F5BE1E)
+        /// 90-110 km/h = orange (#EB571E)
+        ///  110+  km/h = red    (#DC3C32)
         private static func color(forSpeedMS speed: Double) -> UIColor {
             let kmh = speed * 3.6
             switch kmh {
-            case ..<30:
+            case ..<50:
                 return UIColor(red: 0x2E/255, green: 0xAE/255, blue: 0x50/255, alpha: 0.9)
-            case 30..<60:
+            case 50..<90:
                 return UIColor(red: 0xF5/255, green: 0xBE/255, blue: 0x1E/255, alpha: 0.9)
-            case 60..<90:
+            case 90..<110:
                 return UIColor(red: 0xEB/255, green: 0x57/255, blue: 0x1E/255, alpha: 0.9)
             default:
                 return UIColor(red: 0xDC/255, green: 0x3C/255, blue: 0x32/255, alpha: 0.9)

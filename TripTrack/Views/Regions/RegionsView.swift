@@ -118,49 +118,33 @@ struct RegionsView: View {
 
     // MARK: - Stats Card
 
+    /// Approximate area of one geohash-6 tile in km².
+    private static let km2PerTile: Double = 0.72
+
     private func statsCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         let tileCount = mapVM.territoryManager.visitedTileCount
+        let exploredKm2 = Int(Double(tileCount) * Self.km2PerTile)
         let cityCount = cities.count
         let regionCount = regions.count
         let topRegion = regions.sorted(by: { $0.percentage > $1.percentage }).first
 
         return VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 16) {
-                // Left column: tile count + progress bar
+                // Left column: explored area
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("\(tileCount)")
-                        .font(.system(size: 34, weight: .heavy).monospacedDigit())
-                        .foregroundStyle(AppTheme.accent)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(exploredKm2)")
+                            .font(.system(size: 34, weight: .heavy).monospacedDigit())
+                            .foregroundStyle(AppTheme.accent)
+                        Text(isRu ? "км²" : "km²")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(AppTheme.accent.opacity(0.7))
+                    }
 
-                    Text(AppStrings.tilesDiscovered(lang.language))
+                    Text(isRu ? "ИССЛЕДОВАНО" : "EXPLORED")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(c.textSecondary)
                         .tracking(0.5)
-
-                    // Accent progress bar — milestone-based
-                    let nextMilestone: Int = {
-                        if tileCount < 100 { return 100 }
-                        if tileCount < 500 { return 500 }
-                        if tileCount < 1000 { return 1000 }
-                        if tileCount < 5000 { return 5000 }
-                        return 10000
-                    }()
-                    let progressFraction = min(Double(tileCount) / Double(nextMilestone), 1.0)
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(c.cardAlt)
-                                .frame(height: 4)
-                            Capsule()
-                                .fill(AppTheme.accent)
-                                .frame(width: max(4, geo.size.width * progressFraction), height: 4)
-                        }
-                    }
-                    .frame(height: 4)
-
-                    Text("\(tileCount)/\(nextMilestone)")
-                        .font(.system(size: 10, weight: .medium).monospacedDigit())
-                        .foregroundStyle(c.textTertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -246,7 +230,9 @@ struct RegionsView: View {
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
-                    Text("\(place.tileCount)/\(place.target) \(AppStrings.tiles(lang.language))")
+                    let km2 = Int(Double(place.tileCount) * Self.km2PerTile)
+                    let targetKm2 = Int(Double(place.target) * Self.km2PerTile)
+                    Text("\(km2)/\(targetKm2) \(isRu ? "км²" : "km²")")
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
 
