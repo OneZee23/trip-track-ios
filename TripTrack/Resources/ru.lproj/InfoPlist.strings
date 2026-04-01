@@ -1,0 +1,5 @@
+/* Location permission: when in use */
+"NSLocationWhenInUseUsageDescription" = "TripTrack использует геолокацию для записи маршрута поездки на карте, расчёта расстояния и скорости, и сохранения поездки в дневник путешествий.";
+
+/* Location permission: always (background) */
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack использует геолокацию в фоновом режиме, чтобы продолжать запись маршрута, пока приложение свёрнуто, и не потерять ни одного участка поездки.";

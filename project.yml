@@ -35,8 +35,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: TripTrack/Info.plist
-        INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "Для отслеживания поездок в фоновом режиме"
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Для отслеживания ваших поездок"
+        INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "TripTrack uses your location in the background to continue recording your driving route while the app is minimized, so you don't lose any part of your trip."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "TripTrack uses your location to record your driving route on the map, calculate distance and speed, and save the trip to your travel journal."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
         MARKETING_VERSION: "0.1.0"

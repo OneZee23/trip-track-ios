@@ -1,0 +1,5 @@
+/* Location permission: when in use */
+"NSLocationWhenInUseUsageDescription" = "TripTrack uses your location to record your driving route on the map, calculate distance and speed, and save the trip to your travel journal.";
+
+/* Location permission: always (background) */
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack uses your location in the background to continue recording your driving route while the app is minimized, so you don't lose any part of your trip.";
