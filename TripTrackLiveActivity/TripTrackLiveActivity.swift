@@ -58,8 +58,10 @@ struct TripTrackLiveActivity: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     if context.state.isFinished {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title3).foregroundStyle(accentOrange)
+                        Image("app_icon")
+                            .resizable().scaledToFit()
+                            .frame(width: 28, height: 28)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
                     } else {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(Int(context.state.speedKmh))").font(.title2.bold())
@@ -110,7 +112,10 @@ struct TripTrackLiveActivity: Widget {
                 }
             } compactLeading: {
                 if context.state.isFinished {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(accentOrange)
+                    Image("app_icon")
+                        .resizable().scaledToFit()
+                        .frame(width: 20, height: 20)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
                 } else {
                     Label {
                         Text("\(Int(context.state.speedKmh))").font(.caption.bold())
@@ -121,8 +126,15 @@ struct TripTrackLiveActivity: Widget {
             } compactTrailing: {
                 Text(fmtDist(context.state.distanceKm) + (context.state.isRu ? " км" : " km")).font(.caption)
             } minimal: {
-                Image(systemName: context.state.isFinished ? "checkmark.circle.fill" : "location.fill")
-                    .foregroundStyle(accentOrange)
+                if context.state.isFinished {
+                    Image("app_icon")
+                        .resizable().scaledToFit()
+                        .frame(width: 16, height: 16)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                } else {
+                    Image(systemName: "location.fill")
+                        .foregroundStyle(accentOrange)
+                }
             }
             .widgetURL(context.state.isFinished
                 ? URL(string: "triptrack://trip/\(context.attributes.tripId.uuidString)")
@@ -308,62 +320,78 @@ private struct LiveLockScreenView: View {
     }
 }
 
+// MARK: - Gradient colors (finished screen)
+
+private let gradientStart = Color(red: 1.0, green: 0.78, blue: 0.47)
+private let gradientEnd = Color(red: 1.0, green: 0.63, blue: 0.31)
+
 // MARK: - Finished Lock Screen
 
 private struct FinishedLockScreenView: View {
     let context: ActivityViewContext<TripActivityAttributes>
     private var isRu: Bool { context.state.isRu }
-    private var c: WidgetColors { .from(isDark: context.state.isDarkMode) }
+    private var isPixel: Bool { context.attributes.vehicleAvatar.hasPrefix("pixel_car_") }
 
     var body: some View {
         VStack(spacing: 0) {
-            // TripTrack label top-right
-            HStack {
-                Spacer()
-                Text("TripTrack")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
+            // Row 1: vehicle avatar + text + AppIcon
+            HStack(spacing: 12) {
+                // Left: vehicle avatar
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 44, height: 44)
+                    if isPixel {
+                        Image(context.attributes.vehicleAvatar)
+                            .resizable().scaledToFit()
+                            .frame(width: 32, height: 32)
+                    } else {
+                        Text(context.attributes.vehicleAvatar)
+                            .font(.system(size: 22))
+                    }
+                }
+
+                // Center: title + subtitle
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isRu ? "Маршрут сохранен" : "Route saved")
+                        .font(.system(size: 18, weight: .black))
+                        .foregroundStyle(Color.black.opacity(0.8))
+                        .lineLimit(1)
+                    Text(summaryText)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.black.opacity(0.5))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                // Right: AppIcon
+                Image("app_icon")
+                    .resizable().scaledToFit()
+                    .frame(width: 40, height: 40)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            .padding(.top, 6)
+            .padding(.bottom, 12)
 
-            // Check icon
-            ZStack {
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(accentOrange.opacity(0.1))
-                    .frame(width: 44, height: 44)
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(accentOrange)
-            }
-            .padding(.bottom, 8)
-
-            Text(context.state.isRu ? "Маршрут сохранен" : "Route saved")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(c.text)
-                .padding(.bottom, 3)
-
-            Text(summaryText)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(c.textSecondary)
-                .padding(.bottom, 10)
-
-            // CTA
-            HStack {
-                Text(context.state.isRu ? "Открыть автодневник" : "Open trip diary")
-                    .font(.system(size: 13, weight: .semibold))
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.7))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .frame(height: 38)
-            .background(accentOrange, in: RoundedRectangle(cornerRadius: 12))
+            // Row 2: Glass CTA button
+            Text(isRu ? "Открыть автодневник" : "Open trip diary")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.black.opacity(0.6))
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(Color.white.opacity(0.3), in: RoundedRectangle(cornerRadius: 14))
         }
         .padding(.horizontal, 16)
+        .padding(.top, 16)
         .padding(.bottom, 14)
-        .activityBackgroundTint(c.bg)
+        .background(
+            LinearGradient(
+                colors: [gradientStart, gradientEnd],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .activityBackgroundTint(accentOrange)
     }
 
     private var summaryText: String {

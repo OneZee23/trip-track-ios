@@ -1,0 +1,71 @@
+<h2>Редизайн финишного Live Activity</h2>
+<p class="subtitle">Стиль Яндекс Навигатора, данные TripTrack</p>
+
+<div class="split">
+  <!-- Current -->
+  <div class="mockup">
+    <div class="mockup-header">Сейчас (TripTrack)</div>
+    <div class="mockup-body" style="padding: 0;">
+      <div style="background: #f2f2f7; border-radius: 20px; padding: 14px 16px 14px; font-family: -apple-system, system-ui, sans-serif; position: relative;">
+        <!-- TripTrack label -->
+        <div style="text-align: right; font-size: 9px; font-weight: 600; color: rgba(0,0,0,0.3); padding-bottom: 6px;">TripTrack</div>
+        <!-- Check icon -->
+        <div style="text-align: center; padding-bottom: 8px;">
+          <div style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: rgba(255,149,0,0.1); border-radius: 14px;">
+            <span style="font-size: 22px; color: #FF9500;">&#10003;</span>
+          </div>
+        </div>
+        <!-- Title -->
+        <div style="text-align: center; font-size: 17px; font-weight: 700; color: rgba(0,0,0,0.85); padding-bottom: 3px;">Маршрут сохранен</div>
+        <!-- Summary -->
+        <div style="text-align: center; font-size: 13px; font-weight: 500; color: rgba(0,0,0,0.45); padding-bottom: 10px;">VW Polo &bull; 3.9 км &bull; 14:41</div>
+        <!-- CTA Button -->
+        <div style="background: #FF9500; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
+          <span style="color: white; font-size: 13px; font-weight: 600;">Открыть автодневник</span>
+          <span style="color: rgba(255,255,255,0.7); font-size: 10px; font-weight: 700;">&rsaquo;</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proposed -->
+  <div class="mockup">
+    <div class="mockup-header">Новый (стиль Яндекса)</div>
+    <div class="mockup-body" style="padding: 0;">
+      <div style="background: linear-gradient(135deg, rgba(255,200,120,0.85), rgba(255,160,80,0.75)); backdrop-filter: blur(20px); border-radius: 20px; padding: 16px; font-family: -apple-system, system-ui, sans-serif; position: relative;">
+        <!-- Top-right branding -->
+        <div style="position: absolute; top: 10px; right: 14px; font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.5);">TripTrack</div>
+
+        <!-- Main row: icon + text + icon -->
+        <div style="display: flex; align-items: center; gap: 12px; padding-bottom: 12px; padding-top: 2px;">
+          <!-- Left icon -->
+          <div style="font-size: 36px; line-height: 1; flex-shrink: 0;">&#127937;</div>
+
+          <!-- Center text -->
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 18px; font-weight: 800; color: rgba(0,0,0,0.8); line-height: 1.2;">Маршрут сохранен</div>
+            <div style="font-size: 14px; font-weight: 500; color: rgba(0,0,0,0.5); margin-top: 2px;">VW Polo &bull; 3.9 км &bull; 14:41</div>
+          </div>
+
+          <!-- Right icon -->
+          <div style="font-size: 28px; line-height: 1; flex-shrink: 0;">&#128205;</div>
+        </div>
+
+        <!-- Glass button -->
+        <div style="background: rgba(255,255,255,0.3); backdrop-filter: blur(10px); border-radius: 14px; padding: 12px 16px; text-align: center;">
+          <span style="font-size: 15px; font-weight: 600; color: rgba(0,0,0,0.6);">Открыть автодневник</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 24px;">
+  <h3>Ключевые изменения</h3>
+  <ul style="line-height: 1.8; color: #ccc;">
+    <li><strong>Фон:</strong> теплый градиент с blur вместо сплошного серого</li>
+    <li><strong>Лейаут:</strong> горизонтальный (иконка-текст-иконка) вместо вертикального по центру</li>
+    <li><strong>Кнопка:</strong> стеклянная (glass) вместо залитой оранжевой</li>
+    <li><strong>Иконки:</strong> 🏁 слева + 📍 справа (как у Яндекса)</li>
+  </ul>
+</div>

@@ -85,6 +85,13 @@ final class MapViewModel: ObservableObject {
         refreshTripStats()
 
         Task { @MainActor [tripManager, gamificationManager, territoryManager] in
+            // Mark existing trips as processed (one-time migration)
+            tripManager.migrateMarkExistingTripsProcessed()
+
+            // Process any trips that weren't post-processed (e.g., app killed before completion)
+            let processor = PostTripTrackProcessor()
+            await processor.processUnprocessedTrips()
+
             tripManager.backfillPreviewPolylines()
             tripManager.migrateRegionsIfNeeded()
 
@@ -256,6 +263,14 @@ final class MapViewModel: ObservableObject {
         distance = 0
         duration = "00:00"
 
+        // Post-trip track processing (fill GPS gaps)
+        if let trip = completedTrip {
+            let processor = PostTripTrackProcessor()
+            Task {
+                await processor.processTrip(trip.id)
+            }
+        }
+
         // Auto-delete junk trips (< 500m AND < 2 min)
         if let trip = completedTrip,
            trip.distance < 500 && trip.duration < 120 {
@@ -388,14 +403,22 @@ final class MapViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Speed decay: if no GPS update for 2s, gradually reduce speed to 0
+        // Speed decay + Kalman prediction during GPS gaps
         speedDecayTimer = Timer.publish(every: 0.5, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                guard let self, self.isRecording, self.speed > 0 else { return }
+                guard let self, self.isRecording else { return }
+
+                // Kalman prediction: if GPS gap is active, feed predicted position to display
+                if !self.isPaused, self.tripManager.kalmanFilter.isPredicting,
+                   let predicted = self.tripManager.kalmanFilter.predictedLocation() {
+                    self.trackManager.addPoint(predicted.coordinate)
+                }
+
+                // Speed decay: if no GPS update for 2s, gradually reduce speed to 0
+                guard self.speed > 0 else { return }
                 let elapsed = Date().timeIntervalSince(self.lastSpeedUpdate)
                 if elapsed > 2.0 {
-                    // Gradual decay over ~1.5 seconds (3 ticks at 0.5s interval)
                     let decayed = self.speed * 0.4
                     self.speed = decayed < 1 ? 0 : decayed
                     self.smoothedSpeed = self.speed

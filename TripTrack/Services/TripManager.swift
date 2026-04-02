@@ -10,6 +10,9 @@ final class TripManager: ObservableObject {
 
     var isPaused: Bool = false
 
+    /// Kalman filter for GPS smoothing and gap prediction
+    let kalmanFilter = KalmanLocationFilter()
+
     private let locationManager: LocationManager
     private let persistenceController: PersistenceController
     private var cancellables = Set<AnyCancellable>()
@@ -64,6 +67,7 @@ final class TripManager: ObservableObject {
         lastLocation = nil
         unsavedPointCount = 0
         lastSaveTime = Date()
+        kalmanFilter.reset()
         locationManager.startTracking()
     }
 
@@ -290,20 +294,23 @@ final class TripManager: ObservableObject {
     private func handleNewLocation(_ location: CLLocation) {
         guard isRecording, !isPaused, let entity = activeTripEntity else { return }
 
-        // Filter: reject poor accuracy
+        // Filter: reject poor accuracy (check raw GPS before Kalman)
         guard location.horizontalAccuracy >= 0,
               location.horizontalAccuracy <= maxRecordAccuracy else { return }
 
-        // Filter: minimum distance between stored points
+        // Smooth through Kalman filter
+        let filtered = kalmanFilter.processGPSUpdate(location)
+
+        // Filter: minimum distance between stored points (on filtered position)
         if let last = lastLocation {
-            let delta = location.distance(from: last)
+            let delta = filtered.distance(from: last)
             guard delta >= minRecordDistance else { return }
 
             // Filter: GPS drift — device reports low speed but calculated distance is high
-            let timeDelta = location.timestamp.timeIntervalSince(last.timestamp)
+            let timeDelta = filtered.timestamp.timeIntervalSince(last.timestamp)
             if timeDelta > 0 {
                 let calculatedSpeed = delta / timeDelta
-                if location.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
+                if filtered.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
                     return
                 }
             }
@@ -312,13 +319,13 @@ final class TripManager: ObservableObject {
         let context = persistenceController.container.viewContext
         let point = TrackPointEntity(context: context)
         point.id = UUID()
-        point.latitude = location.coordinate.latitude
-        point.longitude = location.coordinate.longitude
-        point.altitude = location.altitude
-        point.speed = max(0, location.speed)
-        point.course = location.course
-        point.horizontalAccuracy = location.horizontalAccuracy
-        point.timestamp = location.timestamp
+        point.latitude = filtered.coordinate.latitude
+        point.longitude = filtered.coordinate.longitude
+        point.altitude = filtered.altitude
+        point.speed = max(0, filtered.speed)
+        point.course = filtered.course
+        point.horizontalAccuracy = filtered.horizontalAccuracy
+        point.timestamp = filtered.timestamp
         point.trip = entity
 
         // Update distance
@@ -609,6 +616,43 @@ final class TripManager: ObservableObject {
         persistenceController.save()
     }
 
+    // MARK: - Track Processing Migration
+
+    /// Mark all existing trips as track-processed (one-time migration).
+    /// Without this, the new isTrackProcessed field defaults to false,
+    /// causing PostTripTrackProcessor to incorrectly process all old trips.
+    func migrateMarkExistingTripsProcessed() {
+        let key = "didMigrateTrackProcessed"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+
+        let context = persistenceController.container.viewContext
+
+        // 1. Remove any incorrectly added interpolated points from all trips
+        let pointRequest: NSFetchRequest<TrackPointEntity> = TrackPointEntity.fetchRequest()
+        pointRequest.predicate = NSPredicate(format: "isInterpolated == YES")
+        if let interpolatedPoints = try? context.fetch(pointRequest), !interpolatedPoints.isEmpty {
+            for point in interpolatedPoints {
+                context.delete(point)
+            }
+        }
+
+        // 2. Mark all existing completed trips as processed
+        let tripRequest: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        tripRequest.predicate = NSPredicate(format: "endDate != nil AND isTrackProcessed == NO")
+        if let entities = try? context.fetch(tripRequest), !entities.isEmpty {
+            for entity in entities {
+                entity.isTrackProcessed = true
+            }
+        }
+
+        persistenceController.save()
+
+        // 3. Regenerate preview polylines (in case some were corrupted by interpolated points)
+        backfillPreviewPolylines()
+
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     // MARK: - Region Migration
 
     /// Re-geocode region field for trips missing region data
@@ -716,7 +760,8 @@ final class TripManager: ObservableObject {
                     speed: pe.speed,
                     course: pe.course,
                     horizontalAccuracy: pe.horizontalAccuracy,
-                    timestamp: ts
+                    timestamp: ts,
+                    isInterpolated: pe.isInterpolated
                 )
             } ?? []
         } else {

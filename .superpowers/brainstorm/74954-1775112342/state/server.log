@@ -1,0 +1,6 @@
+{"type":"server-started","port":63088,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:63088","screen_dir":"/Users/onezee/OneZeeProjects/trip-track/.superpowers/brainstorm/74954-1775112342/content","state_dir":"/Users/onezee/OneZeeProjects/trip-track/.superpowers/brainstorm/74954-1775112342/state"}
+{"type":"screen-added","file":"/Users/onezee/OneZeeProjects/trip-track/.superpowers/brainstorm/74954-1775112342/content/finished-redesign.html"}
+{"type":"screen-added","file":"/Users/onezee/OneZeeProjects/trip-track/.superpowers/brainstorm/74954-1775112342/content/finished-redesign-v2.html"}
+{"type":"screen-added","file":"/Users/onezee/OneZeeProjects/trip-track/.superpowers/brainstorm/74954-1775112342/content/finished-redesign-v3.html"}
+{"type":"screen-added","file":"/Users/onezee/OneZeeProjects/trip-track/.superpowers/brainstorm/74954-1775112342/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

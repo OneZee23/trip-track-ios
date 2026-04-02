@@ -10,6 +10,7 @@ struct TrackPoint: Identifiable {
     let course: Double // degrees
     let horizontalAccuracy: Double
     let timestamp: Date
+    let isInterpolated: Bool
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -21,7 +22,7 @@ struct TrackPoint: Identifiable {
 
     init(id: UUID = UUID(), latitude: Double, longitude: Double, altitude: Double = 0,
          speed: Double = 0, course: Double = -1, horizontalAccuracy: Double = 0,
-         timestamp: Date = Date()) {
+         timestamp: Date = Date(), isInterpolated: Bool = false) {
         self.id = id
         self.latitude = latitude
         self.longitude = longitude
@@ -30,9 +31,10 @@ struct TrackPoint: Identifiable {
         self.course = course
         self.horizontalAccuracy = horizontalAccuracy
         self.timestamp = timestamp
+        self.isInterpolated = isInterpolated
     }
 
-    init(id: UUID = UUID(), location: CLLocation) {
+    init(id: UUID = UUID(), location: CLLocation, isInterpolated: Bool = false) {
         self.id = id
         self.latitude = location.coordinate.latitude
         self.longitude = location.coordinate.longitude
@@ -41,5 +43,6 @@ struct TrackPoint: Identifiable {
         self.course = location.course
         self.horizontalAccuracy = location.horizontalAccuracy
         self.timestamp = location.timestamp
+        self.isInterpolated = isInterpolated
     }
 }
