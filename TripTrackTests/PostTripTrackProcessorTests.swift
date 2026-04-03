@@ -80,16 +80,15 @@ final class PostTripTrackProcessorTests: XCTestCase {
 
         await processor.processTrip(tripId)
 
+        // Interpolated points are NOT saved to CoreData (only used for preview polyline)
         let points = fetchTrackPoints(tripId: tripId)
         let interpolated = points.filter { $0.isInterpolated }
+        XCTAssertEqual(interpolated.count, 0, "Interpolated points should not be persisted")
 
-        XCTAssertGreaterThan(interpolated.count, 0, "Should have interpolated points in the gap")
-
-        // Interpolated points should be between the gap boundaries
-        for p in interpolated {
-            XCTAssertGreaterThan(p.latitude, 45.0001, "Interpolated point should be north of gap start")
-            XCTAssertLessThan(p.latitude, 45.001, "Interpolated point should be south of gap end")
-        }
+        // But preview polyline should be generated (non-nil)
+        let trip = fetchTrip(tripId: tripId)
+        XCTAssertNotNil(trip?.previewPolyline, "Preview polyline should be generated with interpolation")
+        XCTAssertTrue(trip!.isTrackProcessed)
     }
 
     func testNoGapNoInterpolation() async {
@@ -185,9 +184,8 @@ final class PostTripTrackProcessorTests: XCTestCase {
 
     // MARK: - Course Interpolation
 
-    func testCourseInterpolationWrapsAround() async {
+    func testProcessedTripHasPreviewPolyline() async {
         let t0 = Date()
-        // Course goes from 350° to 10° (crossing 0°/360° boundary)
         let tripId = createTrip(points: [
             (lat: 45.0, lon: 39.0, speed: 10, course: 340, timestamp: t0),
             (lat: 45.0001, lon: 39.0, speed: 10, course: 350, timestamp: t0.addingTimeInterval(1)),
@@ -198,14 +196,13 @@ final class PostTripTrackProcessorTests: XCTestCase {
 
         await processor.processTrip(tripId)
 
+        let trip = fetchTrip(tripId: tripId)
+        XCTAssertNotNil(trip?.previewPolyline, "Trip with gaps should have preview polyline after processing")
+        XCTAssertTrue(trip!.isTrackProcessed)
+
+        // No interpolated points saved
         let points = fetchTrackPoints(tripId: tripId)
         let interpolated = points.filter { $0.isInterpolated }
-
-        for p in interpolated {
-            // Course should be in the range ~350-360 or 0-10, not jump to 180
-            let course = p.course
-            let isNearNorth = (course >= 340 && course <= 360) || (course >= 0 && course <= 20)
-            XCTAssertTrue(isNearNorth, "Interpolated course \(course) should wrap correctly around 0°/360°")
-        }
+        XCTAssertEqual(interpolated.count, 0)
     }
 }

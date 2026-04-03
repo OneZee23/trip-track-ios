@@ -72,74 +72,126 @@ final class PostTripTrackProcessor {
             return
         }
 
-        // Find and fill gaps
-        var interpolatedEntities: [TrackPointEntity] = []
+        // Remove spike points (GPS multipath / jumps)
+        let cleanedPoints = removeSpikePoints(originalPoints, context: context)
 
-        for i in 0..<(originalPoints.count - 1) {
-            let p1 = originalPoints[i]
-            let p2 = originalPoints[i + 1]
+        guard cleanedPoints.count >= 2 else {
+            entity.isTrackProcessed = true
+            persistenceController.save()
+            return
+        }
 
-            guard let t1 = p1.timestamp, let t2 = p2.timestamp else { continue }
-            let dt = t2.timeIntervalSince(t1)
-            guard dt > gapThreshold else { continue }
+        // Build combined coordinate array (GPS + interpolated) for preview polyline only.
+        // Interpolated points are NOT saved to CoreData — they only improve the preview.
+        var combinedCoords: [CLLocationCoordinate2D] = []
+        for i in 0..<cleanedPoints.count {
+            combinedCoords.append(CLLocationCoordinate2D(
+                latitude: cleanedPoints[i].latitude,
+                longitude: cleanedPoints[i].longitude
+            ))
 
-            // Check distance
-            let loc1 = CLLocation(latitude: p1.latitude, longitude: p1.longitude)
-            let loc2 = CLLocation(latitude: p2.latitude, longitude: p2.longitude)
-            let distance = loc2.distance(from: loc1)
-            guard distance <= maxInterpolationDistance else { continue }
+            // Interpolate gap if needed
+            if i < cleanedPoints.count - 1 {
+                let p1 = cleanedPoints[i]
+                let p2 = cleanedPoints[i + 1]
+                guard let t1 = p1.timestamp, let t2 = p2.timestamp else { continue }
+                let dt = t2.timeIntervalSince(t1)
+                guard dt > gapThreshold else { continue }
 
-            // Catmull-Rom needs 4 control points: p0, p1, p2, p3
-            let p0 = i > 0 ? originalPoints[i - 1] : p1
-            let p3 = (i + 2) < originalPoints.count ? originalPoints[i + 2] : p2
+                let loc1 = CLLocation(latitude: p1.latitude, longitude: p1.longitude)
+                let loc2 = CLLocation(latitude: p2.latitude, longitude: p2.longitude)
+                let distance = loc2.distance(from: loc1)
+                guard distance <= maxInterpolationDistance else { continue }
 
-            // Number of interpolated points
-            let numPoints = max(1, Int(dt / interpolationInterval) - 1)
+                let p0 = i > 0 ? cleanedPoints[i - 1] : p1
+                let p3 = (i + 2) < cleanedPoints.count ? cleanedPoints[i + 2] : p2
 
-            for j in 1...numPoints {
-                let t = Double(j) / Double(numPoints + 1)
-                let timestamp = t1.addingTimeInterval(dt * t)
-
-                // Catmull-Rom interpolation for coordinates
-                let coord = catmullRom(
-                    p0: CLLocationCoordinate2D(latitude: p0.latitude, longitude: p0.longitude),
-                    p1: CLLocationCoordinate2D(latitude: p1.latitude, longitude: p1.longitude),
-                    p2: CLLocationCoordinate2D(latitude: p2.latitude, longitude: p2.longitude),
-                    p3: CLLocationCoordinate2D(latitude: p3.latitude, longitude: p3.longitude),
-                    t: t
-                )
-
-                // Linear interpolation for other properties
-                let speed = p1.speed + (p2.speed - p1.speed) * t
-                let altitude = p1.altitude + (p2.altitude - p1.altitude) * t
-                let course = interpolateCourse(from: p1.course, to: p2.course, t: t)
-
-                let pointEntity = TrackPointEntity(context: context)
-                pointEntity.id = UUID()
-                pointEntity.latitude = coord.latitude
-                pointEntity.longitude = coord.longitude
-                pointEntity.altitude = altitude
-                pointEntity.speed = speed
-                pointEntity.course = course
-                pointEntity.horizontalAccuracy = 0
-                pointEntity.timestamp = timestamp
-                pointEntity.isInterpolated = true
-                pointEntity.trip = entity
-
-                interpolatedEntities.append(pointEntity)
+                let numPoints = max(1, Int(dt / interpolationInterval) - 1)
+                for j in 1...numPoints {
+                    let t = Double(j) / Double(numPoints + 1)
+                    let coord = catmullRom(
+                        p0: CLLocationCoordinate2D(latitude: p0.latitude, longitude: p0.longitude),
+                        p1: CLLocationCoordinate2D(latitude: p1.latitude, longitude: p1.longitude),
+                        p2: CLLocationCoordinate2D(latitude: p2.latitude, longitude: p2.longitude),
+                        p3: CLLocationCoordinate2D(latitude: p3.latitude, longitude: p3.longitude),
+                        t: t
+                    )
+                    combinedCoords.append(coord)
+                }
             }
         }
 
-        // Regenerate preview polyline (uses all track points including interpolated)
-        regeneratePreviewPolyline(for: entity)
+        // Regenerate preview polyline from combined coords (GPS + interpolated)
+        regeneratePreviewPolyline(for: entity, coordinates: combinedCoords)
 
-        // Recalculate stats
+        // Recalculate stats from GPS-only points
         recalculateStats(for: entity)
 
         // Mark as processed
         entity.isTrackProcessed = true
         entity.lastModifiedAt = Date()
         persistenceController.save()
+    }
+
+    // MARK: - Spike Removal
+
+    /// Remove GPS spike points that deviate too far from the surrounding track.
+    /// A spike is a point that creates an implausible detour: the angle between
+    /// (prev → point) and (point → next) is sharp AND the point is far from the
+    /// straight line between prev and next.
+    private func removeSpikePoints(_ points: [TrackPointEntity], context: NSManagedObjectContext) -> [TrackPointEntity] {
+        guard points.count >= 3 else { return points }
+
+        var keepFlags = Array(repeating: true, count: points.count)
+        // Always keep first and last
+        keepFlags[0] = true
+        keepFlags[points.count - 1] = true
+
+        for i in 1..<(points.count - 1) {
+            let prev = points[i - 1]
+            let curr = points[i]
+            let next = points[i + 1]
+
+            let locPrev = CLLocation(latitude: prev.latitude, longitude: prev.longitude)
+            let locCurr = CLLocation(latitude: curr.latitude, longitude: curr.longitude)
+            let locNext = CLLocation(latitude: next.latitude, longitude: next.longitude)
+
+            let distPrevCurr = locCurr.distance(from: locPrev)
+            let distCurrNext = locNext.distance(from: locCurr)
+            let distPrevNext = locNext.distance(from: locPrev)
+
+            // Spike detection: the detour via curr is much longer than the direct path
+            // (prev → curr → next) vs (prev → next)
+            let detour = distPrevCurr + distCurrNext
+            let directPath = distPrevNext
+
+            // Skip if distances are too small to judge
+            guard directPath > 5 else { continue }
+
+            // A spike creates a large detour ratio
+            let detourRatio = detour / max(directPath, 1.0)
+
+            // Also check speed: if the implied speed to reach this point is implausible
+            var implausibleSpeed = false
+            if let tPrev = prev.timestamp, let tCurr = curr.timestamp {
+                let dt = tCurr.timeIntervalSince(tPrev)
+                if dt > 0 {
+                    let speed = distPrevCurr / dt  // m/s
+                    // > 50 m/s (~180 km/h) in city is suspicious
+                    if speed > 50 && distPrevCurr > 50 {
+                        implausibleSpeed = true
+                    }
+                }
+            }
+
+            // Remove if: big detour (>1.8x) OR implausible speed with any deviation
+            if detourRatio > 1.8 || (implausibleSpeed && detourRatio > 1.3) {
+                keepFlags[i] = false
+                context.delete(curr)
+            }
+        }
+
+        return zip(points, keepFlags).compactMap { $1 ? $0 : nil }
     }
 
     // MARK: - Catmull-Rom Interpolation
@@ -187,17 +239,9 @@ final class PostTripTrackProcessor {
 
     // MARK: - Preview Polyline
 
-    private func regeneratePreviewPolyline(for entity: TripEntity) {
-        guard let points = entity.trackPoints?.array as? [TrackPointEntity],
-              points.count >= 2 else { return }
-
-        let sorted = points.sorted {
-            ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast)
-        }
-        let coords = sorted.map {
-            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-        }
-        let simplified = GeometryUtils.simplifyRDP(coords, epsilon: 0.00003)
+    private func regeneratePreviewPolyline(for entity: TripEntity, coordinates: [CLLocationCoordinate2D]) {
+        guard coordinates.count >= 2 else { return }
+        let simplified = GeometryUtils.simplifyRDP(coordinates, epsilon: 0.00003)
         entity.previewPolyline = Trip.encodePolyline(simplified)
     }
 

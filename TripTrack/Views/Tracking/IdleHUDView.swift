@@ -48,29 +48,10 @@ struct IdleHUDView: View {
                 Spacer().frame(height: 20)
             }
 
-            // Start button
-            Button {
-                let generator = UIImpactFeedbackGenerator(style: .heavy)
-                generator.impactOccurred()
-                onStartTrip()
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 16))
-                    Text(AppStrings.startTrip(lang.language))
-                        .font(.system(size: 18, weight: .bold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(AppTheme.accent)
-                )
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
+            // Slide to start
+            SlideToStartView(onStartTrip: onStartTrip)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
         }
         .background(
             RoundedRectangle(cornerRadius: 24)

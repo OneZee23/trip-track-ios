@@ -328,17 +328,17 @@ final class TripManager: ObservableObject {
         point.timestamp = filtered.timestamp
         point.trip = entity
 
-        // Update distance
+        // Update distance (use filtered position, not raw GPS)
         if let last = lastLocation {
-            let delta = location.distance(from: last)
+            let delta = filtered.distance(from: last)
             if delta < 1000 { // ignore jumps > 1km
                 entity.distance += delta
             }
         }
-        lastLocation = location
+        lastLocation = filtered
 
         // Update speeds
-        let speed = max(0, location.speed)
+        let speed = max(0, filtered.speed)
         if speed > entity.maxSpeed {
             entity.maxSpeed = speed
         }
@@ -650,6 +650,35 @@ final class TripManager: ObservableObject {
         // 3. Regenerate preview polylines (in case some were corrupted by interpolated points)
         backfillPreviewPolylines()
 
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    /// Re-process all trips with spike removal (one-time, v2 of track processing).
+    func migrateReprocessTripsWithSpikeRemoval() {
+        let key = "didMigrateTrackSpikeRemovalV2"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+
+        let context = persistenceController.container.viewContext
+
+        // 1. Remove old interpolated points
+        let pointRequest: NSFetchRequest<TrackPointEntity> = TrackPointEntity.fetchRequest()
+        pointRequest.predicate = NSPredicate(format: "isInterpolated == YES")
+        if let interpolatedPoints = try? context.fetch(pointRequest), !interpolatedPoints.isEmpty {
+            for point in interpolatedPoints {
+                context.delete(point)
+            }
+        }
+
+        // 2. Reset isTrackProcessed on all trips so PostTripTrackProcessor reprocesses them
+        let tripRequest: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        tripRequest.predicate = NSPredicate(format: "endDate != nil AND isTrackProcessed == YES")
+        if let entities = try? context.fetch(tripRequest), !entities.isEmpty {
+            for entity in entities {
+                entity.isTrackProcessed = false
+            }
+        }
+
+        persistenceController.save()
         UserDefaults.standard.set(true, forKey: key)
     }
 

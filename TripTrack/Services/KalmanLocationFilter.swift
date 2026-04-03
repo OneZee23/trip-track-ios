@@ -31,7 +31,8 @@ final class KalmanLocationFilter {
     private let predictionTimeout: TimeInterval = 10.0
 
     /// Process noise acceleration (m/s²) — tuned for automotive
-    private let processNoiseAccel: Double = 2.0
+    /// Lower = filter is stiffer, resists GPS jumps more
+    private let processNoiseAccel: Double = 1.0
 
     // MARK: - Internal State
 
@@ -80,7 +81,8 @@ final class KalmanLocationFilter {
                                           lon: location.coordinate.longitude)
 
         // Measurement noise from horizontal accuracy
-        let accuracy = max(location.horizontalAccuracy, 1.0)
+        // Floor at 10m — GPS in cities reports optimistic accuracy during jamming
+        let accuracy = max(location.horizontalAccuracy, 10.0)
         let R = accuracy * accuracy  // variance in meters²
 
         // Update step (correct state with GPS measurement)

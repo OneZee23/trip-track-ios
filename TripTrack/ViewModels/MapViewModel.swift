@@ -88,6 +88,9 @@ final class MapViewModel: ObservableObject {
             // Mark existing trips as processed (one-time migration)
             tripManager.migrateMarkExistingTripsProcessed()
 
+            // Re-process all trips with spike removal (one-time v2 migration)
+            tripManager.migrateReprocessTripsWithSpikeRemoval()
+
             // Process any trips that weren't post-processed (e.g., app killed before completion)
             let processor = PostTripTrackProcessor()
             await processor.processUnprocessedTrips()

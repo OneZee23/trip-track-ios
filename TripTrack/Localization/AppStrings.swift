@@ -68,6 +68,9 @@ enum AppStrings {
     static func startTrip(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Начать поездку" : "Start trip"
     }
+    static func slideToStart(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сдвиньте для старта" : "Slide to start"
+    }
     static func readyToRide(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Готов к поездке" : "Ready to ride"
     }
