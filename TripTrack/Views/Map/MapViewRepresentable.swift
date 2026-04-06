@@ -10,6 +10,7 @@ struct MapViewRepresentable: UIViewRepresentable {
     var bottomInset: CGFloat = 0
     @Binding var zoomDelta: Double
     var isRecording: Bool = false
+    var simulatedCoordinate: CLLocationCoordinate2D?
     var onAnnotationSelected: ((MKPointAnnotation) -> Void)?
     var onCameraDistanceChanged: ((Double) -> Void)?
 
@@ -17,8 +18,9 @@ struct MapViewRepresentable: UIViewRepresentable {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
 
-        mapView.showsUserLocation = true
-        mapView.userTrackingMode = userTrackingMode
+        let isSimulated = simulatedCoordinate != nil
+        mapView.showsUserLocation = !isSimulated
+        mapView.userTrackingMode = isSimulated ? .none : userTrackingMode
 
         mapView.layoutMargins = UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
 
@@ -50,10 +52,26 @@ struct MapViewRepresentable: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
 
-        // Tracking mode sync
-        if !context.coordinator.suppressTrackingCallback,
-           mapView.userTrackingMode != userTrackingMode {
-            mapView.setUserTrackingMode(userTrackingMode, animated: true)
+        // Simulated mode: follow simulated coordinate instead of user location
+        if let simCoord = simulatedCoordinate {
+            mapView.showsUserLocation = false
+            if mapView.userTrackingMode != .none {
+                mapView.setUserTrackingMode(.none, animated: false)
+            }
+            // Set zoom once, then just follow center
+            if mapView.camera.centerCoordinateDistance > 1500 || mapView.camera.centerCoordinateDistance < 100 {
+                let camera = MKMapCamera(lookingAtCenter: simCoord, fromDistance: 800, pitch: 0, heading: 0)
+                mapView.camera = camera
+            } else {
+                mapView.setCenter(simCoord, animated: false)
+            }
+        } else {
+            mapView.showsUserLocation = true
+            // Tracking mode sync
+            if !context.coordinator.suppressTrackingCallback,
+               mapView.userTrackingMode != userTrackingMode {
+                mapView.setUserTrackingMode(userTrackingMode, animated: true)
+            }
         }
 
         // Bottom inset

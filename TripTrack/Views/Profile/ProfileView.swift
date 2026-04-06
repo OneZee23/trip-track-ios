@@ -8,6 +8,10 @@ struct ProfileView: View {
 
     @ObservedObject private var settings = SettingsManager.shared
 
+    // Dev mode activation
+    @State private var devTapCount = 0
+    @State private var devLastTap: Date = .distantPast
+
     // Profile avatar
     @State private var selectedAvatar: String = "😎"
     @State private var isEditingAvatar = false
@@ -319,9 +323,26 @@ struct ProfileView: View {
                     .foregroundStyle(AppTheme.accent)
                     .tracking(3)
 
-                Text("v0.1.0 MVP")
+                Text(mapVM.locationManager.isDeveloperMode ? "v0.1.0 DEV" : "v0.1.0 MVP")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(c.textSecondary)
+                    .foregroundStyle(mapVM.locationManager.isDeveloperMode ? AppTheme.green : c.textSecondary)
+                    .contentShape(Rectangle())
+                    .frame(minWidth: 100, minHeight: 44)
+                    .onTapGesture {
+                        guard BuildEnvironment.allowsDevMode else { return }
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        let now = Date()
+                        if now.timeIntervalSince(devLastTap) > 3 { devTapCount = 0 }
+                        devLastTap = now
+                        devTapCount += 1
+                        if devTapCount >= 5 {
+                            devTapCount = 0
+                            mapVM.locationManager.isDeveloperMode.toggle()
+                            UINotificationFeedbackGenerator().notificationOccurred(
+                                mapVM.locationManager.isDeveloperMode ? .success : .warning
+                            )
+                        }
+                    }
 
                 Text("\(AppStrings.author(lang.language)): OneZee")
                     .font(.system(size: 12))

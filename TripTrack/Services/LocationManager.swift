@@ -7,6 +7,19 @@ enum TrackingMode {
     case simulated  // Dev-режим с джойстиком
 }
 
+enum BuildEnvironment {
+    static let devModeKey = "devMode"
+
+    /// True for Debug builds and TestFlight (not App Store)
+    static var allowsDevMode: Bool {
+        #if DEBUG
+        return true
+        #else
+        return Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+        #endif
+    }
+}
+
 /// Менеджер режимов отслеживания (GPS/Симуляция)
 class LocationManager: ObservableObject {
     // Публичный интерфейс — единый для обоих режимов
@@ -15,7 +28,13 @@ class LocationManager: ObservableObject {
     
     // Текущий режим
     @Published private(set) var mode: TrackingMode = .real
-    @Published var isDeveloperMode: Bool = false
+    @Published var isDeveloperMode: Bool = BuildEnvironment.allowsDevMode && UserDefaults.standard.bool(forKey: BuildEnvironment.devModeKey) {
+        didSet {
+            guard isDeveloperMode != oldValue else { return }
+            guard BuildEnvironment.allowsDevMode else { isDeveloperMode = false; return }
+            UserDefaults.standard.set(isDeveloperMode, forKey: BuildEnvironment.devModeKey)
+        }
+    }
     
     // Провайдеры
     private var realGPS = RealGPSProvider()
@@ -98,15 +117,14 @@ class LocationManager: ObservableObject {
     private func startSimulatedTracking() {
         mode = .simulated
 
-        // Берём текущую реальную позицию как стартовую
-        // Fallback: Москва (не 0,0 чтобы не портить статистику)
-        let startCoordinate = currentLocation?.coordinate ?? CLLocationCoordinate2D(
-            latitude: 55.7558,
-            longitude: 37.6173
+        let route = SimulatedLocationProvider.tokyoDemoRoute
+        guard let startCoordinate = route.first else { return }
+
+        let provider = SimulatedLocationProvider(
+            startingFrom: startCoordinate,
+            autoRoute: route,
+            autoRouteSpeed: 11.0
         )
-        
-        // Создаём симулированный провайдер
-        let provider = SimulatedLocationProvider(startingFrom: startCoordinate)
         simulatedProvider = provider
         
         // Подписываемся на обновления симуляции

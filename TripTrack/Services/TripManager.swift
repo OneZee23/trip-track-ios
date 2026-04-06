@@ -655,7 +655,7 @@ final class TripManager: ObservableObject {
 
     /// Re-process all trips with spike removal (one-time, v2 of track processing).
     func migrateReprocessTripsWithSpikeRemoval() {
-        let key = "didMigrateTrackSpikeRemovalV2"
+        let key = "didMigrateTrackSpikeRemovalV3"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
 
         let context = persistenceController.container.viewContext

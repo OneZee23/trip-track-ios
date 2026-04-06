@@ -5,7 +5,6 @@ struct SlideToStartView: View {
     @EnvironmentObject private var lang: LanguageManager
 
     @State private var dragOffset: CGFloat = 0
-    @State private var isCompleted = false
 
     private let thumbSize: CGFloat = 48
     private let trackHeight: CGFloat = 56
@@ -42,22 +41,13 @@ struct SlideToStartView: View {
                         .gesture(
                             DragGesture()
                                 .onChanged { value in
-                                    guard !isCompleted else { return }
                                     dragOffset = max(0, min(value.translation.width, maxOffset))
                                 }
                                 .onEnded { _ in
-                                    guard !isCompleted else { return }
                                     if progress >= threshold {
-                                        isCompleted = true
                                         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                                        dragOffset = 0
                                         onStartTrip()
-                                        // Reset after a short delay
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                                                dragOffset = 0
-                                            }
-                                            isCompleted = false
-                                        }
                                     } else {
                                         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                                             dragOffset = 0

@@ -19,6 +19,8 @@ struct TrackingView: View {
                     bottomInset: viewModel.isRecording ? 0 : idleHUDInset,
                     zoomDelta: $viewModel.zoomDelta,
                     isRecording: viewModel.isRecording,
+                    simulatedCoordinate: viewModel.locationManager.mode == .simulated
+                        ? viewModel.locationManager.currentLocation?.coordinate : nil,
                     onCameraDistanceChanged: { viewModel.currentCameraDistance = $0 }
                 )
                 .ignoresSafeArea()
