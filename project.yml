@@ -30,7 +30,6 @@ targets:
       Release: Local.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
@@ -38,9 +37,17 @@ targets:
         INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "TripTrack uses your location in the background to continue recording your driving route while the app is minimized, so you don't lose any part of your trip."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "TripTrack uses your location to record your driving route on the map, calculate distance and speed, and save the trip to your travel journal."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
         MARKETING_VERSION: "0.1.1"
         CURRENT_PROJECT_VERSION: "2"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.dev
+          INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Dev"
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIconDev
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack
+          INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     entitlements:
       path: TripTrack/TripTrack.entitlements
 
@@ -57,7 +64,6 @@ targets:
       - path: TripTrackShared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.LiveActivity
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
@@ -67,6 +73,11 @@ targets:
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         APP_INTENTS_DEPLOYMENT_POSTPROCESSING: NO
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.dev.LiveActivity
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.LiveActivity
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig
