@@ -184,8 +184,8 @@ final class PostTripTrackProcessor {
                 }
             }
 
-            // Remove if: big detour (>1.8x) OR implausible speed with any deviation
-            if detourRatio > 1.8 || (implausibleSpeed && detourRatio > 1.3) {
+            // Remove if: big detour (>3.0x) OR implausible speed with moderate deviation
+            if detourRatio > 3.0 || (implausibleSpeed && detourRatio > 1.5) {
                 keepFlags[i] = false
                 context.delete(curr)
             }

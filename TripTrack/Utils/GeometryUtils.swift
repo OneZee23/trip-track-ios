@@ -66,6 +66,47 @@ enum GeometryUtils {
         }
     }
 
+    /// Default gap threshold in meters for splitting routes into segments.
+    static let defaultGapThreshold: Double = 1_000
+
+    // MARK: - Gap Splitting
+
+    /// Split a coordinate array into continuous segments, breaking at gaps > threshold meters.
+    /// Uses Haversine formula to avoid CLLocation allocations.
+    static func splitByGaps(
+        _ coords: [CLLocationCoordinate2D],
+        threshold: Double
+    ) -> [[CLLocationCoordinate2D]] {
+        guard coords.count >= 2 else { return [] }
+        var segments: [[CLLocationCoordinate2D]] = []
+        var current: [CLLocationCoordinate2D] = [coords[0]]
+        for i in 1..<coords.count {
+            if haversineDistance(coords[i - 1], coords[i]) > threshold {
+                if current.count >= 2 { segments.append(current) }
+                current = [coords[i]]
+            } else {
+                current.append(coords[i])
+            }
+        }
+        if current.count >= 2 { segments.append(current) }
+        return segments
+    }
+
+    /// Haversine distance in meters between two coordinates.
+    static func haversineDistance(
+        _ a: CLLocationCoordinate2D,
+        _ b: CLLocationCoordinate2D
+    ) -> Double {
+        let R = 6_371_000.0 // Earth radius in meters
+        let dLat = (b.latitude - a.latitude) * .pi / 180
+        let dLon = (b.longitude - a.longitude) * .pi / 180
+        let lat1 = a.latitude * .pi / 180
+        let lat2 = b.latitude * .pi / 180
+        let h = sin(dLat / 2) * sin(dLat / 2) +
+                cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
+        return R * 2 * atan2(sqrt(h), sqrt(1 - h))
+    }
+
     // MARK: - Perpendicular Distance
 
     /// Distance from a point to a line segment defined by two endpoints, in coordinate degrees.

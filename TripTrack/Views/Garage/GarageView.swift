@@ -214,6 +214,7 @@ struct GarageView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -345,7 +346,7 @@ private struct FuelSettingsCard: View {
     @State private var didLoad = false
     @AppStorage("distanceUnit") private var distanceUnit: String = "km"
     @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
-    @AppStorage("fuelCurrency") private var currency: String = "₽"
+    @AppStorage(FuelCurrency.storageKey) private var currency: String = FuelCurrency.defaultSymbol
 
     private var volShort: String {
         volumeUnit == "gallons" ? (isRu ? "гал" : "gal") : (isRu ? "л" : "L")
@@ -475,7 +476,7 @@ private struct UnitsSettingsCard: View {
 
     @AppStorage("distanceUnit") private var distanceUnit: String = "km"
     @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
-    @AppStorage("fuelCurrency") private var currency: String = "₽"
+    @AppStorage(FuelCurrency.storageKey) private var currency: String = FuelCurrency.defaultSymbol
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)

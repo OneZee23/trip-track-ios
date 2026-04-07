@@ -120,24 +120,44 @@ struct ProfileView: View {
 
     private func quickStatsRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         HStack(spacing: 10) {
-            quickStatPill(
-                icon: "flame.fill",
-                value: "\(settings.currentStreak)",
-                label: isRu ? "серия" : "streak",
-                color: AppTheme.accent, c: c
-            )
-            quickStatPill(
-                icon: "car.fill",
-                value: String(format: "%.0f", mapVM.cachedTotalKm),
-                label: isRu ? "км" : "km",
-                color: AppTheme.green, c: c
-            )
-            quickStatPill(
-                icon: "flag.fill",
-                value: "\(mapVM.cachedTripCount)",
-                label: isRu ? "поездок" : "trips",
-                color: AppTheme.blue, c: c
-            )
+            Button {
+                Haptics.tap()
+                showStats = true
+            } label: {
+                quickStatPill(
+                    icon: "flame.fill",
+                    value: "\(settings.currentStreak)",
+                    label: isRu ? "серия" : "streak",
+                    color: AppTheme.accent, c: c
+                )
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                Haptics.tap()
+                showStats = true
+            } label: {
+                quickStatPill(
+                    icon: "car.fill",
+                    value: String(format: "%.0f", mapVM.cachedTotalKm),
+                    label: isRu ? "км" : "km",
+                    color: AppTheme.green, c: c
+                )
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                Haptics.tap()
+                showStats = true
+            } label: {
+                quickStatPill(
+                    icon: "flag.fill",
+                    value: "\(mapVM.cachedTripCount)",
+                    label: isRu ? "поездок" : "trips",
+                    color: AppTheme.blue, c: c
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -319,11 +339,11 @@ struct ProfileView: View {
                     .foregroundStyle(AppTheme.accent)
                     .tracking(3)
 
-                Text("v0.1.0 MVP")
+                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.1")")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(c.textSecondary)
 
-                Text("\(AppStrings.author(lang.language)): OneZee")
+                Text("\(AppStrings.developer(lang.language)): OneZee")
                     .font(.system(size: 12))
                     .foregroundStyle(c.textTertiary)
             }
@@ -364,9 +384,10 @@ struct ProfileView: View {
         } label: {
             VStack(spacing: 6) {
                 Image(assetIcon)
+                    .renderingMode(.template)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 22, height: 22)
+                    .frame(width: 22, height: 22, alignment: .center)
                     .foregroundStyle(iconColor)
 
                 Text(label)

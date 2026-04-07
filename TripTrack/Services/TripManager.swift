@@ -54,6 +54,7 @@ final class TripManager: ObservableObject {
         entity.maxSpeed = 0
         entity.averageSpeed = 0
         entity.vehicleId = vehicleId
+        entity.fuelCurrency = FuelCurrency.current
         entity.lastModifiedAt = Date()
         persistenceController.save()
 
@@ -722,6 +723,8 @@ final class TripManager: ObservableObject {
 
     private static let demoTripIdKey = "demoTripId"
 
+    // MARK: - Demo Trip (debug only, not used in production since 0.1.1)
+
     func createDemoTrip() {
         let context = persistenceController.container.viewContext
         let entity = TripEntity(context: context)
@@ -764,7 +767,7 @@ final class TripManager: ObservableObject {
         UserDefaults.standard.set(tripId.uuidString, forKey: Self.demoTripIdKey)
     }
 
-    private func deleteDemoTripIfNeeded() {
+    func deleteDemoTripIfNeeded() {
         guard let demoIdString = UserDefaults.standard.string(forKey: Self.demoTripIdKey),
               let demoId = UUID(uuidString: demoIdString) else { return }
 
@@ -827,6 +830,7 @@ final class TripManager: ObservableObject {
             region: entity.region,
             isPrivate: entity.isPrivate,
             vehicleId: entity.vehicleId,
+            fuelCurrency: entity.fuelCurrency,
             previewPolyline: entity.previewPolyline,
             earnedBadgeIds: badgeIds
         )
@@ -856,7 +860,10 @@ final class TripManager: ObservableObject {
         guard let points = entity.trackPoints?.array as? [TrackPointEntity],
               points.count >= 2 else { return }
 
-        let coords = points.map {
+        let sorted = points.sorted {
+            ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast)
+        }
+        let coords = sorted.map {
             CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
         }
         let simplified = GeometryUtils.simplifyRDP(coords, epsilon: 0.00003)
@@ -875,6 +882,27 @@ final class TripManager: ObservableObject {
             generatePreviewPolyline(for: entity)
         }
         persistenceController.save()
+    }
+
+    /// One-time migration: regenerate all preview polylines with correct timestamp sorting.
+    func migrateRegeneratePreviewPolylines() {
+        let key = "didMigratePreviewPolylinesSorted"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "endDate != nil AND previewPolyline != nil")
+
+        guard let entities = try? context.fetch(request), !entities.isEmpty else {
+            UserDefaults.standard.set(true, forKey: key)
+            return
+        }
+
+        for entity in entities {
+            generatePreviewPolyline(for: entity)
+        }
+        persistenceController.save()
+        UserDefaults.standard.set(true, forKey: key)
     }
 
     // MARK: - Photos

@@ -91,12 +91,21 @@ struct RegionsView: View {
             }
         }
         .opacity(isLoading ? 0 : 1)
-        .task {
+        .onAppear {
             mapVM.checkSunTheme()
+            let hasCachedData = mapVM.cachedRegionsPolylines != nil
             loadData()
-            withAnimation(.easeOut(duration: 0.3)) {
+            if hasCachedData {
                 isLoading = false
+            } else {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    isLoading = false
+                }
             }
+        }
+        .refreshable {
+            mapVM.invalidateRegionsCache()
+            loadData()
         }
         .fullScreenCover(isPresented: $isMapExpanded) {
             FullscreenFogMapView(
@@ -126,7 +135,7 @@ struct RegionsView: View {
         let exploredKm2 = Int(Double(tileCount) * Self.km2PerTile)
         let cityCount = cities.count
         let regionCount = regions.count
-        let topRegion = regions.sorted(by: { $0.percentage > $1.percentage }).first
+        let isRu = lang.language == .ru
 
         return VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 16) {
@@ -176,9 +185,11 @@ struct RegionsView: View {
                 }
             }
 
-            // Bottom line: top region explored percentage
-            if let top = topRegion {
-                Text(AppStrings.exploredPercent(lang.language, percent: "\(Int(top.percentage * 100))", place: top.name))
+            // Bottom line: top region by tile count
+            if let top = regions.max(by: { $0.tileCount < $1.tileCount }), top.tileCount > 0 {
+                let topKm2 = Int(Double(top.tileCount) * Self.km2PerTile)
+                Text(isRu ? "Больше всего исследовано: \(top.name) — \(topKm2) км²"
+                     : "Most explored: \(top.name) — \(topKm2) km²")
                     .font(.system(size: 12))
                     .foregroundStyle(c.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -231,8 +242,7 @@ struct RegionsView: View {
 
                 HStack(spacing: 6) {
                     let km2 = Int(Double(place.tileCount) * Self.km2PerTile)
-                    let targetKm2 = Int(Double(place.target) * Self.km2PerTile)
-                    Text("\(km2)/\(targetKm2) \(isRu ? "км²" : "km²")")
+                    Text("\(km2) \(isRu ? "км²" : "km²")")
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
 
@@ -246,11 +256,6 @@ struct RegionsView: View {
 
             // Circular progress indicator
             circularProgress(percentage: place.percentage, color: place.status.color, c: c)
-
-            // Chevron
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -268,8 +273,8 @@ struct RegionsView: View {
                 .rotationEffect(.degrees(-90))
                 .frame(width: 32, height: 32)
 
-            Text(String(format: "%.0f", percentage * 100))
-                .font(.system(size: 9, weight: .bold).monospacedDigit())
+            Text(String(format: "%.0f%%", percentage * 100))
+                .font(.system(size: 8, weight: .bold).monospacedDigit())
                 .foregroundStyle(c.text)
         }
     }
@@ -283,20 +288,39 @@ struct RegionsView: View {
     private func loadData() {
         visitedGeohashes = mapVM.territoryManager.visitedGeohashes
 
+        // Use cached data if available (instant on repeat visits)
+        if let cachedPolylines = mapVM.cachedRegionsPolylines,
+           let cachedCities = mapVM.cachedRegionsCities,
+           let cachedRegions = mapVM.cachedRegionsRegions {
+            tripPolylines = cachedPolylines
+            cities = cachedCities
+            regions = cachedRegions
+            return
+        }
+
         let trips = mapVM.tripManager.fetchTripsWithTrackPoints()
+        let gapThreshold = GeometryUtils.defaultGapThreshold
         var polylines: [MKPolyline] = []
         for trip in trips {
-            let coords = trip.trackPoints.map(\.coordinate)
+            let coords = trip.previewCoordinates
             guard coords.count >= 2 else { continue }
-            var mutableCoords = coords
-            let polyline = MKPolyline(coordinates: &mutableCoords, count: mutableCoords.count)
-            polylines.append(polyline)
+            let segments = GeometryUtils.splitByGaps(coords, threshold: gapThreshold)
+            for segment in segments {
+                var mutable = segment
+                let polyline = MKPolyline(coordinates: &mutable, count: mutable.count)
+                polylines.append(polyline)
+            }
         }
         tripPolylines = polylines
 
         let exploration = mapVM.territoryManager.getExploration(from: trips)
         cities = exploration.filter { $0.type == .city }
         regions = exploration.filter { $0.type == .region }
+
+        // Cache for instant repeat visits
+        mapVM.cachedRegionsPolylines = polylines
+        mapVM.cachedRegionsCities = cities
+        mapVM.cachedRegionsRegions = regions
     }
 
     private var tabBarHeight: CGFloat {

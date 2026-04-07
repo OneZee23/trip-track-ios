@@ -100,7 +100,7 @@ struct DriverLevelView: View {
                     xpInfoRow(icon: "arrow.right", text: isRu ? "×2 за поездки 200+ км" : "×2 for trips 200+ km", c: c)
 
                     Text(isRu ? "Ранги: Новичок → Водитель → Путешественник → Исследователь → Штурман → Дальнобойщик → Легенда"
-                         : "Ranks: Novice → Driver → Traveler → Explorer → Navigator → Trucker → Legend")
+                         : "Ranks: Beginner → Driver → Traveler → Explorer → Navigator → Trucker → Legend")
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
                         .padding(.top, 2)

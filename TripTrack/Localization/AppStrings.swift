@@ -148,8 +148,8 @@ enum AppStrings {
     static func about(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "О приложении" : "About"
     }
-    static func author(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Автор" : "Author"
+    static func developer(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Разработчик" : "Developer"
     }
     static func calendar(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Календарь" : "Calendar"
@@ -167,7 +167,7 @@ enum AppStrings {
         lang == .ru ? "Расход л/100км" : "L/100km"
     }
     static func pricePerLiter(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "₽ за литр" : "$/L"
+        lang == .ru ? "\(FuelCurrency.current) за литр" : "\(FuelCurrency.current)/L"
     }
 
     // MARK: - Trip detail
@@ -207,13 +207,13 @@ enum AppStrings {
         lang == .ru ? "Добро пожаловать в TripTrack" : "Welcome to TripTrack"
     }
     static func onboardingWelcomeSub(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Дневник ваших дорог" : "Your road diary"
+        lang == .ru ? "Дневник ваших дорог — маршруты, статистика, расход топлива и гараж" : "Your road diary — routes, stats, fuel costs, and your garage"
     }
     static func onboardingRecord(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Записывайте поездки" : "Record your trips"
     }
     static func onboardingRecordSub(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Нажмите кнопку и маршрут запишется автоматически" : "Tap the button and your route records automatically"
+        lang == .ru ? "Нажмите кнопку — маршрут, скорость и расход запишутся автоматически. Управляйте машинами в гараже" : "Tap the button — route, speed, and fuel cost are recorded. Manage your cars in the garage"
     }
     static func onboardingFeed(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Ваша лента поездок" : "Your trip feed"

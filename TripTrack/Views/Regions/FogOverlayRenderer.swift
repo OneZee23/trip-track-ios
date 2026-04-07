@@ -6,7 +6,7 @@ final class FogOverlayRenderer: MKOverlayRenderer {
     private var fogColor: UIColor {
         isDark
             ? UIColor(red: 10/255, green: 10/255, blue: 15/255, alpha: 0.88)
-            : UIColor(red: 160/255, green: 160/255, blue: 170/255, alpha: 0.78)
+            : UIColor(red: 220/255, green: 220/255, blue: 225/255, alpha: 0.85)
     }
 
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {

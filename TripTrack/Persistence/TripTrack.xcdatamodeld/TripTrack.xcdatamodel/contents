@@ -18,6 +18,7 @@
         <attribute name="lastModifiedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="syncStatus" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="isTrackProcessed" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="fuelCurrency" optional="YES" attributeType="String"/>
         <attribute name="vehicleId" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="xpEarned" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <relationship name="photos" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="TripPhotoEntity" inverseName="trip" inverseEntity="TripPhotoEntity"/>
@@ -71,7 +72,7 @@
         <attribute name="currentStreak" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="distanceUnit" optional="YES" attributeType="String" defaultValueString="km"/>
         <attribute name="fuelConsumption" optional="YES" attributeType="Double" defaultValueString="7.8" usesScalarValueType="YES"/>
-        <attribute name="fuelCurrency" optional="YES" attributeType="String" defaultValueString="₽"/>
+        <attribute name="fuelCurrency" optional="YES" attributeType="String" defaultValueString="€"/>
         <attribute name="fuelPrice" optional="YES" attributeType="Double" defaultValueString="56" usesScalarValueType="YES"/>
         <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="language" optional="YES" attributeType="String" defaultValueString="ru"/>

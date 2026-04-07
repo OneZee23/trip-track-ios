@@ -24,7 +24,7 @@ struct FeedTripCardView: View {
     var vehicleName: String?
     var vehicleEmoji: String = "🚗"
     var vehicle: Vehicle?
-    var fuelCurrency: String = "₽"
+    var fuelCurrency: String = "€"
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
 

@@ -79,10 +79,10 @@ final class TerritoryManager: ObservableObject {
             let cities = extractCities(from: trip)
             let region = trip.region
 
-            let startCoord = trip.trackPoints.first!.coordinate
-            let endCoord = trip.trackPoints.last!.coordinate
-            let startLoc = CLLocation(latitude: startCoord.latitude, longitude: startCoord.longitude)
-            let endLoc = CLLocation(latitude: endCoord.latitude, longitude: endCoord.longitude)
+            guard let startPoint = trip.trackPoints.first,
+                  let endPoint = trip.trackPoints.last else { continue }
+            let startCoord = startPoint.coordinate
+            let endCoord = endPoint.coordinate
 
             for point in trip.trackPoints {
                 let hash6 = GeohashEncoder.encode(
@@ -92,25 +92,22 @@ final class TerritoryManager: ObservableObject {
                 )
                 guard visitedCache.contains(hash6) else { continue }
 
-                let pointLoc = CLLocation(latitude: point.latitude, longitude: point.longitude)
+                let pointCoord = point.coordinate
 
-                // Attribute to start city only if within radius
                 if let startCity = cities.start,
-                   pointLoc.distance(from: startLoc) <= cityRadiusMeters {
+                   GeometryUtils.haversineDistance(pointCoord, startCoord) <= cityRadiusMeters {
                     cityTiles[startCity, default: []].insert(hash6)
                     unmatchedTiles.remove(hash6)
                     if let region { cityToRegion[startCity] = region }
                 }
 
-                // Attribute to end city only if within radius
                 if let endCity = cities.end, endCity != cities.start,
-                   pointLoc.distance(from: endLoc) <= cityRadiusMeters {
+                   GeometryUtils.haversineDistance(pointCoord, endCoord) <= cityRadiusMeters {
                     cityTiles[endCity, default: []].insert(hash6)
                     unmatchedTiles.remove(hash6)
                     if let region { cityToRegion[endCity] = region }
                 }
 
-                // Region gets ALL tiles regardless of city proximity
                 if let region {
                     regionTiles[region, default: []].insert(hash6)
                     unmatchedTiles.remove(hash6)
@@ -157,20 +154,34 @@ final class TerritoryManager: ObservableObject {
         return places
     }
 
-    /// Extract start and end city names from trip title.
-    /// "Krasnodar → Gelendzhik" → (start: "Krasnodar", end: "Gelendzhik")
-    /// "Krasnodar" → (start: "Krasnodar", end: nil) — circular trip
+    /// Look up start and end city names from the geocode cache using trip coordinates.
+    /// Falls back to parsing trip title if cache misses.
     private func extractCities(from trip: Trip) -> (start: String?, end: String?) {
-        guard let title = trip.title, !title.isEmpty else { return (nil, nil) }
+        guard !trip.trackPoints.isEmpty else { return (nil, nil) }
 
-        // Skip date-format titles like "18 Mar, 21:08"
-        if title.contains(":") && title.count < 20 {
-            return (nil, nil)
+        let context = persistenceController.container.viewContext
+
+        // Try geocode cache first (most reliable — uses same data as trip naming)
+        func cachedLocality(for coord: CLLocationCoordinate2D) -> String? {
+            let geohash5 = GeohashEncoder.encode(latitude: coord.latitude, longitude: coord.longitude, precision: 5)
+            let request: NSFetchRequest<GeocodeCacheEntity> = GeocodeCacheEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "geohash5 == %@", geohash5)
+            request.fetchLimit = 1
+            return (try? context.fetch(request).first)?.locality
         }
-        // Skip titles that start with a digit (likely a date)
-        if let first = title.first, first.isNumber {
-            return (nil, nil)
+
+        let startCity = trip.trackPoints.first.flatMap { cachedLocality(for: $0.coordinate) }
+        let endCity = trip.trackPoints.last.flatMap { cachedLocality(for: $0.coordinate) }
+
+        if startCity != nil || endCity != nil {
+            let effectiveEnd = (endCity != startCity) ? endCity : nil
+            return (startCity, effectiveEnd)
         }
+
+        // Fallback: parse trip title
+        guard let title = trip.title, !title.isEmpty else { return (nil, nil) }
+        if title.contains(":") && title.count < 20 { return (nil, nil) }
+        if let first = title.first, first.isNumber { return (nil, nil) }
 
         if let arrow = title.range(of: " → ") {
             let start = String(title[..<arrow.lowerBound])
@@ -179,6 +190,53 @@ final class TerritoryManager: ObservableObject {
         }
 
         return (title, nil)
+    }
+
+    // MARK: - Rebuild (after trip deletion)
+
+    /// Rebuilds visited geohashes from all active trips' track points on a background context.
+    func rebuildFromTrips() {
+        let pc = persistenceController
+        let bgContext = pc.container.newBackgroundContext()
+
+        bgContext.perform {
+            let existing: NSFetchRequest<VisitedGeohashEntity> = VisitedGeohashEntity.fetchRequest()
+            if let entities = try? bgContext.fetch(existing) {
+                for entity in entities { bgContext.delete(entity) }
+            }
+
+            let request = NSFetchRequest<NSFetchRequestResult>(entityName: "TrackPointEntity")
+            request.predicate = NSPredicate(format: "trip.endDate != nil AND trip.syncStatus != %d", SyncStatus.pendingDelete.rawValue)
+            request.resultType = .dictionaryResultType
+            request.propertiesToFetch = ["latitude", "longitude"]
+            request.fetchBatchSize = 500
+
+            var newHashes = Set<String>()
+            if let results = try? bgContext.fetch(request) as? [[String: Any]] {
+                for dict in results {
+                    guard let lat = dict["latitude"] as? Double,
+                          let lon = dict["longitude"] as? Double else { continue }
+                    newHashes.insert(GeohashEncoder.encode(latitude: lat, longitude: lon, precision: 6))
+                }
+            }
+
+            let now = Date()
+            for hash in newHashes {
+                let entity = VisitedGeohashEntity(context: bgContext)
+                entity.hash6 = hash
+                entity.firstVisited = now
+                entity.lastVisited = now
+                entity.visitCount = 1
+            }
+            try? bgContext.save()
+
+            Task { @MainActor [weak self] in
+                self?.visitedCache = newHashes
+                self?.visitedTileCount = newHashes.count
+                FogMaskGenerator.clearCache()
+                NotificationCenter.default.post(name: .territoryRebuilt, object: nil)
+            }
+        }
     }
 
     // MARK: - Backfill from existing trips

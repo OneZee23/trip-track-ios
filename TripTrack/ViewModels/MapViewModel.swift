@@ -41,6 +41,17 @@ final class MapViewModel: ObservableObject {
     @Published var cachedTotalKm: Double = 0
     @Published var cachedTripCount: Int = 0
 
+    // MARK: - Cached Regions Data (loaded on first visit, invalidated on trip end)
+    var cachedRegionsPolylines: [MKPolyline]?
+    var cachedRegionsCities: [ExplorationPlace]?
+    var cachedRegionsRegions: [ExplorationPlace]?
+
+    func invalidateRegionsCache() {
+        cachedRegionsPolylines = nil
+        cachedRegionsCities = nil
+        cachedRegionsRegions = nil
+    }
+
     /// Reads selectedVehicleId from settings entity at recording start
     private var selectedVehicleId: UUID? {
         gamificationManager.fetchSettingsEntity()?.selectedVehicleId
@@ -82,7 +93,24 @@ final class MapViewModel: ObservableObject {
 
         setupRecordingBindings()
         setupSunBasedTheme()
+        checkSunTheme() // Immediate check using cached location
         refreshTripStats()
+
+        // Rebuild territory when a trip is deleted
+        NotificationCenter.default.publisher(for: .tripDeleted)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.territoryManager.rebuildFromTrips()
+            }
+            .store(in: &cancellables)
+
+        // Invalidate regions cache after territory rebuild completes (async)
+        NotificationCenter.default.publisher(for: .territoryRebuilt)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.invalidateRegionsCache()
+            }
+            .store(in: &cancellables)
 
         Task { @MainActor [tripManager, gamificationManager, territoryManager] in
             // Mark existing trips as processed (one-time migration)
@@ -90,6 +118,9 @@ final class MapViewModel: ObservableObject {
 
             // Re-process all trips with spike removal (one-time v2 migration)
             tripManager.migrateReprocessTripsWithSpikeRemoval()
+
+            // Regenerate preview polylines with correct timestamp sorting (one-time)
+            tripManager.migrateRegeneratePreviewPolylines()
 
             // Process any trips that weren't post-processed (e.g., app killed before completion)
             let processor = PostTripTrackProcessor()
@@ -246,6 +277,11 @@ final class MapViewModel: ObservableObject {
     }
 
     private func stopRecording() {
+        // Haptic immediately — before any async work, while app may still be in foreground
+        let haptic = UINotificationFeedbackGenerator()
+        haptic.prepare()
+        haptic.notificationOccurred(.success)
+
         let completedTrip = tripManager.stopTrip()
         trackManager.stopAnimation()
         isRecording = false
@@ -347,8 +383,6 @@ final class MapViewModel: ObservableObject {
             lastCompletedTrip = completedTrip
         }
 
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
     }
 
     /// Called after badge celebration is dismissed to show the trip summary
@@ -364,6 +398,7 @@ final class MapViewModel: ObservableObject {
         let stats = tripManager.fetchTripStats()
         cachedTotalKm = stats.totalDistance / 1000.0
         cachedTripCount = stats.count
+        invalidateRegionsCache()
     }
 
     private func setupRecordingBindings() {
@@ -502,7 +537,10 @@ final class MapViewModel: ObservableObject {
     }
 
     func checkSunTheme() {
-        guard let loc = locationManager.currentLocation else { return }
-        updateThemeForSun(coordinate: loc.coordinate)
+        if let loc = locationManager.currentLocation {
+            updateThemeForSun(coordinate: loc.coordinate)
+        } else if let cached = locationManager.cachedSystemLocation {
+            updateThemeForSun(coordinate: cached.coordinate)
+        }
     }
 }

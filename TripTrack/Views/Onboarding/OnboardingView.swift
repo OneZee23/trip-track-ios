@@ -105,8 +105,6 @@ struct OnboardingView: View {
         locationManager = manager
         manager.requestWhenInUseAuthorization()
 
-        // Flag for demo trip creation when ContentView loads
-        UserDefaults.standard.set(true, forKey: "needsDemoTrip")
         hasCompletedOnboarding = true
     }
 }

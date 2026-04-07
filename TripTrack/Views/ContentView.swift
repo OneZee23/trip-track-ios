@@ -9,6 +9,8 @@ extension Notification.Name {
     static let openTripDetail = Notification.Name("openTripDetail")
     static let navigateToTrip = Notification.Name("navigateToTrip")
     static let dismissTripSummary = Notification.Name("dismissTripSummary")
+    static let tripDeleted = Notification.Name("tripDeleted")
+    static let territoryRebuilt = Notification.Name("territoryRebuilt")
 }
 
 struct ContentView: View {
@@ -91,10 +93,8 @@ struct ContentView: View {
             mapVM.pendingBadges = []
         }
         .onAppear {
-            if UserDefaults.standard.bool(forKey: "needsDemoTrip") {
-                mapVM.tripManager.createDemoTrip()
-                UserDefaults.standard.removeObject(forKey: "needsDemoTrip")
-            }
+            // Clean up demo trip for users who onboarded before 0.1.1
+            mapVM.tripManager.deleteDemoTripIfNeeded()
         }
     }
 }

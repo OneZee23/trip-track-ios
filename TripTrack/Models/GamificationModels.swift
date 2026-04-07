@@ -60,6 +60,14 @@ enum FuelCurrency: String, CaseIterable {
     case brl = "R$"
 
     var symbol: String { rawValue }
+
+    static let storageKey = "fuelCurrency"
+    static let defaultSymbol = "€"
+
+    /// Current global fuel currency symbol from UserDefaults.
+    static var current: String {
+        UserDefaults.standard.string(forKey: storageKey) ?? defaultSymbol
+    }
 }
 
 // MARK: - Driver Profile
@@ -123,7 +131,7 @@ enum DriverRank: String, CaseIterable {
 
     func titleEn() -> String {
         switch self {
-        case .novice:    return "Novice"
+        case .novice:    return "Beginner"
         case .driver:    return "Driver"
         case .traveler:  return "Traveler"
         case .explorer:  return "Explorer"

@@ -64,8 +64,12 @@ struct FeedView: View {
             .scrollIndicators(.hidden)
             .background(c.bg)
             .onReceive(NotificationCenter.default.publisher(for: .feedScrollToTop)) { _ in
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    scrollProxy.scrollTo("feedTop", anchor: .top)
+                if selectedTripId != nil {
+                    selectedTripId = nil
+                } else {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        scrollProxy.scrollTo("feedTop", anchor: .top)
+                    }
                 }
             }
             } // ScrollViewReader
@@ -80,21 +84,26 @@ struct FeedView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Image("PixelCar")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                        VStack(spacing: 1) {
-                            Text("ROAD  TRIP")
-                                .font(.custom("PressStart2P-Regular", size: 10))
-                                .foregroundStyle(AppTheme.accent)
-                            Text("TRACKER")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(c.textTertiary)
-                                .tracking(2)
+                    Button {
+                        NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image("PixelCar")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                            VStack(spacing: 1) {
+                                Text("ROAD  TRIP")
+                                    .font(.custom("PressStart2P-Regular", size: 10))
+                                    .foregroundStyle(AppTheme.accent)
+                                Text("TRACKER")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(c.textTertiary)
+                                    .tracking(2)
+                            }
                         }
                     }
+                    .buttonStyle(.plain)
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showProfile = true } label: {
@@ -268,7 +277,7 @@ struct FeedView: View {
                 vehicleName: vehicle?.name,
                 vehicleEmoji: vehicle?.avatarEmoji ?? settings.avatarEmoji,
                 vehicle: vehicle,
-                fuelCurrency: "₽"
+                fuelCurrency: trip.fuelCurrency ?? FuelCurrency.current
             )
         }
         .onAppear {
@@ -280,24 +289,44 @@ struct FeedView: View {
 
     private func quickStats(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
-            statPill(
-                label: AppStrings.trips(lang.language),
-                value: "\(feedVM.totalTripCount)",
-                color: AppTheme.accent,
-                c: c
-            )
-            statPill(
-                label: AppStrings.km(lang.language),
-                value: String(format: "%.0f", feedVM.totalKm),
-                color: c.text,
-                c: c
-            )
-            statPill(
-                label: AppStrings.time(lang.language),
-                value: feedVM.formattedTotalTime,
-                color: c.text,
-                c: c
-            )
+            Button {
+                Haptics.tap()
+                showStats = true
+            } label: {
+                statPill(
+                    label: AppStrings.trips(lang.language),
+                    value: "\(feedVM.totalTripCount)",
+                    color: AppTheme.accent,
+                    c: c
+                )
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                Haptics.tap()
+                showStats = true
+            } label: {
+                statPill(
+                    label: AppStrings.km(lang.language),
+                    value: String(format: "%.0f", feedVM.totalKm),
+                    color: c.text,
+                    c: c
+                )
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                Haptics.tap()
+                showStats = true
+            } label: {
+                statPill(
+                    label: AppStrings.time(lang.language),
+                    value: feedVM.formattedTotalTime,
+                    color: c.text,
+                    c: c
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 

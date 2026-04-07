@@ -13,7 +13,7 @@ enum FogMaskGenerator {
     private static var cachedResult: Result?
     private static var cachedGeohashSet: Set<String> = []
 
-    private static let generationVersion: Int = 2 // bump to invalidate cache on algorithm change
+    private static let generationVersion: Int = 4 // bump to invalidate cache on algorithm change
     private static var cachedVersion: Int = 0
 
     /// Generate mask with caching — only regenerates when geohash set changes.
@@ -76,7 +76,7 @@ enum FogMaskGenerator {
         }
 
         // 2. Reveal radius = much larger than tile for smooth blending
-        let revealRadiusMapPoints = max(tileWidth, tileHeight) * 2.0
+        let revealRadiusMapPoints = max(tileWidth, tileHeight) * 3.0
 
         // 3. Expand bounding rect by reveal radius
         let expansion = revealRadiusMapPoints * 3.0
@@ -98,7 +98,7 @@ enum FogMaskGenerator {
         let radiusInPixels = CGFloat(revealRadiusMapPoints / unionRect.size.width) * imageSize.width
 
         // 5. Spatial dedup — one center per visual cell to avoid overdraw
-        let cellSize = revealRadiusMapPoints * 0.5
+        let cellSize = revealRadiusMapPoints * 0.4
         var seen = Set<UInt64>()
         var reducedCenters: [MKMapPoint] = []
         for p in centers {
@@ -118,9 +118,9 @@ enum FogMaskGenerator {
             let colorSpace = CGColorSpaceCreateDeviceGray()
             guard let gradient = CGGradient(
                 colorSpace: colorSpace,
-                colorComponents: [1, 1,  1, 0.95,  1, 0.7,  1, 0.3,  1, 0],  // (gray, alpha) pairs — smoother falloff
-                locations: [0, 0.25, 0.5, 0.75, 1.0],
-                count: 5
+                colorComponents: [1, 1,  1, 1,  1, 0.9,  1, 0.5,  1, 0.15,  1, 0],  // (gray, alpha) pairs — wide solid core, gentle fade
+                locations: [0, 0.3, 0.5, 0.7, 0.9, 1.0],
+                count: 6
             ) else { return }
 
             for point in reducedCenters {

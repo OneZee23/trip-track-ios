@@ -387,7 +387,7 @@ struct TripDetailView: View {
         let fuel = v.fuelCost(distanceKm: trip.distanceKm, avgSpeedKmh: trip.averageSpeedKmh)
 
         let volumeUnit = UserDefaults.standard.string(forKey: "volumeUnit") ?? "liters"
-        let currency = UserDefaults.standard.string(forKey: "fuelCurrency") ?? "₽"
+        let currency = trip.fuelCurrency ?? FuelCurrency.current
         let volShort = volumeUnit == "gallons" ? (lang.language == .ru ? "гал" : "gal") : (lang.language == .ru ? "л" : "L")
 
         let volume: Double

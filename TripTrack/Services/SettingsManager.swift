@@ -27,6 +27,7 @@ final class SettingsManager: ObservableObject {
         loadSettings()
         loadVehicles()
         ensureDefaultVehicle()
+        migrateDefaultVehicleName()
     }
 
     // MARK: - Settings
@@ -92,7 +93,7 @@ final class SettingsManager: ObservableObject {
 
         let randomAvatar = Vehicle.pixelCarAssets.randomElement() ?? "pixel_car_orange"
         let savedLang = UserDefaults.standard.string(forKey: "appLanguage")
-        let name = savedLang == "ru" ? "Телега" : "Telega"
+        let name = savedLang == "ru" ? "Ваша машина" : "Your car"
 
         let context = persistenceController.container.viewContext
         let entity = VehicleEntity(context: context)
@@ -107,6 +108,22 @@ final class SettingsManager: ObservableObject {
 
         selectedVehicleId = vehicleId
         saveSettings()
+        loadVehicles()
+    }
+
+    private func migrateDefaultVehicleName() {
+        let legacyNames: Set<String> = ["Телега", "Telega"]
+        guard let first = vehicles.first, legacyNames.contains(first.name) else { return }
+
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", first.id as CVarArg)
+        request.fetchLimit = 1
+
+        guard let entity = try? context.fetch(request).first else { return }
+        let savedLang = UserDefaults.standard.string(forKey: "appLanguage")
+        entity.name = savedLang == "ru" ? "Ваша машина" : "Your car"
+        persistenceController.save()
         loadVehicles()
     }
 

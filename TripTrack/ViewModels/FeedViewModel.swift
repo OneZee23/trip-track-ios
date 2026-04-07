@@ -131,8 +131,10 @@ final class FeedViewModel: ObservableObject {
         guard let trip = pendingDeleteTrip else { return }
         pendingDeleteTrip = nil
         tripManager.deleteTrip(id: trip.id)
+        tripManager.purgeSoftDeletedTrips()
         allTrips.removeAll { $0.id == trip.id }
         rebuildCalendarCaches()
+        NotificationCenter.default.post(name: .tripDeleted, object: nil)
     }
 
     func cancelPendingDelete() {

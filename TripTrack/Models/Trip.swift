@@ -18,6 +18,7 @@ struct Trip: Identifiable {
     var region: String?
     var isPrivate: Bool
     var vehicleId: UUID?
+    var fuelCurrency: String?
     var previewPolyline: Data?
     var earnedBadgeIds: [String]
 
@@ -113,6 +114,7 @@ struct Trip: Identifiable {
          title: String? = nil, tripDescription: String? = nil,
          fuelUsed: Double = 0, elevation: Double = 0,
          region: String? = nil, isPrivate: Bool = false, vehicleId: UUID? = nil,
+         fuelCurrency: String? = nil,
          previewPolyline: Data? = nil, earnedBadgeIds: [String] = []) {
         self.id = id
         self.startDate = startDate
@@ -129,6 +131,7 @@ struct Trip: Identifiable {
         self.region = region
         self.isPrivate = isPrivate
         self.vehicleId = vehicleId
+        self.fuelCurrency = fuelCurrency
         self.previewPolyline = previewPolyline
         self.earnedBadgeIds = earnedBadgeIds
     }

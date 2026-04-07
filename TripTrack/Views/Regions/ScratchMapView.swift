@@ -69,8 +69,8 @@ struct ScratchMapView: UIViewRepresentable {
                     mapView.addOverlay(fog, level: .aboveLabels)
 
                     // Wait for MapKit to render fog tiles, then fade in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        UIView.animate(withDuration: 0.5, delay: 0, options: .curveEaseOut) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseOut) {
                             mapView.alpha = 1
                         }
                     }

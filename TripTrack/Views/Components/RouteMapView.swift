@@ -13,6 +13,8 @@ struct RouteMapView: UIViewRepresentable {
     var speeds: [Double] = []
     var isInteractive: Bool = false
 
+    private static let gapThreshold = GeometryUtils.defaultGapThreshold
+
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
@@ -28,27 +30,42 @@ struct RouteMapView: UIViewRepresentable {
         )
 
         if coordinates.count >= 2 {
+            // Split into continuous segments first, then simplify each
+            let segments: [([CLLocationCoordinate2D], [Double])]
             if speeds.count == coordinates.count {
-                // Build per-segment speed polylines
-                let simplified = Self.simplifyWithSpeeds(coordinates, speeds: speeds, epsilon: 0.00003)
-                var unionRect: MKMapRect = .null
-                for i in 0..<(simplified.coords.count - 1) {
-                    var segment = [simplified.coords[i], simplified.coords[i + 1]]
-                    let poly = SpeedPolyline(coordinates: &segment, count: 2)
-                    poly.speed = simplified.speeds[i]
-                    mapView.addOverlay(poly, level: .aboveRoads)
-                    unionRect = unionRect.union(poly.boundingMapRect)
+                segments = Self.splitIntoSegments(coordinates, speeds: speeds, gapThreshold: Self.gapThreshold)
+            } else {
+                segments = Self.splitIntoSegments(coordinates, speeds: [], gapThreshold: Self.gapThreshold)
+            }
+
+            var unionRect: MKMapRect = .null
+
+            for (segCoords, segSpeeds) in segments {
+                guard segCoords.count >= 2 else { continue }
+
+                if segSpeeds.count == segCoords.count {
+                    let simplified = Self.simplifyWithSpeeds(segCoords, speeds: segSpeeds, epsilon: 0.0001)
+                    // Group consecutive points in the same speed zone into single polylines
+                    let grouped = Self.groupBySpeedZone(simplified)
+                    for group in grouped {
+                        var coords = group.coords
+                        let poly = SpeedPolyline(coordinates: &coords, count: coords.count)
+                        poly.speed = group.speed
+                        mapView.addOverlay(poly, level: .aboveRoads)
+                        unionRect = unionRect.union(poly.boundingMapRect)
+                    }
+                } else {
+                    let simplified = GeometryUtils.simplifyRDP(segCoords, epsilon: 0.0001)
+                    var mutable = simplified
+                    let polyline = MKPolyline(coordinates: &mutable, count: mutable.count)
+                    mapView.addOverlay(polyline, level: .aboveRoads)
+                    unionRect = unionRect.union(polyline.boundingMapRect)
                 }
+            }
+
+            if !unionRect.isNull {
                 let insets = UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
                 mapView.setVisibleMapRect(unionRect, edgePadding: insets, animated: false)
-            } else {
-                let simplified = GeometryUtils.simplifyRDP(coordinates, epsilon: 0.00003)
-                let polyline = MKPolyline(coordinates: simplified, count: simplified.count)
-                mapView.addOverlay(polyline, level: .aboveRoads)
-
-                let rect = polyline.boundingMapRect
-                let insets = UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
-                mapView.setVisibleMapRect(rect, edgePadding: insets, animated: false)
             }
         }
 
@@ -72,6 +89,81 @@ struct RouteMapView: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {}
 
     func makeCoordinator() -> Coordinator { Coordinator() }
+
+    // MARK: - Gap Detection (with parallel speeds array)
+
+    /// Split coordinates + speeds into continuous segments, breaking at gaps > threshold.
+    /// Extends GeometryUtils.splitByGaps with parallel speed array support.
+    private static func splitIntoSegments(
+        _ coords: [CLLocationCoordinate2D],
+        speeds: [Double],
+        gapThreshold: Double
+    ) -> [([CLLocationCoordinate2D], [Double])] {
+        guard coords.count >= 2 else { return [(coords, speeds)] }
+        let hasSpeeds = speeds.count == coords.count
+        var segments: [([CLLocationCoordinate2D], [Double])] = []
+        var curCoords: [CLLocationCoordinate2D] = [coords[0]]
+        var curSpeeds: [Double] = hasSpeeds ? [speeds[0]] : []
+        for i in 1..<coords.count {
+            if GeometryUtils.haversineDistance(coords[i - 1], coords[i]) > gapThreshold {
+                if curCoords.count >= 2 { segments.append((curCoords, curSpeeds)) }
+                curCoords = [coords[i]]
+                curSpeeds = hasSpeeds ? [speeds[i]] : []
+            } else {
+                curCoords.append(coords[i])
+                if hasSpeeds { curSpeeds.append(speeds[i]) }
+            }
+        }
+        if curCoords.count >= 2 { segments.append((curCoords, curSpeeds)) }
+        return segments
+    }
+
+    // MARK: - Speed Zone Grouping
+
+    private struct SpeedGroup {
+        var coords: [CLLocationCoordinate2D]
+        let speed: Double // representative speed for color
+    }
+
+    /// Group consecutive points that fall in the same speed color zone into single polylines.
+    /// Reduces overlay count from O(points) to O(zone_changes).
+    private static func groupBySpeedZone(_ route: SimplifiedRoute) -> [SpeedGroup] {
+        guard route.coords.count >= 2 else { return [] }
+        var groups: [SpeedGroup] = []
+        var currentZone = speedZone(route.speeds[0])
+        var currentCoords: [CLLocationCoordinate2D] = [route.coords[0]]
+        var currentSpeed = route.speeds[0]
+
+        for i in 1..<route.coords.count {
+            let zone = speedZone(route.speeds[i])
+            if zone == currentZone {
+                currentCoords.append(route.coords[i])
+            } else {
+                // Close current group (overlap last point for continuity)
+                currentCoords.append(route.coords[i])
+                groups.append(SpeedGroup(coords: currentCoords, speed: currentSpeed))
+                // Start new group from this point
+                currentZone = zone
+                currentCoords = [route.coords[i]]
+                currentSpeed = route.speeds[i]
+            }
+        }
+        if currentCoords.count >= 2 {
+            groups.append(SpeedGroup(coords: currentCoords, speed: currentSpeed))
+        }
+        return groups
+    }
+
+    /// Map speed to zone index for grouping (matches color thresholds in Coordinator).
+    private static func speedZone(_ speedMS: Double) -> Int {
+        let kmh = speedMS * 3.6
+        switch kmh {
+        case ..<50:  return 0
+        case 50..<90: return 1
+        case 90..<110: return 2
+        default: return 3
+        }
+    }
 
     // MARK: - Simplification with speeds
 

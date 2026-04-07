@@ -793,7 +793,7 @@ private struct FuelCalculatorCard: View {
                     Text(String(format: "%.0f", cost))
                         .font(.system(size: 18, weight: .heavy).monospacedDigit())
                         .foregroundStyle(AppTheme.accent)
-                    Text(language == .ru ? "₽" : "$")
+                    Text(FuelCurrency.current)
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
                 }
