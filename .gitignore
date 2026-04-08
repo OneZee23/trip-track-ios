@@ -27,6 +27,13 @@ Local.xcconfig
 # Claude Code
 .claude/
 
+# Git worktrees
+.worktrees/
+
+# Superpowers brainstorm
+.superpowers/
+docs/superpowers/**/*
+
 # App Store docs (private)
 docs/APP_STORE_SUBMISSION.md
 
