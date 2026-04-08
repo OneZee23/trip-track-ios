@@ -12,6 +12,7 @@ struct RouteMapView: UIViewRepresentable {
     let coordinates: [CLLocationCoordinate2D]
     var speeds: [Double] = []
     var isInteractive: Bool = false
+    var fogCutoffDate: Date?
 
     private static let gapThreshold = GeometryUtils.defaultGapThreshold
 
@@ -66,6 +67,17 @@ struct RouteMapView: UIViewRepresentable {
             if !unionRect.isNull {
                 let insets = UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
                 mapView.setVisibleMapRect(unionRect, edgePadding: insets, animated: false)
+
+                // Add fog of war overlay (below route polylines)
+                let visitedHashes: Set<String>
+                if let cutoff = fogCutoffDate {
+                    visitedHashes = TerritoryManager().visitedHashes(before: cutoff)
+                } else {
+                    visitedHashes = TerritoryManager().visitedGeohashes
+                }
+                if let fog = FogPolygonBuilder.build(visitedHashes: visitedHashes, visibleRect: mapView.visibleMapRect) {
+                    mapView.insertOverlay(fog, at: 0, level: .aboveRoads)
+                }
             }
         }
 
@@ -192,6 +204,11 @@ struct RouteMapView: UIViewRepresentable {
 
     class Coordinator: NSObject, MKMapViewDelegate {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if overlay is FogPolygon {
+                let renderer = MKPolygonRenderer(overlay: overlay)
+                renderer.fillColor = FogPolygonBuilder.fogColor
+                return renderer
+            }
             if let speedLine = overlay as? SpeedPolyline {
                 let renderer = MKPolylineRenderer(polyline: speedLine)
                 renderer.strokeColor = Self.color(forSpeedMS: speedLine.speed)

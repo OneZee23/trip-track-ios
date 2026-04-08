@@ -19,7 +19,8 @@ struct TrackingView: View {
                     bottomInset: viewModel.isRecording ? 0 : idleHUDInset,
                     zoomDelta: $viewModel.zoomDelta,
                     isRecording: viewModel.isRecording,
-                    onCameraDistanceChanged: { viewModel.currentCameraDistance = $0 }
+                    onCameraDistanceChanged: { viewModel.currentCameraDistance = $0 },
+                    onVisibleRectChanged: { viewModel.handleVisibleRectChange($0) }
                 )
                 .ignoresSafeArea()
                 .allowsHitTesting(!viewModel.isRecording)

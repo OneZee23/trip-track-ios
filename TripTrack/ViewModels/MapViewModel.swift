@@ -77,7 +77,10 @@ final class MapViewModel: ObservableObject {
     private static let speedEMAAlpha: Double = 0.3
     private var mainTrackOverlay: MKPolyline?
     private var headOverlay: GlowingHeadOverlay?
+    private var fogOverlay: FogPolygon?
     private var lastOverlayUpdate: Date = .distantPast
+    private var lastFogRebuild: Date = .distantPast
+    private var lastVisibleRect: MKMapRect = .null
 
     init() {
         let manager = LocationManager()
@@ -104,11 +107,15 @@ final class MapViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Invalidate regions cache after territory rebuild completes (async)
+        // Invalidate regions cache and fog after territory rebuild completes (async)
         NotificationCenter.default.publisher(for: .territoryRebuilt)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.invalidateRegionsCache()
+                FogPolygonBuilder.clearCache()
+                if let self, !self.lastVisibleRect.isNull {
+                    self.rebuildFog(visibleRect: self.lastVisibleRect)
+                }
             }
             .store(in: &cancellables)
 
@@ -428,7 +435,12 @@ final class MapViewModel: ObservableObject {
 
                 if self.isRecording && !self.isPaused {
                     self.trackManager.addPoint(update.coordinate)
-                    self.territoryManager.recordVisit(coordinate: update.coordinate)
+                    let isNewTile = self.territoryManager.recordVisit(coordinate: update.coordinate)
+
+                    // Rebuild fog immediately when a new tile is discovered
+                    if isNewTile, !self.lastVisibleRect.isNull {
+                        self.rebuildFog(visibleRect: self.lastVisibleRect)
+                    }
 
                     // Update Live Activity with current tracking data
                     LiveActivityManager.shared.updateActivity(
@@ -496,9 +508,42 @@ final class MapViewModel: ObservableObject {
 
     private func updateTrackOverlays() {
         var overlays: [MKOverlay] = []
+        if let fog = fogOverlay { overlays.append(fog) }
         if let main = mainTrackOverlay { overlays.append(main) }
         if let head = headOverlay { overlays.append(head) }
         trackOverlays = overlays
+    }
+
+    // MARK: - Fog of War
+
+    func rebuildFog(visibleRect: MKMapRect) {
+        guard !visibleRect.isNull else { return }
+        lastVisibleRect = visibleRect
+        fogOverlay = FogPolygonBuilder.build(
+            visitedHashes: territoryManager.visitedGeohashes,
+            visibleRect: visibleRect
+        )
+        updateTrackOverlays()
+    }
+
+    /// Called by MapViewRepresentable when the visible region changes.
+    func handleVisibleRectChange(_ newRect: MKMapRect) {
+        guard !newRect.isNull else { return }
+
+        // Throttle fog rebuilds to 1×/sec
+        let now = Date()
+        guard now.timeIntervalSince(lastFogRebuild) >= 1.0 else { return }
+
+        // Only rebuild if camera shifted >30% of visible width
+        if !lastVisibleRect.isNull {
+            let dx = abs(newRect.midX - lastVisibleRect.midX)
+            let dy = abs(newRect.midY - lastVisibleRect.midY)
+            let threshold = lastVisibleRect.size.width * 0.3
+            guard dx > threshold || dy > threshold else { return }
+        }
+
+        lastFogRebuild = now
+        rebuildFog(visibleRect: newRect)
     }
 
     private func updateDuration() {

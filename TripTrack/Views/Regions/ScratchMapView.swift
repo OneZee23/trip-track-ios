@@ -15,7 +15,6 @@ struct ScratchMapView: UIViewRepresentable {
         mapView.isPitchEnabled = true
         mapView.isRotateEnabled = true
         mapView.preferredConfiguration = MKStandardMapConfiguration(elevationStyle: .flat)
-        mapView.alpha = 0 // Start hidden, fade in after fog renders
         return mapView
     }
 
@@ -24,58 +23,21 @@ struct ScratchMapView: UIViewRepresentable {
         mapView.overrideUserInterfaceStyle = isDark ? .dark : .light
 
         let hashesChanged = coordinator.lastGeohashes == nil || visitedGeohashes != coordinator.lastGeohashes
-        let themeChanged = coordinator.isDark != isDark
-        coordinator.isDark = isDark
 
         if hashesChanged {
-            // Remove old overlays
-            if let oldFog = coordinator.currentFogOverlay {
-                mapView.removeOverlay(oldFog)
-            }
-            for poly in coordinator.currentPolylines {
-                mapView.removeOverlay(poly)
+            // Remove all old overlays
+            mapView.removeOverlays(mapView.overlays)
+
+            // Add fog polygon first (renders below polylines)
+            if let fog = FogPolygonBuilder.build(visitedHashes: visitedGeohashes, visibleRect: mapView.visibleMapRect.isNull ? .world : mapView.visibleMapRect) {
+                mapView.addOverlay(fog, level: .aboveRoads)
             }
 
-            // Add trip route polylines
+            // Add trip route polylines on top
             for poly in tripPolylines {
                 mapView.addOverlay(poly, level: .aboveRoads)
             }
-            coordinator.currentPolylines = tripPolylines
-
-            // Generate geohash-based reveal mask
-            let hashes = visitedGeohashes
-            let dark = isDark
-            coordinator.lastGeohashes = hashes
-            coordinator.fogGenerationToken &+= 1
-            let currentToken = coordinator.fogGenerationToken
-
-            DispatchQueue.global(qos: .userInitiated).async {
-                let result = FogMaskGenerator.generateCached(geohashes: hashes)
-                DispatchQueue.main.async {
-                    // Discard stale result if a newer generation was requested
-                    guard coordinator.fogGenerationToken == currentToken else { return }
-
-                    if let stale = coordinator.currentFogOverlay {
-                        mapView.removeOverlay(stale)
-                    }
-                    let fog = FogOverlay(
-                        revealMask: result?.image,
-                        imageMapRect: result?.mapRect ?? .world
-                    )
-                    let renderer = FogOverlayRenderer(overlay: fog)
-                    renderer.isDark = dark
-                    coordinator.currentFogRenderer = renderer
-                    coordinator.currentFogOverlay = fog
-                    mapView.addOverlay(fog, level: .aboveLabels)
-
-                    // Wait for MapKit to render fog tiles, then fade in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseOut) {
-                            mapView.alpha = 1
-                        }
-                    }
-                }
-            }
+            coordinator.lastGeohashes = visitedGeohashes
 
             // Center on user location with ~150 km visible span;
             // fall back to bounding box of visited tiles if location unavailable.
@@ -102,35 +64,18 @@ struct ScratchMapView: UIViewRepresentable {
                 let insets = UIEdgeInsets(top: 40, left: 20, bottom: 40, right: 20)
                 mapView.setVisibleMapRect(expandedRect, edgePadding: insets, animated: false)
             }
-        } else if themeChanged {
-            if let fog = coordinator.currentFogOverlay {
-                mapView.removeOverlay(fog)
-                let renderer = FogOverlayRenderer(overlay: fog)
-                renderer.isDark = isDark
-                coordinator.currentFogRenderer = renderer
-                mapView.addOverlay(fog, level: .aboveLabels)
-            }
         }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     class Coordinator: NSObject, MKMapViewDelegate {
-        var isDark: Bool = false
-        var currentFogOverlay: FogOverlay?
-        var currentFogRenderer: FogOverlayRenderer?
-        var currentPolylines: [MKPolyline] = []
-        var lastGeohashes: Set<String>? = nil // nil = never loaded, forces first update
-        var fogGenerationToken: UInt = 0
+        var lastGeohashes: Set<String>?
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if let fog = overlay as? FogOverlay {
-                if let cached = currentFogRenderer, cached.overlay === fog {
-                    return cached
-                }
-                let renderer = FogOverlayRenderer(overlay: fog)
-                renderer.isDark = isDark
-                currentFogRenderer = renderer
+            if overlay is FogPolygon {
+                let renderer = MKPolygonRenderer(overlay: overlay)
+                renderer.fillColor = FogPolygonBuilder.fogColor
                 return renderer
             }
             if let polyline = overlay as? MKPolyline {

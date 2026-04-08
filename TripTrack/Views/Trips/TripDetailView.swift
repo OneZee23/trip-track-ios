@@ -46,7 +46,8 @@ struct TripDetailView: View {
                                     RouteMapView(
                                         coordinates: cachedCoordinates,
                                         speeds: cachedSpeeds,
-                                        isInteractive: true
+                                        isInteractive: true,
+                                        fogCutoffDate: trip.endDate
                                     )
                                 } else {
                                     c.cardAlt
