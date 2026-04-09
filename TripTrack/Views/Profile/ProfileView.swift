@@ -16,6 +16,7 @@ struct ProfileView: View {
     @State private var showStats = false
     @State private var showBadges = false
     @State private var showGarage = false
+    @State private var showVehicleDetail = false
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -38,7 +39,10 @@ struct ProfileView: View {
 
                 // Vehicle Card
                 if let vehicle = selectedVehicle {
-                    VehicleCardView(vehicle: vehicle)
+                    Button { showVehicleDetail = true } label: {
+                        VehicleCardView(vehicle: vehicle)
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 // Garage button
@@ -108,6 +112,11 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showGarage) {
             GarageView()
+        }
+        .sheet(isPresented: $showVehicleDetail) {
+            if let vehicle = selectedVehicle {
+                VehicleDetailView(vehicleId: vehicle.id)
+            }
         }
     }
 

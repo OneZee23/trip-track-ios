@@ -12,6 +12,7 @@ struct GarageView: View {
     @State private var newEmoji = "🚗"
     @State private var renameVehicleId: UUID?
     @State private var renameText = ""
+    @State private var detailVehicleId: UUID?
 
     private let vehicleEmojis = ["🏎️", "🚗", "🏍️", "🚙", "🛻", "🚐", "🏁", "⛽"]
 
@@ -27,10 +28,11 @@ struct GarageView: View {
                         if settings.vehicles.isEmpty {
                             emptyState(c: c, isRu: isRu)
                         } else {
-                            ForEach(Array(settings.vehicles.enumerated()), id: \.element.id) { index, vehicle in
+                            let sorted = settings.vehicles.sorted { $0.odometerKm > $1.odometerKm }
+                            ForEach(Array(sorted.enumerated()), id: \.element.id) { index, vehicle in
                                 vehicleRow(vehicle: vehicle, c: c, isRu: isRu)
 
-                                if index < settings.vehicles.count - 1 {
+                                if index < sorted.count - 1 {
                                     Rectangle().fill(c.border).frame(height: 1).padding(.leading, 60)
                                 }
                             }
@@ -41,36 +43,29 @@ struct GarageView: View {
                     .surfaceCard(cornerRadius: 16)
 
                     // Add vehicle button
-                    Button { showAddVehicle = true } label: {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 18))
-                                .foregroundStyle(AppTheme.accent)
-                            Text(isRu ? "Добавить автомобиль" : "Add vehicle")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(c.text)
-                            Spacer()
+                    if settings.vehicles.count < 5 {
+                        Button { showAddVehicle = true } label: {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(AppTheme.accent)
+                                Text(isRu ? "Добавить автомобиль" : "Add vehicle")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(c.text)
+                                Spacer()
+                            }
+                            .padding(16)
+                            .surfaceCard(cornerRadius: 16)
                         }
-                        .padding(16)
-                        .surfaceCard(cornerRadius: 16)
-                    }
-                    .buttonStyle(.plain)
-
-                    // 2. Fuel settings for active vehicle
-                    if let active = activeVehicle {
-                        FuelSettingsCard(
-                            vehicleId: active.id,
-                            initialCity: active.cityConsumption,
-                            initialHighway: active.highwayConsumption,
-                            initialPrice: active.fuelPrice,
-                            isRu: isRu,
-                            settings: settings
-                        )
-                        .id(active.id)
+                        .buttonStyle(.plain)
+                    } else {
+                        Text(isRu ? "Максимум 5 автомобилей" : "Maximum 5 vehicles")
+                            .font(.system(size: 13))
+                            .foregroundStyle(c.textTertiary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
                     }
 
-                    // 3. Units settings
-                    UnitsSettingsCard()
                 }
                 .padding(16)
             }
@@ -113,6 +108,14 @@ struct GarageView: View {
                     renameVehicleId = nil
                 }
             }
+            .sheet(isPresented: Binding(
+                get: { detailVehicleId != nil },
+                set: { if !$0 { detailVehicleId = nil } }
+            )) {
+                if let id = detailVehicleId {
+                    VehicleDetailView(vehicleId: id)
+                }
+            }
         }
     }
 
@@ -131,8 +134,12 @@ struct GarageView: View {
 
         return Button {
             Haptics.tap()
-            settings.selectedVehicleId = vehicle.id
-            settings.saveSettings()
+            if isActive {
+                detailVehicleId = vehicle.id
+            } else {
+                settings.selectedVehicleId = vehicle.id
+                settings.saveSettings()
+            }
         } label: {
             HStack(spacing: 12) {
                 // Emoji
@@ -188,6 +195,12 @@ struct GarageView: View {
 
                 // Edit menu
                 Menu {
+                    Button {
+                        detailVehicleId = vehicle.id
+                    } label: {
+                        Label(isRu ? "Подробнее" : "Details", systemImage: "info.circle")
+                    }
+
                     Button {
                         renameText = vehicle.name
                         renameVehicleId = vehicle.id
@@ -331,7 +344,7 @@ struct GarageView: View {
 // MARK: - Isolated Fuel Settings Card
 
 /// Zero-dependency fuel card. Uses AppStorage for units (lightweight, no re-render chain).
-private struct FuelSettingsCard: View {
+struct FuelSettingsCard: View {
     let vehicleId: UUID
     let initialCity: Double
     let initialHighway: Double
@@ -470,7 +483,7 @@ private struct FuelSettingsCard: View {
 
 // MARK: - Units Settings Card
 
-private struct UnitsSettingsCard: View {
+struct UnitsSettingsCard: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
 

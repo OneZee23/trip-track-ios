@@ -36,39 +36,39 @@ struct TripDetailView: View {
             if let trip {
                 ScrollView {
                     VStack(spacing: 0) {
-                        // Interactive map with parallax stretch
-                        GeometryReader { geo in
-                            let offset = geo.frame(in: .named("detailScroll")).minY
-                            let stretch = max(0, offset)
-                            let stretchScale = (mapBaseHeight + stretch) / mapBaseHeight
-                            ZStack {
-                                if cachedCoordinates.count > 1 {
-                                    RouteMapView(
-                                        coordinates: cachedCoordinates,
-                                        speeds: cachedSpeeds,
-                                        isInteractive: true
-                                    )
-                                } else {
-                                    c.cardAlt
-                                        .overlay {
-                                            Image(systemName: "map")
-                                                .font(.largeTitle)
-                                                .foregroundStyle(c.textTertiary)
-                                        }
-                                }
+                        // Interactive map
+                        Group {
+                            if cachedCoordinates.count > 1 {
+                                RouteMapView(
+                                    coordinates: cachedCoordinates,
+                                    speeds: cachedSpeeds,
+                                    isInteractive: true,
+                                    fogCutoffDate: trip.endDate
+                                )
+                            } else {
+                                c.cardAlt
+                                    .overlay {
+                                        Image(systemName: "map")
+                                            .font(.largeTitle)
+                                            .foregroundStyle(c.textTertiary)
+                                    }
                             }
-                            .frame(height: mapBaseHeight)
-                            .scaleEffect(x: 1, y: stretchScale, anchor: .top)
-                            .offset(y: -stretch)
                         }
                         .frame(height: mapBaseHeight)
 
                         // Bottom info panel
                         infoPanel(trip: trip, c: c)
+                            .background(c.bg)
+                    }
+                    .background(alignment: .top) {
+                        Color(UIColor(white: 0.12, alpha: 1.0))
+                            .frame(height: mapBaseHeight + 1000)
+                            .offset(y: -1000)
                     }
                 }
                 .coordinateSpace(name: "detailScroll")
                 .scrollIndicators(.hidden)
+                .background(ScrollBounceDisabler())
 
                 // Sticky back button — outside ScrollView
                 Button {
@@ -628,3 +628,28 @@ private class SwipeBackController: UIViewController {
         navigationController?.interactivePopGestureRecognizer?.delegate = nil
     }
 }
+
+// MARK: - Disable ScrollView Bounce
+
+private struct ScrollBounceDisabler: UIViewRepresentable {
+    func makeUIView(context: Context) -> ScrollBounceFinderView {
+        ScrollBounceFinderView()
+    }
+    func updateUIView(_ uiView: ScrollBounceFinderView, context: Context) {}
+}
+
+private class ScrollBounceFinderView: UIView {
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else { return }
+        var current: UIView? = self
+        while let parent = current?.superview {
+            if let scrollView = parent as? UIScrollView {
+                scrollView.bounces = false
+                return
+            }
+            current = parent
+        }
+    }
+}
+

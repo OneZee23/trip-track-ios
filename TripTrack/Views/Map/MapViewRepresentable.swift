@@ -12,6 +12,8 @@ struct MapViewRepresentable: UIViewRepresentable {
     var isRecording: Bool = false
     var onAnnotationSelected: ((MKPointAnnotation) -> Void)?
     var onCameraDistanceChanged: ((Double) -> Void)?
+    var onVisibleRectChanged: ((MKMapRect) -> Void)?
+    var onFogRendererCreated: ((FogOverlayRenderer) -> Void)?
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -164,9 +166,19 @@ struct MapViewRepresentable: UIViewRepresentable {
         var suppressTrackingCallback = false
         var restoreTrackingWork: DispatchWorkItem?
         var savedTrackingMode: MKUserTrackingMode?
+        var didSendInitialRect = false
 
         init(_ parent: MapViewRepresentable) {
             self.parent = parent
+        }
+
+        func mapViewDidFinishRenderingMap(_ mapView: MKMapView, fullyRendered: Bool) {
+            guard !didSendInitialRect else { return }
+            didSendInitialRect = true
+            let rect = mapView.visibleMapRect
+            DispatchQueue.main.async {
+                self.parent.onVisibleRectChanged?(rect)
+            }
         }
 
         func mapView(_ mapView: MKMapView, didChange mode: MKUserTrackingMode, animated: Bool) {
@@ -194,9 +206,12 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             let distance = mapView.camera.centerCoordinateDistance
-            let callback = parent.onCameraDistanceChanged
+            let cameraCallback = parent.onCameraDistanceChanged
+            let rectCallback = parent.onVisibleRectChanged
+            let visibleRect = mapView.visibleMapRect
             DispatchQueue.main.async {
-                callback?(distance)
+                cameraCallback?(distance)
+                rectCallback?(visibleRect)
             }
         }
 
@@ -206,6 +221,13 @@ struct MapViewRepresentable: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if overlay is FogOverlay {
+                let renderer = FogOverlayRenderer(overlay: overlay)
+                DispatchQueue.main.async { [weak self] in
+                    self?.parent.onFogRendererCreated?(renderer)
+                }
+                return renderer
+            }
             if let headOverlay = overlay as? GlowingHeadOverlay {
                 return GlowingHeadRenderer(overlay: headOverlay)
             }

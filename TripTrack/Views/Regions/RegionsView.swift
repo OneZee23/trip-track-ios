@@ -106,6 +106,7 @@ struct RegionsView: View {
         .refreshable {
             mapVM.invalidateRegionsCache()
             loadData()
+            try? await Task.sleep(for: .milliseconds(400))
         }
         .fullScreenCover(isPresented: $isMapExpanded) {
             FullscreenFogMapView(
@@ -286,12 +287,14 @@ struct RegionsView: View {
     // MARK: - Data Loading
 
     private func loadData() {
-        visitedGeohashes = mapVM.territoryManager.visitedGeohashes
+        let newHashes = mapVM.territoryManager.visitedGeohashes
 
         // Use cached data if available (instant on repeat visits)
         if let cachedPolylines = mapVM.cachedRegionsPolylines,
            let cachedCities = mapVM.cachedRegionsCities,
            let cachedRegions = mapVM.cachedRegionsRegions {
+            // Batch all state updates to avoid multiple re-renders
+            visitedGeohashes = newHashes
             tripPolylines = cachedPolylines
             cities = cachedCities
             regions = cachedRegions
@@ -311,16 +314,21 @@ struct RegionsView: View {
                 polylines.append(polyline)
             }
         }
-        tripPolylines = polylines
 
         let exploration = mapVM.territoryManager.getExploration(from: trips)
-        cities = exploration.filter { $0.type == .city }
-        regions = exploration.filter { $0.type == .region }
+        let newCities = exploration.filter { $0.type == .city }
+        let newRegions = exploration.filter { $0.type == .region }
 
         // Cache for instant repeat visits
         mapVM.cachedRegionsPolylines = polylines
-        mapVM.cachedRegionsCities = cities
-        mapVM.cachedRegionsRegions = regions
+        mapVM.cachedRegionsCities = newCities
+        mapVM.cachedRegionsRegions = newRegions
+
+        // Batch all state updates at once to avoid layout thrashing
+        visitedGeohashes = newHashes
+        tripPolylines = polylines
+        cities = newCities
+        regions = newRegions
     }
 
     private var tabBarHeight: CGFloat {
