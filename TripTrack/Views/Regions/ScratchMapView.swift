@@ -10,7 +10,7 @@ struct ScratchMapView: UIViewRepresentable {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = true
-        mapView.showsCompass = true
+        mapView.showsCompass = false
         mapView.showsScale = true
         mapView.isPitchEnabled = true
         mapView.isRotateEnabled = true
@@ -43,10 +43,14 @@ struct ScratchMapView: UIViewRepresentable {
             // fall back to bounding box of visited tiles if location unavailable.
             if let userLoc = mapView.userLocation.location,
                userLoc.horizontalAccuracy >= 0 {
+                // Adaptive zoom: closer when few tiles explored, wider as exploration grows
+                // ~14 tiles → 5km, ~50 → 15km, ~200 → 50km, ~1000+ → 150km
+                let tileCount = Double(visitedGeohashes.count)
+                let span = min(150_000, max(5_000, tileCount * 350))
                 let region = MKCoordinateRegion(
                     center: userLoc.coordinate,
-                    latitudinalMeters: 150_000,
-                    longitudinalMeters: 150_000
+                    latitudinalMeters: span,
+                    longitudinalMeters: span
                 )
                 mapView.setRegion(region, animated: false)
             } else if !visitedGeohashes.isEmpty {
@@ -73,10 +77,8 @@ struct ScratchMapView: UIViewRepresentable {
         var lastGeohashes: Set<String>?
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if overlay is FogPolygon {
-                let renderer = MKPolygonRenderer(overlay: overlay)
-                renderer.fillColor = FogPolygonBuilder.fogColor
-                return renderer
+            if overlay is FogOverlay {
+                return FogOverlayRenderer(overlay: overlay)
             }
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)

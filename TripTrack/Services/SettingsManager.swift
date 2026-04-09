@@ -188,6 +188,17 @@ final class SettingsManager: ObservableObject {
         }
     }
 
+    func updateVehicleAvatar(id: UUID, emoji: String) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        if let entity = try? context.fetch(request).first {
+            entity.avatarEmoji = emoji
+            persistenceController.save()
+            loadVehicles()
+        }
+    }
+
     func updateVehicleFuel(id: UUID, city: Double, highway: Double, price: Double) {
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()

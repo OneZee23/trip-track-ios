@@ -13,6 +13,7 @@ struct MapViewRepresentable: UIViewRepresentable {
     var onAnnotationSelected: ((MKPointAnnotation) -> Void)?
     var onCameraDistanceChanged: ((Double) -> Void)?
     var onVisibleRectChanged: ((MKMapRect) -> Void)?
+    var onFogRendererCreated: ((FogOverlayRenderer) -> Void)?
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -220,9 +221,11 @@ struct MapViewRepresentable: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if overlay is FogPolygon {
-                let renderer = MKPolygonRenderer(overlay: overlay)
-                renderer.fillColor = FogPolygonBuilder.fogColor
+            if overlay is FogOverlay {
+                let renderer = FogOverlayRenderer(overlay: overlay)
+                DispatchQueue.main.async { [weak self] in
+                    self?.parent.onFogRendererCreated?(renderer)
+                }
                 return renderer
             }
             if let headOverlay = overlay as? GlowingHeadOverlay {

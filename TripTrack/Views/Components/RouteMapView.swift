@@ -24,7 +24,7 @@ struct RouteMapView: UIViewRepresentable {
         mapView.isZoomEnabled = isInteractive
         mapView.isRotateEnabled = isInteractive
         mapView.isPitchEnabled = isInteractive
-        mapView.showsCompass = isInteractive
+        mapView.showsCompass = false
         mapView.showsScale = false
         mapView.preferredConfiguration = MKStandardMapConfiguration(
             elevationStyle: isInteractive ? .realistic : .flat
@@ -204,10 +204,8 @@ struct RouteMapView: UIViewRepresentable {
 
     class Coordinator: NSObject, MKMapViewDelegate {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if overlay is FogPolygon {
-                let renderer = MKPolygonRenderer(overlay: overlay)
-                renderer.fillColor = FogPolygonBuilder.fogColor
-                return renderer
+            if overlay is FogOverlay {
+                return FogOverlayRenderer(overlay: overlay)
             }
             if let speedLine = overlay as? SpeedPolyline {
                 let renderer = MKPolylineRenderer(polyline: speedLine)

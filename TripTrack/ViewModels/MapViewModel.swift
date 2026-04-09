@@ -77,10 +77,15 @@ final class MapViewModel: ObservableObject {
     private static let speedEMAAlpha: Double = 0.3
     private var mainTrackOverlay: MKPolyline?
     private var headOverlay: GlowingHeadOverlay?
-    private var fogOverlay: FogPolygon?
+    private var fogOverlay: FogOverlay?
     private var lastOverlayUpdate: Date = .distantPast
-    private var lastFogRebuild: Date = .distantPast
-    private var lastVisibleRect: MKMapRect = .null
+    private var fogBuilt = false
+
+    // Fog reveal animation
+    weak var fogRenderer: FogOverlayRenderer? // set by MapViewRepresentable callback
+    private var fogAnimationLink: CADisplayLink?
+    private var fogAnimationStart: Date?
+    private static let fogAnimationDuration: Double = 0.7
 
     init() {
         let manager = LocationManager()
@@ -113,9 +118,7 @@ final class MapViewModel: ObservableObject {
             .sink { [weak self] _ in
                 self?.invalidateRegionsCache()
                 FogPolygonBuilder.clearCache()
-                if let self, !self.lastVisibleRect.isNull {
-                    self.rebuildFog(visibleRect: self.lastVisibleRect)
-                }
+                self?.rebuildFog()
             }
             .store(in: &cancellables)
 
@@ -244,7 +247,9 @@ final class MapViewModel: ObservableObject {
         trackManager.startAnimation()
         mainTrackOverlay = nil
         headOverlay = nil
-        trackOverlays = []
+
+        // Rebuild fog before clearing overlays so it's included
+        rebuildFog()
 
         // Start trip in CoreData
         tripManager.startTrip(vehicleId: selectedVehicleId)
@@ -291,6 +296,7 @@ final class MapViewModel: ObservableObject {
 
         let completedTrip = tripManager.stopTrip()
         trackManager.stopAnimation()
+        stopFogAnimation()
         isRecording = false
         isPaused = false
         tripManager.isPaused = false
@@ -303,9 +309,12 @@ final class MapViewModel: ObservableObject {
         speedDecayTimer = nil
         mainTrackOverlay = nil
         headOverlay = nil
-        trackOverlays = []
         speed = 0
         altitude = 0
+
+        // Rebuild fog with new tiles from completed trip
+        FogPolygonBuilder.clearCache()
+        rebuildFog()
         distance = 0
         duration = "00:00"
 
@@ -437,9 +446,9 @@ final class MapViewModel: ObservableObject {
                     self.trackManager.addPoint(update.coordinate)
                     let isNewTile = self.territoryManager.recordVisit(coordinate: update.coordinate)
 
-                    // Rebuild fog immediately when a new tile is discovered
-                    if isNewTile, !self.lastVisibleRect.isNull {
-                        self.rebuildFog(visibleRect: self.lastVisibleRect)
+                    // Animate fog reveal when a new tile is discovered
+                    if isNewTile {
+                        self.rebuildFogAnimated()
                     }
 
                     // Update Live Activity with current tracking data
@@ -516,34 +525,76 @@ final class MapViewModel: ObservableObject {
 
     // MARK: - Fog of War
 
-    func rebuildFog(visibleRect: MKMapRect) {
-        guard !visibleRect.isNull else { return }
-        lastVisibleRect = visibleRect
+    func rebuildFog() {
         fogOverlay = FogPolygonBuilder.build(
             visitedHashes: territoryManager.visitedGeohashes,
-            visibleRect: visibleRect
+            visibleRect: .world
         )
+        fogBuilt = true
         updateTrackOverlays()
     }
 
-    /// Called by MapViewRepresentable when the visible region changes.
-    func handleVisibleRectChange(_ newRect: MKMapRect) {
-        guard !newRect.isNull else { return }
+    /// Rebuild fog with animated reveal for newly discovered tiles.
+    private func rebuildFogAnimated() {
+        // Stop current animation — new overlay will include all pending + new tiles
+        stopFogAnimation()
 
-        // Throttle fog rebuilds to 1×/sec
-        let now = Date()
-        guard now.timeIntervalSince(lastFogRebuild) >= 1.0 else { return }
+        guard let result = FogPolygonBuilder.buildAnimated(
+            visitedHashes: territoryManager.visitedGeohashes,
+            visibleRect: .world
+        ) else { return }
 
-        // Only rebuild if camera shifted >30% of visible width
-        if !lastVisibleRect.isNull {
-            let dx = abs(newRect.midX - lastVisibleRect.midX)
-            let dy = abs(newRect.midY - lastVisibleRect.midY)
-            let threshold = lastVisibleRect.size.width * 0.3
-            guard dx > threshold || dy > threshold else { return }
+        fogOverlay = result.overlay
+        fogBuilt = true
+        updateTrackOverlays()
+
+        // Start animation if there are new tiles to reveal
+        guard !result.newHashes.isEmpty else { return }
+        fogAnimationStart = Date()
+        startFogAnimation()
+    }
+
+    private func startFogAnimation() {
+        guard fogAnimationLink == nil else { return }
+        let proxy = DisplayLinkProxy { [weak self] in
+            MainActor.assumeIsolated {
+                self?.fogAnimationTick()
+            }
+        }
+        let link = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick))
+        link.add(to: .main, forMode: .common)
+        fogAnimationLink = link
+    }
+
+    private func stopFogAnimation() {
+        fogAnimationLink?.invalidate()
+        fogAnimationLink = nil
+        fogAnimationStart = nil
+    }
+
+    private func fogAnimationTick() {
+        guard let start = fogAnimationStart, let overlay = fogOverlay else {
+            stopFogAnimation()
+            return
         }
 
-        lastFogRebuild = now
-        rebuildFog(visibleRect: newRect)
+        let elapsed = Date().timeIntervalSince(start)
+        let t = min(1.0, elapsed / Self.fogAnimationDuration)
+        // EaseOut cubic
+        let progress = 1.0 - pow(1.0 - t, 3)
+
+        let stillAnimating = overlay.updateAnimationProgress(progress)
+        fogRenderer?.setNeedsDisplay()
+
+        if !stillAnimating {
+            stopFogAnimation()
+        }
+    }
+
+    /// Called by MapViewRepresentable when the map first renders.
+    func handleVisibleRectChange(_ newRect: MKMapRect) {
+        guard !fogBuilt else { return }
+        rebuildFog()
     }
 
     private func updateDuration() {
