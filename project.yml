@@ -36,9 +36,10 @@ targets:
         INFOPLIST_FILE: TripTrack/Info.plist
         INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "TripTrack uses your location in the background to continue recording your driving route while the app is minimized, so you don't lose any part of your trip."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "TripTrack uses your location to record your driving route on the map, calculate distance and speed, and save the trip to your travel journal."
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "TripTrack uses Bluetooth to automatically detect when you start and end a drive"
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        MARKETING_VERSION: "0.2.0"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "4"
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.dev
@@ -68,8 +69,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Live"
-        MARKETING_VERSION: "0.2.0"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "4"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         APP_INTENTS_DEPLOYMENT_POSTPROCESSING: NO

@@ -19,15 +19,81 @@ final class SettingsManager: ObservableObject {
     @Published var currentStreak: Int = 0
     @Published var bestStreak: Int = 0
 
+    // Auto-record
+    @Published var autoRecordMode: AutoRecordMode = .off {
+        didSet {
+            guard !isLoadingAutoRecord else { return }
+            UserDefaults.standard.set(autoRecordMode.rawValue, forKey: "autoRecordMode")
+        }
+    }
+    @Published var autoStopTimeout: Int = 3 {
+        didSet {
+            guard !isLoadingAutoRecord else { return }
+            UserDefaults.standard.set(autoStopTimeout, forKey: "autoStopTimeout")
+        }
+    }
+    @Published var savedBluetoothDevices: [SavedBluetoothDevice] = [] {
+        didSet {
+            guard !isLoadingAutoRecord else { return }
+            if let data = try? JSONEncoder().encode(savedBluetoothDevices) {
+                UserDefaults.standard.set(data, forKey: "savedBluetoothDevices")
+            }
+        }
+    }
+
+    private var isLoadingAutoRecord = false
     private let persistenceController: PersistenceController
     private var settingsEntity: UserSettingsEntity?
 
     init(persistenceController: PersistenceController = .shared) {
         self.persistenceController = persistenceController
+        loadAutoRecordSettings()
         loadSettings()
         loadVehicles()
         ensureDefaultVehicle()
         migrateDefaultVehicleName()
+    }
+
+    // MARK: - Auto-record Settings
+
+    private func loadAutoRecordSettings() {
+        isLoadingAutoRecord = true
+        defer { isLoadingAutoRecord = false }
+        if let raw = UserDefaults.standard.string(forKey: "autoRecordMode"),
+           let mode = AutoRecordMode(rawValue: raw) {
+            autoRecordMode = mode
+        }
+        let timeout = UserDefaults.standard.integer(forKey: "autoStopTimeout")
+        autoStopTimeout = timeout > 0 ? timeout : 3
+        if let data = UserDefaults.standard.data(forKey: "savedBluetoothDevices"),
+           let devices = try? JSONDecoder().decode([SavedBluetoothDevice].self, from: data) {
+            savedBluetoothDevices = devices
+        }
+    }
+
+    func isSavedBluetoothDevice(name: String) -> Bool {
+        savedBluetoothDevices.contains { $0.name == name }
+    }
+
+    func bluetoothDevice(forVehicle vehicleId: UUID) -> SavedBluetoothDevice? {
+        savedBluetoothDevices.first { $0.vehicleId == vehicleId }
+    }
+
+    func vehicleId(forDeviceName name: String) -> UUID? {
+        savedBluetoothDevices.first { $0.name == name }?.vehicleId
+    }
+
+    func addBluetoothDevice(_ device: SavedBluetoothDevice) {
+        guard !savedBluetoothDevices.contains(where: { $0.uuid == device.uuid }) else { return }
+        savedBluetoothDevices.append(device)
+    }
+
+    func removeBluetoothDevice(uuid: String) {
+        savedBluetoothDevices.removeAll { $0.uuid == uuid }
+    }
+
+    func removeBluetoothDevice(forVehicle vehicleId: UUID) {
+        savedBluetoothDevices.removeAll { $0.vehicleId == vehicleId }
     }
 
     // MARK: - Settings

@@ -356,4 +356,155 @@ enum AppStrings {
         lang == .ru ? "Добавить фото" : "Add photos"
     }
 
+    // MARK: - Auto-record
+    static func autoRecord(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Автозапись" : "Auto-record"
+    }
+    static func autoRecordMode(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Режим" : "Mode"
+    }
+    static func autoRecordOff(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Выкл" : "Off"
+    }
+    static func autoRecordRemind(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Напоминание" : "Remind"
+    }
+    static func autoRecordAuto(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Авто" : "Auto"
+    }
+    static func myDevices(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Мои устройства" : "My devices"
+    }
+    static func addDevice(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Добавить устройство" : "Add device"
+    }
+    static func linkStereo(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Привязать магнитолу" : "Link car stereo"
+    }
+    static func enterDeviceName(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Введите имя устройства" : "Enter device name"
+    }
+    static func enterDeviceNameHint(_ lang: LanguageManager.Language) -> String {
+        if lang == .ru {
+            return "Откройте Настройки → Bluetooth на iPhone и скопируйте имя магнитолы"
+        }
+        return "Open Settings → Bluetooth on your iPhone and copy the stereo name"
+    }
+    static func save(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сохранить" : "Save"
+    }
+    static func nearbyDevices(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Устройства рядом" : "Nearby devices"
+    }
+    static func autoRecordDescription(_ lang: LanguageManager.Language) -> String {
+        if lang == .ru {
+            return "Запись начнётся автоматически при подключении к магнитоле по Bluetooth"
+        }
+        return "Recording starts automatically when connected to the car stereo via Bluetooth"
+    }
+    static func remindModeDescription(_ lang: LanguageManager.Language) -> String {
+        if lang == .ru {
+            return "Уведомление с кнопкой \"Начать запись\" при подключении"
+        }
+        return "Push notification with \"Start recording\" button on connection"
+    }
+    static func autoModeDescription(_ lang: LanguageManager.Language) -> String {
+        if lang == .ru {
+            return "Запись начинается сразу, без касания телефона"
+        }
+        return "Recording starts immediately, no phone interaction needed"
+    }
+    static func autoStopDescription(_ lang: LanguageManager.Language) -> String {
+        if lang == .ru {
+            return "Поездка автоматически завершится через это время после отключения от магнитолы"
+        }
+        return "Trip auto-stops this long after disconnecting from the stereo"
+    }
+    static func autoStopTimeout(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Автозавершение" : "Auto-stop"
+    }
+    static func autoStopMinutes(_ lang: LanguageManager.Language, minutes: Int) -> String {
+        if lang == .ru {
+            return "\(minutes) мин"
+        }
+        return "\(minutes) min"
+    }
+    static func scanningDevices(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поиск устройств..." : "Scanning for devices..."
+    }
+    static func scanHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Убедись, что ты в машине и магнитола включена" : "Make sure you're in the car with the stereo on"
+    }
+    static func noDevicesFound(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Устройства не найдены" : "No devices found"
+    }
+    static func currentAudioOutput(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Текущий аудиовыход" : "Current audio output"
+    }
+    static func bluetoothRequired(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Для автозаписи нужен доступ к Bluetooth" : "Auto-record requires Bluetooth access"
+    }
+    static func notificationsRequired(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Для напоминаний нужны уведомления" : "Notifications are required for reminders"
+    }
+    static func openSettings(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Открыть настройки" : "Open Settings"
+    }
+
+    // MARK: - Auto-record Notifications
+    static func notifTripStartTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Похоже, ты в машине" : "Looks like you're in the car"
+    }
+    static func notifTripStartBody(_ lang: LanguageManager.Language, deviceName: String) -> String {
+        if lang == .ru {
+            return "Подключено к \(deviceName). Начать запись?"
+        }
+        return "Connected to \(deviceName). Start recording?"
+    }
+    static func notifTripStartAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Начать запись" : "Start Recording"
+    }
+    static func notifSkipAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пропустить" : "Skip"
+    }
+    static func notifTripStopTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездка закончена?" : "Trip finished?"
+    }
+    static func notifTripStopBody(_ lang: LanguageManager.Language, minutes: Int) -> String {
+        if lang == .ru {
+            return "Bluetooth отключился. Автозавершение через \(minutes) мин"
+        }
+        return "Bluetooth disconnected. Auto-stop in \(minutes) min"
+    }
+    static func notifStopNowAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Завершить сейчас" : "Stop Now"
+    }
+    static func notifContinueAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Продолжить" : "Continue"
+    }
+    static func notifAutoStartTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Запись началась" : "Recording started"
+    }
+    static func notifAutoStartBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "TripTrack автоматически начал запись" : "TripTrack automatically started recording"
+    }
+    static func notifAutoStopBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Автозавершение поездки" : "Auto-stopping trip"
+    }
+    static func bluetoothAudio(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Bluetooth-аудио" : "Bluetooth Audio"
+    }
+    static func strongSignal(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сильный сигнал" : "Strong signal"
+    }
+    static func mediumSignal(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Средний сигнал" : "Medium signal"
+    }
+    static func weakSignal(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Слабый сигнал" : "Weak signal"
+    }
+    static func done(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Готово" : "Done"
+    }
+
 }

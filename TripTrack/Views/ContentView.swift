@@ -95,6 +95,9 @@ struct ContentView: View {
         .onAppear {
             // Clean up demo trip for users who onboarded before 0.1.1
             mapVM.tripManager.deleteDemoTripIfNeeded()
+            // Configure auto-trip detection
+            AutoTripService.shared.configure(mapViewModel: mapVM)
+            AutoTripService.shared.startIfNeeded()
         }
     }
 }

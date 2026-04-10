@@ -50,7 +50,7 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(isRu ? "Готово" : "Done") {
+                    Button(AppStrings.done(lang.language)) {
                         dismiss()
                     }
                     .foregroundStyle(AppTheme.accent)

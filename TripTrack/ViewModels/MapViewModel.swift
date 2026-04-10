@@ -232,7 +232,7 @@ final class MapViewModel: ObservableObject {
         generator.impactOccurred()
     }
 
-    private func startRecording() {
+    func startRecording() {
         // Reset state
         isPaused = false
         tripManager.isPaused = false
@@ -288,7 +288,7 @@ final class MapViewModel: ObservableObject {
         generator.impactOccurred()
     }
 
-    private func stopRecording() {
+    func stopRecording() {
         // Haptic immediately — before any async work, while app may still be in foreground
         let haptic = UINotificationFeedbackGenerator()
         haptic.prepare()

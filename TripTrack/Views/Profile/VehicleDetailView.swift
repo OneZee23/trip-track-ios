@@ -9,6 +9,7 @@ struct VehicleDetailView: View {
 
     @State private var isEditingName = false
     @State private var editedName = ""
+    @State private var showBluetoothScan = false
     @FocusState private var isNameFocused: Bool
 
 
@@ -42,6 +43,8 @@ struct VehicleDetailView: View {
                             settings: settings
                         )
                         .id(vehicle.id)
+
+                        bluetoothCard(vehicle: vehicle, c: c, isRu: isRu)
 
                         UnitsSettingsCard()
 
@@ -255,6 +258,139 @@ struct VehicleDetailView: View {
         .buttonStyle(.plain)
     }
 
+
+    // MARK: - Bluetooth
+
+    private func bluetoothCard(vehicle: Vehicle, c: AppTheme.Colors, isRu: Bool) -> some View {
+        let isEnabled = settings.autoRecordMode != .off
+        let l = lang.language
+
+        return VStack(alignment: .leading, spacing: 12) {
+            // Header with toggle
+            HStack {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 15))
+                    .foregroundStyle(isEnabled ? AppTheme.accent : c.textTertiary)
+                Text(AppStrings.autoRecord(l))
+                    .font(.system(size: 16, weight: .semibold))
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { settings.autoRecordMode != .off },
+                    set: { newValue in
+                        if newValue {
+                            settings.autoRecordMode = .remind
+                            NotificationManager.shared.requestAuthorization { _ in }
+                        } else {
+                            settings.autoRecordMode = .off
+                        }
+                        AutoTripService.shared.startIfNeeded()
+                    }
+                ))
+                .tint(AppTheme.accent)
+                .labelsHidden()
+            }
+
+            if isEnabled {
+                // Description
+                Text(AppStrings.autoRecordDescription(l))
+                    .font(.system(size: 13))
+                    .foregroundStyle(c.textSecondary)
+
+                Divider()
+
+                // Linked devices
+                let vehicleDevices = settings.savedBluetoothDevices.filter { $0.vehicleId == vehicleId }
+                ForEach(vehicleDevices) { device in
+                    HStack(spacing: 10) {
+                        Image(systemName: "car.rear.and.tire.marks")
+                            .font(.system(size: 14))
+                            .foregroundStyle(AppTheme.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(device.name)
+                                .font(.system(size: 15, weight: .medium))
+                            Text(isRu ? "Привязано" : "Linked")
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppTheme.accent)
+                        }
+                        Spacer()
+                        Button {
+                            settings.removeBluetoothDevice(uuid: device.uuid)
+                            AutoTripService.shared.startIfNeeded()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(c.textTertiary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                // Add device button
+                Button {
+                    showBluetoothScan = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(AppTheme.accent)
+                        Text(AppStrings.linkStereo(l))
+                            .font(.system(size: 15))
+                            .foregroundStyle(AppTheme.accent)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Divider()
+
+                // Mode picker with explanation
+                VStack(alignment: .leading, spacing: 6) {
+                    Picker(AppStrings.autoRecordMode(l), selection: $settings.autoRecordMode) {
+                        Text(AppStrings.autoRecordRemind(l)).tag(AutoRecordMode.remind)
+                        Text(AppStrings.autoRecordAuto(l)).tag(AutoRecordMode.auto)
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: settings.autoRecordMode) { _, _ in
+                        AutoTripService.shared.startIfNeeded()
+                    }
+
+                    Text(settings.autoRecordMode == .auto
+                         ? AppStrings.autoModeDescription(l)
+                         : AppStrings.remindModeDescription(l))
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textTertiary)
+                }
+
+                Divider()
+
+                // Auto-stop timeout with explanation
+                VStack(alignment: .leading, spacing: 6) {
+                    Stepper(value: $settings.autoStopTimeout, in: 1...10) {
+                        HStack {
+                            Text(AppStrings.autoStopTimeout(l))
+                                .font(.system(size: 15))
+                            Spacer()
+                            Text(AppStrings.autoStopMinutes(l, minutes: settings.autoStopTimeout))
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(AppTheme.accent)
+                        }
+                    }
+                    Text(AppStrings.autoStopDescription(l))
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textTertiary)
+                }
+            }
+        }
+        .padding(14)
+        .surfaceCard(cornerRadius: 16)
+        .sheet(isPresented: $showBluetoothScan) {
+            BluetoothScanSheet(vehicleId: vehicleId)
+                .environmentObject(lang)
+        }
+    }
 
     // MARK: - Footer
 

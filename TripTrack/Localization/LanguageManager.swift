@@ -5,6 +5,10 @@ final class LanguageManager: ObservableObject {
         case en, ru
     }
 
+    static var currentLanguage: Language {
+        Language(rawValue: UserDefaults.standard.string(forKey: "appLanguage") ?? "en") ?? .en
+    }
+
     @Published var language: Language {
         didSet {
             UserDefaults.standard.set(language.rawValue, forKey: "appLanguage")
