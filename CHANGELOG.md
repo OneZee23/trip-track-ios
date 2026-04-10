@@ -6,6 +6,32 @@
 
 ---
 
+## [0.3.0] -- 10 апреля 2026
+
+### Добавлено
+- **Автозапись поездок по Bluetooth** -- привязка BT-устройства (магнитолы) к машине в деталке автомобиля. Два режима: "Напоминание" (уведомление с кнопкой "Начать запись") и "Авто" (запись стартует автоматически)
+- **Детекция вождения через CMMotion** -- `CMMotionActivityManager` определяет `.automotive` activity. Работает после force-quit через `significantLocationChanges` (требует Always location)
+- **Трёхслойная детекция**: (1) Audio route -- мгновенная при подключении к BT, app в памяти; (2) CMMotion + significant location -- после force-quit, задержка 1-3 мин; (3) Проверка при разблокировке через `didBecomeActive`
+- **Привязка BT-устройства к конкретной машине** -- при подключении к магнитоле автоматически выбирается нужный vehicle
+- **Несколько BT-устройств на машину** -- можно привязать и магнитолу, и другие устройства
+- **BLE-сканер устройств** (`BluetoothScanSheet`) -- поиск Bluetooth-устройств поблизости с индикатором силы сигнала (цветные бары), сортировка A-Z
+- **Уведомления с action buttons** -- "Начать запись" / "Пропустить" на lock screen. Тап по уведомлению = старт записи + переход на экран Record
+- **Автозавершение поездки** -- при отключении BT или окончании `.automotive` activity, таймер автозавершения (1-10 мин, настраивается). Debounce 60 секунд для CMMotion (светофоры, пробки)
+- **Карточка Bluetooth в деталке машины** -- toggle включения, описание режимов, список привязанных устройств, настройка таймаута автозавершения
+- **NotificationManager** -- локальные уведомления с категориями и action buttons
+- **AudioRouteDetector** -- мониторинг `AVAudioSession.routeChangeNotification` для Classic Bluetooth (A2DP/HFP)
+- **BluetoothDetector** -- `CBCentralManager` с state restoration для BLE-устройств
+- **MotionDetector** -- обёртка над `CMMotionActivityManager` с live updates и historical query
+- Новые permissions: `NSBluetoothAlwaysUsageDescription`, `NSMotionUsageDescription`, `bluetooth-central` background mode
+
+### Изменено
+- `MapViewModel.startRecording()` / `stopRecording()` стали public для вызова из AutoTripService
+- Версия 0.2.0 → 0.3.0, build 3 → 4
+- `LanguageManager` -- добавлен `static var currentLanguage` для использования вне SwiftUI views
+- `SettingsManager` -- добавлены `autoRecordMode`, `autoStopTimeout`, `savedBluetoothDevices` (UserDefaults)
+
+---
+
 ## [0.2.0] -- 9 апреля 2026
 
 ### Добавлено

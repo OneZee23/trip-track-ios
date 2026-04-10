@@ -34,9 +34,10 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: TripTrack/Info.plist
-        INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "TripTrack uses your location in the background to continue recording your driving route while the app is minimized, so you don't lose any part of your trip."
+        INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "TripTrack uses background location to automatically detect when you start driving and record your trips — even when the app is closed."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "TripTrack uses your location to record your driving route on the map, calculate distance and speed, and save the trip to your travel journal."
         INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "TripTrack uses Bluetooth to automatically detect when you start and end a drive"
+        INFOPLIST_KEY_NSMotionUsageDescription: "TripTrack uses motion data to detect when you're driving and automatically start recording trips."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         MARKETING_VERSION: "0.3.0"
         CURRENT_PROJECT_VERSION: "4"

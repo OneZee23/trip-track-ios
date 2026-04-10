@@ -506,5 +506,8 @@ enum AppStrings {
     static func done(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Готово" : "Done"
     }
+    static func car(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Автомобиль" : "Car"
+    }
 
 }

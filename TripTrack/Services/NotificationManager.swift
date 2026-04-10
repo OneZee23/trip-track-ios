@@ -60,7 +60,7 @@ final class NotificationManager: NSObject, ObservableObject {
         let startAction = UNNotificationAction(
             identifier: Self.startRecordingAction,
             title: AppStrings.notifTripStartAction(lang),
-            options: [.foreground]
+            options: []  // Run in background — starts recording + shows Live Activity
         )
         let skipAction = UNNotificationAction(
             identifier: Self.skipAction,
@@ -181,11 +181,14 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             NotificationCenter.default.post(name: .autoTripStopRequested, object: nil)
         case Self.continueAction:
             NotificationCenter.default.post(name: .autoTripContinueRequested, object: nil)
-        default:
-            // Tapped the notification itself (not an action button)
+        case UNNotificationDefaultActionIdentifier:
+            // Tapped the notification body — start recording + open record screen
             if response.notification.request.content.categoryIdentifier == Self.tripStartPromptCategory {
+                NotificationCenter.default.post(name: .autoTripStartRequested, object: nil)
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
             }
+        default:
+            break
         }
         completionHandler()
     }

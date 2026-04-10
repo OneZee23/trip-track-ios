@@ -3,7 +3,7 @@
 > Google Photos для дорог. Записывает маршруты, помнит за тебя.
 
 **Platform:** iOS (iPhone)
-**Status:** v0.1.0 | **Started:** Jan 2026
+**Status:** v0.3.0 | **Started:** Jan 2026
 
 ---
 

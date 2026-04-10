@@ -1,6 +1,7 @@
 import Foundation
-import Combine
 import UserNotifications
+import CoreLocation
+import UIKit
 
 @MainActor
 final class AutoTripService: ObservableObject {
@@ -8,13 +9,17 @@ final class AutoTripService: ObservableObject {
 
     let bluetoothDetector = BluetoothDetector()
     let audioRouteDetector = AudioRouteDetector()
+    let motionDetector = MotionDetector()
 
     private weak var mapViewModel: MapViewModel?
     private let notificationManager = NotificationManager.shared
     private let settings = SettingsManager.shared
 
     private var autoStopTimer: Timer?
+    private var motionEndedDebounceTimer: Timer?
     private var notificationObservers: [Any] = []
+    private var keepAliveLocationManager: CLLocationManager?
+    private var keepAliveDelegate: KeepAliveLocationDelegate?
 
     // Debounce: ignore duplicate events within this window
     private let deduplicationInterval: TimeInterval = 5
@@ -30,6 +35,11 @@ final class AutoTripService: ObservableObject {
 
     func configure(mapViewModel: MapViewModel) {
         self.mapViewModel = mapViewModel
+        // Replay queued automotive detection from background launch
+        if pendingAutomotiveDetection {
+            pendingAutomotiveDetection = false
+            handleAutomotiveDetected()
+        }
     }
 
     func startIfNeeded() {
@@ -37,7 +47,6 @@ final class AutoTripService: ObservableObject {
             stopMonitoring()
             return
         }
-        guard !settings.savedBluetoothDevices.isEmpty else { return }
 
         // Ensure notification permissions are granted
         notificationManager.requestAuthorization { _ in }
@@ -48,12 +57,115 @@ final class AutoTripService: ObservableObject {
     func startMonitoring() {
         bluetoothDetector.startMonitoring()
         audioRouteDetector.startMonitoring()
+        motionDetector.startLiveUpdates()
+        startKeepAlive()
     }
 
     func stopMonitoring() {
         bluetoothDetector.stopMonitoring()
         audioRouteDetector.stopMonitoring()
+        motionDetector.stopLiveUpdates()
+        motionEndedDebounceTimer?.invalidate()
+        motionEndedDebounceTimer = nil
         cancelAutoStopTimer()
+        stopKeepAlive()
+    }
+
+    /// Whether a background launch detected automotive activity (queued for when mapViewModel is ready)
+    private var pendingAutomotiveDetection = false
+
+    /// Called when app is launched in background by significant location change
+    func handleBackgroundLaunch() {
+        guard settings.autoRecordMode != .off else { return }
+
+        motionDetector.queryRecentAutomotive { [weak self] isAutomotive in
+            guard let self, isAutomotive else { return }
+            if self.mapViewModel != nil {
+                self.handleAutomotiveDetected()
+            } else {
+                // mapViewModel not configured yet — queue for when configure() is called
+                self.pendingAutomotiveDetection = true
+            }
+        }
+    }
+
+    // MARK: - Keep-alive via Significant Location Change
+
+    private func startKeepAlive() {
+        guard keepAliveLocationManager == nil else { return }
+        guard CLLocationManager.authorizationStatus() == .authorizedAlways else { return }
+
+        let delegate = KeepAliveLocationDelegate { [weak self] in
+            // Woken by significant location change — check for automotive activity
+            self?.motionDetector.queryRecentAutomotive { isAutomotive in
+                guard isAutomotive else { return }
+                self?.handleAutomotiveDetected()
+            }
+        }
+        let manager = CLLocationManager()
+        manager.delegate = delegate
+        manager.startMonitoringSignificantLocationChanges()
+        keepAliveLocationManager = manager
+        keepAliveDelegate = delegate
+    }
+
+    private func stopKeepAlive() {
+        keepAliveLocationManager?.stopMonitoringSignificantLocationChanges()
+        keepAliveLocationManager = nil
+        keepAliveDelegate = nil
+    }
+
+    #if DEBUG
+    func debugTriggerAutomotive() {
+        handleAutomotiveDetected()
+    }
+    #endif
+
+    // MARK: - Automotive Detection (from CMMotion)
+
+    private var lastTripTriggerTime: Date?
+
+    private func handleAutomotiveDetected() {
+        guard let vm = mapViewModel, !vm.isRecording else { return }
+
+        // Deduplicate: don't trigger twice within 30s (BT + Motion can fire together)
+        if let last = lastTripTriggerTime, Date().timeIntervalSince(last) < 30 { return }
+        lastTripTriggerTime = Date()
+
+        // Check if BT audio route matches a saved device → select vehicle
+        if let btDevice = audioRouteDetector.currentBluetoothOutput(),
+           let vehicleId = settings.vehicleId(forDeviceName: btDevice) {
+            settings.selectedVehicleId = vehicleId
+            settings.saveSettings()
+        }
+
+        let deviceName = audioRouteDetector.currentBluetoothOutput()
+            ?? AppStrings.car(LanguageManager.currentLanguage)
+        triggerTripStart(vm: vm, deviceName: deviceName)
+    }
+
+    // MARK: - Unified Trip Trigger
+
+    private func triggerTripStart(vm: MapViewModel, deviceName: String) {
+        let isInForeground = UIApplication.shared.applicationState == .active
+
+        switch settings.autoRecordMode {
+        case .auto:
+            vm.startRecording()
+            if isInForeground {
+                NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
+            } else {
+                notificationManager.sendAutoStartNotification()
+            }
+        case .remind:
+            if isInForeground {
+                NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
+            } else {
+                notificationManager.sendTripStartPrompt(deviceName: deviceName)
+            }
+        case .off:
+            break
+        }
     }
 
     // MARK: - Detector Wiring
@@ -69,9 +181,27 @@ final class AutoTripService: ObservableObject {
                 self?.handleDeviceEvent(event)
             }
         }
+        motionDetector.onAutomotiveDetected = { [weak self] in
+            self?.motionEndedDebounceTimer?.invalidate()
+            self?.handleAutomotiveDetected()
+        }
+        motionDetector.onAutomotiveEnded = { [weak self] in
+            guard let self else { return }
+            // Debounce: CMMotion flickers between states at red lights etc.
+            // Wait 60s of non-automotive before triggering auto-stop
+            self.motionEndedDebounceTimer?.invalidate()
+            self.motionEndedDebounceTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, let vm = self.mapViewModel, vm.isRecording else { return }
+                    let timeout = self.settings.autoStopTimeout
+                    self.notificationManager.sendTripStopPrompt(minutes: timeout)
+                    self.startAutoStopTimer(minutes: timeout)
+                }
+            }
+        }
     }
 
-    // MARK: - Event Handling
+    // MARK: - BT Event Handling
 
     private func handleDeviceEvent(_ event: BluetoothEvent) {
         switch event {
@@ -84,40 +214,22 @@ final class AutoTripService: ObservableObject {
 
     private func handleDeviceConnected(name: String) {
         guard let vm = mapViewModel else { return }
-
-        // Ignore if already recording
         guard !vm.isRecording else { return }
-
-        // Deduplicate — both detectors might fire for same device
         guard shouldProcessEvent(.connected, name: name) else { return }
 
-        // Cancel any pending auto-stop (reconnected quickly)
         cancelAutoStopTimer()
 
-        // Select the vehicle linked to this BT device
         if let vehicleId = settings.vehicleId(forDeviceName: name) {
             settings.selectedVehicleId = vehicleId
             settings.saveSettings()
         }
 
-        switch settings.autoRecordMode {
-        case .auto:
-            vm.startRecording()
-            notificationManager.sendAutoStartNotification()
-        case .remind:
-            notificationManager.sendTripStartPrompt(deviceName: name)
-        case .off:
-            break
-        }
+        triggerTripStart(vm: vm, deviceName: name)
     }
 
     private func handleDeviceDisconnected(name: String) {
         guard let vm = mapViewModel else { return }
-
-        // Only relevant if recording
         guard vm.isRecording else { return }
-
-        // Deduplicate
         guard shouldProcessEvent(.disconnected, name: name) else { return }
 
         let timeout = settings.autoStopTimeout
@@ -130,7 +242,6 @@ final class AutoTripService: ObservableObject {
     private func startAutoStopTimer(minutes: Int) {
         cancelAutoStopTimer()
 
-        // Foreground timer
         autoStopTimer = Timer.scheduledTimer(
             withTimeInterval: TimeInterval(minutes * 60),
             repeats: false
@@ -140,8 +251,7 @@ final class AutoTripService: ObservableObject {
             }
         }
 
-        // Background fallback: schedule a local notification at the deadline
-        // so the user gets prompted even if the app is suspended and the timer doesn't fire
+        // Background fallback notification
         let content = UNMutableNotificationContent()
         let lang = LanguageManager.currentLanguage
         content.title = AppStrings.notifTripStopTitle(lang)
@@ -221,3 +331,19 @@ final class AutoTripService: ObservableObject {
     }
 }
 
+// MARK: - Keep-alive Location Delegate
+
+final class KeepAliveLocationDelegate: NSObject, CLLocationManagerDelegate {
+    private let onLocationUpdate: () -> Void
+
+    init(onLocationUpdate: @escaping () -> Void) {
+        self.onLocationUpdate = onLocationUpdate
+        super.init()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        onLocationUpdate()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+}

@@ -7,6 +7,12 @@ struct TripTrackApp: App {
     @StateObject private var languageManager = LanguageManager()
     @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
 
+    init() {
+        // Handle background relaunch by significant location change
+        // iOS relaunches the app after force-quit when cell tower changes
+        AutoTripService.shared.handleBackgroundLaunch()
+    }
+
     var body: some Scene {
         WindowGroup {
             if hasCompletedOnboarding {
