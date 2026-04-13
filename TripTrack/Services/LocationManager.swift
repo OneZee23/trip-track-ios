@@ -21,7 +21,7 @@ class LocationManager: ObservableObject {
     var cachedSystemLocation: CLLocation? { realGPS.cachedSystemLocation }
 
     // Провайдеры
-    private var realGPS = RealGPSProvider()
+    private(set) var realGPS = RealGPSProvider()
     private var simulatedProvider: SimulatedLocationProvider?
     
     // Подписки
@@ -61,6 +61,7 @@ class LocationManager: ObservableObject {
 
     /// Начать запись трека
     func startTracking() {
+        guard !isTracking else { return }
         if isDeveloperMode {
             startSimulatedTracking()
         } else {

@@ -33,6 +33,7 @@ Local.xcconfig
 # Superpowers brainstorm
 .superpowers/
 docs/superpowers/**/*
+docs/specs/
 
 # App Store docs (private)
 docs/APP_STORE_SUBMISSION.md

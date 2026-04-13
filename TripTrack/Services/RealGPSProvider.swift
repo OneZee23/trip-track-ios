@@ -23,6 +23,10 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
     /// Whether we're actively recording a trip (used to force-resume if iOS pauses updates)
     var isRecording = false
 
+    /// GPS warm-up: first 2 seconds after mode switch produce unreliable data
+    private(set) var isWarmingUp = false
+    private var warmUpTimer: Timer?
+
     override init() {
         super.init()
         manager.delegate = self
@@ -41,15 +45,24 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
         manager.pausesLocationUpdatesAutomatically = true
         manager.allowsBackgroundLocationUpdates = false
         manager.showsBackgroundLocationIndicator = false
+        isWarmingUp = false
+        warmUpTimer?.invalidate()
     }
 
     /// High-accuracy mode for active trip recording
     func setRecordingMode() {
-        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.distanceFilter = 5.0
         manager.pausesLocationUpdatesAutomatically = false
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
+
+        // GPS needs ~2 seconds to recalibrate after accuracy change
+        isWarmingUp = true
+        warmUpTimer?.invalidate()
+        warmUpTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+            self?.isWarmingUp = false
+        }
     }
 
     func start() {
@@ -65,51 +78,51 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
         manager.stopUpdatingLocation()
         manager.stopUpdatingHeading()
     }
-    
+
     // MARK: - CLLocationManagerDelegate
-    
+
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         for location in locations {
             guard isValidLocation(location) else { continue }
-            
+
             let update = LocationUpdate.from(location)
             currentLocation = update
             locationSubject.send(update)
         }
     }
-    
+
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         print("Location error: \(error.localizedDescription)")
     }
 
     func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
-        print("⚠️ iOS paused location updates (isRecording: \(isRecording))")
         if isRecording {
             // Force resume — we must keep tracking during an active trip
             manager.startUpdatingLocation()
         }
     }
 
-    func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
-        print("✅ iOS resumed location updates")
-    }
-    
+    func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {}
+
     private func isValidLocation(_ location: CLLocation) -> Bool {
-        guard location.horizontalAccuracy >= 0,
-              location.horizontalAccuracy <= maxAccuracy else {
-            return false
-        }
-        
+        // Reject invalid accuracy
+        guard location.horizontalAccuracy >= 0 else { return false }
+
+        // Stricter accuracy threshold during recording
+        let accuracyLimit = isRecording ? 50.0 : maxAccuracy
+        guard location.horizontalAccuracy <= accuracyLimit else { return false }
+
+        // Reject stale cached positions
         let age = -location.timestamp.timeIntervalSinceNow
-        guard age < maxLocationAge else {
-            return false
-        }
-        
+        guard age < maxLocationAge else { return false }
+
+        // Reject unknown speed during recording
+        if isRecording && location.speed < 0 { return false }
+
+        // Reject unrealistic speed
         let speed = max(0, location.speed)
-        if speed > maxSpeedMs {
-            return false
-        }
-        
+        if speed > maxSpeedMs { return false }
+
         return true
     }
 }

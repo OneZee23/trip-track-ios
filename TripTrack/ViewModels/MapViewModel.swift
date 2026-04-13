@@ -72,6 +72,8 @@ final class MapViewModel: ObservableObject {
     private var pauseStartDate: Date?
     private var sunCheckTimer: AnyCancellable?
     private var speedDecayTimer: AnyCancellable?
+    private var gpsWatchdogTimer: AnyCancellable?
+    private var lastValidLocationTime: Date = .distantPast
     private var lastSpeedUpdate: Date = .distantPast
     private var smoothedSpeed: Double = 0
     private static let speedEMAAlpha: Double = 0.3
@@ -276,6 +278,18 @@ final class MapViewModel: ObservableObject {
                 self?.updateDuration()
             }
 
+        // GPS watchdog — restart tracking if no valid updates for 60 seconds
+        lastValidLocationTime = Date()
+        gpsWatchdogTimer = Timer.publish(every: 30, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self, self.isRecording else { return }
+                if Date().timeIntervalSince(self.lastValidLocationTime) > 60 {
+                    self.locationManager.stopTracking()
+                    self.locationManager.startTracking()
+                }
+            }
+
         // Sun-based theme check during recording
         sunCheckTimer = Timer.publish(every: 300, on: .main, in: .common)
             .autoconnect()
@@ -307,6 +321,8 @@ final class MapViewModel: ObservableObject {
         sunCheckTimer = nil
         speedDecayTimer?.cancel()
         speedDecayTimer = nil
+        gpsWatchdogTimer?.cancel()
+        gpsWatchdogTimer = nil
         mainTrackOverlay = nil
         headOverlay = nil
         speed = 0
@@ -424,6 +440,11 @@ final class MapViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] update in
                 guard let self else { return }
+
+                // Skip warm-up period for speed/track, but still update watchdog timestamp
+                self.lastValidLocationTime = Date()
+                if self.locationManager.realGPS.isWarmingUp { return }
+
                 let rawSpeed = max(0, update.speed)
                 let speedKmh = rawSpeed < 1.0 ? 0 : rawSpeed * 3.6
 
@@ -437,6 +458,7 @@ final class MapViewModel: ObservableObject {
                     self.smoothedSpeed = alpha * speedKmh + (1 - alpha) * self.smoothedSpeed
                 }
                 self.speed = self.smoothedSpeed
+                AutoTripService.shared.updateSpeedForInactivity(self.smoothedSpeed)
 
                 self.lastSpeedUpdate = Date()
                 self.altitude = update.altitude

@@ -144,10 +144,55 @@ final class AutoTripService: ObservableObject {
         triggerTripStart(vm: vm, deviceName: deviceName)
     }
 
+    // MARK: - Inactivity Auto-stop
+
+    private var lowSpeedStartTime: Date?
+    private static let inactivityTimeout: TimeInterval = 20 * 60 // 20 minutes
+    private static let lowSpeedThreshold: Double = 2.0 // km/h
+
+    /// Called periodically from MapViewModel speed updates to track inactivity
+    func updateSpeedForInactivity(_ speedKmh: Double) {
+        guard let vm = mapViewModel, vm.isRecording else {
+            lowSpeedStartTime = nil
+            return
+        }
+
+        if speedKmh < Self.lowSpeedThreshold {
+            if lowSpeedStartTime == nil {
+                lowSpeedStartTime = Date()
+            }
+            if let start = lowSpeedStartTime,
+               Date().timeIntervalSince(start) > Self.inactivityTimeout {
+                // Stationary for 20 minutes — trigger auto-stop
+                let timeout = settings.autoStopTimeout
+                notificationManager.sendTripStopPrompt(minutes: timeout)
+                startAutoStopTimer(minutes: timeout)
+                lowSpeedStartTime = nil // reset so we don't re-trigger
+            }
+        } else {
+            lowSpeedStartTime = nil
+        }
+    }
+
     // MARK: - Unified Trip Trigger
 
     private func triggerTripStart(vm: MapViewModel, deviceName: String) {
         let isInForeground = UIApplication.shared.applicationState == .active
+
+        // Request background task to prevent iOS from suspending before GPS warms up
+        if !isInForeground {
+            var bgTaskId: UIBackgroundTaskIdentifier = .invalid
+            bgTaskId = UIApplication.shared.beginBackgroundTask {
+                UIApplication.shared.endBackgroundTask(bgTaskId)
+            }
+            // End after 25 seconds or when recording is stable
+            Task {
+                try? await Task.sleep(for: .seconds(25))
+                await MainActor.run {
+                    UIApplication.shared.endBackgroundTask(bgTaskId)
+                }
+            }
+        }
 
         switch settings.autoRecordMode {
         case .auto:
@@ -292,6 +337,8 @@ final class AutoTripService: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let vm = self?.mapViewModel, !vm.isRecording else { return }
+                // Pre-warm GPS immediately — don't wait for full startRecording() chain
+                vm.locationManager.startTracking()
                 vm.startRecording()
             }
         }
