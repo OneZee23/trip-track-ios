@@ -115,12 +115,6 @@ final class AutoTripService: ObservableObject {
         keepAliveDelegate = nil
     }
 
-    #if DEBUG
-    func debugTriggerAutomotive() {
-        handleAutomotiveDetected()
-    }
-    #endif
-
     // MARK: - Automotive Detection (from CMMotion)
 
     private var lastTripTriggerTime: Date?
@@ -139,9 +133,13 @@ final class AutoTripService: ObservableObject {
             settings.saveSettings()
         }
 
-        let deviceName = audioRouteDetector.currentBluetoothOutput()
-            ?? AppStrings.car(LanguageManager.currentLanguage)
-        triggerTripStart(vm: vm, deviceName: deviceName)
+        // Try to recover the real trip start time from CMMotion history
+        motionDetector.queryAutomotiveStartTime { [weak self] automotiveStartDate in
+            guard let self else { return }
+            let deviceName = self.audioRouteDetector.currentBluetoothOutput()
+                ?? AppStrings.car(LanguageManager.currentLanguage)
+            self.triggerTripStart(vm: vm, deviceName: deviceName, estimatedStartDate: automotiveStartDate)
+        }
     }
 
     // MARK: - Inactivity Auto-stop
@@ -176,7 +174,7 @@ final class AutoTripService: ObservableObject {
 
     // MARK: - Unified Trip Trigger
 
-    private func triggerTripStart(vm: MapViewModel, deviceName: String) {
+    private func triggerTripStart(vm: MapViewModel, deviceName: String, estimatedStartDate: Date? = nil) {
         let isInForeground = UIApplication.shared.applicationState == .active
 
         // Request background task to prevent iOS from suspending before GPS warms up
@@ -197,6 +195,10 @@ final class AutoTripService: ObservableObject {
         switch settings.autoRecordMode {
         case .auto:
             vm.startRecording()
+            // Backdate trip start to when automotive activity actually began
+            if let realStart = estimatedStartDate {
+                vm.tripManager.backdateTrip(to: realStart)
+            }
             if isInForeground {
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
             } else {

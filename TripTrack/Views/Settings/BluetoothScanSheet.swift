@@ -194,7 +194,7 @@ private struct DeviceRow: View {
                     .foregroundStyle(saved ? c.textTertiary : AppTheme.textPrimary)
                 Spacer()
                 if saved {
-                    Text("Added")
+                    Text(AppStrings.added(LanguageManager.currentLanguage))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(AppTheme.accent)
                 } else {

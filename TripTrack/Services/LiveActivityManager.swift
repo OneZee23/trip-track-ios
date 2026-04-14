@@ -9,13 +9,7 @@ final class LiveActivityManager {
     private var lastUpdateDate: Date?
     private let throttleInterval: TimeInterval = 2.0
 
-    private init() {
-        let authInfo = ActivityAuthorizationInfo()
-        print("[LiveActivity] areActivitiesEnabled: \(authInfo.areActivitiesEnabled)")
-
-        let existing = Activity<TripActivityAttributes>.activities
-        print("[LiveActivity] Found \(existing.count) orphaned activities on init")
-    }
+    private init() {}
 
     /// Current language & dark mode — read fresh on every update
     private var currentLanguage: String {
@@ -31,7 +25,6 @@ final class LiveActivityManager {
     func startActivity(tripId: UUID, startDate: Date, vehicleName: String, vehicleAvatar: String) {
         let authInfo = ActivityAuthorizationInfo()
         guard authInfo.areActivitiesEnabled else {
-            print("[LiveActivity] ⚠️ Activities DISABLED")
             return
         }
 
@@ -62,9 +55,7 @@ final class LiveActivityManager {
                 )
                 self.currentActivity = activity
                 self.lastUpdateDate = Date()
-                print("[LiveActivity] ✅ Started id=\(activity.id)")
             } catch {
-                print("[LiveActivity] ❌ Failed: \(error)")
             }
         }
     }

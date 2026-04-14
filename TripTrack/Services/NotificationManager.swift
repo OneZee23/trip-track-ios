@@ -54,6 +54,10 @@ final class NotificationManager: NSObject, ObservableObject {
 
     // MARK: - Categories
 
+    func reregisterCategories() {
+        registerCategories()
+    }
+
     private func registerCategories() {
         let lang = LanguageManager.currentLanguage
 

@@ -66,6 +66,28 @@ final class MotionDetector {
         }
     }
 
+    /// Find when automotive activity started (for trip start time recovery)
+    func queryAutomotiveStartTime(completion: @escaping (Date?) -> Void) {
+        guard CMMotionActivityManager.isActivityAvailable() else {
+            completion(nil)
+            return
+        }
+
+        let now = Date()
+        let from = now.addingTimeInterval(-600) // look back 10 minutes
+
+        motionManager.queryActivityStarting(from: from, to: now, to: motionQueue) { activities, error in
+            guard let activities, error == nil else {
+                Task { @MainActor in completion(nil) }
+                return
+            }
+
+            // Find the earliest automotive activity in the window
+            let firstAutomotive = activities.first { $0.automotive && $0.confidence == .high }
+            Task { @MainActor in completion(firstAutomotive?.startDate) }
+        }
+    }
+
     // MARK: - Authorization
 
     static var isAuthorized: Bool {

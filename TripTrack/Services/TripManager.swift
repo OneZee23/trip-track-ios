@@ -72,6 +72,18 @@ final class TripManager: ObservableObject {
         locationManager.startTracking()
     }
 
+    /// Backdate the active trip's start time (for auto-start recovery)
+    func backdateTrip(to date: Date) {
+        guard let entity = activeTripEntity else { return }
+        entity.startDate = date
+        activeTrip = activeTrip.map { trip in
+            var updated = trip
+            updated.startDate = date
+            return updated
+        }
+        persistenceController.save()
+    }
+
     @discardableResult
     func stopTrip() -> Trip? {
         locationManager.stopTracking()

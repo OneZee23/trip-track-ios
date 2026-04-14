@@ -381,6 +381,7 @@ struct ProfileView: View {
                     c: c
                 )
             }
+
         }
     }
 

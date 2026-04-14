@@ -1,6 +1,5 @@
 import SwiftUI
 import CoreLocation
-import UserNotifications
 
 struct VehicleDetailView: View {
     let vehicleId: UUID
@@ -311,7 +310,7 @@ struct VehicleDetailView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(device.name)
                                 .font(.system(size: 15, weight: .medium))
-                            Text(isRu ? "Привязано" : "Linked")
+                            Text(AppStrings.linked(lang.language))
                                 .font(.system(size: 12))
                                 .foregroundStyle(AppTheme.accent)
                         }
@@ -387,51 +386,6 @@ struct VehicleDetailView: View {
                 }
             }
 
-            #if DEBUG
-            Divider()
-            VStack(alignment: .leading, spacing: 8) {
-                Text("DEBUG")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.red)
-                    .tracking(0.5)
-                Button {
-                    AutoTripService.shared.handleBackgroundLaunch()
-                } label: {
-                    Label("Simulate background wake", systemImage: "ant.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.red)
-                }
-                .buttonStyle(.plain)
-                Button {
-                    AutoTripService.shared.debugTriggerAutomotive()
-                } label: {
-                    Label("Simulate automotive detected", systemImage: "car.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.red)
-                }
-                .buttonStyle(.plain)
-                Button {
-                    // Send test notification in 3 seconds — lock your screen!
-                    let lang = LanguageManager.currentLanguage
-                    let content = UNMutableNotificationContent()
-                    content.title = AppStrings.notifTripStartTitle(lang)
-                    let btName = AutoTripService.shared.audioRouteDetector.currentBluetoothOutput()
-                        ?? settings.bluetoothDevice(forVehicle: vehicleId)?.name
-                        ?? "Bluetooth"
-                    content.body = AppStrings.notifTripStartBody(lang, deviceName: btName)
-                    content.sound = .default
-                    content.categoryIdentifier = NotificationManager.tripStartPromptCategory
-                    let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false)
-                    let request = UNNotificationRequest(identifier: "debug-test", content: content, trigger: trigger)
-                    UNUserNotificationCenter.current().add(request)
-                } label: {
-                    Label("Send test notification (3s delay)", systemImage: "bell.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.red)
-                }
-                .buttonStyle(.plain)
-            }
-            #endif
         }
         .padding(14)
         .surfaceCard(cornerRadius: 16)

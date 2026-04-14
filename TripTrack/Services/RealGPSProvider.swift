@@ -91,9 +91,7 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
         }
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("Location error: \(error.localizedDescription)")
-    }
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
 
     func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
         if isRecording {

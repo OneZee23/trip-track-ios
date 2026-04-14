@@ -12,6 +12,8 @@ final class LanguageManager: ObservableObject {
     @Published var language: Language {
         didSet {
             UserDefaults.standard.set(language.rawValue, forKey: "appLanguage")
+            // Re-register notification categories with updated language
+            NotificationManager.shared.reregisterCategories()
         }
     }
 

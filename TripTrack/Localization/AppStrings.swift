@@ -230,6 +230,21 @@ enum AppStrings {
     static func onboardingGo(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Поехали!" : "Let's go!"
     }
+    static func onboardingAutoRecord(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Автоматическая запись" : "Automatic recording"
+    }
+    static func onboardingAutoRecordSub(_ lang: LanguageManager.Language) -> String {
+        if lang == .ru {
+            return "TripTrack сам определит, что вы за рулём, и начнёт запись. Для этого нужен фоновый доступ к геолокации и датчику движения. Батарея почти не расходуется."
+        }
+        return "TripTrack detects when you're driving and starts recording automatically. This requires background location and motion sensor access. Minimal battery impact."
+    }
+    static func onboardingAutoRecordEnable(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Включить" : "Enable"
+    }
+    static func onboardingAutoRecordSkip(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Настрою позже" : "Set up later"
+    }
 
     // MARK: - Badges
     static func badges(_ lang: LanguageManager.Language) -> String {
@@ -508,6 +523,12 @@ enum AppStrings {
     }
     static func car(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Автомобиль" : "Car"
+    }
+    static func added(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Добавлено" : "Added"
+    }
+    static func linked(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Привязано" : "Linked"
     }
 
 }
