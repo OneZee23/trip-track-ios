@@ -1,7 +1,7 @@
 import Foundation
 import CoreLocation
 
-struct TrackPoint: Identifiable {
+struct TrackPoint: Identifiable, Codable {
     let id: UUID
     let latitude: Double
     let longitude: Double

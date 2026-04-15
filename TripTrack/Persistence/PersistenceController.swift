@@ -111,6 +111,31 @@ struct PersistenceController {
         }
     }
 
+    // MARK: - One-time Migrations
+
+    /// Stamp `userId` on all existing Trip and Vehicle entities that don't have one yet.
+    /// Called once from SettingsManager after localUserId is resolved.
+    func migrateUserIdIfNeeded(userId: UUID) {
+        let context = container.viewContext
+        let key = "didMigrateUserId"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+
+        let tripRequest: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        tripRequest.predicate = NSPredicate(format: "userId == nil")
+        if let trips = try? context.fetch(tripRequest) {
+            for trip in trips { trip.userId = userId }
+        }
+
+        let vehicleRequest: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        vehicleRequest.predicate = NSPredicate(format: "userId == nil")
+        if let vehicles = try? context.fetch(vehicleRequest) {
+            for vehicle in vehicles { vehicle.userId = userId }
+        }
+
+        save()
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     // MARK: - Background Context (for future sync operations)
 
     /// Create an isolated background context for sync/import operations.

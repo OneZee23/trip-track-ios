@@ -1,6 +1,6 @@
 import Foundation
 
-struct TripPhoto: Identifiable {
+struct TripPhoto: Identifiable, Codable {
     let id: UUID
     let filename: String
     let caption: String?

@@ -30,17 +30,19 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
 
 - **Models** — data structures: `Trip`, `TrackPoint`, `Vehicle`, `Badge`, `TripPhoto`
 - **ViewModels** — `@ObservableObject` with `@Published`: `MapViewModel` (recording, map state), `FeedViewModel` (trip list, filtering, pagination)
-- **Services** — singletons with business logic: `TripManager` (CRUD, geocoding, batch saves), `LocationManager` (dual-mode GPS/simulated), `GamificationManager` (badges, XP, levels), `SmoothTrackManager` (Kalman filter)
-- **Persistence** — `PersistenceController.shared` (CoreData), photos in Documents directory
+- **Services** — singletons with business logic: `TripManager` (CRUD via TripRepository, geocoding, batch saves), `LocationManager` (dual-mode GPS/simulated), `GamificationManager` (badges, XP, levels), `SmoothTrackManager` (Kalman filter), `SyncQueue` (pending sync operations)
+- **Persistence** — `PersistenceController.shared` (CoreData), `TripRepository` protocol (CRUD abstraction), photos in Documents directory
 - **Views** — SwiftUI, organized by feature in subdirectories under `Views/`
 
-**Data flow**: Views → ViewModels (@Published) → Services → CoreData
+**Data flow**: Views → ViewModels (@Published) → Services → TripRepository → CoreData
 
 **Location tracking** uses Provider pattern: `LocationProvider` protocol → `RealGPSProvider` (CoreLocation) + `SimulatedLocationProvider` (dev joystick). LocationManager switches between them.
 
-## CoreData Schema (8 entities)
+## CoreData Schema (8 entities, versioned)
 
-`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `VehicleEntity`, `UserSettingsEntity`, `VisitedGeohashEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/`.
+`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `VehicleEntity`, `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v2 = current with sync fields).
+
+**Sync-readiness fields (v2):** `userId`, `serverCreatedAt`, `conflictVersion` on TripEntity; `remoteURL`, `uploadStatus` on TripPhotoEntity; `userId` on VehicleEntity. All models (`Trip`, `TrackPoint`, `TripPhoto`, `Vehicle`) are `Codable` for JSON API serialization.
 
 ## Key Patterns
 
@@ -49,6 +51,10 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
 - **Binary polylines**: `Trip.encodePolyline/decodePolyline` for compact route storage
 - **Geohashing**: `GeohashEncoder` + `VisitedGeohashEntity` for territory tracking
 - **Junk trip filtering**: auto-delete trips <500m AND <2min
+- **Repository pattern**: `TripRepository` protocol abstracts CoreData CRUD; `TripManager` delegates to `CoreDataTripRepository`
+- **Sync queue**: `SyncQueue` (@MainActor) with deduplication, priority ordering, exponential backoff retry, `SyncTransport` protocol for future API client
+- **Soft delete**: `SyncStatus.pendingDelete` hides trips from UI; physical delete after server confirms
+- **User identity**: `SettingsManager.localUserId` (UUID) stamped on all entities, prepared for Sign in with Apple
 - **UI modifiers**: `.surfaceCard()`, `.glassBackground()`, `.glassPill()` for consistent card styling
 
 ## Localization & Theming
