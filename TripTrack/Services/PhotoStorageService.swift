@@ -1,4 +1,5 @@
 import UIKit
+import CoreData
 
 enum PhotoStorageService {
     private static var photosDirectory: URL {
@@ -60,8 +61,8 @@ enum PhotoStorageService {
         let scale = UIScreen.main.scale
         return await Task.detached(priority: .userInitiated) {
             // L2: disk cache
-            let diskURL = thumbnailDiskURL(for: filename)
-            if let diskData = try? Data(contentsOf: diskURL),
+            if let diskURL = thumbnailDiskURL(for: filename),
+               let diskData = try? Data(contentsOf: diskURL),
                let diskImage = UIImage(data: diskData) {
                 thumbnailCache.setObject(diskImage, forKey: key)
                 return diskImage as UIImage?
@@ -85,7 +86,8 @@ enum PhotoStorageService {
             thumbnailCache.setObject(thumbnail, forKey: key)
 
             // Write to disk cache for next launch
-            if let jpegData = thumbnail.jpegData(compressionQuality: 0.7) {
+            if let jpegData = thumbnail.jpegData(compressionQuality: 0.7),
+               let diskURL = thumbnailDiskURL(for: filename) {
                 let dir = diskURL.deletingLastPathComponent()
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 try? jpegData.write(to: diskURL)
@@ -96,17 +98,22 @@ enum PhotoStorageService {
     }
 
     /// Disk path for cached thumbnail: Documents/TripPhotos/{tripId}/.thumbnails/{photoFile}
-    private static func thumbnailDiskURL(for filename: String) -> URL {
+    private static func thumbnailDiskURL(for filename: String) -> URL? {
         let components = filename.split(separator: "/")
-        guard components.count == 2 else {
-            return photosDirectory.appendingPathComponent(".thumbnails/\(filename)")
+        let url: URL
+        if components.count == 2 {
+            let tripDir = String(components[0])
+            let photoFile = String(components[1])
+            url = photosDirectory
+                .appendingPathComponent(tripDir, isDirectory: true)
+                .appendingPathComponent(".thumbnails", isDirectory: true)
+                .appendingPathComponent(photoFile)
+        } else {
+            url = photosDirectory.appendingPathComponent(".thumbnails/\(filename)")
         }
-        let tripDir = String(components[0])
-        let photoFile = String(components[1])
-        return photosDirectory
-            .appendingPathComponent(tripDir, isDirectory: true)
-            .appendingPathComponent(".thumbnails", isDirectory: true)
-            .appendingPathComponent(photoFile)
+        let resolved = url.standardizedFileURL
+        guard resolved.path.hasPrefix(photosDirectory.standardizedFileURL.path) else { return nil }
+        return resolved
     }
 
     /// Clear thumbnail cache on memory warning.
@@ -123,8 +130,45 @@ enum PhotoStorageService {
         guard let url = safePhotoURL(for: filename) else { return }
         try? FileManager.default.removeItem(at: url)
         // Clean up cached thumbnail (disk + memory)
-        let thumbURL = thumbnailDiskURL(for: filename)
-        try? FileManager.default.removeItem(at: thumbURL)
+        if let thumbURL = thumbnailDiskURL(for: filename) {
+            try? FileManager.default.removeItem(at: thumbURL)
+        }
         thumbnailCache.removeObject(forKey: filename as NSString)
+    }
+
+    // MARK: - Sync Support
+
+    /// Fetch photos that need to be uploaded to the server.
+    static func pendingUploads(persistenceController: PersistenceController = .shared) -> [(id: UUID, filename: String)] {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "uploadStatus == %d", PhotoUploadStatus.localOnly.rawValue)
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripPhotoEntity.timestamp, ascending: true)]
+        request.fetchBatchSize = 50
+
+        guard let entities = try? context.fetch(request) else { return [] }
+        return entities.compactMap { entity in
+            guard let id = entity.id, let filename = entity.filename else { return nil }
+            return (id: id, filename: filename)
+        }
+    }
+
+    /// Mark a photo as uploaded with its remote URL.
+    static func markUploaded(photoId: UUID, remoteURL: String, persistenceController: PersistenceController = .shared) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", photoId as CVarArg)
+        request.fetchLimit = 1
+
+        guard let entity = try? context.fetch(request).first else { return }
+        entity.uploadStatus = PhotoUploadStatus.uploaded.rawValue
+        entity.remoteURL = remoteURL
+        persistenceController.save()
+    }
+
+    /// Read raw JPEG data for a photo (for upload to remote storage).
+    static func photoData(filename: String) -> Data? {
+        guard let url = safePhotoURL(for: filename) else { return nil }
+        return try? Data(contentsOf: url)
     }
 }

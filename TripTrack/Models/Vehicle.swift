@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-struct Vehicle: Identifiable {
+struct Vehicle: Identifiable, Codable {
     let id: UUID
     var name: String
     var avatarEmoji: String

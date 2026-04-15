@@ -1,7 +1,7 @@
 import Foundation
 import CoreLocation
 
-struct Trip: Identifiable {
+struct Trip: Identifiable, Codable {
     let id: UUID
     var startDate: Date
     var endDate: Date?

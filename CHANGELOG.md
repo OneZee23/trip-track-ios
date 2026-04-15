@@ -6,6 +6,28 @@
 
 ---
 
+## [0.4.0] -- 15 апреля 2026
+
+### Добавлено
+- **CoreData Model Versioning** -- модель данных версионирована (v1 → v2). Все будущие миграции схемы безопасны для существующих пользователей (lightweight migration)
+- **Подготовка к серверному синку** -- новые поля на сущностях: `userId`, `serverCreatedAt`, `conflictVersion` (TripEntity), `remoteURL`, `uploadStatus` (TripPhotoEntity), `userId` (VehicleEntity)
+- **Codable на моделях** -- `Trip`, `TrackPoint`, `TripPhoto`, `Vehicle` сериализуются в JSON для будущего API
+- **TripRepository** -- protocol-абстракция над CoreData CRUD. TripManager делегирует хранение в repository, что позволит подключить серверный синк без переписывания ViewModel'ей
+- **User Identity** -- локальный `userId` (UUID) генерируется при первом запуске и проставляется на все существующие сущности. Фундамент для привязки данных к аккаунту
+- **Photo Sync Readiness** -- `PhotoUploadStatus` enum (localOnly/uploading/uploaded/failed), `RemotePhotoStorage` protocol (stub), методы `pendingUploads()` и `markUploaded()` в PhotoStorageService
+- **SyncQueue** -- очередь синк-операций с дедупликацией, приоритизацией (metadata → photos), exponential backoff retry, интеграция с NetworkMonitor
+- **Тесты** -- `CodableRoundTripTests` (6 тестов на сериализацию), `SyncQueueTests` (6 тестов на очередь)
+
+### Изменено
+- TripManager CRUD-методы делегируют в TripRepository (−280 строк)
+- `thumbnailDiskURL` теперь проверяет path traversal (как `safePhotoURL`)
+- SyncQueue помечен `@MainActor` для thread safety
+- Все CoreData fetch-запросы имеют `fetchBatchSize` для оптимизации памяти
+- `PhotoStorageService.markUploaded` использует `PersistenceController.save()` вместо raw `context.save()`
+- Версия 0.3.1 → 0.4.0, build 5 → 6
+
+---
+
 ## [0.3.1] -- 13 апреля 2026
 
 ### Добавлено

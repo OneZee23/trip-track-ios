@@ -3,7 +3,7 @@
 > Google Photos для дорог. Записывает маршруты, помнит за тебя.
 
 **Platform:** iOS (iPhone)
-**Status:** v0.3.0 | **Started:** Jan 2026
+**Status:** v0.4.0 | **Started:** Jan 2026
 
 ---
 
@@ -11,7 +11,7 @@
 
 Нажал "Запись" -- поехал -- нажал "Стоп". Приложение автоматически назовет поездку по геокодингу, сохранит маршрут, скорость, высоту. Через месяц откроешь ленту -- а там все твои дороги. Scratch-карта покажет, где уже был.
 
-Без регистрации. Без облака. Без подписки. Русский и English.
+Без регистрации. Без подписки. Русский и English. Готовится серверный синк.
 
 ---
 
@@ -120,7 +120,7 @@ Location:    CoreLocation (background modes)
 Charts:      Swift Charts
 Min iOS:     17.0+
 Build:       xcodegen + Xcode
-Backend:     None (local-only)
+Backend:     None yet (sync-ready data layer)
 Deps:        Zero (100% native)
 ```
 
@@ -147,12 +147,15 @@ TripTrack/
 │   ├── GeohashEncoder.swift    -- кодирование geohash
 │   ├── SunCalculator.swift     -- sunrise/sunset для авто-темы карты
 │   ├── PhotoStorageService.swift -- сохранение фото в Documents
-│   ├── SettingsManager.swift   -- профиль, XP, streak
+│   ├── SettingsManager.swift   -- профиль, XP, streak, userId
+│   ├── SyncQueue.swift         -- очередь синк-операций с retry
+│   ├── RemotePhotoStorage.swift -- protocol для облачного хранения фото
 │   ├── PathSmoother.swift      -- сглаживание маршрута
 │   └── NetworkMonitor.swift    -- мониторинг сети
 ├── Persistence/
 │   ├── PersistenceController.swift
-│   └── TripTrack.xcdatamodeld/ -- CoreData schema (8 entities)
+│   ├── TripRepository.swift    -- protocol + CoreData repository (CRUD abstraction)
+│   └── TripTrack.xcdatamodeld/ -- CoreData schema v2 (8 entities, versioned)
 ├── ViewModels/
 │   ├── MapViewModel.swift      -- запись, карта, бейджи, zoom
 │   ├── FeedViewModel.swift     -- лента, фильтры, пагинация
@@ -226,35 +229,55 @@ xcodebuild test -scheme TripTrack -configuration Debug -destination 'platform=iO
 
 ## Roadmap
 
-### v0.1.0 MVP (done -- current)
+### v0.1.0 MVP (done)
 
 - [x] GPS-трекинг с фильтром Калмана и фоновой записью
 - [x] Реалтайм HUD: скорость, высота, дистанция, время
 - [x] Автоматический геокодинг названий поездок
 - [x] Лента поездок с группировкой по месяцам
-- [x] Contribution calendar (heatmap по дням)
 - [x] Детали поездки: карта, скорости, фото, редактирование
 - [x] Scratch-карта территорий (fog of war, geohash)
 - [x] Геймификация: 30+ бейджей, XP, уровни, ранги
-- [x] Коллекция дорог
-- [x] Профиль с аватаром и статистикой
-- [x] Онбординг (3 страницы)
-- [x] Тема (system/light/dark) и язык (RU/EN)
 - [x] CoreData persistence с batch saves
-- [x] Автоудаление мусорных поездок (<500м AND <2мин)
-- [x] Dev mode с виртуальным джойстиком
-- [x] Share-карточки для поездок
+- [x] Тема (system/light/dark) и язык (RU/EN)
+
+### v0.2.0 Fog of War 2.0 (done)
+
+- [x] Мягкие радиальные градиенты вместо острых прямоугольников
+- [x] Анимация рассеивания тумана при записи
+- [x] Экран детальной информации о машине
+
+### v0.3.0 Auto-Trip (done)
+
+- [x] Автозапись поездок по Bluetooth
+- [x] Детекция вождения через CMMotion
+- [x] Трёхслойная детекция (Audio + CMMotion + Significant Location)
+- [x] Уведомления с action buttons
+
+### v0.4.0 Pre-Server Readiness (done -- current)
+
+- [x] CoreData Model Versioning (v1 → v2)
+- [x] Codable на моделях (Trip, TrackPoint, TripPhoto, Vehicle)
+- [x] TripRepository — CRUD абстракция за protocol
+- [x] User Identity (локальный userId)
+- [x] Photo Sync Readiness (upload status, remote URL)
+- [x] SyncQueue (очередь операций с retry)
+- [x] Тесты: Codable round-trip, SyncQueue
+
+### Next: v0.5.0 Server Sync (planned)
+
+- [ ] Свой бэкенд (API, auth, БД)
+- [ ] Sign in with Apple
+- [ ] Синхронизация поездок между устройствами
+- [ ] Upload фото на сервер
 
 ### Future (ideas)
 
-- [ ] Apple Watch companion (быстрый старт записи)
-- [ ] Widgets (последняя поездка, статистика за неделю)
-- [ ] Push-уведомления (забытая запись, стрик)
+- [ ] Социальные фичи (профили, шеринг поездок, общий фид)
+- [ ] UI-редизайн под Strava-стиль
+- [ ] Apple Watch companion
+- [ ] Widgets (последняя поездка, статистика)
 - [ ] Экспорт данных (GPX, CSV)
-- [ ] Автостарт записи (motion detection)
-- [ ] iCloud sync
-- [ ] Мультиязычный геокодинг
-- [ ] Fuel tracking
 
 ---
 

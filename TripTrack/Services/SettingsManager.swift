@@ -13,6 +13,9 @@ final class SettingsManager: ObservableObject {
     @Published var selectedVehicleId: UUID?
     @Published var vehicles: [Vehicle] = []
 
+    // User identity (local UUID, persisted in UserSettingsEntity.id)
+    @Published private(set) var localUserId: UUID = UUID()
+
     // Gamification
     @Published var profileXP: Int = 0
     @Published var profileLevel: Int = 1
@@ -49,6 +52,7 @@ final class SettingsManager: ObservableObject {
         self.persistenceController = persistenceController
         loadAutoRecordSettings()
         loadSettings()
+        persistenceController.migrateUserIdIfNeeded(userId: localUserId)
         loadVehicles()
         ensureDefaultVehicle()
         migrateDefaultVehicleName()
@@ -118,6 +122,9 @@ final class SettingsManager: ObservableObject {
     private static let vehicleEmojis: Set<String> = ["🏎️", "🚗", "🏍️", "🚙", "🛻", "🚐", "🏁", "⛽"]
 
     private func syncFromEntity(_ entity: UserSettingsEntity) {
+        if let id = entity.id {
+            localUserId = id
+        }
         let stored = entity.avatarEmoji ?? "😎"
         // Migrate: old vehicle emoji as profile avatar → reset to person emoji
         avatarEmoji = Self.vehicleEmojis.contains(stored) ? "😎" : stored

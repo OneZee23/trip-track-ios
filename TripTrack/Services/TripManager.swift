@@ -13,6 +13,8 @@ final class TripManager: ObservableObject {
     /// Kalman filter for GPS smoothing and gap prediction
     let kalmanFilter = KalmanLocationFilter()
 
+    private let repository: TripRepository
+
     private let locationManager: LocationManager
     private let persistenceController: PersistenceController
     private var cancellables = Set<AnyCancellable>()
@@ -23,9 +25,10 @@ final class TripManager: ObservableObject {
     private let saveBatchSize = 10
     private let saveInterval: TimeInterval = 15
 
-    init(locationManager: LocationManager, persistenceController: PersistenceController = .shared) {
+    init(locationManager: LocationManager, persistenceController: PersistenceController = .shared, repository: TripRepository? = nil) {
         self.locationManager = locationManager
         self.persistenceController = persistenceController
+        self.repository = repository ?? CoreDataTripRepository(persistenceController: persistenceController)
 
         locationManager.$currentLocation
             .compactMap { $0 }
@@ -56,6 +59,7 @@ final class TripManager: ObservableObject {
         entity.vehicleId = vehicleId
         entity.fuelCurrency = FuelCurrency.current
         entity.lastModifiedAt = Date()
+        entity.userId = SettingsManager.shared.localUserId
         persistenceController.save()
 
         activeTripEntity = entity
@@ -96,7 +100,7 @@ final class TripManager: ObservableObject {
         generatePreviewPolyline(for: entity)
         persistenceController.save()
 
-        let completedTrip = tripFromEntity(entity)
+        let completedTrip = entity.id.flatMap { repository.fetchTripDetail(id: $0) }
 
         geocodeAndNameTrip(entity: entity)
         deleteDemoTripIfNeeded()
@@ -109,158 +113,47 @@ final class TripManager: ObservableObject {
     }
 
     func fetchTrips() -> [Trip] {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
-        request.fetchBatchSize = 25
-
-        guard let entities = try? context.fetch(request) else { return [] }
-        return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
+        repository.fetchAllTrips()
     }
 
-    /// Paginated fetch — CoreData-level limit/offset for scalable feed loading.
     func fetchTrips(limit: Int, offset: Int) -> [Trip] {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
-        request.fetchLimit = limit
-        request.fetchOffset = offset
-        request.fetchBatchSize = limit
-
-        guard let entities = try? context.fetch(request) else { return [] }
-        return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
+        repository.fetchTrips(limit: limit, offset: offset)
     }
 
-    /// Fetch trips modified since a given date — for incremental server sync.
     func fetchTripsModifiedSince(_ date: Date) -> [Trip] {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(
-            format: "lastModifiedAt > %@ AND syncStatus != %d",
-            date as NSDate, SyncStatus.synced.rawValue
-        )
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.lastModifiedAt, ascending: true)]
-
-        guard let entities = try? context.fetch(request) else { return [] }
-        return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
+        repository.fetchTripsModifiedSince(date)
     }
 
     func fetchTripsWithTrackPoints() -> [Trip] {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
-
-        guard let entities = try? context.fetch(request) else { return [] }
-        return entities.compactMap { tripFromEntity($0) }
+        repository.fetchTripsWithTrackPoints()
     }
 
     func fetchTripCount() -> Int {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
-        return (try? context.count(for: request)) ?? 0
+        repository.fetchTripCount()
     }
 
     func fetchLastTripDate() -> Date? {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
-        request.fetchLimit = 1
-        return (try? context.fetch(request).first)?.startDate
+        repository.fetchLastTripDate()
     }
 
-    /// Combined stats query — single CoreData fetch for count + total distance.
     func fetchTripStats() -> (count: Int, totalDistance: Double) {
-        let context = persistenceController.container.viewContext
-        let predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
-
-        let countRequest: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        countRequest.predicate = predicate
-        let count = (try? context.count(for: countRequest)) ?? 0
-
-        let sumRequest = NSFetchRequest<NSDictionary>(entityName: "TripEntity")
-        sumRequest.predicate = predicate
-        sumRequest.resultType = .dictionaryResultType
-        let sumDesc = NSExpressionDescription()
-        sumDesc.name = "totalDistance"
-        sumDesc.expression = NSExpression(forFunction: "sum:", arguments: [NSExpression(forKeyPath: "distance")])
-        sumDesc.expressionResultType = .doubleAttributeType
-        sumRequest.propertiesToFetch = [sumDesc]
-
-        let distance: Double
-        if let results = try? context.fetch(sumRequest),
-           let dict = results.first,
-           let total = dict["totalDistance"] as? Double {
-            distance = total
-        } else {
-            distance = 0
-        }
-
-        return (count, distance)
+        repository.fetchTripStats()
     }
 
     func fetchTotalDistance() -> Double {
-        let context = persistenceController.container.viewContext
-        let request = NSFetchRequest<NSDictionary>(entityName: "TripEntity")
-        request.predicate = NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
-        request.resultType = .dictionaryResultType
-
-        let sumDesc = NSExpressionDescription()
-        sumDesc.name = "totalDistance"
-        sumDesc.expression = NSExpression(forFunction: "sum:", arguments: [NSExpression(forKeyPath: "distance")])
-        sumDesc.expressionResultType = .doubleAttributeType
-        request.propertiesToFetch = [sumDesc]
-
-        guard let results = try? context.fetch(request),
-              let dict = results.first,
-              let total = dict["totalDistance"] as? Double else { return 0 }
-        return total
+        repository.fetchTotalDistance()
     }
 
     func deleteTrip(id: UUID) {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
-
-        if let entity = try? context.fetch(request).first {
-            // Soft delete: mark for server-side deletion, hide from UI.
-            // Photos cleaned up when server confirms or on periodic purge.
-            entity.syncStatus = SyncStatus.pendingDelete.rawValue
-            entity.lastModifiedAt = Date()
-            persistenceController.save()
-        }
+        repository.deleteTrip(id: id)
     }
 
-    /// Physically remove soft-deleted trips. Called after server confirms deletion
-    /// or during local cleanup when no server is configured.
     func purgeSoftDeletedTrips() {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "syncStatus == %d", SyncStatus.pendingDelete.rawValue)
-
-        guard let entities = try? context.fetch(request) else { return }
-        for entity in entities {
-            if let id = entity.id {
-                PhotoStorageService.deletePhotos(for: id)
-            }
-            context.delete(entity)
-        }
-        if !entities.isEmpty {
-            persistenceController.save()
-        }
+        repository.purgeSoftDeletedTrips()
     }
 
     func tripDetail(id: UUID) -> Trip? {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
-
-        guard let entity = try? context.fetch(request).first else { return nil }
-        return tripFromEntity(entity)
+        repository.fetchTripDetail(id: id)
     }
 
     // MARK: - Orphan Cleanup
@@ -787,82 +680,10 @@ final class TripManager: ObservableObject {
         UserDefaults.standard.removeObject(forKey: Self.demoTripIdKey)
     }
 
-    // MARK: - Entity Conversion
-
-    private func tripFromEntity(_ entity: TripEntity, includeTrackPoints: Bool = true) -> Trip? {
-        guard let id = entity.id, let startDate = entity.startDate else { return nil }
-
-        let points: [TrackPoint]
-        if includeTrackPoints {
-            points = (entity.trackPoints?.array as? [TrackPointEntity])?.compactMap { pe in
-                guard let pid = pe.id, let ts = pe.timestamp else { return nil }
-                return TrackPoint(
-                    id: pid,
-                    latitude: pe.latitude,
-                    longitude: pe.longitude,
-                    altitude: pe.altitude,
-                    speed: pe.speed,
-                    course: pe.course,
-                    horizontalAccuracy: pe.horizontalAccuracy,
-                    timestamp: ts,
-                    isInterpolated: pe.isInterpolated
-                )
-            } ?? []
-        } else {
-            points = []
-        }
-
-        let photos: [TripPhoto] = (entity.photos?.array as? [TripPhotoEntity])?.compactMap { pe in
-            guard let pid = pe.id, let filename = pe.filename, let ts = pe.timestamp else { return nil }
-            return TripPhoto(id: pid, filename: filename, caption: pe.caption, timestamp: ts)
-        } ?? []
-
-        let badgeIds: [String]
-        if let json = entity.badgesJSON,
-           let data = json.data(using: .utf8),
-           let ids = try? JSONDecoder().decode([String].self, from: data) {
-            badgeIds = ids
-        } else {
-            badgeIds = []
-        }
-
-        return Trip(
-            id: id,
-            startDate: startDate,
-            endDate: entity.endDate,
-            distance: entity.distance,
-            maxSpeed: entity.maxSpeed,
-            averageSpeed: entity.averageSpeed,
-            trackPoints: points,
-            photos: photos,
-            title: entity.title,
-            tripDescription: entity.tripDescription,
-            fuelUsed: entity.fuelUsed,
-            elevation: entity.elevation,
-            region: entity.region,
-            isPrivate: entity.isPrivate,
-            vehicleId: entity.vehicleId,
-            fuelCurrency: entity.fuelCurrency,
-            previewPolyline: entity.previewPolyline,
-            earnedBadgeIds: badgeIds
-        )
-    }
-
     // MARK: - Per-Trip Badges
 
     func saveBadgesJSON(tripId: UUID, badgeIds: [String]) {
-        guard !badgeIds.isEmpty else { return }
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", tripId as CVarArg)
-        if let entity = try? context.fetch(request).first {
-            if let data = try? JSONEncoder().encode(badgeIds),
-               let json = String(data: data, encoding: .utf8) {
-                entity.badgesJSON = json
-                entity.lastModifiedAt = Date()
-                persistenceController.save()
-            }
-        }
+        repository.saveBadgesJSON(tripId: tripId, badgeIds: badgeIds)
     }
 
     // MARK: - Preview Polyline
@@ -920,68 +741,19 @@ final class TripManager: ObservableObject {
     // MARK: - Photos
 
     func addPhoto(to tripId: UUID, image: UIImage, caption: String? = nil) -> TripPhoto? {
-        guard let filename = PhotoStorageService.savePhoto(image, for: tripId) else { return nil }
-
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", tripId as CVarArg)
-
-        guard let entity = try? context.fetch(request).first else { return nil }
-
-        let photoEntity = TripPhotoEntity(context: context)
-        let photoId = UUID()
-        photoEntity.id = photoId
-        photoEntity.filename = filename
-        photoEntity.caption = caption
-        photoEntity.timestamp = Date()
-        photoEntity.lastModifiedAt = Date()
-        photoEntity.sortOrder = Int16(entity.photos?.count ?? 0)
-        photoEntity.trip = entity
-        entity.lastModifiedAt = Date()
-
-        persistenceController.save()
-
-        return TripPhoto(id: photoId, filename: filename, caption: caption, timestamp: Date())
+        repository.addPhoto(to: tripId, image: image, caption: caption)
     }
 
     func deletePhoto(id: UUID, from tripId: UUID) {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
-
-        if let entity = try? context.fetch(request).first {
-            PhotoStorageService.deletePhoto(filename: entity.filename ?? "")
-            // Update parent trip's lastModifiedAt for sync tracking
-            if let trip = entity.trip {
-                trip.lastModifiedAt = Date()
-            }
-            context.delete(entity)
-            persistenceController.save()
-        }
+        repository.deletePhoto(id: id, from: tripId)
     }
 
     func updateNotes(for tripId: UUID, notes: String) {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", tripId as CVarArg)
-
-        if let entity = try? context.fetch(request).first {
-            entity.tripDescription = notes
-            entity.lastModifiedAt = Date()
-            persistenceController.save()
-        }
+        repository.updateNotes(for: tripId, notes: notes)
     }
 
     func updateTitle(for tripId: UUID, title: String) {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", tripId as CVarArg)
-
-        if let entity = try? context.fetch(request).first {
-            entity.title = title.isEmpty ? nil : title
-            entity.lastModifiedAt = Date()
-            persistenceController.save()
-        }
+        repository.updateTitle(for: tripId, title: title)
     }
 
     // MARK: - Geocoding Retry
