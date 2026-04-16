@@ -531,4 +531,31 @@ enum AppStrings {
         lang == .ru ? "Привязано" : "Linked"
     }
 
+    // MARK: - Auth
+
+    static func guest(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Гость" : "Guest"
+    }
+    static func signInToSync(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войдите для синхронизации" : "Sign in to sync trips"
+    }
+    static func signedIn(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вы вошли" : "Signed in"
+    }
+    static func synced(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Синхронизировано" : "Synced"
+    }
+    static func syncComingSoon(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Синхронизация скоро" : "Sync coming soon"
+    }
+    static func signOut(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Выйти" : "Sign out"
+    }
+    static func signOutConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Выйти?" : "Sign out?"
+    }
+    static func signOutConfirmMessage(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ваши поездки останутся на устройстве" : "Your trips will remain on this device"
+    }
+
 }

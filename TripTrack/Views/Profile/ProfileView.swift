@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 struct ProfileView: View {
     @EnvironmentObject private var mapVM: MapViewModel
@@ -7,6 +8,7 @@ struct ProfileView: View {
     @Environment(\.colorScheme) private var scheme
 
     @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var auth = AuthService.shared
 
     // Profile avatar
     @State private var selectedAvatar: String = "😎"
@@ -17,6 +19,7 @@ struct ProfileView: View {
     @State private var showBadges = false
     @State private var showGarage = false
     @State private var showVehicleDetail = false
+    @State private var showSignOutAlert = false
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -93,6 +96,21 @@ struct ProfileView: View {
                 languageCard(c, isRu: isRu)
 
                 aboutCard(c, isRu: isRu)
+
+                // Sign out button (only when signed in)
+                if auth.isSignedIn {
+                    Button {
+                        showSignOutAlert = true
+                    } label: {
+                        Text(AppStrings.signOut(lang.language))
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .surfaceCard(cornerRadius: 12)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
@@ -117,6 +135,17 @@ struct ProfileView: View {
             if let vehicle = selectedVehicle {
                 VehicleDetailView(vehicleId: vehicle.id)
             }
+        }
+        .alert(
+            AppStrings.signOutConfirmTitle(lang.language),
+            isPresented: $showSignOutAlert
+        ) {
+            Button(AppStrings.cancel(lang.language), role: .cancel) {}
+            Button(AppStrings.signOut(lang.language), role: .destructive) {
+                auth.signOut()
+            }
+        } message: {
+            Text(AppStrings.signOutConfirmMessage(lang.language))
         }
     }
 
@@ -219,16 +248,7 @@ struct ProfileView: View {
                         .foregroundStyle(AppTheme.accent)
                 }
                 Spacer()
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isEditingAvatar.toggle()
-                    }
-                } label: {
-                    Image(systemName: isEditingAvatar ? "checkmark" : "pencil")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(isEditingAvatar ? AppTheme.accent : c.textTertiary)
-                        .frame(width: 28, height: 28)
-                }
+                editAvatarButton(c)
             }
 
             Text(selectedAvatar)
@@ -238,42 +258,121 @@ struct ProfileView: View {
                 .scaleEffect(avatarBounce ? 1.15 : 1.0)
                 .animation(.spring(response: 0.3, dampingFraction: 0.5), value: avatarBounce)
 
+            if auth.isSignedIn {
+                signedInHeader(c)
+            } else {
+                guestHeader(c)
+            }
+
             if isEditingAvatar {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
-                    ForEach(profileAvatars, id: \.self) { emoji in
-                        Button {
-                            Haptics.tap()
-                            selectedAvatar = emoji
-                            settings.avatarEmoji = emoji
-                            settings.saveSettings()
-                            // Bounce the main avatar
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
-                                avatarBounce = true
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                avatarBounce = false
-                            }
-                        } label: {
-                            Text(emoji)
-                                .font(.system(size: 24))
-                                .frame(width: 48, height: 48)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(selectedAvatar == emoji ? AppTheme.accentBg : c.cardAlt)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(selectedAvatar == emoji ? AppTheme.accent : .clear, lineWidth: 2)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                avatarGrid(c)
             }
         }
         .padding(16)
         .surfaceCard(cornerRadius: 16)
+    }
+
+    // MARK: - Guest Header
+
+    @ViewBuilder
+    private func guestHeader(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 4) {
+            Text(AppStrings.guest(lang.language))
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(c.text)
+            Text(AppStrings.signInToSync(lang.language))
+                .font(.system(size: 13))
+                .foregroundStyle(c.textSecondary)
+        }
+
+        SignInWithAppleButton(.signIn) { request in
+            request.requestedScopes = [.fullName, .email]
+        } onCompletion: { result in
+            switch result {
+            case .success(let authorization):
+                auth.handleAuthorization(authorization)
+            case .failure:
+                break
+            }
+        }
+        .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
+        .frame(height: 44)
+        .cornerRadius(10)
+    }
+
+    // MARK: - Signed In Header
+
+    @ViewBuilder
+    private func signedInHeader(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 4) {
+            Text(auth.userName ?? AppStrings.signedIn(lang.language))
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(c.text)
+            if let email = auth.userEmail {
+                Text(email)
+                    .font(.system(size: 13))
+                    .foregroundStyle(c.textSecondary)
+            }
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(c.textTertiary)
+                    .frame(width: 6, height: 6)
+                Text(AppStrings.syncComingSoon(lang.language))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(c.textTertiary)
+            }
+        }
+    }
+
+    // MARK: - Edit Avatar Button
+
+    private func editAvatarButton(_ c: AppTheme.Colors) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isEditingAvatar.toggle()
+            }
+        } label: {
+            Image(systemName: isEditingAvatar ? "checkmark" : "pencil")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isEditingAvatar ? AppTheme.accent : c.textTertiary)
+                .frame(width: 28, height: 28)
+        }
+    }
+
+    // MARK: - Avatar Grid
+
+    private func avatarGrid(_ c: AppTheme.Colors) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+            ForEach(profileAvatars, id: \.self) { emoji in
+                Button {
+                    Haptics.tap()
+                    selectedAvatar = emoji
+                    settings.avatarEmoji = emoji
+                    settings.saveSettings()
+                    // Bounce the main avatar
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                        avatarBounce = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        avatarBounce = false
+                    }
+                } label: {
+                    Text(emoji)
+                        .font(.system(size: 24))
+                        .frame(width: 48, height: 48)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(selectedAvatar == emoji ? AppTheme.accentBg : c.cardAlt)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(selectedAvatar == emoji ? AppTheme.accent : .clear, lineWidth: 2)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     // MARK: - Theme Card
