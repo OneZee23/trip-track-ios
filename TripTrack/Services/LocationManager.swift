@@ -49,6 +49,8 @@ class LocationManager: ObservableObject {
     
     /// Запустить реальный GPS (для получения начальной позиции)
     func startRealGPS() {
+        // Don't downgrade to idle mode if we're actively recording a trip
+        guard !isTracking else { return }
         realGPS.setIdleMode()
         realGPS.start()
     }
@@ -92,6 +94,8 @@ class LocationManager: ObservableObject {
         // Switch to high-accuracy recording mode
         realGPS.isRecording = true
         realGPS.setRecordingMode()
+        // Ensure GPS is actually running (may not be started yet in background auto-trip)
+        realGPS.start()
 
         activeProviderCancellable = realGPS.locationPublisher
             .sink { [weak self] update in

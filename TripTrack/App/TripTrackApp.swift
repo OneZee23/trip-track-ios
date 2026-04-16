@@ -24,6 +24,9 @@ struct TripTrackApp: App {
                     .onOpenURL { url in
                         handleDeepLink(url)
                     }
+                    .task {
+                        AuthService.shared.checkAuthStatus()
+                    }
             } else {
                 OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
                     .environmentObject(themeManager)
