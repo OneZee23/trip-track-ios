@@ -120,6 +120,7 @@ final class AutoTripService: ObservableObject {
     private var lastTripTriggerTime: Date?
     /// Prevents re-sending remind notification while the same driving session continues
     private var hasRemindedForCurrentTrip = false
+    private var foregroundRetryObserver: Any?
 
     private func handleAutomotiveDetected() {
         guard let vm = mapViewModel, !vm.isRecording else { return }
@@ -203,6 +204,10 @@ final class AutoTripService: ObservableObject {
             // Backdate trip start to when automotive activity actually began
             if let realStart = estimatedStartDate {
                 vm.tripManager.backdateTrip(to: realStart)
+            }
+            // Retry Live Activity when app comes to foreground (background start may fail silently)
+            if !isInForeground {
+                scheduleLiveActivityRetry(vm: vm)
             }
             if isInForeground {
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
@@ -386,6 +391,33 @@ final class AutoTripService: ObservableObject {
         }
         lastProcessedEvent = (type: type, name: name, time: now)
         return true
+    }
+    // MARK: - Live Activity Foreground Retry
+
+    private func scheduleLiveActivityRetry(vm: MapViewModel) {
+        if let obs = foregroundRetryObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        foregroundRetryObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self, weak vm] _ in
+            Task { @MainActor in
+                guard let self, let vm, vm.isRecording else { return }
+                if let obs = self.foregroundRetryObserver {
+                    NotificationCenter.default.removeObserver(obs)
+                    self.foregroundRetryObserver = nil
+                }
+                let settings = SettingsManager.shared
+                let vehicle = settings.vehicles.first { $0.id == settings.selectedVehicleId } ?? settings.vehicles.first
+                let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
+                LiveActivityManager.shared.startActivity(
+                    tripId: vm.tripManager.activeTrip?.id ?? UUID(),
+                    startDate: vm.tripManager.activeTrip?.startDate ?? Date(),
+                    vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
+                    vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
+                )
+            }
+        }
     }
 }
 
