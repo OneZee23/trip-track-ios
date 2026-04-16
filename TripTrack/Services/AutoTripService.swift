@@ -118,9 +118,14 @@ final class AutoTripService: ObservableObject {
     // MARK: - Automotive Detection (from CMMotion)
 
     private var lastTripTriggerTime: Date?
+    /// Prevents re-sending remind notification while the same driving session continues
+    private var hasRemindedForCurrentTrip = false
 
     private func handleAutomotiveDetected() {
         guard let vm = mapViewModel, !vm.isRecording else { return }
+
+        // Don't re-remind for the same driving session
+        if settings.autoRecordMode == .remind && hasRemindedForCurrentTrip { return }
 
         // Deduplicate: don't trigger twice within 30s (BT + Motion can fire together)
         if let last = lastTripTriggerTime, Date().timeIntervalSince(last) < 30 { return }
@@ -205,6 +210,7 @@ final class AutoTripService: ObservableObject {
                 notificationManager.sendAutoStartNotification()
             }
         case .remind:
+            hasRemindedForCurrentTrip = true
             if isInForeground {
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
             } else {
@@ -239,7 +245,9 @@ final class AutoTripService: ObservableObject {
             self.motionEndedDebounceTimer?.invalidate()
             self.motionEndedDebounceTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    guard let self, let vm = self.mapViewModel, vm.isRecording else { return }
+                    guard let self else { return }
+                    self.hasRemindedForCurrentTrip = false
+                    guard let vm = self.mapViewModel, vm.isRecording else { return }
                     let timeout = self.settings.autoStopTimeout
                     self.notificationManager.sendTripStopPrompt(minutes: timeout)
                     self.startAutoStopTimer(minutes: timeout)
@@ -338,6 +346,7 @@ final class AutoTripService: ObservableObject {
             forName: .autoTripStartRequested, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                self?.hasRemindedForCurrentTrip = false
                 guard let vm = self?.mapViewModel, !vm.isRecording else { return }
                 // Pre-warm GPS immediately — don't wait for full startRecording() chain
                 vm.locationManager.startTracking()
