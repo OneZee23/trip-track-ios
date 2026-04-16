@@ -341,6 +341,9 @@ final class AutoTripService: ObservableObject {
 
     private func autoStopTrip() {
         guard let vm = mapViewModel, vm.isRecording else { return }
+        if let trip = vm.tripManager.activeTrip {
+            notificationManager.sendAutoStopNotification(distanceKm: trip.distanceKm, duration: trip.formattedDuration)
+        }
         vm.stopRecording()
     }
 
