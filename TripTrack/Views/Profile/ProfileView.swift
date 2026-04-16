@@ -287,8 +287,13 @@ struct ProfileView: View {
 
         SignInWithAppleButton(.signIn) { request in
             request.requestedScopes = [.fullName, .email]
-        } onCompletion: { _ in
-            // AuthService handles delegate callbacks directly
+        } onCompletion: { result in
+            switch result {
+            case .success(let authorization):
+                auth.handleAuthorization(authorization)
+            case .failure:
+                break
+            }
         }
         .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
         .frame(height: 44)
@@ -310,11 +315,11 @@ struct ProfileView: View {
             }
             HStack(spacing: 4) {
                 Circle()
-                    .fill(AppTheme.green)
+                    .fill(c.textTertiary)
                     .frame(width: 6, height: 6)
-                Text(AppStrings.synced(lang.language))
+                Text(AppStrings.syncComingSoon(lang.language))
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(AppTheme.green)
+                    .foregroundStyle(c.textTertiary)
             }
         }
     }

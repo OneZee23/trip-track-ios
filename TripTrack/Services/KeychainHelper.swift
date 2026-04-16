@@ -1,4 +1,3 @@
-// TripTrack/Services/KeychainHelper.swift
 import Foundation
 import Security
 
@@ -10,12 +9,14 @@ enum KeychainHelper {
         case deleteFailed(OSStatus)
     }
 
+    private static let service = "com.triptrack.keychain"
+
     static func save(_ data: Data, for key: String) throws {
-        // Delete existing item first (upsert pattern)
         delete(key: key)
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
@@ -30,6 +31,7 @@ enum KeychainHelper {
     static func load(key: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
@@ -45,6 +47,7 @@ enum KeychainHelper {
     static func delete(key: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: key
         ]
         return SecItemDelete(query as CFDictionary) == errSecSuccess
@@ -53,7 +56,9 @@ enum KeychainHelper {
     // MARK: - String convenience
 
     static func saveString(_ string: String, for key: String) throws {
-        guard let data = string.data(using: .utf8) else { return }
+        guard let data = string.data(using: .utf8) else {
+            throw KeychainError.saveFailed(errSecParam)
+        }
         try save(data, for: key)
     }
 

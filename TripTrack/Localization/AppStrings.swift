@@ -545,6 +545,9 @@ enum AppStrings {
     static func synced(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Синхронизировано" : "Synced"
     }
+    static func syncComingSoon(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Синхронизация скоро" : "Sync coming soon"
+    }
     static func signOut(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Выйти" : "Sign out"
     }
