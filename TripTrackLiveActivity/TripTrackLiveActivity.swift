@@ -42,14 +42,12 @@ private struct WidgetColors {
     )
 }
 
-// MARK: - Watch Smart Stack support
+// MARK: - Availability helper
 
-extension ActivityConfiguration {
-    /// Adds `.supplementalActivityFamilies([.small])` on iOS 18+ so the Live Activity
-    /// appears on Apple Watch Smart Stack. On iOS 17 this is a no-op.
-    func watchSmartStack() -> some WidgetConfiguration {
-        if #available(iOS 18.0, *) {
-            return self.supplementalActivityFamilies([.small])
+extension WidgetConfiguration {
+    func withWatchSupport() -> some WidgetConfiguration {
+        if #available(iOSApplicationExtension 18.0, *) {
+            return supplementalActivityFamilies([.small])
         } else {
             return self
         }
@@ -154,7 +152,7 @@ struct TripTrackLiveActivity: Widget {
                 ? URL(string: "triptrack://trip/\(context.attributes.tripId.uuidString)")
                 : URL(string: "triptrack://recording"))
         }
-        .watchSmartStack()
+        .withWatchSupport()
     }
 
     @ViewBuilder
