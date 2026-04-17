@@ -3,7 +3,7 @@
 > Google Photos для дорог. Записывает маршруты, помнит за тебя.
 
 **Platform:** iOS (iPhone)
-**Status:** v0.4.0 | **Started:** Jan 2026
+**Status:** v0.4.2 | **Started:** Jan 2026
 
 ---
 
@@ -254,7 +254,7 @@ xcodebuild test -scheme TripTrack -configuration Debug -destination 'platform=iO
 - [x] Трёхслойная детекция (Audio + CMMotion + Significant Location)
 - [x] Уведомления с action buttons
 
-### v0.4.0 Pre-Server Readiness (done -- current)
+### v0.4.0 Pre-Server Readiness (done)
 
 - [x] CoreData Model Versioning (v1 → v2)
 - [x] Codable на моделях (Trip, TrackPoint, TripPhoto, Vehicle)
@@ -264,10 +264,25 @@ xcodebuild test -scheme TripTrack -configuration Debug -destination 'platform=iO
 - [x] SyncQueue (очередь операций с retry)
 - [x] Тесты: Codable round-trip, SyncQueue
 
+### v0.4.1 Sign in with Apple (done)
+
+- [x] Авторизация через Apple ID в профиле
+- [x] KeychainHelper для безопасного хранения credentials
+- [x] Два состояния профиля: Guest / Signed In
+
+### v0.4.2 Live Activity + Watch (done -- current)
+
+- [x] Fix: remind-режим не спамит уведомлениями
+- [x] Fix: Live Activity при автостарте из бэкграунда
+- [x] Fix: восстановление записи после перезапуска приложения
+- [x] Live Activity на Apple Watch Smart Stack (iOS 18+)
+- [x] Уведомление при автозавершении поездки
+- [x] Кнопка "Остановить" в уведомлении об автостарте
+
 ### Next: v0.5.0 Server Sync (planned)
 
 - [ ] Свой бэкенд (API, auth, БД)
-- [ ] Sign in with Apple
+- [ ] Серверная верификация Apple ID token
 - [ ] Синхронизация поездок между устройствами
 - [ ] Upload фото на сервер
 
@@ -275,7 +290,7 @@ xcodebuild test -scheme TripTrack -configuration Debug -destination 'platform=iO
 
 - [ ] Социальные фичи (профили, шеринг поездок, общий фид)
 - [ ] UI-редизайн под Strava-стиль
-- [ ] Apple Watch companion
+- [ ] Apple Watch companion app (старт/пауза/стоп с часов)
 - [ ] Widgets (последняя поездка, статистика)
 - [ ] Экспорт данных (GPX, CSV)
 

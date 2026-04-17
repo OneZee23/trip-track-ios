@@ -156,10 +156,14 @@ final class TripManager: ObservableObject {
         repository.fetchTripDetail(id: id)
     }
 
-    // MARK: - Orphan Cleanup
+    // MARK: - Orphan Cleanup & Recovery
 
-    /// Called on init: finds trips with no endDate (app was killed mid-recording)
-    /// and either deletes them (junk) or closes them using the last track point's timestamp.
+    /// Max age for a restorable orphan trip (1 hour). Older orphans are closed.
+    private static let maxRestorableAge: TimeInterval = 3600
+
+    /// Called on init: finds trips with no endDate (app was killed mid-recording).
+    /// Recent orphans (< 1 hour) are restored as active recording.
+    /// Old orphans are closed or deleted (junk).
     private func cleanupOrphanedTrips() {
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
@@ -175,13 +179,33 @@ final class TripManager: ObservableObject {
                 continue
             }
 
-            // Close the trip at the timestamp of the last recorded point
             let lastTimestamp = points.compactMap { $0.timestamp }.max() ?? Date()
             let actualDuration = max(0, entity.startDate.map { lastTimestamp.timeIntervalSince($0) } ?? 0)
             let isJunk = entity.distance < 500 && actualDuration < 120
 
             if isJunk {
                 context.delete(entity)
+                continue
+            }
+
+            // Recent orphan — restore as active recording
+            let age = Date().timeIntervalSince(lastTimestamp)
+            if age < Self.maxRestorableAge {
+                activeTripEntity = entity
+                guard let tripId = entity.id, let startDate = entity.startDate else { continue }
+                activeTrip = Trip(
+                    id: tripId,
+                    startDate: startDate,
+                    distance: entity.distance,
+                    maxSpeed: entity.maxSpeed,
+                    averageSpeed: entity.averageSpeed
+                )
+                isRecording = true
+                lastLocation = nil
+                unsavedPointCount = 0
+                lastSaveTime = Date()
+                kalmanFilter.reset()
+                locationManager.startTracking()
             } else {
                 entity.endDate = lastTimestamp
             }
