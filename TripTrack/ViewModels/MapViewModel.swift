@@ -105,6 +105,7 @@ final class MapViewModel: ObservableObject {
         setupSunBasedTheme()
         checkSunTheme() // Immediate check using cached location
         refreshTripStats()
+        restoreActiveRecordingIfNeeded()
 
         // Rebuild territory when a trip is deleted
         NotificationCenter.default.publisher(for: .tripDeleted)
@@ -232,6 +233,36 @@ final class MapViewModel: ObservableObject {
 
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()
+    }
+
+    // MARK: - Recording Recovery
+
+    /// Restore active recording if TripManager recovered an orphaned trip on launch.
+    private func restoreActiveRecordingIfNeeded() {
+        guard tripManager.isRecording, let trip = tripManager.activeTrip else { return }
+        isRecording = true
+        isPaused = false
+        recordingStartDate = trip.startDate
+        pausedAccumulated = 0
+        pauseStartDate = nil
+        smoothedSpeed = 0
+        trackManager.reset()
+        trackManager.startAnimation()
+
+        // Start Live Activity
+        let settings = SettingsManager.shared
+        let vehicle = settings.vehicles.first { $0.id == selectedVehicleId } ?? settings.vehicles.first
+        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
+        LiveActivityManager.shared.startActivity(
+            tripId: trip.id,
+            startDate: trip.startDate,
+            vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
+            vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
+        )
+
+        #if DEBUG
+        print("Recording restored: trip \(trip.id), started \(trip.startDate)")
+        #endif
     }
 
     func startRecording() {

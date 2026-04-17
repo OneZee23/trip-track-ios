@@ -42,6 +42,18 @@ private struct WidgetColors {
     )
 }
 
+// MARK: - Availability helper
+
+extension WidgetConfiguration {
+    func withWatchSupport() -> some WidgetConfiguration {
+        if #available(iOSApplicationExtension 18.0, *) {
+            return supplementalActivityFamilies([.small])
+        } else {
+            return self
+        }
+    }
+}
+
 // MARK: - Widget
 
 struct TripTrackLiveActivity: Widget {
@@ -140,6 +152,7 @@ struct TripTrackLiveActivity: Widget {
                 ? URL(string: "triptrack://trip/\(context.attributes.tripId.uuidString)")
                 : URL(string: "triptrack://recording"))
         }
+        .withWatchSupport()
     }
 
     @ViewBuilder

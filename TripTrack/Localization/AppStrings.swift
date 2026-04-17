@@ -503,6 +503,12 @@ enum AppStrings {
     static func notifAutoStartBody(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "TripTrack автоматически начал запись" : "TripTrack automatically started recording"
     }
+    static func notifAutoStopTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездка завершена" : "Trip completed"
+    }
+    static func notifAutoStopSummary(_ lang: LanguageManager.Language, km: String, time: String) -> String {
+        lang == .ru ? "\(km) км · \(time)" : "\(km) km · \(time)"
+    }
     static func notifAutoStopBody(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Автозавершение поездки" : "Auto-stopping trip"
     }

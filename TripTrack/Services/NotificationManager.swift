@@ -93,9 +93,14 @@ final class NotificationManager: NSObject, ObservableObject {
             intentIdentifiers: []
         )
 
+        let autoStartStopAction = UNNotificationAction(
+            identifier: Self.stopNowAction,
+            title: AppStrings.notifStopNowAction(lang),
+            options: []
+        )
         let autoStartCategory = UNNotificationCategory(
             identifier: Self.tripAutoStartedCategory,
-            actions: [],
+            actions: [autoStartStopAction],
             intentIdentifiers: []
         )
 
@@ -148,6 +153,21 @@ final class NotificationManager: NSObject, ObservableObject {
 
         let request = UNNotificationRequest(
             identifier: "trip-auto-started",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    func sendAutoStopNotification(distanceKm: Double, duration: String) {
+        let lang = currentLang()
+        let content = UNMutableNotificationContent()
+        content.title = AppStrings.notifAutoStopTitle(lang)
+        content.body = AppStrings.notifAutoStopSummary(lang, km: String(format: "%.1f", distanceKm), time: duration)
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "trip-auto-stopped",
             content: content,
             trigger: nil
         )
