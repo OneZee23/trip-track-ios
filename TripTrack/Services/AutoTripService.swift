@@ -118,9 +118,15 @@ final class AutoTripService: ObservableObject {
     // MARK: - Automotive Detection (from CMMotion)
 
     private var lastTripTriggerTime: Date?
+    /// Prevents re-sending remind notification while the same driving session continues
+    private var hasRemindedForCurrentTrip = false
+    private var foregroundRetryObserver: Any?
 
     private func handleAutomotiveDetected() {
         guard let vm = mapViewModel, !vm.isRecording else { return }
+
+        // Don't re-remind for the same driving session
+        if settings.autoRecordMode == .remind && hasRemindedForCurrentTrip { return }
 
         // Deduplicate: don't trigger twice within 30s (BT + Motion can fire together)
         if let last = lastTripTriggerTime, Date().timeIntervalSince(last) < 30 { return }
@@ -199,12 +205,17 @@ final class AutoTripService: ObservableObject {
             if let realStart = estimatedStartDate {
                 vm.tripManager.backdateTrip(to: realStart)
             }
+            // Retry Live Activity when app comes to foreground (background start may fail silently)
+            if !isInForeground {
+                scheduleLiveActivityRetry(vm: vm)
+            }
             if isInForeground {
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
             } else {
                 notificationManager.sendAutoStartNotification()
             }
         case .remind:
+            hasRemindedForCurrentTrip = true
             if isInForeground {
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
             } else {
@@ -239,7 +250,9 @@ final class AutoTripService: ObservableObject {
             self.motionEndedDebounceTimer?.invalidate()
             self.motionEndedDebounceTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    guard let self, let vm = self.mapViewModel, vm.isRecording else { return }
+                    guard let self else { return }
+                    self.hasRemindedForCurrentTrip = false
+                    guard let vm = self.mapViewModel, vm.isRecording else { return }
                     let timeout = self.settings.autoStopTimeout
                     self.notificationManager.sendTripStopPrompt(minutes: timeout)
                     self.startAutoStopTimer(minutes: timeout)
@@ -328,6 +341,9 @@ final class AutoTripService: ObservableObject {
 
     private func autoStopTrip() {
         guard let vm = mapViewModel, vm.isRecording else { return }
+        if let trip = vm.tripManager.activeTrip {
+            notificationManager.sendAutoStopNotification(distanceKm: trip.distanceKm, duration: trip.formattedDuration)
+        }
         vm.stopRecording()
     }
 
@@ -338,6 +354,7 @@ final class AutoTripService: ObservableObject {
             forName: .autoTripStartRequested, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                self?.hasRemindedForCurrentTrip = false
                 guard let vm = self?.mapViewModel, !vm.isRecording else { return }
                 // Pre-warm GPS immediately — don't wait for full startRecording() chain
                 vm.locationManager.startTracking()
@@ -377,6 +394,33 @@ final class AutoTripService: ObservableObject {
         }
         lastProcessedEvent = (type: type, name: name, time: now)
         return true
+    }
+    // MARK: - Live Activity Foreground Retry
+
+    private func scheduleLiveActivityRetry(vm: MapViewModel) {
+        if let obs = foregroundRetryObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        foregroundRetryObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self, weak vm] _ in
+            Task { @MainActor in
+                guard let self, let vm, vm.isRecording else { return }
+                if let obs = self.foregroundRetryObserver {
+                    NotificationCenter.default.removeObserver(obs)
+                    self.foregroundRetryObserver = nil
+                }
+                let settings = SettingsManager.shared
+                let vehicle = settings.vehicles.first { $0.id == settings.selectedVehicleId } ?? settings.vehicles.first
+                let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
+                LiveActivityManager.shared.startActivity(
+                    tripId: vm.tripManager.activeTrip?.id ?? UUID(),
+                    startDate: vm.tripManager.activeTrip?.startDate ?? Date(),
+                    vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
+                    vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
+                )
+            }
+        }
     }
 }
 

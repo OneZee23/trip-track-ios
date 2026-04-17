@@ -56,6 +56,9 @@ final class LiveActivityManager {
                 self.currentActivity = activity
                 self.lastUpdateDate = Date()
             } catch {
+                #if DEBUG
+                print("LiveActivity: failed to start — \(error.localizedDescription)")
+                #endif
             }
         }
     }
