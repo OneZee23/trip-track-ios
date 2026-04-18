@@ -16,7 +16,6 @@ final class AutoTripService: ObservableObject {
     private let settings = SettingsManager.shared
 
     private var autoStopTimer: Timer?
-    private var motionEndedDebounceTimer: Timer?
     private var notificationObservers: [Any] = []
     private var keepAliveLocationManager: CLLocationManager?
     private var keepAliveDelegate: KeepAliveLocationDelegate?
@@ -65,8 +64,6 @@ final class AutoTripService: ObservableObject {
         bluetoothDetector.stopMonitoring()
         audioRouteDetector.stopMonitoring()
         motionDetector.stopLiveUpdates()
-        motionEndedDebounceTimer?.invalidate()
-        motionEndedDebounceTimer = nil
         cancelAutoStopTimer()
         stopKeepAlive()
     }
@@ -120,6 +117,12 @@ final class AutoTripService: ObservableObject {
     private var lastTripTriggerTime: Date?
     /// Prevents re-sending remind notification while the same driving session continues
     private var hasRemindedForCurrentTrip = false
+    /// Timestamp of the last `automotive → not automotive` transition. Used to detect
+    /// when a new driving session starts (long gap → treat next `automotive` as a new session).
+    private var lastAutomotiveEndTime: Date?
+    /// Gap between automotive-ended and next automotive-detected above which we treat
+    /// the next activity as a new driving session (resets the remind-once flag).
+    private static let newSessionGap: TimeInterval = 10 * 60
     private var foregroundRetryObserver: Any?
 
     private func handleAutomotiveDetected() {
@@ -169,7 +172,7 @@ final class AutoTripService: ObservableObject {
                Date().timeIntervalSince(start) > Self.inactivityTimeout {
                 // Stationary for 20 minutes — trigger auto-stop
                 let timeout = settings.autoStopTimeout
-                notificationManager.sendTripStopPrompt(minutes: timeout)
+                notificationManager.sendTripStopPrompt(minutes: timeout, reason: .inactivity)
                 startAutoStopTimer(minutes: timeout)
                 lowSpeedStartTime = nil // reset so we don't re-trigger
             }
@@ -240,24 +243,23 @@ final class AutoTripService: ObservableObject {
             }
         }
         motionDetector.onAutomotiveDetected = { [weak self] in
-            self?.motionEndedDebounceTimer?.invalidate()
-            self?.handleAutomotiveDetected()
+            guard let self else { return }
+            // Long gap since the car last stopped moving → treat as a new driving session
+            if let lastEnd = self.lastAutomotiveEndTime,
+               Date().timeIntervalSince(lastEnd) > Self.newSessionGap {
+                self.hasRemindedForCurrentTrip = false
+            }
+            if let vm = self.mapViewModel, vm.isRecording {
+                // Car moved again — cancel any pending inactivity auto-stop
+                self.cancelAutoStopTimer()
+            }
+            self.handleAutomotiveDetected()
         }
         motionDetector.onAutomotiveEnded = { [weak self] in
-            guard let self else { return }
-            // Debounce: CMMotion flickers between states at red lights etc.
-            // Wait 60s of non-automotive before triggering auto-stop
-            self.motionEndedDebounceTimer?.invalidate()
-            self.motionEndedDebounceTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.hasRemindedForCurrentTrip = false
-                    guard let vm = self.mapViewModel, vm.isRecording else { return }
-                    let timeout = self.settings.autoStopTimeout
-                    self.notificationManager.sendTripStopPrompt(minutes: timeout)
-                    self.startAutoStopTimer(minutes: timeout)
-                }
-            }
+            // CMMotion flickers on red lights / traffic jams — don't drive auto-stop
+            // from this signal (GPS-speed inactivity does that instead). We only
+            // record the timestamp so onAutomotiveDetected can spot a new session.
+            self?.lastAutomotiveEndTime = Date()
         }
     }
 
@@ -289,11 +291,15 @@ final class AutoTripService: ObservableObject {
 
     private func handleDeviceDisconnected(name: String) {
         guard let vm = mapViewModel else { return }
-        guard vm.isRecording else { return }
         guard shouldProcessEvent(.disconnected, name: name) else { return }
 
+        // BT disconnect is a strong end-of-session signal — always reset remind flag
+        hasRemindedForCurrentTrip = false
+
+        guard vm.isRecording else { return }
+
         let timeout = settings.autoStopTimeout
-        notificationManager.sendTripStopPrompt(minutes: timeout)
+        notificationManager.sendTripStopPrompt(minutes: timeout, reason: .bluetooth)
         startAutoStopTimer(minutes: timeout)
     }
 
@@ -345,6 +351,7 @@ final class AutoTripService: ObservableObject {
             notificationManager.sendAutoStopNotification(distanceKm: trip.distanceKm, duration: trip.formattedDuration)
         }
         vm.stopRecording()
+        hasRemindedForCurrentTrip = false
     }
 
     // MARK: - Notification Action Handling

@@ -127,11 +127,11 @@ final class NotificationManager: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
-    func sendTripStopPrompt(minutes: Int) {
+    func sendTripStopPrompt(minutes: Int, reason: AppStrings.TripStopReason) {
         let lang = currentLang()
         let content = UNMutableNotificationContent()
         content.title = AppStrings.notifTripStopTitle(lang)
-        content.body = AppStrings.notifTripStopBody(lang, minutes: minutes)
+        content.body = AppStrings.notifTripStopBody(lang, minutes: minutes, reason: reason)
         content.sound = .default
         content.categoryIdentifier = Self.tripStopPromptCategory
 

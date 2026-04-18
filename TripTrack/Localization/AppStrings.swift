@@ -485,11 +485,21 @@ enum AppStrings {
     static func notifTripStopTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Поездка закончена?" : "Trip finished?"
     }
-    static func notifTripStopBody(_ lang: LanguageManager.Language, minutes: Int) -> String {
-        if lang == .ru {
-            return "Bluetooth отключился. Автозавершение через \(minutes) мин"
+    enum TripStopReason {
+        case bluetooth
+        case inactivity
+    }
+    static func notifTripStopBody(_ lang: LanguageManager.Language, minutes: Int, reason: TripStopReason) -> String {
+        switch reason {
+        case .bluetooth:
+            return lang == .ru
+                ? "Bluetooth отключился. Автозавершение через \(minutes) мин"
+                : "Bluetooth disconnected. Auto-stop in \(minutes) min"
+        case .inactivity:
+            return lang == .ru
+                ? "Машина не движется. Автозавершение через \(minutes) мин"
+                : "Vehicle isn't moving. Auto-stop in \(minutes) min"
         }
-        return "Bluetooth disconnected. Auto-stop in \(minutes) min"
     }
     static func notifStopNowAction(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Завершить сейчас" : "Stop Now"
