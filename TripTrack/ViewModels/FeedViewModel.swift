@@ -29,6 +29,8 @@ final class FeedViewModel: ObservableObject {
     private var kmByDayCache: [Date: [Date: Double]] = [:]
     private(set) var cachedUniqueRegions: [String] = []
 
+    private var cancellables = Set<AnyCancellable>()
+
     // Cached DateFormatters for section titles (separate per locale+format for thread safety)
     private static let sectionMonthRu: DateFormatter = {
         let f = DateFormatter(); f.locale = Locale(identifier: "ru_RU"); f.dateFormat = "LLLL"; return f
@@ -45,6 +47,13 @@ final class FeedViewModel: ObservableObject {
 
     init(tripManager: TripManager) {
         self.tripManager = tripManager
+
+        // Reload when a trip is recorded/auto-stopped in the background —
+        // otherwise the feed stays stale until pull-to-refresh
+        NotificationCenter.default.publisher(for: .tripRecordingEnded)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.loadTrips() }
+            .store(in: &cancellables)
     }
 
     deinit {

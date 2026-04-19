@@ -334,6 +334,10 @@ final class MapViewModel: ObservableObject {
     }
 
     func stopRecording() {
+        // Notify subscribers (Feed, Stats) regardless of which cleanup branch runs,
+        // including silent junk-discard where the trip is deleted
+        defer { NotificationCenter.default.post(name: .tripRecordingEnded, object: nil) }
+
         // Haptic immediately — before any async work, while app may still be in foreground
         let haptic = UINotificationFeedbackGenerator()
         haptic.prepare()
@@ -373,9 +377,13 @@ final class MapViewModel: ObservableObject {
             }
         }
 
-        // Auto-delete junk trips (< 500m AND < 2 min)
+        // Auto-delete junk trips. Two kinds:
+        //  1. Very short: <500m AND <2 min (parking-lot manoeuvres)
+        //  2. Walking-speed only: max speed <15 km/h for >3 min (CMMotion misfires
+        //     that record the user walking instead of driving)
         if let trip = completedTrip,
-           trip.distance < 500 && trip.duration < 120 {
+           (trip.distance < 500 && trip.duration < 120) ||
+           (trip.maxSpeedKmh < 15 && trip.duration > 180) {
             LiveActivityManager.shared.endActivity()
             tripManager.deleteTrip(id: trip.id)
             discardedJunkTrip = true
