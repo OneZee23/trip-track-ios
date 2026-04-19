@@ -10,6 +10,7 @@ extension Notification.Name {
     static let navigateToTrip = Notification.Name("navigateToTrip")
     static let dismissTripSummary = Notification.Name("dismissTripSummary")
     static let tripDeleted = Notification.Name("tripDeleted")
+    static let tripRecordingEnded = Notification.Name("tripRecordingEnded")
     static let territoryRebuilt = Notification.Name("territoryRebuilt")
 }
 
