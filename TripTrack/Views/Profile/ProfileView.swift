@@ -21,6 +21,7 @@ struct ProfileView: View {
     @State private var showGarage = false
     @State private var showVehicleDetail = false
     @State private var showSignOutAlert = false
+    @State private var showCloudSync = false
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -98,9 +99,17 @@ struct ProfileView: View {
 
                 aboutCard(c, isRu: isRu)
 
-                // Cloud sync toggle (only when signed in)
+                // Cloud sync settings (only when signed in)
                 if auth.isSignedIn {
-                    cloudSyncCard(c, isRu: isRu)
+                    Button { showCloudSync = true } label: {
+                        profileNavButton(
+                            icon: settings.cloudSyncEnabled ? "icloud.fill" : "icloud.slash",
+                            iconColor: settings.cloudSyncEnabled ? AppTheme.blue : c.textTertiary,
+                            label: isRu ? "Синхронизация в облаке" : "Cloud sync",
+                            c: c
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 // Sign out button (only when signed in)
@@ -136,6 +145,11 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showGarage) {
             GarageView()
+        }
+        .sheet(isPresented: $showCloudSync) {
+            CloudSyncView()
+                .environmentObject(lang)
+                .environmentObject(themeManager)
         }
         .sheet(isPresented: $showVehicleDetail) {
             if let vehicle = selectedVehicle {
@@ -435,59 +449,6 @@ struct ProfileView: View {
             }
         }
         .transition(.opacity.combined(with: .move(edge: .top)))
-    }
-
-    // MARK: - Cloud Sync Card
-
-    private func cloudSyncCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: settings.cloudSyncEnabled ? "icloud.fill" : "icloud.slash")
-                .font(.system(size: 18))
-                .foregroundStyle(settings.cloudSyncEnabled ? Color.blue : c.textTertiary)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isRu ? "Синхронизация в облаке" : "Cloud sync")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(c.text)
-                Text(settings.cloudSyncEnabled
-                     ? (isRu ? "Данные загружаются на сервер" : "Data is uploaded to the server")
-                     : (isRu ? "Данные остаются только на устройстве" : "Data stays on this device only"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(c.textSecondary)
-                    .lineLimit(2)
-            }
-            Spacer()
-            Toggle("", isOn: Binding(
-                get: { settings.cloudSyncEnabled },
-                set: { newValue in
-                    settings.cloudSyncEnabled = newValue
-                    if newValue {
-                        // Re-enable: mark everything as pending, trigger full sync
-                        Task { @MainActor in
-                            let repo: TripRepository = CoreDataTripRepository()
-                            repo.markAllPendingUpload()
-                            for trip in repo.fetchAllTrips() {
-                                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: trip.id, action: .upload))
-                            }
-                            for vehicle in settings.vehicles {
-                                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: vehicle.id, action: .upload))
-                            }
-                            SyncEnqueuer.enqueue(SyncOperation(
-                                entityType: .settings, entityId: settings.localUserId, action: .upload))
-                            await SyncCoordinator.shared.runFullSync()
-                        }
-                    } else {
-                        // Disable: clear pending queue
-                        SyncQueue.shared.clearAll()
-                    }
-                }
-            ))
-            .labelsHidden()
-            .tint(.blue)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .surfaceCard(cornerRadius: 12)
     }
 
     // MARK: - Theme Card
