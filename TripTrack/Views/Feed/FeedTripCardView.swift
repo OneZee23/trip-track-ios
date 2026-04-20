@@ -84,7 +84,7 @@ struct FeedTripCardView: View {
                     .lineLimit(2)
                     .padding(.bottom, 12)
 
-                // Route preview on map
+                // Route preview on map (only when there's a real route)
                 if trip.previewCoordinates.count > 1 {
                     MapSnapshotPreview(
                         coordinates: trip.previewCoordinates,
@@ -93,16 +93,6 @@ struct FeedTripCardView: View {
                     .frame(height: 80)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .padding(.bottom, 12)
-                } else {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(c.cardAlt)
-                        .frame(height: 80)
-                        .overlay {
-                            Image(systemName: "map")
-                                .font(.system(size: 24))
-                                .foregroundStyle(c.textTertiary)
-                        }
-                        .padding(.bottom, 12)
                 }
 
                 // Primary stats: 3-column grid (distance, duration, avg speed)

@@ -61,7 +61,7 @@ struct CloudSyncView: View {
                         iconColor: .green,
                         title: isRu ? "Приватность" : "Privacy",
                         body: isRu
-                            ? "Аккаунт привязан к Apple ID. Только ты видишь свои поездки, если не сделаешь их публичными."
+                            ? "Аккаунт привязан к Apple ID. Только Вы видите свои поездки, если не сделаете их публичными."
                             : "Account tied to your Apple ID. Only you see your trips unless you make them public.",
                         c: c
                     )
@@ -105,7 +105,7 @@ struct CloudSyncView: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(c.text)
             Text(settings.cloudSyncEnabled
-                 ? (isRu ? "Данные доступны на всех твоих устройствах" : "Data available on all your devices")
+                 ? (isRu ? "Данные доступны на всех Ваших устройствах" : "Data available on all your devices")
                  : (isRu ? "Данные только на этом устройстве" : "Data stays on this device"))
                 .font(.system(size: 14))
                 .foregroundStyle(c.textSecondary)
@@ -216,11 +216,12 @@ struct CloudSyncView: View {
     }
 
     private func infoCard(icon: String, iconColor: Color, title: String, body: String, c: AppTheme.Colors) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 20))
+                .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(iconColor)
-                .frame(width: 28, height: 28)
+                .frame(width: 24, alignment: .center)
+                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 }
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
@@ -230,7 +231,7 @@ struct CloudSyncView: View {
                     .foregroundStyle(c.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
         .padding(14)
         .surfaceCard(cornerRadius: 14)
