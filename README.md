@@ -3,7 +3,7 @@
 > Google Photos для дорог. Записывает маршруты, помнит за тебя.
 
 **Platform:** iOS (iPhone)
-**Status:** v0.4.2 | **Started:** Jan 2026
+**Status:** v0.5.0 | **Started:** Jan 2026
 
 ---
 
@@ -270,7 +270,7 @@ xcodebuild test -scheme TripTrack -configuration Debug -destination 'platform=iO
 - [x] KeychainHelper для безопасного хранения credentials
 - [x] Два состояния профиля: Guest / Signed In
 
-### v0.4.2 Live Activity + Watch (done -- current)
+### v0.4.2 Live Activity + Watch (done)
 
 - [x] Fix: remind-режим не спамит уведомлениями
 - [x] Fix: Live Activity при автостарте из бэкграунда
@@ -279,12 +279,32 @@ xcodebuild test -scheme TripTrack -configuration Debug -destination 'platform=iO
 - [x] Уведомление при автозавершении поездки
 - [x] Кнопка "Остановить" в уведомлении об автостарте
 
-### Next: v0.5.0 Server Sync (planned)
+### v0.4.3 -- v0.4.4 Auto-trip fixes (done)
 
-- [ ] Свой бэкенд (API, auth, БД)
-- [ ] Серверная верификация Apple ID token
-- [ ] Синхронизация поездок между устройствами
-- [ ] Upload фото на сервер
+- [x] Motion-ended больше не триггерит auto-stop (только GPS скорость + BT)
+- [x] Split notification text (BT disconnect vs 20-min inactivity)
+- [x] Junk filter расширен (maxSpeed<15 AND duration>180 → delete)
+- [x] Feed auto-reload после авто-записи в фоне
+
+### v0.5.0 Server Sync (done -- current)
+
+- [x] Свой бэкенд (NestJS + PostgreSQL + JWT + Cloudflare R2)
+- [x] Серверная верификация Apple identity token через JWKS
+- [x] Client API layer (URLSession + JSON-RPC envelope + single-flight refresh)
+- [x] Синхронизация trips / vehicles / settings / photos между устройствами
+- [x] R2 photo storage (thumbnails cellular, originals Wi-Fi only)
+- [x] Sync triggers: foreground, network restored, Wi-Fi connected, 5-мин таймер
+- [x] Conflict resolution (optimistic concurrency + silent last-write-wins)
+- [x] First sync после Sign in (все локальные данные уезжают)
+- [x] Guest mode сохранён (sync opt-in)
+
+### Next: v0.5.x UI Redesign + Social (planned)
+
+- [ ] UI редизайн под Strava-стиль (tabs: My Activities / Social Feed)
+- [ ] Публичные профили пользователей (имя, avatar, статистика, последние поездки)
+- [ ] Follow / unfollow, общий фид поездок от подписок
+- [ ] Реакции на поездки (👍🔥❤️🏆😲)
+- [ ] Шеринг поездки по ссылке (deep link + OpenGraph preview)
 
 ### Future (ideas)
 
