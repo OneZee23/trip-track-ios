@@ -448,7 +448,7 @@ enum AppStrings {
         lang == .ru ? "Поиск устройств..." : "Scanning for devices..."
     }
     static func scanHint(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Убедись, что ты в машине и магнитола включена" : "Make sure you're in the car with the stereo on"
+        lang == .ru ? "Убедитесь, что Вы в машине и магнитола включена" : "Make sure you're in the car with the stereo on"
     }
     static func noDevicesFound(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Устройства не найдены" : "No devices found"
@@ -468,7 +468,7 @@ enum AppStrings {
 
     // MARK: - Auto-record Notifications
     static func notifTripStartTitle(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Похоже, ты в машине" : "Looks like you're in the car"
+        lang == .ru ? "Похоже, Вы в машине" : "Looks like you're in the car"
     }
     static func notifTripStartBody(_ lang: LanguageManager.Language, deviceName: String) -> String {
         if lang == .ru {
