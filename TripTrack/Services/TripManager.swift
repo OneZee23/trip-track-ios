@@ -13,7 +13,7 @@ final class TripManager: ObservableObject {
     /// Kalman filter for GPS smoothing and gap prediction
     let kalmanFilter = KalmanLocationFilter()
 
-    private let repository: TripRepository
+    let repository: TripRepository
 
     private let locationManager: LocationManager
     private let persistenceController: PersistenceController
