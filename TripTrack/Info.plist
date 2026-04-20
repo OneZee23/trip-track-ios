@@ -21,6 +21,8 @@
 	<string>$(API_BASE_URL)</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>TripTrack использует локальную сеть для связи с dev-сервером синхронизации.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>TripTrack сохраняет картинку поездки в Фото, чтобы Вы могли опубликовать её в сторис.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
