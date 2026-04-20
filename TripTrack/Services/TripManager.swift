@@ -105,6 +105,12 @@ final class TripManager: ObservableObject {
         geocodeAndNameTrip(entity: entity)
         deleteDemoTripIfNeeded()
 
+        if let tripId = completedTrip?.id {
+            Task { @MainActor in
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .upload))
+            }
+        }
+
         activeTrip = nil
         activeTripEntity = nil
         lastLocation = nil
@@ -367,6 +373,9 @@ final class TripManager: ObservableObject {
                     entity.region = cs.region
                     entity.lastModifiedAt = Date()
                     self?.persistenceController.save()
+                    if let id = entity.id {
+                        SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .update))
+                    }
                 }
                 return
             }
@@ -378,6 +387,9 @@ final class TripManager: ObservableObject {
                     entity.region = cs.region
                     entity.lastModifiedAt = Date()
                     self?.persistenceController.save()
+                    if let id = entity.id {
+                        SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .update))
+                    }
                 }
                 return
             }
@@ -400,6 +412,9 @@ final class TripManager: ObservableObject {
                     entity.region = startRegion
                     entity.lastModifiedAt = Date()
                     self?.persistenceController.save()
+                    if let id = entity.id {
+                        SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .update))
+                    }
                     return
                 }
 
@@ -410,6 +425,9 @@ final class TripManager: ObservableObject {
                     entity.region = startRegion
                     entity.lastModifiedAt = Date()
                     self?.persistenceController.save()
+                    if let id = entity.id {
+                        SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .update))
+                    }
                     return
                 }
 
@@ -425,6 +443,9 @@ final class TripManager: ObservableObject {
                         entity.region = startRegion
                         entity.lastModifiedAt = Date()
                         self?.persistenceController.save()
+                        if let id = entity.id {
+                            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .update))
+                        }
                     }
                 }
             }
@@ -774,10 +795,16 @@ final class TripManager: ObservableObject {
 
     func updateNotes(for tripId: UUID, notes: String) {
         repository.updateNotes(for: tripId, notes: notes)
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+        }
     }
 
     func updateTitle(for tripId: UUID, title: String) {
         repository.updateTitle(for: tripId, title: title)
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+        }
     }
 
     // MARK: - Geocoding Retry
