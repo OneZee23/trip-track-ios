@@ -39,6 +39,10 @@ final class APIClient {
         try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: false)
     }
 
+    func get<Res: Decodable>(_ path: String, requiresAuth: Bool = true) async throws -> Res {
+        try await performGet(path: path, requiresAuth: requiresAuth, isRetry: false)
+    }
+
     func uploadMultipart<Res: Decodable>(
         _ path: String,
         fields: [(name: String, value: String)],
@@ -108,6 +112,51 @@ final class APIClient {
                 iso.date(from: s) ?? ISO8601DateFormatter().date(from: s)
             }
             throw APIError.from(code: code, message: message, serverVersion: envelope.serverVersion, serverLastModifiedAt: lastModified)
+        }
+    }
+
+    private func performGet<Res: Decodable>(path: String, requiresAuth: Bool, isRetry: Bool) async throws -> Res {
+        let url = AppConfig.apiBaseURL.appendingPathComponent(path)
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        if requiresAuth, let token = tokenStore.accessToken {
+            req.setValue(token, forHTTPHeaderField: "x-access-token")
+        }
+        logger.log(request: req, bodyPreview: nil)
+
+        let start = Date()
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: req)
+        } catch let e as URLError {
+            throw APIError.network(e)
+        }
+        logger.log(response: response, data: data, duration: Date().timeIntervalSince(start))
+
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw APIError.invalidHTTPStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+        }
+        let envelope: APIEnvelope<Res>
+        do {
+            envelope = try decoder.decode(APIEnvelope<Res>.self, from: data)
+        } catch {
+            throw APIError.decoding("\(error)")
+        }
+
+        switch envelope.status {
+        case .ok:
+            guard let payload = envelope.payload else {
+                if let empty = EmptyResponse() as? Res { return empty }
+                throw APIError.decoding("missing payload for ok status")
+            }
+            return payload
+        case .error:
+            let code = envelope.code ?? "UNKNOWN"
+            if code == "USER_NOT_AUTH", requiresAuth, !isRetry {
+                try await refreshIfNeeded()
+                return try await performGet(path: path, requiresAuth: requiresAuth, isRetry: true)
+            }
+            throw APIError.from(code: code, message: envelope.message ?? "", serverVersion: envelope.serverVersion, serverLastModifiedAt: nil)
         }
     }
 
