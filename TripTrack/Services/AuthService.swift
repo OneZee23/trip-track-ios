@@ -30,8 +30,13 @@ final class AuthService: ObservableObject {
     // MARK: - Handle Authorization (called from SignInWithAppleButton onCompletion)
 
     func handleAuthorization(_ authorization: ASAuthorization) async {
-        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else { return }
+        print("[AuthService] handleAuthorization START")
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            print("[AuthService] ❌ credential cast failed, got: \(type(of: authorization.credential))")
+            return
+        }
         let userId = credential.user
+        print("[AuthService] credential.user=\(userId) tokenSize=\(credential.identityToken?.count ?? -1)")
 
         try? KeychainHelper.saveString(userId, for: Keys.userIdentifier)
         userIdentifier = userId
