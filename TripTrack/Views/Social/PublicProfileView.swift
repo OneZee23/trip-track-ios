@@ -15,6 +15,7 @@ struct PublicProfileView: View {
     @State private var isLoading = false
     @State private var isTogglingFollow = false
     @State private var loadError: String?
+    @State private var followListMode: FollowListMode?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -47,6 +48,14 @@ struct PublicProfileView: View {
         }
         .task { await loadProfile() }
         .refreshable { await loadProfile() }
+        .navigationDestination(isPresented: Binding(
+            get: { followListMode != nil },
+            set: { if !$0 { followListMode = nil } }
+        )) {
+            if let m = followListMode {
+                FollowListView(accountId: accountId, mode: m)
+            }
+        }
     }
 
     // MARK: - Hero
@@ -171,27 +180,41 @@ struct PublicProfileView: View {
 
     private func followCounters(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         HStack(spacing: 0) {
-            VStack(spacing: 3) {
-                Text("\(profile?.followerCount ?? 0)")
-                    .font(.system(size: 17, weight: .heavy).monospacedDigit())
-                    .foregroundStyle(c.text)
-                Text(isRu ? "подписчиков" : "followers")
-                    .font(.system(size: 11))
-                    .foregroundStyle(c.textTertiary)
+            Button {
+                Haptics.tap()
+                followListMode = .followers
+            } label: {
+                VStack(spacing: 3) {
+                    Text("\(profile?.followerCount ?? 0)")
+                        .font(.system(size: 17, weight: .heavy).monospacedDigit())
+                        .foregroundStyle(c.text)
+                    Text(isRu ? "подписчиков" : "followers")
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity)
+            .buttonStyle(.plain)
 
             Rectangle().fill(c.border).frame(width: 0.5, height: 32)
 
-            VStack(spacing: 3) {
-                Text("\(profile?.followingCount ?? 0)")
-                    .font(.system(size: 17, weight: .heavy).monospacedDigit())
-                    .foregroundStyle(c.text)
-                Text(isRu ? "подписок" : "following")
-                    .font(.system(size: 11))
-                    .foregroundStyle(c.textTertiary)
+            Button {
+                Haptics.tap()
+                followListMode = .following
+            } label: {
+                VStack(spacing: 3) {
+                    Text("\(profile?.followingCount ?? 0)")
+                        .font(.system(size: 17, weight: .heavy).monospacedDigit())
+                        .foregroundStyle(c.text)
+                    Text(isRu ? "подписок" : "following")
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity)
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 12)
         .surfaceCard(cornerRadius: 14)

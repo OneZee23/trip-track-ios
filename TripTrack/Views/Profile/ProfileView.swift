@@ -29,6 +29,8 @@ struct ProfileView: View {
     @State private var showDeleteAccountAlert = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
+    @State private var socialProfile: SocialProfile?
+    @State private var followListMode: FollowListMode?
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -48,6 +50,12 @@ struct ProfileView: View {
 
                 // Quick stats row
                 quickStatsRow(c, isRu: isRu)
+
+                // Social followers/following (signed in only)
+                if auth.isSignedIn {
+                    socialCountersRow(c, isRu: isRu)
+                    shareProfileButton(c, isRu: isRu)
+                }
 
                 // Vehicle Card
                 if let vehicle = selectedVehicle {
@@ -160,6 +168,26 @@ struct ProfileView: View {
         .onAppear {
             selectedAvatar = settings.avatarEmoji
             settings.reloadGamificationState()
+        }
+        .task {
+            await loadOwnSocialProfile()
+        }
+        .sheet(isPresented: Binding(
+            get: { followListMode != nil },
+            set: { if !$0 { followListMode = nil } }
+        )) {
+            if let mode = followListMode,
+               let accountId = TokenStore.shared.accountId {
+                NavigationStack {
+                    FollowListView(accountId: accountId, mode: mode)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+                        }
+                }
+                .environmentObject(lang)
+                .environmentObject(themeManager)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+            }
         }
         .sheet(isPresented: $showStats) {
             StatsView(tripManager: mapVM.tripManager)
@@ -298,6 +326,95 @@ struct ProfileView: View {
             return settings.vehicles.first { $0.id == id }
         }
         return settings.vehicles.first
+    }
+
+    // MARK: - Social Counters Row (followers / following)
+
+    private func socialCountersRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        HStack(spacing: 0) {
+            Button {
+                Haptics.tap()
+                followListMode = .followers
+            } label: {
+                VStack(spacing: 3) {
+                    Text("\(socialProfile?.followerCount ?? 0)")
+                        .font(.system(size: 17, weight: .heavy).monospacedDigit())
+                        .foregroundStyle(c.text)
+                    Text(isRu ? "подписчиков" : "followers")
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Rectangle().fill(c.border).frame(width: 0.5, height: 32)
+
+            Button {
+                Haptics.tap()
+                followListMode = .following
+            } label: {
+                VStack(spacing: 3) {
+                    Text("\(socialProfile?.followingCount ?? 0)")
+                        .font(.system(size: 17, weight: .heavy).monospacedDigit())
+                        .foregroundStyle(c.text)
+                    Text(isRu ? "подписок" : "following")
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 12)
+        .surfaceCard(cornerRadius: 14)
+    }
+
+    private func shareProfileButton(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        Button {
+            Haptics.tap()
+            presentShareProfile()
+        } label: {
+            HStack {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 15))
+                    .foregroundStyle(AppTheme.accent)
+                Text(isRu ? "Поделиться профилем" : "Share profile")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(c.text)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func presentShareProfile() {
+        guard let accountId = TokenStore.shared.accountId else { return }
+        let urlString = "https://trip-track.app/u/\(accountId)"
+        guard let url = URL(string: urlString) else { return }
+        let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
+            .first?
+            .present(av, animated: true)
+    }
+
+    private func loadOwnSocialProfile() async {
+        guard auth.isSignedIn, let accountId = TokenStore.shared.accountId else { return }
+        do {
+            let p: SocialProfile = try await APIClient.shared.get(
+                APIEndpoint.userProfile(accountId.uuidString))
+            socialProfile = p
+        } catch {
+            // Silent — social counters just won't populate
+        }
     }
 
     private func quickStatsRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
