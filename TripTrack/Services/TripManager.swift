@@ -94,7 +94,7 @@ final class TripManager: ObservableObject {
         isRecording = false
 
         guard let entity = activeTripEntity else { return nil }
-        entity.endDate = Date()
+        entity.endDate = trimmedEndDate(for: entity) ?? Date()
         entity.lastModifiedAt = Date()
         updateEntityStats(entity)
         generatePreviewPolyline(for: entity)
@@ -116,6 +116,35 @@ final class TripManager: ObservableObject {
         lastLocation = nil
 
         return completedTrip
+    }
+
+    /// Returns a trimmed endDate if the trip ends with a stationary tail.
+    /// Walks the track points backwards and returns the timestamp of the last
+    /// meaningful movement (≥7 km/h, confirmed by an adjacent point also moving).
+    /// Only trims when the stationary tail exceeds 60 seconds — short stops at
+    /// lights/parking are preserved.
+    private func trimmedEndDate(for entity: TripEntity) -> Date? {
+        guard let points = (entity.trackPoints?.array as? [TrackPointEntity]),
+              points.count > 2 else { return nil }
+
+        let movingThresholdMs: Double = 2.0 // ~7.2 km/h — clearly driving, not parking
+        let minTailToTrim: TimeInterval = 60
+
+        // Find the last index where the point AND its predecessor are both moving.
+        var lastMovingIdx: Int?
+        for i in stride(from: points.count - 1, through: 1, by: -1) {
+            if points[i].speed > movingThresholdMs && points[i - 1].speed > movingThresholdMs {
+                lastMovingIdx = i
+                break
+            }
+        }
+
+        guard let idx = lastMovingIdx,
+              let lastMovingTs = points[idx].timestamp,
+              let tailTs = points.last?.timestamp else { return nil }
+
+        let tailDuration = tailTs.timeIntervalSince(lastMovingTs)
+        return tailDuration >= minTailToTrim ? lastMovingTs : nil
     }
 
     func fetchTrips() -> [Trip] {

@@ -154,7 +154,7 @@ final class AutoTripService: ObservableObject {
     // MARK: - Inactivity Auto-stop
 
     private var lowSpeedStartTime: Date?
-    private static let inactivityTimeout: TimeInterval = 20 * 60 // 20 minutes
+    private static let inactivityTimeout: TimeInterval = 10 * 60 // 10 minutes
     private static let lowSpeedThreshold: Double = 2.0 // km/h
 
     /// Called periodically from MapViewModel speed updates to track inactivity
