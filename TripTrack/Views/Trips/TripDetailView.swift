@@ -352,6 +352,11 @@ struct TripDetailView: View {
     private func commitTitleEdit() {
         let trimmed = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
+            if let err = ContentFilter.validate(trimmed, field: .tripTitle, language: lang.language) {
+                toastItem = ToastItem(type: .error, message: err)
+                cancelTitleEdit()
+                return
+            }
             mapVM.tripManager.updateTitle(for: tripId, title: trimmed)
             trip = viewModel.tripDetail(id: tripId)
         }
