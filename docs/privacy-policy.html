@@ -14,7 +14,7 @@
             padding: 20px;
         }
         .container {
-            max-width: 680px;
+            max-width: 720px;
             margin: 40px auto;
             background: #fff;
             border-radius: 16px;
@@ -22,7 +22,7 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
         h1 {
-            font-size: 28px;
+            font-size: 30px;
             font-weight: 700;
             margin-bottom: 8px;
         }
@@ -34,8 +34,14 @@
         h2 {
             font-size: 20px;
             font-weight: 600;
-            margin-top: 28px;
+            margin-top: 32px;
             margin-bottom: 12px;
+        }
+        h3 {
+            font-size: 17px;
+            font-weight: 600;
+            margin-top: 20px;
+            margin-bottom: 8px;
         }
         p, li {
             font-size: 16px;
@@ -48,6 +54,12 @@
         }
         a { color: #0066cc; text-decoration: none; }
         a:hover { text-decoration: underline; }
+        .lang-switch {
+            text-align: right;
+            font-size: 14px;
+            margin-bottom: 16px;
+            color: #86868b;
+        }
         .footer {
             margin-top: 40px;
             padding-top: 20px;
@@ -55,49 +67,139 @@
             font-size: 14px;
             color: #86868b;
         }
+        code {
+            background: #f5f5f7;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="lang-switch">English · <a href="privacy-policy-ru.html">Русский</a></div>
+
         <h1>Privacy Policy</h1>
-        <p class="updated">Last updated: March 24, 2026</p>
+        <p class="updated">Last updated: April 20, 2026</p>
 
-        <h2>Overview</h2>
-        <p>TripTrack is a personal trip diary app that stores all data locally on your device. We do not collect, transmit, or share any personal information.</p>
+        <h2>1. Overview</h2>
+        <p>TripTrack is an iOS application for recording personal car trips. This Privacy Policy explains what information we collect, how we use it, and the choices you have. It applies to the TripTrack mobile app and any server infrastructure we operate ("Service").</p>
+        <p>The developer of TripTrack ("we", "us") acts as the data controller for personal data processed through the Service. Contact: <a href="mailto:privacy@triptrack.app">privacy@triptrack.app</a>.</p>
 
-        <h2>Data Storage</h2>
-        <p>All your data — trips, GPS routes, photos, settings, and preferences — is stored exclusively on your device using CoreData. No data is sent to any server, cloud service, or third party.</p>
+        <h2>2. Two Usage Modes</h2>
+        <p>TripTrack works in two distinct modes. The data we process depends on which mode you use.</p>
 
-        <h2>Location Data</h2>
-        <p>TripTrack uses your device's GPS to record trip routes. Specifically:</p>
+        <h3>2.1 Guest mode (offline, default)</h3>
+        <p>If you do not sign in, TripTrack stores all your data — trips, GPS tracks, photos, vehicle profiles, preferences — <strong>exclusively on your device</strong> using Apple's CoreData framework. No data leaves the device. In this mode we do not process any personal data on our servers.</p>
+
+        <h3>2.2 Signed-in mode (cloud sync)</h3>
+        <p>If you sign in with Apple, your data can be synchronized with our server so it is available on your other devices. Cloud sync is opt-in and can be disabled at any time in the app (Profile → Cloud Sync).</p>
+
+        <h2>3. Data We Process</h2>
+
+        <h3>3.1 Account data (signed-in mode only)</h3>
         <ul>
-            <li>Location data is collected <strong>only during active trip recording</strong> initiated by you.</li>
-            <li>Background location access is used solely to continue recording when the app is in the background.</li>
-            <li>All location data (coordinates, speed, altitude) is stored <strong>locally on your device</strong> and never transmitted anywhere.</li>
-            <li>Reverse geocoding (converting coordinates to place names) is performed by Apple's built-in MapKit services — no third-party geocoding is used.</li>
-            <li>You can delete any trip and its associated data at any time from within the app.</li>
+            <li><strong>Apple user identifier</strong> — an opaque stable ID provided by Apple after Sign in with Apple. We never receive your Apple ID or password.</li>
+            <li><strong>Email</strong> — provided by Apple on first sign-in (real or hide-my-email alias). Optional.</li>
+            <li><strong>Display name</strong> — provided by Apple on first sign-in. Optional.</li>
+            <li><strong>Device identifier</strong> — a random UUID generated locally on first app launch, used to tell your devices apart.</li>
         </ul>
 
-        <h2>Photos</h2>
-        <p>Photos you attach to trips are stored locally in the app's Documents directory on your device. They are not uploaded to any server or cloud service.</p>
+        <h3>3.2 Trip and vehicle data (signed-in mode only, when cloud sync is on)</h3>
+        <ul>
+            <li><strong>GPS trajectories</strong> — coordinates, speed, altitude, and timestamps captured during trip recording you initiated.</li>
+            <li><strong>Trip metadata</strong> — start/end time, distance, duration, auto-geocoded place names, user-provided titles and notes.</li>
+            <li><strong>Photos you attach</strong> — uploaded to Cloudflare R2 storage. Before upload, all metadata (EXIF, including GPS tags) is stripped.</li>
+            <li><strong>Vehicle profiles</strong> — make, model, avatar, odometer.</li>
+            <li><strong>App settings</strong> — theme, language, unit system, gamification progress.</li>
+        </ul>
 
-        <h2>Analytics &amp; Tracking</h2>
-        <p>TripTrack does not use any analytics services, advertising SDKs, or tracking tools. We do not collect usage statistics, crash reports, or any telemetry data.</p>
+        <h3>3.3 Technical data</h3>
+        <ul>
+            <li><strong>Authentication tokens</strong> — JWT access and refresh tokens stored in your iOS Keychain.</li>
+            <li><strong>IP address</strong> — seen by our server on each request; kept in access logs for up to 14 days for abuse prevention, then discarded.</li>
+        </ul>
 
-        <h2>Third-Party Services</h2>
-        <p>TripTrack does not integrate with any third-party services, APIs, or SDKs that collect user data. The app is built entirely with native Apple frameworks.</p>
+        <h3>3.4 Local-only data (never leaves your device)</h3>
+        <ul>
+            <li>Recent 48 hours of diagnostic logs (you can export them via Profile → Send debug logs).</li>
+            <li>Geocode cache, map tiles, fog-of-war state.</li>
+        </ul>
 
-        <h2>Children's Privacy</h2>
-        <p>TripTrack does not knowingly collect any personal information from children.</p>
+        <h2>4. Location Data — Detail</h2>
+        <ul>
+            <li>Location is accessed <strong>only during active trip recording</strong> that you start manually, or when you opt in to automatic recording via Bluetooth/motion triggers.</li>
+            <li>Background location permission is used solely to continue an in-progress recording.</li>
+            <li>You can revoke location access at any time in iOS Settings.</li>
+            <li>Reverse geocoding (coordinates → place names) is performed via Apple MapKit on your device. We do not use third-party geocoding services.</li>
+        </ul>
 
-        <h2>Changes to This Policy</h2>
-        <p>If we update this Privacy Policy, the changes will be posted on this page with an updated date.</p>
+        <h2>5. Purposes and Legal Bases (GDPR)</h2>
+        <p>For users in the European Economic Area, the United Kingdom, and jurisdictions with similar rules, the legal bases for processing are:</p>
+        <ul>
+            <li><strong>Performance of a contract</strong> — to provide the core sync service you requested by enabling cloud sync (Art. 6(1)(b) GDPR).</li>
+            <li><strong>Legitimate interests</strong> — for service security, abuse prevention, and aggregated analysis of server load; balanced against your rights (Art. 6(1)(f) GDPR).</li>
+            <li><strong>Consent</strong> — where required, for example for optional features you explicitly opt into (Art. 6(1)(a) GDPR).</li>
+        </ul>
 
-        <h2>Contact</h2>
-        <p>If you have questions about this Privacy Policy, please open an issue on our <a href="https://github.com/OneZee23/trip-track-ios">GitHub repository</a>.</p>
+        <h2>6. Sub-processors</h2>
+        <p>When you use cloud sync, the following third parties process data on our behalf:</p>
+        <ul>
+            <li><strong>Apple</strong> — Sign in with Apple verification (identity token validation). Subject to Apple's Privacy Policy.</li>
+            <li><strong>Cloudflare, Inc.</strong> — photo storage (Cloudflare R2), located outside the European Economic Area and the Russian Federation. Subject to Cloudflare's Data Processing Addendum and Standard Contractual Clauses.</li>
+            <li><strong>Our infrastructure provider</strong> — hosts the application server and PostgreSQL database. We will update this policy with the current provider's name before public launch.</li>
+        </ul>
+        <p>We do not sell or rent your data. We do not use analytics SDKs, advertising networks, or tracking tools.</p>
+
+        <h2>7. Cross-Border Data Transfers</h2>
+        <p>If you are in the European Economic Area, the United Kingdom, or a country that restricts cross-border data transfers, and cloud sync is enabled, your data may be transferred to and processed in other jurisdictions. We rely on Standard Contractual Clauses and equivalent safeguards where available.</p>
+
+        <h2>8. Data Retention</h2>
+        <ul>
+            <li><strong>Account data and synced content</strong> — retained for as long as your account is active. If you don't sign in for 3 years, we may delete the account after notifying you via the email on file.</li>
+            <li><strong>Deleted trips, photos, vehicles</strong> — removed from our servers and from Cloudflare R2 immediately upon deletion.</li>
+            <li><strong>Server access logs</strong> — up to 14 days.</li>
+            <li><strong>Authentication refresh tokens</strong> — rotated on use, revoked on sign-out or account deletion.</li>
+        </ul>
+
+        <h2>9. Your Rights</h2>
+        <p>Depending on your jurisdiction, you have the following rights:</p>
+        <ul>
+            <li><strong>Access and portability</strong> — request a copy of your data. Contact us at <a href="mailto:privacy@triptrack.app">privacy@triptrack.app</a>.</li>
+            <li><strong>Rectification</strong> — correct inaccurate data (most fields are editable directly in the app).</li>
+            <li><strong>Erasure</strong> — permanently delete your account and all associated server-side data via Profile → Danger zone → Delete account. Local trips on your device are preserved after account deletion; you can continue using the app in guest mode.</li>
+            <li><strong>Restriction and objection</strong> — limit or stop certain processing. Disable cloud sync in the app at any time.</li>
+            <li><strong>Withdraw consent</strong> — sign out at any time; cloud processing stops immediately.</li>
+            <li><strong>Complain</strong> — lodge a complaint with your local data protection authority.</li>
+        </ul>
+        <p>We respond to verified requests within 30 days.</p>
+
+        <h2>10. Security</h2>
+        <ul>
+            <li>All network communication is over HTTPS.</li>
+            <li>Authentication credentials are stored in iOS Keychain (hardware-backed on most devices).</li>
+            <li>Passwords are never used — authentication is via Sign in with Apple only.</li>
+            <li>Photos are stripped of metadata (EXIF including GPS) before upload.</li>
+            <li>Database access is restricted to the application service.</li>
+        </ul>
+        <p>No system is perfectly secure. If you believe your account has been compromised, contact us immediately.</p>
+
+        <h2>11. Children's Privacy</h2>
+        <p>TripTrack is rated 17+ in the App Store and is not directed to children under 13. We do not knowingly collect personal data from children under 13. If you believe a child has provided us with personal data, please contact us for prompt removal.</p>
+
+        <h2>12. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time. Material changes will be announced in the app or by email. The "Last updated" date at the top always reflects the current version.</p>
+
+        <h2>13. Contact</h2>
+        <p>Questions, complaints, or data subject requests:</p>
+        <ul>
+            <li>Email: <a href="mailto:privacy@triptrack.app">privacy@triptrack.app</a></li>
+            <li>GitHub: <a href="https://github.com/OneZee23/trip-track-ios/issues">github.com/OneZee23/trip-track-ios</a></li>
+        </ul>
 
         <div class="footer">
-            TripTrack &copy; 2026
+            TripTrack &copy; 2026 · <a href="terms.html">Terms of Service</a>
         </div>
     </div>
 </body>
