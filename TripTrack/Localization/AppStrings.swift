@@ -207,7 +207,7 @@ enum AppStrings {
         lang == .ru ? "Добро пожаловать в TripTrack" : "Welcome to TripTrack"
     }
     static func onboardingWelcomeSub(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Дневник ваших дорог — маршруты, статистика, расход топлива и гараж" : "Your road diary — routes, stats, fuel costs, and your garage"
+        lang == .ru ? "Дневник Ваших дорог — маршруты, статистика, расход топлива и гараж" : "Your road diary — routes, stats, fuel costs, and your garage"
     }
     static func onboardingRecord(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Записывайте поездки" : "Record your trips"
@@ -235,7 +235,7 @@ enum AppStrings {
     }
     static func onboardingAutoRecordSub(_ lang: LanguageManager.Language) -> String {
         if lang == .ru {
-            return "TripTrack сам определит, что вы за рулём, и начнёт запись. Для этого нужен фоновый доступ к геолокации и датчику движения. Батарея почти не расходуется."
+            return "TripTrack сам определит, что Вы за рулём, и начнёт запись. Для этого нужен фоновый доступ к геолокации и датчику движения. Батарея почти не расходуется."
         }
         return "TripTrack detects when you're driving and starts recording automatically. This requires background location and motion sensor access. Minimal battery impact."
     }
@@ -244,6 +244,20 @@ enum AppStrings {
     }
     static func onboardingAutoRecordSkip(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Настрою позже" : "Set up later"
+    }
+    static func onboardingConsent(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Продолжая, Вы соглашаетесь с"
+            : "By continuing you agree to our"
+    }
+    static func termsOfService(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Условиями" : "Terms"
+    }
+    static func privacyPolicy(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Политикой конфиденциальности" : "Privacy Policy"
+    }
+    static func and(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "и" : "and"
     }
 
     // MARK: - Badges
@@ -573,5 +587,21 @@ enum AppStrings {
     static func signOutConfirmMessage(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Ваши поездки останутся на устройстве" : "Your trips will remain on this device"
     }
-
+    static func deleteAccount(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Удалить аккаунт" : "Delete account"
+    }
+    static func deleteAccountConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Удалить аккаунт?" : "Delete account?"
+    }
+    static func deleteAccountConfirmMessage(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Все данные на нашем сервере (поездки, фото, машины, настройки) будут удалены навсегда. Ваши локальные поездки на этом устройстве останутся — Вы сможете продолжать пользоваться приложением без облака. Это действие необратимо."
+            : "All data on our server (trips, photos, vehicles, settings) will be permanently deleted. Your local trips on this device will remain — you can continue using the app offline. This action cannot be undone."
+    }
+    static func deleteAccountFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось удалить аккаунт. Попробуйте ещё раз." : "Couldn't delete account. Please try again."
+    }
+    static func dangerZone(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Опасная зона" : "Danger zone"
+    }
 }

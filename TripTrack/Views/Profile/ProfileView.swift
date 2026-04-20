@@ -26,6 +26,9 @@ struct ProfileView: View {
     @State private var showSignOutAlert = false
     @State private var showCloudSync = false
     @State private var showDebugLogs = false
+    @State private var showDeleteAccountAlert = false
+    @State private var isDeletingAccount = false
+    @State private var deleteAccountError: String?
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -141,6 +144,12 @@ struct ProfileView: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                // Danger zone — delete account (signed in only)
+                if auth.isSignedIn {
+                    dangerZoneCard(c, isRu: isRu)
+                        .padding(.top, 8)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
@@ -187,6 +196,27 @@ struct ProfileView: View {
         } message: {
             Text(AppStrings.signOutConfirmMessage(lang.language))
         }
+        .alert(
+            AppStrings.deleteAccountConfirmTitle(lang.language),
+            isPresented: $showDeleteAccountAlert
+        ) {
+            Button(AppStrings.cancel(lang.language), role: .cancel) {}
+            Button(AppStrings.deleteAccount(lang.language), role: .destructive) {
+                Task { await performDeleteAccount() }
+            }
+        } message: {
+            Text(AppStrings.deleteAccountConfirmMessage(lang.language))
+        }
+        .alert(
+            AppStrings.deleteAccountFailed(lang.language),
+            isPresented: Binding(
+                get: { deleteAccountError != nil },
+                set: { if !$0 { deleteAccountError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteAccountError ?? "")
+        }
         .alert("Sign in failed",
                isPresented: Binding(
                  get: { auth.lastAuthError != nil },
@@ -195,6 +225,71 @@ struct ProfileView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(String(describing: auth.lastAuthError ?? .transport("unknown")))
+        }
+    }
+
+    // MARK: - Danger Zone
+
+    private func dangerZoneCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label {
+                Text(AppStrings.dangerZone(lang.language))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.red)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.red)
+            }
+
+            Button {
+                showDeleteAccountAlert = true
+            } label: {
+                HStack {
+                    if isDeletingAccount {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .tint(.red)
+                        Text(isRu ? "Удаление…" : "Deleting…")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.red)
+                    } else {
+                        Image(systemName: "trash.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.red)
+                        Text(AppStrings.deleteAccount(lang.language))
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.red)
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.red.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.red.opacity(0.25), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isDeletingAccount)
+        }
+        .padding(16)
+        .surfaceCard(cornerRadius: 16)
+    }
+
+    private func performDeleteAccount() async {
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        do {
+            try await auth.deleteAccount()
+        } catch let e as APIError {
+            deleteAccountError = String(describing: e)
+        } catch {
+            deleteAccountError = error.localizedDescription
         }
     }
 
@@ -582,6 +677,30 @@ struct ProfileView: View {
                 )
             }
 
+            // Legal links
+            HStack(spacing: 16) {
+                Button {
+                    Haptics.tap()
+                    UIApplication.shared.open(AppConfig.privacyPolicyURL(lang.language))
+                } label: {
+                    Text(AppStrings.privacyPolicy(lang.language))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(c.textTertiary)
+                        .underline()
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    Haptics.tap()
+                    UIApplication.shared.open(AppConfig.termsURL(lang.language))
+                } label: {
+                    Text(AppStrings.termsOfService(lang.language))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(c.textTertiary)
+                        .underline()
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 

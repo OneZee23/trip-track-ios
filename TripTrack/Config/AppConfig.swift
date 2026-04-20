@@ -20,4 +20,18 @@ enum AppConfig {
         return false
         #endif
     }
+
+    // MARK: - Legal URLs
+
+    static func privacyPolicyURL(_ lang: LanguageManager.Language) -> URL {
+        let base = "https://onezee23.github.io/trip-track-ios"
+        let path = lang == .ru ? "/privacy-policy-ru.html" : "/privacy-policy.html"
+        return URL(string: base + path)!
+    }
+
+    static func termsURL(_ lang: LanguageManager.Language) -> URL {
+        let base = "https://onezee23.github.io/trip-track-ios"
+        let path = lang == .ru ? "/terms-ru.html" : "/terms.html"
+        return URL(string: base + path)!
+    }
 }

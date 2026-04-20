@@ -1,9 +1,10 @@
 import Foundation
 
 enum APIEndpoint {
-    static let login   = "/auth/login"
-    static let refresh = "/auth/refresh"
-    static let logout  = "/auth/logout"
+    static let login         = "/auth/login"
+    static let refresh       = "/auth/refresh"
+    static let logout        = "/auth/logout"
+    static let deleteAccount = "/auth/delete-account"
 
     static let tripUpsert = "/trips/upsert"
     static let tripDetail = "/trips/detail"

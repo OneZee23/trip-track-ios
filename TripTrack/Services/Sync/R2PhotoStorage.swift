@@ -1,8 +1,28 @@
 import Foundation
+import ImageIO
 
 enum PhotoType: String {
     case thumbnail
     case original
+}
+
+/// Re-encodes JPEG data with all metadata stripped (EXIF, GPS, IPTC, XMP).
+/// Returns original data if re-encoding fails.
+private func stripImageMetadata(_ jpegData: Data) -> Data {
+    guard let source = CGImageSourceCreateWithData(jpegData as CFData, nil) else { return jpegData }
+    let uti = CGImageSourceGetType(source) ?? ("public.jpeg" as CFString)
+    let output = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(output, uti, 1, nil) else { return jpegData }
+    let options: [CFString: Any] = [
+        kCGImageDestinationMetadata: CGImageMetadataCreateMutable(),
+        kCGImageMetadataShouldExcludeGPS: kCFBooleanTrue as Any,
+        kCGImageMetadataShouldExcludeXMP: kCFBooleanTrue as Any,
+    ]
+    var err: Unmanaged<CFError>?
+    guard CGImageDestinationCopyImageSource(destination, source, options as CFDictionary, &err) else {
+        return jpegData
+    }
+    return output as Data
 }
 
 struct PhotoUploadResponse: Codable {
@@ -43,6 +63,7 @@ final class R2PhotoStorage: RemotePhotoStorage {
         tripId: UUID, photoId: UUID, type: PhotoType,
         data: Data, caption: String?, timestamp: Date
     ) async throws -> PhotoUploadResponse {
+        let cleanData = stripImageMetadata(data)
         var fields: [(name: String, value: String)] = [
             ("tripId", tripId.uuidString),
             ("photoId", photoId.uuidString),
@@ -53,7 +74,7 @@ final class R2PhotoStorage: RemotePhotoStorage {
         return try await client.uploadMultipart(
             APIEndpoint.photoUpload,
             fields: fields,
-            file: (name: "file", filename: "photo.jpg", mimeType: "image/jpeg", data: data)
+            file: (name: "file", filename: "photo.jpg", mimeType: "image/jpeg", data: cleanData)
         )
     }
 
