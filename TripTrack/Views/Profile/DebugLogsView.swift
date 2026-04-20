@@ -37,11 +37,7 @@ struct DebugLogsView: View {
             .navigationTitle(isRu ? "Логи" : "Debug logs")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(isRu ? "Готово" : "Done") { dismiss() }
-                        .foregroundStyle(AppTheme.accent)
-                        .fontWeight(.semibold)
-                }
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
         }
     }

@@ -83,11 +83,7 @@ struct CloudSyncView: View {
             .navigationTitle(isRu ? "Синхронизация" : "Sync")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(isRu ? "Готово" : "Done") { dismiss() }
-                        .foregroundStyle(AppTheme.accent)
-                        .fontWeight(.semibold)
-                }
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
         }
     }

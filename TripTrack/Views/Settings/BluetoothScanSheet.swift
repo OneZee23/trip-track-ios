@@ -31,10 +31,7 @@ struct BluetoothScanSheet: View {
             .navigationTitle(AppStrings.linkStereo(l))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(AppStrings.done(l)) { dismiss() }
-                        .foregroundStyle(AppTheme.accent)
-                }
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
             .task {
                 bluetoothDetector.startScanning()

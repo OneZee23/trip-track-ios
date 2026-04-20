@@ -49,12 +49,7 @@ struct SettingsView: View {
             .navigationTitle(isRu ? "Настройки" : "Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(AppStrings.done(lang.language)) {
-                        dismiss()
-                    }
-                    .foregroundStyle(AppTheme.accent)
-                }
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
         }
     }
