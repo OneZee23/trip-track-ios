@@ -8,6 +8,12 @@ struct CloudSyncView: View {
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var syncQueue = SyncQueue.shared
+    @ObservedObject private var auth = AuthService.shared
+
+    @State private var showSignOutAlert = false
+    @State private var showDeleteAccountAlert = false
+    @State private var isDeletingAccount = false
+    @State private var deleteAccountError: String?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -75,9 +81,49 @@ struct CloudSyncView: View {
                             : "New changes stay on this device only. Re-enabling uploads everything accumulated in one batch.",
                         c: c
                     )
+
+                    if auth.isSignedIn {
+                        accountActions(c, isRu: isRu)
+                            .padding(.top, 8)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 20)
+            }
+            .alert(
+                AppStrings.signOutConfirmTitle(lang.language),
+                isPresented: $showSignOutAlert
+            ) {
+                Button(AppStrings.cancel(lang.language), role: .cancel) {}
+                Button(AppStrings.signOut(lang.language), role: .destructive) {
+                    Task {
+                        await auth.signOut()
+                        dismiss()
+                    }
+                }
+            } message: {
+                Text(AppStrings.signOutConfirmMessage(lang.language))
+            }
+            .alert(
+                AppStrings.deleteAccountConfirmTitle(lang.language),
+                isPresented: $showDeleteAccountAlert
+            ) {
+                Button(AppStrings.cancel(lang.language), role: .cancel) {}
+                Button(AppStrings.deleteAccount(lang.language), role: .destructive) {
+                    Task { await performDeleteAccount() }
+                }
+            } message: {
+                Text(AppStrings.deleteAccountConfirmMessage(lang.language))
+            }
+            .alert(
+                AppStrings.deleteAccountFailed(lang.language),
+                isPresented: Binding(
+                    get: { deleteAccountError != nil },
+                    set: { if !$0 { deleteAccountError = nil } })
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(deleteAccountError ?? "")
             }
             .background(c.bg)
             .navigationTitle(isRu ? "Синхронизация" : "Sync")
@@ -215,6 +261,74 @@ struct CloudSyncView: View {
         .animation(.easeInOut(duration: 0.2), value: syncQueue.isSyncing)
         .animation(.easeInOut(duration: 0.2), value: syncQueue.pendingCount)
         .animation(.easeInOut(duration: 0.2), value: settings.cloudSyncEnabled)
+    }
+
+    // MARK: - Account actions (sign out + delete)
+
+    private func accountActions(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(spacing: 10) {
+            Button {
+                Haptics.tap()
+                showSignOutAlert = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(c.textSecondary)
+                        .frame(width: 24, alignment: .center)
+                    Text(AppStrings.signOut(lang.language))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(c.text)
+                    Spacer()
+                }
+                .padding(14)
+                .surfaceCard(cornerRadius: 14)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                Haptics.tap()
+                showDeleteAccountAlert = true
+            } label: {
+                HStack(spacing: 12) {
+                    if isDeletingAccount {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .tint(.red)
+                            .frame(width: 24, alignment: .center)
+                        Text(isRu ? "Удаление…" : "Deleting…")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.red)
+                    } else {
+                        Image(systemName: "trash")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(.red)
+                            .frame(width: 24, alignment: .center)
+                        Text(AppStrings.deleteAccount(lang.language))
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.red)
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .surfaceCard(cornerRadius: 14)
+            }
+            .buttonStyle(.plain)
+            .disabled(isDeletingAccount)
+        }
+    }
+
+    private func performDeleteAccount() async {
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        do {
+            try await auth.deleteAccount()
+            dismiss()
+        } catch let e as APIError {
+            deleteAccountError = String(describing: e)
+        } catch {
+            deleteAccountError = error.localizedDescription
+        }
     }
 
     private func infoCard(icon: String, iconColor: Color, title: String, body: String, c: AppTheme.Colors) -> some View {
