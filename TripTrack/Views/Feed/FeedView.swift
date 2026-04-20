@@ -1,8 +1,12 @@
 import SwiftUI
 
+enum FeedMode: Hashable { case own, social }
+
 struct FeedView: View {
     @StateObject private var feedVM: FeedViewModel
     @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var auth = AuthService.shared
+    @ObservedObject private var socialFeed = SocialFeedStore.shared
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
@@ -16,6 +20,8 @@ struct FeedView: View {
     @State private var showGarage = false
     @State private var tripToDelete: Trip?
     @State private var collapsedSections: Set<String> = []
+    @State private var feedMode: FeedMode = .own
+    @State private var selectedAuthor: SocialAuthor?
 
     init(tripManager: TripManager, selectedTab: Binding<Int>) {
         _feedVM = StateObject(wrappedValue: FeedViewModel(tripManager: tripManager))
@@ -30,32 +36,43 @@ struct FeedView: View {
             ScrollViewReader { scrollProxy in
             ScrollView {
                 LazyVStack(spacing: 6) {
-                    ContributionCalendarView(
-                        dateFrom: Binding(
-                            get: { feedVM.filters.dateFrom },
-                            set: { newDate in
-                                feedVM.setDateRange(from: newDate, to: feedVM.filters.dateTo)
-                            }
-                        ),
-                        dateTo: Binding(
-                            get: { feedVM.filters.dateTo },
-                            set: { newDate in
-                                feedVM.setDateRange(from: feedVM.filters.dateFrom, to: newDate)
-                            }
-                        ),
-                        language: lang.language,
-                        maxKmDay: feedVM.maxKmDay,
-                        kmByDay: { feedVM.kmByDay(for: $0) }
-                    )
-                    .padding(.top, 4)
-                    .id("feedTop")
+                    if auth.isSignedIn {
+                        feedModeSwitcher(c)
+                            .padding(.top, 4)
+                            .id("feedTop")
+                    }
 
-                    quickStats(c)
+                    if feedMode == .own {
+                        ContributionCalendarView(
+                            dateFrom: Binding(
+                                get: { feedVM.filters.dateFrom },
+                                set: { newDate in
+                                    feedVM.setDateRange(from: newDate, to: feedVM.filters.dateTo)
+                                }
+                            ),
+                            dateTo: Binding(
+                                get: { feedVM.filters.dateTo },
+                                set: { newDate in
+                                    feedVM.setDateRange(from: feedVM.filters.dateFrom, to: newDate)
+                                }
+                            ),
+                            language: lang.language,
+                            maxKmDay: feedVM.maxKmDay,
+                            kmByDay: { feedVM.kmByDay(for: $0) }
+                        )
+                        .padding(.top, auth.isSignedIn ? 0 : 4)
+                        .id(auth.isSignedIn ? "feedOwnTop" : "feedTop")
 
-                    filterBar(c)
-                        .padding(.top, 2)
+                        quickStats(c)
 
-                    tripSections(c)
+                        filterBar(c)
+                            .padding(.top, 2)
+
+                        tripSections(c)
+                    } else {
+                        socialFeedContent(c)
+                            .padding(.top, 6)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 120)
@@ -78,6 +95,14 @@ struct FeedView: View {
             )) {
                 if let id = selectedTripId {
                     TripDetailView(tripId: id, viewModel: TripsViewModel(tripManager: feedVM.tripManager))
+                }
+            }
+            .navigationDestination(isPresented: Binding(
+                get: { selectedAuthor != nil },
+                set: { if !$0 { selectedAuthor = nil } }
+            )) {
+                if let author = selectedAuthor {
+                    PublicProfileView(accountId: author.id, preloaded: author)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -197,6 +222,125 @@ struct FeedView: View {
             .animation(.easeInOut(duration: 0.3), value: mapVM.isRecording)
         }
         } // ZStack
+    }
+
+    // MARK: - Feed Mode Switcher
+
+    private func feedModeSwitcher(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return HStack(spacing: 3) {
+            modePill(.own, label: isRu ? "Мои" : "Mine", c: c)
+            modePill(.social, label: isRu ? "Друзья" : "Friends", c: c)
+        }
+        .padding(3)
+        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 11))
+    }
+
+    private func modePill(_ mode: FeedMode, label: String, c: AppTheme.Colors) -> some View {
+        let active = feedMode == mode
+        return Button {
+            Haptics.selection()
+            withAnimation(.easeInOut(duration: 0.2)) { feedMode = mode }
+            if mode == .social, socialFeed.trips.isEmpty {
+                Task { await socialFeed.refresh() }
+            }
+        } label: {
+            Text(label)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(active ? c.text : c.textTertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(
+                    active
+                    ? c.card
+                    : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 8)
+                )
+                .shadow(color: active ? Color.black.opacity(0.04) : Color.clear, radius: 1, y: 1)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Social Feed Content
+
+    @ViewBuilder
+    private func socialFeedContent(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+
+        if socialFeed.isLoading, socialFeed.trips.isEmpty {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 60)
+        } else if socialFeed.trips.isEmpty {
+            socialEmptyState(c, isRu: isRu)
+        } else {
+            ForEach(socialFeed.trips) { trip in
+                SocialFeedCardView(
+                    trip: trip,
+                    onTapAuthor: { selectedAuthor = trip.author },
+                    onReact: { emoji in
+                        Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
+                    },
+                    onShare: {
+                        shareSocialTrip(trip)
+                    }
+                )
+                .onAppear {
+                    Task { await socialFeed.loadMoreIfNeeded(currentItem: trip) }
+                }
+            }
+
+            if socialFeed.isLoadingMore {
+                ProgressView()
+                    .padding(.vertical, 16)
+            }
+        }
+    }
+
+    private func socialEmptyState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "person.2")
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(c.textTertiary)
+                .padding(.top, 60)
+            Text(isRu ? "Пока никого не читаете" : "You're not following anyone yet")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+            Text(isRu
+                 ? "Подпишитесь на друзей, чтобы видеть их поездки здесь."
+                 : "Follow friends to see their trips here.")
+                .font(.system(size: 13))
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 40)
+    }
+
+    private func shareSocialTrip(_ trip: SocialFeedTrip) {
+        Task {
+            do {
+                let req = SocialShareRequest(tripId: trip.id, expiresInDays: nil)
+                let res: SocialShareResponse = try await APIClient.shared.post(
+                    APIEndpoint.socialShare, body: req)
+                await MainActor.run {
+                    presentShareSheet(url: res.shareUrl)
+                }
+            } catch {
+                // Ignore errors silently for MVP
+            }
+        }
+    }
+
+    private func presentShareSheet(url: String) {
+        guard let u = URL(string: url) else { return }
+        let av = UIActivityViewController(activityItems: [u], applicationActivities: nil)
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
+            .first?
+            .present(av, animated: true)
     }
 
     // MARK: - Trip Sections

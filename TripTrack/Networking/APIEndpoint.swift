@@ -20,4 +20,15 @@ enum APIEndpoint {
 
     static let syncPull = "/sync/pull"
     static let syncPush = "/sync/push"
+
+    static let socialFeed       = "/social/feed"
+    static let socialFollow     = "/social/follow"
+    static let socialUnfollow   = "/social/unfollow"
+    static let socialFollowers  = "/social/followers"
+    static let socialFollowing  = "/social/following"
+    static let socialReact      = "/social/react"
+    static let socialUnreact    = "/social/unreact"
+    static let socialShare      = "/social/share"
+
+    static func userProfile(_ id: String) -> String { "/users/\(id)/profile" }
 }
