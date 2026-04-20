@@ -155,7 +155,14 @@ struct FeedView: View {
             .toolbarBackground(.automatic, for: .navigationBar)
         }
         .toast(item: $feedVM.toastItem)
-        .refreshable { feedVM.language = lang.language; feedVM.loadTrips() }
+        .refreshable {
+            if feedMode == .social {
+                await socialFeed.refresh()
+            } else {
+                feedVM.language = lang.language
+                feedVM.loadTrips()
+            }
+        }
         .onAppear {
             if !didLoad { didLoad = true; feedVM.language = lang.language; feedVM.loadTrips() }
             feedVM.retryGeocodingIfNeeded()
@@ -272,7 +279,7 @@ struct FeedView: View {
         return Button {
             Haptics.selection()
             withAnimation(.easeInOut(duration: 0.2)) { feedMode = mode }
-            if mode == .social, socialFeed.trips.isEmpty {
+            if mode == .social {
                 Task { await socialFeed.refresh() }
             }
         } label: {
@@ -299,9 +306,11 @@ struct FeedView: View {
         let isRu = lang.language == .ru
 
         if socialFeed.isLoading, socialFeed.trips.isEmpty {
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 60)
+            PixelCarLoader(
+                label: isRu ? "Загружаем ленту друзей…" : "Loading friends feed…"
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 40)
         } else if socialFeed.trips.isEmpty {
             socialEmptyState(c, isRu: isRu)
         } else {
