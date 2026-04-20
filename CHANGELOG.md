@@ -6,6 +6,24 @@
 
 ---
 
+## [0.5.0] -- 20 апреля 2026
+
+### Добавлено
+- **Собственный backend-сервер** (NestJS + PostgreSQL + JWT + Cloudflare R2). Репозиторий `trip-track-backend`. API для auth, trips/vehicles CRUD, photos, sync, social (follows, feed, reactions, sharing)
+- **Клиентская интеграция с сервером**. `APIClient` (URLSession + JSON-RPC envelope + single-flight token refresh), `APISyncTransport` (реализует существующий `SyncTransport`), `R2PhotoStorage` (реализует `RemotePhotoStorage`), `SyncCoordinator` (триггеры: foreground, network restored, Wi-Fi connected, 5-мин таймер), `PullApplier` (merge server delta в CoreData)
+- **Sign in with Apple на сервере**. После Apple Sign In клиент вызывает `/auth/login` → сервер верифицирует identity token через Apple JWKS → выдаёт свой access+refresh JWT. Хранятся в Keychain
+- **Умная загрузка фото**. Thumbnails всегда (даже на cellular), оригиналы только на Wi-Fi. Pending originals автоматически заливаются когда появляется Wi-Fi. Presigned URL-ы для чтения (1ч TTL)
+- **Conflict resolution**. Optimistic concurrency через `conflictVersion` + `lastModifiedAt`. Silent last-write-wins для MVP
+- **First sync после Sign in**. Все локальные поездки, vehicles, settings, фото автоматически попадают в очередь и уезжают на сервер
+- **Guest mode сохранён**. Без Sign in приложение работает как раньше — полностью локально. Sync — opt-in
+
+### Изменено
+- CoreData schema v2 → v3 (добавлены `thumbnailURL` на фото, `conflictVersion` на vehicle/settings). Lightweight migration
+- `NetworkMonitor` теперь публикует `isOnWiFi`. `CacheManager` — новый publisher `wifiConnected`
+- Версия 0.4.4 → 0.5.0, build 10 → 11
+
+---
+
 ## [0.4.4] -- 19 апреля 2026
 
 ### Исправлено
