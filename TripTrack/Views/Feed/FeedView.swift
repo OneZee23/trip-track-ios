@@ -38,11 +38,9 @@ struct FeedView: View {
             ScrollViewReader { scrollProxy in
             ScrollView {
                 LazyVStack(spacing: 6) {
-                    if auth.isSignedIn {
-                        feedModeSwitcher(c)
-                            .padding(.top, 4)
-                            .id("feedTop")
-                    }
+                    feedModeSwitcher(c)
+                        .padding(.top, 4)
+                        .id("feedTop")
 
                     if feedMode == .own {
                         ContributionCalendarView(
@@ -71,8 +69,11 @@ struct FeedView: View {
                             .padding(.top, 2)
 
                         tripSections(c)
-                    } else {
+                    } else if auth.isSignedIn {
                         socialFeedContent(c)
+                            .padding(.top, 6)
+                    } else {
+                        guestFriendsState(c)
                             .padding(.top, 6)
                     }
                 }
@@ -279,7 +280,7 @@ struct FeedView: View {
         return Button {
             Haptics.selection()
             withAnimation(.easeInOut(duration: 0.2)) { feedMode = mode }
-            if mode == .social {
+            if mode == .social, auth.isSignedIn {
                 Task { await socialFeed.refresh() }
             }
         } label: {
@@ -311,6 +312,8 @@ struct FeedView: View {
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 40)
+        } else if socialFeed.lastError != nil, socialFeed.trips.isEmpty {
+            socialErrorState(c, isRu: isRu)
         } else if socialFeed.trips.isEmpty {
             socialEmptyState(c, isRu: isRu)
         } else {
@@ -335,6 +338,87 @@ struct FeedView: View {
                     .padding(.vertical, 16)
             }
         }
+    }
+
+    private func guestFriendsState(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return VStack(spacing: 16) {
+            PixelCarLoader(label: nil, height: 100)
+                .allowsHitTesting(false)
+                .padding(.top, 24)
+
+            VStack(spacing: 8) {
+                Text(isRu ? "Друзья в TripTrack" : "Friends on TripTrack")
+                    .font(.system(size: 20, weight: .heavy))
+                    .tracking(-0.2)
+                    .foregroundStyle(c.text)
+                Text(isRu
+                     ? "Войдите через Apple ID, чтобы подписаться на друзей и видеть их поездки."
+                     : "Sign in with Apple to follow friends and see their trips.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(c.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+            Button {
+                Haptics.tap()
+                showProfile = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "apple.logo")
+                        .font(.system(size: 14))
+                    Text(isRu ? "Войти через Apple" : "Sign in with Apple")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(Color.black, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+    }
+
+    private func socialErrorState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(.red.opacity(0.8))
+                .padding(.top, 60)
+            Text(isRu ? "Не удалось загрузить ленту" : "Couldn't load feed")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(c.text)
+            Text(isRu
+                 ? "Проверьте соединение с интернетом и попробуйте снова."
+                 : "Check your connection and try again.")
+                .font(.system(size: 13))
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Button {
+                Haptics.tap()
+                Task { await socialFeed.refresh() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(isRu ? "Попробовать снова" : "Try again")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(AppTheme.accent, in: Capsule())
+                .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 40)
     }
 
     private func socialEmptyState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
