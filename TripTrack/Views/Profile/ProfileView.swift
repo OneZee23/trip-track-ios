@@ -1,5 +1,8 @@
 import SwiftUI
 import AuthenticationServices
+import OSLog
+
+private let signInLog = Logger(subsystem: "com.triptrack", category: "signin")
 
 struct ProfileView: View {
     @EnvironmentObject private var mapVM: MapViewModel
@@ -334,16 +337,16 @@ struct ProfileView: View {
         ZStack {
             SignInWithAppleButton(.signIn) { request in
                 request.requestedScopes = [.fullName, .email]
-                print("[SignIn] → request scopes, bundle=\(Bundle.main.bundleIdentifier ?? "?")")
+                signInLog.debug("→ request scopes, bundle=\(Bundle.main.bundleIdentifier ?? "?")")
             } onCompletion: { result in
                 switch result {
                 case .success(let authorization):
-                    print("[SignIn] ✅ got credential")
+                    signInLog.debug("✅ got credential")
                     Task { await auth.handleAuthorization(authorization) }
                 case .failure(let error):
                     let ns = error as NSError
-                    print("[SignIn] ❌ domain=\(ns.domain) code=\(ns.code) desc=\(ns.localizedDescription)")
-                    print("[SignIn]   userInfo=\(ns.userInfo)")
+                    signInLog.debug("❌ domain=\(ns.domain) code=\(ns.code) desc=\(ns.localizedDescription)")
+                    signInLog.debug("  userInfo=\(ns.userInfo)")
                     auth.lastAuthError = .transport("Apple: \(ns.code) \(ns.localizedDescription)")
                 }
             }

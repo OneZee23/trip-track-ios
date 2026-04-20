@@ -30,13 +30,29 @@ enum DebugLogExporter {
         let predicate = NSPredicate(format: "subsystem BEGINSWITH %@", "com.triptrack")
         let entries = try store.getEntries(at: since, matching: predicate)
 
+        let identity = await MainActor.run { () -> (localUserId: String, accountId: String, signedIn: Bool, syncEnabled: Bool) in
+            let local = SettingsManager.shared.localUserId.uuidString
+            let acc = TokenStore.shared.accountId?.uuidString ?? "(not signed in)"
+            return (local, acc, AuthService.shared.isSignedIn, SettingsManager.shared.cloudSyncEnabled)
+        }
+
         var lines: [String] = []
-        lines.append("TripTrack debug log export")
-        lines.append("generated: \(ISO8601DateFormatter().string(from: Date()))")
-        lines.append("window: last \(Int(window))h")
-        lines.append("device: \(DeviceInfo.description)")
-        lines.append("app: \(DeviceInfo.appVersion) (build \(DeviceInfo.buildNumber))")
+        lines.append("=== TripTrack debug log ===")
+        lines.append("generated:     \(ISO8601DateFormatter().string(from: Date()))")
+        lines.append("window:        last \(Int(window))h")
         lines.append("")
+        lines.append("--- app ---")
+        lines.append("bundle_id:     \(Bundle.main.bundleIdentifier ?? "?")")
+        lines.append("version:       \(DeviceInfo.appVersion) (build \(DeviceInfo.buildNumber))")
+        lines.append("device:        \(DeviceInfo.description)")
+        lines.append("")
+        lines.append("--- identity ---")
+        lines.append("local_user_id: \(identity.localUserId)")
+        lines.append("account_id:    \(identity.accountId)")
+        lines.append("signed_in:     \(identity.signedIn)")
+        lines.append("sync_enabled:  \(identity.syncEnabled)")
+        lines.append("")
+        lines.append("--- log entries ---")
 
         let fmt = ISO8601DateFormatter()
         fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

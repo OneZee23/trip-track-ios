@@ -2,6 +2,9 @@ import Foundation
 import AuthenticationServices
 import CoreData
 import UIKit
+import OSLog
+
+private let authLog = Logger(subsystem: "com.triptrack", category: "auth")
 
 @MainActor
 final class AuthService: ObservableObject {
@@ -30,13 +33,13 @@ final class AuthService: ObservableObject {
     // MARK: - Handle Authorization (called from SignInWithAppleButton onCompletion)
 
     func handleAuthorization(_ authorization: ASAuthorization) async {
-        print("[AuthService] handleAuthorization START")
+        authLog.debug("handleAuthorization START")
         guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-            print("[AuthService] ❌ credential cast failed, got: \(type(of: authorization.credential))")
+            authLog.debug("❌ credential cast failed, got: \(type(of: authorization.credential))")
             return
         }
         let userId = credential.user
-        print("[AuthService] credential.user=\(userId) tokenSize=\(credential.identityToken?.count ?? -1)")
+        authLog.debug("credential.user=\(userId) tokenSize=\(credential.identityToken?.count ?? -1)")
 
         try? KeychainHelper.saveString(userId, for: Keys.userIdentifier)
         userIdentifier = userId
