@@ -84,6 +84,21 @@ struct SocialFollowersResponse: Codable {
     let total: Int
 }
 
+// MARK: - Search / Suggest
+
+struct SocialSearchRequest: Codable {
+    let query: String
+    let limit: Int?
+}
+
+struct SocialSuggestedRequest: Codable {
+    let limit: Int?
+}
+
+struct SocialUsersResponse: Codable {
+    let users: [SocialAuthor]
+}
+
 // MARK: - Reactions
 
 struct SocialReactRequest: Codable {

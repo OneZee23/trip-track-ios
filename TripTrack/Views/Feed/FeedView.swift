@@ -22,6 +22,7 @@ struct FeedView: View {
     @State private var collapsedSections: Set<String> = []
     @State private var feedMode: FeedMode = .own
     @State private var selectedAuthor: SocialAuthor?
+    @State private var showDiscover = false
 
     init(tripManager: TripManager, selectedTab: Binding<Int>) {
         _feedVM = StateObject(wrappedValue: FeedViewModel(tripManager: tripManager))
@@ -137,6 +138,17 @@ struct FeedView: View {
                             .background(c.cardAlt, in: Circle())
                     }
                 }
+                if auth.isSignedIn, feedMode == .social {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showDiscover = true } label: {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 38, height: 38)
+                                .foregroundStyle(c.text)
+                                .background(c.cardAlt, in: Circle())
+                        }
+                    }
+                }
             }
             .toolbarBackground(c.bg.opacity(0.95), for: .navigationBar)
             .toolbarBackground(.automatic, for: .navigationBar)
@@ -180,6 +192,12 @@ struct FeedView: View {
         }
         .sheet(isPresented: $showProfile) {
             ProfileView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .sheet(isPresented: $showDiscover) {
+            DiscoverView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)

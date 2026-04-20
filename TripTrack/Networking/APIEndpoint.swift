@@ -29,6 +29,8 @@ enum APIEndpoint {
     static let socialReact      = "/social/react"
     static let socialUnreact    = "/social/unreact"
     static let socialShare      = "/social/share"
+    static let socialSearch     = "/social/search"
+    static let socialSuggested  = "/social/suggested"
 
     static func userProfile(_ id: String) -> String { "/users/\(id)/profile" }
 }
