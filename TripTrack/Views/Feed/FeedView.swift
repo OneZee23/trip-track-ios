@@ -12,7 +12,6 @@ struct FeedView: View {
     @State private var didLoad = false
     @State private var showStats = false
     @State private var showBadges = false
-    @State private var showSettings = false
     @State private var showProfile = false
     @State private var showGarage = false
     @State private var tripToDelete: Trip?
@@ -153,11 +152,6 @@ struct FeedView: View {
             if let region = notif.object as? String {
                 feedVM.setRegionFilter(region)
             }
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showProfile) {
             ProfileView()
