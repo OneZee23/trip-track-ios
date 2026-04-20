@@ -19,6 +19,8 @@
 	<true/>
 	<key>API_BASE_URL</key>
 	<string>$(API_BASE_URL)</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>TripTrack использует локальную сеть для связи с dev-сервером синхронизации.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

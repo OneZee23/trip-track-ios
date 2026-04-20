@@ -54,6 +54,12 @@ final class FeedViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.loadTrips() }
             .store(in: &cancellables)
+
+        // Server sync delivered updated data — reload to pick it up
+        NotificationCenter.default.publisher(for: .syncPullCompleted)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.loadTrips() }
+            .store(in: &cancellables)
     }
 
     deinit {
