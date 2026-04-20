@@ -23,6 +23,7 @@ struct FeedView: View {
     @State private var feedMode: FeedMode = .own
     @State private var selectedAuthor: SocialAuthor?
     @State private var showDiscover = false
+    @State private var shareSheetData: (data: StoryShareData, url: String)?
 
     init(tripManager: TripManager, selectedTab: Binding<Int>) {
         _feedVM = StateObject(wrappedValue: FeedViewModel(tripManager: tripManager))
@@ -202,6 +203,18 @@ struct FeedView: View {
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
+        .sheet(isPresented: Binding(
+            get: { shareSheetData != nil },
+            set: { if !$0 { shareSheetData = nil } }
+        )) {
+            if let share = shareSheetData {
+                StoryShareSheet(data: share.data, shareUrl: share.url)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .environmentObject(lang)
+                    .preferredColorScheme(themeManager.preferredColorScheme)
+            }
+        }
         .sheet(isPresented: $showGarage) {
             GarageView()
                 .presentationDetents([.large])
@@ -344,21 +357,15 @@ struct FeedView: View {
                 let res: SocialShareResponse = try await APIClient.shared.post(
                     APIEndpoint.socialShare, body: req)
                 await MainActor.run {
-                    presentShareSheet(url: res.shareUrl)
+                    shareSheetData = (
+                        StoryShareData.from(trip, lang: lang.language),
+                        res.shareUrl
+                    )
                 }
             } catch {
                 // Ignore errors silently for MVP
             }
         }
-    }
-
-    private func presentShareSheet(url: String) {
-        guard let u = URL(string: url) else { return }
-        let av = UIActivityViewController(activityItems: [u], applicationActivities: nil)
-        UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
-            .first?
-            .present(av, animated: true)
     }
 
     // MARK: - Trip Sections
