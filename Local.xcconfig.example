@@ -8,4 +8,11 @@ DEVELOPMENT_TEAM = YOUR_TEAM_ID
 
 // API base URL — backend NestJS server. Debug defaults to localhost:3003.
 // Use $() to escape slashes in URLs (xcconfig treats // as comment).
+//
+// Simulator: http:/$()/localhost:3003 works out of the box.
+// Real device: use your Mac's LAN IP instead of localhost (e.g. 192.168.1.50).
+//              You MUST also add that IP to TripTrack/Info.plist under
+//              NSAppTransportSecurity > NSExceptionDomains (see localhost
+//              entry for reference). Info.plist is committed; make your
+//              local edit but don't push it.
 API_BASE_URL = http:/$()/localhost:3003
