@@ -285,6 +285,11 @@ final class SettingsManager: ObservableObject {
         }
     }
 
+    func reloadFromCoreData() {
+        loadSettings()
+        loadVehicles()
+    }
+
     func reloadGamificationState() {
         if let entity = settingsEntity {
             profileXP = Int(entity.profileXP)
