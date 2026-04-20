@@ -16,11 +16,23 @@
 - **Conflict resolution**. Optimistic concurrency через `conflictVersion` + `lastModifiedAt`. Silent last-write-wins для MVP
 - **First sync после Sign in**. Все локальные поездки, vehicles, settings, фото автоматически попадают в очередь и уезжают на сервер
 - **Guest mode сохранён**. Без Sign in приложение работает как раньше — полностью локально. Sync — opt-in
+- **Тоггл синхронизации** (`CloudSyncView`) — отдельный экран из профиля: включить/выключить cloud sync, индикатор статуса, карточки с объяснением что синхронизируется и где хранится. Выключение блокирует `SyncEnqueuer` глобально
+- **Прогресс синхронизации X/Y** — `SyncQueue.batchTotal` + `batchProcessed` показывают сколько сущностей осталось обработать. Видно в ProfileView и CloudSyncView
+- **Восстановление после перезапуска** — `SyncCoordinator.recoverPendingEntities()` при старте сканирует CoreData на `syncStatus=pendingUpload` и перезапускает очередь. Если приложение убили в процессе синка, при следующем запуске всё доедет
+- **Экспорт логов** (`DebugLogsView`) — кнопка в профиле, читает `OSLogStore` по подсистеме `com.triptrack`, хранит 48 часов, экспорт как текстовый файл через `ShareLink`. В начале файла блок идентификации (local_user_id, account_id, signed_in, sync_enabled) для отладки по письму от пользователя
+- **Единый стиль close button** — компонент `SheetCloseButton` (`xmark.circle.fill`, серый, справа вверху). Применён ко всем шитам: CloudSync, DebugLogs, Stats, Badges, Garage, AddVehicle, BluetoothScan, DevMenu, RoadCollection, VehicleDetail
 
 ### Изменено
 - CoreData schema v2 → v3 (добавлены `thumbnailURL` на фото, `conflictVersion` на vehicle/settings). Lightweight migration
 - `NetworkMonitor` теперь публикует `isOnWiFi`. `CacheManager` — новый publisher `wifiConnected`
+- **Миграция `print()` → `Logger`** в SyncCoordinator, AuthService, ProfileView — чтобы логи попадали в OSLogStore и были доступны для экспорта
+- **Feed автообновляется после pull** — `PullApplier` шлёт `.syncPullCompleted` нотификацию, `FeedViewModel` перезагружает список
+- **Русский язык — уважительно на "Вы"** везде (AppStrings, CloudSyncView, DebugLogsView)
+- **Сломанные поездки компактнее** — карточки с `previewCoordinates.count ≤ 1` больше не показывают пустую карту-плейсхолдер, только статистику
 - Версия 0.4.4 → 0.5.0, build 10 → 11
+
+### Удалено
+- `SettingsView.swift` и папка `Views/Settings/` — единственное место для пользовательских настроек теперь `ProfileView`. `BluetoothScanSheet` перемещён в `Views/Profile/`
 
 ---
 
