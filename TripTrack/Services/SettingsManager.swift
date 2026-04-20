@@ -16,6 +16,11 @@ final class SettingsManager: ObservableObject {
     // User identity (local UUID, persisted in UserSettingsEntity.id)
     @Published private(set) var localUserId: UUID = UUID()
 
+    // Cloud sync toggle. UserDefaults persisted. Default true — once signed in user opts in.
+    @Published var cloudSyncEnabled: Bool = UserDefaults.standard.object(forKey: "com.triptrack.settings.cloudSyncEnabled") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(cloudSyncEnabled, forKey: "com.triptrack.settings.cloudSyncEnabled") }
+    }
+
     // Gamification
     @Published var profileXP: Int = 0
     @Published var profileLevel: Int = 1

@@ -35,6 +35,7 @@ final class SyncCoordinator {
 
     func runFullSync() async {
         guard AuthService.shared.isSignedIn else { return }
+        guard SettingsManager.shared.cloudSyncEnabled else { return }
         guard !CacheManager.shared.isOffline else { return }
         guard !isPulling else { return }
         isPulling = true

@@ -98,6 +98,11 @@ struct ProfileView: View {
 
                 aboutCard(c, isRu: isRu)
 
+                // Cloud sync toggle (only when signed in)
+                if auth.isSignedIn {
+                    cloudSyncCard(c, isRu: isRu)
+                }
+
                 // Sign out button (only when signed in)
                 if auth.isSignedIn {
                     Button {
@@ -347,7 +352,14 @@ struct ProfileView: View {
         let syncing = syncQueue.isSyncing
 
         HStack(spacing: 6) {
-            if syncing {
+            if !settings.cloudSyncEnabled {
+                Image(systemName: "icloud.slash")
+                    .font(.system(size: 10))
+                    .foregroundStyle(c.textTertiary)
+                Text(isRu ? "Синхронизация выключена" : "Sync disabled")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(c.textTertiary)
+            } else if syncing {
                 ProgressView()
                     .scaleEffect(0.55)
                     .frame(width: 10, height: 10)
@@ -423,6 +435,59 @@ struct ProfileView: View {
             }
         }
         .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    // MARK: - Cloud Sync Card
+
+    private func cloudSyncCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: settings.cloudSyncEnabled ? "icloud.fill" : "icloud.slash")
+                .font(.system(size: 18))
+                .foregroundStyle(settings.cloudSyncEnabled ? Color.blue : c.textTertiary)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isRu ? "Синхронизация в облаке" : "Cloud sync")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(c.text)
+                Text(settings.cloudSyncEnabled
+                     ? (isRu ? "Данные загружаются на сервер" : "Data is uploaded to the server")
+                     : (isRu ? "Данные остаются только на устройстве" : "Data stays on this device only"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(c.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { settings.cloudSyncEnabled },
+                set: { newValue in
+                    settings.cloudSyncEnabled = newValue
+                    if newValue {
+                        // Re-enable: mark everything as pending, trigger full sync
+                        Task { @MainActor in
+                            let repo: TripRepository = CoreDataTripRepository()
+                            repo.markAllPendingUpload()
+                            for trip in repo.fetchAllTrips() {
+                                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: trip.id, action: .upload))
+                            }
+                            for vehicle in settings.vehicles {
+                                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: vehicle.id, action: .upload))
+                            }
+                            SyncEnqueuer.enqueue(SyncOperation(
+                                entityType: .settings, entityId: settings.localUserId, action: .upload))
+                            await SyncCoordinator.shared.runFullSync()
+                        }
+                    } else {
+                        // Disable: clear pending queue
+                        SyncQueue.shared.clearAll()
+                    }
+                }
+            ))
+            .labelsHidden()
+            .tint(.blue)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .surfaceCard(cornerRadius: 12)
     }
 
     // MARK: - Theme Card
