@@ -12,6 +12,7 @@ struct TripTrackApp: App {
         // iOS relaunches the app after force-quit when cell tower changes
         AutoTripService.shared.handleBackgroundLaunch()
         SyncQueue.shared.configure(transport: APISyncTransport.shared)
+        SyncCoordinator.shared.start()
     }
 
     var body: some Scene {
