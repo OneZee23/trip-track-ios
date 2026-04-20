@@ -176,37 +176,54 @@ struct SocialFeedCardView: View {
     // MARK: - Action Bar
 
     private func actionBar(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 18) {
-            // Heart reaction (single-tap toggles ❤️)
-            Button {
-                Haptics.tap()
-                onReact?("❤️")
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: trip.myReaction == "❤️" ? "heart.fill" : "heart")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(trip.myReaction == "❤️" ? AppTheme.accent : c.textSecondary)
-                    if trip.reactionCount > 0 {
-                        Text("\(trip.reactionCount)")
-                            .font(.system(size: 13, weight: .bold).monospacedDigit())
-                            .foregroundStyle(c.textSecondary)
-                    }
-                }
+        HStack(spacing: 4) {
+            ForEach(ReactionEmoji.all, id: \.self) { emoji in
+                reactionPill(emoji, c: c)
             }
-            .buttonStyle(.plain)
+
+            Spacer(minLength: 6)
+
+            if trip.reactionCount > 0 {
+                Text("\(trip.reactionCount)")
+                    .font(.system(size: 12, weight: .bold).monospacedDigit())
+                    .foregroundStyle(c.textSecondary)
+                    .padding(.trailing, 4)
+            }
 
             Button {
                 Haptics.tap()
                 onShare?()
             } label: {
                 Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(c.textSecondary)
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
-
-            Spacer()
         }
+    }
+
+    private func reactionPill(_ emoji: String, c: AppTheme.Colors) -> some View {
+        let isMine = trip.myReaction == emoji
+        return Button {
+            Haptics.selection()
+            onReact?(emoji)
+        } label: {
+            Text(emoji)
+                .font(.system(size: 18))
+                .frame(width: 32, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isMine ? AppTheme.accentBg : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isMine ? AppTheme.accent.opacity(0.4) : Color.clear, lineWidth: 1)
+                )
+                .scaleEffect(isMine ? 1.05 : 1.0)
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isMine)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Formatters
