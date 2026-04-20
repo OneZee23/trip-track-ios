@@ -247,8 +247,8 @@ enum AppStrings {
     }
     static func onboardingConsent(_ lang: LanguageManager.Language) -> String {
         lang == .ru
-            ? "Продолжая, Вы соглашаетесь с"
-            : "By continuing you agree to our"
+            ? "Продолжая, Вы принимаете"
+            : "By continuing, you accept our"
     }
     static func termsOfService(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Условиями" : "Terms"
