@@ -70,15 +70,20 @@ struct OnboardingView: View {
 
             Spacer()
 
-            Button {
-                requestLocationAndAdvance()
-            } label: {
-                Text(AppStrings.onboardingGo(lang.language))
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 16))
+            VStack(spacing: 12) {
+                Button {
+                    requestLocationAndAdvance()
+                } label: {
+                    Text(AppStrings.onboardingGo(lang.language))
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 16))
+                }
+
+                consentText(c)
+                    .padding(.top, 4)
             }
             .padding(.horizontal, 32)
             .padding(.bottom, 48)

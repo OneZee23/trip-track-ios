@@ -136,30 +136,40 @@
         </ul>
 
         <h2>5. Purposes and Legal Bases (GDPR)</h2>
-        <p>For users in the European Economic Area, the United Kingdom, and jurisdictions with similar rules, the legal bases for processing are:</p>
-        <ul>
-            <li><strong>Performance of a contract</strong> — to provide the core sync service you requested by enabling cloud sync (Art. 6(1)(b) GDPR).</li>
-            <li><strong>Legitimate interests</strong> — for service security, abuse prevention, and aggregated analysis of server load; balanced against your rights (Art. 6(1)(f) GDPR).</li>
-            <li><strong>Consent</strong> — where required, for example for optional features you explicitly opt into (Art. 6(1)(a) GDPR).</li>
-        </ul>
+        <p>For users in the European Economic Area, the United Kingdom, and jurisdictions with similar rules, we process each data category on the following lawful bases (GDPR Art. 6):</p>
+        <table style="width:100%; border-collapse:collapse; margin: 12px 0; font-size:14px;">
+            <tr style="background:#f0f0f2; text-align:left;"><th style="padding:8px; border:1px solid #d2d2d7;">Data</th><th style="padding:8px; border:1px solid #d2d2d7;">Purpose</th><th style="padding:8px; border:1px solid #d2d2d7;">Legal basis</th></tr>
+            <tr><td style="padding:8px; border:1px solid #d2d2d7;">Apple user ID, account UUID, device UUID</td><td style="padding:8px; border:1px solid #d2d2d7;">Create and authenticate your account</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
+            <tr><td style="padding:8px; border:1px solid #d2d2d7;">Email, display name</td><td style="padding:8px; border:1px solid #d2d2d7;">Account identification, social features, account recovery</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
+            <tr><td style="padding:8px; border:1px solid #d2d2d7;">GPS trips (uploaded on opt-in)</td><td style="padding:8px; border:1px solid #d2d2d7;">Deliver the sync service you enabled</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
+            <tr><td style="padding:8px; border:1px solid #d2d2d7;">Photos (EXIF stripped)</td><td style="padding:8px; border:1px solid #d2d2d7;">Deliver the sync service</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
+            <tr><td style="padding:8px; border:1px solid #d2d2d7;">Public profile, follows, reactions, trip shares</td><td style="padding:8px; border:1px solid #d2d2d7;">Deliver social features you enabled</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
+            <tr><td style="padding:8px; border:1px solid #d2d2d7;">Server access logs, IP addresses, abuse-report records</td><td style="padding:8px; border:1px solid #d2d2d7;">Security, abuse prevention, accountability</td><td style="padding:8px; border:1px solid #d2d2d7;">Legitimate interests — Art. 6(1)(f), Recital 49</td></tr>
+            <tr><td style="padding:8px; border:1px solid #d2d2d7;">Account-deletion audit record (timestamp + opaque hash only)</td><td style="padding:8px; border:1px solid #d2d2d7;">Demonstrate compliance with Art. 17 requests</td><td style="padding:8px; border:1px solid #d2d2d7;">Legal obligation + legitimate interests — Art. 6(1)(c)+(f)</td></tr>
+        </table>
+        <p><strong>We do not rely on consent as a legal basis for the core service.</strong> Using a feature (tapping Record, enabling cloud sync, making your profile public) is your affirmative action to use that feature under Art. 6(1)(b). This is intentional — it means there is no ambiguous "consent withdrawal" question for core features; you simply disable the feature and processing stops.</p>
+        <p><strong>Precise location and special category data.</strong> GPS coordinates are not special-category data under GDPR Art. 9 per se. We do not derive, infer, or cluster users by visited-place type (e.g., health, religion, sexuality). We do not run machine-learning inference on trip coordinates. If our practice changes, this policy will be updated in advance.</p>
 
         <h2>6. Sub-processors</h2>
-        <p>When you use cloud sync, the following third parties process data on our behalf:</p>
+        <p>When you use cloud sync, the following parties process data on our behalf or alongside us:</p>
         <ul>
-            <li><strong>Apple</strong> — Sign in with Apple verification (identity token validation). Subject to Apple's Privacy Policy.</li>
-            <li><strong>Cloudflare, Inc.</strong> — photo storage (Cloudflare R2), located outside the European Economic Area and the Russian Federation. Subject to Cloudflare's Data Processing Addendum and Standard Contractual Clauses.</li>
-            <li><strong>Our infrastructure provider</strong> — hosts the application server and PostgreSQL database. We will update this policy with the current provider's name before public launch.</li>
+            <li><strong>Apple Inc.</strong> (United States) — Sign in with Apple identity-token verification. Apple is an independent controller of your Apple ID; we only receive a limited identity token. Apple is certified under the EU-US Data Privacy Framework.</li>
+            <li><strong>Cloudflare, Inc.</strong> (United States / EU data centers) — photo object storage (Cloudflare R2), in an EU-jurisdiction bucket. Cloudflare is certified under the EU-US Data Privacy Framework and our processing is governed by Cloudflare's Data Processing Addendum incorporating EU Standard Contractual Clauses (2021/914).</li>
+            <li><strong>Our hosting provider</strong> — runs the application server and PostgreSQL database. Currently an EU-based VPS provider; the exact name will be published here before the first public release. Data center in the European Economic Area. Governed by the provider's GDPR-compliant DPA.</li>
         </ul>
-        <p>We do not sell or rent your data. We do not use analytics SDKs, advertising networks, or tracking tools.</p>
+        <p><strong>We do not sell or share your personal information.</strong> We do not use analytics SDKs, advertising networks, cross-app/site tracking, or any third-party trackers. We do not share data with advertisers. We do not use your content to train machine-learning models.</p>
 
-        <h2>7. Cross-Border Data Transfers</h2>
-        <p>If you are in the European Economic Area, the United Kingdom, or a country that restricts cross-border data transfers, and cloud sync is enabled, your data may be transferred to and processed in other jurisdictions. We rely on Standard Contractual Clauses and equivalent safeguards where available.</p>
+        <h2>7. International Data Transfers</h2>
+        <p>Our primary hosting is in the European Economic Area. Photo storage on Cloudflare R2 uses an EU-jurisdiction bucket; however, as a US-headquartered company, Cloudflare is subject to US law. We rely on Cloudflare's EU-US Data Privacy Framework certification and Standard Contractual Clauses as transfer mechanisms. Sign in with Apple authentication routes through Apple Inc. (United States) under the EU-US DPF. If you are in a jurisdiction with stricter cross-border rules, using cloud sync constitutes your informed consent to this transfer.</p>
 
         <h2>8. Data Retention</h2>
         <ul>
             <li><strong>Account data and synced content</strong> — retained for as long as your account is active. If you don't sign in for 3 years, we may delete the account after notifying you via the email on file.</li>
-            <li><strong>Deleted trips, photos, vehicles</strong> — removed from our servers and from Cloudflare R2 immediately upon deletion.</li>
-            <li><strong>Server access logs</strong> — up to 14 days.</li>
+            <li><strong>Deleted trips, photos, vehicles, and account data</strong> — removed from our primary database and from Cloudflare R2 immediately upon deletion.</li>
+            <li><strong>Encrypted database backups</strong> — retained for no more than 30 days. Deleted user data is purged from backups within this window by backup rotation.</li>
+            <li><strong>Server access logs</strong> — up to 14 days, then deleted.</li>
+            <li><strong>Account-deletion audit record</strong> — a non-identifying record (timestamp + opaque hash, no name, email, or content) may be retained indefinitely to demonstrate compliance with deletion requests.</li>
+            <li><strong>Abuse reports and moderation actions</strong> — retained for up to 2 years for safety and enforcement, then deleted.</li>
             <li><strong>Authentication refresh tokens</strong> — rotated on use, revoked on sign-out or account deletion.</li>
         </ul>
 
@@ -168,7 +178,8 @@
         <ul>
             <li><strong>Access and portability</strong> — request a copy of your data. Contact us at <a href="mailto:privacy@trip-track.app">privacy@trip-track.app</a>.</li>
             <li><strong>Rectification</strong> — correct inaccurate data (most fields are editable directly in the app).</li>
-            <li><strong>Erasure</strong> — permanently delete your account and all associated server-side data via Profile → Danger zone → Delete account. Local trips on your device are preserved after account deletion; you can continue using the app in guest mode.</li>
+            <li><strong>Erasure</strong> — permanently delete your account and all associated server-side data via Profile → Cloud Sync → Delete account. Local trips on your device are preserved after account deletion; you can continue using the app in guest mode.</li>
+            <li><strong>Portability</strong> — receive a machine-readable copy of your data. Email <a href="mailto:privacy@trip-track.app">privacy@trip-track.app</a> and we will deliver a JSON export (with photos as a ZIP) within 30 days.</li>
             <li><strong>Restriction and objection</strong> — limit or stop certain processing. Disable cloud sync in the app at any time.</li>
             <li><strong>Withdraw consent</strong> — sign out at any time; cloud processing stops immediately.</li>
             <li><strong>Complain</strong> — lodge a complaint with your local data protection authority.</li>
@@ -186,7 +197,13 @@
         <p>No system is perfectly secure. If you believe your account has been compromised, contact us immediately.</p>
 
         <h2>11. Children's Privacy</h2>
-        <p>TripTrack is rated 17+ in the App Store and is not directed to children under 13. We do not knowingly collect personal data from children under 13. If you believe a child has provided us with personal data, please contact us for prompt removal.</p>
+        <p>TripTrack is directed to adults and is not intended for children. The minimum age to use the App is 16 (matching the strictest GDPR Art. 8 threshold across EU member states). We do not knowingly collect personal data from children under 13 in the United States (COPPA), and will delete any account we learn belongs to a user under 13. If you believe a child has provided us with personal data, please contact us for prompt removal.</p>
+
+        <h2>11a. US State-Specific Disclosures</h2>
+        <p><strong>California (CCPA/CPRA).</strong> We do not sell or share your personal information as defined by California law. We do not use personal information for cross-context behavioral advertising. If you are a California resident, you may contact us to exercise rights to know, delete, correct, or access your data. We will verify your identity via the email on file.</p>
+        <p><strong>Nevada (SB 220).</strong> Nevada residents may opt out of any future sale of their covered personal information by emailing <a href="mailto:privacy@trip-track.app">privacy@trip-track.app</a>. We currently do not sell personal information.</p>
+        <p><strong>Washington (My Health My Data Act).</strong> Precise location data collected by the App may, in some cases, incidentally reveal visits to health-related facilities (e.g., a medical office, gym). To the extent any such data is classified as "consumer health data" under Washington law: (a) we collect it only when you actively record a trip; (b) we do not sell it; (c) we do not share it with advertisers; (d) we do not geofence health-facility locations; (e) you can delete it at any time by deleting the relevant trip or your account. Before any material change to this practice, we will obtain your separate opt-in consent. To exercise rights under RCW 19.373, email <a href="mailto:privacy@trip-track.app">privacy@trip-track.app</a>.</p>
+        <p><strong>Other US states (Virginia, Colorado, Connecticut, Utah, Texas, Oregon, Montana, etc.).</strong> Residents of states with comprehensive privacy laws have rights similar to California's under their respective statutes. To exercise any such right, email <a href="mailto:privacy@trip-track.app">privacy@trip-track.app</a>.</p>
 
         <h2>12. Changes to This Policy</h2>
         <p>We may update this Privacy Policy from time to time. Material changes will be announced in the app or by email. The "Last updated" date at the top always reflects the current version.</p>

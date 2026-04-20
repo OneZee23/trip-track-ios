@@ -65,7 +65,12 @@
    - При сабмите: "Does your app use encryption?" → Yes, standard iOS encryption
    - Скорее всего exempt (standard HTTPS + iOS crypto)
 
-4. **Age rating**: 17+ (Infrequent/Mild Mature Themes с Frequent/Intense Use of Location Services)
+4. **Age rating**: цель **13+** (новая система рейтингов Apple с января 2026, уровни 4+/9+/13+/16+/18+).
+   - UGC флажок = Yes (публичные профили, лента друзей, реакции)
+   - Unrestricted Web Access = No
+   - Messaging/Chat = No (нет DM и комментов — осознанное решение)
+   - Polarsteps с похожим набором фич = 4+. Strava = 13+ (у них есть DM/комменты). Мы ближе к Polarsteps, но цель 13+ для безопасности ревью.
+5. **Минимальный возраст в Terms**: **16+** (строгий GDPR Art. 8 для всех EU member states). COPPA: удаляем аккаунт если узнали что юзер <13.
 
 ## Этап 2: Запуск на РФ (отдельный этап, отдельные риски)
 
