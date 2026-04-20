@@ -355,21 +355,25 @@ final class CoreDataTripRepository: TripRepository {
         entity.lastModifiedAt = p.lastModifiedAt
         entity.syncStatus = SyncStatus.synced.rawValue
 
-        if let existingTPs = entity.trackPoints as? Set<TrackPointEntity> {
-            for tp in existingTPs { context.delete(tp) }
-        }
-        for pt in p.trackPoints {
-            let tpe = TrackPointEntity(context: context)
-            tpe.id = pt.id
-            tpe.latitude = pt.latitude
-            tpe.longitude = pt.longitude
-            tpe.altitude = pt.altitude
-            tpe.speed = pt.speed
-            tpe.course = pt.course
-            tpe.horizontalAccuracy = pt.horizontalAccuracy
-            tpe.timestamp = pt.timestamp
-            tpe.isInterpolated = pt.isInterpolated
-            tpe.trip = entity
+        // Only replace track points when server actually sent them (detail/push).
+        // Pull delta omits track points — keep local ones intact.
+        if let serverPoints = p.trackPoints {
+            if let existingTPs = entity.trackPoints as? Set<TrackPointEntity> {
+                for tp in existingTPs { context.delete(tp) }
+            }
+            for pt in serverPoints {
+                let tpe = TrackPointEntity(context: context)
+                tpe.id = pt.id
+                tpe.latitude = pt.latitude
+                tpe.longitude = pt.longitude
+                tpe.altitude = pt.altitude
+                tpe.speed = pt.speed
+                tpe.course = pt.course
+                tpe.horizontalAccuracy = pt.horizontalAccuracy
+                tpe.timestamp = pt.timestamp
+                tpe.isInterpolated = pt.isInterpolated
+                tpe.trip = entity
+            }
         }
 
         if let localPhotos = entity.photos?.array as? [TripPhotoEntity] {

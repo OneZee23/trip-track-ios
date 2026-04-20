@@ -28,7 +28,9 @@ struct TripSyncPayload: Codable {
     let xpEarned: Int?
     let conflictVersion: Int
     let lastModifiedAt: Date
-    let trackPoints: [TrackPointPayload]
+    // Optional: server omits track points in sync/pull responses (delta sync returns metadata only).
+    // Present on upload (client → server) and on /trips/detail response.
+    let trackPoints: [TrackPointPayload]?
     let photos: [TripPhotoMetadataPayload]?
 }
 
