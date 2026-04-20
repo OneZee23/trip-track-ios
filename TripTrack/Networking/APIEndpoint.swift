@@ -31,6 +31,10 @@ enum APIEndpoint {
     static let socialShare      = "/social/share"
     static let socialSearch     = "/social/search"
     static let socialSuggested  = "/social/suggested"
+    static let socialBlock      = "/social/block"
+    static let socialUnblock    = "/social/unblock"
+    static let socialBlocked    = "/social/blocked"
+    static let socialReport     = "/social/report"
 
     static func userProfile(_ id: String) -> String { "/users/\(id)/profile" }
 }

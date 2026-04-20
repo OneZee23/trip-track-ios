@@ -16,6 +16,9 @@ struct PublicProfileView: View {
     @State private var isTogglingFollow = false
     @State private var loadError: String?
     @State private var followListMode: FollowListMode?
+    @State private var isBlocked = false
+    @State private var showBlockConfirm = false
+    @State private var showReport = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -45,6 +48,31 @@ struct PublicProfileView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(c.text)
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        Haptics.tap()
+                        showReport = true
+                    } label: {
+                        Label(isRu ? "Пожаловаться" : "Report", systemImage: "flag")
+                    }
+                    Button(role: .destructive) {
+                        Haptics.tap()
+                        showBlockConfirm = true
+                    } label: {
+                        Label(
+                            isBlocked
+                                ? (isRu ? "Разблокировать" : "Unblock")
+                                : (isRu ? "Заблокировать" : "Block"),
+                            systemImage: isBlocked ? "hand.raised.slash" : "hand.raised.fill"
+                        )
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(c.text)
+                }
+            }
         }
         .task { await loadProfile() }
         .refreshable { await loadProfile() }
@@ -55,6 +83,34 @@ struct PublicProfileView: View {
             if let m = followListMode {
                 FollowListView(accountId: accountId, mode: m)
             }
+        }
+        .sheet(isPresented: $showReport) {
+            ReportSheet(target: .user(accountId))
+                .environmentObject(lang)
+        }
+        .alert(
+            isBlocked
+                ? (lang.language == .ru ? "Разблокировать пользователя?" : "Unblock this user?")
+                : (lang.language == .ru ? "Заблокировать пользователя?" : "Block this user?"),
+            isPresented: $showBlockConfirm
+        ) {
+            Button(lang.language == .ru ? "Отмена" : "Cancel", role: .cancel) {}
+            Button(
+                isBlocked
+                    ? (lang.language == .ru ? "Разблокировать" : "Unblock")
+                    : (lang.language == .ru ? "Заблокировать" : "Block"),
+                role: .destructive
+            ) {
+                Task { await toggleBlock() }
+            }
+        } message: {
+            Text(isBlocked
+                 ? (lang.language == .ru
+                    ? "Пользователь снова сможет видеть ваши публичные поездки и подписываться на вас."
+                    : "This user will again be able to see your public trips and follow you.")
+                 : (lang.language == .ru
+                    ? "Пользователь не увидит ваш контент, а его поездки не появятся в вашей ленте. Вы оба автоматически отписываетесь друг от друга."
+                    : "This user won't see your content, and their trips won't appear in your feed. Any follows between you will be removed."))
         }
     }
 
@@ -349,6 +405,26 @@ struct PublicProfileView: View {
             profileLog.error("profile load failed: \(String(describing: e))")
         } catch {
             loadError = error.localizedDescription
+        }
+    }
+
+    private func toggleBlock() async {
+        let wasBlocked = isBlocked
+        isBlocked = !wasBlocked
+        do {
+            let req = SocialBlockRequest(targetAccountId: accountId)
+            let endpoint = wasBlocked ? APIEndpoint.socialUnblock : APIEndpoint.socialBlock
+            let _: SocialBlockResponse = try await APIClient.shared.post(endpoint, body: req)
+            if !wasBlocked {
+                // After blocking, clear isFollowing both ways (backend already does this)
+                if var p = profile {
+                    p = p.with(isFollowing: false, followerCount: p.followerCount)
+                    profile = p
+                }
+            }
+        } catch {
+            isBlocked = wasBlocked
+            profileLog.error("block toggle failed: \(error.localizedDescription)")
         }
     }
 
