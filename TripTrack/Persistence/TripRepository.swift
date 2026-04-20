@@ -23,6 +23,19 @@ protocol TripRepository {
     func addPhoto(to tripId: UUID, image: UIImage, caption: String?) -> TripPhoto?
     func deletePhoto(id: UUID, from tripId: UUID)
     func markSynced(tripId: UUID, conflictVersion: Int)
+
+    // MARK: Sync
+    func fetchEntity(id: UUID) -> TripEntity?
+    func markSynced(tripId: UUID, conflictVersion: Int, serverCreatedAt: Date)
+    func markAllPendingUpload()
+    func applyRemoteTrip(_ payload: TripSyncPayload)
+    func applyRemoteVehicle(_ payload: VehicleSyncPayload)
+    func applyRemotePhoto(_ payload: PhotoSyncPayload)
+    func applyRemoteSettings(_ payload: SettingsSyncPayload)
+    func deleteTripHard(id: UUID)
+    func deleteVehicleHard(id: UUID)
+    func deletePhotoHard(id: UUID)
+    func markPhotoUploaded(photoId: UUID, remoteURL: String?, thumbnailURL: String, uploadStatus: PhotoUploadStatus)
 }
 
 // MARK: - CoreData Implementation
@@ -212,13 +225,21 @@ final class CoreDataTripRepository: TripRepository {
         persistenceController.save()
     }
 
+    func markSynced(tripId: UUID, conflictVersion: Int, serverCreatedAt: Date) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        entity.syncStatus = SyncStatus.synced.rawValue
+        entity.conflictVersion = Int32(conflictVersion)
+        entity.serverCreatedAt = serverCreatedAt
+        saveIfNeeded()
+    }
+
     // MARK: - Private
 
     private var completedTripPredicate: NSPredicate {
         NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
     }
 
-    private func fetchEntity(id: UUID) -> TripEntity? {
+    func fetchEntity(id: UUID) -> TripEntity? {
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         request.fetchLimit = 1
@@ -267,5 +288,197 @@ final class CoreDataTripRepository: TripRepository {
             vehicleId: entity.vehicleId, fuelCurrency: entity.fuelCurrency,
             previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds
         )
+    }
+
+    // MARK: - Sync Helpers
+
+    func markAllPendingUpload() {
+        let trips = NSBatchUpdateRequest(entityName: "TripEntity")
+        trips.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
+        _ = try? context.execute(trips)
+
+        let vehicles = NSBatchUpdateRequest(entityName: "VehicleEntity")
+        vehicles.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
+        _ = try? context.execute(vehicles)
+
+        let photos = NSBatchUpdateRequest(entityName: "TripPhotoEntity")
+        photos.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
+        _ = try? context.execute(photos)
+
+        let settings = NSBatchUpdateRequest(entityName: "UserSettingsEntity")
+        settings.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
+        _ = try? context.execute(settings)
+
+        context.refreshAllObjects()
+    }
+
+    func applyRemoteTrip(_ p: TripSyncPayload) {
+        let entity = fetchEntity(id: p.id) ?? TripEntity(context: context)
+        if entity.id != nil,
+           entity.syncStatus == SyncStatus.pendingUpload.rawValue,
+           Int(entity.conflictVersion) >= p.conflictVersion {
+            return
+        }
+        entity.id = p.id
+        entity.title = p.title
+        entity.tripDescription = p.description
+        entity.startDate = p.startDate
+        entity.endDate = p.endDate
+        entity.distance = p.distance
+        entity.maxSpeed = p.maxSpeed
+        entity.averageSpeed = p.averageSpeed
+        entity.fuelUsed = p.fuelUsed
+        entity.elevation = p.elevation
+        entity.region = p.region
+        entity.isPrivate = p.isPrivate
+        entity.vehicleId = p.vehicleId
+        entity.fuelCurrency = p.fuelCurrency
+        entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
+        entity.badgesJSON = p.badgesJson
+        entity.xpEarned = Int32(p.xpEarned ?? 0)
+        entity.conflictVersion = Int32(p.conflictVersion)
+        entity.lastModifiedAt = p.lastModifiedAt
+        entity.syncStatus = SyncStatus.synced.rawValue
+
+        if let existingTPs = entity.trackPoints as? Set<TrackPointEntity> {
+            for tp in existingTPs { context.delete(tp) }
+        }
+        for pt in p.trackPoints {
+            let tpe = TrackPointEntity(context: context)
+            tpe.id = pt.id
+            tpe.latitude = pt.latitude
+            tpe.longitude = pt.longitude
+            tpe.altitude = pt.altitude
+            tpe.speed = pt.speed
+            tpe.course = pt.course
+            tpe.horizontalAccuracy = pt.horizontalAccuracy
+            tpe.timestamp = pt.timestamp
+            tpe.isInterpolated = pt.isInterpolated
+            tpe.trip = entity
+        }
+
+        if let localPhotos = entity.photos?.array as? [TripPhotoEntity] {
+            let serverIds = Set((p.photos ?? []).map { $0.id })
+            for pe in localPhotos {
+                guard let pid = pe.id else { continue }
+                if pe.uploadStatus == PhotoUploadStatus.localOnly.rawValue {
+                    continue
+                }
+                if !serverIds.contains(pid) {
+                    context.delete(pe)
+                }
+            }
+        }
+
+        saveIfNeeded()
+    }
+
+    func applyRemoteVehicle(_ p: VehicleSyncPayload) {
+        let req: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "id == %@", p.id as CVarArg)
+        req.fetchLimit = 1
+        let entity = (try? context.fetch(req).first) ?? VehicleEntity(context: context)
+        entity.id = p.id
+        entity.name = p.name
+        entity.avatarEmoji = p.avatarEmoji
+        entity.odometerKm = p.odometerKm
+        entity.vehicleLevel = Int32(p.level)
+        entity.stickersJSON = p.stickersJson
+        entity.cityConsumption = p.cityConsumption
+        entity.highwayConsumption = p.highwayConsumption
+        entity.fuelPrice = p.fuelPrice
+        entity.conflictVersion = Int32(p.conflictVersion)
+        entity.lastModifiedAt = p.lastModifiedAt
+        entity.syncStatus = SyncStatus.synced.rawValue
+        saveIfNeeded()
+    }
+
+    func applyRemotePhoto(_ p: PhotoSyncPayload) {
+        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "id == %@", p.id as CVarArg)
+        req.fetchLimit = 1
+        let entity = (try? context.fetch(req).first) ?? TripPhotoEntity(context: context)
+        entity.id = p.id
+        if let trip = fetchEntity(id: p.tripId) {
+            entity.trip = trip
+        }
+        entity.filename = p.filename
+        entity.caption = p.caption
+        entity.timestamp = p.timestamp
+        entity.remoteURL = p.remoteUrl
+        entity.thumbnailURL = p.thumbnailUrl
+        entity.sortOrder = Int16(p.sortOrder)
+        entity.uploadStatus = p.uploadStatus
+        entity.lastModifiedAt = p.lastModifiedAt
+        entity.syncStatus = SyncStatus.synced.rawValue
+        saveIfNeeded()
+    }
+
+    func applyRemoteSettings(_ p: SettingsSyncPayload) {
+        let req: NSFetchRequest<UserSettingsEntity> = UserSettingsEntity.fetchRequest()
+        req.fetchLimit = 1
+        let entity = (try? context.fetch(req).first) ?? UserSettingsEntity(context: context)
+        entity.id = p.id
+        entity.avatarEmoji = p.avatarEmoji
+        entity.themeMode = p.themeMode
+        entity.language = p.language
+        entity.distanceUnit = p.distanceUnit
+        entity.volumeUnit = p.volumeUnit
+        entity.fuelConsumption = p.fuelConsumption
+        entity.fuelPrice = p.fuelPrice
+        entity.fuelCurrency = p.fuelCurrency
+        entity.selectedVehicleId = p.selectedVehicleId
+        entity.profileLevel = Int32(p.profileLevel)
+        entity.profileXP = Int64(p.profileXp)
+        entity.currentStreak = Int32(p.currentStreak)
+        entity.bestStreak = Int32(p.bestStreak)
+        entity.lastTripDate = p.lastTripDate
+        entity.conflictVersion = Int32(p.conflictVersion)
+        entity.lastModifiedAt = p.lastModifiedAt
+        entity.syncStatus = SyncStatus.synced.rawValue
+        saveIfNeeded()
+    }
+
+    func deleteTripHard(id: UUID) {
+        if let e = fetchEntity(id: id) {
+            context.delete(e)
+            saveIfNeeded()
+        }
+    }
+
+    func deleteVehicleHard(id: UUID) {
+        let req: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        if let e = try? context.fetch(req).first {
+            context.delete(e)
+            saveIfNeeded()
+        }
+    }
+
+    func deletePhotoHard(id: UUID) {
+        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        if let e = try? context.fetch(req).first {
+            context.delete(e)
+            saveIfNeeded()
+        }
+    }
+
+    func markPhotoUploaded(photoId: UUID, remoteURL: String?, thumbnailURL: String, uploadStatus: PhotoUploadStatus) {
+        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "id == %@", photoId as CVarArg)
+        if let e = try? context.fetch(req).first {
+            e.thumbnailURL = thumbnailURL
+            if let r = remoteURL { e.remoteURL = r }
+            e.uploadStatus = uploadStatus.rawValue
+            e.lastModifiedAt = Date()
+            saveIfNeeded()
+        }
+    }
+
+    private func saveIfNeeded() {
+        if context.hasChanges {
+            try? context.save()
+        }
     }
 }
