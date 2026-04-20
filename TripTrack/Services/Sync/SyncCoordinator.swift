@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import UIKit
+import CoreData
 
 @MainActor
 final class SyncCoordinator {
@@ -14,6 +15,10 @@ final class SyncCoordinator {
     private var isPulling = false
 
     func start() {
+        // Recovery: re-enqueue any local entities marked pendingUpload but not in the in-memory queue
+        // (happens after app kill mid-sync — queue state is lost, but syncStatus on CoreData persists)
+        recoverPendingEntities()
+
         NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in Task { await self?.runFullSync() } }
             .store(in: &cancellables)
@@ -76,6 +81,51 @@ final class SyncCoordinator {
     private func enqueuePendingOriginals() {
         for id in PhotoStorageService.pendingOriginalUploads() {
             SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: id, action: .upload))
+        }
+    }
+
+    /// After app relaunch, CoreData may contain entities with syncStatus=pendingUpload
+    /// that weren't re-enqueued (SyncQueue is in-memory, gets wiped on process kill).
+    /// Scan once on start and re-enqueue them.
+    private func recoverPendingEntities() {
+        let ctx = PersistenceController.shared.container.viewContext
+        let pending = SyncStatus.pendingUpload.rawValue
+        let pendingDelete = SyncStatus.pendingDelete.rawValue
+
+        let tripReq: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        tripReq.predicate = NSPredicate(format: "syncStatus == %d OR syncStatus == %d", pending, pendingDelete)
+        let trips = (try? ctx.fetch(tripReq)) ?? []
+        for t in trips {
+            guard let id = t.id else { continue }
+            let action: SyncOperation.Action = t.syncStatus == pendingDelete ? .delete : .upload
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: action))
+        }
+
+        let vehReq: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        vehReq.predicate = NSPredicate(format: "syncStatus == %d", pending)
+        let vehicles = (try? ctx.fetch(vehReq)) ?? []
+        for v in vehicles {
+            guard let id = v.id else { continue }
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
+        }
+
+        let photoReq: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        photoReq.predicate = NSPredicate(format: "syncStatus == %d", pending)
+        let photos = (try? ctx.fetch(photoReq)) ?? []
+        for p in photos {
+            guard let id = p.id else { continue }
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: id, action: .upload))
+        }
+
+        let setReq: NSFetchRequest<UserSettingsEntity> = UserSettingsEntity.fetchRequest()
+        setReq.predicate = NSPredicate(format: "syncStatus == %d", pending)
+        if let s = (try? ctx.fetch(setReq))?.first, let id = s.id {
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .settings, entityId: id, action: .upload))
+        }
+
+        let total = trips.count + vehicles.count + photos.count
+        if total > 0 {
+            print("[SyncCoordinator] recovered \(total) pending entities after relaunch")
         }
     }
 
