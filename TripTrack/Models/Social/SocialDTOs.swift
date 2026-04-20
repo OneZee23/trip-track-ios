@@ -165,3 +165,62 @@ struct SocialProfile: Codable, Hashable {
 enum ReactionEmoji {
     static let all: [String] = ["👍", "🔥", "❤️", "🏆", "😲"]
 }
+
+// MARK: - Block / Report
+
+struct SocialBlockRequest: Codable {
+    let targetAccountId: UUID
+}
+
+struct SocialBlockResponse: Codable {
+    let blocked: Bool
+}
+
+struct SocialBlockedListResponse: Codable {
+    let users: [SocialAuthor]
+}
+
+enum ReportReason: String, Codable, CaseIterable, Identifiable {
+    case spam
+    case harassment
+    case hate
+    case nudity
+    case violence
+    case illegal
+    case impersonation
+    case other
+
+    var id: String { rawValue }
+
+    func label(_ lang: LanguageManager.Language) -> String {
+        switch (self, lang) {
+        case (.spam, .ru): return "Спам / реклама"
+        case (.spam, .en): return "Spam or advertising"
+        case (.harassment, .ru): return "Домогательства / травля"
+        case (.harassment, .en): return "Harassment or bullying"
+        case (.hate, .ru): return "Разжигание ненависти"
+        case (.hate, .en): return "Hate speech"
+        case (.nudity, .ru): return "Обнажённость / сексуальный контент"
+        case (.nudity, .en): return "Nudity or sexual content"
+        case (.violence, .ru): return "Насилие или угрозы"
+        case (.violence, .en): return "Violence or threats"
+        case (.illegal, .ru): return "Незаконные действия"
+        case (.illegal, .en): return "Illegal activity"
+        case (.impersonation, .ru): return "Выдаёт себя за другое лицо"
+        case (.impersonation, .en): return "Impersonation"
+        case (.other, .ru): return "Другое"
+        case (.other, .en): return "Something else"
+        }
+    }
+}
+
+struct SocialReportRequest: Codable {
+    let targetType: String   // "user" | "trip"
+    let targetId: UUID
+    let reason: String
+    let notes: String?
+}
+
+struct SocialReportResponse: Codable {
+    let reported: Bool
+}

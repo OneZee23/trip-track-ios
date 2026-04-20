@@ -11,6 +11,7 @@ struct SocialFeedCardView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @State private var showReport = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -107,6 +108,24 @@ struct SocialFeedCardView: View {
                 .padding(.vertical, 4)
                 .background(c.cardAlt, in: Capsule())
             }
+
+            Menu {
+                Button {
+                    Haptics.tap()
+                    showReport = true
+                } label: {
+                    Label(isRu ? "Пожаловаться" : "Report", systemImage: "flag")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14))
+                    .foregroundStyle(c.textTertiary)
+                    .frame(width: 28, height: 28)
+            }
+        }
+        .sheet(isPresented: $showReport) {
+            ReportSheet(target: .trip(trip.id))
+                .environmentObject(lang)
         }
     }
 
