@@ -92,7 +92,7 @@
 
 В поле **Privacy Policy URL**:
 - После публикации docs на GitHub Pages: `https://onezee23.github.io/trip-track-ios/privacy-policy.html`
-- Если настроишь custom domain (triptrack.app): `https://triptrack.app/privacy`
+- Если настроишь custom domain (trip-track.app): `https://trip-track.app/privacy`
 
 ## Что ещё проверить перед сабмитом
 
