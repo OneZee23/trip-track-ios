@@ -1,5 +1,7 @@
 import Foundation
 import AuthenticationServices
+import CoreData
+import UIKit
 
 @MainActor
 final class AuthService: ObservableObject {
@@ -9,6 +11,9 @@ final class AuthService: ObservableObject {
     @Published private(set) var userName: String?
     @Published private(set) var userEmail: String?
     private(set) var userIdentifier: String?
+
+    @Published private(set) var isAuthenticating = false
+    @Published var lastAuthError: APIError?
 
     private enum Keys {
         static let userIdentifier = "com.triptrack.auth.userIdentifier"
@@ -24,7 +29,7 @@ final class AuthService: ObservableObject {
 
     // MARK: - Handle Authorization (called from SignInWithAppleButton onCompletion)
 
-    func handleAuthorization(_ authorization: ASAuthorization) {
+    func handleAuthorization(_ authorization: ASAuthorization) async {
         guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else { return }
         let userId = credential.user
 
@@ -54,26 +59,90 @@ final class AuthService: ObservableObject {
             userEmail = KeychainHelper.loadString(key: Keys.userEmail)
         }
 
-        if let tokenData = credential.identityToken {
-            try? KeychainHelper.save(tokenData, for: Keys.identityToken)
+        guard let tokenData = credential.identityToken else {
+            lastAuthError = .invalidAppleToken("nil")
+            return
+        }
+        try? KeychainHelper.save(tokenData, for: Keys.identityToken)
+        try? KeychainHelper.saveString("true", for: Keys.isSignedIn)
+
+        // Call server /auth/login
+        isAuthenticating = true
+        defer { isAuthenticating = false }
+
+        do {
+            let body = LoginRequest(
+                identityToken: tokenData.base64EncodedString(),
+                localUserId: SettingsManager.shared.localUserId.uuidString,
+                deviceName: UIDevice.current.name
+            )
+            let response: LoginResponse = try await APIClient.shared.post(
+                APIEndpoint.login, body: body, requiresAuth: false)
+            TokenStore.shared.set(accessToken: response.accessToken, refreshToken: response.refreshToken)
+            TokenStore.shared.setAccountId(response.account.id)
+            isSignedIn = true
+            await performFirstSync()
+        } catch let e as APIError {
+            lastAuthError = e
+        } catch {
+            lastAuthError = .transport(error.localizedDescription)
+        }
+    }
+
+    // MARK: - First Sync
+
+    private func performFirstSync() async {
+        let repo: TripRepository = CoreDataTripRepository()
+        repo.markAllPendingUpload()
+
+        for trip in repo.fetchAllTrips() {
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: trip.id, action: .upload))
+        }
+        for vehicle in SettingsManager.shared.vehicles {
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: vehicle.id, action: .upload))
+        }
+        SyncEnqueuer.enqueue(SyncOperation(
+            entityType: .settings, entityId: SettingsManager.shared.localUserId, action: .upload))
+
+        // Photos that are pending upload (never sent to R2)
+        let ctx = PersistenceController.shared.container.viewContext
+        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "uploadStatus == %d", PhotoUploadStatus.localOnly.rawValue)
+        if let photos = try? ctx.fetch(req) {
+            for p in photos {
+                if let pid = p.id {
+                    SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: pid, action: .upload))
+                }
+            }
         }
 
-        try? KeychainHelper.saveString("true", for: Keys.isSignedIn)
-        isSignedIn = true
+        await SyncCoordinator.shared.runFullSync()
     }
 
     // MARK: - Sign Out
 
-    func signOut() {
+    func signOut() async {
+        // Best-effort logout — ignore error
+        let _: EmptyResponse? = try? await APIClient.shared.post(APIEndpoint.logout, body: EmptyRequest())
+        TokenStore.shared.clear()
         KeychainHelper.delete(key: Keys.identityToken)
         KeychainHelper.delete(key: Keys.isSignedIn)
-        // Keep userIdentifier, userName, userEmail in Keychain for re-sign-in
 
         isSignedIn = false
         userName = nil
         userEmail = nil
         userIdentifier = nil
         SyncQueue.shared.clearAll()
+
+        // Reset all local entities so next sign-in re-pushes
+        let repo: TripRepository = CoreDataTripRepository()
+        repo.markAllPendingUpload()
+    }
+
+    // MARK: - Force Sign Out (sync wrapper for APIClient fallback)
+
+    func forceSignOut() {
+        Task { await signOut() }
     }
 
     // MARK: - Auth Status Check (called on app launch)
@@ -91,7 +160,7 @@ final class AuthService: ObservableObject {
                 case .authorized:
                     if self?.isSignedIn != true { self?.isSignedIn = true }
                 case .revoked, .notFound:
-                    self?.signOut()
+                    await self?.signOut()
                 default:
                     break
                 }

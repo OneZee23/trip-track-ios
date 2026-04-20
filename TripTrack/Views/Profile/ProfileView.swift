@@ -142,10 +142,19 @@ struct ProfileView: View {
         ) {
             Button(AppStrings.cancel(lang.language), role: .cancel) {}
             Button(AppStrings.signOut(lang.language), role: .destructive) {
-                auth.signOut()
+                Task { await auth.signOut() }
             }
         } message: {
             Text(AppStrings.signOutConfirmMessage(lang.language))
+        }
+        .alert("Sign in failed",
+               isPresented: Binding(
+                 get: { auth.lastAuthError != nil },
+                 set: { if !$0 { auth.lastAuthError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(String(describing: auth.lastAuthError ?? .transport("unknown")))
         }
     }
 
@@ -285,19 +294,27 @@ struct ProfileView: View {
                 .foregroundStyle(c.textSecondary)
         }
 
-        SignInWithAppleButton(.signIn) { request in
-            request.requestedScopes = [.fullName, .email]
-        } onCompletion: { result in
-            switch result {
-            case .success(let authorization):
-                auth.handleAuthorization(authorization)
-            case .failure:
-                break
+        ZStack {
+            SignInWithAppleButton(.signIn) { request in
+                request.requestedScopes = [.fullName, .email]
+            } onCompletion: { result in
+                switch result {
+                case .success(let authorization):
+                    Task { await auth.handleAuthorization(authorization) }
+                case .failure:
+                    break
+                }
+            }
+            .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
+            .frame(height: 44)
+            .cornerRadius(10)
+            .opacity(auth.isAuthenticating ? 0.5 : 1.0)
+            .disabled(auth.isAuthenticating)
+
+            if auth.isAuthenticating {
+                ProgressView()
             }
         }
-        .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
-        .frame(height: 44)
-        .cornerRadius(10)
     }
 
     // MARK: - Signed In Header
