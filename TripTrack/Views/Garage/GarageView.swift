@@ -77,13 +77,7 @@ struct GarageView: View {
             .navigationTitle(isRu ? "Гараж" : "Garage")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(c.textSecondary)
-                    }
-                }
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
             .toolbarBackground(c.bg, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -328,13 +322,7 @@ struct GarageView: View {
             .navigationTitle(isRu ? "Новый автомобиль" : "New vehicle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showAddVehicle = false } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(c.textSecondary)
-                    }
-                }
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
         }
         .presentationDetents([.medium])

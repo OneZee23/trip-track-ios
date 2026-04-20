@@ -92,13 +92,7 @@ struct BadgesView: View {
             .navigationTitle(AppStrings.badges(lang.language))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(c.textSecondary)
-                    }
-                }
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
             .toolbarBackground(c.bg, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)

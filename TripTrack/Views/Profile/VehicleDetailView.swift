@@ -61,15 +61,7 @@ struct VehicleDetailView: View {
                 .navigationTitle(isRu ? "Мой автомобиль" : "My Vehicle")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(c.textSecondary)
-                                .frame(width: 30, height: 30)
-                                .background(c.cardAlt, in: Circle())
-                        }
-                    }
+                    ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
                 }
             }
         )

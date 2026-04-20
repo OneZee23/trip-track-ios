@@ -177,9 +177,7 @@ struct DevMenuView: View {
             .navigationTitle("Dev Menu")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
         }
     }
