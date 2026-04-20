@@ -6,6 +6,7 @@ import MapKit
 struct MapSnapshotPreview: View {
     let coordinates: [CLLocationCoordinate2D]
     let tripId: UUID
+    var height: CGFloat = 80
 
     @Environment(\.colorScheme) private var scheme
     @State private var snapshot: UIImage?
@@ -32,7 +33,7 @@ struct MapSnapshotPreview: View {
     }
 
     private var cacheKey: String {
-        "\(tripId.uuidString)-\(scheme == .dark ? "d" : "l")-v3"
+        "\(tripId.uuidString)-\(scheme == .dark ? "d" : "l")-h\(Int(height))-v3"
     }
 
     @MainActor
@@ -52,13 +53,15 @@ struct MapSnapshotPreview: View {
         let region = Self.mapRegion(for: coordinates)
         let scale = UIScreen.main.scale
 
+        let snapshotSize = CGSize(width: 340, height: height)
+        let isDark = scheme == .dark
         let image = await Task.detached(priority: .userInitiated) {
             await Self.renderSnapshot(
                 coordinates: coordinates,
                 region: region,
-                size: CGSize(width: 340, height: 80),
+                size: snapshotSize,
                 scale: scale,
-                isDark: scheme == .dark
+                isDark: isDark
             )
         }.value
 
