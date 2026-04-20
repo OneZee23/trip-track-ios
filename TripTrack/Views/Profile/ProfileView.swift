@@ -494,30 +494,28 @@ struct ProfileView: View {
         .surfaceCard(cornerRadius: 16)
     }
 
-    // MARK: - Avatar Card (Profile)
+    // MARK: - Avatar Card (Profile, hero-style)
 
     private func avatarCard(_ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             HStack {
-                Label {
-                    Text(lang.language == .ru ? "Аватар" : "Avatar")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(c.textSecondary)
-                } icon: {
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(AppTheme.accent)
-                }
                 Spacer()
                 editAvatarButton(c)
             }
+            .padding(.bottom, -14) // pull the edit pill up so it doesn't eat hero space
 
-            Text(selectedAvatar)
-                .font(.system(size: 48))
-                .frame(width: 72, height: 72)
-                .background(Circle().fill(c.cardAlt))
-                .scaleEffect(avatarBounce ? 1.15 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.5), value: avatarBounce)
+            ZStack(alignment: .bottomTrailing) {
+                Text(selectedAvatar)
+                    .font(.system(size: 56))
+                    .frame(width: 96, height: 96)
+                    .background(Circle().fill(c.cardAlt))
+                    .overlay(Circle().stroke(AppTheme.accent.opacity(0.15), lineWidth: 2))
+                    .scaleEffect(avatarBounce ? 1.12 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: avatarBounce)
+
+                levelPill
+                    .offset(x: 4, y: 4)
+            }
 
             if auth.isSignedIn {
                 signedInHeader(c)
@@ -530,20 +528,35 @@ struct ProfileView: View {
             }
         }
         .padding(16)
-        .surfaceCard(cornerRadius: 16)
+        .surfaceCard(cornerRadius: 18)
+    }
+
+    private var levelPill: some View {
+        Text("LVL \(settings.profileLevel)")
+            .font(.custom("PressStart2P-Regular", size: 9))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(AppTheme.accent)
+                    .shadow(color: AppTheme.accent.opacity(0.3), radius: 4, y: 2)
+            )
     }
 
     // MARK: - Guest Header
 
     @ViewBuilder
     private func guestHeader(_ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Text(AppStrings.guest(lang.language))
-                .font(.system(size: 17, weight: .bold))
+                .font(.system(size: 22, weight: .heavy))
+                .tracking(-0.3)
                 .foregroundStyle(c.text)
             Text(AppStrings.signInToSync(lang.language))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
         }
 
         ZStack {
@@ -578,16 +591,19 @@ struct ProfileView: View {
 
     @ViewBuilder
     private func signedInHeader(_ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Text(auth.userName ?? AppStrings.signedIn(lang.language))
-                .font(.system(size: 17, weight: .bold))
+                .font(.system(size: 22, weight: .heavy))
+                .tracking(-0.3)
                 .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
             if let email = auth.userEmail {
                 Text(email)
-                    .font(.system(size: 13))
-                    .foregroundStyle(c.textSecondary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(c.textTertiary)
             }
             syncStatusIndicator(c)
+                .padding(.top, 4)
         }
     }
 
