@@ -22,9 +22,9 @@
 
 ### 🔨 Твоя оффлайн-работа перед beta
 
-1. **Email для контакта по приватности** — `privacy@triptrack.app` сейчас заглушка. Варианты:
-   - Купить домен `triptrack.app` (~$15/год на Namecheap/Cloudflare) → настроить email forwarder → `privacy@triptrack.app` пересылает тебе
-   - Заменить все упоминания `privacy@triptrack.app` на свой gmail (быстро, но менее профессионально и светит личный email)
+1. **Email для контакта по приватности** — `privacy@trip-track.app` сейчас заглушка. Варианты:
+   - Купить домен `trip-track.app` (~$15/год на Namecheap/Cloudflare) → настроить email forwarder → `privacy@trip-track.app` пересылает тебе
+   - Заменить все упоминания `privacy@trip-track.app` на свой gmail (быстро, но менее профессионально и светит личный email)
    - Сделать отдельный Gmail `triptrack.privacy@gmail.com` (бесплатно, компромисс)
    - **Рекомендую**: купить домен (пригодится для сайта и брендинга).
 
