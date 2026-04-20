@@ -128,10 +128,26 @@ struct OnboardingView: View {
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                 }
+
+                consentText(c)
+                    .padding(.top, 8)
             }
             .padding(.horizontal, 32)
             .padding(.bottom, 48)
         }
+    }
+
+    // MARK: - Consent Text (Terms + Privacy links)
+
+    private func consentText(_ c: AppTheme.Colors) -> some View {
+        let termsURL = AppConfig.termsURL(lang.language).absoluteString
+        let privacyURL = AppConfig.privacyPolicyURL(lang.language).absoluteString
+        let text = "\(AppStrings.onboardingConsent(lang.language)) [\(AppStrings.termsOfService(lang.language))](\(termsURL)) \(AppStrings.and(lang.language)) [\(AppStrings.privacyPolicy(lang.language))](\(privacyURL))"
+        return Text(.init(text))
+            .font(.system(size: 12))
+            .foregroundStyle(c.textTertiary)
+            .tint(AppTheme.accent)
+            .multilineTextAlignment(.center)
     }
 
     // MARK: - Reusable Page Template

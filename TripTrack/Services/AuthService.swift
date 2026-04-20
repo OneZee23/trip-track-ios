@@ -147,6 +147,31 @@ final class AuthService: ObservableObject {
         repo.markAllPendingUpload()
     }
 
+    // MARK: - Delete Account
+
+    /// Deletes the account on the server (cascades DB + R2 photo cleanup),
+    /// then clears tokens locally. Local CoreData (trips/vehicles/settings) is preserved —
+    /// user returns to guest mode and can continue using the app offline.
+    func deleteAccount() async throws {
+        let _: EmptyResponse = try await APIClient.shared.post(
+            APIEndpoint.deleteAccount, body: EmptyRequest())
+
+        TokenStore.shared.clear()
+        KeychainHelper.delete(key: Keys.identityToken)
+        KeychainHelper.delete(key: Keys.isSignedIn)
+        KeychainHelper.delete(key: Keys.userIdentifier)
+        KeychainHelper.delete(key: Keys.userName)
+        KeychainHelper.delete(key: Keys.userEmail)
+
+        isSignedIn = false
+        userName = nil
+        userEmail = nil
+        userIdentifier = nil
+        SyncQueue.shared.clearAll()
+
+        authLog.log("Account deleted, returned to guest mode")
+    }
+
     // MARK: - Force Sign Out (sync wrapper for APIClient fallback)
 
     func forceSignOut() {
