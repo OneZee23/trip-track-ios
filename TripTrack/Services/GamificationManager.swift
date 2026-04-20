@@ -103,6 +103,13 @@ final class GamificationManager {
 
         persistenceController.save()
 
+        // Enqueue sync for updated trip and settings
+        let tripId = trip.id
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+        }
+        SettingsManager.shared.scheduleSettingsSync()
+
         // Badge evaluation: milestones + repeatable badges
         let badgeResult = BadgeManager.evaluateBadgesForTrip(trip, allTrips: allTrips)
 

@@ -47,6 +47,18 @@ final class SettingsManager: ObservableObject {
     private var isLoadingAutoRecord = false
     private let persistenceController: PersistenceController
     private var settingsEntity: UserSettingsEntity?
+    private var settingsEnqueueDebouncer: Timer?
+
+    func scheduleSettingsSync() {
+        settingsEnqueueDebouncer?.invalidate()
+        settingsEnqueueDebouncer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                SyncEnqueuer.enqueue(SyncOperation(
+                    entityType: .settings, entityId: self.localUserId, action: .upload))
+            }
+        }
+    }
 
     init(persistenceController: PersistenceController = .shared) {
         self.persistenceController = persistenceController
@@ -149,6 +161,7 @@ final class SettingsManager: ObservableObject {
         entity.fuelPrice = fuelPrice
         entity.selectedVehicleId = selectedVehicleId
         persistenceController.save()
+        scheduleSettingsSync()
     }
 
     // MARK: - Vehicles
@@ -203,7 +216,8 @@ final class SettingsManager: ObservableObject {
     func addVehicle(name: String, emoji: String) {
         let context = persistenceController.container.viewContext
         let entity = VehicleEntity(context: context)
-        entity.id = UUID()
+        let vehicleId = UUID()
+        entity.id = vehicleId
         entity.name = name
         entity.avatarEmoji = emoji
         entity.odometerKm = 0
@@ -211,6 +225,9 @@ final class SettingsManager: ObservableObject {
         entity.createdAt = Date()
         persistenceController.save()
         loadVehicles()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: vehicleId, action: .upload))
+        }
     }
 
     func deleteVehicle(id: UUID) {
@@ -222,6 +239,9 @@ final class SettingsManager: ObservableObject {
             context.delete(entity)
             persistenceController.save()
             loadVehicles()
+            Task { @MainActor in
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .delete))
+            }
         }
     }
 
@@ -258,6 +278,9 @@ final class SettingsManager: ObservableObject {
             entity.name = name
             persistenceController.save()
             loadVehicles()
+            Task { @MainActor in
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+            }
         }
     }
 
@@ -269,6 +292,9 @@ final class SettingsManager: ObservableObject {
             entity.avatarEmoji = emoji
             persistenceController.save()
             loadVehicles()
+            Task { @MainActor in
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+            }
         }
     }
 
@@ -282,6 +308,9 @@ final class SettingsManager: ObservableObject {
             entity.fuelPrice = price
             persistenceController.save()
             loadVehicles()
+            Task { @MainActor in
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+            }
         }
     }
 

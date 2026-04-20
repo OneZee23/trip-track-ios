@@ -145,6 +145,9 @@ final class CoreDataTripRepository: TripRepository {
         entity.syncStatus = SyncStatus.pendingDelete.rawValue
         entity.lastModifiedAt = Date()
         persistenceController.save()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .delete))
+        }
     }
 
     func purgeSoftDeletedTrips() {
@@ -183,6 +186,9 @@ final class CoreDataTripRepository: TripRepository {
             entity.badgesJSON = json
             entity.lastModifiedAt = Date()
             persistenceController.save()
+            Task { @MainActor in
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+            }
         }
     }
 
@@ -202,7 +208,12 @@ final class CoreDataTripRepository: TripRepository {
         entity.lastModifiedAt = Date()
         persistenceController.save()
 
-        return TripPhoto(id: photoId, filename: filename, caption: caption, timestamp: Date())
+        let photo = TripPhoto(id: photoId, filename: filename, caption: caption, timestamp: Date())
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: photoId, action: .upload))
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+        }
+        return photo
     }
 
     func deletePhoto(id: UUID, from tripId: UUID) {
@@ -215,6 +226,10 @@ final class CoreDataTripRepository: TripRepository {
             }
             context.delete(entity)
             persistenceController.save()
+            Task { @MainActor in
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: id, action: .delete))
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+            }
         }
     }
 
