@@ -131,7 +131,7 @@ struct DebugLogsView: View {
                         }
                         Text(isExporting
                              ? (isRu ? "Собираю…" : "Collecting…")
-                             : (isRu ? "Собрать логи за 24ч" : "Collect last 24h logs"))
+                             : (isRu ? "Собрать логи за 48ч" : "Collect last 48h logs"))
                     }
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
