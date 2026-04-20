@@ -9,6 +9,7 @@ struct ProfileView: View {
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
+    @ObservedObject private var syncQueue = SyncQueue.shared
 
     // Profile avatar
     @State private var selectedAvatar: String = "😎"
@@ -297,12 +298,17 @@ struct ProfileView: View {
         ZStack {
             SignInWithAppleButton(.signIn) { request in
                 request.requestedScopes = [.fullName, .email]
+                print("[SignIn] → request scopes, bundle=\(Bundle.main.bundleIdentifier ?? "?")")
             } onCompletion: { result in
                 switch result {
                 case .success(let authorization):
+                    print("[SignIn] ✅ got credential")
                     Task { await auth.handleAuthorization(authorization) }
-                case .failure:
-                    break
+                case .failure(let error):
+                    let ns = error as NSError
+                    print("[SignIn] ❌ domain=\(ns.domain) code=\(ns.code) desc=\(ns.localizedDescription)")
+                    print("[SignIn]   userInfo=\(ns.userInfo)")
+                    auth.lastAuthError = .transport("Apple: \(ns.code) \(ns.localizedDescription)")
                 }
             }
             .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
@@ -330,15 +336,42 @@ struct ProfileView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(c.textSecondary)
             }
-            HStack(spacing: 4) {
+            syncStatusIndicator(c)
+        }
+    }
+
+    @ViewBuilder
+    private func syncStatusIndicator(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        let pending = syncQueue.pendingCount
+        let syncing = syncQueue.isSyncing
+
+        HStack(spacing: 6) {
+            if syncing {
+                ProgressView()
+                    .scaleEffect(0.55)
+                    .frame(width: 10, height: 10)
+                Text(isRu ? "Синхронизация…" : "Syncing…")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(c.textSecondary)
+            } else if pending > 0 {
                 Circle()
-                    .fill(c.textTertiary)
+                    .fill(Color.orange)
                     .frame(width: 6, height: 6)
-                Text(AppStrings.syncComingSoon(lang.language))
+                Text(isRu ? "В очереди: \(pending)" : "Pending: \(pending)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(c.textSecondary)
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.green)
+                Text(isRu ? "Синхронизировано" : "Synced")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(c.textTertiary)
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: syncing)
+        .animation(.easeInOut(duration: 0.2), value: pending)
     }
 
     // MARK: - Edit Avatar Button
