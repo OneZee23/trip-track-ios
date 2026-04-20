@@ -17,6 +17,8 @@ struct TripDetailView: View {
     @State private var originalTitle: String = ""
     @State private var cachedCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSpeeds: [Double] = []
+    @State private var storyShare: (data: StoryShareData, url: String?)?
+    @State private var isGeneratingShare = false
     @FocusState private var isTitleFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -175,6 +177,46 @@ struct TripDetailView: View {
                 photoToDelete = nil
             }
         }
+        .sheet(isPresented: Binding(
+            get: { storyShare != nil },
+            set: { if !$0 { storyShare = nil } }
+        )) {
+            if let share = storyShare {
+                StoryShareSheet(data: share.data, shareUrl: share.url)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .environmentObject(lang)
+            }
+        }
+    }
+
+    // MARK: - Story Share
+
+    private func openStoryShare(for trip: Trip) async {
+        guard !isGeneratingShare else { return }
+        isGeneratingShare = true
+        defer { isGeneratingShare = false }
+
+        let authorName = AuthService.shared.userName
+            ?? (lang.language == .ru ? "Моя поездка" : "My trip")
+        let authorEmoji = settings.avatarEmoji
+        let data = StoryShareData.from(trip, authorName: authorName, authorEmoji: authorEmoji, lang: lang.language)
+
+        // If signed in, try to generate a public share link via the server.
+        // If offline or not signed in — fall back to image-only share.
+        var url: String?
+        if AuthService.shared.isSignedIn {
+            do {
+                let req = SocialShareRequest(tripId: trip.id, expiresInDays: nil)
+                let res: SocialShareResponse = try await APIClient.shared.post(
+                    APIEndpoint.socialShare, body: req)
+                url = res.shareUrl
+            } catch {
+                url = nil
+            }
+        }
+
+        storyShare = (data, url)
     }
 
     // MARK: - Info Panel
@@ -186,13 +228,25 @@ struct TripDetailView: View {
             HStack(alignment: .top) {
                 dateTimeLine(trip: trip, c: c)
                 Spacer()
-                ShareLink(item: shareTripText(trip)) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14))
-                        .foregroundStyle(c.textTertiary)
-                        .frame(width: 32, height: 32)
-                        .background(c.cardAlt, in: Circle())
+                Button {
+                    Haptics.tap()
+                    Task { await openStoryShare(for: trip) }
+                } label: {
+                    ZStack {
+                        if isGeneratingShare {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 14))
+                                .foregroundStyle(c.textTertiary)
+                        }
+                    }
+                    .frame(width: 32, height: 32)
+                    .background(c.cardAlt, in: Circle())
                 }
+                .buttonStyle(.plain)
+                .disabled(isGeneratingShare)
             }
             .padding(.bottom, 8)
 

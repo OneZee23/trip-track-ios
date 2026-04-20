@@ -34,11 +34,29 @@ extension StoryShareData {
             authorName: trip.author.displayName ?? (lang == .ru ? "Пользователь" : "User")
         )
     }
+
+    /// Build share data from a local `Trip` (own trip from TripDetail).
+    static func from(_ trip: Trip, authorName: String, authorEmoji: String, lang: LanguageManager.Language) -> StoryShareData {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: lang == .ru ? "ru_RU" : "en_US")
+        df.dateFormat = "d MMM yyyy"
+        return StoryShareData(
+            title: trip.title ?? df.string(from: trip.startDate),
+            dateText: df.string(from: trip.startDate),
+            distanceKmText: String(format: "%.1f", trip.distanceKm),
+            durationText: trip.formattedDuration,
+            avgSpeedKmhText: String(format: "%.0f", trip.averageSpeedKmh),
+            region: trip.region,
+            coordinates: trip.previewCoordinates,
+            authorEmoji: authorEmoji,
+            authorName: authorName
+        )
+    }
 }
 
 struct StoryShareSheet: View {
     let data: StoryShareData
-    let shareUrl: String
+    let shareUrl: String?
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -65,7 +83,9 @@ struct StoryShareSheet: View {
                         actionButton(
                             icon: "square.and.arrow.up",
                             title: isRu ? "Поделиться" : "Share",
-                            subtitle: isRu ? "Картинка + ссылка" : "Image + link",
+                            subtitle: shareUrl != nil
+                                ? (isRu ? "Картинка + ссылка" : "Image + link")
+                                : (isRu ? "Картинка" : "Image"),
                             isPrimary: true,
                             c: c,
                             action: shareImage
@@ -82,16 +102,18 @@ struct StoryShareSheet: View {
                             c: c,
                             action: savePhoto
                         )
-                        actionButton(
-                            icon: linkCopied ? "checkmark.circle.fill" : "link",
-                            title: linkCopied
-                                ? (isRu ? "Ссылка скопирована" : "Link copied")
-                                : (isRu ? "Скопировать ссылку" : "Copy link"),
-                            subtitle: shareUrl,
-                            isPrimary: false,
-                            c: c,
-                            action: copyLink
-                        )
+                        if let shareUrl {
+                            actionButton(
+                                icon: linkCopied ? "checkmark.circle.fill" : "link",
+                                title: linkCopied
+                                    ? (isRu ? "Ссылка скопирована" : "Link copied")
+                                    : (isRu ? "Скопировать ссылку" : "Copy link"),
+                                subtitle: shareUrl,
+                                isPrimary: false,
+                                c: c,
+                                action: copyLink
+                            )
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
@@ -172,8 +194,11 @@ struct StoryShareSheet: View {
 
     private func shareImage() {
         guard let image = renderStoryImage() else { return }
-        guard let url = URL(string: shareUrl) else { return }
-        let av = UIActivityViewController(activityItems: [image, url], applicationActivities: nil)
+        var items: [Any] = [image]
+        if let shareUrl, let url = URL(string: shareUrl) {
+            items.append(url)
+        }
+        let av = UIActivityViewController(activityItems: items, applicationActivities: nil)
         UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
             .first?
@@ -198,6 +223,7 @@ struct StoryShareSheet: View {
     }
 
     private func copyLink() {
+        guard let shareUrl else { return }
         UIPasteboard.general.string = shareUrl
         linkCopied = true
         Haptics.success()
