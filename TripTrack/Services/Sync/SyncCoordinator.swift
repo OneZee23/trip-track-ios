@@ -2,6 +2,9 @@ import Foundation
 import Combine
 import UIKit
 import CoreData
+import OSLog
+
+private let coordinatorLog = Logger(subsystem: "com.triptrack", category: "sync")
 
 @MainActor
 final class SyncCoordinator {
@@ -51,15 +54,15 @@ final class SyncCoordinator {
 
     private func runPull() async {
         guard let accountId = TokenStore.shared.accountId else {
-            print("[SyncCoordinator] runPull skipped: no accountId")
+            coordinatorLog.debug("runPull skipped: no accountId")
             return
         }
         let since = LastSyncedAtStore.get(accountId: accountId)
         let req = SyncPullRequest(lastSyncedAt: since, entityTypes: nil)
-        print("[SyncCoordinator] pull start since=\(since?.description ?? "nil")")
+        coordinatorLog.debug("pull start since=\(since?.description ?? "nil")")
         do {
             let res: SyncPullResponse = try await client.post(APIEndpoint.syncPull, body: req)
-            print("[SyncCoordinator] pull got trips=\(res.trips.upserted.count) vehicles=\(res.vehicles.upserted.count) photos=\(res.photos.upserted.count) settings=\(res.settings != nil) serverTime=\(res.serverTime)")
+            coordinatorLog.debug("pull got trips=\(res.trips.upserted.count) vehicles=\(res.vehicles.upserted.count) photos=\(res.photos.upserted.count) settings=\(res.settings != nil) serverTime=\(res.serverTime)")
             pullApplier.apply(res)
             let withFrac = ISO8601DateFormatter()
             withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -67,14 +70,14 @@ final class SyncCoordinator {
             plain.formatOptions = [.withInternetDateTime]
             if let serverTime = withFrac.date(from: res.serverTime) ?? plain.date(from: res.serverTime) {
                 LastSyncedAtStore.set(serverTime, for: accountId)
-                print("[SyncCoordinator] lastSyncedAt advanced to \(serverTime)")
+                coordinatorLog.debug("lastSyncedAt advanced to \(serverTime)")
             } else {
-                print("[SyncCoordinator] ⚠️ failed to parse serverTime=\(res.serverTime)")
+                coordinatorLog.debug("⚠️ failed to parse serverTime=\(res.serverTime)")
             }
             // Notify UI that remote data was applied
             NotificationCenter.default.post(name: .syncPullCompleted, object: nil)
         } catch {
-            print("[SyncCoordinator] pull failed: \(error)")
+            coordinatorLog.debug("pull failed: \(error)")
         }
     }
 
@@ -125,7 +128,7 @@ final class SyncCoordinator {
 
         let total = trips.count + vehicles.count + photos.count
         if total > 0 {
-            print("[SyncCoordinator] recovered \(total) pending entities after relaunch")
+            coordinatorLog.debug("recovered \(total) pending entities after relaunch")
         }
     }
 
