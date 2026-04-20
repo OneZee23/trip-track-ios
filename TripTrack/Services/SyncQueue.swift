@@ -45,6 +45,8 @@ final class SyncQueue: ObservableObject {
 
     @Published private(set) var isSyncing = false
     @Published private(set) var pendingCount = 0
+    @Published private(set) var batchTotal = 0     // total ops in the current batch
+    @Published private(set) var batchProcessed = 0 // ops completed (success or failed) in current batch
 
     private var queue: [SyncOperation] = []
     private var failedQueue: [SyncOperation] = []
@@ -90,8 +92,12 @@ final class SyncQueue: ObservableObject {
         guard !queue.isEmpty else { return }
 
         isSyncing = true
+        batchTotal = queue.count
+        batchProcessed = 0
         defer {
             isSyncing = false
+            batchTotal = 0
+            batchProcessed = 0
             updatePendingCount()
         }
 
@@ -105,6 +111,7 @@ final class SyncQueue: ObservableObject {
             guard !CacheManager.shared.isOffline else { break }
 
             var operation = queue.removeFirst()
+            updatePendingCount()
 
             do {
                 try await activeTransport.execute(operation)
@@ -117,6 +124,7 @@ final class SyncQueue: ObservableObject {
                 print("SyncQueue: operation \(operation.entityType.rawValue)/\(operation.action.rawValue) failed (attempt \(operation.retryCount)): \(error)")
                 #endif
             }
+            batchProcessed += 1
         }
     }
 

@@ -22,6 +22,7 @@ struct ProfileView: View {
     @State private var showVehicleDetail = false
     @State private var showSignOutAlert = false
     @State private var showCloudSync = false
+    @State private var showDebugLogs = false
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -112,6 +113,17 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
                 }
 
+                // Debug logs (always available — useful even for guest mode bug reports)
+                Button { showDebugLogs = true } label: {
+                    profileNavButton(
+                        icon: "ladybug.fill",
+                        iconColor: .gray,
+                        label: isRu ? "Отправить логи" : "Send debug logs",
+                        c: c
+                    )
+                }
+                .buttonStyle(.plain)
+
                 // Sign out button (only when signed in)
                 if auth.isSignedIn {
                     Button {
@@ -148,6 +160,11 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showCloudSync) {
             CloudSyncView()
+                .environmentObject(lang)
+                .environmentObject(themeManager)
+        }
+        .sheet(isPresented: $showDebugLogs) {
+            DebugLogsView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
         }
@@ -377,9 +394,14 @@ struct ProfileView: View {
                 ProgressView()
                     .scaleEffect(0.55)
                     .frame(width: 10, height: 10)
-                Text(isRu ? "Синхронизация…" : "Syncing…")
+                let total = syncQueue.batchTotal
+                let done = syncQueue.batchProcessed
+                Text(total > 0
+                     ? (isRu ? "Синхронизация… \(done)/\(total)" : "Syncing… \(done)/\(total)")
+                     : (isRu ? "Синхронизация…" : "Syncing…"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(c.textSecondary)
+                    .monospacedDigit()
             } else if pending > 0 {
                 Circle()
                     .fill(Color.orange)

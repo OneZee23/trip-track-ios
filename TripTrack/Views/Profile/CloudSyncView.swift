@@ -190,8 +190,14 @@ struct CloudSyncView: View {
             } else if syncQueue.isSyncing {
                 ProgressView()
                     .scaleEffect(0.75)
-                Text(isRu ? "Синхронизация…" : "Syncing…")
-                    .foregroundStyle(c.text)
+                if syncQueue.batchTotal > 0 {
+                    Text((isRu ? "Синхронизация… " : "Syncing… ") + "\(syncQueue.batchProcessed)/\(syncQueue.batchTotal)")
+                        .foregroundStyle(c.text)
+                        .monospacedDigit()
+                } else {
+                    Text(isRu ? "Синхронизация…" : "Syncing…")
+                        .foregroundStyle(c.text)
+                }
             } else if syncQueue.pendingCount > 0 {
                 Circle()
                     .fill(Color.orange)
