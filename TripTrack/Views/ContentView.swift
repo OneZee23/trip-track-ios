@@ -12,6 +12,7 @@ extension Notification.Name {
     static let tripDeleted = Notification.Name("tripDeleted")
     static let tripRecordingEnded = Notification.Name("tripRecordingEnded")
     static let territoryRebuilt = Notification.Name("territoryRebuilt")
+    static let syncPullCompleted = Notification.Name("syncPullCompleted")
 }
 
 struct ContentView: View {
