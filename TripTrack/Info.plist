@@ -34,11 +34,16 @@
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
 				<true/>
 			</dict>
-			<key>192.168.1.73</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
+			<!--
+			  For real-device dev testing, add your Mac LAN IP below and do NOT commit.
+			  Example:
+			  <key>192.168.1.50</key>
+			  <dict>
+			      <key>NSExceptionAllowsInsecureHTTPLoads</key>
+			      <true/>
+			  </dict>
+			-->
+
 		</dict>
 	</dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
