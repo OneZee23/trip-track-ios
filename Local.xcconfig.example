@@ -5,3 +5,7 @@
 
 PRODUCT_BUNDLE_IDENTIFIER = com.yourname.TripTrack
 DEVELOPMENT_TEAM = YOUR_TEAM_ID
+
+// API base URL — backend NestJS server. Debug defaults to localhost:3003.
+// Use $() to escape slashes in URLs (xcconfig treats // as comment).
+API_BASE_URL = http:/$()/localhost:3003
