@@ -166,6 +166,15 @@ enum PhotoStorageService {
         persistenceController.save()
     }
 
+    /// Fetch photo IDs that have a thumbnail but no remote URL yet (pending original upload).
+    static func pendingOriginalUploads() -> [UUID] {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "thumbnailURL != nil AND remoteURL == nil")
+        let results = (try? ctx.fetch(req)) ?? []
+        return results.compactMap { $0.id }
+    }
+
     /// Read raw JPEG data for a photo (for upload to remote storage).
     static func photoData(filename: String) -> Data? {
         guard let url = safePhotoURL(for: filename) else { return nil }
