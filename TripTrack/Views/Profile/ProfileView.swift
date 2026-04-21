@@ -279,10 +279,13 @@ struct ProfileView: View {
         let urlString = "https://trip-track.app/u/\(accountId)"
         guard let url = URL(string: urlString) else { return }
         let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        UIApplication.shared.connectedScenes
+        var vc = UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
-            .first?
-            .present(av, animated: true)
+            .first
+        while let presented = vc?.presentedViewController {
+            vc = presented
+        }
+        vc?.present(av, animated: true)
     }
 
     private func loadOwnSocialProfile() async {
