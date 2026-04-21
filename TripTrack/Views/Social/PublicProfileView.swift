@@ -118,9 +118,12 @@ struct PublicProfileView: View {
 
     private func heroSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         let bg = ProfileBackground.from(profile?.profileBackground)
+        let avatarSize: CGFloat = 100
+        let bannerHeight: CGFloat = 140
+        let avatarOverlap = avatarSize / 2
+        let emoji = profile?.avatarEmoji ?? preloaded?.avatarEmoji ?? "🚗"
 
         return VStack(spacing: 0) {
-            // Banner
             ZStack {
                 if bg == .none {
                     c.cardAlt
@@ -128,44 +131,53 @@ struct PublicProfileView: View {
                     bg.view()
                 }
             }
-            .frame(height: 110)
+            .frame(height: bannerHeight)
             .frame(maxWidth: .infinity)
             .clipShape(UnevenRoundedRectangle(
                 topLeadingRadius: 18, bottomLeadingRadius: 0,
                 bottomTrailingRadius: 0, topTrailingRadius: 18
             ))
 
-            let emoji = profile?.avatarEmoji ?? preloaded?.avatarEmoji ?? "🚗"
-            Circle()
-                .fill(c.card)
-                .overlay(Circle().stroke(c.cardAlt, lineWidth: 3))
-                .frame(width: 88, height: 88)
-                .overlay { Text(emoji).font(.system(size: 44)) }
-                .offset(y: -44)
-                .padding(.bottom, -44)
-                .padding(.top, 12)
+            VStack(spacing: 10) {
+                VStack(spacing: 4) {
+                    Text(profile?.displayName ?? preloaded?.displayName ?? (isRu ? "Пользователь" : "User"))
+                        .font(.system(size: 22, weight: .heavy))
+                        .tracking(-0.2)
+                        .foregroundStyle(c.text)
+                        .multilineTextAlignment(.center)
 
-            VStack(spacing: 4) {
-                Text(profile?.displayName ?? preloaded?.displayName ?? (isRu ? "Пользователь" : "User"))
-                    .font(.system(size: 22, weight: .heavy))
-                    .tracking(-0.2)
-                    .foregroundStyle(c.text)
-                    .multilineTextAlignment(.center)
+                    if let lvl = profile?.profileLevel ?? preloaded?.profileLevel {
+                        Text("LVL \(lvl)")
+                            .font(.system(size: 12, weight: .bold).monospacedDigit())
+                            .tracking(1)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(AppTheme.accentBg, in: Capsule())
+                            .foregroundStyle(AppTheme.accent)
+                    }
+                }
 
-                if let lvl = profile?.profileLevel ?? preloaded?.profileLevel {
-                    Text("LVL \(lvl)")
-                        .font(.system(size: 12, weight: .bold).monospacedDigit())
-                        .tracking(1)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(AppTheme.accentBg, in: Capsule())
-                        .foregroundStyle(AppTheme.accent)
+                if profile?.isFollowing != nil {
+                    followButton(c, isRu: isRu)
                 }
             }
-
-            if profile?.isFollowing != nil {
-                followButton(c, isRu: isRu)
-            }
+            .padding(.top, avatarOverlap + 14)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+        }
+        .background(c.card)
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(c.border, lineWidth: 0.5)
+        )
+        .overlay(alignment: .top) {
+            Text(emoji)
+                .font(.system(size: avatarSize * 0.55))
+                .frame(width: avatarSize, height: avatarSize)
+                .background(Circle().fill(c.card))
+                .overlay(Circle().stroke(c.card, lineWidth: 5))
+                .padding(.top, bannerHeight - avatarOverlap)
         }
     }
 

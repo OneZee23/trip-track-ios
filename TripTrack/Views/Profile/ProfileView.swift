@@ -28,6 +28,7 @@ struct ProfileView: View {
     @State private var socialProfile: SocialProfile?
     @State private var followListMode: FollowListMode?
     @State private var showBackgroundPicker = false
+    @State private var previewingOwnProfile = false
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -51,6 +52,7 @@ struct ProfileView: View {
                 // Social followers/following (signed in only)
                 if auth.isSignedIn {
                     socialCountersRow(c, isRu: isRu)
+                    previewProfileButton(c, isRu: isRu)
                     shareProfileButton(c, isRu: isRu)
                 }
 
@@ -187,6 +189,19 @@ struct ProfileView: View {
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
+        .sheet(isPresented: $previewingOwnProfile) {
+            if let accountId = TokenStore.shared.accountId {
+                NavigationStack {
+                    PublicProfileView(accountId: accountId, preloaded: nil)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+                        }
+                }
+                .environmentObject(lang)
+                .environmentObject(themeManager)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+            }
+        }
         .sheet(isPresented: $showDebugLogs) {
             DebugLogsView()
                 .environmentObject(lang)
@@ -257,6 +272,29 @@ struct ProfileView: View {
         }
         .padding(.vertical, 12)
         .surfaceCard(cornerRadius: 14)
+    }
+
+    private func previewProfileButton(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        Button {
+            Haptics.tap()
+            previewingOwnProfile = true
+        } label: {
+            HStack {
+                Image(systemName: "eye")
+                    .font(.system(size: 15))
+                    .foregroundStyle(AppTheme.blue)
+                Text(isRu ? "Посмотреть глазами других" : "Preview as others see you")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(c.text)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
     }
 
     private func shareProfileButton(_ c: AppTheme.Colors, isRu: Bool) -> some View {
@@ -384,61 +422,47 @@ struct ProfileView: View {
         .surfaceCard(cornerRadius: 16)
     }
 
-    // MARK: - Avatar Card (Profile, hero-style with selectable background)
+    // MARK: - Avatar Card (hero with banner, avatar overlaps seam)
+
+    private static let heroAvatarSize: CGFloat = 108
+    private static let heroBannerHeight: CGFloat = 150
 
     private func avatarCard(_ c: AppTheme.Colors) -> some View {
         let bg = ProfileBackground.from(settings.profileBackground)
+        let avatarSize = Self.heroAvatarSize
+        let bannerHeight = Self.heroBannerHeight
+        // Avatar sits so its center aligns with the banner/content seam.
+        let avatarOverlap = avatarSize / 2
 
         return VStack(spacing: 0) {
-            // Banner behind the header — tappable to open picker
+            // Banner
             ZStack(alignment: .topTrailing) {
                 if bg == .none {
-                    c.cardAlt.frame(height: 110)
+                    c.cardAlt
                 } else {
-                    bg.view().frame(height: 110)
+                    bg.view()
                 }
 
-                Button {
-                    Haptics.tap()
-                    showBackgroundPicker = true
-                } label: {
-                    Image(systemName: "photo.on.rectangle")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(8)
-                        .background(.black.opacity(0.35), in: Circle())
+                // Banner action row: edit avatar + choose background
+                HStack(spacing: 8) {
+                    bannerIconButton(system: "pencil") {
+                        withAnimation(.easeInOut(duration: 0.2)) { isEditingAvatar.toggle() }
+                    }
+                    bannerIconButton(system: "photo.on.rectangle") {
+                        showBackgroundPicker = true
+                    }
                 }
-                .buttonStyle(.plain)
-                .padding(10)
+                .padding(12)
             }
+            .frame(height: bannerHeight)
             .clipShape(UnevenRoundedRectangle(
                 topLeadingRadius: 18, bottomLeadingRadius: 0,
                 bottomTrailingRadius: 0, topTrailingRadius: 18
             ))
 
-            VStack(spacing: 14) {
-                HStack {
-                    Spacer()
-                    editAvatarButton(c)
-                }
-                .padding(.top, 10)
-                .padding(.bottom, -6)
-
-                ZStack(alignment: .bottomTrailing) {
-                    Text(selectedAvatar)
-                        .font(.system(size: 56))
-                        .frame(width: 96, height: 96)
-                        .background(Circle().fill(c.card))
-                        .overlay(Circle().stroke(c.cardAlt, lineWidth: 3))
-                        .offset(y: -46) // pull avatar up onto the banner
-                        .scaleEffect(avatarBounce ? 1.12 : 1.0)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.5), value: avatarBounce)
-
-                    levelPill
-                        .offset(x: 4, y: -40)
-                }
-                .padding(.bottom, -46) // neutralize the avatar's upward offset for layout
-
+            // Content below banner. Top padding = half the avatar so content starts
+            // below the avatar's bottom edge; avatar itself is an overlay.
+            VStack(spacing: 10) {
                 if auth.isSignedIn {
                     signedInHeader(c)
                 } else {
@@ -447,8 +471,10 @@ struct ProfileView: View {
 
                 if isEditingAvatar {
                     avatarGrid(c)
+                        .padding(.top, 4)
                 }
             }
+            .padding(.top, avatarOverlap + 14)
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
@@ -459,6 +485,38 @@ struct ProfileView: View {
                 .stroke(c.border, lineWidth: 0.5)
         )
         .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
+        .overlay(alignment: .top) {
+            // Floating avatar — its vertical center sits on the banner/content seam.
+            ZStack(alignment: .bottomTrailing) {
+                Text(selectedAvatar)
+                    .font(.system(size: avatarSize * 0.58))
+                    .frame(width: avatarSize, height: avatarSize)
+                    .background(Circle().fill(c.card))
+                    .overlay(
+                        Circle().stroke(c.card, lineWidth: 5)
+                    )
+                    .scaleEffect(avatarBounce ? 1.12 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: avatarBounce)
+
+                levelPill
+                    .offset(x: 2, y: 2)
+            }
+            .padding(.top, bannerHeight - avatarOverlap)
+        }
+    }
+
+    private func bannerIconButton(system: String, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            Image(systemName: system)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(.black.opacity(0.35), in: Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var levelPill: some View {
@@ -608,6 +666,7 @@ struct ProfileView: View {
                     selectedAvatar = emoji
                     settings.avatarEmoji = emoji
                     settings.saveSettings()
+                    Task { await auth.syncProfileToServer() }
                     // Bounce the main avatar
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
                         avatarBounce = true
