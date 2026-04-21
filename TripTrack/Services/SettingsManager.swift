@@ -21,6 +21,11 @@ final class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(cloudSyncEnabled, forKey: "com.triptrack.settings.cloudSyncEnabled") }
     }
 
+    // Profile background identifier (one of ProfileBackground rawValues, "" = default).
+    @Published var profileBackground: String = UserDefaults.standard.string(forKey: "com.triptrack.settings.profileBackground") ?? "" {
+        didSet { UserDefaults.standard.set(profileBackground, forKey: "com.triptrack.settings.profileBackground") }
+    }
+
     // Gamification
     @Published var profileXP: Int = 0
     @Published var profileLevel: Int = 1

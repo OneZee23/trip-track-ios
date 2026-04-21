@@ -27,6 +27,7 @@ struct ProfileView: View {
     @State private var showDebugLogs = false
     @State private var socialProfile: SocialProfile?
     @State private var followListMode: FollowListMode?
+    @State private var showBackgroundPicker = false
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -178,6 +179,13 @@ struct ProfileView: View {
             CloudSyncView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
+        }
+        .sheet(isPresented: $showBackgroundPicker) {
+            ProfileBackgroundPickerSheet()
+                .environmentObject(lang)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showDebugLogs) {
             DebugLogsView()
@@ -376,41 +384,81 @@ struct ProfileView: View {
         .surfaceCard(cornerRadius: 16)
     }
 
-    // MARK: - Avatar Card (Profile, hero-style)
+    // MARK: - Avatar Card (Profile, hero-style with selectable background)
 
     private func avatarCard(_ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 14) {
-            HStack {
-                Spacer()
-                editAvatarButton(c)
-            }
-            .padding(.bottom, -14) // pull the edit pill up so it doesn't eat hero space
+        let bg = ProfileBackground.from(settings.profileBackground)
 
-            ZStack(alignment: .bottomTrailing) {
-                Text(selectedAvatar)
-                    .font(.system(size: 56))
-                    .frame(width: 96, height: 96)
-                    .background(Circle().fill(c.cardAlt))
-                    .overlay(Circle().stroke(AppTheme.accent.opacity(0.15), lineWidth: 2))
-                    .scaleEffect(avatarBounce ? 1.12 : 1.0)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: avatarBounce)
+        return VStack(spacing: 0) {
+            // Banner behind the header — tappable to open picker
+            ZStack(alignment: .topTrailing) {
+                if bg == .none {
+                    c.cardAlt.frame(height: 110)
+                } else {
+                    bg.view().frame(height: 110)
+                }
 
-                levelPill
-                    .offset(x: 4, y: 4)
+                Button {
+                    Haptics.tap()
+                    showBackgroundPicker = true
+                } label: {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(.black.opacity(0.35), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .padding(10)
             }
+            .clipShape(UnevenRoundedRectangle(
+                topLeadingRadius: 18, bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0, topTrailingRadius: 18
+            ))
 
-            if auth.isSignedIn {
-                signedInHeader(c)
-            } else {
-                guestHeader(c)
-            }
+            VStack(spacing: 14) {
+                HStack {
+                    Spacer()
+                    editAvatarButton(c)
+                }
+                .padding(.top, 10)
+                .padding(.bottom, -6)
 
-            if isEditingAvatar {
-                avatarGrid(c)
+                ZStack(alignment: .bottomTrailing) {
+                    Text(selectedAvatar)
+                        .font(.system(size: 56))
+                        .frame(width: 96, height: 96)
+                        .background(Circle().fill(c.card))
+                        .overlay(Circle().stroke(c.cardAlt, lineWidth: 3))
+                        .offset(y: -46) // pull avatar up onto the banner
+                        .scaleEffect(avatarBounce ? 1.12 : 1.0)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.5), value: avatarBounce)
+
+                    levelPill
+                        .offset(x: 4, y: -40)
+                }
+                .padding(.bottom, -46) // neutralize the avatar's upward offset for layout
+
+                if auth.isSignedIn {
+                    signedInHeader(c)
+                } else {
+                    guestHeader(c)
+                }
+
+                if isEditingAvatar {
+                    avatarGrid(c)
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
-        .padding(16)
-        .surfaceCard(cornerRadius: 18)
+        .background(c.card)
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(c.border, lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
     }
 
     private var levelPill: some View {

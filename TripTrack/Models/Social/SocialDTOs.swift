@@ -159,11 +159,20 @@ struct SocialProfile: Codable, Hashable {
     let displayName: String?
     let avatarEmoji: String?
     let profileLevel: Int
+    let profileBackground: String?
     let stats: SocialProfileStats
     let recentTrips: [SocialProfileRecentTrip]
     let followerCount: Int
     let followingCount: Int
     let isFollowing: Bool?
+}
+
+// MARK: - Profile appearance update
+
+struct ProfileUpdateRequest: Codable {
+    let displayName: String?
+    let avatarEmoji: String?
+    let profileBackground: String?
 }
 
 // MARK: - Allowed reaction emoji (matches backend whitelist)
