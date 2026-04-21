@@ -206,40 +206,51 @@ struct SocialFeedCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Action Bar (compact: reaction summary + share)
+    // MARK: - Action Bar (Telegram-style: one pill per used emoji)
 
     private func actionBar(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 10) {
-            // Reaction summary — tap to open picker (same as long-press on card)
-            Button {
-                Haptics.selection()
-                onLongPress?()
-            } label: {
-                HStack(spacing: 6) {
-                    if let mine = trip.myReaction {
-                        Text(mine)
-                            .font(.system(size: 17))
-                    } else {
-                        Image(systemName: "heart")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(c.textSecondary)
+        HStack(spacing: 6) {
+            if trip.reactionBreakdown.isEmpty {
+                // No reactions yet — show a single "add reaction" pill
+                Button {
+                    Haptics.selection()
+                    onLongPress?()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "face.smiling")
+                            .font(.system(size: 13, weight: .medium))
+                        Text(lang.language == .ru ? "Реакция" : "React")
+                            .font(.system(size: 12, weight: .semibold))
                     }
-                    if trip.reactionCount > 0 {
-                        Text("\(trip.reactionCount)")
-                            .font(.system(size: 13, weight: .bold).monospacedDigit())
-                            .foregroundStyle(trip.myReaction != nil ? AppTheme.accent : c.textSecondary)
+                    .foregroundStyle(c.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(c.cardAlt.opacity(0.6)))
+                }
+                .buttonStyle(.plain)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(trip.reactionBreakdown, id: \.emoji) { tally in
+                            reactionTallyPill(tally, c: c)
+                        }
+                        // Plus-picker pill at the end to add new emoji
+                        Button {
+                            Haptics.selection()
+                            onLongPress?()
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(c.textSecondary)
+                                .frame(width: 28, height: 28)
+                                .background(Capsule().fill(c.cardAlt.opacity(0.6)))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill(trip.myReaction != nil ? AppTheme.accentBg : c.cardAlt.opacity(0.6))
-                )
             }
-            .buttonStyle(.plain)
 
-            Spacer()
+            Spacer(minLength: 6)
 
             Button {
                 Haptics.tap()
@@ -252,6 +263,33 @@ struct SocialFeedCardView: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    private func reactionTallyPill(_ tally: ReactionTally, c: AppTheme.Colors) -> some View {
+        let isMine = trip.myReaction == tally.emoji
+        return Button {
+            Haptics.selection()
+            onReact?(tally.emoji)
+        } label: {
+            HStack(spacing: 4) {
+                Text(tally.emoji)
+                    .font(.system(size: 14))
+                Text("\(tally.count)")
+                    .font(.system(size: 12, weight: .bold).monospacedDigit())
+                    .foregroundStyle(isMine ? AppTheme.accent : c.textSecondary)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(isMine ? AppTheme.accentBg : c.cardAlt.opacity(0.6))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(isMine ? AppTheme.accent.opacity(0.4) : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Formatters

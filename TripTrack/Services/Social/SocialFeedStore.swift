@@ -128,14 +128,28 @@ final class SocialFeedStore: ObservableObject {
 
 private extension SocialFeedTrip {
     func with(reactionCount: Int, myReaction: String?) -> SocialFeedTrip {
-        SocialFeedTrip(
+        // Rebuild breakdown locally to reflect optimistic toggle:
+        // decrement previous myReaction bucket, increment new one.
+        var breakdown = reactionBreakdown.reduce(into: [String: Int]()) { $0[$1.emoji] = $1.count }
+        if let old = self.myReaction {
+            breakdown[old, default: 1] -= 1
+            if (breakdown[old] ?? 0) <= 0 { breakdown.removeValue(forKey: old) }
+        }
+        if let new = myReaction {
+            breakdown[new, default: 0] += 1
+        }
+        let updated = breakdown
+            .map { ReactionTally(emoji: $0.key, count: $0.value) }
+            .sorted { $0.count > $1.count }
+
+        return SocialFeedTrip(
             id: id, author: author, title: title,
             startDate: startDate, endDate: endDate,
             distance: distance, duration: duration, region: region,
             previewPolyline: previewPolyline,
             photoCount: photoCount, firstPhotoThumbnail: firstPhotoThumbnail,
-            reactionCount: reactionCount, myReaction: myReaction,
-            badgeIds: badgeIds
+            reactionCount: reactionCount, reactionBreakdown: updated,
+            myReaction: myReaction, badgeIds: badgeIds
         )
     }
 }
