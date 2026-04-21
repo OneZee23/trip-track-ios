@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum FeedMode: Hashable { case own, social }
+enum FeedMode: Hashable { case all, mine }
 
 struct FeedView: View {
     @StateObject private var feedVM: FeedViewModel
@@ -20,7 +20,7 @@ struct FeedView: View {
     @State private var showGarage = false
     @State private var tripToDelete: Trip?
     @State private var collapsedSections: Set<String> = []
-    @State private var feedMode: FeedMode = .own
+    @State private var feedMode: FeedMode = .all
     @State private var selectedAuthor: SocialAuthor?
     @State private var selectedSocialTrip: SocialFeedTrip?
     @State private var reactionPickerTrip: SocialFeedTrip?
@@ -44,7 +44,7 @@ struct FeedView: View {
                         .padding(.top, 4)
                         .id("feedTop")
 
-                    if feedMode == .own {
+                    if feedMode == .mine {
                         ContributionCalendarView(
                             dateFrom: Binding(
                                 get: { feedVM.filters.dateFrom },
@@ -160,7 +160,7 @@ struct FeedView: View {
                             .background(c.cardAlt, in: Circle())
                     }
                 }
-                if auth.isSignedIn, feedMode == .social {
+                if auth.isSignedIn, feedMode == .all {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { showDiscover = true } label: {
                             Image(systemName: "magnifyingglass")
@@ -177,7 +177,7 @@ struct FeedView: View {
         }
         .toast(item: $feedVM.toastItem)
         .refreshable {
-            if feedMode == .social {
+            if feedMode == .all {
                 await socialFeed.refresh()
             } else {
                 feedVM.language = lang.language
@@ -302,8 +302,8 @@ struct FeedView: View {
     private func feedModeSwitcher(_ c: AppTheme.Colors) -> some View {
         let isRu = lang.language == .ru
         return HStack(spacing: 3) {
-            modePill(.own, label: isRu ? "Мои" : "Mine", c: c)
-            modePill(.social, label: isRu ? "Друзья" : "Friends", c: c)
+            modePill(.all, label: isRu ? "Лента" : "Feed", c: c)
+            modePill(.mine, label: isRu ? "Мои" : "Mine", c: c)
         }
         .padding(3)
         .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 11))
@@ -314,7 +314,7 @@ struct FeedView: View {
         return Button {
             Haptics.selection()
             withAnimation(.easeInOut(duration: 0.2)) { feedMode = mode }
-            if mode == .social, auth.isSignedIn {
+            if mode == .all, auth.isSignedIn {
                 Task { await socialFeed.refresh() }
             }
         } label: {
@@ -340,9 +340,15 @@ struct FeedView: View {
     private func socialFeedContent(_ c: AppTheme.Colors) -> some View {
         let isRu = lang.language == .ru
 
+        // Suggested users always on top (carousel hides itself if nothing to recommend)
+        SuggestedUsersCarousel(onTapUser: { user in
+            selectedAuthor = user
+        })
+        .padding(.bottom, 6)
+
         if socialFeed.isLoading, socialFeed.trips.isEmpty {
             PixelCarLoader(
-                label: isRu ? "Загружаем ленту друзей…" : "Loading friends feed…"
+                label: isRu ? "Загружаем ленту…" : "Loading feed…"
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 40)
@@ -459,17 +465,18 @@ struct FeedView: View {
 
     private func socialEmptyState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         VStack(spacing: 16) {
-            Image(systemName: "person.2")
+            Image(systemName: "sparkles")
                 .font(.system(size: 44, weight: .light))
                 .foregroundStyle(c.textTertiary)
-                .padding(.top, 60)
-            Text(isRu ? "Пока никого не читаете" : "You're not following anyone yet")
+                .padding(.top, 40)
+            Text(isRu ? "Здесь появятся ваши и поездки друзей" : "Your and friends' trips will appear here")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
             Text(isRu
-                 ? "Подпишитесь на друзей, чтобы видеть их поездки здесь."
-                 : "Follow friends to see their trips here.")
+                 ? "Подпишитесь на кого-нибудь выше или запишите свою первую поездку."
+                 : "Follow someone above or record your first trip.")
                 .font(.system(size: 13))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
