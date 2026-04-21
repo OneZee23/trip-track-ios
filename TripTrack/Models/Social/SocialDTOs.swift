@@ -22,6 +22,11 @@ struct SocialFeedResponse: Codable {
     let nextCursor: String?
 }
 
+struct ReactionTally: Codable, Hashable {
+    let emoji: String
+    let count: Int
+}
+
 struct SocialFeedTrip: Codable, Identifiable, Hashable {
     let id: UUID
     let author: SocialAuthor
@@ -37,6 +42,7 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     let photoCount: Int
     let firstPhotoThumbnail: String?
     let reactionCount: Int
+    let reactionBreakdown: [ReactionTally]
     let myReaction: String?
     let badgeIds: [String]
 
