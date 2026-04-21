@@ -90,6 +90,7 @@ final class AuthService: ObservableObject {
             TokenStore.shared.setAccountId(response.account.id)
             isSignedIn = true
             await performFirstSync()
+            await syncProfileToServer()
         } catch let e as APIError {
             lastAuthError = e
         } catch {
@@ -145,6 +146,28 @@ final class AuthService: ObservableObject {
         // Reset all local entities so next sign-in re-pushes
         let repo: TripRepository = CoreDataTripRepository()
         repo.markAllPendingUpload()
+    }
+
+    // MARK: - Profile sync to server (displayName + avatarEmoji + profileBackground)
+
+    /// Push the current client-side profile fields (name from SIWA Keychain,
+    /// avatar emoji from SettingsManager, profile background) to the server so
+    /// social feeds / reactions / public profile render the user correctly.
+    /// Fire-and-forget; failure is logged but not surfaced.
+    func syncProfileToServer() async {
+        guard isSignedIn else { return }
+        let req = ProfileUpdateRequest(
+            displayName: userName,
+            avatarEmoji: SettingsManager.shared.avatarEmoji,
+            profileBackground: SettingsManager.shared.profileBackground
+        )
+        do {
+            let _: EmptyResponse = try await APIClient.shared.post(
+                APIEndpoint.profileUpdate, body: req)
+            authLog.log("profile synced to server")
+        } catch {
+            authLog.error("profile sync failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Delete Account

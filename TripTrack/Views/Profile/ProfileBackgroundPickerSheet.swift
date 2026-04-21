@@ -73,21 +73,6 @@ struct ProfileBackgroundPickerSheet: View {
 
     private func setBackground(_ bg: ProfileBackground) {
         settings.profileBackground = bg.rawValue
-
-        // If signed-in, propagate to server so public profile shows same bg.
-        guard auth.isSignedIn else { return }
-        Task {
-            do {
-                let req = ProfileUpdateRequest(
-                    displayName: nil,
-                    avatarEmoji: nil,
-                    profileBackground: bg.rawValue
-                )
-                let _: EmptyResponse = try await APIClient.shared.post(
-                    APIEndpoint.profileUpdate, body: req)
-            } catch {
-                bgLog.error("profile bg sync failed: \(error.localizedDescription)")
-            }
-        }
+        Task { await auth.syncProfileToServer() }
     }
 }
