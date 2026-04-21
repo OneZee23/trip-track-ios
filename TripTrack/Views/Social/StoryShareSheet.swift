@@ -199,10 +199,20 @@ struct StoryShareSheet: View {
             items.append(url)
         }
         let av = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        UIApplication.shared.connectedScenes
+        topPresentedViewController()?.present(av, animated: true)
+    }
+
+    /// Walks up the presentation chain to find the topmost presented view controller.
+    /// Needed because StoryShareSheet itself is a SwiftUI sheet on top of the root,
+    /// so presenting directly on root fails with "already presenting" warning.
+    private func topPresentedViewController() -> UIViewController? {
+        var vc = UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
-            .first?
-            .present(av, animated: true)
+            .first
+        while let presented = vc?.presentedViewController {
+            vc = presented
+        }
+        return vc
     }
 
     private func savePhoto() {
