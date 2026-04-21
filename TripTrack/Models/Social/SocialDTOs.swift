@@ -178,7 +178,10 @@ struct ProfileUpdateRequest: Codable {
 // MARK: - Allowed reaction emoji (matches backend whitelist)
 
 enum ReactionEmoji {
-    static let all: [String] = ["👍", "🔥", "❤️", "🏆", "😲"]
+    /// Car / road themed reactions for TripTrack.
+    /// 🔥 — awesome, 🏁 — reached destination, 🏎️ — fast/impressive,
+    /// 🛣️ — nice road, 🗺️ — new places explored.
+    static let all: [String] = ["🔥", "🏁", "🏎️", "🛣️", "🗺️"]
 }
 
 // MARK: - Block / Report
