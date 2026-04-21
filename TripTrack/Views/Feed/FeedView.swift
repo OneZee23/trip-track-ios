@@ -185,8 +185,23 @@ struct FeedView: View {
             }
         }
         .onAppear {
-            if !didLoad { didLoad = true; feedVM.language = lang.language; feedVM.loadTrips() }
+            if !didLoad {
+                didLoad = true
+                feedVM.language = lang.language
+                feedVM.loadTrips()
+                // Kick off combined feed fetch as soon as Feed tab opens — otherwise
+                // the user would have to pull-to-refresh before seeing anything.
+                if auth.isSignedIn, socialFeed.trips.isEmpty {
+                    Task { await socialFeed.refresh() }
+                }
+            }
             feedVM.retryGeocodingIfNeeded()
+        }
+        .onChange(of: auth.isSignedIn) { _, newValue in
+            // User just signed in — load combined feed
+            if newValue, socialFeed.trips.isEmpty {
+                Task { await socialFeed.refresh() }
+            }
         }
         .sheet(isPresented: $feedVM.showFilters) {
             FilterSheetView(
