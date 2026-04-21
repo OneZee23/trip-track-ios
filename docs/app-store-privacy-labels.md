@@ -49,7 +49,14 @@
   - Used for: App Functionality
   - Linked to user? **Yes**
   - Used for tracking? **No**
-  - Описание: названия поездок, заметки, профили машин
+  - Описание: названия поездок, заметки, профили машин, отображаемое имя в социальных функциях
+
+### Customer Support
+- [x] **Customer Support**
+  - Used for: App Functionality
+  - Linked to user? **Yes**
+  - Used for tracking? **No**
+  - Описание: abuse reports (в рамках in-app Report) — хранятся со связью с reporter/target для модерации
 
 ## Что НЕ собираем (все UNCHECKED в App Store Connect)
 
@@ -61,7 +68,6 @@
 - Purchase History
 - Audio Data
 - Gameplay Content
-- Customer Support
 - Credit Info
 - Other Financial Info
 - Physical Address
@@ -96,11 +102,17 @@
 
 ## Что ещё проверить перед сабмитом
 
-1. **Age Rating**: 17+ (location services collection required)
-2. **Export Compliance**: uses standard iOS crypto → declare via App Store Connect
-3. **Content Rights**: подтверди что все визуалы твои
-4. **Intellectual Property**: пройди checklist на товарный знак "TripTrack"
-5. **App Review Information**:
-   - Demo account: подготовить Apple ID для review team (или guest mode instructions)
-   - Notes: объяснить что cloud sync = opt-in, core functionality работает offline
-6. **Build Artefacts**: убедись что `PrivacyInfo.xcprivacy` попал в bundle (Xcode → target → Copy Bundle Resources)
+1. **Age Rating**: новый questionnaire Apple (обязателен с 31 января 2026, уровни 4+/9+/13+/16+/18+).
+   - User-generated content: **Yes** (публичные профили, лента друзей, реакции)
+   - Unrestricted Web Access: **No**
+   - Messaging or Chat: **No** (нет DM и комментов)
+   - Mature/Suggestive/Horror/Violence/Alcohol/Gambling/Medical/Profanity: **No**
+   - Ожидаемый рейтинг: **13+**. Polarsteps с похожим набором = 4+, но при наличии UGC безопаснее целиться в 13+.
+2. **Custom EULA**: App Store Connect → App Information → License Agreement → выбери "Custom" и вставь содержимое `docs/terms.html`. Guideline 1.2 требует custom EULA с zero-tolerance clause для UGC apps.
+3. **Export Compliance**: uses standard iOS crypto → declare via App Store Connect (exempt от EAR 740.17(b)).
+4. **Content Rights**: подтверди что все визуалы твои (Pixel Car art, иконка)
+5. **Intellectual Property**: пройди checklist на товарный знак "TripTrack" + "ROAD TRIP TRACKER"
+6. **App Review Information**:
+   - Demo account: подготовить Apple ID для review team (критично — иначе revew fail на проверке SIA)
+   - Notes: использовать текст из `docs/app-review-notes.md`
+7. **Build Artefacts**: убедись что `PrivacyInfo.xcprivacy` попал в bundle (Xcode → target → Copy Bundle Resources)
