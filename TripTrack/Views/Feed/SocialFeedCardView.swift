@@ -5,6 +5,7 @@ import SwiftUI
 /// plus an action bar with reactions + share.
 struct SocialFeedCardView: View {
     let trip: SocialFeedTrip
+    var onTapCard: (() -> Void)?
     var onTapAuthor: (() -> Void)?
     var onReact: ((String) -> Void)?
     var onShare: (() -> Void)?
@@ -23,22 +24,31 @@ struct SocialFeedCardView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 10)
 
-            if let title = trip.title, !title.isEmpty {
-                Text(title)
-                    .font(.system(size: 17, weight: .heavy))
-                    .tracking(-0.1)
-                    .foregroundStyle(c.text)
-                    .lineLimit(2)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
+            Button {
+                Haptics.tap()
+                onTapCard?()
+            } label: {
+                VStack(alignment: .leading, spacing: 0) {
+                    if let title = trip.title, !title.isEmpty {
+                        Text(title)
+                            .font(.system(size: 17, weight: .heavy))
+                            .tracking(-0.1)
+                            .foregroundStyle(c.text)
+                            .lineLimit(2)
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 12)
+                    }
+
+                    mapSection(c)
+
+                    metricsStrip(c)
+                        .padding(.horizontal, 14)
+                        .padding(.top, 12)
+                        .padding(.bottom, 10)
+                }
+                .contentShape(Rectangle())
             }
-
-            mapSection(c)
-
-            metricsStrip(c)
-                .padding(.horizontal, 14)
-                .padding(.top, 12)
-                .padding(.bottom, 10)
+            .buttonStyle(.plain)
 
             if !trip.badgeIds.isEmpty {
                 TripBadgesRow(badgeIds: trip.badgeIds, maxVisible: 4, size: 22)

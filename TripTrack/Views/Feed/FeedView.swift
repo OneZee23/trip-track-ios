@@ -22,6 +22,7 @@ struct FeedView: View {
     @State private var collapsedSections: Set<String> = []
     @State private var feedMode: FeedMode = .own
     @State private var selectedAuthor: SocialAuthor?
+    @State private var selectedSocialTrip: SocialFeedTrip?
     @State private var showDiscover = false
     @State private var shareSheetData: (data: StoryShareData, url: String)?
 
@@ -106,6 +107,24 @@ struct FeedView: View {
             )) {
                 if let author = selectedAuthor {
                     PublicProfileView(accountId: author.id, preloaded: author)
+                }
+            }
+            .navigationDestination(isPresented: Binding(
+                get: { selectedSocialTrip != nil },
+                set: { if !$0 { selectedSocialTrip = nil } }
+            )) {
+                if let t = selectedSocialTrip {
+                    SocialTripDetailView(
+                        trip: t,
+                        onReact: { emoji in
+                            Task { await socialFeed.toggleReaction(for: t.id, emoji: emoji) }
+                            // Keep the current view in sync with optimistic update
+                            if let updated = socialFeed.trips.first(where: { $0.id == t.id }) {
+                                selectedSocialTrip = updated
+                            }
+                        },
+                        onShare: { shareSocialTrip(t) }
+                    )
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -320,6 +339,7 @@ struct FeedView: View {
             ForEach(socialFeed.trips) { trip in
                 SocialFeedCardView(
                     trip: trip,
+                    onTapCard: { selectedSocialTrip = trip },
                     onTapAuthor: { selectedAuthor = trip.author },
                     onReact: { emoji in
                         Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
