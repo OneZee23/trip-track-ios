@@ -14,19 +14,31 @@ final class SocialFeedStore: ObservableObject {
 
     private var nextCursor: String?
     private var hasMore = true
+    private var currentTask: Task<Void, Never>?
 
     private init() {}
 
     // MARK: - Load
 
     func refresh() async {
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
+        // Cancel any in-flight refresh so pull-to-refresh always triggers a fresh
+        // fetch. The previous URLSession task gets cancelled via Task cooperative
+        // cancellation — its -999 error is swallowed by fetchPage()'s catch.
+        currentTask?.cancel()
 
-        nextCursor = nil
-        hasMore = true
-        await fetchPage(replace: true)
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await MainActor.run { self.isLoading = true }
+            defer { Task { @MainActor in self.isLoading = false } }
+
+            await MainActor.run {
+                self.nextCursor = nil
+                self.hasMore = true
+            }
+            await self.fetchPage(replace: true)
+        }
+        currentTask = task
+        await task.value
     }
 
     func loadMoreIfNeeded(currentItem: SocialFeedTrip) async {
@@ -43,6 +55,7 @@ final class SocialFeedStore: ObservableObject {
         do {
             let res: SocialFeedResponse = try await APIClient.shared.post(
                 APIEndpoint.socialFeed, body: req)
+            try Task.checkCancellation()
             if replace {
                 trips = res.trips
             } else {
@@ -51,7 +64,13 @@ final class SocialFeedStore: ObservableObject {
             nextCursor = res.nextCursor
             hasMore = res.nextCursor != nil
             lastError = nil
+        } catch is CancellationError {
+            // Superseded by a newer refresh — ignore silently.
         } catch let e as APIError {
+            // URLSession cancellations surface as APIError.network(-999); ignore those too.
+            if case .network(let urlErr) = e, urlErr.code == .cancelled {
+                return
+            }
             lastError = e
             socialLog.error("feed fetch failed: \(String(describing: e))")
         } catch {
