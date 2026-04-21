@@ -224,3 +224,17 @@ struct SocialReportRequest: Codable {
 struct SocialReportResponse: Codable {
     let reported: Bool
 }
+
+// MARK: - Reactions breakdown
+
+struct SocialReactionEntry: Codable, Identifiable, Hashable {
+    let user: SocialAuthor
+    let emoji: String
+    let createdAt: Date
+
+    var id: String { "\(user.id.uuidString)-\(emoji)" }
+}
+
+struct SocialReactionsResponse: Codable {
+    let reactions: [SocialReactionEntry]
+}
