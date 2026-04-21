@@ -77,6 +77,12 @@ final class APISyncTransport: SyncTransport {
         } catch let err as APIError {
             if case .conflictDetected = err {
                 try await pullAndOverwriteTrip(id: id)
+            } else if case .tripNotFound = err {
+                // The trip used to exist on the server but is now gone — the account
+                // was reset, the trip was deleted elsewhere, or this ID belongs to
+                // another user (stale local cache). Server is authoritative for synced
+                // content, so we purge the local copy to stop the retry loop.
+                repo.deleteTripHard(id: id)
             } else {
                 throw err
             }
