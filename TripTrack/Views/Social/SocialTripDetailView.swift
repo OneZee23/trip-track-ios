@@ -11,6 +11,7 @@ struct SocialTripDetailView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
     @State private var selectedAuthor: SocialAuthor?
     @State private var showReport = false
     @State private var reactionEntries: [SocialReactionEntry] = []
@@ -19,40 +20,57 @@ struct SocialTripDetailView: View {
     private var mapBaseHeight: CGFloat {
         (UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.bounds.height ?? 844) * 0.42
+            .first?.windows.first?.bounds.height ?? 844) * 0.45
+    }
+
+    private var safeAreaTop: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.windows.first?.safeAreaInsets.top ?? 47
     }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let isRu = lang.language == .ru
 
-        ScrollView {
-            VStack(spacing: 0) {
-                mapSection(c)
-                    .frame(height: mapBaseHeight)
+        ZStack(alignment: .topLeading) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    mapSection(c)
+                        .frame(height: mapBaseHeight)
 
-                VStack(alignment: .leading, spacing: 16) {
-                    authorRow(c, isRu: isRu)
-                    titleSection(c)
-                    metricsGrid(c, isRu: isRu)
-                    if !trip.badgeIds.isEmpty {
-                        TripBadgesRow(badgeIds: trip.badgeIds, maxVisible: 6, size: 26)
-                            .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 16) {
+                        authorRow(c, isRu: isRu)
+                        titleSection(c)
+                        metricsGrid(c, isRu: isRu)
+                        if !trip.badgeIds.isEmpty {
+                            TripBadgesRow(badgeIds: trip.badgeIds, maxVisible: 6, size: 26)
+                                .padding(.top, 2)
+                        }
+                        reactionsRow(c)
+                        reactionsBreakdown(c)
                     }
-                    reactionsRow(c)
-                    reactionsBreakdown(c)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 80)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 80)
             }
-        }
-        .background(c.bg)
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) { NavBackButton() }
-            ToolbarItem(placement: .topBarTrailing) {
+            .ignoresSafeArea(edges: .top)
+            .scrollIndicators(.hidden)
+
+            // Sticky floating back button + menu — matches TripDetailView pattern.
+            HStack {
+                Button {
+                    Haptics.tap()
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(.black.opacity(0.4), in: Circle())
+                }
+                Spacer()
                 Menu {
                     Button {
                         Haptics.tap()
@@ -68,11 +86,18 @@ struct SocialTripDetailView: View {
                         Label(isRu ? "Пожаловаться" : "Report", systemImage: "flag")
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 16))
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(.black.opacity(0.4), in: Circle())
                 }
             }
+            .padding(.top, safeAreaTop)
+            .padding(.horizontal, 16)
         }
+        .background(c.bg)
+        .navigationBarHidden(true)
         .navigationDestination(isPresented: Binding(
             get: { selectedAuthor != nil },
             set: { if !$0 { selectedAuthor = nil } }

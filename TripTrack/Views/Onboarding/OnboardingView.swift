@@ -147,7 +147,11 @@ struct OnboardingView: View {
     private func consentText(_ c: AppTheme.Colors) -> some View {
         let termsURL = AppConfig.termsURL(lang.language).absoluteString
         let privacyURL = AppConfig.privacyPolicyURL(lang.language).absoluteString
-        let text = "\(AppStrings.onboardingConsent(lang.language)) [\(AppStrings.termsOfService(lang.language))](\(termsURL)) \(AppStrings.and(lang.language)) [\(AppStrings.privacyPolicy(lang.language))](\(privacyURL))"
+        let text = AppStrings.onboardingConsentMarkdown(
+            lang.language,
+            termsURL: termsURL,
+            privacyURL: privacyURL
+        )
         return Text(.init(text))
             .font(.system(size: 12))
             .foregroundStyle(c.textTertiary)
