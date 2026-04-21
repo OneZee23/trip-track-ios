@@ -14,12 +14,15 @@ struct CloudSyncView: View {
     @State private var showDeleteAccountAlert = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
+    @State private var showEnableConfirm = false
+    @State private var showBlockedList = false
+    @AppStorage("com.triptrack.sync.firstToggleShown") private var firstToggleShown = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let isRu = lang.language == .ru
 
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
                     // Hero icon + state
@@ -83,12 +86,29 @@ struct CloudSyncView: View {
                     )
 
                     if auth.isSignedIn {
+                        blockedEntry(c, isRu: isRu)
                         accountActions(c, isRu: isRu)
                             .padding(.top, 8)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 20)
+            }
+            .navigationDestination(isPresented: $showBlockedList) {
+                BlockedListView()
+            }
+            .alert(
+                isRu ? "Включить синхронизацию?" : "Turn on cloud sync?",
+                isPresented: $showEnableConfirm
+            ) {
+                Button(isRu ? "Отмена" : "Cancel", role: .cancel) {}
+                Button(isRu ? "Включить" : "Turn on") {
+                    enableCloudSync()
+                }
+            } message: {
+                Text(isRu
+                     ? "Ваши поездки, фото (с удалёнными метаданными), автомобили и настройки будут загружены на наш сервер в ЕС и доступны на других Ваших устройствах. Вы можете отключить в любой момент. Подробнее — в Политике конфиденциальности."
+                     : "Your trips, photos (with metadata stripped), vehicles, and settings will be uploaded to our EU server so you can access them on your other devices. You can turn this off anytime. See our Privacy Policy for details.")
             }
             .alert(
                 AppStrings.signOutConfirmTitle(lang.language),
@@ -178,25 +198,36 @@ struct CloudSyncView: View {
                 c: c
             ) {
                 if !settings.cloudSyncEnabled {
-                    settings.cloudSyncEnabled = true
-                    Task { @MainActor in
-                        let repo: TripRepository = CoreDataTripRepository()
-                        repo.markAllPendingUpload()
-                        for trip in repo.fetchAllTrips() {
-                            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: trip.id, action: .upload))
-                        }
-                        for vehicle in settings.vehicles {
-                            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: vehicle.id, action: .upload))
-                        }
-                        SyncEnqueuer.enqueue(SyncOperation(
-                            entityType: .settings, entityId: settings.localUserId, action: .upload))
-                        await SyncCoordinator.shared.runFullSync()
+                    // First time: show confirmation sheet (GDPR just-in-time consent pattern).
+                    // Subsequent toggles go through without interruption.
+                    if !firstToggleShown {
+                        showEnableConfirm = true
+                    } else {
+                        enableCloudSync()
                     }
                 }
             }
         }
         .padding(16)
         .surfaceCard(cornerRadius: 16)
+    }
+
+    private func enableCloudSync() {
+        settings.cloudSyncEnabled = true
+        firstToggleShown = true
+        Task { @MainActor in
+            let repo: TripRepository = CoreDataTripRepository()
+            repo.markAllPendingUpload()
+            for trip in repo.fetchAllTrips() {
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: trip.id, action: .upload))
+            }
+            for vehicle in settings.vehicles {
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: vehicle.id, action: .upload))
+            }
+            SyncEnqueuer.enqueue(SyncOperation(
+                entityType: .settings, entityId: settings.localUserId, action: .upload))
+            await SyncCoordinator.shared.runFullSync()
+        }
     }
 
     private func syncChip(label: String, icon: String, isActive: Bool, c: AppTheme.Colors, action: @escaping () -> Void) -> some View {
@@ -261,6 +292,32 @@ struct CloudSyncView: View {
         .animation(.easeInOut(duration: 0.2), value: syncQueue.isSyncing)
         .animation(.easeInOut(duration: 0.2), value: syncQueue.pendingCount)
         .animation(.easeInOut(duration: 0.2), value: settings.cloudSyncEnabled)
+    }
+
+    // MARK: - Blocked users entry
+
+    private func blockedEntry(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        Button {
+            Haptics.tap()
+            showBlockedList = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "hand.raised.slash")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(c.textSecondary)
+                    .frame(width: 24, alignment: .center)
+                Text(isRu ? "Заблокированные пользователи" : "Blocked users")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(c.text)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Account actions (sign out + delete)
