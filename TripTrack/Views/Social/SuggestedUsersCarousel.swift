@@ -20,8 +20,8 @@ struct SuggestedUsersCarousel: View {
         let c = AppTheme.colors(for: scheme)
         let isRu = lang.language == .ru
 
-        if !users.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            if !users.isEmpty {
                 HStack {
                     Text(isRu ? "Рекомендуем подписаться" : "Suggested")
                         .font(.system(size: 11, weight: .bold))
@@ -41,15 +41,9 @@ struct SuggestedUsersCarousel: View {
                     .padding(.horizontal, 4)
                 }
             }
-            .task {
-                if !didLoad { didLoad = true; await load() }
-            }
-        } else if !didLoad {
-            // Placeholder to trigger initial load
-            Color.clear.frame(height: 1).task {
-                didLoad = true
-                await load()
-            }
+        }
+        .task {
+            if !didLoad { didLoad = true; await load() }
         }
     }
 
