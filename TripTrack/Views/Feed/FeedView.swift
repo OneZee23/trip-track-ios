@@ -23,6 +23,7 @@ struct FeedView: View {
     @State private var feedMode: FeedMode = .own
     @State private var selectedAuthor: SocialAuthor?
     @State private var selectedSocialTrip: SocialFeedTrip?
+    @State private var reactionPickerTrip: SocialFeedTrip?
     @State private var showDiscover = false
     @State private var shareSheetData: (data: StoryShareData, url: String)?
 
@@ -279,6 +280,20 @@ struct FeedView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .animation(.easeInOut(duration: 0.3), value: mapVM.isRecording)
         }
+
+        // Reaction picker (iMessage-style) — appears on long-press of a feed card
+        if let picked = reactionPickerTrip {
+            ReactionPickerOverlay(
+                currentReaction: picked.myReaction,
+                onPick: { emoji in
+                    Task { await socialFeed.toggleReaction(for: picked.id, emoji: emoji) }
+                    reactionPickerTrip = nil
+                },
+                onDismiss: { reactionPickerTrip = nil }
+            )
+            .transition(.opacity)
+            .zIndex(100)
+        }
         } // ZStack
     }
 
@@ -341,6 +356,7 @@ struct FeedView: View {
                     trip: trip,
                     onTapCard: { selectedSocialTrip = trip },
                     onTapAuthor: { selectedAuthor = trip.author },
+                    onLongPress: { reactionPickerTrip = trip },
                     onReact: { emoji in
                         Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
                     },

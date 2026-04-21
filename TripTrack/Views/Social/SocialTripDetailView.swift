@@ -13,6 +13,8 @@ struct SocialTripDetailView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var selectedAuthor: SocialAuthor?
     @State private var showReport = false
+    @State private var reactionEntries: [SocialReactionEntry] = []
+    @State private var isLoadingReactions = false
 
     private var mapBaseHeight: CGFloat {
         (UIApplication.shared.connectedScenes
@@ -38,6 +40,7 @@ struct SocialTripDetailView: View {
                             .padding(.top, 2)
                     }
                     reactionsRow(c)
+                    reactionsBreakdown(c)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -79,6 +82,19 @@ struct SocialTripDetailView: View {
         .sheet(isPresented: $showReport) {
             ReportSheet(target: .trip(trip.id))
                 .environmentObject(lang)
+        }
+        .task { await loadReactions() }
+    }
+
+    private func loadReactions() async {
+        isLoadingReactions = true
+        defer { isLoadingReactions = false }
+        do {
+            let res: SocialReactionsResponse = try await APIClient.shared.post(
+                APIEndpoint.socialReactions, body: SocialUnreactRequest(tripId: trip.id))
+            reactionEntries = res.reactions
+        } catch {
+            // Non-fatal — breakdown stays empty
         }
     }
 
@@ -239,6 +255,88 @@ struct SocialTripDetailView: View {
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isMine)
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Reactions breakdown
+
+    @ViewBuilder
+    private func reactionsBreakdown(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        if reactionEntries.isEmpty {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(isRu ? "Реакции" : "Reactions")
+                        .font(.system(size: 11, weight: .bold))
+                        .tracking(0.5)
+                        .foregroundStyle(c.textTertiary)
+                        .textCase(.uppercase)
+                    Text("\(reactionEntries.count)")
+                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(c.textTertiary)
+                    Spacer()
+                    breakdownSummary(c)
+                }
+
+                ForEach(reactionEntries) { entry in
+                    reactionRow(entry, c: c, isRu: isRu)
+                }
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 14)
+        }
+    }
+
+    /// Horizontal stack like "👍 2 · 🔥 1 · ❤️ 3" ranking emojis by count.
+    private func breakdownSummary(_ c: AppTheme.Colors) -> some View {
+        let counts = Dictionary(grouping: reactionEntries, by: { $0.emoji })
+            .mapValues { $0.count }
+            .sorted { $0.value > $1.value }
+        return HStack(spacing: 6) {
+            ForEach(Array(counts.prefix(3)), id: \.key) { emoji, count in
+                HStack(spacing: 2) {
+                    Text(emoji).font(.system(size: 12))
+                    Text("\(count)")
+                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(c.textSecondary)
+                }
+            }
+        }
+    }
+
+    private func reactionRow(_ entry: SocialReactionEntry, c: AppTheme.Colors, isRu: Bool) -> some View {
+        Button {
+            Haptics.tap()
+            selectedAuthor = entry.user
+        } label: {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(AppTheme.accentBg)
+                    .frame(width: 32, height: 32)
+                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.system(size: 16)) }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(entry.user.displayName ?? (isRu ? "Пользователь" : "User"))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    Text(relativeTime(entry.createdAt, isRu: isRu))
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textTertiary)
+                }
+                Spacer()
+                Text(entry.emoji)
+                    .font(.system(size: 22))
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func relativeTime(_ date: Date, isRu: Bool) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: isRu ? "ru_RU" : "en_US")
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
     // MARK: - Formatters
