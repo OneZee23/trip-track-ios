@@ -245,19 +245,29 @@ enum AppStrings {
     static func onboardingAutoRecordSkip(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Настрою позже" : "Set up later"
     }
-    static func onboardingConsent(_ lang: LanguageManager.Language) -> String {
-        lang == .ru
-            ? "Продолжая, Вы принимаете"
-            : "By continuing, you accept our"
+    /// Composes the full onboarding consent sentence with clickable Markdown links.
+    /// Uses correct Russian declension (instrumental after «соглашаетесь с»).
+    static func onboardingConsentMarkdown(
+        _ lang: LanguageManager.Language,
+        termsURL: String,
+        privacyURL: String
+    ) -> String {
+        if lang == .ru {
+            return "Продолжая, Вы соглашаетесь с [Условиями использования](\(termsURL)) и [Политикой конфиденциальности](\(privacyURL))"
+        } else {
+            return "By continuing, you accept our [Terms of Service](\(termsURL)) and [Privacy Policy](\(privacyURL))"
+        }
     }
+
+    /// Nominative / standalone title. Use wherever the text stands alone
+    /// (button, row in settings, link in the profile).
     static func termsOfService(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Условиями" : "Terms"
+        lang == .ru ? "Условия использования" : "Terms of Service"
     }
+
+    /// Nominative / standalone title.
     static func privacyPolicy(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Политикой конфиденциальности" : "Privacy Policy"
-    }
-    static func and(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "и" : "and"
+        lang == .ru ? "Политика конфиденциальности" : "Privacy Policy"
     }
 
     // MARK: - Badges
