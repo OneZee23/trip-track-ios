@@ -117,12 +117,33 @@ struct PublicProfileView: View {
     // MARK: - Hero
 
     private func heroSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(spacing: 12) {
+        let bg = ProfileBackground.from(profile?.profileBackground)
+
+        return VStack(spacing: 0) {
+            // Banner
+            ZStack {
+                if bg == .none {
+                    c.cardAlt
+                } else {
+                    bg.view()
+                }
+            }
+            .frame(height: 110)
+            .frame(maxWidth: .infinity)
+            .clipShape(UnevenRoundedRectangle(
+                topLeadingRadius: 18, bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0, topTrailingRadius: 18
+            ))
+
             let emoji = profile?.avatarEmoji ?? preloaded?.avatarEmoji ?? "🚗"
             Circle()
-                .fill(AppTheme.accentBg)
+                .fill(c.card)
+                .overlay(Circle().stroke(c.cardAlt, lineWidth: 3))
                 .frame(width: 88, height: 88)
                 .overlay { Text(emoji).font(.system(size: 44)) }
+                .offset(y: -44)
+                .padding(.bottom, -44)
+                .padding(.top, 12)
 
             VStack(spacing: 4) {
                 Text(profile?.displayName ?? preloaded?.displayName ?? (isRu ? "Пользователь" : "User"))
@@ -460,7 +481,8 @@ private extension SocialProfile {
     func with(isFollowing: Bool, followerCount: Int) -> SocialProfile {
         SocialProfile(
             id: id, displayName: displayName, avatarEmoji: avatarEmoji,
-            profileLevel: profileLevel, stats: stats, recentTrips: recentTrips,
+            profileLevel: profileLevel, profileBackground: profileBackground,
+            stats: stats, recentTrips: recentTrips,
             followerCount: followerCount, followingCount: followingCount,
             isFollowing: isFollowing
         )
