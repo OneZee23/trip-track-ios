@@ -35,6 +35,8 @@ struct BlockedListView: View {
         .background(c.bg)
         .navigationTitle(isRu ? "Заблокированные" : "Blocked")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar { ToolbarItem(placement: .topBarLeading) { NavBackButton() } }
         .task { await load() }
         .refreshable { await load() }
     }

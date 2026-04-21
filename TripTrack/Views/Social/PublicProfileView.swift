@@ -42,7 +42,9 @@ struct PublicProfileView: View {
         }
         .background(c.bg)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) { NavBackButton() }
             ToolbarItem(placement: .principal) {
                 Text(profile?.displayName ?? preloaded?.displayName ?? (isRu ? "Профиль" : "Profile"))
                     .font(.system(size: 15, weight: .bold))

@@ -43,6 +43,8 @@ struct FollowListView: View {
         .background(c.bg)
         .navigationTitle(titleString(isRu: isRu))
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar { ToolbarItem(placement: .topBarLeading) { NavBackButton() } }
         .navigationDestination(isPresented: Binding(
             get: { selectedAuthor != nil },
             set: { if !$0 { selectedAuthor = nil } }

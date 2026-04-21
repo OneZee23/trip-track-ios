@@ -49,7 +49,9 @@ struct SocialTripDetailView: View {
         }
         .background(c.bg)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) { NavBackButton() }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
