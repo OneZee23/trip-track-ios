@@ -451,7 +451,7 @@ struct PublicProfileView: View {
         if !ids.isEmpty {
             let badges = ids.compactMap { id in Badge.all.first(where: { $0.id == id }) }
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
+                HStack(spacing: 6) {
                     Text(isRu ? "Ачивки" : "Achievements")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(c.text)
@@ -463,16 +463,22 @@ struct PublicProfileView: View {
                     Spacer()
                 }
 
+                // Wrap ScrollView in a rounded container that owns both the
+                // background and the clip shape. Applying `surfaceCard` directly
+                // to the ScrollView worked for the fill but didn't clip the
+                // scroll content — items bled past the rounded corners and the
+                // card looked broken when content overflowed horizontally.
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 14) {
                         ForEach(badges) { badge in
                             badgeCell(badge, c: c)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
                 }
-                .surfaceCard(cornerRadius: 14)
+                .background(c.card)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
         }
     }
@@ -495,7 +501,8 @@ struct PublicProfileView: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
                     .lineLimit(1)
-                    .frame(width: 64)
+                    .minimumScaleFactor(0.7)
+                    .frame(width: 72)
             }
         }
         .buttonStyle(.plain)
