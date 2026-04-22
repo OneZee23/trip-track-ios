@@ -141,9 +141,8 @@ struct SocialProfileStats: Codable, Hashable {
     /// Total trip count including private trips.
     let tripCount: Int
     let regionsCount: Int
-    /// How many of those trips are currently public. Older backends may omit
-    /// this — fall back to `tripCount` on the client when nil.
-    let publicTripCount: Int?
+    /// How many of those trips are currently public.
+    let publicTripCount: Int
 }
 
 struct SocialProfileRecentTrip: Codable, Identifiable, Hashable {
@@ -177,13 +176,11 @@ struct SocialProfile: Codable, Hashable {
     let avatarEmoji: String?
     let profileLevel: Int
     let profileBackground: String?
-    /// Current consecutive-day trip streak. Backend field is nullable on older
-    /// records; default to 0 for graceful fallback.
-    let currentStreak: Int?
-    let bestStreak: Int?
+    let currentStreak: Int
+    let bestStreak: Int
     let stats: SocialProfileStats
     let activeVehicle: SocialActiveVehicle?
-    let recentBadges: [String]?
+    let recentBadges: [String]
     let recentTrips: [SocialProfileRecentTrip]
     let followerCount: Int
     let followingCount: Int
@@ -192,10 +189,13 @@ struct SocialProfile: Codable, Hashable {
 
 // MARK: - Profile appearance update
 
-/// Client → server push of all mutable profile fields. Everything optional so the
-/// same DTO covers partial updates (e.g. just tapping a new avatar) and full
-/// push-on-appear.
-struct ProfileUpdateRequest: Codable {
+/// Client → server push of all mutable profile fields. Everything optional so
+/// the same DTO covers partial updates (e.g. just tapping a new avatar) and
+/// full push-on-appear. Uses `encodeIfPresent` so nil fields are **omitted**
+/// from the JSON rather than sent as `null` — important because the server
+/// treats `null` as "clear this field" while an absent key means "leave
+/// unchanged".
+struct ProfileUpdateRequest: Encodable {
     let displayName: String?
     let avatarEmoji: String?
     let profileBackground: String?
@@ -203,9 +203,27 @@ struct ProfileUpdateRequest: Codable {
     let profileXp: Int?
     let currentStreak: Int?
     let bestStreak: Int?
-    /// UUID string of the active vehicle; pass nil to leave unchanged. Empty
-    /// string is reserved for future "clear selection" intent.
+    /// UUID string of the active vehicle. Empty string clears the selection
+    /// server-side; nil means "don't change".
     let activeVehicleId: String?
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(displayName, forKey: .displayName)
+        try c.encodeIfPresent(avatarEmoji, forKey: .avatarEmoji)
+        try c.encodeIfPresent(profileBackground, forKey: .profileBackground)
+        try c.encodeIfPresent(profileLevel, forKey: .profileLevel)
+        try c.encodeIfPresent(profileXp, forKey: .profileXp)
+        try c.encodeIfPresent(currentStreak, forKey: .currentStreak)
+        try c.encodeIfPresent(bestStreak, forKey: .bestStreak)
+        try c.encodeIfPresent(activeVehicleId, forKey: .activeVehicleId)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case displayName, avatarEmoji, profileBackground
+        case profileLevel, profileXp, currentStreak, bestStreak
+        case activeVehicleId
+    }
 }
 
 // MARK: - Allowed reaction emoji (matches backend whitelist)

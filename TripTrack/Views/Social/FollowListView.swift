@@ -18,6 +18,7 @@ struct FollowListView: View {
     @State private var users: [SocialAuthor] = []
     @State private var isLoading = false
     @State private var selectedAuthor: SocialAuthor?
+    @State private var loadError: String?
     /// Gate initial fetch — `.task` re-fires on every view re-appearance
     /// (e.g. popping back from a pushed profile), so without this the same
     /// list would be fetched twice for each navigation round-trip.
@@ -32,6 +33,8 @@ struct FollowListView: View {
                 if isLoading, users.isEmpty {
                     ProgressView()
                         .padding(.vertical, 60)
+                } else if let err = loadError, users.isEmpty {
+                    errorState(err, c: c, isRu: isRu)
                 } else if users.isEmpty {
                     emptyState(c, isRu: isRu)
                 } else {
@@ -42,12 +45,17 @@ struct FollowListView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            .padding(.bottom, 32)
+            .padding(.bottom, 120)
         }
         .background(c.bg)
         .navigationTitle(titleString(isRu: isRu))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        // See PublicProfileView for why explicit background is needed — keeps
+        // the nav bar painted during pop animation instead of briefly
+        // revealing the pushed profile underneath.
+        .toolbarBackground(c.bg, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar { ToolbarItem(placement: .topBarLeading) { NavBackButton() } }
         .navigationDestination(isPresented: Binding(
             get: { selectedAuthor != nil },
@@ -93,6 +101,31 @@ struct FollowListView: View {
         }
     }
 
+    private func errorState(_ msg: String, c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 28))
+                .foregroundStyle(.red)
+            Text(isRu ? "Не удалось загрузить список" : "Couldn't load list")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(c.textSecondary)
+            Text(msg)
+                .font(.system(size: 11))
+                .foregroundStyle(c.textTertiary)
+                .multilineTextAlignment(.center)
+            Button(isRu ? "Повторить" : "Retry") {
+                Haptics.tap()
+                Task { await load() }
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(AppTheme.accent)
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
+        .padding(.horizontal, 24)
+    }
+
     private func userRow(_ user: SocialAuthor, c: AppTheme.Colors, isRu: Bool) -> some View {
         Button {
             Haptics.tap()
@@ -135,7 +168,9 @@ struct FollowListView: View {
             let req = SocialFollowersRequest(accountId: accountId, limit: 100, offset: 0)
             let res: SocialFollowersResponse = try await APIClient.shared.post(endpoint, body: req)
             users = res.users
+            loadError = nil
         } catch {
+            loadError = error.localizedDescription
             followListLog.error("load failed: \(error.localizedDescription)")
         }
     }

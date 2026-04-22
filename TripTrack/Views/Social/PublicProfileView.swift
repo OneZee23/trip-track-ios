@@ -79,6 +79,13 @@ struct PublicProfileView: View {
         .background(c.bg)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        // Pin the nav bar's background so it stays painted during push/pop
+        // transitions. Without `.visible` SwiftUI fades the background based
+        // on scroll — and the brief fade during the pop animation is what
+        // users see as a "teleport" flash to a broken-looking intermediate
+        // screen when returning from a pushed FollowListView.
+        .toolbarBackground(c.bg, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { NavBackButton() }
             ToolbarItem(placement: .principal) {
@@ -115,20 +122,22 @@ struct PublicProfileView: View {
             }
         }
         .task {
-            // Gate with `didInitialLoad` so popping back from a pushed
-            // FollowListView / PublicProfileView doesn't re-run the expensive
-            // sync + fetch cycle on every re-appearance. Pull-to-refresh
-            // remains the explicit "I want fresh data" control below.
+            // `didInitialLoad` gates the initial fetch so popping back from a
+            // pushed FollowListView doesn't re-run the expensive sync + fetch
+            // cycle on every re-appearance. The `.onChange(of: auth.isSignedIn)`
+            // below resets the gate if the user signs out and back in while
+            // this view is mounted — otherwise the gate would wedge the
+            // screen on the previous account's data.
             guard !didInitialLoad else { return }
             didInitialLoad = true
             if isOwnProfile {
-                // Push local state FIRST so the subsequent fetch reflects
-                // current client-authoritative fields (level, streak,
-                // displayName). Without this the first render shows stale
-                // server defaults (LVL 1, 0 streak) until pull-to-refresh.
                 await AuthService.shared.syncProfileToServer()
             }
             await loadProfile()
+        }
+        .onChange(of: auth.isSignedIn) { _, _ in
+            didInitialLoad = false
+            profile = nil
         }
         .refreshable {
             if isOwnProfile {
@@ -566,8 +575,6 @@ struct PublicProfileView: View {
     @ViewBuilder
     private func recentTrips(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         if let trips = profile?.recentTrips, !trips.isEmpty {
-            // Prefer server-reported public count; fall back to rendered list
-            // length for older backends that don't yet return `publicTripCount`.
             let publicCount = profile?.stats.publicTripCount ?? trips.count
             let totalCount = profile?.stats.tripCount ?? trips.count
             VStack(alignment: .leading, spacing: 10) {
@@ -594,12 +601,15 @@ struct PublicProfileView: View {
                     recentTripRow(t, c: c, isRu: isRu)
                 }
             }
+        } else if let err = loadError {
+            // Error takes priority over the empty state so a failed refresh
+            // of an already-loaded profile doesn't silently fall back to
+            // "No public trips yet" — user needs to know the fetch failed.
+            errorRow(err, c: c, isRu: isRu)
         } else if profile != nil {
             emptyTripsHint(c, isRu: isRu)
         } else if isLoading {
-            skeleton(c)
-        } else if let err = loadError {
-            errorRow(err, c: c, isRu: isRu)
+            skeleton()
         }
     }
 
@@ -662,7 +672,7 @@ struct PublicProfileView: View {
         .padding(.vertical, 32)
     }
 
-    private func skeleton(_ c: AppTheme.Colors) -> some View {
+    private func skeleton() -> some View {
         ProgressView()
             .frame(maxWidth: .infinity)
             .padding(.vertical, 32)
@@ -725,12 +735,11 @@ struct PublicProfileView: View {
     }
 
     private func toggleFollow() async {
-        guard var current = profile else { return }
+        guard let current = profile else { return }
         let wasFollowing = current.isFollowing ?? false
         isTogglingFollow = true
         defer { isTogglingFollow = false }
 
-        // Optimistic update
         profile = current.with(isFollowing: !wasFollowing,
                                followerCount: current.followerCount + (wasFollowing ? -1 : 1))
         do {
@@ -738,9 +747,12 @@ struct PublicProfileView: View {
             let endpoint = wasFollowing ? APIEndpoint.socialUnfollow : APIEndpoint.socialFollow
             let _: SocialFollowResponse = try await APIClient.shared.post(endpoint, body: req)
         } catch {
-            // Revert
-            profile = current
             profileLog.error("follow toggle failed: \(error.localizedDescription)")
+            // Don't revert to the pre-optimistic snapshot — a concurrent pull
+            // may have mutated `profile` meanwhile, and clobbering it would
+            // overwrite fresh server state. Re-fetch instead so the view
+            // reconciles to server truth.
+            await loadProfile()
         }
     }
 
