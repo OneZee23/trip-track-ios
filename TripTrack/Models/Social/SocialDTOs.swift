@@ -138,8 +138,12 @@ struct SocialShareResponse: Codable {
 struct SocialProfileStats: Codable, Hashable {
     /// km (already divided by 1000 on backend)
     let totalKm: Double
+    /// Total trip count including private trips.
     let tripCount: Int
     let regionsCount: Int
+    /// How many of those trips are currently public. Older backends may omit
+    /// this — fall back to `tripCount` on the client when nil.
+    let publicTripCount: Int?
 }
 
 struct SocialProfileRecentTrip: Codable, Identifiable, Hashable {
