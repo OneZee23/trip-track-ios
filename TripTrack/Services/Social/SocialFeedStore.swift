@@ -41,6 +41,13 @@ final class SocialFeedStore: ObservableObject {
         await task.value
     }
 
+    /// Optimistic removal used when the user flips one of their own trips back to
+    /// private from the detail screen — removes the card immediately so the feed
+    /// reflects the new privacy state without waiting for the server round-trip.
+    func removeOptimistically(tripId: UUID) {
+        trips.removeAll { $0.id == tripId }
+    }
+
     func loadMoreIfNeeded(currentItem: SocialFeedTrip) async {
         guard hasMore, !isLoadingMore,
               let last = trips.last,

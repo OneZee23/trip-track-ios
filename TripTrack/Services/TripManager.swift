@@ -60,6 +60,8 @@ final class TripManager: ObservableObject {
         entity.fuelCurrency = FuelCurrency.current
         entity.lastModifiedAt = Date()
         entity.userId = SettingsManager.shared.localUserId
+        // New trips are private by default; owner can toggle visibility from the trip detail.
+        entity.isPrivate = true
         persistenceController.save()
 
         activeTripEntity = entity
@@ -834,6 +836,10 @@ final class TripManager: ObservableObject {
         Task { @MainActor in
             SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
         }
+    }
+
+    func updatePrivacy(for tripId: UUID, isPrivate: Bool) {
+        repository.updatePrivacy(for: tripId, isPrivate: isPrivate)
     }
 
     // MARK: - Geocoding Retry

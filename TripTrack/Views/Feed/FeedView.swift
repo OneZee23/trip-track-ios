@@ -37,63 +37,38 @@ struct FeedView: View {
 
         ZStack(alignment: .bottom) {
         NavigationStack {
-            ScrollViewReader { scrollProxy in
-            ScrollView {
-                LazyVStack(spacing: 6) {
-                    feedModeSwitcher(c)
-                        .padding(.top, 4)
-                        .id("feedTop")
+            VStack(spacing: 0) {
+                // Pinned outside the paged TabView so the pill row stays put while the
+                // content underneath slides horizontally.
+                feedModeSwitcher(c)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                    .padding(.bottom, 6)
+                    .background(c.bg)
 
-                    if feedMode == .mine {
-                        ContributionCalendarView(
-                            dateFrom: Binding(
-                                get: { feedVM.filters.dateFrom },
-                                set: { newDate in
-                                    feedVM.setDateRange(from: newDate, to: feedVM.filters.dateTo)
-                                }
-                            ),
-                            dateTo: Binding(
-                                get: { feedVM.filters.dateTo },
-                                set: { newDate in
-                                    feedVM.setDateRange(from: feedVM.filters.dateFrom, to: newDate)
-                                }
-                            ),
-                            language: lang.language,
-                            maxKmDay: feedVM.maxKmDay,
-                            kmByDay: { feedVM.kmByDay(for: $0) }
-                        )
-                        .padding(.top, auth.isSignedIn ? 0 : 4)
-                        .id(auth.isSignedIn ? "feedOwnTop" : "feedTop")
-
-                        quickStats(c)
-
-                        filterBar(c)
-                            .padding(.top, 2)
-
-                        tripSections(c)
-                    } else if auth.isSignedIn {
-                        socialFeedContent(c)
-                            .padding(.top, 6)
-                    } else {
-                        guestFriendsState(c)
-                            .padding(.top, 6)
-                    }
+                // Native page-style TabView gives us smooth horizontal slide with
+                // iOS's own physics — much nicer than our cross-fade or manual drag
+                // gesture. The pills above stay fixed, only the content below slides.
+                TabView(selection: $feedMode) {
+                    allFeedPage(c)
+                        .tag(FeedMode.all)
+                    mineFeedPage(c)
+                        .tag(FeedMode.mine)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 120)
-            }
-            .scrollIndicators(.hidden)
-            .background(c.bg)
-            .onReceive(NotificationCenter.default.publisher(for: .feedScrollToTop)) { _ in
-                if selectedTripId != nil {
-                    selectedTripId = nil
-                } else {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        scrollProxy.scrollTo("feedTop", anchor: .top)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                // Disable the rubber-band bounce when swiping past the first or last
+                // page — the underlying UIPageViewController uses a UIScrollView that
+                // bounces by default, which shows the black background on edges.
+                .background(PageViewBounceDisabler())
+                .onChange(of: feedMode) { _, newMode in
+                    if newMode == .all, auth.isSignedIn {
+                        Task { await socialFeed.refresh() }
+                    } else if newMode == .mine {
+                        feedVM.language = lang.language
+                        feedVM.loadTrips()
                     }
                 }
             }
-            } // ScrollViewReader
             .navigationDestination(isPresented: Binding(
                 get: { selectedTripId != nil },
                 set: { if !$0 { selectedTripId = nil } }
@@ -160,40 +135,43 @@ struct FeedView: View {
                             .background(c.cardAlt, in: Circle())
                     }
                 }
-                if auth.isSignedIn, feedMode == .all {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { showDiscover = true } label: {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 38, height: 38)
-                                .foregroundStyle(c.text)
-                                .background(c.cardAlt, in: Circle())
-                        }
+                // Keep the trailing slot rendered in both tabs even when the user
+                // is signed out — conditionally toggling ToolbarItem presence forces
+                // SwiftUI to rebuild the nav bar and causes a visible hop/strip when
+                // switching Лента ↔ Мои.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        if auth.isSignedIn { showDiscover = true }
+                        else { showProfile = true }
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 38, height: 38)
+                            .foregroundStyle(c.text)
+                            .background(c.cardAlt, in: Circle())
                     }
                 }
             }
+            // Pin the nav bar's background so it stays painted regardless of scroll
+            // position or tab transitions. Without `.visible`, SwiftUI defaults to
+            // "automatic" which fades the background in/out based on scroll — the
+            // re-fade on tab switch is the subtle "drop" users see.
             .toolbarBackground(c.bg.opacity(0.95), for: .navigationBar)
-            .toolbarBackground(.automatic, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
         .toast(item: $feedVM.toastItem)
-        .refreshable {
-            if feedMode == .all {
-                await socialFeed.refresh()
-            } else {
-                feedVM.language = lang.language
-                feedVM.loadTrips()
-            }
-        }
+        // Per-page refreshable modifiers live inside allFeedPage / mineFeedPage so
+        // pull-to-refresh fires in the correct ScrollView (TabView hosts each page
+        // in its own scroll container).
         .onAppear {
-            if !didLoad {
-                didLoad = true
-                feedVM.language = lang.language
-                feedVM.loadTrips()
-                // Kick off combined feed fetch as soon as Feed tab opens — otherwise
-                // the user would have to pull-to-refresh before seeing anything.
-                if auth.isSignedIn, socialFeed.trips.isEmpty {
-                    Task { await socialFeed.refresh() }
-                }
+            // Refresh on every appearance (tab switches, back-from-detail, etc.) so the
+            // feed always reflects server state. Each refresh only fetches the first
+            // page (limit=20) — extra pages load lazily via loadMoreIfNeeded when the
+            // user scrolls, so the cost stays bounded even with a large feed.
+            feedVM.language = lang.language
+            feedVM.loadTrips()
+            if auth.isSignedIn {
+                Task { await socialFeed.refresh() }
             }
             feedVM.retryGeocodingIfNeeded()
         }
@@ -232,6 +210,23 @@ struct FeedView: View {
         .onReceive(NotificationCenter.default.publisher(for: .switchToFeedWithRegionFilter)) { notif in
             if let region = notif.object as? String {
                 feedVM.setRegionFilter(region)
+            }
+        }
+        // Privacy flipped on a trip the user owns. If it just went private, drop the
+        // card from the feed immediately with a fade — waiting 2–3s for the sync push
+        // to reach the server and come back through /social/feed felt laggy. Either way
+        // we still trigger a delayed refresh so the server's authoritative state
+        // (including any trips that got added by going public) reconciles.
+        .onReceive(NotificationCenter.default.publisher(for: .tripPrivacyChanged)) { notif in
+            guard auth.isSignedIn else { return }
+            if let payload = notif.object as? PrivacyChangePayload, payload.isPrivate {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    socialFeed.removeOptimistically(tripId: payload.tripId)
+                }
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                await socialFeed.refresh()
             }
         }
         .sheet(isPresented: $showProfile) {
@@ -328,9 +323,19 @@ struct FeedView: View {
         let active = feedMode == mode
         return Button {
             Haptics.selection()
+            let wasActive = active
             withAnimation(.easeInOut(duration: 0.2)) { feedMode = mode }
+            // When switching tabs, scroll back to top so the content change is obvious —
+            // otherwise the ScrollView preserves offset and can leave the user staring at
+            // the bottom of the previous tab's content.
+            if !wasActive {
+                NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
+            }
             if mode == .all, auth.isSignedIn {
                 Task { await socialFeed.refresh() }
+            } else if mode == .mine {
+                feedVM.language = lang.language
+                feedVM.loadTrips()
             }
         } label: {
             Text(label)
@@ -347,6 +352,90 @@ struct FeedView: View {
                 .shadow(color: active ? Color.black.opacity(0.04) : Color.clear, radius: 1, y: 1)
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Feed Pages (paged TabView content)
+
+    @ViewBuilder
+    private func allFeedPage(_ c: AppTheme.Colors) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 6) {
+                    Color.clear.frame(height: 0).id("feedTopAll")
+                    if auth.isSignedIn {
+                        socialFeedContent(c).padding(.top, 6)
+                    } else {
+                        guestFriendsState(c).padding(.top, 6)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 120)
+            }
+            .scrollIndicators(.hidden)
+            .background(c.bg)
+            .refreshable {
+                if auth.isSignedIn { await socialFeed.refresh() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .feedScrollToTop)) { _ in
+                if selectedTripId != nil { selectedTripId = nil }
+                else {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo("feedTopAll", anchor: .top)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func mineFeedPage(_ c: AppTheme.Colors) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 6) {
+                    Color.clear.frame(height: 0).id("feedTopMine")
+                    ContributionCalendarView(
+                        dateFrom: Binding(
+                            get: { feedVM.filters.dateFrom },
+                            set: { newDate in
+                                feedVM.setDateRange(from: newDate, to: feedVM.filters.dateTo)
+                            }
+                        ),
+                        dateTo: Binding(
+                            get: { feedVM.filters.dateTo },
+                            set: { newDate in
+                                feedVM.setDateRange(from: feedVM.filters.dateFrom, to: newDate)
+                            }
+                        ),
+                        language: lang.language,
+                        maxKmDay: feedVM.maxKmDay,
+                        kmByDay: { feedVM.kmByDay(for: $0) }
+                    )
+
+                    quickStats(c)
+
+                    filterBar(c)
+                        .padding(.top, 2)
+
+                    tripSections(c)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 120)
+            }
+            .scrollIndicators(.hidden)
+            .background(c.bg)
+            .refreshable {
+                feedVM.language = lang.language
+                feedVM.loadTrips()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .feedScrollToTop)) { _ in
+                if selectedTripId != nil { selectedTripId = nil }
+                else {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo("feedTopMine", anchor: .top)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Social Feed Content
@@ -373,9 +462,21 @@ struct FeedView: View {
             socialEmptyState(c, isRu: isRu)
         } else {
             ForEach(socialFeed.trips) { trip in
+                let isOwn = isOwnSocialTrip(trip)
+                let ownVehicle = isOwn ? ownVehicleFor(tripId: trip.id) : nil
                 SocialFeedCardView(
                     trip: trip,
-                    onTapCard: { selectedSocialTrip = trip },
+                    isOwn: isOwn,
+                    ownVehicle: ownVehicle,
+                    onTapCard: {
+                        // Own trips open the regular TripDetailView (vehicle-based header,
+                        // edit pencil, privacy toggle) — same experience as from "Мои".
+                        if isOwn {
+                            selectedTripId = trip.id
+                        } else {
+                            selectedSocialTrip = trip
+                        }
+                    },
                     onTapAuthor: { selectedAuthor = trip.author },
                     onLongPress: { reactionPickerTrip = trip },
                     onReact: { emoji in
@@ -388,7 +489,14 @@ struct FeedView: View {
                 .onAppear {
                     Task { await socialFeed.loadMoreIfNeeded(currentItem: trip) }
                 }
+                // Smooth fade + collapse when a card is removed (e.g. after the user
+                // flips their own trip back to private).
+                .transition(.asymmetric(
+                    insertion: .opacity,
+                    removal: .opacity.combined(with: .scale(scale: 0.92)).combined(with: .move(edge: .leading))
+                ))
             }
+            .animation(.easeInOut(duration: 0.35), value: socialFeed.trips.map(\.id))
 
             if socialFeed.isLoadingMore {
                 ProgressView()
@@ -484,14 +592,14 @@ struct FeedView: View {
                 .font(.system(size: 44, weight: .light))
                 .foregroundStyle(c.textTertiary)
                 .padding(.top, 40)
-            Text(isRu ? "Здесь появятся ваши и поездки друзей" : "Your and friends' trips will appear here")
+            Text(isRu ? "Здесь появятся поездки друзей" : "Friends' trips will appear here")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             Text(isRu
-                 ? "Подпишитесь на кого-нибудь выше или запишите свою первую поездку."
-                 : "Follow someone above or record your first trip.")
+                 ? "Подпишитесь на кого-нибудь выше, чтобы видеть их поездки."
+                 : "Follow someone above to see their trips.")
                 .font(.system(size: 13))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
@@ -499,6 +607,21 @@ struct FeedView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 40)
+    }
+
+    /// True when a feed card refers to the signed-in user's own trip. Used to route
+    /// taps to the regular TripDetailView (with edit pencil + privacy toggle) instead
+    /// of the read-only SocialTripDetailView.
+    private func isOwnSocialTrip(_ trip: SocialFeedTrip) -> Bool {
+        TokenStore.shared.accountId == trip.author.id
+    }
+
+    /// Looks up the local vehicle attached to a trip (by id) so own-trip cards in the
+    /// feed render with the same vehicle header as in the "Мои" tab.
+    private func ownVehicleFor(tripId: UUID) -> Vehicle? {
+        guard let trip = feedVM.tripManager.tripDetail(id: tripId),
+              let vid = trip.vehicleId else { return nil }
+        return settings.vehicles.first { $0.id == vid }
     }
 
     private func shareSocialTrip(_ trip: SocialFeedTrip) {
@@ -576,23 +699,20 @@ struct FeedView: View {
 
     private func tripCard(_ trip: Trip, c: AppTheme.Colors) -> some View {
         let vehicle = vehicleForTrip(trip)
-        return SwipeToDeleteCard(
-            onTap: {
-                Haptics.tap()
-                selectedTripId = trip.id
-            },
-            onDelete: {
-                Haptics.action()
-                tripToDelete = trip
-            }
-        ) {
-            FeedTripCardView(
-                trip: trip,
-                vehicleName: vehicle?.name,
-                vehicleEmoji: vehicle?.avatarEmoji ?? settings.avatarEmoji,
-                vehicle: vehicle,
-                fuelCurrency: trip.fuelCurrency ?? FuelCurrency.current
-            )
+        // Swipe-to-delete has been retired — it collided with the horizontal
+        // Feed ↔ Mine page swipe and made accidental deletions too easy. Delete
+        // lives in the trip detail view now (menu with a confirmation step).
+        return FeedTripCardView(
+            trip: trip,
+            vehicleName: vehicle?.name,
+            vehicleEmoji: vehicle?.avatarEmoji ?? settings.avatarEmoji,
+            vehicle: vehicle,
+            fuelCurrency: trip.fuelCurrency ?? FuelCurrency.current
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            Haptics.tap()
+            selectedTripId = trip.id
         }
         .onAppear {
             feedVM.loadMoreIfNeeded(currentTrip: trip)
@@ -731,5 +851,46 @@ struct FeedView: View {
             return fromStr
         }
         return "\(fromStr) – \(formatter.string(from: to))"
+    }
+}
+
+// MARK: - Page TabView bounce disable
+
+/// Walks up the UIKit hierarchy to find the UIScrollView hosting the paged TabView
+/// and disables its bounce so swiping past the first/last page doesn't reveal the
+/// black background behind the TabView.
+private struct PageViewBounceDisabler: UIViewRepresentable {
+    func makeUIView(context: Context) -> PageBounceFinderView { PageBounceFinderView() }
+    func updateUIView(_ uiView: PageBounceFinderView, context: Context) {}
+}
+
+private final class PageBounceFinderView: UIView {
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else { return }
+        DispatchQueue.main.async { [weak self] in self?.disableBounce() }
+    }
+
+    private func disableBounce() {
+        var candidate: UIView? = self
+        while let v = candidate {
+            if let scroll = v as? UIScrollView {
+                scroll.bounces = false
+                return
+            }
+            if let found = findScroll(in: v) {
+                found.bounces = false
+                return
+            }
+            candidate = v.superview
+        }
+    }
+
+    private func findScroll(in view: UIView) -> UIScrollView? {
+        for sub in view.subviews {
+            if let scroll = sub as? UIScrollView { return scroll }
+            if let nested = findScroll(in: sub) { return nested }
+        }
+        return nil
     }
 }

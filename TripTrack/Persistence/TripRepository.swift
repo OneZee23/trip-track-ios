@@ -19,6 +19,9 @@ protocol TripRepository {
     func purgeSoftDeletedTrips()
     func updateTitle(for tripId: UUID, title: String)
     func updateNotes(for tripId: UUID, notes: String)
+    func updatePrivacy(for tripId: UUID, isPrivate: Bool)
+    @discardableResult
+    func migrateAllTripsToPrivate() -> [UUID]
     func saveBadgesJSON(tripId: UUID, badgeIds: [String])
     func addPhoto(to tripId: UUID, image: UIImage, caption: String?) -> TripPhoto?
     func deletePhoto(id: UUID, from tripId: UUID)
@@ -177,6 +180,38 @@ final class CoreDataTripRepository: TripRepository {
         entity.tripDescription = notes
         entity.lastModifiedAt = Date()
         persistenceController.save()
+    }
+
+    func updatePrivacy(for tripId: UUID, isPrivate: Bool) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        entity.isPrivate = isPrivate
+        entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+        }
+    }
+
+    /// One-time migration for the privacy-by-default launch (v0.6.0+). Flips every
+    /// existing local trip to `isPrivate = true` and marks it for re-upload. Runs
+    /// once per install (guarded by UserDefaults at the call site). Returns the
+    /// number of trips flipped so the caller can enqueue sync operations.
+    @discardableResult
+    func migrateAllTripsToPrivate() -> [UUID] {
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "isPrivate == NO")
+        guard let entities = try? context.fetch(request) else { return [] }
+        let now = Date()
+        var flippedIds: [UUID] = []
+        for entity in entities {
+            entity.isPrivate = true
+            entity.lastModifiedAt = now
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+            if let id = entity.id { flippedIds.append(id) }
+        }
+        persistenceController.save()
+        return flippedIds
     }
 
     func saveBadgesJSON(tripId: UUID, badgeIds: [String]) {

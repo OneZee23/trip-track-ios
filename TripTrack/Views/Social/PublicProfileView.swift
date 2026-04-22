@@ -10,6 +10,7 @@ struct PublicProfileView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @ObservedObject private var auth = AuthService.shared
 
     @State private var profile: SocialProfile?
     @State private var isLoading = false
@@ -19,17 +20,44 @@ struct PublicProfileView: View {
     @State private var isBlocked = false
     @State private var showBlockConfirm = false
     @State private var showReport = false
+    @State private var selectedBadge: Badge?
+
+    /// True when this view is rendering the signed-in user's own profile
+    /// (e.g. "preview as others see you"). Hides Follow/Block/Report actions.
+    private var isOwnProfile: Bool {
+        TokenStore.shared.accountId == accountId
+    }
+
+    /// Display-ready name with fallback chain:
+    ///   server profile → preloaded summary → own Apple name → "Driver".
+    /// The Apple-name fallback means a user whose `displayName` never made it to
+    /// the server (first sign-in pushed nil, later signs-in got the name from
+    /// Keychain but never re-synced) still sees their real name on their own
+    /// profile. An idempotent push-on-appear below fixes the server copy.
+    private var resolvedDisplayName: String {
+        let isRu = lang.language == .ru
+        if let p = profile?.displayName, !p.isEmpty { return p }
+        if let p = preloaded?.displayName, !p.isEmpty { return p }
+        if isOwnProfile, let n = auth.userName, !n.isEmpty { return n }
+        return isRu ? "Водитель" : "Driver"
+    }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let isRu = lang.language == .ru
 
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 heroSection(c, isRu: isRu)
                     .padding(.top, 16)
 
                 statsGrid(c, isRu: isRu)
+                    .padding(.horizontal, 16)
+
+                activeVehicleCard(c, isRu: isRu)
+                    .padding(.horizontal, 16)
+
+                badgesSection(c, isRu: isRu)
                     .padding(.horizontal, 16)
 
                 followCounters(c, isRu: isRu)
@@ -46,38 +74,61 @@ struct PublicProfileView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { NavBackButton() }
             ToolbarItem(placement: .principal) {
-                Text(profile?.displayName ?? preloaded?.displayName ?? (isRu ? "Профиль" : "Profile"))
+                Text(resolvedDisplayName)
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(c.text)
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        Haptics.tap()
-                        showReport = true
+            if !isOwnProfile {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            Haptics.tap()
+                            showReport = true
+                        } label: {
+                            Label(isRu ? "Пожаловаться" : "Report", systemImage: "flag")
+                        }
+                        Button(role: .destructive) {
+                            Haptics.tap()
+                            showBlockConfirm = true
+                        } label: {
+                            Label(
+                                isBlocked
+                                    ? (isRu ? "Разблокировать" : "Unblock")
+                                    : (isRu ? "Заблокировать" : "Block"),
+                                systemImage: isBlocked ? "hand.raised.slash" : "hand.raised.fill"
+                            )
+                        }
                     } label: {
-                        Label(isRu ? "Пожаловаться" : "Report", systemImage: "flag")
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 16))
+                            .foregroundStyle(c.text)
                     }
-                    Button(role: .destructive) {
-                        Haptics.tap()
-                        showBlockConfirm = true
-                    } label: {
-                        Label(
-                            isBlocked
-                                ? (isRu ? "Разблокировать" : "Unblock")
-                                : (isRu ? "Заблокировать" : "Block"),
-                            systemImage: isBlocked ? "hand.raised.slash" : "hand.raised.fill"
-                        )
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 16))
-                        .foregroundStyle(c.text)
                 }
             }
         }
-        .task { await loadProfile() }
+        .task {
+            await loadProfile()
+            // For the signed-in user's own profile, push local profile state on
+            // appear. Idempotent and fire-and-forget — fixes users whose
+            // `displayName` was null on the server (common: SIWA only returns
+            // the name on first login, the later Keychain restore never made
+            // it back out). Keeps streak / level / active vehicle fresh too.
+            if isOwnProfile {
+                await AuthService.shared.syncProfileToServer()
+            }
+        }
         .refreshable { await loadProfile() }
+        .overlay {
+            if let badge = selectedBadge {
+                BadgeDetailOverlay(
+                    badge: badge,
+                    isUnlocked: true,
+                    language: lang.language,
+                    colorScheme: scheme,
+                    onDismiss: { selectedBadge = nil }
+                )
+            }
+        }
         .navigationDestination(isPresented: Binding(
             get: { followListMode != nil },
             set: { if !$0 { followListMode = nil } }
@@ -141,25 +192,32 @@ struct PublicProfileView: View {
             ))
 
             VStack(spacing: 10) {
-                VStack(spacing: 4) {
-                    Text(profile?.displayName ?? preloaded?.displayName ?? (isRu ? "Пользователь" : "User"))
+                VStack(spacing: 6) {
+                    Text(resolvedDisplayName)
                         .font(.system(size: 22, weight: .heavy))
                         .tracking(-0.2)
                         .foregroundStyle(c.text)
                         .multilineTextAlignment(.center)
 
                     if let lvl = profile?.profileLevel ?? preloaded?.profileLevel {
-                        Text("LVL \(lvl)")
-                            .font(.system(size: 12, weight: .bold).monospacedDigit())
-                            .tracking(1)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(AppTheme.accentBg, in: Capsule())
-                            .foregroundStyle(AppTheme.accent)
+                        HStack(spacing: 6) {
+                            Text(DriverRank.from(level: lvl).title(lang.language))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(c.textSecondary)
+                            Text("·")
+                                .foregroundStyle(c.textTertiary)
+                            Text("LVL \(lvl)")
+                                .font(.custom("PressStart2P-Regular", size: 9))
+                                .tracking(1)
+                                .foregroundStyle(AppTheme.accent)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(AppTheme.accentBg, in: Capsule())
                     }
                 }
 
-                if profile?.isFollowing != nil {
+                if !isOwnProfile, profile?.isFollowing != nil {
                     followButton(c, isRu: isRu)
                 }
             }
@@ -218,6 +276,7 @@ struct PublicProfileView: View {
 
     private func statsGrid(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         let stats = profile?.stats
+        let streakValue = profile?.currentStreak ?? 0
         return HStack(spacing: 0) {
             statCell(
                 value: stats.map { String($0.tripCount) } ?? "—",
@@ -238,20 +297,35 @@ struct PublicProfileView: View {
             )
             divider(c)
             statCell(
-                value: profile.map { String($0.profileLevel) } ?? "—",
-                label: "LVL",
-                c: c
+                value: profile == nil ? "—" : "\(streakValue)",
+                label: isRu ? "серия" : "streak",
+                c: c,
+                accent: streakValue > 0 ? AppTheme.accent : nil,
+                iconSystemName: streakValue > 0 ? "flame.fill" : nil
             )
         }
         .padding(.vertical, 12)
         .surfaceCard(cornerRadius: 14)
     }
 
-    private func statCell(value: String, label: String, c: AppTheme.Colors) -> some View {
+    private func statCell(
+        value: String,
+        label: String,
+        c: AppTheme.Colors,
+        accent: Color? = nil,
+        iconSystemName: String? = nil
+    ) -> some View {
         VStack(spacing: 2) {
-            Text(value)
-                .font(.system(size: 16, weight: .heavy).monospacedDigit())
-                .foregroundStyle(c.text)
+            HStack(spacing: 3) {
+                if let icon = iconSystemName {
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(accent ?? c.text)
+                }
+                Text(value)
+                    .font(.system(size: 16, weight: .heavy).monospacedDigit())
+                    .foregroundStyle(accent ?? c.text)
+            }
             Text(label)
                 .font(.system(size: 10, weight: .bold))
                 .tracking(0.5)
@@ -265,6 +339,157 @@ struct PublicProfileView: View {
         Rectangle()
             .fill(c.border)
             .frame(width: 0.5, height: 28)
+    }
+
+    // MARK: - Active vehicle
+
+    /// "Your car" card that mirrors the one on the private ProfileView — same
+    /// hierarchy (avatar, name, level title, odometer progress bar) so the
+    /// public view feels consistent with how the user sees their own garage.
+    /// Uses VehicleLevelSystem directly instead of `VehicleCardView` because
+    /// the server returns a leaner DTO without stickers/consumption.
+    @ViewBuilder
+    private func activeVehicleCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        if let v = profile?.activeVehicle {
+            let progress = VehicleLevelSystem.progressToNext(km: v.odometerKm, level: v.level)
+            let title = VehicleLevelSystem.title(level: v.level, lang: lang.language)
+            let frame = vehicleFrameColor(level: v.level)
+
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(frame.opacity(0.12))
+                        .frame(width: 52, height: 52)
+                    if v.isPixelAvatar {
+                        Image(v.avatarEmoji)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 44, height: 44)
+                    } else {
+                        Text(v.avatarEmoji.isEmpty ? "🏎️" : v.avatarEmoji)
+                            .font(.system(size: 26))
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(v.name.isEmpty ? (isRu ? "Авто" : "Car") : v.name)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(c.text)
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        Text("LVL \(v.level)")
+                            .font(.custom("PressStart2P-Regular", size: 9))
+                            .foregroundStyle(frame)
+                    }
+
+                    Text(title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(frame)
+
+                    HStack(spacing: 8) {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(c.cardAlt).frame(height: 6)
+                                Capsule()
+                                    .fill(frame)
+                                    .frame(width: max(3, geo.size.width * progress), height: 6)
+                            }
+                        }
+                        .frame(height: 6)
+
+                        Text(formatOdometer(v.odometerKm))
+                            .font(.system(size: 11))
+                            .foregroundStyle(c.textTertiary)
+                            .fixedSize()
+                    }
+                }
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 16)
+        }
+    }
+
+    private func vehicleFrameColor(level: Int) -> Color {
+        switch level {
+        case 1...2: return .gray
+        case 3: return Color(red: 205/255, green: 127/255, blue: 50/255)
+        case 4...5: return Color(red: 192/255, green: 192/255, blue: 192/255)
+        case 6: return Color(red: 255/255, green: 215/255, blue: 0/255)
+        case 7...8: return Color(red: 180/255, green: 210/255, blue: 230/255)
+        default: return AppTheme.accent
+        }
+    }
+
+    private func formatOdometer(_ km: Double) -> String {
+        if km >= 1000 {
+            return String(format: "%.1fK km", km / 1000)
+        }
+        return String(format: "%.0f km", km)
+    }
+
+    // MARK: - Badges
+
+    /// Up to 6 recent badges the profile owner has earned. Tapping opens the
+    /// same detail overlay as `BadgesView` so tapping a badge on a friend's
+    /// profile explains what it means — keeps social discovery educational.
+    @ViewBuilder
+    private func badgesSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        let ids = profile?.recentBadges ?? []
+        if !ids.isEmpty {
+            let badges = ids.compactMap { id in Badge.all.first(where: { $0.id == id }) }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(isRu ? "Ачивки" : "Achievements")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(c.text)
+                    Text("·")
+                        .foregroundStyle(c.textTertiary)
+                    Text("\(badges.count)")
+                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(c.textTertiary)
+                    Spacer()
+                }
+
+                HStack(spacing: 10) {
+                    ForEach(badges) { badge in
+                        Button {
+                            Haptics.tap()
+                            selectedBadge = badge
+                        } label: {
+                            VStack(spacing: 6) {
+                                ZStack {
+                                    Circle()
+                                        .fill(badge.color.opacity(0.15))
+                                        .frame(width: 44, height: 44)
+                                    Image(systemName: badge.icon)
+                                        .font(.system(size: 20))
+                                        .foregroundStyle(badge.color)
+                                }
+                                Text(badge.title(lang.language))
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(c.textSecondary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    // Fill trailing space so fewer-than-6 badges stay left-aligned
+                    // without stretching the icons.
+                    if badges.count < 6 {
+                        ForEach(0..<(6 - badges.count), id: \.self) { _ in
+                            Color.clear.frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+                .padding(12)
+                .surfaceCard(cornerRadius: 14)
+            }
+        }
     }
 
     // MARK: - Follow counters
@@ -496,7 +721,9 @@ private extension SocialProfile {
         SocialProfile(
             id: id, displayName: displayName, avatarEmoji: avatarEmoji,
             profileLevel: profileLevel, profileBackground: profileBackground,
-            stats: stats, recentTrips: recentTrips,
+            currentStreak: currentStreak, bestStreak: bestStreak,
+            stats: stats, activeVehicle: activeVehicle, recentBadges: recentBadges,
+            recentTrips: recentTrips,
             followerCount: followerCount, followingCount: followingCount,
             isFollowing: isFollowing
         )

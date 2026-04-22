@@ -3,7 +3,7 @@
 > Google Photos для дорог. Записывает маршруты, помнит за тебя.
 
 **Platform:** iOS (iPhone)
-**Status:** v0.5.0 | **Started:** Jan 2026
+**Status:** v0.6.0 | **Started:** Jan 2026
 
 ---
 
@@ -92,6 +92,16 @@ TripTrack заполняет эту нишу: минимальный effort пр
 - Celebration-экран с конфетти при получении бейджа
 - Профиль с аватаром, уровнем, стриком
 
+### Социальное (v0.6)
+- **Приватно по умолчанию** — все поездки приватные; пользователь сам решает какие публиковать. One-time миграция переводит все существующие поездки в приватные при апгрейде
+- **Лента подписок** — публичные поездки тех на кого подписан + карусель "Предложенные" когда подписок мало. Paged tabs "Лента ↔ Мои" с горизонтальным свайпом
+- **Публичные профили** — hero с баннером и градиентным фоном (8 вариантов), имя + ранг + LVL, stats grid (поездки/км/регионы/🔥 стрик), карточка активной машины (уровень + одометр), ряд последних ачивок, followers/following, последние поездки
+- **Реакции** — `🔥 🏁 🏎️ 🛣️ 🗺️` через long-press. Top-3 самых популярных реакций с количествами прямо на карточке, полный breakdown в деталях поездки
+- **Шеринг** — story-style 9:16 карточка с картой и метриками для Instagram/галереи + share-ссылка через бэкенд
+- **Модерация** — block/unblock, репорты на пользователей и поездки, content-filter на названия поездок, список заблокированных
+- **Discover** — поиск пользователей по имени + suggested карусель
+- **"Посмотреть как видят другие"** — превью своего публичного профиля из настроек
+
 ### Коллекция дорог
 - Автоматическое обнаружение часто проезжаемых дорог
 - Уровни освоения дороги
@@ -162,20 +172,20 @@ TripTrack/
 │   └── TripsViewModel.swift    -- список поездок
 ├── Views/
 │   ├── ContentView.swift       -- 3-tab layout
-│   ├── Navigation/             -- CustomTabBar (glass)
+│   ├── Navigation/             -- CustomTabBar (glass), NavBackButton
 │   ├── Tracking/               -- карта, HUD, спидометр, idle, summary
-│   ├── Feed/                   -- лента, карточки, календарь, фильтры, статистика
-│   ├── Trips/                  -- список, детали, фото, share card
+│   ├── Feed/                   -- лента, Strava-стиль карточки, календарь, фильтры, статистика
+│   ├── Trips/                  -- список, детали, фото, share card, reactions breakdown
+│   ├── Social/                 -- PublicProfileView, FollowListView, DiscoverView, ReportSheet, BlockedListView, StoryShareSheet, SuggestedUsersCarousel
 │   ├── Regions/                -- scratch map, fog of war
 │   ├── Roads/                  -- коллекция дорог
 │   ├── Badges/                 -- бейджи, celebration, confetti
-│   ├── Profile/                -- профиль, уровень, гараж
+│   ├── Profile/                -- профиль, hero card, уровень, гараж, ProfileBackgroundPickerSheet, CloudSyncView, DebugLogsView
 │   ├── Garage/                 -- управление машинами
-│   ├── Settings/               -- настройки
 │   ├── Onboarding/             -- онбординг (3 страницы)
 │   ├── Map/                    -- MapViewRepresentable, glow overlay
 │   ├── Theme/                  -- AppTheme, ThemeManager
-│   └── Components/             -- переиспользуемые компоненты
+│   └── Components/             -- переиспользуемые компоненты (SheetCloseButton, и др.)
 └── Resources/                  -- Assets
 ```
 
@@ -298,21 +308,25 @@ xcodebuild test -scheme TripTrack -configuration Debug -destination 'platform=iO
 - [x] First sync после Sign in (все локальные данные уезжают)
 - [x] Guest mode сохранён (sync opt-in)
 
-### Next: v0.5.x UI Redesign + Social (planned)
+### v0.6.0 — Social (shipped)
 
-- [ ] UI редизайн под Strava-стиль (tabs: My Activities / Social Feed)
-- [ ] Публичные профили пользователей (имя, avatar, статистика, последние поездки)
-- [ ] Follow / unfollow, общий фид поездок от подписок
-- [ ] Реакции на поездки (👍🔥❤️🏆😲)
-- [ ] Шеринг поездки по ссылке (deep link + OpenGraph preview)
+- [x] Strava-style карточки в ленте (`SocialFeedCardView`)
+- [x] Публичные профили с hero, stats grid, активной машиной, ачивками, followers/following
+- [x] Follow / unfollow, объединённая лента подписок + suggested users
+- [x] Car-themed реакции `🔥 🏁 🏎️ 🛣️ 🗺️` через long-press, per-emoji pills, reaction breakdown
+- [x] Шеринг поездки по ссылке через бэкенд + story-style share 9:16
+- [x] Градиентные фоны профиля (8 вариантов)
+- [x] Block / unblock, репорты (user + trip), content-filter на названия
+- [x] Discover — поиск пользователей и suggested карусель
+- [x] Unified back button, единый presentation chain для share sheet
 
 ### Future (ideas)
 
-- [ ] Социальные фичи (профили, шеринг поездок, общий фид)
-- [ ] UI-редизайн под Strava-стиль
 - [ ] Apple Watch companion app (старт/пауза/стоп с часов)
 - [ ] Widgets (последняя поездка, статистика)
 - [ ] Экспорт данных (GPX, CSV)
+- [ ] Комментарии к поездкам
+- [ ] Notifications — новые подписчики, реакции на поездки
 
 ---
 
