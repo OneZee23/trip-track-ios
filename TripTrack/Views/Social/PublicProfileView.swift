@@ -5,7 +5,6 @@ private let profileLog = Logger(subsystem: "com.triptrack", category: "social.pr
 
 struct PublicProfileView: View {
     let accountId: UUID
-    /// Optional fallback identity used while the request is in flight.
     var preloaded: SocialAuthor?
 
     @EnvironmentObject private var lang: LanguageManager
@@ -711,13 +710,14 @@ struct PublicProfileView: View {
                 APIEndpoint.userProfile(accountId.uuidString))
             if Task.isCancelled { return }
             profile = p
-        } catch let e as APIError {
-            if Task.isCancelled { return }
-            loadError = String(describing: e)
-            profileLog.error("profile load failed: \(String(describing: e))")
         } catch {
+            // Cancellation means `refresh()` replaced us with a newer task —
+            // don't surface its error; the newer task owns the outcome.
             if Task.isCancelled { return }
-            loadError = error.localizedDescription
+            let msg = (error as? APIError).map { String(describing: $0) }
+                ?? error.localizedDescription
+            loadError = msg
+            profileLog.error("profile load failed: \(msg)")
         }
     }
 
