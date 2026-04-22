@@ -107,17 +107,23 @@ struct PublicProfileView: View {
             }
         }
         .task {
-            await loadProfile()
-            // For the signed-in user's own profile, push local profile state on
-            // appear. Idempotent and fire-and-forget — fixes users whose
-            // `displayName` was null on the server (common: SIWA only returns
-            // the name on first login, the later Keychain restore never made
-            // it back out). Keeps streak / level / active vehicle fresh too.
+            // For the signed-in user's own profile, push local state FIRST so
+            // the subsequent profile fetch reflects current client-authoritative
+            // fields (level, streak, displayName, active vehicle). Without this
+            // the first render shows stale server defaults (LVL 1, 0 streak)
+            // until the user pulls-to-refresh. Fire-and-forget: if sync fails,
+            // we still render whatever the server has.
             if isOwnProfile {
                 await AuthService.shared.syncProfileToServer()
             }
+            await loadProfile()
         }
-        .refreshable { await loadProfile() }
+        .refreshable {
+            if isOwnProfile {
+                await AuthService.shared.syncProfileToServer()
+            }
+            await loadProfile()
+        }
         .overlay {
             if let badge = selectedBadge {
                 BadgeDetailOverlay(
