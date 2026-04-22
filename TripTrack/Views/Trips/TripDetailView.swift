@@ -19,6 +19,10 @@ struct TripDetailView: View {
     @State private var cachedSpeeds: [Double] = []
     @State private var storyShare: (data: StoryShareData, url: String?)?
     @State private var isGeneratingShare = false
+    @State private var showDeleteConfirm = false
+    @State private var reactionEntries: [SocialReactionEntry] = []
+    @State private var selectedReactorAuthor: SocialAuthor?
+    @ObservedObject private var auth = AuthService.shared
     @FocusState private var isTitleFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -72,19 +76,41 @@ struct TripDetailView: View {
                 .scrollIndicators(.hidden)
                 .background(ScrollBounceDisabler())
 
-                // Sticky back button — outside ScrollView
-                Button {
-                    Haptics.tap()
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.black.opacity(0.4), in: Circle())
+                // Sticky back button + menu — outside ScrollView, floating over the map
+                HStack {
+                    Button {
+                        Haptics.tap()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.4), in: Circle())
+                    }
+
+                    Spacer()
+
+                    Menu {
+                        Button(role: .destructive) {
+                            Haptics.action()
+                            showDeleteConfirm = true
+                        } label: {
+                            Label(
+                                AppStrings.delete(lang.language),
+                                systemImage: "trash"
+                            )
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.4), in: Circle())
+                    }
                 }
                 .padding(.top, safeAreaTop)
-                .padding(.leading, 16)
+                .padding(.horizontal, 16)
             } else {
                 // Loading skeleton
                 VStack(spacing: 0) {
@@ -111,14 +137,40 @@ struct TripDetailView: View {
         .background(EnableSwipeBack())
         .ignoresSafeArea()
         .navigationBarHidden(true)
-        .task(id: tripId) {
-            guard trip == nil else { return }
-            trip = viewModel.tripDetail(id: tripId)
-            if let t = trip {
-                cachedCoordinates = t.trackPoints.map(\.coordinate)
-                cachedSpeeds = t.trackPoints.map(\.speed)
+        .navigationDestination(isPresented: Binding(
+            get: { selectedReactorAuthor != nil },
+            set: { if !$0 { selectedReactorAuthor = nil } }
+        )) {
+            if let author = selectedReactorAuthor {
+                PublicProfileView(accountId: author.id, preloaded: author)
             }
-            badgeLastEarnedDates = BadgeManager.lastEarnedDates(for: trip?.earnedBadgeIds ?? [], using: mapVM.tripManager)
+        }
+        .confirmationDialog(
+            AppStrings.deleteTrip(lang.language),
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(AppStrings.delete(lang.language), role: .destructive) {
+                mapVM.tripManager.deleteTrip(id: tripId)
+                NotificationCenter.default.post(name: .tripDeleted, object: tripId)
+                dismiss()
+            }
+            Button(AppStrings.cancel(lang.language), role: .cancel) {}
+        }
+        .task(id: tripId) {
+            if trip == nil {
+                trip = viewModel.tripDetail(id: tripId)
+                if let t = trip {
+                    cachedCoordinates = t.trackPoints.map(\.coordinate)
+                    cachedSpeeds = t.trackPoints.map(\.speed)
+                }
+                badgeLastEarnedDates = BadgeManager.lastEarnedDates(for: trip?.earnedBadgeIds ?? [], using: mapVM.tripManager)
+            }
+            await loadReactions()
+        }
+        .onChange(of: trip?.isPrivate) { _, newValue in
+            if newValue == false { Task { await loadReactions() } }
+            else { reactionEntries = [] }
         }
         .sheet(isPresented: $showPhotoPicker) {
             PhotoPickerView(selectedImages: $pickedImages)
@@ -253,8 +305,17 @@ struct TripDetailView: View {
             // Title with edit button
             titleSection(trip: trip, c: c)
 
+            privacyToggle(trip: trip, c: c)
+                .padding(.top, 10)
+
             statsGrid(trip: trip, c: c)
                 .padding(.top, 16)
+
+            // Reactions from followers show only for public trips of signed-in users.
+            if !trip.isPrivate, auth.isSignedIn, !reactionEntries.isEmpty {
+                reactionsSection(c)
+                    .padding(.top, 16)
+            }
 
             badgesSection(trip: trip, c: c)
 
@@ -347,6 +408,113 @@ struct TripDetailView: View {
         }
         .padding(.bottom, 4)
         .animation(.easeInOut(duration: 0.25), value: isEditingTitle)
+    }
+
+    private func reactionsSection(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Text("\(reactionEntries.count)")
+                    .font(.system(size: 18, weight: .heavy).monospacedDigit())
+                    .foregroundStyle(c.text)
+                Text((isRu ? "реакций" : "reactions").uppercased())
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(0.5)
+                    .foregroundStyle(c.textTertiary)
+                Spacer()
+            }
+            VStack(spacing: 0) {
+                ForEach(Array(reactionEntries.enumerated()), id: \.offset) { idx, entry in
+                    reactionRow(entry, c: c, isRu: isRu)
+                    if idx < reactionEntries.count - 1 {
+                        Divider().padding(.leading, 50)
+                    }
+                }
+            }
+            .surfaceCard(cornerRadius: 14)
+        }
+    }
+
+    private func reactionRow(_ entry: SocialReactionEntry, c: AppTheme.Colors, isRu: Bool) -> some View {
+        Button {
+            Haptics.tap()
+            selectedReactorAuthor = entry.user
+        } label: {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(AppTheme.accentBg)
+                    .frame(width: 34, height: 34)
+                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.system(size: 17)) }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.user.displayName ?? (isRu ? "Пользователь" : "User"))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    Text("LVL \(entry.user.profileLevel)")
+                        .font(.system(size: 10, weight: .bold).monospacedDigit())
+                        .foregroundStyle(c.textTertiary)
+                }
+                Spacer()
+                Text(entry.emoji).font(.system(size: 22))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .contentShape(Rectangle())
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func loadReactions() async {
+        guard let t = trip, !t.isPrivate, auth.isSignedIn else { return }
+        do {
+            let res: SocialReactionsResponse = try await APIClient.shared.post(
+                APIEndpoint.socialReactions, body: SocialUnreactRequest(tripId: t.id))
+            await MainActor.run { reactionEntries = res.reactions }
+        } catch {
+            // Non-fatal — reactions section just stays hidden
+        }
+    }
+
+    @ViewBuilder
+    private func privacyToggle(trip: Trip, c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        let isPrivate = trip.isPrivate
+        // Plain HStack + onTapGesture instead of Button — Button + custom background
+        // inside a ScrollView often loses its hit-region in SwiftUI 17/18. The tap
+        // gesture on a contentShape'd HStack is dependable.
+        HStack(spacing: 6) {
+            Image(systemName: isPrivate ? "lock.fill" : "globe")
+                .font(.system(size: 11, weight: .semibold))
+            Text(isPrivate
+                 ? (isRu ? "Только для меня" : "Only me")
+                 : (isRu ? "Видна друзьям" : "Visible to followers"))
+                .font(.system(size: 12, weight: .semibold))
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 9, weight: .semibold))
+                .opacity(0.6)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .foregroundStyle(isPrivate ? c.textSecondary : AppTheme.accent)
+        .background(
+            Capsule().fill(isPrivate ? c.cardAlt : AppTheme.accentBg)
+        )
+        .contentShape(Capsule())
+        .onTapGesture {
+            Haptics.selection()
+            let newValue = !isPrivate
+            mapVM.tripManager.updatePrivacy(for: tripId, isPrivate: newValue)
+            self.trip = viewModel.tripDetail(id: tripId)
+            // Pass the new privacy state so the feed can optimistically remove/add the
+            // card before the server round-trip completes.
+            NotificationCenter.default.post(
+                name: .tripPrivacyChanged,
+                object: PrivacyChangePayload(tripId: tripId, isPrivate: newValue)
+            )
+        }
     }
 
     private func commitTitleEdit() {

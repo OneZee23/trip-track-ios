@@ -154,13 +154,32 @@ struct SocialProfileRecentTrip: Codable, Identifiable, Hashable {
     var distanceKm: Double { distance / 1000.0 }
 }
 
+struct SocialActiveVehicle: Codable, Hashable {
+    let id: UUID
+    let name: String
+    let level: Int
+    /// km
+    let odometerKm: Double
+    let avatarEmoji: String
+
+    /// Mirrors `Vehicle.isPixelAvatar` so the client can render the PNG instead
+    /// of drawing the asset name as text.
+    var isPixelAvatar: Bool { avatarEmoji.hasPrefix("pixel_car_") }
+}
+
 struct SocialProfile: Codable, Hashable {
     let id: UUID
     let displayName: String?
     let avatarEmoji: String?
     let profileLevel: Int
     let profileBackground: String?
+    /// Current consecutive-day trip streak. Backend field is nullable on older
+    /// records; default to 0 for graceful fallback.
+    let currentStreak: Int?
+    let bestStreak: Int?
     let stats: SocialProfileStats
+    let activeVehicle: SocialActiveVehicle?
+    let recentBadges: [String]?
     let recentTrips: [SocialProfileRecentTrip]
     let followerCount: Int
     let followingCount: Int
@@ -169,10 +188,20 @@ struct SocialProfile: Codable, Hashable {
 
 // MARK: - Profile appearance update
 
+/// Client → server push of all mutable profile fields. Everything optional so the
+/// same DTO covers partial updates (e.g. just tapping a new avatar) and full
+/// push-on-appear.
 struct ProfileUpdateRequest: Codable {
     let displayName: String?
     let avatarEmoji: String?
     let profileBackground: String?
+    let profileLevel: Int?
+    let profileXp: Int?
+    let currentStreak: Int?
+    let bestStreak: Int?
+    /// UUID string of the active vehicle; pass nil to leave unchanged. Empty
+    /// string is reserved for future "clear selection" intent.
+    let activeVehicleId: String?
 }
 
 // MARK: - Allowed reaction emoji (matches backend whitelist)

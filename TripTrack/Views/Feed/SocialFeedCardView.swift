@@ -5,6 +5,14 @@ import SwiftUI
 /// plus an action bar with reactions + share.
 struct SocialFeedCardView: View {
     let trip: SocialFeedTrip
+    /// When true, the card is rendered for the signed-in user's own trip — hides the
+    /// report menu and "Reaction" pill, and swaps the author row for a vehicle-style
+    /// header that matches the look of trips in the "Мои" tab.
+    var isOwn: Bool = false
+    /// Local Vehicle struct used to render the header on own-trip cards. If the vehicle
+    /// has a pixel avatar we render the PNG instead of trying to draw the asset name
+    /// as text.
+    var ownVehicle: Vehicle?
     var onTapCard: (() -> Void)?
     var onTapAuthor: (() -> Void)?
     var onLongPress: (() -> Void)?
@@ -75,37 +83,49 @@ struct SocialFeedCardView: View {
     // MARK: - Author Row
 
     private func authorRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(spacing: 10) {
-            Button {
-                Haptics.tap()
-                onTapAuthor?()
-            } label: {
-                Circle()
-                    .fill(AppTheme.accentBg)
-                    .frame(width: 34, height: 34)
-                    .overlay {
-                        Text(trip.author.avatarEmoji ?? "🚗")
+        let headerName: String = {
+            if isOwn {
+                if let name = ownVehicle?.name, !name.isEmpty { return name }
+                return isRu ? "Моя машина" : "My car"
+            }
+            return trip.author.displayName ?? (isRu ? "Пользователь" : "User")
+        }()
+        return HStack(spacing: 10) {
+            Circle()
+                .fill(AppTheme.accentBg)
+                .frame(width: 34, height: 34)
+                .overlay {
+                    if isOwn, let vehicle = ownVehicle, vehicle.isPixelAvatar {
+                        vehicle.avatarView(size: 28)
+                    } else {
+                        Text(isOwn ? (ownVehicle?.avatarEmoji ?? "🚗") : (trip.author.avatarEmoji ?? "🚗"))
                             .font(.system(size: 17))
                     }
-            }
-            .buttonStyle(.plain)
+                }
+                .onTapGesture {
+                    if !isOwn {
+                        Haptics.tap()
+                        onTapAuthor?()
+                    }
+                }
 
-            Button {
-                Haptics.tap()
-                onTapAuthor?()
-            } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(trip.author.displayName ?? (isRu ? "Пользователь" : "User"))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                    Text(dateRegionText(isRu: isRu))
-                        .font(.system(size: 11))
-                        .foregroundStyle(c.textTertiary)
-                        .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(headerName)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(c.text)
+                    .lineLimit(1)
+                Text(dateRegionText(isRu: isRu))
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+                    .lineLimit(1)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if !isOwn {
+                    Haptics.tap()
+                    onTapAuthor?()
                 }
             }
-            .buttonStyle(.plain)
 
             Spacer()
 
@@ -123,18 +143,20 @@ struct SocialFeedCardView: View {
                 .background(c.cardAlt, in: Capsule())
             }
 
-            Menu {
-                Button {
-                    Haptics.tap()
-                    showReport = true
+            if !isOwn {
+                Menu {
+                    Button {
+                        Haptics.tap()
+                        showReport = true
+                    } label: {
+                        Label(isRu ? "Пожаловаться" : "Report", systemImage: "flag")
+                    }
                 } label: {
-                    Label(isRu ? "Пожаловаться" : "Report", systemImage: "flag")
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14))
+                        .foregroundStyle(c.textTertiary)
+                        .frame(width: 28, height: 28)
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 14))
-                    .foregroundStyle(c.textTertiary)
-                    .frame(width: 28, height: 28)
             }
         }
         .sheet(isPresented: $showReport) {
@@ -229,24 +251,28 @@ struct SocialFeedCardView: View {
                 }
                 .buttonStyle(.plain)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(trip.reactionBreakdown, id: \.emoji) { tally in
-                            reactionTallyPill(tally, c: c)
-                        }
-                        // Plus-picker pill at the end to add new emoji
-                        Button {
-                            Haptics.selection()
-                            onLongPress?()
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(c.textSecondary)
-                                .frame(width: 28, height: 28)
-                                .background(Capsule().fill(c.cardAlt.opacity(0.6)))
-                        }
-                        .buttonStyle(.plain)
+                // Show only the top-3 most popular reactions in the card — anything
+                // extra lives in the trip detail's full reactions breakdown. Keeps the
+                // action bar compact and removes the confusing horizontal scroll when
+                // there are only a handful of reactions.
+                let top = trip.reactionBreakdown
+                    .sorted { $0.count > $1.count }
+                    .prefix(3)
+                HStack(spacing: 6) {
+                    ForEach(Array(top), id: \.emoji) { tally in
+                        reactionTallyPill(tally, c: c)
                     }
+                    Button {
+                        Haptics.selection()
+                        onLongPress?()
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(c.textSecondary)
+                            .frame(width: 28, height: 28)
+                            .background(Capsule().fill(c.cardAlt.opacity(0.6)))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
 

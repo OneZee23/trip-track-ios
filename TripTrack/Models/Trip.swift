@@ -154,6 +154,7 @@ extension Trip: Equatable {
         lhs.startDate == rhs.startDate &&
         lhs.endDate == rhs.endDate &&
         lhs.region == rhs.region &&
+        lhs.isPrivate == rhs.isPrivate &&
         lhs.photos.count == rhs.photos.count &&
         lhs.previewPolyline == rhs.previewPolyline
     }

@@ -98,7 +98,12 @@ final class APISyncTransport: SyncTransport {
     private func deleteTrip(id: UUID) async throws {
         guard let entity = repo.fetchEntity(id: id) else { return }
         let req = TripDeleteRequest(id: id, conflictVersion: Int(entity.conflictVersion))
-        let _: EmptyResponse = try await client.post(APIEndpoint.tripDelete, body: req)
+        do {
+            let _: EmptyResponse = try await client.post(APIEndpoint.tripDelete, body: req)
+        } catch APIError.tripNotFound {
+            // Server already lost the trip (orphaned local pendingDelete). Treat
+            // as success so the queue stops retrying — local hard-delete still happens below.
+        }
         repo.deleteTripHard(id: id)
     }
 

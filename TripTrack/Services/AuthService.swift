@@ -148,18 +148,27 @@ final class AuthService: ObservableObject {
         repo.markAllPendingUpload()
     }
 
-    // MARK: - Profile sync to server (displayName + avatarEmoji + profileBackground)
+    // MARK: - Profile sync to server
 
-    /// Push the current client-side profile fields (name from SIWA Keychain,
-    /// avatar emoji from SettingsManager, profile background) to the server so
-    /// social feeds / reactions / public profile render the user correctly.
+    /// Push all mutable client-authoritative profile fields to the server so
+    /// social feeds / public profile render the user correctly. Covers name,
+    /// avatar, background, driver level/XP, streaks, and the active-vehicle
+    /// selection for the "Your car" card on the public profile.
     /// Fire-and-forget; failure is logged but not surfaced.
     func syncProfileToServer() async {
         guard isSignedIn else { return }
+        let settings = SettingsManager.shared
+        let activeVehicleId = settings.selectedVehicleId?.uuidString
+            ?? settings.vehicles.first?.id.uuidString
         let req = ProfileUpdateRequest(
             displayName: userName,
-            avatarEmoji: SettingsManager.shared.avatarEmoji,
-            profileBackground: SettingsManager.shared.profileBackground
+            avatarEmoji: settings.avatarEmoji,
+            profileBackground: settings.profileBackground,
+            profileLevel: settings.profileLevel,
+            profileXp: settings.profileXP,
+            currentStreak: settings.currentStreak,
+            bestStreak: settings.bestStreak,
+            activeVehicleId: activeVehicleId
         )
         do {
             let _: EmptyResponse = try await APIClient.shared.post(

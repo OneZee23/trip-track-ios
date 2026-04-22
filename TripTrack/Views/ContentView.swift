@@ -13,6 +13,14 @@ extension Notification.Name {
     static let tripRecordingEnded = Notification.Name("tripRecordingEnded")
     static let territoryRebuilt = Notification.Name("territoryRebuilt")
     static let syncPullCompleted = Notification.Name("syncPullCompleted")
+    static let tripPrivacyChanged = Notification.Name("tripPrivacyChanged")
+}
+
+/// Payload for `.tripPrivacyChanged` — lets the feed optimistically remove/add the
+/// affected card instead of waiting for the server round-trip.
+struct PrivacyChangePayload {
+    let tripId: UUID
+    let isPrivate: Bool
 }
 
 struct ContentView: View {

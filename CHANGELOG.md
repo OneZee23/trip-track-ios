@@ -6,6 +6,76 @@
 
 ---
 
+## [0.6.0] -- 22 апреля 2026
+
+Социальный слой поверх синка v0.5.0: лента поездок, профили, реакции, шеринг, репорты/блоки. Плюс модель приватности "по умолчанию приватно" для всех поездок.
+
+### Добавлено
+
+**Приватность поездок**
+- **Приватно по умолчанию** — все новые поездки помечаются `isPrivate = true` при записи. Публикация — явный toggle из деталей поездки
+- **Миграция существующих поездок** — one-time `CoreDataTripRepository.migrateAllTripsToPrivate()` при апгрейде до v0.6.0 переводит все имеющиеся поездки в приватные и помечает под повторный sync. Ничего не утекает в ленту без согласия пользователя
+- **Optimistic privacy flip** — при переключении поездки обратно в приватные из деталей, `SocialFeedStore.removeOptimistically()` сразу убирает карточку из ленты, не дожидаясь round-trip до сервера. Через 1.5с — refresh для выравнивания с серверным состоянием
+- **`.tripPrivacyChanged` нотификация** с `PrivacyChangePayload` — механизм реакции UI на изменения видимости
+
+**Лента и карточки**
+- **Paged feed tabs** — вкладки "Лента" ↔ "Мои" теперь горизонтальный swipe через нативный `TabView(.page)` с iOS-физикой. Пиллы сверху закреплены, только контент слайдится
+- **Объединённая лента "Лента"** — публичные поездки тех на кого подписан + "Предложенные" пользователи карусель сверху, когда подписок мало. Strava-стиль карточек (`SocialFeedCardView`) с author row, map preview, метриками, pill-ами реакций и share-кнопкой
+- **Author row tap** — тап на автора карточки открывает его публичный профиль. Тап на саму карточку — детали поездки (`SocialTripDetailView`)
+- **Auto refresh on appear** — лента подтягивается при каждом открытии таба + при `.syncPullCompleted` и `.tripRecordingEnded`
+
+**Публичные профили (v0.6 редизайн)**
+- **Обогащённый `PublicProfileView`** — hero с баннером, аватаром, именем и рангом (Новичок / Водитель / ...), стрик с 🔥 в stats grid, карточка активной машины (`Break-in LVL 2` + одометр), горизонтальный ряд последних 6 ачивок, followers/following, последние поездки
+- **Фоны профиля (`ProfileBackground`)** — 8 градиентных вариантов выбираемых в `ProfileBackgroundPickerSheet`, синкаются на сервер и рендерятся в баннере hero
+- **"Посмотреть как видят другие"** — кнопка в `ProfileView` открывает свой же `PublicProfileView` в шите. Автоматический push профиля на сервер при открытии — чинит случаи когда `displayName` не доехал на сервер из Apple Sign-In
+- **Fallback имени** — для собственного профиля если server вернул `displayName=null`, показывается имя из Keychain Apple Sign-In
+- **Profile sync расширен** — `ProfileUpdateRequest` теперь везёт `profileLevel / profileXp / currentStreak / bestStreak / activeVehicleId` вдобавок к имени/аватару/фону. Бэкенд-ответ `/user/profile/:id` отдаёт `currentStreak`, `bestStreak`, `activeVehicle {name,level,odometerKm,avatarEmoji}`, `recentBadges: string[]` (агрегация из `Trip.badgesJson`)
+- **Hero profile card** — большая карточка сверху `ProfileView` с аватаром, именем, email и индикатором sync-статуса
+- **Social counters** — followers/following прямо в `ProfileView`, тап открывает `FollowListView`
+
+**Реакции**
+- **Long-press для реакций** — долгий тап на карточке открывает емодзи-палитру, короткий тап — открывает детали
+- **Per-emoji pills** — вместо одного счётчика реакций показываем топ-3 самых популярных с количеством, `+` открывает палитру. Своя реакция выделена цветом
+- **Car-themed набор** — `🔥 🏁 🏎️ 🛣️ 🗺️` (заменён generic набор 👍❤️...)
+- **Breakdown в деталях поездки** — полный список реакторов (`SocialReactionEntry`), тап на реактора — его публичный профиль
+
+**Шеринг и stories**
+- **Story-style share sheet** — `StoryShareSheet` рендерит карточку поездки 9:16 с картой, метриками и брендом, экспорт в Instagram/галерею. Gracefully работает в guest mode
+- **Share link через бэкенд** — `POST /social/share` возвращает `shareCode`, ссылка `https://trip-track.app/s/<code>`. Контроль presentation chain (`fcc9fc7`) для корректной работы из full-screen экранов
+
+**Модерация**
+- **Block/unblock** — действие из профиля и меню карточки. Бэкенд удаляет все follow-связи в обе стороны, скрывает контент из лент/поиска/suggested
+- **Список заблокированных** (`BlockedListView`) из профиля с confirm-диалогом для отзыва блокировки
+- **Report** (`ReportSheet`) — репорт на пользователя или поездку с причиной (spam / harassment / hate / nudity / violence / illegal / impersonation / other) + заметка
+- **Content filter на названия** (`ContentFilter`) — пре-модерация заголовков поездок перед публичным показом
+
+**Discover**
+- **`DiscoverView`** — поиск пользователей по имени + suggested карусель (топ пользователей по `profileLevel`, исключая тех на кого уже подписан и заблокированных)
+
+**Прочее**
+- **Unified back button** (`NavBackButton`) — единый кастомный back-button без "Back"-текста через всё социальное навигационное дерево (`276b204`)
+- **Hero profile card** (`521f491`) — большая верхняя карточка `ProfileView` заменила скромный заголовок
+- **Account actions в CloudSync** — "Выйти" и "Удалить аккаунт" теперь лежат в `CloudSyncView`, убраны из корня профиля
+
+### Исправлено
+- **Auto refresh ленты** после возврата в таб (`0e6712a`) — раньше надо было pull-to-refresh вручную
+- **Грамматика consent-текстов** и отступы сверху в деталях поездки (`4cf72aa`)
+- **Cancel stale refresh** — если пользователь быстро переключает табы, предыдущий `fetchPage` отменяется через `Task.checkCancellation()` (`88d0993`)
+- **Share sheet presentation chain** — больше не теряется при открытии из full-screen модала (`fcc9fc7`)
+- **Purge orphan trips** — сервер чистит "висящие" поездки без валидной связи (`aaa6b43`)
+- **Stationary tail trim** — хвост "стояния" в конце поездки отбрасывается при финализации (`8d723a1`)
+
+### Изменено
+- **Бэкенд**: `AccountEntity` получил `active_vehicle_id` (uuid, nullable); `currentStreak / bestStreak` уже были. `ProfileUpdateRequestDto` принимает новые опциональные поля. `SocialService.getProfile()` джойнит активную машину (с fallback на самую свежую если id не передан) и агрегирует бейджи из последних 50 публичных поездок
+- **Settings sync теперь зеркалит profile fields в AccountEntity** — когда клиент апсертит настройки (profileLevel/XP/streak/avatarEmoji), сервер одновременно обновляет публичный профиль, чтобы уровень в ленте не отставал после level-up
+- **SyncEnqueuer моментально кикает очередь** после `enqueue` (раньше приходилось ждать 5-мин таймер). Toggling приватности поездки теперь доходит до сервера за секунды
+- **Orphan trip delete** — `APISyncTransport.deleteTrip` теперь проглатывает `tripNotFound` как успех, чтобы очередь не ретраила удаление уже отсутствующей на сервере поездки
+- **Pull queries** — `OR` в where-клаузах `sync.service` обёрнуты скобками (precedence bug: без скобок фильтр по `accountId` шорткатился)
+- **Русский язык** в социальных экранах — везде на "Вы"
+- **Legal hardening** — privacy policy и terms обновлены под социальные фичи (`1337061`)
+
+---
+
 ## [0.5.0] -- 20 апреля 2026
 
 ### Добавлено
