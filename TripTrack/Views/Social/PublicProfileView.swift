@@ -65,8 +65,11 @@ struct PublicProfileView: View {
 
                 recentTrips(c, isRu: isRu)
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 24)
             }
+            // Bottom inset clears the floating CustomTabBar so the last trip
+            // card is fully visible. Matches FeedView's 120pt inset. Without
+            // this, the tab bar's ~100pt height covers the last card.
+            .padding(.bottom, 120)
         }
         .background(c.bg)
         .navigationBarTitleDisplayMode(.inline)
@@ -438,9 +441,10 @@ struct PublicProfileView: View {
 
     // MARK: - Badges
 
-    /// Up to 6 recent badges the profile owner has earned. Tapping opens the
-    /// same detail overlay as `BadgesView` so tapping a badge on a friend's
-    /// profile explains what it means — keeps social discovery educational.
+    /// Recent badges the profile owner has earned. Horizontal scroll so the
+    /// row never gets truncated when a user has more than fits on screen —
+    /// same interaction model as the trip reaction palette. Tapping a badge
+    /// opens the same detail overlay as `BadgesView`.
     @ViewBuilder
     private func badgesSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         let ids = profile?.recentBadges ?? []
@@ -459,43 +463,42 @@ struct PublicProfileView: View {
                     Spacer()
                 }
 
-                HStack(spacing: 10) {
-                    ForEach(badges) { badge in
-                        Button {
-                            Haptics.tap()
-                            selectedBadge = badge
-                        } label: {
-                            VStack(spacing: 6) {
-                                ZStack {
-                                    Circle()
-                                        .fill(badge.color.opacity(0.15))
-                                        .frame(width: 44, height: 44)
-                                    Image(systemName: badge.icon)
-                                        .font(.system(size: 20))
-                                        .foregroundStyle(badge.color)
-                                }
-                                Text(badge.title(lang.language))
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(c.textSecondary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    // Fill trailing space so fewer-than-6 badges stay left-aligned
-                    // without stretching the icons.
-                    if badges.count < 6 {
-                        ForEach(0..<(6 - badges.count), id: \.self) { _ in
-                            Color.clear.frame(maxWidth: .infinity)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(badges) { badge in
+                            badgeCell(badge, c: c)
                         }
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 12)
                 }
-                .padding(12)
                 .surfaceCard(cornerRadius: 14)
             }
         }
+    }
+
+    private func badgeCell(_ badge: Badge, c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            selectedBadge = badge
+        } label: {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(badge.color.opacity(0.15))
+                        .frame(width: 48, height: 48)
+                    Image(systemName: badge.icon)
+                        .font(.system(size: 22))
+                        .foregroundStyle(badge.color)
+                }
+                Text(badge.title(lang.language))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(c.textSecondary)
+                    .lineLimit(1)
+                    .frame(width: 64)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Follow counters
@@ -547,16 +550,27 @@ struct PublicProfileView: View {
     @ViewBuilder
     private func recentTrips(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         if let trips = profile?.recentTrips, !trips.isEmpty {
+            // Prefer server-reported public count; fall back to rendered list
+            // length for older backends that don't yet return `publicTripCount`.
+            let publicCount = profile?.stats.publicTripCount ?? trips.count
+            let totalCount = profile?.stats.tripCount ?? trips.count
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
+                HStack(spacing: 6) {
                     Text(isRu ? "Поездки" : "Trips")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(c.text)
                     Text("·")
                         .foregroundStyle(c.textTertiary)
-                    Text("\(profile?.stats.tripCount ?? trips.count)")
+                    Text(isRu ? "Публичные \(publicCount)" : "\(publicCount) public")
                         .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(c.textTertiary)
+                        .foregroundStyle(c.textSecondary)
+                    if totalCount > publicCount {
+                        Text("·")
+                            .foregroundStyle(c.textTertiary)
+                        Text(isRu ? "всего \(totalCount)" : "\(totalCount) total")
+                            .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(c.textTertiary)
+                    }
                     Spacer()
                 }
 
