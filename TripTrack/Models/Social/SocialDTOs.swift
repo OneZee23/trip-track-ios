@@ -189,12 +189,9 @@ struct SocialProfile: Codable, Hashable {
 
 // MARK: - Profile appearance update
 
-/// Client → server push of all mutable profile fields. Everything optional so
-/// the same DTO covers partial updates (e.g. just tapping a new avatar) and
-/// full push-on-appear. Uses `encodeIfPresent` so nil fields are **omitted**
-/// from the JSON rather than sent as `null` — important because the server
-/// treats `null` as "clear this field" while an absent key means "leave
-/// unchanged".
+/// Client → server push of mutable profile fields. Nil fields are OMITTED
+/// from the JSON (see `encode(to:)`) — the server treats absent keys as
+/// "leave unchanged" but would treat `null` as "clear this field".
 struct ProfileUpdateRequest: Encodable {
     let displayName: String?
     let avatarEmoji: String?

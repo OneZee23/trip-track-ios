@@ -51,9 +51,7 @@ struct FollowListView: View {
         .navigationTitle(titleString(isRu: isRu))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        // See PublicProfileView for why explicit background is needed — keeps
-        // the nav bar painted during pop animation instead of briefly
-        // revealing the pushed profile underneath.
+        // Keep the nav bar opaque during pop animation — see PublicProfileView.
         .toolbarBackground(c.bg, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar { ToolbarItem(placement: .topBarLeading) { NavBackButton() } }

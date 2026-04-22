@@ -33,12 +33,10 @@ struct PublicProfileView: View {
         TokenStore.shared.accountId == accountId
     }
 
-    /// Display-ready name with fallback chain:
-    ///   server profile → preloaded summary → own Apple name → "Driver".
-    /// The Apple-name fallback means a user whose `displayName` never made it to
-    /// the server (first sign-in pushed nil, later signs-in got the name from
-    /// Keychain but never re-synced) still sees their real name on their own
-    /// profile. An idempotent push-on-appear below fixes the server copy.
+    /// Fallback chain: server profile → preloaded summary → own Apple name
+    /// → localized "Driver". The Apple-name step covers users whose server
+    /// `displayName` is null because SIWA only returned a name on their
+    /// very first sign-in.
     private var resolvedDisplayName: String {
         let isRu = lang.language == .ru
         if let p = profile?.displayName, !p.isEmpty { return p }
@@ -79,11 +77,8 @@ struct PublicProfileView: View {
         .background(c.bg)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        // Pin the nav bar's background so it stays painted during push/pop
-        // transitions. Without `.visible` SwiftUI fades the background based
-        // on scroll — and the brief fade during the pop animation is what
-        // users see as a "teleport" flash to a broken-looking intermediate
-        // screen when returning from a pushed FollowListView.
+        // Keep the nav bar opaque during push/pop so popping FollowListView
+        // doesn't briefly reveal the destination underneath.
         .toolbarBackground(c.bg, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
@@ -122,12 +117,11 @@ struct PublicProfileView: View {
             }
         }
         .task {
-            // `didInitialLoad` gates the initial fetch so popping back from a
-            // pushed FollowListView doesn't re-run the expensive sync + fetch
-            // cycle on every re-appearance. The `.onChange(of: auth.isSignedIn)`
-            // below resets the gate if the user signs out and back in while
-            // this view is mounted — otherwise the gate would wedge the
-            // screen on the previous account's data.
+            // `didInitialLoad` gates the initial fetch so popping back from
+            // a pushed FollowListView doesn't re-run the expensive sync +
+            // fetch cycle on every re-appearance. The auth-change handler
+            // below trips the gate and kicks a fresh load when the user
+            // signs out/in while this view is mounted.
             guard !didInitialLoad else { return }
             didInitialLoad = true
             if isOwnProfile {
@@ -136,8 +130,18 @@ struct PublicProfileView: View {
             await loadProfile()
         }
         .onChange(of: auth.isSignedIn) { _, _ in
-            didInitialLoad = false
+            // Clearing `profile` alone would leave the screen empty until
+            // pull-to-refresh — `.task` does NOT re-fire on state change,
+            // only on view re-appearance or id change. Kick the load
+            // manually to keep the view responsive across auth transitions.
+            didInitialLoad = true
             profile = nil
+            Task {
+                if isOwnProfile {
+                    await AuthService.shared.syncProfileToServer()
+                }
+                await loadProfile()
+            }
         }
         .refreshable {
             if isOwnProfile {
@@ -697,8 +701,11 @@ struct PublicProfileView: View {
 
     // MARK: - Networking
 
-    private func loadProfile() async {
-        guard !isLoading else { return }
+    /// - Parameter force: when true, skips the `isLoading` re-entrancy gate.
+    ///   Used by error-recovery paths (e.g. `toggleFollow`) that MUST reach
+    ///   server truth even if a pull-to-refresh is already in flight.
+    private func loadProfile(force: Bool = false) async {
+        if !force, isLoading { return }
         isLoading = true
         defer { isLoading = false }
         loadError = nil
@@ -748,11 +755,13 @@ struct PublicProfileView: View {
             let _: SocialFollowResponse = try await APIClient.shared.post(endpoint, body: req)
         } catch {
             profileLog.error("follow toggle failed: \(error.localizedDescription)")
-            // Don't revert to the pre-optimistic snapshot — a concurrent pull
-            // may have mutated `profile` meanwhile, and clobbering it would
-            // overwrite fresh server state. Re-fetch instead so the view
-            // reconciles to server truth.
-            await loadProfile()
+            // Revert to server truth instead of the pre-optimistic snapshot —
+            // a concurrent pull may have updated `profile` in between and we
+            // don't want to clobber it. Force through the `isLoading` gate so
+            // the recovery isn't silently skipped when pull-to-refresh is
+            // concurrently in flight — user-facing state would otherwise stay
+            // on the wrong optimistic value with no further signal.
+            await loadProfile(force: true)
         }
     }
 
