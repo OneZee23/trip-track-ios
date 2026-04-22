@@ -18,6 +18,10 @@ struct FollowListView: View {
     @State private var users: [SocialAuthor] = []
     @State private var isLoading = false
     @State private var selectedAuthor: SocialAuthor?
+    /// Gate initial fetch — `.task` re-fires on every view re-appearance
+    /// (e.g. popping back from a pushed profile), so without this the same
+    /// list would be fetched twice for each navigation round-trip.
+    @State private var didInitialLoad = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -53,7 +57,11 @@ struct FollowListView: View {
                 PublicProfileView(accountId: a.id, preloaded: a)
             }
         }
-        .task { await load() }
+        .task {
+            guard !didInitialLoad else { return }
+            didInitialLoad = true
+            await load()
+        }
         .refreshable { await load() }
     }
 

@@ -21,6 +21,11 @@ struct PublicProfileView: View {
     @State private var showBlockConfirm = false
     @State private var showReport = false
     @State private var selectedBadge: Badge?
+    /// Gate initial fetch so `.task` — which re-fires every time this view
+    /// re-appears (e.g. after popping a pushed FollowListView) — doesn't
+    /// re-run the full sync + profile load cycle. Pull-to-refresh is still
+    /// the explicit way to re-fetch.
+    @State private var didInitialLoad = false
 
     /// True when this view is rendering the signed-in user's own profile
     /// (e.g. "preview as others see you"). Hides Follow/Block/Report actions.
@@ -110,13 +115,17 @@ struct PublicProfileView: View {
             }
         }
         .task {
-            // For the signed-in user's own profile, push local state FIRST so
-            // the subsequent profile fetch reflects current client-authoritative
-            // fields (level, streak, displayName, active vehicle). Without this
-            // the first render shows stale server defaults (LVL 1, 0 streak)
-            // until the user pulls-to-refresh. Fire-and-forget: if sync fails,
-            // we still render whatever the server has.
+            // Gate with `didInitialLoad` so popping back from a pushed
+            // FollowListView / PublicProfileView doesn't re-run the expensive
+            // sync + fetch cycle on every re-appearance. Pull-to-refresh
+            // remains the explicit "I want fresh data" control below.
+            guard !didInitialLoad else { return }
+            didInitialLoad = true
             if isOwnProfile {
+                // Push local state FIRST so the subsequent fetch reflects
+                // current client-authoritative fields (level, streak,
+                // displayName). Without this the first render shows stale
+                // server defaults (LVL 1, 0 streak) until pull-to-refresh.
                 await AuthService.shared.syncProfileToServer()
             }
             await loadProfile()
