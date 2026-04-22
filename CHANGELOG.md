@@ -65,9 +65,23 @@
 - **Purge orphan trips** — сервер чистит "висящие" поездки без валидной связи (`aaa6b43`)
 - **Stationary tail trim** — хвост "стояния" в конце поездки отбрасывается при финализации (`8d723a1`)
 
+### Безопасность
+- **`/users/:id/profile` защищён**: добавлены `@UseGuards(JwtAuthGuard, ThrottlerGuard)` + `@CurrentUser()` декоратор (проверяет подпись JWT через guard, а не `jwt.decode`). Неавторизованные запросы теперь отвергаются. Rate limit 60 запросов/мин на IP
+- **Блоки уважаются в профиле**: `getProfile` возвращает `UserNotFound` если между запрашивающим и целевым аккаунтом есть блок в любую сторону. Ошибка одинакова для блока и несуществования, чтобы не подтверждать факт блокировки
+- **`isPublic` уважается**: non-public аккаунт видим только владельцу и активным подписчикам. Остальным — `UserNotFound`
+- **Ownership check на `activeVehicleId`**: `AuthService.updateProfile` теперь проверяет что UUID машины принадлежит аккаунту запрашивающего. Раньше можно было выставить чужой `vehicle.id` в свой профиль и "карточка Your car" показывала бы чужую машину (имя / одометр / уровень). `getActiveVehicle` также дополнительно фильтрует по `accountId` defence-in-depth
+- **`IsUUID()` + `ValidateIf` на `activeVehicleId`**: пустая строка как "очистить выбор" теперь проходит валидацию. Раньше class-validator отвергал с 400
+- **Клиентские game-state поля ограничены**: `profileLevel ≤ 100`, `profileXp ≤ 10M`, `currentStreak/bestStreak ≤ 10k`. Вдобавок `profileLevel` убран из `ORDER BY` в suggested-users — чтобы читер с profile-update push'ем `999` не мог закрепиться в топе
+- **`parseBadgeIds` валидирует shape**: JSON.parse результат проверяется на `Array<string>` + каждый id матчится `[a-z0-9_]{1,40}`. Defence-in-depth против crafted `badgesJson` push'ей
+
 ### Изменено
-- **Бэкенд**: `AccountEntity` получил `active_vehicle_id` (uuid, nullable); `currentStreak / bestStreak` уже были. `ProfileUpdateRequestDto` принимает новые опциональные поля. `SocialService.getProfile()` джойнит активную машину (с fallback на самую свежую если id не передан) и агрегирует бейджи из последних 50 публичных поездок
-- **Settings sync теперь зеркалит profile fields в AccountEntity** — когда клиент апсертит настройки (profileLevel/XP/streak/avatarEmoji), сервер одновременно обновляет публичный профиль, чтобы уровень в ленте не отставал после level-up
+- **Бэкенд**: `AccountEntity` получил `active_vehicle_id` (uuid, nullable); `currentStreak / bestStreak` уже были. `ProfileUpdateRequestDto` принимает новые опциональные поля. `SocialService.getProfile()` джойнит активную машину (с ownership-check) и агрегирует бейджи из последних 50 поездок
+- **`AuthService.updateProfile` — единственный writer для profile-mirrored полей** на `AccountEntity`. Раньше `SettingsService.upsert` тоже зеркалил level/streak/avatar в `AccountEntity` — два writer-а без координации `updatedAt` приводили к stale clobbering. Mirror убран
+- **Клиентский `ProfileUpdateRequest` использует `encodeIfPresent`**: nil-поля теперь пропускаются из JSON вместо отправки `null`. Раньше отправка `displayName: nil` стирала имя на сервере
+- **`PublicProfileView` сбрасывает gate при смене auth**: `onChange(of: auth.isSignedIn)` обнуляет `didInitialLoad`, чтобы после sign-out/sign-in view не залипал на данных предыдущего аккаунта
+- **`toggleFollow` при ошибке теперь перечитывает профиль** вместо отката к pre-optimistic snapshot — снимок мог быть устаревшим если параллельный pull уже обновил `profile`
+- **`toolbarBackground(.visible)` на PublicProfileView + FollowListView**: фиксит "teleport" артефакт — во время pop-анимации nav bar больше не становится прозрачным и не просвечивает предыдущий экран
+- **`getMyReactions` больше не N+1**: предикат `tripId: In(tripIds)` пушится в query, вместо fetch-all-then-filter-in-JS
 - **SyncEnqueuer моментально кикает очередь** после `enqueue` (раньше приходилось ждать 5-мин таймер). Toggling приватности поездки теперь доходит до сервера за секунды
 - **Orphan trip delete** — `APISyncTransport.deleteTrip` теперь проглатывает `tripNotFound` как успех, чтобы очередь не ретраила удаление уже отсутствующей на сервере поездки
 - **Pull queries** — `OR` в where-клаузах `sync.service` обёрнуты скобками (precedence bug: без скобок фильтр по `accountId` шорткатился)

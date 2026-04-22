@@ -158,8 +158,9 @@ final class AuthService: ObservableObject {
     func syncProfileToServer() async {
         guard isSignedIn else { return }
         let settings = SettingsManager.shared
-        let activeVehicleId = settings.selectedVehicleId?.uuidString
-            ?? settings.vehicles.first?.id.uuidString
+        // `displayName` is nil for users who signed in before SIWA returned a
+        // name — pass nil (skipped in JSON via `encodeIfPresent`) instead of
+        // null, otherwise the server would CLEAR a previously-stored name.
         let req = ProfileUpdateRequest(
             displayName: userName,
             avatarEmoji: settings.avatarEmoji,
@@ -168,7 +169,7 @@ final class AuthService: ObservableObject {
             profileXp: settings.profileXP,
             currentStreak: settings.currentStreak,
             bestStreak: settings.bestStreak,
-            activeVehicleId: activeVehicleId
+            activeVehicleId: settings.selectedVehicleId?.uuidString
         )
         do {
             let _: EmptyResponse = try await APIClient.shared.post(
