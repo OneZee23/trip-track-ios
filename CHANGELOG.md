@@ -66,6 +66,8 @@
 - **Stationary tail trim** — хвост "стояния" в конце поездки отбрасывается при финализации (`8d723a1`)
 
 ### Безопасность
+- **Stored XSS на `/s/:code` share landing**: поля `title / region / displayName / avatarEmoji` интерполировались в HTML без экранирования. Пользователь с именем `<script>...</script>` мог угнать токены у любого кто открыл share-ссылку. Экранирование + `Content-Security-Policy: default-src 'none'` через extracted `escapeHtml` + `renderSharedTripHtml` функции
+- **`UserNotAuth` пропагируется корректно**: добавлен глобальный `AppErrorFilter` — если `@CurrentUser()` бросает `UserNotAuth` вне `PostApiEntry` роута (где есть `JsonRpcExceptionFilter`), ответ идёт как `401 JSON` вместо raw 500 со стэк-трейсом
 - **`/users/:id/profile` защищён**: добавлены `@UseGuards(JwtAuthGuard, ThrottlerGuard)` + `@CurrentUser()` декоратор (проверяет подпись JWT через guard, а не `jwt.decode`). Неавторизованные запросы теперь отвергаются. Rate limit 60 запросов/мин на IP
 - **Блоки уважаются в профиле**: `getProfile` возвращает `UserNotFound` если между запрашивающим и целевым аккаунтом есть блок в любую сторону. Ошибка одинакова для блока и несуществования, чтобы не подтверждать факт блокировки
 - **`isPublic` уважается**: non-public аккаунт видим только владельцу и активным подписчикам. Остальным — `UserNotFound`
