@@ -21,11 +21,15 @@ struct PublicProfileView: View {
     @State private var showBlockConfirm = false
     @State private var showReport = false
     @State private var selectedBadge: Badge?
-    /// Gate initial fetch so `.task` — which re-fires every time this view
-    /// re-appears (e.g. after popping a pushed FollowListView) — doesn't
-    /// re-run the full sync + profile load cycle. Pull-to-refresh is still
-    /// the explicit way to re-fetch.
+    /// Gate initial fetch so `.task` — which re-fires on view re-appearance
+    /// (e.g. after popping a pushed FollowListView) — doesn't re-run the
+    /// sync+fetch cycle every time. Pull-to-refresh remains the explicit
+    /// refetch path.
     @State private var didInitialLoad = false
+    /// Current in-flight load task. New loads cancel the previous one so
+    /// only one request's response can commit to `profile`, preventing the
+    /// last-completion-wins race between pull-to-refresh and error recovery.
+    @State private var loadTask: Task<Void, Never>?
 
     /// True when this view is rendering the signed-in user's own profile
     /// (e.g. "preview as others see you"). Hides Follow/Block/Report actions.
@@ -117,38 +121,18 @@ struct PublicProfileView: View {
             }
         }
         .task {
-            // `didInitialLoad` gates the initial fetch so popping back from
-            // a pushed FollowListView doesn't re-run the expensive sync +
-            // fetch cycle on every re-appearance. The auth-change handler
-            // below trips the gate and kicks a fresh load when the user
-            // signs out/in while this view is mounted.
             guard !didInitialLoad else { return }
             didInitialLoad = true
-            if isOwnProfile {
-                await AuthService.shared.syncProfileToServer()
-            }
-            await loadProfile()
+            await refresh()
         }
         .onChange(of: auth.isSignedIn) { _, _ in
-            // Clearing `profile` alone would leave the screen empty until
-            // pull-to-refresh — `.task` does NOT re-fire on state change,
-            // only on view re-appearance or id change. Kick the load
-            // manually to keep the view responsive across auth transitions.
-            didInitialLoad = true
+            // `.task` does NOT re-fire on state change — we must kick the
+            // load manually so sign-out/sign-in flows refresh the view
+            // instead of leaving it stuck on the previous account's data.
             profile = nil
-            Task {
-                if isOwnProfile {
-                    await AuthService.shared.syncProfileToServer()
-                }
-                await loadProfile()
-            }
+            Task { await refresh() }
         }
-        .refreshable {
-            if isOwnProfile {
-                await AuthService.shared.syncProfileToServer()
-            }
-            await loadProfile()
-        }
+        .refreshable { await refresh() }
         .overlay {
             if let badge = selectedBadge {
                 BadgeDetailOverlay(
@@ -701,22 +685,38 @@ struct PublicProfileView: View {
 
     // MARK: - Networking
 
-    /// - Parameter force: when true, skips the `isLoading` re-entrancy gate.
-    ///   Used by error-recovery paths (e.g. `toggleFollow`) that MUST reach
-    ///   server truth even if a pull-to-refresh is already in flight.
-    private func loadProfile(force: Bool = false) async {
-        if !force, isLoading { return }
+    /// Single entry point for syncing + fetching the profile. Cancels any
+    /// previous in-flight refresh so concurrent callers (pull-to-refresh,
+    /// auth change, toggle-follow error recovery) don't race on the final
+    /// `profile = p` assignment — only the latest request can commit.
+    private func refresh() async {
+        loadTask?.cancel()
+        let task = Task {
+            if isOwnProfile {
+                await AuthService.shared.syncProfileToServer()
+            }
+            if Task.isCancelled { return }
+            await loadProfile()
+        }
+        loadTask = task
+        await task.value
+    }
+
+    private func loadProfile() async {
         isLoading = true
         defer { isLoading = false }
         loadError = nil
         do {
             let p: SocialProfile = try await APIClient.shared.get(
                 APIEndpoint.userProfile(accountId.uuidString))
+            if Task.isCancelled { return }
             profile = p
         } catch let e as APIError {
+            if Task.isCancelled { return }
             loadError = String(describing: e)
             profileLog.error("profile load failed: \(String(describing: e))")
         } catch {
+            if Task.isCancelled { return }
             loadError = error.localizedDescription
         }
     }
@@ -755,13 +755,10 @@ struct PublicProfileView: View {
             let _: SocialFollowResponse = try await APIClient.shared.post(endpoint, body: req)
         } catch {
             profileLog.error("follow toggle failed: \(error.localizedDescription)")
-            // Revert to server truth instead of the pre-optimistic snapshot —
-            // a concurrent pull may have updated `profile` in between and we
-            // don't want to clobber it. Force through the `isLoading` gate so
-            // the recovery isn't silently skipped when pull-to-refresh is
-            // concurrently in flight — user-facing state would otherwise stay
-            // on the wrong optimistic value with no further signal.
-            await loadProfile(force: true)
+            // Re-fetch to reconcile with server truth. `refresh()` cancels
+            // any in-flight pull-to-refresh so only our recovery response
+            // commits — avoids last-completion-wins racing.
+            await refresh()
         }
     }
 
