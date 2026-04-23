@@ -72,14 +72,15 @@ struct FollowListView: View {
                 }
             }
         }
-        .navigationDestination(isPresented: Binding(
-            get: { selectedAuthor != nil },
-            set: { if !$0 { selectedAuthor = nil } }
-        )) {
-            if let a = selectedAuthor {
-                PublicProfileView(accountId: a.id, preloaded: a)
-            }
-        }
+        // Local-state push used only when no shared `pushPath` is wired in
+        // (i.e. we're inside a real NavigationStack — Discover, TripDetail).
+        // Inside `PreviewNavigator` there is no stack, so attaching this
+        // modifier would log a "misplaced navigationDestination" warning and
+        // get ignored anyway.
+        .modifier(FollowListLocalDestination(
+            selectedAuthor: $selectedAuthor,
+            enabled: pushPath == nil
+        ))
         .task {
             guard !didInitialLoad else { return }
             didInitialLoad = true
@@ -188,7 +189,34 @@ struct FollowListView: View {
         .buttonStyle(.plain)
     }
 
-    private func load() async {
+}
+
+/// Gates the local-state `.navigationDestination` so SwiftUI only sees it
+/// when we're actually inside a `NavigationStack`. Without the gate,
+/// attaching it inside `PreviewNavigator` (pure-SwiftUI, no stack) triggers
+/// a runtime warning and the modifier gets dropped anyway.
+private struct FollowListLocalDestination: ViewModifier {
+    @Binding var selectedAuthor: SocialAuthor?
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.navigationDestination(isPresented: Binding(
+                get: { selectedAuthor != nil },
+                set: { if !$0 { selectedAuthor = nil } }
+            )) {
+                if let a = selectedAuthor {
+                    PublicProfileView(accountId: a.id, preloaded: a)
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+
+extension FollowListView {
+    fileprivate func load() async {
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
