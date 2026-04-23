@@ -210,36 +210,15 @@ struct ProfileView: View {
             previewPath = []
         }) {
             if let accountId = TokenStore.shared.accountId {
-                NavigationStack(path: $previewPath) {
-                    // Root: user's own profile. Pushes from here (Followers,
-                    // other users) go through `previewPath` with a depth
-                    // cap — see `ProfilePreviewDest.cappedAppend`.
-                    // `NavBarKiller` is attached here (root of the stack)
-                    // so its VC never moves in/out of the nav hierarchy
-                    // across pushes — prevents the system bar from
-                    // flashing during pop handoff.
-                    PublicProfileView(
-                        accountId: accountId,
-                        preloaded: nil,
-                        onClose: { previewingOwnProfile = false },
-                        pushPath: $previewPath
-                    )
-                    .background(NavBarKiller())
-                    .navigationDestination(for: ProfilePreviewDest.self) { dest in
-                        switch dest {
-                        case .profile(let id, let author):
-                            PublicProfileView(
-                                accountId: id, preloaded: author,
-                                pushPath: $previewPath,
-                            )
-                        case .followList(let id, let mode):
-                            FollowListView(
-                                accountId: id, mode: mode,
-                                pushPath: $previewPath,
-                            )
-                        }
-                    }
-                }
+                // Custom ZStack-based navigator — no `NavigationStack`, no
+                // underlying `UINavigationController`, no nav-bar flash.
+                // `PreviewNavigator` slides destinations in/out and bridges
+                // `NavBackButton` via `\.previewPop` environment.
+                PreviewNavigator(
+                    rootAccountId: accountId,
+                    path: $previewPath,
+                    onCloseSheet: { previewingOwnProfile = false }
+                )
                 .environmentObject(lang)
                 .environmentObject(themeManager)
                 .preferredColorScheme(themeManager.preferredColorScheme)
