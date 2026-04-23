@@ -2,6 +2,11 @@ import SwiftUI
 import OSLog
 
 private let profileLog = Logger(subsystem: "com.triptrack", category: "social.profile")
+/// Dedicated channel for the follower/following count trace so it's easy to
+/// filter in Console.app while chasing the "counter shows 0 but list has
+/// users" regression. Covers both the decoded network value and the rendered
+/// `@State profile` value — mismatch means state got stale between them.
+private let countsLog = Logger(subsystem: "com.triptrack", category: "profile.counts")
 
 struct PublicProfileView: View {
     let accountId: UUID
@@ -561,7 +566,14 @@ struct PublicProfileView: View {
     // MARK: - Follow counters
 
     private func followCounters(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(spacing: 0) {
+        // Trace what the UI is ACTUALLY rendering right now. Compare with the
+        // `loadProfile decoded` line to spot the stale-state / wrong-field
+        // case. Runs on every body rebuild — noisy, but that's the point.
+        let followerShown = profile?.followerCount ?? 0
+        let followingShown = profile?.followingCount ?? 0
+        let loaded = profile != nil
+        countsLog.debug("render followCounters id=\(self.accountId.uuidString.prefix(8), privacy: .public) loaded=\(loaded, privacy: .public) followerShown=\(followerShown, privacy: .public) followingShown=\(followingShown, privacy: .public)")
+        return HStack(spacing: 0) {
             Button {
                 Haptics.tap()
                 openFollowList(.followers)
@@ -750,11 +762,18 @@ struct PublicProfileView: View {
         isLoading = true
         defer { isLoading = false }
         loadError = nil
+        let idPrefix = accountId.uuidString.prefix(8)
+        countsLog.debug("loadProfile start id=\(idPrefix, privacy: .public) own=\(self.isOwnProfile, privacy: .public)")
         do {
             let p: SocialProfile = try await APIClient.shared.get(
                 APIEndpoint.userProfile(accountId.uuidString))
-            if Task.isCancelled { return }
+            countsLog.debug("loadProfile decoded id=\(idPrefix, privacy: .public) followerCount=\(p.followerCount, privacy: .public) followingCount=\(p.followingCount, privacy: .public) isFollowing=\(String(describing: p.isFollowing), privacy: .public)")
+            if Task.isCancelled {
+                countsLog.debug("loadProfile cancelled AFTER decode id=\(idPrefix, privacy: .public) — NOT committing to @State")
+                return
+            }
             profile = p
+            countsLog.debug("loadProfile committed id=\(idPrefix, privacy: .public) state.followingCount=\(p.followingCount, privacy: .public)")
         } catch {
             // Cancellation means `refresh()` replaced us with a newer task —
             // don't surface its error; the newer task owns the outcome.
