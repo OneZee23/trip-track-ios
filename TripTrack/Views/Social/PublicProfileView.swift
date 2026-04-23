@@ -156,6 +156,16 @@ struct PublicProfileView: View {
             didInitialLoad = true
             await refresh()
         }
+        .onAppear {
+            let id = accountId.uuidString.prefix(8)
+            let ctx = pushPath == nil ? "local" : "shared"
+            let depth = pushPath?.wrappedValue.count ?? -1
+            NavFlashDebug.log.debug("PublicProfileView.onAppear id=\(id, privacy: .public) ctx=\(ctx, privacy: .public) pathDepth=\(depth)")
+        }
+        .onDisappear {
+            let id = accountId.uuidString.prefix(8)
+            NavFlashDebug.log.debug("PublicProfileView.onDisappear id=\(id, privacy: .public)")
+        }
         .onChange(of: auth.isSignedIn) { _, _ in
             // `.task` does NOT re-fire on state change — we must kick the
             // load manually so sign-out/sign-in flows refresh the view

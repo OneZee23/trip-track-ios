@@ -21,7 +21,13 @@ struct FeedView: View {
     @State private var tripToDelete: Trip?
     @State private var collapsedSections: Set<String> = []
     @State private var feedMode: FeedMode = .all
-    @State private var selectedAuthor: SocialAuthor?
+    /// Shared path for the profile → follow list → profile chain. Using a
+    /// typed `NavigationPath`-style array with `cappedAppend` keeps depth
+    /// ≤ `previewDepthCap`, which dodges the SwiftUI bug that flashes a
+    /// default back button at stack depth 4+. Replaces the previous
+    /// `@State selectedAuthor` + chained `.navigationDestination(isPresented:)`
+    /// that let depth compound unbounded through nested pushes.
+    @State private var authorPath: [ProfilePreviewDest] = []
     @State private var selectedSocialTrip: SocialFeedTrip?
     @State private var reactionPickerTrip: SocialFeedTrip?
     @State private var showDiscover = false
@@ -36,7 +42,7 @@ struct FeedView: View {
         let c = AppTheme.colors(for: scheme)
 
         ZStack(alignment: .bottom) {
-        NavigationStack {
+        NavigationStack(path: $authorPath) {
             VStack(spacing: 0) {
                 // Pinned outside the paged TabView so the pill row stays put while the
                 // content underneath slides horizontally.
@@ -77,12 +83,12 @@ struct FeedView: View {
                     TripDetailView(tripId: id, viewModel: TripsViewModel(tripManager: feedVM.tripManager))
                 }
             }
-            .navigationDestination(isPresented: Binding(
-                get: { selectedAuthor != nil },
-                set: { if !$0 { selectedAuthor = nil } }
-            )) {
-                if let author = selectedAuthor {
-                    PublicProfileView(accountId: author.id, preloaded: author)
+            .navigationDestination(for: ProfilePreviewDest.self) { dest in
+                switch dest {
+                case .profile(let id, let author):
+                    PublicProfileView(accountId: id, preloaded: author, pushPath: $authorPath)
+                case .followList(let id, let mode):
+                    FollowListView(accountId: id, mode: mode, pushPath: $authorPath)
                 }
             }
             .navigationDestination(isPresented: Binding(
@@ -475,7 +481,7 @@ struct FeedView: View {
                             selectedSocialTrip = trip
                         }
                     },
-                    onTapAuthor: { selectedAuthor = trip.author },
+                    onTapAuthor: { authorPath.cappedAppend(.profile(trip.author.id, trip.author)) },
                     onLongPress: { reactionPickerTrip = trip },
                     onReact: { emoji in
                         Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
