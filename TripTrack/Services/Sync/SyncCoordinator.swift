@@ -74,11 +74,113 @@ final class SyncCoordinator {
             } else {
                 coordinatorLog.debug("⚠️ failed to parse serverTime=\(res.serverTime)")
             }
-            // Notify UI that remote data was applied
+            // Detect server-side data loss: if the server reports fewer
+            // non-deleted entities than we have marked `synced` locally, the
+            // DB got wiped or rolled back. Re-push the missing ones so the
+            // client stays the source of truth — "better than Google Timeline".
+            if let counts = res.ownedCounts {
+                await reconcileAfterPull(counts: counts)
+            }
             NotificationCenter.default.post(name: .syncPullCompleted, object: nil)
         } catch {
             coordinatorLog.debug("pull failed: \(error)")
         }
+    }
+
+    // MARK: - Server data-loss reconciliation
+
+    /// Compares server's owned-entity counts against what the client thinks
+    /// is synced. On mismatch (server < local) fetches the full manifest of
+    /// server-owned UUIDs and marks any local `synced` entity that's missing
+    /// as `pendingUpload`, so the queue re-pushes it. Local authoritative.
+    private func reconcileAfterPull(counts: SyncPullResponse.OwnedCounts) async {
+        let ctx = PersistenceController.shared.container.viewContext
+        let localTrips = countSyncedAlive(ctx, entity: TripEntity.fetchRequest())
+        let localVehicles = countSyncedAlive(ctx, entity: VehicleEntity.fetchRequest())
+        let localPhotos = countSyncedAlive(ctx, entity: TripPhotoEntity.fetchRequest())
+
+        let tripsLost = localTrips > counts.trips
+        let vehiclesLost = localVehicles > counts.vehicles
+        let photosLost = localPhotos > counts.photos
+        guard tripsLost || vehiclesLost || photosLost else { return }
+
+        coordinatorLog.warning(
+            "server data-loss suspected — local synced trips=\(localTrips)/srv=\(counts.trips) vehicles=\(localVehicles)/srv=\(counts.vehicles) photos=\(localPhotos)/srv=\(counts.photos); fetching manifest"
+        )
+
+        let manifest: SyncManifestResponse
+        do {
+            manifest = try await client.post(APIEndpoint.syncManifest, body: EmptyRequest())
+        } catch {
+            coordinatorLog.error("manifest fetch failed: \(error.localizedDescription)")
+            return
+        }
+
+        let serverTrips = Set(manifest.trips)
+        let serverVehicles = Set(manifest.vehicles)
+        let serverPhotos = Set(manifest.photos)
+        var repushed = 0
+        if tripsLost { repushed += markMissingForReupload(ctx, type: .trip, serverSet: serverTrips) }
+        if vehiclesLost { repushed += markMissingForReupload(ctx, type: .vehicle, serverSet: serverVehicles) }
+        if photosLost { repushed += markMissingForReupload(ctx, type: .photo, serverSet: serverPhotos) }
+        if repushed > 0 {
+            try? ctx.save()
+            coordinatorLog.warning("reconciliation queued \(repushed) entities for re-upload")
+        }
+    }
+
+    private func countSyncedAlive<T: NSManagedObject>(
+        _ ctx: NSManagedObjectContext, entity request: NSFetchRequest<T>,
+    ) -> Int {
+        request.predicate = NSPredicate(
+            format: "syncStatus == %d", SyncStatus.synced.rawValue,
+        )
+        return (try? ctx.count(for: request)) ?? 0
+    }
+
+    /// Walks local `synced` entities of a given type, flips ones NOT present
+    /// in the server manifest to `pendingUpload`, and enqueues an upload op.
+    private func markMissingForReupload(
+        _ ctx: NSManagedObjectContext,
+        type: SyncOperation.EntityType,
+        serverSet: Set<UUID>,
+    ) -> Int {
+        var count = 0
+        switch type {
+        case .trip:
+            let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "syncStatus == %d", SyncStatus.synced.rawValue)
+            let rows = (try? ctx.fetch(req)) ?? []
+            for r in rows {
+                guard let id = r.id, !serverSet.contains(id) else { continue }
+                r.syncStatus = SyncStatus.pendingUpload.rawValue
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .upload))
+                count += 1
+            }
+        case .vehicle:
+            let req: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "syncStatus == %d", SyncStatus.synced.rawValue)
+            let rows = (try? ctx.fetch(req)) ?? []
+            for r in rows {
+                guard let id = r.id, !serverSet.contains(id) else { continue }
+                r.syncStatus = SyncStatus.pendingUpload.rawValue
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
+                count += 1
+            }
+        case .photo:
+            let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "syncStatus == %d", SyncStatus.synced.rawValue)
+            let rows = (try? ctx.fetch(req)) ?? []
+            for r in rows {
+                guard let id = r.id, !serverSet.contains(id) else { continue }
+                r.syncStatus = SyncStatus.pendingUpload.rawValue
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: id, action: .upload))
+                count += 1
+            }
+        case .settings:
+            break // Settings is singleton — reconciliation not applicable.
+        }
+        return count
     }
 
     private func enqueuePendingOriginals() {

@@ -2,6 +2,7 @@ import Foundation
 
 enum APIError: Error, Equatable {
     case userNotAuth
+    case userBanned
     case invalidAppleToken(String)
     case invalidRefreshToken
     case conflictDetected(serverVersion: Int?, serverLastModifiedAt: Date?)
@@ -19,6 +20,7 @@ enum APIError: Error, Equatable {
     static func from(code: String, message: String, serverVersion: Int?, serverLastModifiedAt: Date?) -> APIError {
         switch code {
         case "USER_NOT_AUTH":          return .userNotAuth
+        case "USER_BANNED":            return .userBanned
         case "INVALID_APPLE_TOKEN":    return .invalidAppleToken(message)
         case "INVALID_REFRESH_TOKEN":  return .invalidRefreshToken
         case "CONFLICT_DETECTED":      return .conflictDetected(serverVersion: serverVersion, serverLastModifiedAt: serverLastModifiedAt)

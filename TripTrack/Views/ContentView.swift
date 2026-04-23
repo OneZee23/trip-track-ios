@@ -14,6 +14,10 @@ extension Notification.Name {
     static let territoryRebuilt = Notification.Name("territoryRebuilt")
     static let syncPullCompleted = Notification.Name("syncPullCompleted")
     static let tripPrivacyChanged = Notification.Name("tripPrivacyChanged")
+    /// Server returned `USER_BANNED` on any authenticated endpoint. AuthService
+    /// observes this and triggers `signOut()` — local data stays intact so the
+    /// user can still view (read-only) what they already have on device.
+    static let userBanned = Notification.Name("userBanned")
 }
 
 /// Payload for `.tripPrivacyChanged` — lets the feed optimistically remove/add the
