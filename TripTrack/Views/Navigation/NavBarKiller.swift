@@ -4,32 +4,21 @@ import OSLog
 
 private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 
-/// Forces the underlying `UINavigationController` bar to stay invisible AND
-/// zero-height so it can't cause the content to shift, plus keeps the
-/// interactive swipe-back gesture working.
+/// Forces the underlying `UINavigationController` bar to be visually
+/// nothing — transparent background, clear tint (back-button invisible),
+/// clear title — AND cancels its safe-area contribution via negative
+/// `additionalSafeAreaInsets`. This survives UIKit's push/pop animations
+/// where `isHidden` / `alpha` get toggled through the presentation layer
+/// (beyond what KVO on the model can intercept): even if the bar paints
+/// for a frame, there's simply no visible content in it.
 ///
-/// Why the previous approaches failed (per runtime logs):
-///
-/// 1. `.toolbar(.hidden)` — UIKit's push/pop animator re-sets
-///    `navigationBar.isHidden = false` mid-transition even when the
-///    controller-level `isNavigationBarHidden` stays true.
-/// 2. `setNavigationBarHidden(true)` + `isHidden = true` only — UIKit's
-///    animator also resets `alpha` back to 1.0 during push/pop, so even
-///    the briefly-shown bar was visually painting 44pt of empty space.
-/// 3. `alpha = 0` alone — same: UIKit restores it every transition.
-///
-/// Final fix: KVO observers on BOTH `isHidden` and `alpha`, synchronously
-/// reverting them when UIKit toggles them. Plus `additionalSafeAreaInsets`
-/// -44pt on the hosting VC so even during the brief flash window the bar
-/// doesn't contribute safe-area space, preventing content from shifting.
+/// Use via `.background(NavBarKiller())`. Safe only in stacks where every
+/// pushed view wants the bar gone. `CustomNavBar` wires this in.
 struct NavBarKiller: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> Controller { Controller() }
     func updateUIViewController(_ vc: Controller, context: Context) {}
 
     final class Controller: UIViewController {
-        private var hiddenObserver: NSKeyValueObservation?
-        private var alphaObserver: NSKeyValueObservation?
-
         override func loadView() {
             let v = UIView()
             v.backgroundColor = .clear
@@ -39,87 +28,88 @@ struct NavBarKiller: UIViewControllerRepresentable {
 
         override func didMove(toParent parent: UIViewController?) {
             super.didMove(toParent: parent)
-            hideBar(phase: "didMove")
-            attachObservers()
+            blankTheBar(phase: "didMove")
         }
 
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
-            hideBar(phase: "willAppear")
-            attachObservers()
+            blankTheBar(phase: "willAppear")
             navigationController?.interactivePopGestureRecognizer?.delegate = nil
             navigationController?.interactivePopGestureRecognizer?.isEnabled = true
         }
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
-            hideBar(phase: "didAppear")
+            blankTheBar(phase: "didAppear")
         }
 
         override func viewWillDisappear(_ animated: Bool) {
             super.viewWillDisappear(animated)
-            hideBar(phase: "willDisappear")
+            blankTheBar(phase: "willDisappear")
         }
 
         override func viewWillLayoutSubviews() {
             super.viewWillLayoutSubviews()
-            hideBar(phase: "willLayout")
+            blankTheBar(phase: "willLayout")
         }
 
         override func viewDidLayoutSubviews() {
             super.viewDidLayoutSubviews()
-            hideBar(phase: "didLayout")
+            blankTheBar(phase: "didLayout")
         }
 
-        /// Observe `isHidden` and `alpha` — revert UIKit transition-induced
-        /// toggles synchronously before the next paint. Both are KVO-
-        /// compliant on `UINavigationBar`.
-        private func attachObservers() {
-            guard let bar = navigationController?.navigationBar else { return }
-            if hiddenObserver == nil {
-                hiddenObserver = bar.observe(\.isHidden, options: [.new]) { bar, change in
-                    guard change.newValue == false else { return }
-                    bar.isHidden = true
-                    navLog.debug("kvo: bar unhidden — reverted")
-                }
-            }
-            if alphaObserver == nil {
-                alphaObserver = bar.observe(\.alpha, options: [.new]) { bar, change in
-                    guard let new = change.newValue, new > 0 else { return }
-                    bar.alpha = 0
-                    navLog.debug("kvo: bar alpha=\(new) — reverted to 0")
-                }
-            }
-        }
+        /// Make the nav bar completely content-free and transparent, then
+        /// subtract its height from the controller's safe area so the
+        /// on-screen layout is identical regardless of UIKit toggling
+        /// `isHidden` / `alpha` mid-animation.
+        private func blankTheBar(phase: String) {
+            guard let nav = navigationController else { return }
+            let bar = nav.navigationBar
 
-        private func hideBar(phase: String) {
-            let nav = navigationController
-            let barVisibleBefore = nav.map { !$0.isNavigationBarHidden }
-            let barSubviewHiddenBefore = nav.map { $0.navigationBar.isHidden }
-            let alphaBefore = nav.map { $0.navigationBar.alpha }
+            // Transparent appearance — background, shadow, everything.
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithTransparentBackground()
+            appearance.backgroundColor = .clear
+            appearance.backgroundEffect = nil
+            appearance.shadowColor = .clear
+            appearance.shadowImage = UIImage()
+            // Title + any large title invisible — mapped color is clear,
+            // so even if SwiftUI pushes a title via `.navigationTitle` it
+            // renders nothing.
+            let clearText: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.clear]
+            appearance.titleTextAttributes = clearText
+            appearance.largeTitleTextAttributes = clearText
+            // Clear back button text + chevron; they draw with `tintColor`.
+            let backItem = UIBarButtonItemAppearance(style: .plain)
+            backItem.normal.titleTextAttributes = clearText
+            backItem.highlighted.titleTextAttributes = clearText
+            appearance.backButtonAppearance = backItem
 
-            nav?.setNavigationBarHidden(true, animated: false)
-            nav?.navigationBar.isHidden = true
-            nav?.navigationBar.alpha = 0
-            // Negative top inset cancels the nav bar's 44pt safe-area
-            // contribution — even if UIKit momentarily restores `isHidden`
-            // and `alpha`, our content doesn't shift down because the bar
-            // is treated as occupying zero safe-area space.
-            if let bar = nav?.navigationBar {
-                let barHeight = bar.frame.height
-                nav?.additionalSafeAreaInsets = UIEdgeInsets(
-                    top: -barHeight, left: 0, bottom: 0, right: 0,
-                )
+            bar.standardAppearance = appearance
+            bar.scrollEdgeAppearance = appearance
+            bar.compactAppearance = appearance
+            if #available(iOS 15.0, *) {
+                bar.compactScrollEdgeAppearance = appearance
             }
+            bar.tintColor = .clear
+            bar.isTranslucent = true
+
+            // Keep the best-effort hide calls too — they work when UIKit
+            // isn't actively animating and save layout cost.
+            nav.setNavigationBarHidden(true, animated: false)
+            bar.isHidden = true
+            bar.alpha = 0
+
+            // Subtract the bar's height from safe area so the flash window
+            // doesn't push content down by 44pt.
+            let barHeight = bar.frame.height
+            nav.additionalSafeAreaInsets = UIEdgeInsets(
+                top: -barHeight, left: 0, bottom: 0, right: 0,
+            )
 
             navLog.debug(
-                "killer[\(ObjectIdentifier(self).hashValue, privacy: .public)].\(phase, privacy: .public) nav=\(nav != nil) barVisible=\(barVisibleBefore?.description ?? "nil", privacy: .public) isHidden=\(barSubviewHiddenBefore?.description ?? "nil", privacy: .public) alpha=\(alphaBefore?.description ?? "nil", privacy: .public) stackDepth=\(nav?.viewControllers.count ?? -1)"
+                "killer[\(ObjectIdentifier(self).hashValue, privacy: .public)].\(phase, privacy: .public) stackDepth=\(nav.viewControllers.count) barH=\(barHeight)"
             )
-        }
-
-        deinit {
-            hiddenObserver?.invalidate()
-            alphaObserver?.invalidate()
         }
     }
 }
