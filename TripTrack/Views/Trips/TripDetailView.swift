@@ -134,7 +134,7 @@ struct TripDetailView: View {
             }
         }
         .background(c.bg)
-        .background(EnableSwipeBack())
+        .background(NavBarKiller())
         .ignoresSafeArea()
         .navigationBarHidden(true)
         .navigationDestination(isPresented: Binding(
@@ -835,24 +835,6 @@ private struct DetailStatCard: View {
                 appeared = true
             }
         }
-    }
-}
-
-// MARK: - Swipe Back Helper
-
-private struct EnableSwipeBack: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> UIViewController {
-        SwipeBackController()
-    }
-
-    func updateUIViewController(_ vc: UIViewController, context: Context) {}
-}
-
-private class SwipeBackController: UIViewController {
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        navigationController?.interactivePopGestureRecognizer?.isEnabled = true
-        navigationController?.interactivePopGestureRecognizer?.delegate = nil
     }
 }
 

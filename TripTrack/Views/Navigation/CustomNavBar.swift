@@ -35,6 +35,11 @@ struct CustomNavBar<Trailing: View>: View {
         .frame(minHeight: 44)
         .frame(maxWidth: .infinity)
         .background(c.bg)
+        // Kill the UIKit-level nav bar and restore swipe-back. Pure
+        // SwiftUI `.toolbar(.hidden)` crossfades across pop transitions
+        // and briefly shows the system bar — `NavBarKiller` closes that
+        // race by hiding at the UINavigationController layer instead.
+        .background(NavBarKiller())
     }
 }
 
