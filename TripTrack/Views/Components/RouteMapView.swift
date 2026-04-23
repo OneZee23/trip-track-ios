@@ -13,6 +13,11 @@ struct RouteMapView: UIViewRepresentable {
     var speeds: [Double] = []
     var isInteractive: Bool = false
     var fogCutoffDate: Date?
+    /// When true, disable gap-splitting. Preview polylines from the social
+    /// feed are already RDP-simplified — points can be several km apart,
+    /// which the 1 km gap threshold treats as discontinuities and leaves the
+    /// map with zero drawable segments (so no bounding rect, so no zoom).
+    var treatAsPreview: Bool = false
 
     private static let gapThreshold = GeometryUtils.defaultGapThreshold
 
@@ -31,9 +36,14 @@ struct RouteMapView: UIViewRepresentable {
         )
 
         if coordinates.count >= 2 {
-            // Split into continuous segments first, then simplify each
+            // Split into continuous segments first, then simplify each.
+            // Preview polylines are treated as one solid segment — their
+            // points are sparsely sampled so gap detection would shred
+            // them into singleton segments that render as nothing.
             let segments: [([CLLocationCoordinate2D], [Double])]
-            if speeds.count == coordinates.count {
+            if treatAsPreview {
+                segments = [(coordinates, speeds.count == coordinates.count ? speeds : [])]
+            } else if speeds.count == coordinates.count {
                 segments = Self.splitIntoSegments(coordinates, speeds: speeds, gapThreshold: Self.gapThreshold)
             } else {
                 segments = Self.splitIntoSegments(coordinates, speeds: [], gapThreshold: Self.gapThreshold)

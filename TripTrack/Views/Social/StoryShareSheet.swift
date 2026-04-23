@@ -6,6 +6,7 @@ import UIKit
 /// Decoupled data for the story preview — built from either a local `Trip`
 /// or a `SocialFeedTrip`.
 struct StoryShareData {
+    let tripId: UUID
     let title: String
     let dateText: String
     let distanceKmText: String
@@ -23,6 +24,7 @@ extension StoryShareData {
         df.locale = Locale(identifier: lang == .ru ? "ru_RU" : "en_US")
         df.dateFormat = "d MMM yyyy"
         return StoryShareData(
+            tripId: trip.id,
             title: trip.title ?? df.string(from: trip.startDate),
             dateText: df.string(from: trip.startDate),
             distanceKmText: String(format: "%.1f", trip.distanceKm),
@@ -41,6 +43,7 @@ extension StoryShareData {
         df.locale = Locale(identifier: lang == .ru ? "ru_RU" : "en_US")
         df.dateFormat = "d MMM yyyy"
         return StoryShareData(
+            tripId: trip.id,
             title: trip.title ?? df.string(from: trip.startDate),
             dateText: df.string(from: trip.startDate),
             distanceKmText: String(format: "%.1f", trip.distanceKm),
@@ -292,9 +295,23 @@ struct StoryPreviewCard: View {
                             .fill(Color.white.opacity(0.04))
 
                         if data.coordinates.count > 1 {
-                            LightRoutePreview(
-                                coordinates: data.coordinates
+                            // Real map tiles (via MKMapSnapshotter) instead of a
+                            // bare Canvas polyline — the line-only preview felt
+                            // empty against the dark card. `data.tripId` is the
+                            // cache key so we don't re-render on every open.
+                            // Pass both width and height so the snapshot
+                            // matches the display slot aspect ratio. Feed
+                            // cards rely on the default 340pt width; the
+                            // share card slot is ~0.77·cardWidth, so the
+                            // hardcoded default aspect-cropped most of the
+                            // horizontal route and blew up the endpoint dots.
+                            MapSnapshotPreview(
+                                coordinates: data.coordinates,
+                                tripId: data.tripId,
+                                height: geo.size.height * 0.48,
+                                width: geo.size.width * 0.77
                             )
+                            .clipShape(RoundedRectangle(cornerRadius: geo.size.width * 0.05))
                             .padding(geo.size.width * 0.04)
                         } else {
                             Image(systemName: "map")

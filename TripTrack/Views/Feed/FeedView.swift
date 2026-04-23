@@ -93,10 +93,7 @@ struct FeedView: View {
                     )
                 case .socialTrip(let t):
                     SocialTripDetailView(
-                        trip: t,
-                        onReact: { emoji in
-                            Task { await socialFeed.toggleReaction(for: t.id, emoji: emoji) }
-                        },
+                        initialTrip: t,
                         onShare: { shareSocialTrip(t) },
                         pushPath: $authorPath
                     )
@@ -108,20 +105,18 @@ struct FeedView: View {
                     Button {
                         NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             Image("PixelCar")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 20, height: 20)
-                            VStack(spacing: 1) {
-                                Text("ROAD  TRIP")
-                                    .font(.custom("PressStart2P-Regular", size: 10))
-                                    .foregroundStyle(AppTheme.accent)
-                                Text("TRACKER")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(c.textTertiary)
-                                    .tracking(2)
-                            }
+                                .frame(width: 22, height: 22)
+                            // Matches the App Store display name "TripTrack"
+                            // (previous two-line "ROAD TRIP / TRACKER" was a
+                            // marketing line that didn't align with branding).
+                            Text("TripTrack")
+                                .font(.system(size: 17, weight: .heavy))
+                                .tracking(-0.2)
+                                .foregroundStyle(c.text)
                         }
                     }
                     .buttonStyle(.plain)

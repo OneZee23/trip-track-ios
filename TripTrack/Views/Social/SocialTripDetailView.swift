@@ -5,8 +5,10 @@ import MapKit
 /// Unlike the local TripDetailView, it shows a friend's trip — no editing,
 /// no deletion, no photo picker. Just the map, metrics, reactions row, and share.
 struct SocialTripDetailView: View {
-    let trip: SocialFeedTrip
-    var onReact: ((String) -> Void)?
+    /// Initial trip snapshot — used as fallback if the store hasn't loaded
+    /// this trip (e.g. direct push). Real rendering reads from
+    /// `socialFeed.trips` so optimistic reaction updates re-render.
+    let initialTrip: SocialFeedTrip
     var onShare: (() -> Void)?
     /// When present, author-avatar and reactor taps push onto this shared
     /// path instead of attaching a local `.navigationDestination`. Keeps us
@@ -16,10 +18,18 @@ struct SocialTripDetailView: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var socialFeed = SocialFeedStore.shared
     @State private var selectedAuthor: SocialAuthor?
-    @State private var showReport = false
     @State private var reactionEntries: [SocialReactionEntry] = []
     @State private var isLoadingReactions = false
+    @State private var isMapFullscreen = false
+
+    /// Always-current view of the trip: prefer store's copy (reflects
+    /// optimistic reaction toggles) and fall back to the original snapshot
+    /// if the store doesn't have the trip yet.
+    private var trip: SocialFeedTrip {
+        socialFeed.trips.first(where: { $0.id == initialTrip.id }) ?? initialTrip
+    }
 
     private var mapBaseHeight: CGFloat {
         (UIApplication.shared.connectedScenes
@@ -59,7 +69,6 @@ struct SocialTripDetailView: View {
                     .padding(.bottom, 80)
                 }
             }
-            .ignoresSafeArea(edges: .top)
             .scrollIndicators(.hidden)
 
             // Sticky floating back button + menu — matches TripDetailView pattern.
@@ -75,22 +84,15 @@ struct SocialTripDetailView: View {
                         .background(.black.opacity(0.4), in: Circle())
                 }
                 Spacer()
-                Menu {
-                    Button {
-                        Haptics.tap()
-                        onShare?()
-                    } label: {
-                        Label(isRu ? "Поделиться" : "Share",
-                              systemImage: "square.and.arrow.up")
-                    }
-                    Button {
-                        Haptics.tap()
-                        showReport = true
-                    } label: {
-                        Label(isRu ? "Пожаловаться" : "Report", systemImage: "flag")
-                    }
+                // Report entry point removed pending a moderation/admin UI —
+                // the server endpoint still accepts reports, but there's no
+                // triage surface for us to act on them yet. Only share is
+                // exposed here. Re-add the Menu when moderation is wired up.
+                Button {
+                    Haptics.tap()
+                    onShare?()
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 44, height: 44)
@@ -101,14 +103,20 @@ struct SocialTripDetailView: View {
             .padding(.horizontal, 16)
         }
         .background(c.bg)
+        .ignoresSafeArea()
         .navigationBarHidden(true)
         .modifier(SocialTripDetailLocalDestination(
             selectedAuthor: $selectedAuthor,
             enabled: pushPath == nil
         ))
-        .sheet(isPresented: $showReport) {
-            ReportSheet(target: .trip(trip.id))
-                .environmentObject(lang)
+        .hideAppTabBar()
+        .fullScreenCover(isPresented: $isMapFullscreen) {
+            FullscreenMapSheet(
+                coordinates: trip.previewCoordinates,
+                speeds: [],
+                fogCutoffDate: nil,
+                treatAsPreview: true
+            )
         }
         .task { await loadReactions() }
     }
@@ -131,9 +139,34 @@ struct SocialTripDetailView: View {
     private func mapSection(_ c: AppTheme.Colors) -> some View {
         let coords = trip.previewCoordinates
         if coords.count > 1 {
-            MapSnapshotPreview(coordinates: coords, tripId: trip.id, height: mapBaseHeight)
+            // Interactive RouteMapView matches TripDetailView so the user can
+            // pan/zoom a friend's route the same way as their own. No speed
+            // gradient here — social feed only carries `previewPolyline`, not
+            // per-point speeds. `fogCutoffDate` stays nil because shared trips
+            // aren't part of the viewer's own territory coverage.
+            ZStack(alignment: .bottomTrailing) {
+                RouteMapView(
+                    coordinates: coords,
+                    speeds: [],
+                    isInteractive: true,
+                    fogCutoffDate: nil,
+                    treatAsPreview: true
+                )
                 .frame(maxWidth: .infinity)
-                .clipped()
+
+                Button {
+                    Haptics.tap()
+                    isMapFullscreen = true
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(.black.opacity(0.45), in: Circle())
+                }
+                .padding(.trailing, 12)
+                .padding(.bottom, 12)
+            }
         } else {
             c.cardAlt
                 .overlay {
@@ -269,7 +302,15 @@ struct SocialTripDetailView: View {
         let isMine = trip.myReaction == emoji
         return Button {
             Haptics.selection()
-            onReact?(emoji)
+            // Toggle + re-fetch chained in one task so `/social/reactions`
+            // only fires after the `/social/react` write commits. Firing them
+            // in parallel (prior bug) meant the fetch returned stale data —
+            // the bottom list always showed the *previous* emoji because the
+            // new react hadn't landed on the server yet.
+            Task {
+                await socialFeed.toggleReaction(for: trip.id, emoji: emoji)
+                await loadReactions()
+            }
         } label: {
             Text(emoji)
                 .font(.system(size: 22))
