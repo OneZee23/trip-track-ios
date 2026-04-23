@@ -78,21 +78,13 @@ struct PublicProfileView: View {
             .padding(.bottom, 120)
         }
         .background(c.bg)
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        // Keep the nav bar opaque during push/pop so popping FollowListView
-        // doesn't briefly reveal the destination underneath.
-        .toolbarBackground(c.bg, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) { NavBackButton() }
-            ToolbarItem(placement: .principal) {
-                Text(resolvedDisplayName)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(c.text)
-            }
-            if !isOwnProfile {
-                ToolbarItem(placement: .topBarTrailing) {
+        .toolbar(.hidden, for: .navigationBar)
+        // Custom top bar rendered as safeAreaInset — system nav bar would
+        // flicker its default back button + borrow the parent title
+        // ("← Followers") during pop animations despite hidden-modifiers.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            CustomNavBar(title: resolvedDisplayName) {
+                if !isOwnProfile {
                     Menu {
                         Button {
                             Haptics.tap()
@@ -113,8 +105,8 @@ struct PublicProfileView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
-                            .font(.system(size: 16))
-                            .foregroundStyle(c.text)
+                            .font(.system(size: 22))
+                            .foregroundStyle(c.textTertiary)
                     }
                 }
             }
@@ -312,7 +304,10 @@ struct PublicProfileView: View {
             divider(c)
             statCell(
                 value: profile == nil ? "—" : "\(streakValue)",
-                label: isRu ? "серия" : "streak",
+                // Spelled out "day streak" so the icon+number doesn't look
+                // like a generic score — it's specifically consecutive days
+                // of recording trips.
+                label: isRu ? "дней подряд" : "day streak",
                 c: c,
                 accent: streakValue > 0 ? AppTheme.accent : nil,
                 iconSystemName: streakValue > 0 ? "flame.fill" : nil

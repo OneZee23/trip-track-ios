@@ -354,7 +354,7 @@ struct ProfileView: View {
                 quickStatPill(
                     icon: "flame.fill",
                     value: "\(settings.currentStreak)",
-                    label: isRu ? "серия" : "streak",
+                    label: isRu ? "дней подряд" : "day streak",
                     color: AppTheme.accent, c: c
                 )
             }
