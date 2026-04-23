@@ -118,7 +118,7 @@ final class SyncCoordinator {
         // is incomplete. Reconciliation would false-positive every legit
         // entity beyond the cap as "missing" and re-upload them, inflicting
         // the exact DoS the cap is meant to prevent. Abort safely.
-        if manifest.truncated == true {
+        if manifest.truncated ?? false {
             coordinatorLog.warning("manifest truncated — skipping reconciliation to avoid false re-upload")
             return
         }
