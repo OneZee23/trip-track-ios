@@ -444,11 +444,9 @@ struct FeedView: View {
     private func socialFeedContent(_ c: AppTheme.Colors) -> some View {
         let isRu = lang.language == .ru
 
-        // Suggested users always on top (carousel hides itself if nothing to recommend)
-        SuggestedUsersCarousel(onTapUser: { user in
-            selectedAuthor = user
-        })
-        .padding(.bottom, 6)
+        // Suggested-users carousel moved out of the feed into DiscoverView
+        // (search tab) — keeps the feed focused on activity and avoids
+        // empty-state awkwardness when there are no recommendations.
 
         if socialFeed.isLoading, socialFeed.trips.isEmpty {
             PixelCarLoader(
