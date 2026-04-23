@@ -18,8 +18,9 @@ struct BlockedListView: View {
         ScrollView {
             VStack(spacing: 10) {
                 if isLoading, users.isEmpty {
-                    ProgressView()
-                        .padding(.vertical, 60)
+                    PixelCarLoader(label: nil, height: 100)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
                 } else if users.isEmpty {
                     emptyState(c, isRu: isRu)
                 } else {

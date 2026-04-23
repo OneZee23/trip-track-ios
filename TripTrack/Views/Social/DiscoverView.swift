@@ -101,9 +101,9 @@ struct DiscoverView: View {
             )
 
             if isLoadingSuggested, suggested.isEmpty {
-                ProgressView()
+                PixelCarLoader(label: nil, height: 80)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
+                    .padding(.vertical, 20)
             } else if suggested.isEmpty {
                 Text(isRu ? "Пока никого не можем порекомендовать" : "No suggestions yet")
                     .font(.system(size: 13))
@@ -132,9 +132,9 @@ struct DiscoverView: View {
             )
 
             if isSearching, results.isEmpty {
-                ProgressView()
+                PixelCarLoader(label: nil, height: 80)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
+                    .padding(.vertical, 20)
             } else if results.isEmpty {
                 Text(isRu ? "Никого не найдено" : "No users found")
                     .font(.system(size: 13))
