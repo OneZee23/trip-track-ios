@@ -667,9 +667,9 @@ struct PublicProfileView: View {
     }
 
     private func skeleton() -> some View {
-        ProgressView()
+        PixelCarLoader(label: nil, height: 80)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 32)
+            .padding(.vertical, 20)
     }
 
     private func errorRow(_ msg: String, c: AppTheme.Colors, isRu: Bool) -> some View {
