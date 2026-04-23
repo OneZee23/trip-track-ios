@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// Shimmer-animated placeholder that matches `PublicProfileView`'s sections
-/// (hero, stats grid, active vehicle, achievements row, follow counters,
-/// recent trips). Shown while the profile fetch is in flight so the user
-/// sees structured ghosts instead of a blank screen or a jarring
-/// content pop-in.
+/// Shimmer-animated placeholder that matches `PublicProfileView`'s always-
+/// present sections (hero, stats grid, follow counters) so the cross-fade
+/// swap stays pixel-aligned. Conditional sections (active vehicle, badges,
+/// recent trips) intentionally aren't reserved here — the real view
+/// renders them only when data is available, and pre-allocating slots
+/// for them caused the skeleton→content swap to visibly shift / overlap
+/// when the real profile turned out to be taller or shorter.
 struct SkeletonProfileView: View {
     @Environment(\.colorScheme) private var scheme
 
@@ -13,10 +15,7 @@ struct SkeletonProfileView: View {
         VStack(spacing: 16) {
             hero(c).padding(.top, 16)
             statsGrid(c).padding(.horizontal, 16)
-            activeVehicle(c).padding(.horizontal, 16)
-            achievements(c).padding(.horizontal, 16)
             followCounters(c).padding(.horizontal, 16)
-            recentTrips(c).padding(.horizontal, 16)
         }
         .shimmer()
     }
@@ -26,11 +25,15 @@ struct SkeletonProfileView: View {
         let bannerHeight: CGFloat = 140
         let avatarOverlap = avatarSize / 2
         return VStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 18)
+            Rectangle()
                 .fill(c.cardAlt)
                 .frame(height: bannerHeight)
 
-            VStack(spacing: 10) {
+            // Mirrors the real hero: name line (22pt heavy) + rank/level pill
+            // underneath, spaced by 6pt, with the same top/bottom padding so
+            // the card's total height matches regardless of which branch is
+            // on screen.
+            VStack(spacing: 6) {
                 RoundedRectangle(cornerRadius: 4)
                     .fill(c.cardAlt)
                     .frame(width: 160, height: 22)
@@ -39,6 +42,7 @@ struct SkeletonProfileView: View {
                     .frame(width: 110, height: 22)
             }
             .padding(.top, avatarOverlap + 14)
+            .padding(.horizontal, 16)
             .padding(.bottom, 16)
         }
         .background(c.card)
@@ -55,7 +59,7 @@ struct SkeletonProfileView: View {
     private func statsGrid(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 0) {
             ForEach(0..<4, id: \.self) { _ in
-                VStack(spacing: 4) {
+                VStack(spacing: 2) {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(c.cardAlt).frame(width: 36, height: 16)
                     RoundedRectangle(cornerRadius: 3)
@@ -66,40 +70,6 @@ struct SkeletonProfileView: View {
         }
         .padding(.vertical, 12)
         .surfaceCard(cornerRadius: 14)
-    }
-
-    private func activeVehicle(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 14)
-                .fill(c.cardAlt).frame(width: 52, height: 52)
-            VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 120, height: 14)
-                RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 80, height: 11)
-                RoundedRectangle(cornerRadius: 3).fill(c.cardAlt).frame(height: 6)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .surfaceCard(cornerRadius: 16)
-    }
-
-    private func achievements(_ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 120, height: 14)
-            HStack(spacing: 14) {
-                ForEach(0..<6, id: \.self) { _ in
-                    VStack(spacing: 6) {
-                        Circle().fill(c.cardAlt).frame(width: 48, height: 48)
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(c.cardAlt).frame(width: 52, height: 9)
-                    }
-                }
-            }
-            .padding(.horizontal, 14).padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(c.card)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-        }
     }
 
     private func followCounters(_ c: AppTheme.Colors) -> some View {
@@ -114,24 +84,5 @@ struct SkeletonProfileView: View {
         }
         .padding(.vertical, 12)
         .surfaceCard(cornerRadius: 14)
-    }
-
-    private func recentTrips(_ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 100, height: 14)
-            ForEach(0..<2, id: \.self) { _ in
-                HStack(spacing: 12) {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(c.cardAlt).frame(width: 80, height: 52)
-                    VStack(alignment: .leading, spacing: 6) {
-                        RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 140, height: 13)
-                        RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 90, height: 10)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(10)
-                .surfaceCard(cornerRadius: 12)
-            }
-        }
     }
 }
