@@ -8,6 +8,10 @@ struct SocialTripDetailView: View {
     let trip: SocialFeedTrip
     var onReact: ((String) -> Void)?
     var onShare: (() -> Void)?
+    /// When present, author-avatar and reactor taps push onto this shared
+    /// path instead of attaching a local `.navigationDestination`. Keeps us
+    /// off the chained isPresented chain that triggers the depth-4 flash.
+    var pushPath: Binding<[ProfilePreviewDest]>?
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -98,14 +102,10 @@ struct SocialTripDetailView: View {
         }
         .background(c.bg)
         .navigationBarHidden(true)
-        .navigationDestination(isPresented: Binding(
-            get: { selectedAuthor != nil },
-            set: { if !$0 { selectedAuthor = nil } }
-        )) {
-            if let a = selectedAuthor {
-                PublicProfileView(accountId: a.id, preloaded: a)
-            }
-        }
+        .modifier(SocialTripDetailLocalDestination(
+            selectedAuthor: $selectedAuthor,
+            enabled: pushPath == nil
+        ))
         .sheet(isPresented: $showReport) {
             ReportSheet(target: .trip(trip.id))
                 .environmentObject(lang)
@@ -147,7 +147,11 @@ struct SocialTripDetailView: View {
     private func authorRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         Button {
             Haptics.tap()
-            selectedAuthor = trip.author
+            if let pushPath {
+                pushPath.wrappedValue.cappedAppend(.profile(trip.author.id, trip.author))
+            } else {
+                selectedAuthor = trip.author
+            }
         } label: {
             HStack(spacing: 12) {
                 Circle()
@@ -335,7 +339,11 @@ struct SocialTripDetailView: View {
     private func reactionRow(_ entry: SocialReactionEntry, c: AppTheme.Colors, isRu: Bool) -> some View {
         Button {
             Haptics.tap()
-            selectedAuthor = entry.user
+            if let pushPath {
+                pushPath.wrappedValue.cappedAppend(.profile(entry.user.id, entry.user))
+            } else {
+                selectedAuthor = entry.user
+            }
         } label: {
             HStack(spacing: 10) {
                 Circle()
@@ -379,3 +387,27 @@ struct SocialTripDetailView: View {
         return result
     }
 }
+
+/// Gates the local-state `.navigationDestination` so it's only active when
+/// no shared `pushPath` is wired in. Parallel to the gate in FollowListView
+/// / PublicProfileView — same depth-4 flash avoidance.
+private struct SocialTripDetailLocalDestination: ViewModifier {
+    @Binding var selectedAuthor: SocialAuthor?
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.navigationDestination(isPresented: Binding(
+                get: { selectedAuthor != nil },
+                set: { if !$0 { selectedAuthor = nil } }
+            )) {
+                if let a = selectedAuthor {
+                    PublicProfileView(accountId: a.id, preloaded: a)
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+

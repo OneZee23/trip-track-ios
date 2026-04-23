@@ -4,6 +4,12 @@ import MapKit
 struct TripDetailView: View {
     let tripId: UUID
     @ObservedObject var viewModel: TripsViewModel
+    /// When present, reactor-avatar taps push onto this shared path
+    /// (capped via `cappedAppend`) instead of attaching a local
+    /// `.navigationDestination(isPresented:)`. Using the typed path dodges
+    /// the SwiftUI NavigationStack flash at depth 4+ that the chained
+    /// isPresented approach was triggering from Feed → Trip → Profile → …
+    var pushPath: Binding<[ProfilePreviewDest]>?
     @State private var trip: Trip?
     @State private var showPhotoPicker = false
     @State private var pickedImages: [UIImage] = []
@@ -137,14 +143,10 @@ struct TripDetailView: View {
         .background(NavBarKiller())
         .ignoresSafeArea()
         .navigationBarHidden(true)
-        .navigationDestination(isPresented: Binding(
-            get: { selectedReactorAuthor != nil },
-            set: { if !$0 { selectedReactorAuthor = nil } }
-        )) {
-            if let author = selectedReactorAuthor {
-                PublicProfileView(accountId: author.id, preloaded: author)
-            }
-        }
+        .modifier(TripDetailLocalReactorDestination(
+            selectedReactorAuthor: $selectedReactorAuthor,
+            enabled: pushPath == nil
+        ))
         .confirmationDialog(
             AppStrings.deleteTrip(lang.language),
             isPresented: $showDeleteConfirm,
@@ -438,7 +440,11 @@ struct TripDetailView: View {
     private func reactionRow(_ entry: SocialReactionEntry, c: AppTheme.Colors, isRu: Bool) -> some View {
         Button {
             Haptics.tap()
-            selectedReactorAuthor = entry.user
+            if let pushPath {
+                pushPath.wrappedValue.cappedAppend(.profile(entry.user.id, entry.user))
+            } else {
+                selectedReactorAuthor = entry.user
+            }
         } label: {
             HStack(spacing: 12) {
                 Circle()
@@ -858,6 +864,31 @@ private class ScrollBounceFinderView: UIView {
                 return
             }
             current = parent
+        }
+    }
+}
+
+/// Gates the local-state reactor `.navigationDestination` so SwiftUI only
+/// sees it in contexts where we don't have a shared `pushPath` (i.e. the
+/// legacy path — which no live flow hits today). When a parent provides a
+/// `pushPath`, attaching this modifier would register a second destination
+/// on the same NavigationStack and re-expose the depth-4 flash bug.
+private struct TripDetailLocalReactorDestination: ViewModifier {
+    @Binding var selectedReactorAuthor: SocialAuthor?
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.navigationDestination(isPresented: Binding(
+                get: { selectedReactorAuthor != nil },
+                set: { if !$0 { selectedReactorAuthor = nil } }
+            )) {
+                if let author = selectedReactorAuthor {
+                    PublicProfileView(accountId: author.id, preloaded: author)
+                }
+            }
+        } else {
+            content
         }
     }
 }

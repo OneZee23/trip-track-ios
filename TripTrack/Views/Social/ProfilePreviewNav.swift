@@ -3,16 +3,20 @@ import OSLog
 
 private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 
-/// Enum-keyed destinations for the profile-preview NavigationStack path.
-/// Using a path instead of chained `.navigationDestination(isPresented:)`
-/// lets us enforce a depth cap, which dodges a SwiftUI bug that lights up
-/// at stack depth 4+: during pop animation at deep levels the hidden nav
-/// bar flashes a default "← Back" for ~1 sec. User-facing cap of 3 pushes
-/// keeps us below the threshold while preserving realistic flows
-/// (Me → Followers → Daniil → Daniil's Followers).
+/// Enum-keyed destinations for every flow that chains social pushes.
+/// Using a typed path (vs chained `.navigationDestination(isPresented:)`)
+/// lets us enforce a depth cap that dodges a SwiftUI bug at stack depth 4+
+/// where the hidden nav bar flashes a default "← Back" for ~1 sec during
+/// pop animations. Name is historical — `.trip`/`.socialTrip` were added so
+/// Feed's main stack could unify trip + profile pushes under one path
+/// (mixing `.navigationDestination(isPresented:)` with a typed
+/// `NavigationStack(path:)` made isPresented-pushed views evaporate when
+/// the typed path mutated).
 enum ProfilePreviewDest: Hashable {
     case profile(UUID, SocialAuthor?)
     case followList(UUID, FollowListMode)
+    case trip(UUID)
+    case socialTrip(SocialFeedTrip)
 }
 
 extension Array where Element == ProfilePreviewDest {

@@ -14,14 +14,17 @@ struct DiscoverView: View {
     @State private var followedIds: Set<UUID> = []
     @State private var isSearching = false
     @State private var isLoadingSuggested = false
-    @State private var selectedAuthor: SocialAuthor?
+    /// Typed path with `cappedAppend` — same pattern as FeedView. Replaces
+    /// the previous `selectedAuthor` + chained `.navigationDestination(isPresented:)`
+    /// which let depth compound past 4 and exposed the SwiftUI back-button flash.
+    @State private var authorPath: [ProfilePreviewDest] = []
     @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let isRu = lang.language == .ru
 
-        NavigationStack {
+        NavigationStack(path: $authorPath) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     searchField(c, isRu: isRu)
@@ -42,12 +45,16 @@ struct DiscoverView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
-            .navigationDestination(isPresented: Binding(
-                get: { selectedAuthor != nil },
-                set: { if !$0 { selectedAuthor = nil } }
-            )) {
-                if let a = selectedAuthor {
-                    PublicProfileView(accountId: a.id, preloaded: a)
+            .navigationDestination(for: ProfilePreviewDest.self) { dest in
+                switch dest {
+                case .profile(let id, let author):
+                    PublicProfileView(accountId: id, preloaded: author, pushPath: $authorPath)
+                case .followList(let id, let mode):
+                    FollowListView(accountId: id, mode: mode, pushPath: $authorPath)
+                case .trip, .socialTrip:
+                    // Discover never pushes trip destinations; render empty if
+                    // the path somehow gets one to stay type-exhaustive.
+                    EmptyView()
                 }
             }
         }
@@ -165,7 +172,7 @@ struct DiscoverView: View {
     private func userRow(_ user: SocialAuthor, c: AppTheme.Colors, isRu: Bool) -> some View {
         Button {
             Haptics.tap()
-            selectedAuthor = user
+            authorPath.cappedAppend(.profile(user.id, user))
         } label: {
             HStack(spacing: 12) {
                 Circle()
