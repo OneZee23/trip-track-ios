@@ -11,6 +11,10 @@ enum FollowListMode {
 struct FollowListView: View {
     let accountId: UUID
     let mode: FollowListMode
+    /// When present, user-tap routes through this shared NavigationPath
+    /// with a depth cap (sheet context); otherwise we push locally via
+    /// `.navigationDestination(isPresented:)` (main-feed context).
+    var pushPath: Binding<[ProfilePreviewDest]>?
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -125,7 +129,11 @@ struct FollowListView: View {
     private func userRow(_ user: SocialAuthor, c: AppTheme.Colors, isRu: Bool) -> some View {
         Button {
             Haptics.tap()
-            selectedAuthor = user
+            if let pushPath {
+                pushPath.wrappedValue.cappedAppend(.profile(user.id, user))
+            } else {
+                selectedAuthor = user
+            }
         } label: {
             HStack(spacing: 12) {
                 Circle()
