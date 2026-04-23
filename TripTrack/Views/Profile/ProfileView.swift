@@ -3,6 +3,7 @@ import AuthenticationServices
 import OSLog
 
 private let signInLog = Logger(subsystem: "com.triptrack", category: "signin")
+private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 
 struct ProfileView: View {
     @EnvironmentObject private var mapVM: MapViewModel
@@ -195,18 +196,26 @@ struct ProfileView: View {
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
-        .sheet(isPresented: $previewingOwnProfile, onDismiss: { previewPath = [] }) {
+        .sheet(isPresented: $previewingOwnProfile, onDismiss: {
+            navLog.debug("preview-sheet dismissed — clearing path (had depth=\(previewPath.count))")
+            previewPath = []
+        }) {
             if let accountId = TokenStore.shared.accountId {
                 NavigationStack(path: $previewPath) {
                     // Root: user's own profile. Pushes from here (Followers,
                     // other users) go through `previewPath` with a depth
                     // cap — see `ProfilePreviewDest.cappedAppend`.
+                    // `NavBarKiller` is attached here (root of the stack)
+                    // so its VC never moves in/out of the nav hierarchy
+                    // across pushes — prevents the system bar from
+                    // flashing during pop handoff.
                     PublicProfileView(
                         accountId: accountId,
                         preloaded: nil,
                         onClose: { previewingOwnProfile = false },
                         pushPath: $previewPath
                     )
+                    .background(NavBarKiller())
                     .navigationDestination(for: ProfilePreviewDest.self) { dest in
                         switch dest {
                         case .profile(let id, let author):
