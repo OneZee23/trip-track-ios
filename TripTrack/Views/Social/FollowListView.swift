@@ -48,13 +48,13 @@ struct FollowListView: View {
             .padding(.bottom, 120)
         }
         .background(c.bg)
-        .navigationTitle(titleString(isRu: isRu))
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        // Keep the nav bar opaque during pop animation — see PublicProfileView.
-        .toolbarBackground(c.bg, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar { ToolbarItem(placement: .topBarLeading) { NavBackButton() } }
+        .toolbar(.hidden, for: .navigationBar)
+        // Custom top bar rendered as safeAreaInset — system nav bar would
+        // flicker its default back button ("← Followers") during pop
+        // animations despite hidden-modifiers. See `CustomNavBar`.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            CustomNavBar(title: titleString(isRu: isRu))
+        }
         .navigationDestination(isPresented: Binding(
             get: { selectedAuthor != nil },
             set: { if !$0 { selectedAuthor = nil } }
