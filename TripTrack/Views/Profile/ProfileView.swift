@@ -192,10 +192,17 @@ struct ProfileView: View {
         .sheet(isPresented: $previewingOwnProfile) {
             if let accountId = TokenStore.shared.accountId {
                 NavigationStack {
-                    PublicProfileView(accountId: accountId, preloaded: nil)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
-                        }
+                    // `onClose` is wired inline into PublicProfileView's
+                    // `CustomNavBar` instead of an external `.toolbar {}`.
+                    // External toolbar items force the system nav bar to
+                    // stay visible, conflicting with `.toolbar(.hidden)` and
+                    // causing the default "← Back" button to flash during
+                    // deep pop animations.
+                    PublicProfileView(
+                        accountId: accountId,
+                        preloaded: nil,
+                        onClose: { previewingOwnProfile = false }
+                    )
                 }
                 .environmentObject(lang)
                 .environmentObject(themeManager)
