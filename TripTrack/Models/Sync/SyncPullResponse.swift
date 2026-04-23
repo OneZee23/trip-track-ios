@@ -35,8 +35,13 @@ struct SyncPullResponse: Codable {
 /// Full list of entity UUIDs the server currently owns. Fetched only when
 /// `ownedCounts` disagrees with local state — used to identify specifically
 /// which local-synced entities the server has lost so they can be re-uploaded.
+///
+/// `truncated` is set when the server's per-type cap was hit — the ID list
+/// is incomplete and MUST NOT drive reconciliation, otherwise client would
+/// flag legit server-owned entities as "missing" and re-upload them.
 struct SyncManifestResponse: Codable {
     let trips: [UUID]
     let vehicles: [UUID]
     let photos: [UUID]
+    let truncated: Bool?
 }

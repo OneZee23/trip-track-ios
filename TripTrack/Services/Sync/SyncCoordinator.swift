@@ -114,26 +114,32 @@ final class SyncCoordinator {
             return
         }
 
+        // Server's manifest was truncated by its per-type cap — the ID list
+        // is incomplete. Reconciliation would false-positive every legit
+        // entity beyond the cap as "missing" and re-upload them, inflicting
+        // the exact DoS the cap is meant to prevent. Abort safely.
+        if manifest.truncated == true {
+            coordinatorLog.warning("manifest truncated — skipping reconciliation to avoid false re-upload")
+            return
+        }
+
         var repushed = 0
         if tripsLost {
             repushed += reuploadMissing(
                 ctx, type: .trip, serverSet: Set(manifest.trips),
                 request: TripEntity.fetchRequest() as NSFetchRequest<TripEntity>,
-                idOf: { $0.id },
             )
         }
         if vehiclesLost {
             repushed += reuploadMissing(
                 ctx, type: .vehicle, serverSet: Set(manifest.vehicles),
                 request: VehicleEntity.fetchRequest() as NSFetchRequest<VehicleEntity>,
-                idOf: { $0.id },
             )
         }
         if photosLost {
             repushed += reuploadMissing(
                 ctx, type: .photo, serverSet: Set(manifest.photos),
                 request: TripPhotoEntity.fetchRequest() as NSFetchRequest<TripPhotoEntity>,
-                idOf: { $0.id },
             )
         }
         if repushed > 0 {
@@ -165,21 +171,21 @@ final class SyncCoordinator {
     }
 
     /// Flips local `synced` entities not present in `serverSet` to
-    /// `pendingUpload` and enqueues an upload op for each. Single generic
-    /// replaces three near-identical case bodies for trip/vehicle/photo.
-    private func reuploadMissing<T: NSManagedObject>(
+    /// `pendingUpload` and enqueues an upload op for each. Generic over any
+    /// entity that conforms to `SyncStatusHolding` — compile-time access to
+    /// `syncStatus` and `id` (replaces brittle KVC setValue calls).
+    private func reuploadMissing<T: SyncStatusHolding>(
         _ ctx: NSManagedObjectContext,
         type: SyncOperation.EntityType,
         serverSet: Set<UUID>,
         request: NSFetchRequest<T>,
-        idOf: (T) -> UUID?,
     ) -> Int {
         request.predicate = NSPredicate(format: "syncStatus == %d", SyncStatus.synced.rawValue)
         let rows = (try? ctx.fetch(request)) ?? []
         var count = 0
         for row in rows {
-            guard let id = idOf(row), !serverSet.contains(id) else { continue }
-            row.setValue(SyncStatus.pendingUpload.rawValue, forKey: "syncStatus")
+            guard let id = row.id, !serverSet.contains(id) else { continue }
+            row.syncStatus = SyncStatus.pendingUpload.rawValue
             SyncEnqueuer.enqueue(SyncOperation(entityType: type, entityId: id, action: .upload))
             count += 1
         }
