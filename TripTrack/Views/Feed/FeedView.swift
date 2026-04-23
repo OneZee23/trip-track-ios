@@ -12,7 +12,6 @@ struct FeedView: View {
     @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Binding var selectedTab: Int
-    @State private var selectedTripId: UUID?
     @State private var didLoad = false
     @State private var showStats = false
     @State private var showBadges = false
@@ -28,7 +27,6 @@ struct FeedView: View {
     /// `@State selectedAuthor` + chained `.navigationDestination(isPresented:)`
     /// that let depth compound unbounded through nested pushes.
     @State private var authorPath: [ProfilePreviewDest] = []
-    @State private var selectedSocialTrip: SocialFeedTrip?
     @State private var reactionPickerTrip: SocialFeedTrip?
     @State private var showDiscover = false
     @State private var shareSheetData: (data: StoryShareData, url: String)?
@@ -75,37 +73,32 @@ struct FeedView: View {
                     }
                 }
             }
-            .navigationDestination(isPresented: Binding(
-                get: { selectedTripId != nil },
-                set: { if !$0 { selectedTripId = nil } }
-            )) {
-                if let id = selectedTripId {
-                    TripDetailView(tripId: id, viewModel: TripsViewModel(tripManager: feedVM.tripManager))
-                }
-            }
+            // Single typed destination for every push out of Feed. Mixing a
+            // `NavigationStack(path:)` with `.navigationDestination(isPresented:)`
+            // made the isPresented-pushed Trip view disappear whenever the typed
+            // path mutated (setting path=[.profile] told SwiftUI the full stack
+            // was just [.profile] and the older trip push got collapsed, which
+            // is why "back" jumped straight to Feed instead of TripDetail).
             .navigationDestination(for: ProfilePreviewDest.self) { dest in
                 switch dest {
                 case .profile(let id, let author):
                     PublicProfileView(accountId: id, preloaded: author, pushPath: $authorPath)
                 case .followList(let id, let mode):
                     FollowListView(accountId: id, mode: mode, pushPath: $authorPath)
-                }
-            }
-            .navigationDestination(isPresented: Binding(
-                get: { selectedSocialTrip != nil },
-                set: { if !$0 { selectedSocialTrip = nil } }
-            )) {
-                if let t = selectedSocialTrip {
+                case .trip(let id):
+                    TripDetailView(
+                        tripId: id,
+                        viewModel: TripsViewModel(tripManager: feedVM.tripManager),
+                        pushPath: $authorPath
+                    )
+                case .socialTrip(let t):
                     SocialTripDetailView(
                         trip: t,
                         onReact: { emoji in
                             Task { await socialFeed.toggleReaction(for: t.id, emoji: emoji) }
-                            // Keep the current view in sync with optimistic update
-                            if let updated = socialFeed.trips.first(where: { $0.id == t.id }) {
-                                selectedSocialTrip = updated
-                            }
                         },
-                        onShare: { shareSocialTrip(t) }
+                        onShare: { shareSocialTrip(t) },
+                        pushPath: $authorPath
                     )
                 }
             }
@@ -210,7 +203,7 @@ struct FeedView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTrip)) { notif in
             if let tripId = notif.object as? UUID {
-                selectedTripId = tripId
+                authorPath = [.trip(tripId)]
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToFeedWithRegionFilter)) { notif in
@@ -383,7 +376,7 @@ struct FeedView: View {
                 if auth.isSignedIn { await socialFeed.refresh() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .feedScrollToTop)) { _ in
-                if selectedTripId != nil { selectedTripId = nil }
+                if !authorPath.isEmpty { authorPath.removeAll() }
                 else {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         proxy.scrollTo("feedTopAll", anchor: .top)
@@ -434,7 +427,7 @@ struct FeedView: View {
                 feedVM.loadTrips()
             }
             .onReceive(NotificationCenter.default.publisher(for: .feedScrollToTop)) { _ in
-                if selectedTripId != nil { selectedTripId = nil }
+                if !authorPath.isEmpty { authorPath.removeAll() }
                 else {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         proxy.scrollTo("feedTopMine", anchor: .top)
@@ -476,9 +469,9 @@ struct FeedView: View {
                         // Own trips open the regular TripDetailView (vehicle-based header,
                         // edit pencil, privacy toggle) — same experience as from "Мои".
                         if isOwn {
-                            selectedTripId = trip.id
+                            authorPath.cappedAppend(.trip(trip.id))
                         } else {
-                            selectedSocialTrip = trip
+                            authorPath.cappedAppend(.socialTrip(trip))
                         }
                     },
                     onTapAuthor: { authorPath.cappedAppend(.profile(trip.author.id, trip.author)) },
@@ -716,7 +709,7 @@ struct FeedView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             Haptics.tap()
-            selectedTripId = trip.id
+            authorPath.cappedAppend(.trip(trip.id))
         }
         .onAppear {
             feedVM.loadMoreIfNeeded(currentTrip: trip)

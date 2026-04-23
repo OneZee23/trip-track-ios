@@ -87,6 +87,14 @@ struct PreviewNavigator: View {
                 onClose: isRoot ? onCloseSheet : nil,
                 pushPath: $path,
             )
+        case .trip, .socialTrip:
+            // Trip destinations only belong to Feed's NavigationStack. If they
+            // somehow ended up here (in the profile-preview sheet) just render
+            // nothing rather than crash — and log so we notice the misroute.
+            EmptyView()
+                .onAppear {
+                    NavFlashDebug.log.debug("PreviewNavigator got trip dest — ignoring")
+                }
         }
     }
 
