@@ -196,8 +196,17 @@ struct ProfileView: View {
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
-        .sheet(isPresented: $previewingOwnProfile, onDismiss: {
-            navLog.debug("preview-sheet dismissed — clearing path (had depth=\(previewPath.count))")
+        // Was `.sheet`, switched to `.fullScreenCover` to sidestep a
+        // SwiftUI bug where the system nav bar flashes during pushes inside
+        // a sheet-hosted NavigationStack. Research ref: sheet's animating
+        // container re-lays-out the UIHostingController, which lets UIKit's
+        // `_pushViewController` run a CAAnimation on the bar's presentation
+        // layer that KVO / lifecycle hooks cannot intercept. fullScreenCover
+        // doesn't trigger the same relayout. UX trade-off: no grabber, no
+        // swipe-to-dismiss — users close via the X button wired into
+        // `CustomNavBar` (`onClose` already passed below).
+        .fullScreenCover(isPresented: $previewingOwnProfile, onDismiss: {
+            navLog.debug("preview dismissed — clearing path (had depth=\(previewPath.count))")
             previewPath = []
         }) {
             if let accountId = TokenStore.shared.accountId {
