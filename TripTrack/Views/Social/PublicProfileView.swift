@@ -6,6 +6,10 @@ private let profileLog = Logger(subsystem: "com.triptrack", category: "social.pr
 struct PublicProfileView: View {
     let accountId: UUID
     var preloaded: SocialAuthor?
+    /// Provided only by the "preview as others see you" sheet — renders a
+    /// close button in the CustomNavBar trailing that dismisses the whole
+    /// sheet (distinct from back-button which pops the nav stack).
+    var onClose: (() -> Void)?
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -84,7 +88,18 @@ struct PublicProfileView: View {
         // ("← Followers") during pop animations despite hidden-modifiers.
         .safeAreaInset(edge: .top, spacing: 0) {
             CustomNavBar(title: resolvedDisplayName) {
-                if !isOwnProfile {
+                if let onClose {
+                    // Preview-sheet mode: X dismisses the whole sheet
+                    // regardless of nav stack depth.
+                    Button {
+                        Haptics.tap()
+                        onClose()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                } else if !isOwnProfile {
                     Menu {
                         Button {
                             Haptics.tap()
