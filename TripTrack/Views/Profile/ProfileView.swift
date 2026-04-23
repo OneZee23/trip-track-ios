@@ -36,6 +36,10 @@ struct ProfileView: View {
     /// can enforce a max depth of 3 — preventing the SwiftUI NavigationStack
     /// bug that surfaces a default "← Back" flash at depth 4+.
     @State private var previewPath: [ProfilePreviewDest] = []
+    /// Same idea as `previewPath` but for the follow-list sheet. A separate
+    /// path lets us reset depth to 0 when the sheet closes without touching
+    /// the preview flow's path.
+    @State private var followListPath: [ProfilePreviewDest] = []
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -158,18 +162,24 @@ struct ProfileView: View {
         .task {
             await loadOwnSocialProfile()
         }
-        .sheet(isPresented: Binding(
+        // Pure-SwiftUI navigator rooted at the follow list — replaces the
+        // previous sheet-hosted `NavigationStack { FollowListView }` that
+        // exhibited the depth-4+ flash when users chained profile↔follower
+        // pushes inside it. Same navigator the preview flow uses.
+        .fullScreenCover(isPresented: Binding(
             get: { followListMode != nil },
             set: { if !$0 { followListMode = nil } }
-        )) {
+        ), onDismiss: {
+            navLog.debug("follow list dismissed — clearing path (had depth=\(followListPath.count))")
+            followListPath = []
+        }) {
             if let mode = followListMode,
                let accountId = TokenStore.shared.accountId {
-                NavigationStack {
-                    FollowListView(accountId: accountId, mode: mode)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
-                        }
-                }
+                PreviewNavigator(
+                    rootDest: .followList(accountId, mode),
+                    path: $followListPath,
+                    onCloseSheet: { followListMode = nil }
+                )
                 .environmentObject(lang)
                 .environmentObject(themeManager)
                 .preferredColorScheme(themeManager.preferredColorScheme)
@@ -215,7 +225,7 @@ struct ProfileView: View {
                 // `PreviewNavigator` slides destinations in/out and bridges
                 // `NavBackButton` via `\.previewPop` environment.
                 PreviewNavigator(
-                    rootAccountId: accountId,
+                    rootDest: .profile(accountId, nil),
                     path: $previewPath,
                     onCloseSheet: { previewingOwnProfile = false }
                 )

@@ -11,6 +11,10 @@ enum FollowListMode {
 struct FollowListView: View {
     let accountId: UUID
     let mode: FollowListMode
+    /// Provided only when this view is the root of a `PreviewNavigator`
+    /// stack — renders an X button in the CustomNavBar trailing that
+    /// dismisses the hosting sheet.
+    var onClose: (() -> Void)?
     /// When present, user-tap routes through this shared NavigationPath
     /// with a depth cap (sheet context); otherwise we push locally via
     /// `.navigationDestination(isPresented:)` (main-feed context).
@@ -55,7 +59,18 @@ struct FollowListView: View {
         .background(c.bg)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top, spacing: 0) {
-            CustomNavBar(title: titleString(isRu: isRu))
+            CustomNavBar(title: titleString(isRu: isRu)) {
+                if let onClose {
+                    Button {
+                        Haptics.tap()
+                        onClose()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                }
+            }
         }
         .navigationDestination(isPresented: Binding(
             get: { selectedAuthor != nil },
