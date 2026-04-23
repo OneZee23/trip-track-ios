@@ -70,6 +70,16 @@ struct FollowListView: View {
             didInitialLoad = true
             await load()
         }
+        .onAppear {
+            let id = accountId.uuidString.prefix(8)
+            let ctx = pushPath == nil ? "local" : "shared"
+            let depth = pushPath?.wrappedValue.count ?? -1
+            NavFlashDebug.log.debug("FollowListView.onAppear id=\(id, privacy: .public) mode=\(String(describing: self.mode), privacy: .public) ctx=\(ctx, privacy: .public) pathDepth=\(depth)")
+        }
+        .onDisappear {
+            let id = accountId.uuidString.prefix(8)
+            NavFlashDebug.log.debug("FollowListView.onDisappear id=\(id, privacy: .public) mode=\(String(describing: self.mode), privacy: .public)")
+        }
         .refreshable { await load() }
     }
 

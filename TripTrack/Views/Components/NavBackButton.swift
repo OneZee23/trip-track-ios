@@ -17,8 +17,10 @@ struct NavBackButton: View {
         Button {
             Haptics.tap()
             if let previewPop {
+                NavFlashDebug.log.debug("NavBackButton.tap route=previewPop")
                 previewPop()
             } else {
+                NavFlashDebug.log.debug("NavBackButton.tap route=dismiss")
                 dismiss()
             }
         } label: {

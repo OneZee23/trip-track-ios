@@ -42,26 +42,34 @@ struct PreviewNavigator: View {
             // reveal whatever was on screen before fullScreenCover opened.
             c.bg.ignoresSafeArea()
 
-            // Root — always mounted; masked by pushed layers above.
+            // Only the topmost view is mounted — this is the key fix for
+            // the persistent flash bug: if we always render all layers
+            // (root + every pushed destination), SwiftUI's transition
+            // system animates each reveal/removal which opens a brief
+            // window where the incoming layer isn't fully laid out yet.
+            // Rendering only the top means there's nothing to transition.
+            // Trade-off: back-navigation re-creates the previous view,
+            // re-running its `.task` — acceptable here because every
+            // view's load is idempotent (guarded by `didInitialLoad`).
+            currentView(rootBg: c)
+                .id(path.count)  // force fresh view on level change
+        }
+        .environment(\.previewPop, popAction)
+    }
+
+    @ViewBuilder
+    private func currentView(rootBg: AppTheme.Colors) -> some View {
+        if let top = path.last {
+            destinationView(for: top)
+                .background(rootBg.bg)
+        } else {
             PublicProfileView(
                 accountId: rootAccountId,
                 preloaded: nil,
                 onClose: onCloseSheet,
                 pushPath: $path,
             )
-            .zIndex(0)
-
-            // Each pushed destination stacks on its own z-layer with a
-            // slide-in/out transition.
-            ForEach(Array(path.enumerated()), id: \.offset) { index, dest in
-                destinationView(for: dest)
-                    .environment(\.previewPop, popAction)
-                    .background(c.bg)  // opaque so the layer below is hidden
-                    .zIndex(Double(index + 1))
-                    .transition(.move(edge: .trailing))
-            }
         }
-        .animation(.easeInOut(duration: 0.28), value: path.count)
     }
 
     @ViewBuilder
@@ -80,6 +88,7 @@ struct PreviewNavigator: View {
 
     private func popTop() {
         guard !path.isEmpty else { return }
+        NavFlashDebug.log.debug("PreviewNavigator.popTop depth \(self.path.count)→\(self.path.count - 1)")
         path.removeLast()
     }
 }
