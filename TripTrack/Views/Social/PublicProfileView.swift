@@ -185,14 +185,14 @@ struct PublicProfileView: View {
                 )
             }
         }
-        .navigationDestination(isPresented: Binding(
-            get: { followListMode != nil },
-            set: { if !$0 { followListMode = nil } }
-        )) {
-            if let m = followListMode {
-                FollowListView(accountId: accountId, mode: m)
-            }
-        }
+        // Gated same as in `FollowListView` — only attach when we're inside
+        // a real `NavigationStack`. Inside `PreviewNavigator` follow-list
+        // navigation goes through `pushPath` and the local state is unused.
+        .modifier(PublicProfileLocalDestination(
+            accountId: accountId,
+            followListMode: $followListMode,
+            enabled: pushPath == nil
+        ))
         .sheet(isPresented: $showReport) {
             ReportSheet(target: .user(accountId))
                 .environmentObject(lang)
@@ -812,6 +812,31 @@ struct PublicProfileView: View {
         f.locale = Locale(identifier: isRu ? "ru_RU" : "en_US")
         f.dateFormat = "d MMM yyyy"
         return f.string(from: date)
+    }
+}
+
+/// Gates the local-state `.navigationDestination` so SwiftUI only sees it
+/// when we're actually inside a `NavigationStack`. Without the gate,
+/// attaching it inside `PreviewNavigator` triggers a runtime warning and
+/// the modifier gets dropped anyway.
+private struct PublicProfileLocalDestination: ViewModifier {
+    let accountId: UUID
+    @Binding var followListMode: FollowListMode?
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.navigationDestination(isPresented: Binding(
+                get: { followListMode != nil },
+                set: { if !$0 { followListMode = nil } }
+            )) {
+                if let m = followListMode {
+                    FollowListView(accountId: accountId, mode: m)
+                }
+            }
+        } else {
+            content
+        }
     }
 }
 
