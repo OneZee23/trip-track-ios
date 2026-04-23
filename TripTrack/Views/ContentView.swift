@@ -27,9 +27,31 @@ struct PrivacyChangePayload {
     let isPrivate: Bool
 }
 
+/// Preference carrying whether the currently-presented leaf view wants the
+/// bottom CustomTabBar hidden (trip-detail screens want the bigger canvas).
+/// Using a PreferenceKey keeps tab-bar control local to the view hierarchy
+/// instead of threading bindings through every intermediate container.
+struct HideTabBarPreferenceKey: PreferenceKey {
+    static var defaultValue: Bool = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        // Any descendant requesting "hide" wins — detail screens want it gone.
+        value = value || nextValue()
+    }
+}
+
+extension View {
+    /// Signal to the root container that this view (and while it's on-screen)
+    /// prefers the CustomTabBar to be hidden. Use with `.onPreferenceChange`
+    /// on the container or let `ContentView` handle it via its existing wiring.
+    func hideAppTabBar(_ hide: Bool = true) -> some View {
+        preference(key: HideTabBarPreferenceKey.self, value: hide)
+    }
+}
+
 struct ContentView: View {
     @StateObject private var mapVM = MapViewModel()
     @State private var selectedTab = 0
+    @State private var hideTabBar = false
     @Environment(\.colorScheme) private var systemScheme
     @EnvironmentObject private var lang: LanguageManager
 
@@ -50,10 +72,17 @@ struct ContentView: View {
                 EmptyView()
             }
 
-            // Custom glass tab bar — hidden on Record tab entirely
-            if selectedTab != 1 {
+            // Custom glass tab bar — hidden on Record tab, and also while any
+            // descendant trip-detail view declared `.hideAppTabBar()`.
+            if selectedTab != 1 && !hideTabBar {
                 CustomTabBar(selectedTab: $selectedTab)
                     .environment(\.colorScheme, (selectedTab == 1 && mapVM.isDarkMap) ? .dark : systemScheme)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .onPreferenceChange(HideTabBarPreferenceKey.self) { newValue in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                hideTabBar = newValue
             }
         }
         .ignoresSafeArea(.keyboard)

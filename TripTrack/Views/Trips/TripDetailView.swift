@@ -28,6 +28,7 @@ struct TripDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var reactionEntries: [SocialReactionEntry] = []
     @State private var selectedReactorAuthor: SocialAuthor?
+    @State private var isMapFullscreen = false
     @ObservedObject private var auth = AuthService.shared
     @FocusState private var isTitleFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -48,22 +49,42 @@ struct TripDetailView: View {
             if let trip {
                 ScrollView {
                     VStack(spacing: 0) {
-                        // Interactive map
-                        Group {
+                        // Interactive map + corner "expand" button that
+                        // presents the route in a fullscreen cover. The button
+                        // only appears when we actually have a route — no
+                        // point letting the user expand the blank-map fallback.
+                        ZStack(alignment: .bottomTrailing) {
+                            Group {
+                                if cachedCoordinates.count > 1 {
+                                    RouteMapView(
+                                        coordinates: cachedCoordinates,
+                                        speeds: cachedSpeeds,
+                                        isInteractive: true,
+                                        fogCutoffDate: trip.endDate
+                                    )
+                                } else {
+                                    c.cardAlt
+                                        .overlay {
+                                            Image(systemName: "map")
+                                                .font(.largeTitle)
+                                                .foregroundStyle(c.textTertiary)
+                                        }
+                                }
+                            }
+
                             if cachedCoordinates.count > 1 {
-                                RouteMapView(
-                                    coordinates: cachedCoordinates,
-                                    speeds: cachedSpeeds,
-                                    isInteractive: true,
-                                    fogCutoffDate: trip.endDate
-                                )
-                            } else {
-                                c.cardAlt
-                                    .overlay {
-                                        Image(systemName: "map")
-                                            .font(.largeTitle)
-                                            .foregroundStyle(c.textTertiary)
-                                    }
+                                Button {
+                                    Haptics.tap()
+                                    isMapFullscreen = true
+                                } label: {
+                                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 36, height: 36)
+                                        .background(.black.opacity(0.45), in: Circle())
+                                }
+                                .padding(.trailing, 12)
+                                .padding(.bottom, 12)
                             }
                         }
                         .frame(height: mapBaseHeight)
@@ -147,6 +168,14 @@ struct TripDetailView: View {
             selectedReactorAuthor: $selectedReactorAuthor,
             enabled: pushPath == nil
         ))
+        .hideAppTabBar()
+        .fullScreenCover(isPresented: $isMapFullscreen) {
+            FullscreenMapSheet(
+                coordinates: cachedCoordinates,
+                speeds: cachedSpeeds,
+                fogCutoffDate: trip?.endDate
+            )
+        }
         .confirmationDialog(
             AppStrings.deleteTrip(lang.language),
             isPresented: $showDeleteConfirm,

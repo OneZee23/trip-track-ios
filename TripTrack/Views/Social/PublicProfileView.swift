@@ -32,7 +32,7 @@ struct PublicProfileView: View {
     @State private var followListMode: FollowListMode?
     @State private var isBlocked = false
     @State private var showBlockConfirm = false
-    @State private var showReport = false
+    // Report flow paused until moderation UI exists; state intentionally omitted.
     @State private var selectedBadge: Badge?
     /// Gate initial fetch so `.task` — which re-fires on view re-appearance
     /// (e.g. after popping a pushed FollowListView) — doesn't re-run the
@@ -130,27 +130,14 @@ struct PublicProfileView: View {
                             .foregroundStyle(c.textTertiary)
                     }
                 } else if !isOwnProfile {
-                    Menu {
-                        Button {
-                            Haptics.tap()
-                            showReport = true
-                        } label: {
-                            Label(isRu ? "Пожаловаться" : "Report", systemImage: "flag")
-                        }
-                        Button(role: .destructive) {
-                            Haptics.tap()
-                            showBlockConfirm = true
-                        } label: {
-                            Label(
-                                isBlocked
-                                    ? (isRu ? "Разблокировать" : "Unblock")
-                                    : (isRu ? "Заблокировать" : "Block"),
-                                systemImage: isBlocked ? "hand.raised.slash" : "hand.raised.fill"
-                            )
-                        }
+                    // Report entry point removed pending a moderation UI;
+                    // block/unblock still actionable so left intact.
+                    Button(role: .destructive) {
+                        Haptics.tap()
+                        showBlockConfirm = true
                     } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.system(size: 22))
+                        Image(systemName: isBlocked ? "hand.raised.slash" : "hand.raised.fill")
+                            .font(.system(size: 20))
                             .foregroundStyle(c.textTertiary)
                     }
                 }
@@ -198,10 +185,6 @@ struct PublicProfileView: View {
             followListMode: $followListMode,
             enabled: pushPath == nil
         ))
-        .sheet(isPresented: $showReport) {
-            ReportSheet(target: .user(accountId))
-                .environmentObject(lang)
-        }
         .alert(
             isBlocked
                 ? (lang.language == .ru ? "Разблокировать пользователя?" : "Unblock this user?")

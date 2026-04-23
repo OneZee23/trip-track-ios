@@ -7,6 +7,12 @@ struct MapSnapshotPreview: View {
     let coordinates: [CLLocationCoordinate2D]
     let tripId: UUID
     var height: CGFloat = 80
+    /// Render width for the MKMapSnapshotter image. Defaults to a
+    /// feed-card-sized 340pt; callers presenting in a wider slot (the share
+    /// preview card) pass their slot width so the snapshot doesn't have to
+    /// be aspect-cropped via `.fill` — which was making the start dot and
+    /// finish flag look huge because they ended up near the cropped edge.
+    var width: CGFloat = 340
 
     @Environment(\.colorScheme) private var scheme
     @State private var snapshot: UIImage?
@@ -33,7 +39,7 @@ struct MapSnapshotPreview: View {
     }
 
     private var cacheKey: String {
-        "\(tripId.uuidString)-\(scheme == .dark ? "d" : "l")-h\(Int(height))-v3"
+        "\(tripId.uuidString)-\(scheme == .dark ? "d" : "l")-w\(Int(width))-h\(Int(height))-v3"
     }
 
     @MainActor
@@ -53,7 +59,7 @@ struct MapSnapshotPreview: View {
         let region = Self.mapRegion(for: coordinates)
         let scale = UIScreen.main.scale
 
-        let snapshotSize = CGSize(width: 340, height: height)
+        let snapshotSize = CGSize(width: width, height: height)
         let isDark = scheme == .dark
         let image = await Task.detached(priority: .userInitiated) {
             await Self.renderSnapshot(
