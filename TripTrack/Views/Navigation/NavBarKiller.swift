@@ -1,5 +1,8 @@
 import SwiftUI
 import UIKit
+import OSLog
+
+private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 
 /// Forces the underlying `UINavigationController` to hide its bar AND keeps
 /// the interactive swipe-back gesture working. Fixes two SwiftUI quirks
@@ -40,37 +43,48 @@ struct NavBarKiller: UIViewControllerRepresentable {
 
         override func didMove(toParent parent: UIViewController?) {
             super.didMove(toParent: parent)
-            hideBar()
+            hideBar(phase: "didMove")
         }
 
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
-            hideBar()
+            hideBar(phase: "willAppear")
             navigationController?.interactivePopGestureRecognizer?.delegate = nil
             navigationController?.interactivePopGestureRecognizer?.isEnabled = true
         }
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
-            hideBar()
+            hideBar(phase: "didAppear")
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            // Keep the bar hidden during pop as well so the outgoing side
+            // of the animation doesn't flash a system bar before the
+            // incoming NavBarKiller's hooks fire.
+            hideBar(phase: "willDisappear")
         }
 
         override func viewWillLayoutSubviews() {
             super.viewWillLayoutSubviews()
-            hideBar()
+            hideBar(phase: "willLayout")
         }
 
         override func viewDidLayoutSubviews() {
             super.viewDidLayoutSubviews()
-            hideBar()
+            hideBar(phase: "didLayout")
         }
 
-        private func hideBar() {
-            // `isHidden = true` plus `setNavigationBarHidden` to catch
-            // both the property- and method-driven UIKit paths — rapid
-            // push/pop cycles otherwise let one or the other flicker on.
-            navigationController?.navigationBar.isHidden = true
-            navigationController?.setNavigationBarHidden(true, animated: false)
+        private func hideBar(phase: String) {
+            let nav = navigationController
+            let barVisibleBefore = nav.map { !$0.isNavigationBarHidden }
+            let barSubviewHiddenBefore = nav.map { $0.navigationBar.isHidden }
+            nav?.navigationBar.isHidden = true
+            nav?.setNavigationBarHidden(true, animated: false)
+            navLog.debug(
+                "killer[\(ObjectIdentifier(self).hashValue, privacy: .public)].\(phase, privacy: .public) nav=\(nav != nil) barVisible=\(barVisibleBefore?.description ?? "nil", privacy: .public) isHidden=\(barSubviewHiddenBefore?.description ?? "nil", privacy: .public) stackDepth=\(nav?.viewControllers.count ?? -1)"
+            )
         }
     }
 }

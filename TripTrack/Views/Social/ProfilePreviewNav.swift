@@ -1,4 +1,7 @@
 import SwiftUI
+import OSLog
+
+private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 
 /// Enum-keyed destinations for the profile-preview NavigationStack path.
 /// Using a path instead of chained `.navigationDestination(isPresented:)`
@@ -20,9 +23,13 @@ extension Array where Element == ProfilePreviewDest {
     /// Push with replacement: once we're at the cap, drop the deepest
     /// entry before appending so total depth stays bounded.
     mutating func cappedAppend(_ dest: ProfilePreviewDest) {
+        let before = count
         if count >= Self.previewDepthCap {
             removeLast()
         }
         append(dest)
+        let after = count
+        let descr = String(describing: dest)
+        navLog.debug("cappedAppend depth \(before)→\(after) dest=\(descr, privacy: .public)")
     }
 }
