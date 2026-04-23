@@ -28,6 +28,15 @@ final class AuthService: ObservableObject {
 
     private init() {
         loadFromKeychain()
+        // Listen for server-reported ban. `APIClient` posts this when any
+        // endpoint returns `USER_BANNED`. We sign out to drop tokens and
+        // stop sync attempts — local CoreData is preserved so the user can
+        // still view their own trips read-only.
+        NotificationCenter.default.addObserver(
+            forName: .userBanned, object: nil, queue: .main,
+        ) { [weak self] _ in
+            Task { @MainActor in await self?.signOut() }
+        }
     }
 
     // MARK: - Handle Authorization (called from SignInWithAppleButton onCompletion)

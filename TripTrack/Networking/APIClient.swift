@@ -106,6 +106,11 @@ final class APIClient {
                 try await refreshIfNeeded()
                 return try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: true)
             }
+            if code == "USER_BANNED" {
+                Task { @MainActor in
+                    NotificationCenter.default.post(name: .userBanned, object: nil)
+                }
+            }
             let iso = ISO8601DateFormatter()
             iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             let lastModified = envelope.serverLastModifiedAt.flatMap { s -> Date? in
@@ -155,6 +160,11 @@ final class APIClient {
             if code == "USER_NOT_AUTH", requiresAuth, !isRetry {
                 try await refreshIfNeeded()
                 return try await performGet(path: path, requiresAuth: requiresAuth, isRetry: true)
+            }
+            if code == "USER_BANNED" {
+                Task { @MainActor in
+                    NotificationCenter.default.post(name: .userBanned, object: nil)
+                }
             }
             throw APIError.from(code: code, message: envelope.message ?? "", serverVersion: envelope.serverVersion, serverLastModifiedAt: nil)
         }
@@ -206,6 +216,11 @@ final class APIClient {
             if code == "USER_NOT_AUTH", !isRetry {
                 try await refreshIfNeeded()
                 return try await performMultipart(path: path, fields: fields, file: file, isRetry: true)
+            }
+            if code == "USER_BANNED" {
+                Task { @MainActor in
+                    NotificationCenter.default.post(name: .userBanned, object: nil)
+                }
             }
             throw APIError.from(code: code, message: envelope.message ?? "", serverVersion: envelope.serverVersion, serverLastModifiedAt: nil)
         }

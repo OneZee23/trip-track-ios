@@ -65,6 +65,10 @@
 - **Purge orphan trips** — сервер чистит "висящие" поездки без валидной связи (`aaa6b43`)
 - **Stationary tail trim** — хвост "стояния" в конце поездки отбрасывается при финализации (`8d723a1`)
 
+### Архитектура данных
+- **Локальные данные — источник правды** (философия "лучше чем Google Timeline"): сервер в ответе `/sync/pull` теперь отдаёт `ownedCounts: {trips, vehicles, photos}` — сколько non-deleted сущностей у него числится. Если клиент видит что у сервера меньше чем помечено `synced` локально — запрашивает новый `POST /sync/manifest` (только UUID-ы), находит пропавшие у сервера записи и помечает их `pendingUpload`. Очередь автоматически пере-заливает. Если сервер умрёт и будет восстановлен из пустоты — данные поднимутся обратно с клиентов, никто ничего не потеряет
+- **Server-side бан пользователя**: `AccountEntity.isBanned` флаг. `JwtAuthGuard` и `/auth/refresh` / `/auth/login` возвращают 403 `USER_BANNED` для забаненных. Клиент `APIClient` при получении этого кода шлёт нотификацию `.userBanned` → `AuthService` делает `signOut()`. Локальные CoreData данные **остаются нетронутыми** — забаненный юзер может смотреть свои поездки read-only, просто без sync. Все его попытки re-upload блокируются
+
 ### Безопасность
 - **Stored XSS на `/s/:code` share landing**: поля `title / region / displayName / avatarEmoji` интерполировались в HTML без экранирования. Пользователь с именем `<script>...</script>` мог угнать токены у любого кто открыл share-ссылку. Экранирование + `Content-Security-Policy: default-src 'none'` через extracted `escapeHtml` + `renderSharedTripHtml` функции
 - **`UserNotAuth` пропагируется корректно**: добавлен глобальный `AppErrorFilter` — если `@CurrentUser()` бросает `UserNotAuth` вне `PostApiEntry` роута (где есть `JsonRpcExceptionFilter`), ответ идёт как `401 JSON` вместо raw 500 со стэк-трейсом

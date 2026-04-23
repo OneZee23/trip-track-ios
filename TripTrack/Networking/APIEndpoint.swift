@@ -21,6 +21,7 @@ enum APIEndpoint {
 
     static let syncPull = "/sync/pull"
     static let syncPush = "/sync/push"
+    static let syncManifest = "/sync/manifest"
 
     static let socialFeed       = "/social/feed"
     static let socialFollow     = "/social/follow"
