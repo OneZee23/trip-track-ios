@@ -106,11 +106,7 @@ final class APIClient {
                 try await refreshIfNeeded()
                 return try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: true)
             }
-            if code == "USER_BANNED" {
-                Task { @MainActor in
-                    NotificationCenter.default.post(name: .userBanned, object: nil)
-                }
-            }
+            postBanIfNeeded(code)
             let iso = ISO8601DateFormatter()
             iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             let lastModified = envelope.serverLastModifiedAt.flatMap { s -> Date? in
@@ -161,11 +157,7 @@ final class APIClient {
                 try await refreshIfNeeded()
                 return try await performGet(path: path, requiresAuth: requiresAuth, isRetry: true)
             }
-            if code == "USER_BANNED" {
-                Task { @MainActor in
-                    NotificationCenter.default.post(name: .userBanned, object: nil)
-                }
-            }
+            postBanIfNeeded(code)
             throw APIError.from(code: code, message: envelope.message ?? "", serverVersion: envelope.serverVersion, serverLastModifiedAt: nil)
         }
     }
@@ -217,13 +209,17 @@ final class APIClient {
                 try await refreshIfNeeded()
                 return try await performMultipart(path: path, fields: fields, file: file, isRetry: true)
             }
-            if code == "USER_BANNED" {
-                Task { @MainActor in
-                    NotificationCenter.default.post(name: .userBanned, object: nil)
-                }
-            }
+            postBanIfNeeded(code)
             throw APIError.from(code: code, message: envelope.message ?? "", serverVersion: envelope.serverVersion, serverLastModifiedAt: nil)
         }
+    }
+
+    /// Fan-out ban detection to any observer (notably `AuthService`, which
+    /// triggers `signOut()`). Invoked at every error-path response — same
+    /// hook regardless of whether the request was POST, GET, or multipart.
+    private func postBanIfNeeded(_ code: String) {
+        guard code == "USER_BANNED" else { return }
+        NotificationCenter.default.post(name: .userBanned, object: nil)
     }
 
     // MARK: - Token refresh (single-flight)
