@@ -10,6 +10,11 @@ struct PublicProfileView: View {
     /// close button in the CustomNavBar trailing that dismisses the whole
     /// sheet (distinct from back-button which pops the nav stack).
     var onClose: (() -> Void)?
+    /// When set, all sub-navigation (follow lists, reactor profiles) is
+    /// routed through a shared `NavigationPath` with a depth cap. Without
+    /// this binding we fall back to local `@State`-driven
+    /// `.navigationDestination(isPresented:)` for main-feed usage.
+    var pushPath: Binding<[ProfilePreviewDest]>?
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -38,6 +43,17 @@ struct PublicProfileView: View {
     /// (e.g. "preview as others see you"). Hides Follow/Block/Report actions.
     private var isOwnProfile: Bool {
         TokenStore.shared.accountId == accountId
+    }
+
+    /// Route follow-list navigation through the shared path when one is
+    /// wired in (sheet context) so deep flows stay capped; fall back to
+    /// local state push for main-feed usage.
+    private func openFollowList(_ mode: FollowListMode) {
+        if let pushPath {
+            pushPath.wrappedValue.cappedAppend(.followList(accountId, mode))
+        } else {
+            followListMode = mode
+        }
     }
 
     /// Fallback chain: server profile → preloaded summary → own Apple name
@@ -526,7 +542,7 @@ struct PublicProfileView: View {
         HStack(spacing: 0) {
             Button {
                 Haptics.tap()
-                followListMode = .followers
+                openFollowList(.followers)
             } label: {
                 VStack(spacing: 3) {
                     Text("\(profile?.followerCount ?? 0)")
@@ -545,7 +561,7 @@ struct PublicProfileView: View {
 
             Button {
                 Haptics.tap()
-                followListMode = .following
+                openFollowList(.following)
             } label: {
                 VStack(spacing: 3) {
                     Text("\(profile?.followingCount ?? 0)")

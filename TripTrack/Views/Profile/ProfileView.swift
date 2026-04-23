@@ -29,6 +29,12 @@ struct ProfileView: View {
     @State private var followListMode: FollowListMode?
     @State private var showBackgroundPicker = false
     @State private var previewingOwnProfile = false
+    /// Nav path for the preview-sheet NavigationStack. Kept alongside the
+    /// sheet's `isPresented` so every deep navigation inside the sheet
+    /// (profile ↔ followers) shares one path and the `cappedAppend` helper
+    /// can enforce a max depth of 3 — preventing the SwiftUI NavigationStack
+    /// bug that surfaces a default "← Back" flash at depth 4+.
+    @State private var previewPath: [ProfilePreviewDest] = []
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -189,20 +195,32 @@ struct ProfileView: View {
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
-        .sheet(isPresented: $previewingOwnProfile) {
+        .sheet(isPresented: $previewingOwnProfile, onDismiss: { previewPath = [] }) {
             if let accountId = TokenStore.shared.accountId {
-                NavigationStack {
-                    // `onClose` is wired inline into PublicProfileView's
-                    // `CustomNavBar` instead of an external `.toolbar {}`.
-                    // External toolbar items force the system nav bar to
-                    // stay visible, conflicting with `.toolbar(.hidden)` and
-                    // causing the default "← Back" button to flash during
-                    // deep pop animations.
+                NavigationStack(path: $previewPath) {
+                    // Root: user's own profile. Pushes from here (Followers,
+                    // other users) go through `previewPath` with a depth
+                    // cap — see `ProfilePreviewDest.cappedAppend`.
                     PublicProfileView(
                         accountId: accountId,
                         preloaded: nil,
-                        onClose: { previewingOwnProfile = false }
+                        onClose: { previewingOwnProfile = false },
+                        pushPath: $previewPath
                     )
+                    .navigationDestination(for: ProfilePreviewDest.self) { dest in
+                        switch dest {
+                        case .profile(let id, let author):
+                            PublicProfileView(
+                                accountId: id, preloaded: author,
+                                pushPath: $previewPath,
+                            )
+                        case .followList(let id, let mode):
+                            FollowListView(
+                                accountId: id, mode: mode,
+                                pushPath: $previewPath,
+                            )
+                        }
+                    }
                 }
                 .environmentObject(lang)
                 .environmentObject(themeManager)
