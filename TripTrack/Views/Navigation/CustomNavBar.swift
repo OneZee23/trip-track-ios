@@ -1,12 +1,10 @@
 import SwiftUI
 
 /// Custom top bar rendered as a `safeAreaInset` above content in views that
-/// hide the system navigation bar. Works around a SwiftUI quirk where the
-/// system nav bar briefly reverts to its default state ("← Followers" back
-/// button with borrowed title) during push/pop animations — replacing it
-/// entirely keeps chrome stable through transitions.
-///
-/// Pair with `.toolbar(.hidden, for: .navigationBar)` on the hosting view.
+/// hide the system navigation bar. Replaces the system bar because SwiftUI
+/// briefly reverts it to default state ("← Back") during deep pop animations
+/// inside sheet-hosted NavigationStacks, no matter how many hidden-flags we
+/// set. Pair with `.toolbar(.hidden, for: .navigationBar)` on the host view.
 struct CustomNavBar<Trailing: View>: View {
     let title: String
     @ViewBuilder var trailing: () -> Trailing
@@ -15,18 +13,26 @@ struct CustomNavBar<Trailing: View>: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        HStack(spacing: 12) {
-            NavBackButton()
-            Spacer(minLength: 8)
+        // ZStack keeps the title centered over the full width while leading
+        // back button and trailing action sit in their own HStack overlay —
+        // same layout model as `UINavigationBar` so long titles truncate
+        // instead of pushing the trailing view off-screen.
+        ZStack {
             Text(title)
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
-            Spacer(minLength: 8)
-            trailing()
+                .truncationMode(.tail)
+                .padding(.horizontal, 64)
+
+            HStack {
+                NavBackButton()
+                Spacer()
+                trailing()
+            }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .frame(minHeight: 44)
         .frame(maxWidth: .infinity)
         .background(c.bg)
     }

@@ -83,9 +83,6 @@ struct PublicProfileView: View {
         }
         .background(c.bg)
         .toolbar(.hidden, for: .navigationBar)
-        // Custom top bar rendered as safeAreaInset — system nav bar would
-        // flicker its default back button + borrow the parent title
-        // ("← Followers") during pop animations despite hidden-modifiers.
         .safeAreaInset(edge: .top, spacing: 0) {
             CustomNavBar(title: resolvedDisplayName) {
                 if let onClose {

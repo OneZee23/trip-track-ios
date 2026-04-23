@@ -18,8 +18,6 @@ final class SyncCoordinator {
     private var isPulling = false
 
     func start() {
-        // Recovery: re-enqueue any local entities marked pendingUpload but not in the in-memory queue
-        // (happens after app kill mid-sync — queue state is lost, but syncStatus on CoreData persists)
         recoverPendingEntities()
 
         NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
@@ -116,16 +114,44 @@ final class SyncCoordinator {
             return
         }
 
-        let serverTrips = Set(manifest.trips)
-        let serverVehicles = Set(manifest.vehicles)
-        let serverPhotos = Set(manifest.photos)
         var repushed = 0
-        if tripsLost { repushed += markMissingForReupload(ctx, type: .trip, serverSet: serverTrips) }
-        if vehiclesLost { repushed += markMissingForReupload(ctx, type: .vehicle, serverSet: serverVehicles) }
-        if photosLost { repushed += markMissingForReupload(ctx, type: .photo, serverSet: serverPhotos) }
+        if tripsLost {
+            repushed += reuploadMissing(
+                ctx, type: .trip, serverSet: Set(manifest.trips),
+                request: TripEntity.fetchRequest() as NSFetchRequest<TripEntity>,
+                idOf: { $0.id },
+            )
+        }
+        if vehiclesLost {
+            repushed += reuploadMissing(
+                ctx, type: .vehicle, serverSet: Set(manifest.vehicles),
+                request: VehicleEntity.fetchRequest() as NSFetchRequest<VehicleEntity>,
+                idOf: { $0.id },
+            )
+        }
+        if photosLost {
+            repushed += reuploadMissing(
+                ctx, type: .photo, serverSet: Set(manifest.photos),
+                request: TripPhotoEntity.fetchRequest() as NSFetchRequest<TripPhotoEntity>,
+                idOf: { $0.id },
+            )
+        }
         if repushed > 0 {
-            try? ctx.save()
-            coordinatorLog.warning("reconciliation queued \(repushed) entities for re-upload")
+            do {
+                try ctx.save()
+                coordinatorLog.warning("reconciliation queued \(repushed) entities for re-upload")
+                // Loud warning when the re-upload set is large — helps catch
+                // a misbehaving/compromised server that falsely reports
+                // `ownedCounts = 0`; the user/developer sees the log and can
+                // intervene before egress spikes.
+                if repushed >= 100 {
+                    coordinatorLog.error("reconciliation LARGE set (\(repushed)) — verify server integrity if unexpected")
+                }
+            } catch {
+                // If save fails, the in-memory flip is lost on relaunch —
+                // better to log loudly than silently `try?`-swallow.
+                coordinatorLog.error("reconciliation save failed: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -138,47 +164,24 @@ final class SyncCoordinator {
         return (try? ctx.count(for: request)) ?? 0
     }
 
-    /// Walks local `synced` entities of a given type, flips ones NOT present
-    /// in the server manifest to `pendingUpload`, and enqueues an upload op.
-    private func markMissingForReupload(
+    /// Flips local `synced` entities not present in `serverSet` to
+    /// `pendingUpload` and enqueues an upload op for each. Single generic
+    /// replaces three near-identical case bodies for trip/vehicle/photo.
+    private func reuploadMissing<T: NSManagedObject>(
         _ ctx: NSManagedObjectContext,
         type: SyncOperation.EntityType,
         serverSet: Set<UUID>,
+        request: NSFetchRequest<T>,
+        idOf: (T) -> UUID?,
     ) -> Int {
+        request.predicate = NSPredicate(format: "syncStatus == %d", SyncStatus.synced.rawValue)
+        let rows = (try? ctx.fetch(request)) ?? []
         var count = 0
-        switch type {
-        case .trip:
-            let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "syncStatus == %d", SyncStatus.synced.rawValue)
-            let rows = (try? ctx.fetch(req)) ?? []
-            for r in rows {
-                guard let id = r.id, !serverSet.contains(id) else { continue }
-                r.syncStatus = SyncStatus.pendingUpload.rawValue
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .upload))
-                count += 1
-            }
-        case .vehicle:
-            let req: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "syncStatus == %d", SyncStatus.synced.rawValue)
-            let rows = (try? ctx.fetch(req)) ?? []
-            for r in rows {
-                guard let id = r.id, !serverSet.contains(id) else { continue }
-                r.syncStatus = SyncStatus.pendingUpload.rawValue
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
-                count += 1
-            }
-        case .photo:
-            let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "syncStatus == %d", SyncStatus.synced.rawValue)
-            let rows = (try? ctx.fetch(req)) ?? []
-            for r in rows {
-                guard let id = r.id, !serverSet.contains(id) else { continue }
-                r.syncStatus = SyncStatus.pendingUpload.rawValue
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: id, action: .upload))
-                count += 1
-            }
-        case .settings:
-            break // Settings is singleton — reconciliation not applicable.
+        for row in rows {
+            guard let id = idOf(row), !serverSet.contains(id) else { continue }
+            row.setValue(SyncStatus.pendingUpload.rawValue, forKey: "syncStatus")
+            SyncEnqueuer.enqueue(SyncOperation(entityType: type, entityId: id, action: .upload))
+            count += 1
         }
         return count
     }

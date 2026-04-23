@@ -49,9 +49,6 @@ struct FollowListView: View {
         }
         .background(c.bg)
         .toolbar(.hidden, for: .navigationBar)
-        // Custom top bar rendered as safeAreaInset — system nav bar would
-        // flicker its default back button ("← Followers") during pop
-        // animations despite hidden-modifiers. See `CustomNavBar`.
         .safeAreaInset(edge: .top, spacing: 0) {
             CustomNavBar(title: titleString(isRu: isRu))
         }
