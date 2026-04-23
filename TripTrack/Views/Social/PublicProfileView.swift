@@ -73,28 +73,40 @@ struct PublicProfileView: View {
         let isRu = lang.language == .ru
 
         ScrollView {
-            VStack(spacing: 16) {
-                heroSection(c, isRu: isRu)
-                    .padding(.top, 16)
+            // Skeleton placeholder until the first `loadProfile()` succeeds.
+            // Using `ZStack` with opacity-driven transition keeps the scroll
+            // offset stable between skeleton and real content — swapping
+            // branches via `if/else` would reset the ScrollView state.
+            ZStack {
+                if profile != nil {
+                    VStack(spacing: 16) {
+                        heroSection(c, isRu: isRu)
+                            .padding(.top, 16)
 
-                statsGrid(c, isRu: isRu)
-                    .padding(.horizontal, 16)
+                        statsGrid(c, isRu: isRu)
+                            .padding(.horizontal, 16)
 
-                activeVehicleCard(c, isRu: isRu)
-                    .padding(.horizontal, 16)
+                        activeVehicleCard(c, isRu: isRu)
+                            .padding(.horizontal, 16)
 
-                badgesSection(c, isRu: isRu)
-                    .padding(.horizontal, 16)
+                        badgesSection(c, isRu: isRu)
+                            .padding(.horizontal, 16)
 
-                followCounters(c, isRu: isRu)
-                    .padding(.horizontal, 16)
+                        followCounters(c, isRu: isRu)
+                            .padding(.horizontal, 16)
 
-                recentTrips(c, isRu: isRu)
-                    .padding(.horizontal, 16)
+                        recentTrips(c, isRu: isRu)
+                            .padding(.horizontal, 16)
+                    }
+                    .transition(.opacity)
+                } else {
+                    SkeletonProfileView()
+                        .transition(.opacity)
+                }
             }
+            .animation(.easeInOut(duration: 0.25), value: profile != nil)
             // Bottom inset clears the floating CustomTabBar so the last trip
-            // card is fully visible. Matches FeedView's 120pt inset. Without
-            // this, the tab bar's ~100pt height covers the last card.
+            // card is fully visible. Matches FeedView's 120pt inset.
             .padding(.bottom, 120)
         }
         .background(c.bg)
