@@ -60,6 +60,14 @@ final class FeedViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.loadTrips() }
             .store(in: &cancellables)
+
+        // Photo added/removed on a trip from anywhere in the app — refresh
+        // so the card's photo indicator + preview thumb update without the
+        // user having to pull-to-refresh.
+        NotificationCenter.default.publisher(for: .tripPhotosChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.loadTrips() }
+            .store(in: &cancellables)
     }
 
     deinit {

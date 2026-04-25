@@ -14,6 +14,9 @@ extension Notification.Name {
     static let territoryRebuilt = Notification.Name("territoryRebuilt")
     static let syncPullCompleted = Notification.Name("syncPullCompleted")
     static let tripPrivacyChanged = Notification.Name("tripPrivacyChanged")
+    /// Photo added or removed from a trip. Feed listens so the card's photo
+    /// indicator refreshes without forcing a pull-to-refresh.
+    static let tripPhotosChanged = Notification.Name("tripPhotosChanged")
     /// Server returned `USER_BANNED` on any authenticated endpoint. AuthService
     /// observes this and triggers `signOut()` — local data stays intact so the
     /// user can still view (read-only) what they already have on device.

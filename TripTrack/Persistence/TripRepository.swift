@@ -247,6 +247,12 @@ final class CoreDataTripRepository: TripRepository {
         Task { @MainActor in
             SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: photoId, action: .upload))
             SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+            // Feed cards include a "has photos" indicator + preview thumbnail
+            // — without this notification the card stays stale until the next
+            // pull-to-refresh because Feed only reloads on recording-end and
+            // sync-pull events.
+            NotificationCenter.default.post(
+                name: .tripPhotosChanged, object: nil, userInfo: ["tripId": tripId])
         }
         return photo
     }
@@ -264,6 +270,8 @@ final class CoreDataTripRepository: TripRepository {
             Task { @MainActor in
                 SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: id, action: .delete))
                 SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+                NotificationCenter.default.post(
+                    name: .tripPhotosChanged, object: nil, userInfo: ["tripId": tripId])
             }
         }
     }
