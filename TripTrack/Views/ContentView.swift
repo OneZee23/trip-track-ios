@@ -56,7 +56,16 @@ struct ContentView: View {
     @EnvironmentObject private var lang: LanguageManager
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        let c = AppTheme.colors(for: systemScheme)
+        return ZStack(alignment: .bottom) {
+            // Paint the theme background across the entire window, including
+            // below the bottom safe area. Previously the feed's own black bg
+            // only extended to the safe-area edge, so the strip around the
+            // home indicator fell through to the system window color and
+            // read as an out-of-place slab on devices with a chin (iPhone
+            // 12, etc.). Painting bg here keeps the screen visually whole.
+            c.bg.ignoresSafeArea()
+
             switch selectedTab {
             case 0:
                 FeedView(tripManager: mapVM.tripManager, selectedTab: $selectedTab)
