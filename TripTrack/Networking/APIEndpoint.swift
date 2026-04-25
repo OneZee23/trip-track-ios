@@ -18,6 +18,7 @@ enum APIEndpoint {
 
     static let photoUpload = "/photos/upload"
     static let photoURL    = "/photos/url"
+    static let photoDelete = "/photos/delete"
 
     static let syncPull = "/sync/pull"
     static let syncPush = "/sync/push"

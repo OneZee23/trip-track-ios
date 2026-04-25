@@ -31,9 +31,16 @@ final class SocialFeedStore: ObservableObject {
                 guard let self else { return }
                 if let tripId = note.userInfo?["tripId"] as? UUID,
                    let delta = note.userInfo?["delta"] as? Int {
+                    // Local-side optimistic event — bump and DON'T refresh.
+                    // Refreshing now would round-trip the still-stale server
+                    // count and overwrite our optimistic update before the
+                    // upload/delete actually lands. The server-confirmed
+                    // notification (no delta) below triggers the reconcile.
                     self.bumpPhotoCount(tripId: tripId, delta: delta)
+                } else {
+                    // Server-confirmed event — fetch authoritative state.
+                    Task { @MainActor [weak self] in await self?.refresh() }
                 }
-                Task { @MainActor [weak self] in await self?.refresh() }
             }
             .store(in: &cancellables)
     }

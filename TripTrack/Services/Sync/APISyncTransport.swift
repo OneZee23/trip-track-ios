@@ -58,7 +58,7 @@ final class APISyncTransport: SyncTransport {
         case (.photo, .upload), (.photo, .update):
             try await uploadPhoto(id: operation.entityId)
         case (.photo, .delete):
-            break  // photos deleted via sync/push
+            try await deletePhoto(id: operation.entityId)
         case (.settings, .upload), (.settings, .update):
             try await uploadSettings()
         case (.settings, .delete):
@@ -259,10 +259,28 @@ final class APISyncTransport: SyncTransport {
         // add time, but that fired BEFORE the upload completed, so the server
         // returned a stale `photoCount=0`. This second post happens after R2
         // + DB are written, so the next refresh sees the real count.
+        // No `delta` key — that signals "server-confirmed, do a refresh".
         await MainActor.run {
             NotificationCenter.default.post(
                 name: .tripPhotosChanged, object: nil,
                 userInfo: ["tripId": tripIdValue])
+        }
+    }
+
+    /// Server-side photo delete: hits `/photos/delete` which clears R2 blobs
+    /// and soft-deletes the DB row. Local row was already wiped by
+    /// `TripRepository.deletePhoto`. Idempotent on the server, so retries
+    /// are safe.
+    private func deletePhoto(id: UUID) async throws {
+        struct DeleteReq: Encodable { let photoId: UUID }
+        let _: EmptyResponse = try await client.post(
+            APIEndpoint.photoDelete, body: DeleteReq(photoId: id))
+        // Confirm delete to UI listeners (no `delta` → triggers refresh
+        // instead of optimistic bump, which the local-side notification
+        // already did).
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: .tripPhotosChanged, object: nil)
         }
     }
 }
