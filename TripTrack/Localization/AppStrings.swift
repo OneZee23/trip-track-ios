@@ -614,4 +614,66 @@ enum AppStrings {
     static func dangerZone(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Опасная зона" : "Danger zone"
     }
+
+    // MARK: - Sync status sheet
+
+    static func syncStatusTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Очередь синхронизации" : "Sync queue"
+    }
+    static func syncStatusPendingHeader(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "В очереди" : "Pending"
+    }
+    static func syncStatusFailedHeader(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось" : "Failed"
+    }
+    static func syncStatusEmpty(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Всё синхронизировано." : "Everything is up to date."
+    }
+    static func syncStatusRetry(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Повторить сейчас" : "Retry now"
+    }
+    static func syncStatusNowLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сейчас" : "Now"
+    }
+    static func syncAttemptsLabel(_ count: Int, _ lang: LanguageManager.Language) -> String {
+        if lang == .ru {
+            // Plural agreement for Russian: 1 → "1 попытка", 2-4 → "2 попытки",
+            // 5-20 → "5 попыток", 21 → "21 попытка", etc.
+            let mod10 = count % 10
+            let mod100 = count % 100
+            let word: String
+            if mod100 >= 11 && mod100 <= 14 {
+                word = "попыток"
+            } else if mod10 == 1 {
+                word = "попытка"
+            } else if (2...4).contains(mod10) {
+                word = "попытки"
+            } else {
+                word = "попыток"
+            }
+            return "\(count) \(word)"
+        } else {
+            return count == 1 ? "1 attempt" : "\(count) attempts"
+        }
+    }
+
+    // MARK: - Entity / action labels (used by sync status sheet)
+
+    static func entityLabel(_ type: String, _ lang: LanguageManager.Language) -> String {
+        switch type {
+        case "trip":     return lang == .ru ? "Поездка" : "Trip"
+        case "vehicle":  return lang == .ru ? "Машина" : "Vehicle"
+        case "photo":    return lang == .ru ? "Фото" : "Photo"
+        case "settings": return lang == .ru ? "Настройки" : "Settings"
+        default:         return type.capitalized
+        }
+    }
+    static func actionLabel(_ action: String, _ lang: LanguageManager.Language) -> String {
+        switch action {
+        case "upload": return lang == .ru ? "Загрузка" : "Upload"
+        case "update": return lang == .ru ? "Обновление" : "Update"
+        case "delete": return lang == .ru ? "Удаление" : "Delete"
+        default:       return action.capitalized
+        }
+    }
 }

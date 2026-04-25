@@ -2,13 +2,16 @@ import Foundation
 import Combine
 
 /// Represents a single sync operation in the queue.
-struct SyncOperation: Identifiable {
+struct SyncOperation: Identifiable, Equatable {
     let id: UUID
     let entityType: EntityType
     let entityId: UUID
     let action: Action
     let createdAt: Date
     var retryCount: Int = 0
+    /// Last transport error message — populated when an attempt fails so the
+    /// sync-status sheet can explain why an operation moved to `failed`.
+    var lastError: String?
 
     enum EntityType: String {
         case trip
@@ -47,6 +50,15 @@ final class SyncQueue: ObservableObject {
     @Published private(set) var pendingCount = 0
     @Published private(set) var batchTotal = 0     // total ops in the current batch
     @Published private(set) var batchProcessed = 0 // ops completed (success or failed) in current batch
+    /// Currently executing operation, when `isSyncing` is true. Lets the
+    /// status sheet show "Now: trip upload" instead of just "Syncing…".
+    @Published private(set) var currentOperation: SyncOperation?
+    /// Snapshot mirrors of `queue` and `failedQueue` for SwiftUI consumers.
+    /// Kept separate from the internal mutating arrays so we don't have to
+    /// publish each tiny intermediate state during the inner sync loop;
+    /// `republishSnapshots()` updates them at well-defined points.
+    @Published private(set) var pending: [SyncOperation] = []
+    @Published private(set) var failed: [SyncOperation] = []
 
     private var queue: [SyncOperation] = []
     private var failedQueue: [SyncOperation] = []
@@ -83,6 +95,7 @@ final class SyncQueue: ObservableObject {
         guard !isDuplicate else { return }
         queue.append(operation)
         updatePendingCount()
+        republishSnapshots()
     }
 
     func processQueue() async {
@@ -98,7 +111,9 @@ final class SyncQueue: ObservableObject {
             isSyncing = false
             batchTotal = 0
             batchProcessed = 0
+            currentOperation = nil
             updatePendingCount()
+            republishSnapshots()
         }
 
         queue.sort { lhs, rhs in
@@ -106,17 +121,22 @@ final class SyncQueue: ObservableObject {
             let rhsPriority = entityPriority.firstIndex(of: rhs.entityType) ?? Int.max
             return lhsPriority < rhsPriority
         }
+        republishSnapshots()
 
         while !queue.isEmpty {
             guard !CacheManager.shared.isOffline else { break }
 
             var operation = queue.removeFirst()
+            currentOperation = operation
             updatePendingCount()
+            republishSnapshots()
 
             do {
                 try await activeTransport.execute(operation)
             } catch {
                 operation.retryCount += 1
+                operation.lastError = (error as? LocalizedError)?.errorDescription
+                    ?? String(describing: error)
                 if operation.retryCount < maxRetries {
                     failedQueue.append(operation)
                 }
@@ -140,7 +160,24 @@ final class SyncQueue: ObservableObject {
         let toRetry = failedQueue
         failedQueue.removeAll()
         queue.append(contentsOf: toRetry)
+        republishSnapshots()
 
+        await processQueue()
+    }
+
+    /// User-initiated retry of failed ops (no backoff sleep) — wired to the
+    /// "Retry now" button in the sync-status sheet. Resets `lastError` so the
+    /// UI doesn't keep showing the previous failure reason while we retry.
+    func retryFailedNow() async {
+        guard !failedQueue.isEmpty else { return }
+        let toRetry = failedQueue.map { op -> SyncOperation in
+            var clean = op
+            clean.lastError = nil
+            return clean
+        }
+        failedQueue.removeAll()
+        queue.append(contentsOf: toRetry)
+        republishSnapshots()
         await processQueue()
     }
 
@@ -149,9 +186,15 @@ final class SyncQueue: ObservableObject {
         queue.removeAll()
         failedQueue.removeAll()
         updatePendingCount()
+        republishSnapshots()
     }
 
     private func updatePendingCount() {
         pendingCount = queue.count + failedQueue.count
+    }
+
+    private func republishSnapshots() {
+        pending = queue
+        failed = failedQueue
     }
 }

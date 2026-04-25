@@ -25,6 +25,7 @@ struct ProfileView: View {
     @State private var showGarage = false
     @State private var showVehicleDetail = false
     @State private var showCloudSync = false
+    @State private var showSyncStatus = false
     @State private var showDebugLogs = false
     @State private var socialProfile: SocialProfile?
     @State private var followListMode: FollowListMode?
@@ -198,6 +199,14 @@ struct ProfileView: View {
             CloudSyncView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
+        }
+        .sheet(isPresented: $showSyncStatus) {
+            SyncStatusSheetView()
+                .environmentObject(lang)
+                .environmentObject(themeManager)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showBackgroundPicker) {
             ProfileBackgroundPickerSheet()
@@ -632,6 +641,10 @@ struct ProfileView: View {
         let isRu = lang.language == .ru
         let pending = syncQueue.pendingCount
         let syncing = syncQueue.isSyncing
+        // Tap is meaningful only when there's actually something to inspect:
+        // queued, in-flight, or recently failed. "Synced" / "Sync disabled"
+        // would open an empty sheet, so we leave them inert.
+        let isTappable = settings.cloudSyncEnabled && (pending > 0 || syncing)
 
         HStack(spacing: 6) {
             if !settings.cloudSyncEnabled {
@@ -648,8 +661,8 @@ struct ProfileView: View {
                 let total = syncQueue.batchTotal
                 let done = syncQueue.batchProcessed
                 Text(total > 0
-                     ? (isRu ? "Синхронизация… \(done)/\(total)" : "Syncing… \(done)/\(total)")
-                     : (isRu ? "Синхронизация…" : "Syncing…"))
+                     ? (isRu ? "синхронизация… \(done)/\(total)" : "syncing… \(done)/\(total)")
+                     : (isRu ? "синхронизация…" : "syncing…"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(c.textSecondary)
                     .monospacedDigit()
@@ -657,17 +670,35 @@ struct ProfileView: View {
                 Circle()
                     .fill(Color.orange)
                     .frame(width: 6, height: 6)
-                Text(isRu ? "В очереди: \(pending)" : "Pending: \(pending)")
+                Text(isRu ? "\(pending) в очереди" : "\(pending) pending")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(c.textSecondary)
             } else {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 10))
                     .foregroundStyle(Color.green)
-                Text(isRu ? "Синхронизировано" : "Synced")
+                Text(isRu ? "синхронизировано" : "synced")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(c.textTertiary)
             }
+            if isTappable {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+                    .padding(.leading, 2)
+            }
+        }
+        .padding(.horizontal, isTappable ? 10 : 0)
+        .padding(.vertical, isTappable ? 4 : 0)
+        .background(
+            isTappable ? AnyShapeStyle(c.cardAlt) : AnyShapeStyle(Color.clear),
+            in: Capsule()
+        )
+        .contentShape(Capsule())
+        .onTapGesture {
+            guard isTappable else { return }
+            Haptics.tap()
+            showSyncStatus = true
         }
         .animation(.easeInOut(duration: 0.2), value: syncing)
         .animation(.easeInOut(duration: 0.2), value: pending)
