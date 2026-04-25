@@ -304,3 +304,27 @@ struct SocialReactionEntry: Codable, Identifiable, Hashable {
 struct SocialReactionsResponse: Codable {
     let reactions: [SocialReactionEntry]
 }
+
+// MARK: - Trip photos (public view)
+
+/// Request body for `/social/trip/photos` — lists photos attached to a
+/// public trip (or the viewer's own). Presigned R2 URLs are short-lived
+/// (~1 hour), so we re-fetch every time the detail view opens.
+struct SocialTripPhotosRequest: Codable {
+    let tripId: UUID
+}
+
+/// Single photo entry returned by the social photos endpoint. Both URLs
+/// are optional because R2 presigning can fail independently (e.g. the
+/// thumbnail upload finished but the original is still in flight).
+struct SocialTripPhoto: Codable, Identifiable, Hashable {
+    let id: UUID
+    let caption: String?
+    let timestamp: Date
+    let thumbnailUrl: String?
+    let originalUrl: String?
+}
+
+struct SocialTripPhotosResponse: Codable {
+    let photos: [SocialTripPhoto]
+}

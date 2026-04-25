@@ -23,6 +23,9 @@ struct SocialTripDetailView: View {
     @State private var reactionEntries: [SocialReactionEntry] = []
     @State private var isLoadingReactions = false
     @State private var isMapFullscreen = false
+    @State private var photos: [SocialTripPhoto] = []
+    @State private var isLoadingPhotos = false
+    @State private var selectedPhotoIndex: Int?
 
     /// Always-current view of the trip: prefer store's copy (reflects
     /// optimistic reaction toggles) and fall back to the original snapshot
@@ -60,6 +63,14 @@ struct SocialTripDetailView: View {
                         if !trip.badgeIds.isEmpty {
                             TripBadgesRow(badgeIds: trip.badgeIds, maxVisible: 6, size: 26)
                                 .padding(.top, 2)
+                        }
+                        // Render a photos strip only when the server actually
+                        // returned any — unlike the owner's detail view which
+                        // keeps the section as an empty-state "add photos"
+                        // prompt, there's nothing a viewer can do about a
+                        // trip without photos, so we just hide it.
+                        if !photos.isEmpty {
+                            photosSection(c, isRu: isRu)
                         }
                         reactionsRow(c)
                         reactionsBreakdown(c)
@@ -118,7 +129,26 @@ struct SocialTripDetailView: View {
                 treatAsPreview: true
             )
         }
-        .task { await loadReactions() }
+        .fullScreenCover(isPresented: Binding(
+            get: { selectedPhotoIndex != nil },
+            set: { if !$0 { selectedPhotoIndex = nil } }
+        )) {
+            if let idx = selectedPhotoIndex {
+                SocialPhotoFullScreenView(
+                    photos: photos,
+                    initialIndex: idx,
+                    onDismiss: { selectedPhotoIndex = nil }
+                )
+            }
+        }
+        .task {
+            // `loadReactions` and `loadPhotos` are independent network calls,
+            // so kick them off in parallel — whichever finishes first lets
+            // SwiftUI render its section before the other lands.
+            async let r: Void = loadReactions()
+            async let p: Void = loadPhotos()
+            _ = await (r, p)
+        }
     }
 
     private func loadReactions() async {
@@ -130,6 +160,19 @@ struct SocialTripDetailView: View {
             reactionEntries = res.reactions
         } catch {
             // Non-fatal — breakdown stays empty
+        }
+    }
+
+    private func loadPhotos() async {
+        isLoadingPhotos = true
+        defer { isLoadingPhotos = false }
+        do {
+            let res: SocialTripPhotosResponse = try await APIClient.shared.post(
+                APIEndpoint.socialTripPhotos,
+                body: SocialTripPhotosRequest(tripId: trip.id))
+            photos = res.photos
+        } catch {
+            // Non-fatal — photo strip just stays hidden.
         }
     }
 
@@ -273,6 +316,68 @@ struct SocialTripDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .surfaceCard(cornerRadius: 14)
+    }
+
+    private func photosSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text((isRu ? "Фото" : "Photos").uppercased() + "  \(photos.count)")
+                .font(.system(size: 11, weight: .bold).monospacedDigit())
+                .tracking(0.5)
+                .foregroundStyle(c.textTertiary)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
+                        remoteThumbnail(photo, c: c)
+                            .frame(width: 104, height: 104)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                Haptics.tap()
+                                selectedPhotoIndex = index
+                            }
+                    }
+                }
+            }
+            .frame(height: 104)
+        }
+    }
+
+    @ViewBuilder
+    private func remoteThumbnail(_ photo: SocialTripPhoto, c: AppTheme.Colors) -> some View {
+        // Thumbnail presign first, original second. AsyncImage falls back to
+        // a neutral placeholder so the grid doesn't jitter while images load.
+        let urlString = photo.thumbnailUrl ?? photo.originalUrl
+        if let s = urlString, let url = URL(string: s) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    Rectangle()
+                        .fill(c.cardAlt)
+                        .overlay {
+                            Image(systemName: "photo.badge.exclamationmark")
+                                .font(.system(size: 18))
+                                .foregroundStyle(c.textTertiary)
+                        }
+                case .empty:
+                    Rectangle()
+                        .fill(c.cardAlt)
+                        .overlay { CarLoadingView(size: .compact) }
+                @unknown default:
+                    Rectangle().fill(c.cardAlt)
+                }
+            }
+        } else {
+            Rectangle()
+                .fill(c.cardAlt)
+                .overlay {
+                    Image(systemName: "photo")
+                        .font(.system(size: 18))
+                        .foregroundStyle(c.textTertiary)
+                }
+        }
     }
 
     private func reactionsRow(_ c: AppTheme.Colors) -> some View {
