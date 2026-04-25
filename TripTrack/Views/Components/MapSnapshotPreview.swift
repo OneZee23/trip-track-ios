@@ -21,9 +21,21 @@ struct MapSnapshotPreview: View {
         let c = AppTheme.colors(for: scheme)
 
         ZStack {
-            // Placeholder always present underneath for stable sizing
-            LightRoutePreview(coordinates: coordinates)
-                .opacity(snapshot == nil ? 1 : 0)
+            // Placeholder: the lightweight Canvas polyline under a dimming
+            // shimmer so the loading state reads as "loading" instead of as
+            // a stretched, low-res version of the final image. The share
+            // sheet opens with a wider slot than feed cards, which surfaced
+            // the old polyline-only placeholder as the "super-zoomed, blurry"
+            // flash the user was seeing right before tiles landed.
+            if snapshot == nil {
+                ZStack {
+                    Rectangle().fill(c.cardAlt)
+                    LightRoutePreview(coordinates: coordinates)
+                        .opacity(0.6)
+                }
+                .shimmer()
+                .transition(.opacity)
+            }
 
             if let snapshot {
                 Image(uiImage: snapshot)
@@ -34,6 +46,12 @@ struct MapSnapshotPreview: View {
         }
         .animation(.easeOut(duration: 0.35), value: snapshot != nil)
         .task(id: cacheKey) {
+            // Reset stale state before hitting the cache — without this the
+            // previous snapshot image would remain visible for a frame or two
+            // whenever the cache key changed (e.g. reopening the share sheet
+            // at a different width), which is what caused the brief "wrong
+            // resolution" flash.
+            snapshot = nil
             await loadSnapshot(colors: c)
         }
     }
