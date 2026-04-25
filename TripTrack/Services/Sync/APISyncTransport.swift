@@ -208,11 +208,14 @@ final class APISyncTransport: SyncTransport {
             return
         }
 
-        // Thumbnail always
+        // Thumbnail always. Target ~15-25 KB: 256pt max-dimension at 1x scale
+        // (NOT screen scale — that's how thumbnails were ballooning to 1536px
+        // and 160 KB on retina devices) with quality 0.6 — feed cards render
+        // them at <120pt so even 256px is more than enough.
         if entity.thumbnailURL == nil {
             guard let uiImage = UIImage(data: originalData),
-                  let thumb = uiImage.resized(maxDimension: 512),
-                  let thumbData = thumb.jpegData(compressionQuality: 0.7) else {
+                  let thumb = uiImage.resized(maxDimension: 256, scale: 1.0),
+                  let thumbData = thumb.jpegData(compressionQuality: 0.6) else {
                 entity.uploadStatus = PhotoUploadStatus.failed.rawValue
                 try? ctx.save()
                 return
@@ -223,11 +226,24 @@ final class APISyncTransport: SyncTransport {
             entity.thumbnailURL = r.url
         }
 
-        // Original only on Wi-Fi
+        // Original only on Wi-Fi. Re-encode capped at 1920pt (more than enough
+        // for full-screen review on any iPhone) at quality 0.8 so we don't
+        // upload 4-8 MB iPhone source files straight to R2 and burn the free
+        // tier in a month. If the source was already small the cap is a no-op.
         if entity.remoteURL == nil && CacheManager.shared.isOnWiFi {
+            guard let uiImage = UIImage(data: originalData),
+                  let bounded = uiImage.resized(maxDimension: 1920, scale: 1.0),
+                  let boundedData = bounded.jpegData(compressionQuality: 0.8) else {
+                entity.uploadStatus = PhotoUploadStatus.failed.rawValue
+                try? ctx.save()
+                return
+            }
+            // Skip the re-encode if we'd actually make the file larger (rare
+            // but possible with small sources or already-aggressive sources).
+            let payload = boundedData.count < originalData.count ? boundedData : originalData
             let r = try await photos.uploadPhotoPart(
                 tripId: tripIdValue, photoId: id, type: .original,
-                data: originalData, caption: entity.caption, timestamp: entity.timestamp ?? Date())
+                data: payload, caption: entity.caption, timestamp: entity.timestamp ?? Date())
             entity.remoteURL = r.url
         }
 
@@ -241,10 +257,18 @@ final class APISyncTransport: SyncTransport {
 }
 
 private extension UIImage {
-    func resized(maxDimension: CGFloat) -> UIImage? {
-        let scale = min(maxDimension / size.width, maxDimension / size.height, 1)
-        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
+    /// Downsize the image so its longest side fits within `maxDimension`
+    /// **points**. `scale` is the *render* scale — pass 1.0 to get true
+    /// `maxDimension` pixels (uploads). Default `UIGraphicsImageRenderer`
+    /// behavior is screen scale, which silently 3× the pixel count on
+    /// retina devices and was the cause of bloated thumbnail uploads.
+    func resized(maxDimension: CGFloat, scale: CGFloat = 0) -> UIImage? {
+        let s = min(maxDimension / size.width, maxDimension / size.height, 1)
+        let newSize = CGSize(width: size.width * s, height: size.height * s)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale > 0 ? scale : UIScreen.main.scale
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
         return renderer.image { _ in draw(in: CGRect(origin: .zero, size: newSize)) }
     }
 }
