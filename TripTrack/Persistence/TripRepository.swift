@@ -250,9 +250,11 @@ final class CoreDataTripRepository: TripRepository {
             // Feed cards include a "has photos" indicator + preview thumbnail
             // — without this notification the card stays stale until the next
             // pull-to-refresh because Feed only reloads on recording-end and
-            // sync-pull events.
+            // sync-pull events. `delta:+1` lets SocialFeedStore bump
+            // `photoCount` optimistically before the upload completes.
             NotificationCenter.default.post(
-                name: .tripPhotosChanged, object: nil, userInfo: ["tripId": tripId])
+                name: .tripPhotosChanged, object: nil,
+                userInfo: ["tripId": tripId, "delta": 1])
         }
         return photo
     }
@@ -271,7 +273,8 @@ final class CoreDataTripRepository: TripRepository {
                 SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: id, action: .delete))
                 SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
                 NotificationCenter.default.post(
-                    name: .tripPhotosChanged, object: nil, userInfo: ["tripId": tripId])
+                    name: .tripPhotosChanged, object: nil,
+                    userInfo: ["tripId": tripId, "delta": -1])
             }
         }
     }

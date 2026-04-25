@@ -19,18 +19,37 @@ final class SocialFeedStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
-        // Photo added/removed/uploaded somewhere in the app — refresh so each
-        // SocialFeedCardView's `photoCount` indicator updates without forcing
-        // pull-to-refresh. The notification is posted both at local-add time
-        // (TripRepository) and at upload-complete time (APISyncTransport) so
-        // we hit refresh once for the optimistic state and once when the
-        // server actually has the new photo.
+        // Photo added/removed/uploaded somewhere in the app. The notification
+        // arrives twice for the same change — once optimistically from
+        // `TripRepository` with a `delta` (+1 add / -1 delete) so we can
+        // bump the card's `photoCount` instantly, and again from
+        // `APISyncTransport` after the upload lands (no delta) so we can
+        // reconcile with the server's authoritative count.
         NotificationCenter.default.publisher(for: .tripPhotosChanged)
             .receive(on: DispatchQueue.main)
-            .sink { _ in
+            .sink { [weak self] note in
+                guard let self else { return }
+                if let tripId = note.userInfo?["tripId"] as? UUID,
+                   let delta = note.userInfo?["delta"] as? Int {
+                    self.bumpPhotoCount(tripId: tripId, delta: delta)
+                }
                 Task { @MainActor [weak self] in await self?.refresh() }
             }
             .store(in: &cancellables)
+    }
+
+    /// Optimistic in-place bump of a feed card's `photoCount` so the user
+    /// sees the indicator the instant they add/remove a photo, without
+    /// waiting for upload + `/social/feed` round-trip.
+    private func bumpPhotoCount(tripId: UUID, delta: Int) {
+        guard let idx = trips.firstIndex(where: { $0.id == tripId }) else { return }
+        var t = trips[idx]
+        t.photoCount = max(0, t.photoCount + delta)
+        // If we just dropped to 0, clear the cached thumbnail too — otherwise
+        // the indicator flips off but the preview tile stays for the
+        // half-second until the server-confirming refresh lands.
+        if t.photoCount == 0 { t.firstPhotoThumbnail = nil }
+        trips[idx] = t
     }
 
     // MARK: - Load

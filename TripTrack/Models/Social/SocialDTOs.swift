@@ -39,8 +39,11 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     let duration: Int
     let region: String?
     let previewPolyline: String?
-    let photoCount: Int
-    let firstPhotoThumbnail: String?
+    // `var` so SocialFeedStore can apply optimistic bumps when the user adds
+    // or removes a photo on their own trip — eliminates the 1-2s gap between
+    // local save and server-side `/social/feed` re-render.
+    var photoCount: Int
+    var firstPhotoThumbnail: String?
     let reactionCount: Int
     let reactionBreakdown: [ReactionTally]
     let myReaction: String?
