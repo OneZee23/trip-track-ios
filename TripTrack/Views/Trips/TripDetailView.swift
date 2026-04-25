@@ -119,6 +119,16 @@ struct TripDetailView: View {
                     Spacer()
 
                     Menu {
+                        Button {
+                            Haptics.tap()
+                            Task { await openStoryShare(for: trip) }
+                        } label: {
+                            Label(
+                                lang.language == .ru ? "Поделиться" : "Share",
+                                systemImage: "square.and.arrow.up"
+                            )
+                        }
+                        .disabled(isGeneratingShare)
                         Button(role: .destructive) {
                             Haptics.action()
                             showDeleteConfirm = true
@@ -307,31 +317,11 @@ struct TripDetailView: View {
     @ViewBuilder
     private func infoPanel(trip: Trip, c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Date + time + vehicle + share button
-            HStack(alignment: .top) {
-                dateTimeLine(trip: trip, c: c)
-                Spacer()
-                Button {
-                    Haptics.tap()
-                    Task { await openStoryShare(for: trip) }
-                } label: {
-                    ZStack {
-                        if isGeneratingShare {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                        } else {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 14))
-                                .foregroundStyle(c.textTertiary)
-                        }
-                    }
-                    .frame(width: 32, height: 32)
-                    .background(c.cardAlt, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isGeneratingShare)
-            }
-            .padding(.bottom, 8)
+            // Date + time + vehicle. Share moved to the overflow menu in the
+            // top chrome so the info panel reads cleaner — `isGeneratingShare`
+            // still gates the Menu item so double-taps don't double-fire.
+            dateTimeLine(trip: trip, c: c)
+                .padding(.bottom, 8)
 
             // Title with edit button
             titleSection(trip: trip, c: c)
