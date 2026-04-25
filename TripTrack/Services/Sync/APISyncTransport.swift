@@ -208,14 +208,14 @@ final class APISyncTransport: SyncTransport {
             return
         }
 
-        // Thumbnail always. Target ~15-25 KB: 256pt max-dimension at 1x scale
+        // Thumbnail always. Target ~5-12 KB: 200pt max-dimension at 1x scale
         // (NOT screen scale — that's how thumbnails were ballooning to 1536px
-        // and 160 KB on retina devices) with quality 0.6 — feed cards render
-        // them at <120pt so even 256px is more than enough.
+        // and 160 KB on retina devices) with quality 0.5 — feed cards render
+        // them at <120pt so even 200px is more than enough.
         if entity.thumbnailURL == nil {
             guard let uiImage = UIImage(data: originalData),
-                  let thumb = uiImage.resized(maxDimension: 256, scale: 1.0),
-                  let thumbData = thumb.jpegData(compressionQuality: 0.6) else {
+                  let thumb = uiImage.resized(maxDimension: 200, scale: 1.0),
+                  let thumbData = thumb.jpegData(compressionQuality: 0.5) else {
                 entity.uploadStatus = PhotoUploadStatus.failed.rawValue
                 try? ctx.save()
                 return
