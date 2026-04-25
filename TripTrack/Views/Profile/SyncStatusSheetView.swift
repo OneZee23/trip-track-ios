@@ -1,10 +1,29 @@
 import SwiftUI
+import CoreData
 
-/// Drill-down for the "Pending: N" indicator on the profile. Lists every
-/// operation currently queued or failed, names what kind of entity it is,
-/// shows attempt count and last error reason for failures, and offers a
-/// one-tap retry. Mirrors `SyncQueue` snapshots so it updates live as
-/// `SyncCoordinator` chews through the batch.
+/// Counts of every entity type by their cloud-sync state. Computed from
+/// CoreData on sheet open + `.syncPullCompleted`, so the user can see what's
+/// actually in the cloud vs what's still local — even when nothing is
+/// actively in flight.
+struct SyncCountSnapshot {
+    var tripsSynced: Int = 0
+    var tripsPending: Int = 0
+    var vehiclesSynced: Int = 0
+    var vehiclesPending: Int = 0
+    var photosUploaded: Int = 0      // both thumb + original on R2
+    var photosPartial: Int = 0       // thumb only — typically waiting for Wi-Fi
+    var photosLocal: Int = 0         // never uploaded
+    var photosFailed: Int = 0
+    var settingsSynced: Bool = false
+    var settingsExists: Bool = false
+
+    static let empty = SyncCountSnapshot()
+}
+
+/// Drill-down for the sync status pill on the profile. Always shows a
+/// per-entity counts card so "everything is synced" still has a story to
+/// tell ("28 trips, 45 photos, 1 vehicle on the cloud"). Below it: live
+/// queue/failed sections when there's actually something in flight.
 struct SyncStatusSheetView: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -13,6 +32,7 @@ struct SyncStatusSheetView: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var isRetrying = false
+    @State private var snapshot: SyncCountSnapshot = .empty
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -25,6 +45,8 @@ struct SyncStatusSheetView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     summaryCard(c, isRu: isRu)
+
+                    countsCard(c, isRu: isRu)
 
                     if let op = syncQueue.currentOperation {
                         nowSection(op, c: c, isRu: isRu)
@@ -59,7 +81,12 @@ struct SyncStatusSheetView: View {
                     }
 
                     if isEmpty {
-                        emptyState(c, isRu: isRu)
+                        Text(AppStrings.syncStatusEmpty(lang.language))
+                            .font(.system(size: 13))
+                            .foregroundStyle(c.textTertiary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 8)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -70,6 +97,14 @@ struct SyncStatusSheetView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+            }
+            .task { loadSnapshot() }
+            .onReceive(NotificationCenter.default.publisher(for: .syncPullCompleted)) { _ in
+                loadSnapshot()
+            }
+            .onChange(of: syncQueue.isSyncing) { _, syncing in
+                // Sync just finished — counts may have changed.
+                if !syncing { loadSnapshot() }
             }
         }
     }
@@ -227,17 +262,161 @@ struct SyncStatusSheetView: View {
         .padding(.top, 4)
     }
 
-    private func emptyState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 36))
-                .foregroundStyle(.green)
-            Text(AppStrings.syncStatusEmpty(lang.language))
-                .font(.system(size: 14))
-                .foregroundStyle(c.textSecondary)
-                .multilineTextAlignment(.center)
+    // MARK: - Counts
+
+    private func countsCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(spacing: 0) {
+            countsRow(
+                icon: "flag.fill", iconColor: AppTheme.blue,
+                title: isRu ? "Поездки" : "Trips",
+                summary: tripsSummary(isRu: isRu),
+                c: c, showsDivider: true
+            )
+            countsRow(
+                icon: "car.fill", iconColor: .green,
+                title: isRu ? "Машины" : "Vehicles",
+                summary: vehiclesSummary(isRu: isRu),
+                c: c, showsDivider: true
+            )
+            countsRow(
+                icon: "photo.fill", iconColor: AppTheme.accent,
+                title: isRu ? "Фото" : "Photos",
+                summary: photosSummary(isRu: isRu),
+                c: c, showsDivider: true
+            )
+            countsRow(
+                icon: "gearshape.fill", iconColor: c.textSecondary,
+                title: isRu ? "Настройки" : "Settings",
+                summary: settingsSummary(isRu: isRu),
+                c: c, showsDivider: false
+            )
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        .surfaceCard(cornerRadius: 14)
     }
+
+    private func countsRow(
+        icon: String, iconColor: Color,
+        title: String, summary: String,
+        c: AppTheme.Colors, showsDivider: Bool
+    ) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 22, alignment: .center)
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(c.text)
+                Spacer()
+                Text(summary)
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
+                    .foregroundStyle(c.textSecondary)
+                    .multilineTextAlignment(.trailing)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            if showsDivider {
+                Divider()
+                    .background(c.cardAlt)
+                    .padding(.leading, 48)
+            }
+        }
+    }
+
+    private func tripsSummary(isRu: Bool) -> String {
+        let s = snapshot
+        if s.tripsPending > 0 {
+            return isRu
+                ? "\(s.tripsSynced) в облаке · \(s.tripsPending) в очереди"
+                : "\(s.tripsSynced) in cloud · \(s.tripsPending) pending"
+        }
+        return isRu ? "\(s.tripsSynced) в облаке" : "\(s.tripsSynced) in cloud"
+    }
+
+    private func vehiclesSummary(isRu: Bool) -> String {
+        let s = snapshot
+        if s.vehiclesPending > 0 {
+            return isRu
+                ? "\(s.vehiclesSynced) в облаке · \(s.vehiclesPending) в очереди"
+                : "\(s.vehiclesSynced) in cloud · \(s.vehiclesPending) pending"
+        }
+        return isRu ? "\(s.vehiclesSynced) в облаке" : "\(s.vehiclesSynced) in cloud"
+    }
+
+    private func photosSummary(isRu: Bool) -> String {
+        let s = snapshot
+        var parts: [String] = []
+        parts.append(isRu ? "\(s.photosUploaded) загружено" : "\(s.photosUploaded) uploaded")
+        if s.photosPartial > 0 {
+            parts.append(isRu
+                ? "\(s.photosPartial) ждут Wi-Fi"
+                : "\(s.photosPartial) awaiting Wi-Fi")
+        }
+        if s.photosLocal > 0 {
+            parts.append(isRu
+                ? "\(s.photosLocal) только локально"
+                : "\(s.photosLocal) local only")
+        }
+        if s.photosFailed > 0 {
+            parts.append(isRu
+                ? "\(s.photosFailed) ошибка"
+                : "\(s.photosFailed) failed")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func settingsSummary(isRu: Bool) -> String {
+        if !snapshot.settingsExists {
+            return isRu ? "—" : "—"
+        }
+        return snapshot.settingsSynced
+            ? (isRu ? "синхронизировано" : "synced")
+            : (isRu ? "в очереди" : "pending")
+    }
+
+    private func loadSnapshot() {
+        let ctx = PersistenceController.shared.container.viewContext
+        ctx.perform {
+            var s = SyncCountSnapshot.empty
+
+            s.tripsSynced    = countEntity(TripEntity.self, ctx: ctx, syncStatus: SyncStatus.synced.rawValue)
+            s.tripsPending   = countEntity(TripEntity.self, ctx: ctx, syncStatus: SyncStatus.pendingUpload.rawValue)
+            s.vehiclesSynced = countEntity(VehicleEntity.self, ctx: ctx, syncStatus: SyncStatus.synced.rawValue)
+            s.vehiclesPending = countEntity(VehicleEntity.self, ctx: ctx, syncStatus: SyncStatus.pendingUpload.rawValue)
+
+            // Photos use a separate enum (PhotoUploadStatus), not SyncStatus.
+            s.photosUploaded = countPhoto(ctx: ctx, status: PhotoUploadStatus.uploaded.rawValue)
+            s.photosPartial  = countPhoto(ctx: ctx, status: PhotoUploadStatus.uploading.rawValue)
+            s.photosLocal    = countPhoto(ctx: ctx, status: PhotoUploadStatus.localOnly.rawValue)
+            s.photosFailed   = countPhoto(ctx: ctx, status: PhotoUploadStatus.failed.rawValue)
+
+            // Settings: there is at most one row per local user.
+            let settingsReq: NSFetchRequest<UserSettingsEntity> = UserSettingsEntity.fetchRequest()
+            settingsReq.fetchLimit = 1
+            if let row = try? ctx.fetch(settingsReq).first {
+                s.settingsExists = true
+                s.settingsSynced = row.syncStatus == SyncStatus.synced.rawValue
+            }
+
+            DispatchQueue.main.async { self.snapshot = s }
+        }
+    }
+}
+
+// MARK: - CoreData count helpers
+
+private func countEntity<T: NSManagedObject>(
+    _ type: T.Type, ctx: NSManagedObjectContext, syncStatus: Int16
+) -> Int {
+    let req = NSFetchRequest<T>(entityName: String(describing: type))
+    req.predicate = NSPredicate(format: "syncStatus == %d", syncStatus)
+    req.includesSubentities = false
+    return (try? ctx.count(for: req)) ?? 0
+}
+
+private func countPhoto(ctx: NSManagedObjectContext, status: Int16) -> Int {
+    let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+    req.predicate = NSPredicate(format: "uploadStatus == %d", status)
+    return (try? ctx.count(for: req)) ?? 0
 }

@@ -641,10 +641,12 @@ struct ProfileView: View {
         let isRu = lang.language == .ru
         let pending = syncQueue.pendingCount
         let syncing = syncQueue.isSyncing
-        // Tap is meaningful only when there's actually something to inspect:
-        // queued, in-flight, or recently failed. "Synced" / "Sync disabled"
-        // would open an empty sheet, so we leave them inert.
-        let isTappable = settings.cloudSyncEnabled && (pending > 0 || syncing)
+        // Always tappable when sync is on — even on "synced" the sheet is
+        // useful as a dashboard ("how much of my data is in the cloud?").
+        // When sync is disabled there's nothing meaningful to show, so we
+        // leave the pill inert; the user can enable sync via the dedicated
+        // Cloud Sync row below.
+        let isTappable = settings.cloudSyncEnabled
 
         HStack(spacing: 6) {
             if !settings.cloudSyncEnabled {
