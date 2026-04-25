@@ -51,3 +51,6 @@ Package.resolved
 *.mobileprovision
 *.cer
 /docs/internal/
+
+# Design prototypes / handoff (not part of iOS build)
+design/
