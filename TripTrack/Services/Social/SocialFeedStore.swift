@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import OSLog
 
 private let socialLog = Logger(subsystem: "com.triptrack", category: "social")
@@ -15,8 +16,22 @@ final class SocialFeedStore: ObservableObject {
     private var nextCursor: String?
     private var hasMore = true
     private var currentTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
 
-    private init() {}
+    private init() {
+        // Photo added/removed/uploaded somewhere in the app — refresh so each
+        // SocialFeedCardView's `photoCount` indicator updates without forcing
+        // pull-to-refresh. The notification is posted both at local-add time
+        // (TripRepository) and at upload-complete time (APISyncTransport) so
+        // we hit refresh once for the optimistic state and once when the
+        // server actually has the new photo.
+        NotificationCenter.default.publisher(for: .tripPhotosChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { _ in
+                Task { @MainActor [weak self] in await self?.refresh() }
+            }
+            .store(in: &cancellables)
+    }
 
     // MARK: - Load
 

@@ -253,6 +253,17 @@ final class APISyncTransport: SyncTransport {
         entity.lastModifiedAt = Date()
         entity.syncStatus = SyncStatus.synced.rawValue
         try? ctx.save()
+
+        // Server now has the photo. Re-broadcast so the social feed re-fetches
+        // — `TripRepository.addPhoto` posted the same notification at local
+        // add time, but that fired BEFORE the upload completed, so the server
+        // returned a stale `photoCount=0`. This second post happens after R2
+        // + DB are written, so the next refresh sees the real count.
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: .tripPhotosChanged, object: nil,
+                userInfo: ["tripId": tripIdValue])
+        }
     }
 }
 
