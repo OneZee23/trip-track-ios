@@ -101,8 +101,12 @@ final class SocialFeedStore: ObservableObject {
     private func fetchPage(replace: Bool) async {
         let req = SocialFeedRequest(limit: 20, cursor: nextCursor)
         do {
+            // `requiresAuth: false` for guests so APIClient skips the token
+            // header and the USER_NOT_AUTH retry. Server returns trending
+            // when no viewer is identified.
             let res: SocialFeedResponse = try await APIClient.shared.post(
-                APIEndpoint.socialFeed, body: req)
+                APIEndpoint.socialFeed, body: req,
+                requiresAuth: AuthService.shared.isSignedIn)
             try Task.checkCancellation()
             if replace {
                 trips = res.trips

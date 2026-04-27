@@ -156,7 +156,8 @@ struct SocialTripDetailView: View {
         defer { isLoadingReactions = false }
         do {
             let res: SocialReactionsResponse = try await APIClient.shared.post(
-                APIEndpoint.socialReactions, body: SocialUnreactRequest(tripId: trip.id))
+                APIEndpoint.socialReactions, body: SocialUnreactRequest(tripId: trip.id),
+                requiresAuth: AuthService.shared.isSignedIn)
             reactionEntries = res.reactions
         } catch {
             // Non-fatal — breakdown stays empty
@@ -169,7 +170,8 @@ struct SocialTripDetailView: View {
         do {
             let res: SocialTripPhotosResponse = try await APIClient.shared.post(
                 APIEndpoint.socialTripPhotos,
-                body: SocialTripPhotosRequest(tripId: trip.id))
+                body: SocialTripPhotosRequest(tripId: trip.id),
+                requiresAuth: AuthService.shared.isSignedIn)
             photos = res.photos
         } catch {
             // Non-fatal — photo strip just stays hidden.

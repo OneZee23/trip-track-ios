@@ -113,7 +113,8 @@ struct SuggestedUsersCarousel: View {
         do {
             let req = SocialSuggestedRequest(limit: 10)
             let res: SocialUsersResponse = try await APIClient.shared.post(
-                APIEndpoint.socialSuggested, body: req)
+                APIEndpoint.socialSuggested, body: req,
+                requiresAuth: AuthService.shared.isSignedIn)
             await MainActor.run { users = res.users }
         } catch {
             suggestedLog.error("suggested load failed: \(error.localizedDescription)")

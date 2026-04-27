@@ -749,7 +749,8 @@ struct PublicProfileView: View {
         countsLog.debug("loadProfile start id=\(idPrefix, privacy: .public) own=\(self.isOwnProfile, privacy: .public)")
         do {
             let p: SocialProfile = try await APIClient.shared.get(
-                APIEndpoint.userProfile(accountId.uuidString))
+                APIEndpoint.userProfile(accountId.uuidString),
+                requiresAuth: AuthService.shared.isSignedIn)
             countsLog.debug("loadProfile decoded id=\(idPrefix, privacy: .public) followerCount=\(p.followerCount, privacy: .public) followingCount=\(p.followingCount, privacy: .public) isFollowing=\(String(describing: p.isFollowing), privacy: .public)")
             if Task.isCancelled {
                 countsLog.debug("loadProfile cancelled AFTER decode id=\(idPrefix, privacy: .public) — NOT committing to @State")

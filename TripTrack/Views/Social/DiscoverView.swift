@@ -244,7 +244,8 @@ struct DiscoverView: View {
         do {
             let req = SocialSearchRequest(query: text, limit: 25)
             let res: SocialUsersResponse = try await APIClient.shared.post(
-                APIEndpoint.socialSearch, body: req)
+                APIEndpoint.socialSearch, body: req,
+                requiresAuth: AuthService.shared.isSignedIn)
             await MainActor.run { results = res.users }
         } catch {
             discoverLog.error("search failed: \(error.localizedDescription)")
@@ -257,7 +258,8 @@ struct DiscoverView: View {
         do {
             let req = SocialSuggestedRequest(limit: 10)
             let res: SocialUsersResponse = try await APIClient.shared.post(
-                APIEndpoint.socialSuggested, body: req)
+                APIEndpoint.socialSuggested, body: req,
+                requiresAuth: AuthService.shared.isSignedIn)
             await MainActor.run { suggested = res.users }
         } catch {
             discoverLog.error("suggested failed: \(error.localizedDescription)")

@@ -223,7 +223,9 @@ extension FollowListView {
         do {
             let endpoint = mode == .followers ? APIEndpoint.socialFollowers : APIEndpoint.socialFollowing
             let req = SocialFollowersRequest(accountId: accountId, limit: 100, offset: 0)
-            let res: SocialFollowersResponse = try await APIClient.shared.post(endpoint, body: req)
+            let res: SocialFollowersResponse = try await APIClient.shared.post(
+                endpoint, body: req,
+                requiresAuth: AuthService.shared.isSignedIn)
             users = res.users
             loadError = nil
         } catch {
