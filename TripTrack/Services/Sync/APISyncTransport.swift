@@ -202,19 +202,17 @@ final class APISyncTransport: SyncTransport {
               let filename = entity.filename,
               let tripIdValue = entity.trip?.id else { return }
 
-        guard let originalData = PhotoStorageService.photoData(filename: filename) else {
+        guard let originalData = PhotoStorageService.photoData(filename: filename),
+              let sourceImage = UIImage(data: originalData) else {
             entity.uploadStatus = PhotoUploadStatus.failed.rawValue
             try? ctx.save()
             return
         }
 
-        // Thumbnail always. Target ~5-12 KB: 200pt max-dimension at 1x scale
-        // (NOT screen scale — that's how thumbnails were ballooning to 1536px
-        // and 160 KB on retina devices) with quality 0.5 — feed cards render
-        // them at <120pt so even 200px is more than enough.
+        // Thumbnail target ~5-12 KB at 200pt @ scale 1.0. `resized` defaults
+        // to screen scale and was 3×-ing thumbnail size on retina devices.
         if entity.thumbnailURL == nil {
-            guard let uiImage = UIImage(data: originalData),
-                  let thumb = uiImage.resized(maxDimension: 200, scale: 1.0),
+            guard let thumb = sourceImage.resized(maxDimension: 200, scale: 1.0),
                   let thumbData = thumb.jpegData(compressionQuality: 0.5) else {
                 entity.uploadStatus = PhotoUploadStatus.failed.rawValue
                 try? ctx.save()
@@ -222,28 +220,27 @@ final class APISyncTransport: SyncTransport {
             }
             let r = try await photos.uploadPhotoPart(
                 tripId: tripIdValue, photoId: id, type: .thumbnail,
-                data: thumbData, caption: entity.caption, timestamp: entity.timestamp ?? Date())
+                data: thumbData, caption: entity.caption, timestamp: entity.timestamp ?? Date(),
+                metadataAlreadyClean: true)
             entity.thumbnailURL = r.url
         }
 
-        // Original only on Wi-Fi. Re-encode capped at 1920pt (more than enough
-        // for full-screen review on any iPhone) at quality 0.8 so we don't
-        // upload 4-8 MB iPhone source files straight to R2 and burn the free
-        // tier in a month. If the source was already small the cap is a no-op.
+        // Original capped at 1920pt @ quality 0.8 so we don't upload 4-8 MB
+        // iPhone source files straight to R2. If the source is already
+        // smaller than the re-encode, ship it as-is.
         if entity.remoteURL == nil && CacheManager.shared.isOnWiFi {
-            guard let uiImage = UIImage(data: originalData),
-                  let bounded = uiImage.resized(maxDimension: 1920, scale: 1.0),
+            guard let bounded = sourceImage.resized(maxDimension: 1920, scale: 1.0),
                   let boundedData = bounded.jpegData(compressionQuality: 0.8) else {
                 entity.uploadStatus = PhotoUploadStatus.failed.rawValue
                 try? ctx.save()
                 return
             }
-            // Skip the re-encode if we'd actually make the file larger (rare
-            // but possible with small sources or already-aggressive sources).
-            let payload = boundedData.count < originalData.count ? boundedData : originalData
+            let useReEncoded = boundedData.count < originalData.count
+            let payload = useReEncoded ? boundedData : originalData
             let r = try await photos.uploadPhotoPart(
                 tripId: tripIdValue, photoId: id, type: .original,
-                data: payload, caption: entity.caption, timestamp: entity.timestamp ?? Date())
+                data: payload, caption: entity.caption, timestamp: entity.timestamp ?? Date(),
+                metadataAlreadyClean: useReEncoded)
             entity.remoteURL = r.url
         }
 

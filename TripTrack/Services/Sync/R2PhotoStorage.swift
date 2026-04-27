@@ -61,14 +61,18 @@ final class R2PhotoStorage: RemotePhotoStorage {
 
     func uploadPhotoPart(
         tripId: UUID, photoId: UUID, type: PhotoType,
-        data: Data, caption: String?, timestamp: Date
+        data: Data, caption: String?, timestamp: Date,
+        metadataAlreadyClean: Bool = false
     ) async throws -> PhotoUploadResponse {
-        let cleanData = stripImageMetadata(data)
+        // `UIImage.draw` (used by the resize path in APISyncTransport) emits
+        // pixel-only JPEGs with no EXIF/GPS to begin with — re-decoding via
+        // CGImageSource just to copy nothing is ~50-200 ms wasted per upload.
+        let cleanData = metadataAlreadyClean ? data : stripImageMetadata(data)
         var fields: [(name: String, value: String)] = [
             ("tripId", tripId.uuidString),
             ("photoId", photoId.uuidString),
             ("type", type.rawValue),
-            ("timestamp", ISO8601DateFormatter().string(from: timestamp))
+            ("timestamp", Self.iso8601.string(from: timestamp))
         ]
         if let caption = caption { fields.append(("caption", caption)) }
         return try await client.uploadMultipart(
@@ -77,6 +81,8 @@ final class R2PhotoStorage: RemotePhotoStorage {
             file: (name: "file", filename: "photo.jpg", mimeType: "image/jpeg", data: cleanData)
         )
     }
+
+    private static let iso8601 = ISO8601DateFormatter()
 
     func fetchPresignedURL(photoId: UUID, type: PhotoType) async throws -> URL {
         let res: PhotoURLResponse = try await client.post(
