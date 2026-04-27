@@ -16,8 +16,12 @@ final class SettingsManager: ObservableObject {
     // User identity (local UUID, persisted in UserSettingsEntity.id)
     @Published private(set) var localUserId: UUID = UUID()
 
-    // Cloud sync toggle. UserDefaults persisted. Default true — once signed in user opts in.
-    @Published var cloudSyncEnabled: Bool = UserDefaults.standard.object(forKey: "com.triptrack.settings.cloudSyncEnabled") as? Bool ?? true {
+    // Cloud sync toggle. UserDefaults persisted. Default `false` — TripTrack
+    // is privacy-first; nothing leaves the device until the user opts in.
+    // For existing installs that had it on, `migrateCloudSyncToOptIn()` flips
+    // them to false on the upgrade so previously-cached `true` doesn't bypass
+    // the new default.
+    @Published var cloudSyncEnabled: Bool = UserDefaults.standard.object(forKey: "com.triptrack.settings.cloudSyncEnabled") as? Bool ?? false {
         didSet { UserDefaults.standard.set(cloudSyncEnabled, forKey: "com.triptrack.settings.cloudSyncEnabled") }
     }
 
@@ -72,12 +76,36 @@ final class SettingsManager: ObservableObject {
 
     init(persistenceController: PersistenceController = .shared) {
         self.persistenceController = persistenceController
+        migrateCloudSyncToOptIn()
         loadAutoRecordSettings()
         loadSettings()
         persistenceController.migrateUserIdIfNeeded(userId: localUserId)
         loadVehicles()
         ensureDefaultVehicle()
         migrateDefaultVehicleName()
+    }
+
+    /// One-shot privacy-default migration. Existing installs may have
+    /// `cloudSyncEnabled = true` cached in UserDefaults from before TripTrack
+    /// switched to opt-in sync. On first launch after the update we force it
+    /// to false so no data leaves the device until the user explicitly turns
+    /// sync on. The pending sync queue is preserved — re-enabling sync later
+    /// resumes from where we stopped. Server-side data (already-uploaded
+    /// trips/photos) is untouched; only new pushes are paused.
+    private func migrateCloudSyncToOptIn() {
+        let key = "com.triptrack.settings.cloudSyncOptInMigrationV1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        cloudSyncEnabled = false
+        // Re-show the GDPR-style consent next time the user toggles sync on
+        // — the contract changed (now strictly opt-in), so prior consent
+        // shouldn't carry over silently.
+        UserDefaults.standard.set(false, forKey: "com.triptrack.sync.firstToggleShown")
+        // Drain any sync ops queued before the migration so we don't fire
+        // them off the moment the user re-enables sync from a stale state.
+        // SyncQueue is @MainActor; settings init is also called on the main
+        // thread during app launch, so the hop is just for actor isolation.
+        Task { @MainActor in SyncQueue.shared.clearAll() }
+        UserDefaults.standard.set(true, forKey: key)
     }
 
     // MARK: - Auto-record Settings
