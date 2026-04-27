@@ -41,6 +41,7 @@ struct ProfileView: View {
     /// path lets us reset depth to 0 when the sheet closes without touching
     /// the preview flow's path.
     @State private var followListPath: [ProfilePreviewDest] = []
+    @State private var signInPrompt: SignInPromptSheet.Action?
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -51,6 +52,10 @@ struct ProfileView: View {
         ScrollView {
             VStack(spacing: 16) {
                 avatarCard(c)
+
+                if !auth.isSignedIn {
+                    guestSignInCard(c, isRu: isRu)
+                }
 
                 // Driver Level Card
                 DriverLevelView(
@@ -247,6 +252,14 @@ struct ProfileView: View {
             DebugLogsView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
+        }
+        .sheet(item: $signInPrompt) { action in
+            SignInPromptSheet(action: action)
+                .environmentObject(lang)
+                .environmentObject(auth)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showVehicleDetail) {
             if let vehicle = selectedVehicle {
@@ -467,6 +480,41 @@ struct ProfileView: View {
 
     private static let heroAvatarSize: CGFloat = 108
     private static let heroBannerHeight: CGFloat = 150
+
+    /// Inline Sign-in CTA shown to guests at the top of ProfileView. Tap opens
+    /// the same `SignInPromptSheet` used elsewhere — keeps the sign-in UX
+    /// consistent across reaction/follow/share gates.
+    private func guestSignInCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        Button {
+            Haptics.tap()
+            signInPrompt = .generic
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .font(.system(size: 26))
+                    .foregroundStyle(AppTheme.accent)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(isRu ? "Войдите в TripTrack" : "Sign in to TripTrack")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(c.text)
+                    Text(isRu
+                         ? "Синхронизация, реакции, подписки — через Apple ID."
+                         : "Cloud sync, reactions, follows — with Apple ID.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
+    }
 
     private func avatarCard(_ c: AppTheme.Colors) -> some View {
         let bg = ProfileBackground.from(settings.profileBackground)

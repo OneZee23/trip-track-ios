@@ -15,6 +15,8 @@ struct SuggestedUsersCarousel: View {
     @State private var followed: Set<UUID> = []
     @State private var pendingFollow: Set<UUID> = []
     @State private var didLoad = false
+    @State private var signInPrompt: SignInPromptSheet.Action?
+    @ObservedObject private var auth = AuthService.shared
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -81,6 +83,10 @@ struct SuggestedUsersCarousel: View {
         let isPending = pendingFollow.contains(user.id)
         return Button {
             Haptics.selection()
+            guard auth.isSignedIn else {
+                signInPrompt = .follow
+                return
+            }
             Task { await toggleFollow(user.id) }
         } label: {
             Group {

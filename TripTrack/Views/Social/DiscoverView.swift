@@ -19,6 +19,8 @@ struct DiscoverView: View {
     /// which let depth compound past 4 and exposed the SwiftUI back-button flash.
     @State private var authorPath: [ProfilePreviewDest] = []
     @State private var searchTask: Task<Void, Never>?
+    @State private var signInPrompt: SignInPromptSheet.Action?
+    @ObservedObject private var auth = AuthService.shared
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -59,6 +61,13 @@ struct DiscoverView: View {
             }
         }
         .task { await loadSuggested() }
+        .sheet(item: $signInPrompt) { action in
+            SignInPromptSheet(action: action)
+                .environmentObject(lang)
+                .environmentObject(auth)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     // MARK: - Search field
@@ -204,6 +213,10 @@ struct DiscoverView: View {
         let isFollowed = followedIds.contains(user.id)
         return Button {
             Haptics.selection()
+            guard auth.isSignedIn else {
+                signInPrompt = .follow
+                return
+            }
             Task { await toggleFollow(for: user.id) }
         } label: {
             Text(isFollowed

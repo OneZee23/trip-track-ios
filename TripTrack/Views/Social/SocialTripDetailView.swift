@@ -16,6 +16,8 @@ struct SocialTripDetailView: View {
     var pushPath: Binding<[ProfilePreviewDest]>?
 
     @EnvironmentObject private var lang: LanguageManager
+    @ObservedObject private var auth = AuthService.shared
+    @State private var signInPrompt: SignInPromptSheet.Action?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var socialFeed = SocialFeedStore.shared
@@ -148,6 +150,13 @@ struct SocialTripDetailView: View {
             async let r: Void = loadReactions()
             async let p: Void = loadPhotos()
             _ = await (r, p)
+        }
+        .sheet(item: $signInPrompt) { action in
+            SignInPromptSheet(action: action)
+                .environmentObject(lang)
+                .environmentObject(auth)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -409,6 +418,10 @@ struct SocialTripDetailView: View {
         let isMine = trip.myReaction == emoji
         return Button {
             Haptics.selection()
+            guard auth.isSignedIn else {
+                signInPrompt = .react
+                return
+            }
             // Toggle + re-fetch chained in one task so `/social/reactions`
             // only fires after the `/social/react` write commits. Firing them
             // in parallel (prior bug) meant the fetch returned stale data —

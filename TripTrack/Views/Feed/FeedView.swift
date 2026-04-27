@@ -30,6 +30,7 @@ struct FeedView: View {
     @State private var reactionPickerTrip: SocialFeedTrip?
     @State private var showDiscover = false
     @State private var shareSheetData: (data: StoryShareData, url: String)?
+    @State private var signInPrompt: SignInPromptSheet.Action?
 
     init(tripManager: TripManager, selectedTab: Binding<Int>) {
         _feedVM = StateObject(wrappedValue: FeedViewModel(tripManager: tripManager))
@@ -65,7 +66,7 @@ struct FeedView: View {
                 // bounces by default, which shows the black background on edges.
                 .background(PageViewBounceDisabler())
                 .onChange(of: feedMode) { _, newMode in
-                    if newMode == .all, auth.isSignedIn {
+                    if newMode == .all {
                         Task { await socialFeed.refresh() }
                     } else if newMode == .mine {
                         feedVM.language = lang.language
@@ -135,8 +136,10 @@ struct FeedView: View {
                 // switching Лента ↔ Мои.
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        if auth.isSignedIn { showDiscover = true }
-                        else { showProfile = true }
+                        // Discover (search + suggested) works for guests too —
+                        // the social API endpoints are public-readable. Only
+                        // tapping Follow inside opens the sign-in prompt.
+                        showDiscover = true
                     } label: {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 16, weight: .semibold))
@@ -164,16 +167,17 @@ struct FeedView: View {
             // user scrolls, so the cost stays bounded even with a large feed.
             feedVM.language = lang.language
             feedVM.loadTrips()
-            if auth.isSignedIn {
-                Task { await socialFeed.refresh() }
-            }
+            // Refresh public/social feed for guests too — the server returns
+            // a trending list when there's no viewer, so the Лента tab is
+            // never empty just because the user isn't signed in.
+            Task { await socialFeed.refresh() }
             feedVM.retryGeocodingIfNeeded()
         }
-        .onChange(of: auth.isSignedIn) { _, newValue in
-            // User just signed in — load combined feed
-            if newValue, socialFeed.trips.isEmpty {
-                Task { await socialFeed.refresh() }
-            }
+        .onChange(of: auth.isSignedIn) { _, _ in
+            // Sign-in state flipped (in either direction) — re-fetch so the
+            // feed switches between personalized (followed users) and
+            // trending without a manual pull.
+            Task { await socialFeed.refresh() }
         }
         .sheet(isPresented: $feedVM.showFilters) {
             FilterSheetView(
@@ -225,6 +229,14 @@ struct FeedView: View {
         }
         .sheet(isPresented: $showProfile) {
             ProfileView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .sheet(item: $signInPrompt) { action in
+            SignInPromptSheet(action: action)
+                .environmentObject(lang)
+                .environmentObject(auth)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
@@ -325,7 +337,7 @@ struct FeedView: View {
             if !wasActive {
                 NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
             }
-            if mode == .all, auth.isSignedIn {
+            if mode == .all {
                 Task { await socialFeed.refresh() }
             } else if mode == .mine {
                 feedVM.language = lang.language
@@ -356,20 +368,19 @@ struct FeedView: View {
             ScrollView {
                 LazyVStack(spacing: 6) {
                     Color.clear.frame(height: 0).id("feedTopAll")
-                    if auth.isSignedIn {
-                        socialFeedContent(c).padding(.top, 6)
-                    } else {
-                        guestFriendsState(c).padding(.top, 6)
+                    if !auth.isSignedIn {
+                        guestSignInBanner(c)
+                            .padding(.horizontal, 0)
+                            .padding(.top, 6)
                     }
+                    socialFeedContent(c).padding(.top, 6)
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
             .background(c.bg)
-            .refreshable {
-                if auth.isSignedIn { await socialFeed.refresh() }
-            }
+            .refreshable { await socialFeed.refresh() }
             .onReceive(NotificationCenter.default.publisher(for: .feedScrollToTop)) { _ in
                 if !authorPath.isEmpty { authorPath.removeAll() }
                 else {
@@ -470,12 +481,20 @@ struct FeedView: View {
                         }
                     },
                     onTapAuthor: { authorPath.cappedAppend(.profile(trip.author.id, trip.author)) },
-                    onLongPress: { reactionPickerTrip = trip },
+                    onLongPress: {
+                        if auth.isSignedIn { reactionPickerTrip = trip }
+                        else { signInPrompt = .react }
+                    },
                     onReact: { emoji in
-                        Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
+                        if auth.isSignedIn {
+                            Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
+                        } else {
+                            signInPrompt = .react
+                        }
                     },
                     onShare: {
-                        shareSocialTrip(trip)
+                        if auth.isSignedIn { shareSocialTrip(trip) }
+                        else { signInPrompt = .share }
                     }
                 )
                 .onAppear {
@@ -497,47 +516,34 @@ struct FeedView: View {
         }
     }
 
-    private func guestFriendsState(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
-        return VStack(spacing: 16) {
-            PixelCarLoader(label: nil, height: 100)
-                .allowsHitTesting(false)
-                .padding(.top, 24)
-
-            VStack(spacing: 8) {
-                Text(isRu ? "Друзья в TripTrack" : "Friends on TripTrack")
-                    .font(.system(size: 20, weight: .heavy))
-                    .tracking(-0.2)
-                    .foregroundStyle(c.text)
-                Text(isRu
-                     ? "Войдите через Apple ID, чтобы подписаться на друзей и видеть их поездки."
-                     : "Sign in with Apple to follow friends and see their trips.")
-                    .font(.system(size: 14))
-                    .foregroundStyle(c.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
-
-            Button {
-                Haptics.tap()
-                showProfile = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "apple.logo")
-                        .font(.system(size: 14))
-                    Text(isRu ? "Войти через Apple" : "Sign in with Apple")
+    /// Compact "Sign in to follow & react" pill at the top of the public feed
+    /// for guests. Replaces the old full-screen empty state — the feed is now
+    /// genuinely populated (trending public trips), so we just want a low-key
+    /// reminder that signing in unlocks personal interactions.
+    private func guestSignInBanner(_ c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            signInPrompt = .generic
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(AppTheme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AppStrings.guestFeedBanner(lang.language))
                         .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .multilineTextAlignment(.leading)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(Color.black, in: Capsule())
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
             }
-            .buttonStyle(.plain)
-            .padding(.top, 4)
+            .padding(14)
+            .surfaceCard(cornerRadius: 14)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
+        .buttonStyle(.plain)
     }
 
     private func socialErrorState(_ c: AppTheme.Colors, isRu: Bool) -> some View {

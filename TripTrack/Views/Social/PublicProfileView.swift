@@ -43,6 +43,7 @@ struct PublicProfileView: View {
     /// only one request's response can commit to `profile`, preventing the
     /// last-completion-wins race between pull-to-refresh and error recovery.
     @State private var loadTask: Task<Void, Never>?
+    @State private var signInPrompt: SignInPromptSheet.Action?
 
     /// True when this view is rendering the signed-in user's own profile
     /// (e.g. "preview as others see you"). Hides Follow/Block/Report actions.
@@ -166,6 +167,13 @@ struct PublicProfileView: View {
             Task { await refresh() }
         }
         .refreshable { await refresh() }
+        .sheet(item: $signInPrompt) { action in
+            SignInPromptSheet(action: action)
+                .environmentObject(lang)
+                .environmentObject(auth)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
         .overlay {
             if let badge = selectedBadge {
                 BadgeDetailOverlay(
@@ -198,6 +206,10 @@ struct PublicProfileView: View {
                     : (lang.language == .ru ? "Заблокировать" : "Block"),
                 role: .destructive
             ) {
+                guard auth.isSignedIn else {
+                    signInPrompt = .generic
+                    return
+                }
                 Task { await toggleBlock() }
             }
         } message: {
@@ -290,6 +302,10 @@ struct PublicProfileView: View {
         let isFollowing = profile?.isFollowing ?? false
         Button {
             Haptics.action()
+            guard auth.isSignedIn else {
+                signInPrompt = .follow
+                return
+            }
             Task { await toggleFollow() }
         } label: {
             HStack(spacing: 6) {

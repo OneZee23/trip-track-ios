@@ -657,6 +657,41 @@ enum AppStrings {
         }
     }
 
+    // MARK: - Sign-in prompt sheet
+
+    static func signInPromptReact(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войдите чтобы реагировать" : "Sign in to react"
+    }
+    static func signInPromptFollow(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войдите чтобы подписаться" : "Sign in to follow"
+    }
+    static func signInPromptShare(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войдите чтобы поделиться" : "Sign in to share"
+    }
+    static func signInPromptSync(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войдите для синхронизации" : "Sign in to sync"
+    }
+    static func signInPromptPublish(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войдите чтобы опубликовать" : "Sign in to publish"
+    }
+    static func signInPromptGeneric(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войдите в TripTrack" : "Sign in to TripTrack"
+    }
+    static func signInPromptSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Через Apple ID. Без паролей и регистраций. Ваш автодневник остаётся приватным — Вы сами решаете, что выкладывать."
+            : "Sign in with Apple. No passwords, no email confirmations. Your driving log stays private — you choose what to publish."
+    }
+
+    // MARK: - Guest mode banners / CTAs
+
+    static func guestFeedBanner(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войдите чтобы подписываться и реагировать" : "Sign in to follow and react"
+    }
+    static func signInWithApple(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войти" : "Sign in"
+    }
+
     // MARK: - Entity / action labels (used by sync status sheet)
 
     static func entityLabel(_ type: String, _ lang: LanguageManager.Language) -> String {
