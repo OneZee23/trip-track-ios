@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreData
 
 struct CloudSyncView: View {
     @EnvironmentObject private var lang: LanguageManager
