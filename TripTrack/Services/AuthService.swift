@@ -67,6 +67,16 @@ final class AuthService: ObservableObject {
         if userName == nil {
             userName = KeychainHelper.loadString(key: Keys.userName)
         }
+        // Reddit-style fallback: Apple Sign In returns `fullName` only on
+        // the very first authorization for an Apple ID. Re-sign-in (after
+        // delete-account, hide-my-email, or token revoke) leaves us with
+        // `null` — generate a road-trip-themed placeholder so the user has
+        // an identity from the start. They can rename via profile header.
+        if userName == nil {
+            let generated = RandomDisplayName.generate(language: LanguageManager.currentLanguage)
+            try? KeychainHelper.saveString(generated, for: Keys.userName)
+            userName = generated
+        }
 
         if let email = credential.email {
             try? KeychainHelper.saveString(email, for: Keys.userEmail)
