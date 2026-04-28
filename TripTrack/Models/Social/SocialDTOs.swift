@@ -10,6 +10,13 @@ struct SocialAuthor: Codable, Hashable {
     let profileLevel: Int
 }
 
+/// Lightweight vehicle metadata shipped on each feed item — name + avatar
+/// emoji is enough for the card's small "what car was this in?" line.
+struct SocialFeedVehicle: Codable, Hashable {
+    let name: String
+    let avatarEmoji: String
+}
+
 // MARK: - Feed
 
 struct SocialFeedRequest: Codable {
@@ -44,6 +51,11 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     // local save and server-side `/social/feed` re-render.
     var photoCount: Int
     var firstPhotoThumbnail: String?
+    /// Vehicle name + avatar that the trip was recorded in. Server-rendered
+    /// for every trip in the feed so own and others' cards share the same
+    /// "what car was this in?" line — no more silently hiding it for non-self
+    /// authors.
+    let vehicle: SocialFeedVehicle?
     let reactionCount: Int
     let reactionBreakdown: [ReactionTally]
     let myReaction: String?

@@ -188,18 +188,23 @@ struct SocialFeedCardView: View {
                     c: c
                 )
             }
-            // Vehicle metadata sits BELOW the metrics row on own trips —
-            // it's no longer the identity (avatar handles that) but stays
-            // visible as "what car was this trip in". Only renders for
-            // own trips because we have local Vehicle data for those.
-            if isOwn, let v = ownVehicle {
+            // Vehicle metadata sits BELOW the metrics row on every trip —
+            // server now returns it on `SocialFeedTrip.vehicle` for own and
+            // others' alike, so cards stay visually identical regardless of
+            // who recorded the trip. The "what car was this in?" line is
+            // metadata, not identity (the avatar slot handles identity).
+            if let v = trip.vehicle {
                 let trimmedName = v.name.trimmingCharacters(in: .whitespaces)
                 if !trimmedName.isEmpty {
                     HStack(spacing: 6) {
-                        if v.isPixelAvatar {
-                            v.avatarView(size: 14)
+                        // Pixel-avatar PNGs only exist locally for the
+                        // signed-in user's own vehicles. For other authors
+                        // we always have the server-stored emoji column,
+                        // which renders cleanly regardless of pixel/emoji.
+                        if isOwn, let local = ownVehicle, local.isPixelAvatar {
+                            local.avatarView(size: 14)
                         } else {
-                            Text(v.avatarEmoji ?? "🚗")
+                            Text(v.avatarEmoji)
                                 .font(.system(size: 12))
                         }
                         Text(trimmedName)

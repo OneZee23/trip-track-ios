@@ -212,6 +212,11 @@ final class AuthService: ObservableObject {
             let _: EmptyResponse = try await APIClient.shared.post(
                 APIEndpoint.profileUpdate, body: req)
             authLog.log("profile synced to server")
+            // Feed cards cache `displayName` from `/social/feed`; without a
+            // refresh after the profile push, an account that just got a
+            // backfilled name (or renamed via long-press) keeps showing the
+            // old "No name" / placeholder until the next pull-to-refresh.
+            await SocialFeedStore.shared.refresh()
         } catch {
             authLog.error("profile sync failed: \(error.localizedDescription)")
         }
