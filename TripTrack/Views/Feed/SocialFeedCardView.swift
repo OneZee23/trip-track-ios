@@ -304,10 +304,9 @@ struct SocialFeedCardView: View {
     // MARK: - Formatters
 
     private func dateRegionText(isRu: Bool) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: isRu ? "ru_RU" : "en_US")
-        formatter.dateFormat = "d MMM"
-        var result = formatter.string(from: trip.startDate)
+        var result = RelativeTripDate.string(
+            from: trip.startDate,
+            language: isRu ? .ru : .en)
         if let r = trip.region, !r.isEmpty {
             result += " · \(r)"
         }

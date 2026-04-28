@@ -190,7 +190,7 @@ struct FeedTripCardView: View {
     }
 
     private var formattedDateShort: String {
-        var result = FeedCardDateFormatter.formatter(for: lang.language).string(from: trip.startDate)
+        var result = RelativeTripDate.string(from: trip.startDate, language: lang.language)
         if let region = trip.region {
             result += " · \(region)"
         }
