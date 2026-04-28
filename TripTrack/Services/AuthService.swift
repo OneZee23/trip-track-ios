@@ -278,5 +278,17 @@ final class AuthService: ObservableObject {
         userName = KeychainHelper.loadString(key: Keys.userName)
         userEmail = KeychainHelper.loadString(key: Keys.userEmail)
         isSignedIn = KeychainHelper.loadString(key: Keys.isSignedIn) != nil && userIdentifier != nil
+
+        // Backfill for accounts created before the random-name fallback
+        // existed: signed-in with no name (Apple Sign In didn't redeliver
+        // it after delete-account → re-sign-in) — generate one and push to
+        // the server. New accounts hit the same code in `handleAuthorization`
+        // before reaching login; this branch only fires on app launch.
+        if isSignedIn, (userName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
+            let generated = RandomDisplayName.generate(language: LanguageManager.currentLanguage)
+            try? KeychainHelper.saveString(generated, for: Keys.userName)
+            userName = generated
+            Task { @MainActor in await syncProfileToServer() }
+        }
     }
 }
