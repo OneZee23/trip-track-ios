@@ -218,23 +218,37 @@ struct SocialFeedCardView: View {
     private func actionBar(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 6) {
             if trip.reactionBreakdown.isEmpty {
-                // No reactions yet — show a single "add reaction" pill
-                Button {
-                    Haptics.selection()
-                    onLongPress?()
-                } label: {
+                if isOwn {
+                    // Own trips can't be self-reacted (Strava rule). Replace
+                    // the "React" CTA with quiet "no reactions yet" copy so
+                    // the empty state isn't a button that does nothing.
                     HStack(spacing: 6) {
-                        Image(systemName: "face.smiling")
+                        Image(systemName: "face.dashed")
                             .font(.system(size: 13, weight: .medium))
-                        Text(lang.language == .ru ? "Реакция" : "React")
+                        Text(lang.language == .ru ? "Пока нет реакций" : "No reactions yet")
                             .font(.system(size: 12, weight: .semibold))
                     }
-                    .foregroundStyle(c.textSecondary)
+                    .foregroundStyle(c.textTertiary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(c.cardAlt.opacity(0.6)))
+                } else {
+                    Button {
+                        Haptics.selection()
+                        onLongPress?()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "face.smiling")
+                                .font(.system(size: 13, weight: .medium))
+                            Text(lang.language == .ru ? "Реакция" : "React")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(c.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(c.cardAlt.opacity(0.6)))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             } else {
                 // Show only the top-3 most popular reactions in the card — anything
                 // extra lives in the trip detail's full reactions breakdown. Keeps the
@@ -247,17 +261,23 @@ struct SocialFeedCardView: View {
                     ForEach(Array(top), id: \.emoji) { tally in
                         reactionTallyPill(tally, c: c)
                     }
-                    Button {
-                        Haptics.selection()
-                        onLongPress?()
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(c.textSecondary)
-                            .frame(width: 28, height: 28)
-                            .background(Capsule().fill(c.cardAlt.opacity(0.6)))
+                    // "+" pill that opens the reaction palette is meaningless
+                    // for owners — they can't react to their own trip. Hide it
+                    // and let them tap any tally pill to see *who* reacted
+                    // instead (handled below in `reactionTallyPill`).
+                    if !isOwn {
+                        Button {
+                            Haptics.selection()
+                            onLongPress?()
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(c.textSecondary)
+                                .frame(width: 28, height: 28)
+                                .background(Capsule().fill(c.cardAlt.opacity(0.6)))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
 
@@ -279,6 +299,11 @@ struct SocialFeedCardView: View {
     private func reactionTallyPill(_ tally: ReactionTally, c: AppTheme.Colors) -> some View {
         let isMine = trip.myReaction == tally.emoji
         return Button {
+            // Owner can't toggle their own reaction (Strava rule). Future
+            // enhancement: tap should open the list of who reacted; for now
+            // it's a no-op so we don't accidentally fire `onReact` from the
+            // owner side and trigger a 4xx.
+            guard !isOwn else { return }
             Haptics.selection()
             onReact?(tally.emoji)
         } label: {

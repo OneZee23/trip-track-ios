@@ -82,11 +82,20 @@ struct FeedTripCardView: View {
                 }
 
             VStack(alignment: .leading, spacing: 2) {
-                if let name = vehicleName, !name.isEmpty {
-                    Text(name)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
+                HStack(spacing: 6) {
+                    if let name = vehicleName, !name.isEmpty {
+                        Text(name)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(c.text)
+                            .lineLimit(1)
+                    }
+                    if trip.isPrivate {
+                        // Visual cue that the trip is local-only — drives
+                        // recognition that publishing unlocks reactions /
+                        // shares from followers. Tap of the whole card
+                        // opens detail where the privacy toggle lives.
+                        privacyPill(c)
+                    }
                 }
                 Text(formattedDateShort)
                     .font(.system(size: 11))
@@ -110,6 +119,20 @@ struct FeedTripCardView: View {
                 .background(c.cardAlt, in: Capsule())
             }
         }
+    }
+
+    private func privacyPill(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return HStack(spacing: 3) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 8, weight: .bold))
+            Text(isRu ? "Только Вы" : "Only you")
+                .font(.system(size: 10, weight: .bold))
+        }
+        .foregroundStyle(.orange)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Color.orange.opacity(0.15), in: Capsule())
     }
 
     // MARK: - Map Section

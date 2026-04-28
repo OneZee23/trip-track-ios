@@ -539,6 +539,21 @@ struct TripDetailView: View {
                 name: .tripPrivacyChanged,
                 object: PrivacyChangePayload(tripId: tripId, isPrivate: newValue)
             )
+            // Celebrate the user's first-ever publish — once-per-app via
+            // UserDefaults flag. Subsequent toggles are quiet (the pill
+            // colour change is enough). Strava's "share to earn kudos"
+            // coaching cites ~3× engagement on photo-bearing trips, so we
+            // lead with that hint after celebrating.
+            let wentPublic = newValue == false
+            let firstPublishKey = "com.triptrack.firstPublishToastShown"
+            if wentPublic && !UserDefaults.standard.bool(forKey: firstPublishKey) {
+                UserDefaults.standard.set(true, forKey: firstPublishKey)
+                toastItem = ToastItem(
+                    type: .success,
+                    message: lang.language == .ru
+                        ? "Первая публичная поездка! Поездки с фото получают больше реакций"
+                        : "Your first public trip! Trips with photos get more reactions")
+            }
         }
     }
 

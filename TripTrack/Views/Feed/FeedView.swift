@@ -482,10 +482,15 @@ struct FeedView: View {
                     },
                     onTapAuthor: { authorPath.cappedAppend(.profile(trip.author.id, trip.author)) },
                     onLongPress: {
+                        // Owners can't react to their own trip (Strava rule)
+                        // — long-press becomes a no-op there instead of
+                        // surfacing a useless emoji palette.
+                        guard !isOwn else { return }
                         if auth.isSignedIn { reactionPickerTrip = trip }
                         else { signInPrompt = .react }
                     },
                     onReact: { emoji in
+                        guard !isOwn else { return }
                         if auth.isSignedIn {
                             Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
                         } else {

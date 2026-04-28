@@ -416,12 +416,17 @@ struct SocialTripDetailView: View {
 
     private func reactionPill(_ emoji: String, c: AppTheme.Colors) -> some View {
         let isMine = trip.myReaction == emoji
+        let isOwnTrip = trip.author.id == TokenStore.shared.accountId
         return Button {
             Haptics.selection()
             guard auth.isSignedIn else {
                 signInPrompt = .react
                 return
             }
+            // Owners can't react to their own trip (Strava rule). The pills
+            // still render so the user sees what reactions ARE possible —
+            // they just don't fire on tap.
+            guard !isOwnTrip else { return }
             // Toggle + re-fetch chained in one task so `/social/reactions`
             // only fires after the `/social/react` write commits. Firing them
             // in parallel (prior bug) meant the fetch returned stale data —
