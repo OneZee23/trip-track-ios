@@ -59,14 +59,26 @@ struct ProfileView: View {
                     guestSignInCard(c, isRu: isRu)
                 }
 
-                // Driver Level Card
-                DriverLevelView(
-                    xp: settings.profileXP,
-                    level: settings.profileLevel
-                )
+                // First-launch welcome — when the user has yet to record any
+                // trip, the stats row and driver-level card show zeros which
+                // reads as broken/sparse. Replace the stats stack below with
+                // a single inviting CTA that takes them to Tracking. Once
+                // they have ≥1 trip everything reverts to the normal layout.
+                if mapVM.cachedTripCount == 0 {
+                    firstTripWelcomeCard(c, isRu: isRu)
+                }
 
-                // Quick stats row
-                quickStatsRow(c, isRu: isRu)
+                // Driver Level + Quick stats hidden until the user has at
+                // least one trip — empty zeros read as broken on a fresh
+                // install. The welcome card above takes their place.
+                if mapVM.cachedTripCount > 0 {
+                    DriverLevelView(
+                        xp: settings.profileXP,
+                        level: settings.profileLevel
+                    )
+
+                    quickStatsRow(c, isRu: isRu)
+                }
 
                 // Social followers/following (signed in only). The hero card
                 // above is itself tappable for "Preview as others see you" —
@@ -479,6 +491,47 @@ struct ProfileView: View {
 
     private static let heroAvatarSize: CGFloat = 108
     private static let heroBannerHeight: CGFloat = 150
+
+    /// Friendly empty-state replacement for the stats row + driver-level
+    /// stack on first-launch (cachedTripCount == 0). Tap routes to the
+    /// Tracking tab so the user lands directly on the record screen — that's
+    /// the one action that matters before they have any data.
+    private func firstTripWelcomeCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        Button {
+            Haptics.tap()
+            NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
+        } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.accentBg)
+                        .frame(width: 52, height: 52)
+                    Image(systemName: "car.side.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(isRu ? "Запишите первую поездку" : "Record your first trip")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(c.text)
+                    Text(isRu
+                         ? "Здесь будут Ваши километры, серии и бейджи."
+                         : "Your kilometers, streaks and badges will appear here.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
+    }
 
     /// Inline Sign-in CTA shown to guests at the top of ProfileView. Tap opens
     /// the same `SignInPromptSheet` used elsewhere — keeps the sign-in UX

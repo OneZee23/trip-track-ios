@@ -81,12 +81,17 @@ struct SyncStatusSheetView: View {
                     }
 
                     if isEmpty {
-                        Text(AppStrings.syncStatusEmpty(lang.language))
-                            .font(.system(size: 13))
-                            .foregroundStyle(c.textTertiary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 8)
+                        VStack(spacing: 8) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 28))
+                                .foregroundStyle(.green)
+                            Text(AppStrings.syncStatusEmpty(lang.language))
+                                .font(.system(size: 13))
+                                .foregroundStyle(c.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
                     }
                 }
                 .padding(.horizontal, 16)

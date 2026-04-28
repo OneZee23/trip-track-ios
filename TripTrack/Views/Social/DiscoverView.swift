@@ -121,11 +121,14 @@ struct DiscoverView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 20)
             } else if suggested.isEmpty {
-                Text(isRu ? "Пока никого не можем порекомендовать" : "No suggestions yet")
-                    .font(.system(size: 13))
-                    .foregroundStyle(c.textTertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
+                emptyStateCard(
+                    icon: "person.2.wave.2",
+                    title: isRu ? "Пока некого рекомендовать" : "No suggestions yet",
+                    subtitle: isRu
+                        ? "Когда в приложении появятся новые водители — увидите их здесь."
+                        : "When new drivers join, they'll show up here.",
+                    c: c
+                )
             } else {
                 VStack(spacing: 8) {
                     ForEach(suggested, id: \.id) { user in
@@ -152,11 +155,14 @@ struct DiscoverView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 20)
             } else if results.isEmpty {
-                Text(isRu ? "Никого не найдено" : "No users found")
-                    .font(.system(size: 13))
-                    .foregroundStyle(c.textTertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
+                emptyStateCard(
+                    icon: "magnifyingglass",
+                    title: isRu ? "Никого не нашли" : "No users found",
+                    subtitle: isRu
+                        ? "Попробуйте другое имя или проверьте раскладку."
+                        : "Try a different name or check your spelling.",
+                    c: c
+                )
             } else {
                 VStack(spacing: 8) {
                     ForEach(results, id: \.id) { user in
@@ -177,6 +183,27 @@ struct DiscoverView: View {
     }
 
     // MARK: - User row
+
+    private func emptyStateCard(
+        icon: String, title: String, subtitle: String, c: AppTheme.Colors,
+    ) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(c.textTertiary)
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(c.textSecondary)
+            Text(subtitle)
+                .font(.system(size: 12))
+                .foregroundStyle(c.textTertiary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 30)
+        .padding(.horizontal, 20)
+    }
 
     private func userRow(_ user: SocialAuthor, c: AppTheme.Colors, isRu: Bool) -> some View {
         Button {
