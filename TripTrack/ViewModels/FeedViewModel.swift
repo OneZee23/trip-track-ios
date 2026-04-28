@@ -68,6 +68,14 @@ final class FeedViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.loadTrips() }
             .store(in: &cancellables)
+
+        // Privacy flipped on a trip (private ↔ public). The "Только Вы" pill
+        // on Mine-tab cards is driven by `trip.isPrivate`, so without this
+        // listener the pill stays stale until pull-to-refresh.
+        NotificationCenter.default.publisher(for: .tripPrivacyChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.loadTrips() }
+            .store(in: &cancellables)
     }
 
     deinit {
