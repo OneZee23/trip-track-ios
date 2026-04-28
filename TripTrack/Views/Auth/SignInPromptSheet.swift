@@ -1,5 +1,8 @@
 import SwiftUI
 import AuthenticationServices
+import OSLog
+
+private let signInPromptLog = Logger(subsystem: "com.triptrack", category: "signin.prompt")
 
 /// Lightweight friction-low Sign-in-with-Apple sheet, presented when a guest
 /// tries to do something that needs an account (react, follow, share, sync).
@@ -33,6 +36,7 @@ struct SignInPromptSheet: View {
     @EnvironmentObject private var auth: AuthService
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
+    @State private var lastError: String?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -65,17 +69,36 @@ struct SignInPromptSheet: View {
 
                 Spacer()
 
+                if let err = lastError {
+                    Text(err)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+
                 SignInWithAppleButton(.signIn,
                     onRequest: { req in req.requestedScopes = [.fullName, .email] },
                     onCompletion: { result in
                         switch result {
                         case .success(let authorization):
+                            signInPromptLog.debug("✅ got credential")
                             Task {
                                 await auth.handleAuthorization(authorization)
                                 if auth.isSignedIn { dismiss() }
+                                else if let e = auth.lastAuthError {
+                                    lastError = String(describing: e)
+                                }
                             }
-                        case .failure:
-                            break
+                        case .failure(let error):
+                            let ns = error as NSError
+                            signInPromptLog.error("❌ domain=\(ns.domain) code=\(ns.code) desc=\(ns.localizedDescription)")
+                            // Code 1001 = user cancelled — silent. Anything else, show.
+                            if ns.code != ASAuthorizationError.canceled.rawValue {
+                                lastError = isRu
+                                    ? "Apple-вход не сработал. Проверьте, что Вы залогинены в iCloud в настройках устройства."
+                                    : "Apple sign-in failed. Make sure you're signed into iCloud in device Settings."
+                            }
                         }
                     })
                     .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
