@@ -38,12 +38,19 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     let id: UUID
     let author: SocialAuthor
     let title: String?
+    /// User-authored notes. Server-rendered for every viewer (own + others)
+    /// so the social detail isn't sparse vs the owner's edit-able copy.
+    let description: String?
     let startDate: Date
     let endDate: Date?
     /// meters
     let distance: Double
     /// seconds
     let duration: Int
+    /// m/s — same units as the local Trip model
+    let maxSpeed: Double?
+    /// metres — same units as the local Trip model
+    let elevation: Double?
     let region: String?
     let previewPolyline: String?
     // `var` so SocialFeedStore can apply optimistic bumps when the user adds
@@ -62,6 +69,7 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     let badgeIds: [String]
 
     var distanceKm: Double { distance / 1000.0 }
+    var maxSpeedKmh: Double { (maxSpeed ?? 0) * 3.6 }
     var averageSpeedKmh: Double {
         guard duration > 0 else { return 0 }
         return distanceKm / (Double(duration) / 3600.0)

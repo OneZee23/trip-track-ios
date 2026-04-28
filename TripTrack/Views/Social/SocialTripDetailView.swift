@@ -61,6 +61,7 @@ struct SocialTripDetailView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         authorRow(c, isRu: isRu)
                         titleSection(c)
+                        descriptionSection(c)
                         metricsGrid(c, isRu: isRu)
                         if !trip.badgeIds.isEmpty {
                             TripBadgesRow(badgeIds: trip.badgeIds, maxVisible: 6, size: 26)
@@ -246,12 +247,30 @@ struct SocialTripDetailView: View {
                     .frame(width: 42, height: 42)
                     .overlay { Text(trip.author.avatarEmoji ?? "🚗").font(.system(size: 22)) }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(trip.author.displayName ?? (isRu ? "Пользователь" : "User"))
+                    Text(trip.author.displayName ?? (isRu ? "Без имени" : "No name"))
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(c.text)
                     Text(dateLine(isRu: isRu))
                         .font(.system(size: 12))
                         .foregroundStyle(c.textTertiary)
+                    // Vehicle metadata sits on the identity strip, Strava-
+                    // style: the avatar is identity, the vehicle is "what
+                    // they were driving". Server now ships this for every
+                    // trip in the feed, so own + others show identical chrome.
+                    if let v = trip.vehicle {
+                        let n = v.name.trimmingCharacters(in: .whitespaces)
+                        if !n.isEmpty {
+                            HStack(spacing: 4) {
+                                Text(v.avatarEmoji)
+                                    .font(.system(size: 11))
+                                Text(n)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(c.textTertiary)
+                                    .lineLimit(1)
+                            }
+                            .padding(.top, 2)
+                        }
+                    }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -272,8 +291,30 @@ struct SocialTripDetailView: View {
             .lineLimit(3)
     }
 
+    @ViewBuilder
+    private func descriptionSection(_ c: AppTheme.Colors) -> some View {
+        // Author's notes — surfaced inline below the title so viewers see the
+        // story behind the trip the same way the owner does. Empty / null is
+        // hidden so the section doesn't take space when there's nothing.
+        if let raw = trip.description {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                Text(trimmed)
+                    .font(.system(size: 14))
+                    .foregroundStyle(c.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
     private func metricsGrid(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+        // Match the depth of the owner-side stat grid: distance, duration,
+        // avg speed, max speed, elevation. Region used to live here but it's
+        // redundant with the date line on the identity strip.
+        let hasMaxSpeed = (trip.maxSpeed ?? 0) > 0
+        let hasElevation = (trip.elevation ?? 0) > 0.5
+        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             metricCell(
                 value: String(format: "%.1f", trip.distanceKm),
                 unit: AppStrings.km(lang.language),
@@ -292,11 +333,19 @@ struct SocialTripDetailView: View {
                 label: AppStrings.avgSpeed(lang.language),
                 color: AppTheme.blue, c: c
             )
-            if let region = trip.region, !region.isEmpty {
+            if hasMaxSpeed {
                 metricCell(
-                    value: region,
-                    unit: "",
-                    label: isRu ? "Регион" : "Region",
+                    value: String(format: "%.0f", trip.maxSpeedKmh),
+                    unit: AppStrings.kmh(lang.language),
+                    label: AppStrings.maxSpeed(lang.language),
+                    color: AppTheme.red, c: c
+                )
+            }
+            if hasElevation {
+                metricCell(
+                    value: String(format: "%.0f", trip.elevation ?? 0),
+                    unit: AppStrings.m(lang.language),
+                    label: isRu ? "Перепад высот" : "Elevation",
                     color: c.textSecondary, c: c
                 )
             }
@@ -459,8 +508,22 @@ struct SocialTripDetailView: View {
     @ViewBuilder
     private func reactionsBreakdown(_ c: AppTheme.Colors) -> some View {
         let isRu = lang.language == .ru
+        let isOwnTrip = trip.author.id == TokenStore.shared.accountId
         if reactionEntries.isEmpty {
-            EmptyView()
+            // Quiet empty-state line — different copy for own vs others'
+            // matches Strava's "be the first" vs "no kudos yet" split.
+            HStack(spacing: 8) {
+                Image(systemName: "face.dashed")
+                    .font(.system(size: 14))
+                    .foregroundStyle(c.textTertiary)
+                Text(isOwnTrip
+                     ? (isRu ? "Пока никто не отреагировал" : "No reactions yet")
+                     : (isRu ? "Будьте первым, кто отреагирует" : "Be the first to react"))
+                    .font(.system(size: 13))
+                    .foregroundStyle(c.textTertiary)
+                Spacer()
+            }
+            .padding(.horizontal, 4)
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {

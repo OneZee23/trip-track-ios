@@ -332,9 +332,13 @@ struct TripDetailView: View {
             statsGrid(trip: trip, c: c)
                 .padding(.top, 16)
 
-            // Reactions from followers show only for public trips of signed-in users.
-            if !trip.isPrivate, auth.isSignedIn, !reactionEntries.isEmpty {
-                reactionsSection(c)
+            // Reactions surface — Strava-style:
+            //   * Public + has reactions → render breakdown.
+            //   * Public + 0 reactions → ghost line ("No reactions yet").
+            //   * Private (signed-in) → publish nudge card to convert.
+            //   * Guest (private fallback) — nothing, no payoff to show.
+            if auth.isSignedIn {
+                reactionsArea(trip: trip, c: c)
                     .padding(.top, 16)
             }
 
@@ -429,6 +433,84 @@ struct TripDetailView: View {
         }
         .padding(.bottom, 4)
         .animation(.easeInOut(duration: 0.25), value: isEditingTitle)
+    }
+
+    /// Composite reactions block that picks the right surface for the current
+    /// trip state — breakdown when there are reactions, a publish nudge for
+    /// private trips, or a quiet "no reactions yet" line for public trips.
+    @ViewBuilder
+    private func reactionsArea(trip: Trip, c: AppTheme.Colors) -> some View {
+        if !trip.isPrivate, !reactionEntries.isEmpty {
+            reactionsSection(c)
+        } else if trip.isPrivate {
+            publishNudgeCard(trip: trip, c: c)
+        } else {
+            // Public, zero reactions — quiet line, no CTA. Owner already
+            // chose to share; spamming them with a "share more!" prompt
+            // would be tone-deaf.
+            HStack(spacing: 8) {
+                Image(systemName: "face.dashed")
+                    .font(.system(size: 14))
+                    .foregroundStyle(c.textTertiary)
+                Text(lang.language == .ru ? "Пока никто не отреагировал" : "No reactions yet")
+                    .font(.system(size: 13))
+                    .foregroundStyle(c.textTertiary)
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+
+    private func publishNudgeCard(trip: Trip, c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return Button {
+            Haptics.tap()
+            // Reuse the privacy toggle's flow so first-publish toast and
+            // notification fire identically.
+            let newValue = false
+            mapVM.tripManager.updatePrivacy(for: tripId, isPrivate: newValue)
+            self.trip = viewModel.tripDetail(id: tripId)
+            NotificationCenter.default.post(
+                name: .tripPrivacyChanged,
+                object: PrivacyChangePayload(tripId: tripId, isPrivate: newValue)
+            )
+            let firstPublishKey = "com.triptrack.firstPublishToastShown"
+            if !UserDefaults.standard.bool(forKey: firstPublishKey) {
+                UserDefaults.standard.set(true, forKey: firstPublishKey)
+                toastItem = ToastItem(
+                    type: .success,
+                    message: isRu
+                        ? "Первая публичная поездка! Поездки с фото получают больше реакций"
+                        : "Your first public trip! Trips with photos get more reactions")
+            }
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(width: 24, alignment: .center)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(isRu ? "Опубликуйте, чтобы получить реакции" : "Publish to get reactions")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .multilineTextAlignment(.leading)
+                    Text(isRu
+                         ? "Поездка увидят те, кто на Вас подписан. Сейчас она только у Вас."
+                         : "Followers will see this trip in their feed. Right now it's just yours.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textSecondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
     }
 
     private func reactionsSection(_ c: AppTheme.Colors) -> some View {
