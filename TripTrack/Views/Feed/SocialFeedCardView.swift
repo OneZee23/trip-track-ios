@@ -83,37 +83,44 @@ struct SocialFeedCardView: View {
     // MARK: - Author Row
 
     private func authorRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        let headerName: String = {
-            if isOwn {
-                if let name = ownVehicle?.name, !name.isEmpty { return name }
-                return isRu ? "Моя машина" : "My car"
-            }
-            return trip.author.displayName ?? (isRu ? "Пользователь" : "User")
-        }()
+        // Unified author chrome — own and others' trips share the same layout
+        // (Strava/Komoot/Garmin convention). Swapping the user's avatar for a
+        // vehicle icon on own cards made the user feel like a ghost in their
+        // own feed; identity recognition belongs on the avatar slot. The
+        // vehicle now lives in the metrics row as metadata, not identity.
+        let rawName = trip.author.displayName?.trimmingCharacters(in: .whitespaces) ?? ""
+        let headerName = rawName.isEmpty ? (isRu ? "Без имени" : "No name") : rawName
         return HStack(spacing: 10) {
             Circle()
                 .fill(AppTheme.accentBg)
                 .frame(width: 34, height: 34)
                 .overlay {
-                    if isOwn, let vehicle = ownVehicle, vehicle.isPixelAvatar {
-                        vehicle.avatarView(size: 28)
-                    } else {
-                        Text(isOwn ? (ownVehicle?.avatarEmoji ?? "🚗") : (trip.author.avatarEmoji ?? "🚗"))
-                            .font(.system(size: 17))
-                    }
+                    Text(trip.author.avatarEmoji ?? "🙂")
+                        .font(.system(size: 17))
                 }
                 .onTapGesture {
-                    if !isOwn {
-                        Haptics.tap()
-                        onTapAuthor?()
-                    }
+                    Haptics.tap()
+                    onTapAuthor?()
                 }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(headerName)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(headerName)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    if isOwn {
+                        // Subtle "this is you" badge — explicit signal that
+                        // the card is yours without breaking the unified
+                        // chrome. NN/g recognition heuristic.
+                        Text(isRu ? "Вы" : "You")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(AppTheme.accent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(AppTheme.accentBg, in: Capsule())
+                    }
+                }
                 Text(dateRegionText(isRu: isRu))
                     .font(.system(size: 11))
                     .foregroundStyle(c.textTertiary)
@@ -121,10 +128,8 @@ struct SocialFeedCardView: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                if !isOwn {
-                    Haptics.tap()
-                    onTapAuthor?()
-                }
+                Haptics.tap()
+                onTapAuthor?()
             }
 
             Spacer()
@@ -142,9 +147,6 @@ struct SocialFeedCardView: View {
                 .padding(.vertical, 4)
                 .background(c.cardAlt, in: Capsule())
             }
-
-            // Overflow menu only contained Report; hidden until moderation
-            // UI lands, so the Menu + its anchor button are gone altogether.
         }
     }
 
