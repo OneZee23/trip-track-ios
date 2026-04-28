@@ -195,13 +195,14 @@ private extension SocialFeedTrip {
             .sorted { $0.count > $1.count }
 
         return SocialFeedTrip(
-            id: id, author: author, title: title,
+            id: id, author: author, title: title, description: description,
             startDate: startDate, endDate: endDate,
-            distance: distance, duration: duration, region: region,
+            distance: distance, duration: duration,
+            maxSpeed: maxSpeed, elevation: elevation, region: region,
             previewPolyline: previewPolyline,
             photoCount: photoCount, firstPhotoThumbnail: firstPhotoThumbnail,
             reactionCount: reactionCount, reactionBreakdown: updated,
-            myReaction: myReaction, badgeIds: badgeIds
+            myReaction: myReaction, badgeIds: badgeIds, vehicle: vehicle
         )
     }
 }
