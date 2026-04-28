@@ -38,28 +38,78 @@ struct PreviewNavigator: View {
     let onCloseSheet: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject private var lang: LanguageManager
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let popAction = path.isEmpty ? nil : PreviewPopAction { popTop() }
 
         ZStack {
-            // Opaque full-screen backdrop so transitioning content can't
-            // reveal whatever was on screen before fullScreenCover opened.
             c.bg.ignoresSafeArea()
 
-            // Only the topmost view is mounted — key fix for the flash bug:
-            // if we always rendered all layers, SwiftUI's transition system
-            // would animate each reveal/removal and open a brief window where
-            // the incoming layer isn't fully laid out yet. Rendering only the
-            // top means there's nothing to transition.
-            // Trade-off: back-navigation re-creates the previous view,
-            // re-running its `.task` — acceptable here because every view's
-            // load is idempotent (guarded by `didInitialLoad`).
-            currentView(rootBg: c)
-                .id(path.count)
+            VStack(spacing: 0) {
+                // Mode indicator for self-preview only (the user tapped their
+                // own avatar/header in the Profile tab). Persistent banner
+                // explains "you're in preview" — the screen looks nearly
+                // identical to the Profile tab and without this users get
+                // disoriented (NN/g heuristic #6: same-looking modes need
+                // explicit recognition signals; LinkedIn's "View as" pattern).
+                if isSelfPreview {
+                    selfPreviewBanner(c)
+                }
+
+                // Only the topmost view is mounted — key fix for the
+                // nav-bar flash bug; rendering all layers makes SwiftUI
+                // animate intermediate states and exposes unstyled chrome.
+                currentView(rootBg: c)
+                    .id(path.count)
+            }
         }
         .environment(\.previewPop, popAction)
+    }
+
+    private var isSelfPreview: Bool {
+        guard let myId = TokenStore.shared.accountId,
+              let myUUID = UUID(uuidString: myId) else { return false }
+        if case .profile(let id, _) = rootDest, id == myUUID { return true }
+        return false
+    }
+
+    private func selfPreviewBanner(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return HStack(spacing: 10) {
+            Image(systemName: "eye.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+            Text(isRu
+                 ? "Предпросмотр — так Ваш профиль видят другие"
+                 : "Preview — how others see your profile")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+            Spacer(minLength: 8)
+            Button {
+                Haptics.tap()
+                onCloseSheet()
+            } label: {
+                Text(isRu ? "Готово" : "Done")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.white.opacity(0.22), in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        // Extend the accent fill up under the status bar so the banner
+        // visually anchors to the top edge — `.ignoresSafeArea(edges: .top)`
+        // applied to the background only (not the content) keeps text
+        // padding correct while the colour bleeds upward.
+        .background(AppTheme.accent.ignoresSafeArea(edges: .top))
     }
 
     @ViewBuilder
