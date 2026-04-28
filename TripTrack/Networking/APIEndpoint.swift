@@ -6,6 +6,7 @@ enum APIEndpoint {
     static let logout        = "/auth/logout"
     static let deleteAccount = "/auth/delete-account"
     static let profileUpdate = "/auth/profile-update"
+    static let deviceToken   = "/auth/device-token"
 
     static let tripUpsert = "/trips/upsert"
     static let tripDetail = "/trips/detail"

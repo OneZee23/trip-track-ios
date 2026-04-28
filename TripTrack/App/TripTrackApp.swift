@@ -6,6 +6,9 @@ struct TripTrackApp: App {
     @StateObject private var themeManager = ThemeManager()
     @StateObject private var languageManager = LanguageManager()
     @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
+    /// AppDelegate adapter — only purpose is receiving APNs device-token
+    /// callbacks, which SwiftUI's `App` doesn't expose directly.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
         // Handle background relaunch by significant location change
@@ -28,6 +31,17 @@ struct TripTrackApp: App {
                     }
                     .task {
                         AuthService.shared.checkAuthStatus()
+                        // Replay APNs registration each cold launch — iOS rotates
+                        // device tokens on rare occasions, and the only way to
+                        // catch that is to ask for a fresh one. Idempotent;
+                        // `PushNotificationManager` skips the server roundtrip
+                        // if the token hasn't actually changed.
+                        if NotificationManager.shared.isAuthorized {
+                            PushNotificationManager.shared.registerForRemoteNotifications()
+                            if AuthService.shared.isSignedIn {
+                                await PushNotificationManager.shared.syncTokenToServer()
+                            }
+                        }
                     }
             } else {
                 OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)

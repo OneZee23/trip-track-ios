@@ -110,6 +110,13 @@ final class AuthService: ObservableObject {
             isSignedIn = true
             await performFirstSync()
             await syncProfileToServer()
+            // If APNs already handed us a token (likely — onboarding registers
+            // before sign-in), push it now so backend can dispatch reactions /
+            // follow notifications to this device. Re-registering here also
+            // covers the case where the user signed out, came back, and the
+            // existing cached token is still valid.
+            PushNotificationManager.shared.registerForRemoteNotifications()
+            await PushNotificationManager.shared.syncTokenToServer()
         } catch let e as APIError {
             lastAuthError = e
         } catch {

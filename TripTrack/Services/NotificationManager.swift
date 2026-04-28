@@ -198,6 +198,9 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        let category = response.notification.request.content.categoryIdentifier
+        let userInfo = response.notification.request.content.userInfo
+
         switch response.actionIdentifier {
         case Self.startRecordingAction:
             NotificationCenter.default.post(name: .autoTripStartRequested, object: nil)
@@ -206,10 +209,21 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         case Self.continueAction:
             NotificationCenter.default.post(name: .autoTripContinueRequested, object: nil)
         case UNNotificationDefaultActionIdentifier:
-            // Tapped the notification body — start recording + open record screen
-            if response.notification.request.content.categoryIdentifier == Self.tripStartPromptCategory {
+            // Tapped the notification body — route by category. Local trip-
+            // start prompt opens the recording tab; remote pushes deep-link
+            // into trip detail (REACTION) or open the social tab (FOLLOW).
+            if category == Self.tripStartPromptCategory {
                 NotificationCenter.default.post(name: .autoTripStartRequested, object: nil)
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
+            } else if category == "REACTION" {
+                if let tripIdString = userInfo["tripId"] as? String,
+                   let tripId = UUID(uuidString: tripIdString) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        NotificationCenter.default.post(name: .openTripDetail, object: tripId)
+                    }
+                }
+            } else if category == "FOLLOW" {
+                NotificationCenter.default.post(name: .switchToFeedTab, object: nil)
             }
         default:
             break

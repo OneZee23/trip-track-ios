@@ -242,8 +242,17 @@ struct OnboardingView: View {
         // Request Motion permission
         MotionDetector.requestAuthorization { _ in }
 
-        // Request Notification permission
-        NotificationManager.shared.requestAuthorization { _ in }
+        // Request Notification permission. If granted, also kick off APNs
+        // registration so we can receive remote pushes (reactions, follows)
+        // once the user signs in. Token sync to server is gated on sign-in
+        // inside `PushNotificationManager`.
+        NotificationManager.shared.requestAuthorization { granted in
+            if granted {
+                Task { @MainActor in
+                    PushNotificationManager.shared.registerForRemoteNotifications()
+                }
+            }
+        }
 
         // Enable auto-record by default
         SettingsManager.shared.autoRecordMode = .remind
