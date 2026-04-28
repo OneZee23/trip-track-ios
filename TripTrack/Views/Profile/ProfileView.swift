@@ -66,10 +66,11 @@ struct ProfileView: View {
                 // Quick stats row
                 quickStatsRow(c, isRu: isRu)
 
-                // Social followers/following (signed in only)
+                // Social followers/following (signed in only). The hero card
+                // above is itself tappable for "Preview as others see you" —
+                // see `avatarCard` for the gesture wiring.
                 if auth.isSignedIn {
                     socialCountersRow(c, isRu: isRu)
-                    previewProfileButton(c, isRu: isRu)
                     shareProfileButton(c, isRu: isRu)
                 }
 
@@ -328,32 +329,6 @@ struct ProfileView: View {
         .surfaceCard(cornerRadius: 14)
     }
 
-    private func previewProfileButton(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        Button {
-            Haptics.tap()
-            previewingOwnProfile = true
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "eye")
-                    .font(.system(size: 15))
-                    .foregroundStyle(AppTheme.blue)
-                    .frame(width: 22, alignment: .center)
-                Text(isRu ? "Посмотреть глазами других" : "Preview as others see you")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-            }
-            .padding(14)
-            .surfaceCard(cornerRadius: 14)
-        }
-        .buttonStyle(.plain)
-    }
-
     private func shareProfileButton(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         Button {
             Haptics.tap()
@@ -560,6 +535,17 @@ struct ProfileView: View {
             VStack(spacing: 10) {
                 if auth.isSignedIn {
                     signedInHeader(c)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            // Whole header opens "preview as others see you" —
+                            // replaces the dedicated CTA button below the
+                            // counters that used to feel like clutter.
+                            // Edit-avatar mode owns its own grid below, so
+                            // suppress the gesture there to avoid hijacking.
+                            guard !isEditingAvatar else { return }
+                            Haptics.tap()
+                            previewingOwnProfile = true
+                        }
                 } else {
                     guestHeader(c)
                 }
@@ -597,6 +583,12 @@ struct ProfileView: View {
                     .offset(x: 2, y: 2)
             }
             .padding(.top, bannerHeight - avatarOverlap)
+            .contentShape(Circle())
+            .onTapGesture {
+                guard auth.isSignedIn, !isEditingAvatar else { return }
+                Haptics.tap()
+                previewingOwnProfile = true
+            }
         }
     }
 
