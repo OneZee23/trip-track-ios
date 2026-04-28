@@ -85,8 +85,12 @@ struct TripCompleteSummaryView: View {
                 gamificationSection(data: data, c: c)
             }
 
-            // Photo button
-            HStack(spacing: 12) {
+            // Photo button + motivational hint. Strava's published guidance
+            // (10 ways to get more kudos) calls out photo trips as the single
+            // strongest engagement driver (~3× kudos vs photo-less). Show
+            // the hint only on the first photo prompt — once a photo is
+            // attached it goes away and we just confirm the count.
+            VStack(spacing: 6) {
                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                     Label(
                         savedPhotoCount > 0
@@ -99,6 +103,18 @@ struct TripCompleteSummaryView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
                     .background(AppTheme.accentBg, in: RoundedRectangle(cornerRadius: 12))
+                }
+                if savedPhotoCount == 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 10))
+                        Text(lang.language == .ru
+                             ? "Поездки с фото получают в 3 раза больше реакций"
+                             : "Trips with photos get 3× more reactions")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(c.textTertiary)
+                    .multilineTextAlignment(.center)
                 }
             }
             .padding(.horizontal, 20)

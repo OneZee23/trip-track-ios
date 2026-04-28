@@ -165,26 +165,50 @@ struct SocialFeedCardView: View {
 
     // MARK: - Metrics
 
+    @ViewBuilder
     private func metricsStrip(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 4) {
-            metricBlock(
-                value: String(format: "%.1f", trip.distanceKm),
-                unit: AppStrings.km(lang.language),
-                label: AppStrings.distance(lang.language),
-                c: c
-            )
-            metricBlock(
-                value: trip.formattedDuration,
-                unit: "",
-                label: AppStrings.duration(lang.language),
-                c: c
-            )
-            metricBlock(
-                value: String(format: "%.0f", trip.averageSpeedKmh),
-                unit: AppStrings.kmh(lang.language),
-                label: AppStrings.avgSpeed(lang.language),
-                c: c
-            )
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 4) {
+                metricBlock(
+                    value: String(format: "%.1f", trip.distanceKm),
+                    unit: AppStrings.km(lang.language),
+                    label: AppStrings.distance(lang.language),
+                    c: c
+                )
+                metricBlock(
+                    value: trip.formattedDuration,
+                    unit: "",
+                    label: AppStrings.duration(lang.language),
+                    c: c
+                )
+                metricBlock(
+                    value: String(format: "%.0f", trip.averageSpeedKmh),
+                    unit: AppStrings.kmh(lang.language),
+                    label: AppStrings.avgSpeed(lang.language),
+                    c: c
+                )
+            }
+            // Vehicle metadata sits BELOW the metrics row on own trips —
+            // it's no longer the identity (avatar handles that) but stays
+            // visible as "what car was this trip in". Only renders for
+            // own trips because we have local Vehicle data for those.
+            if isOwn, let v = ownVehicle {
+                let trimmedName = v.name.trimmingCharacters(in: .whitespaces)
+                if !trimmedName.isEmpty {
+                    HStack(spacing: 6) {
+                        if v.isPixelAvatar {
+                            v.avatarView(size: 14)
+                        } else {
+                            Text(v.avatarEmoji ?? "🚗")
+                                .font(.system(size: 12))
+                        }
+                        Text(trimmedName)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(c.textTertiary)
+                            .lineLimit(1)
+                    }
+                }
+            }
         }
     }
 
