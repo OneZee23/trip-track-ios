@@ -142,9 +142,14 @@ final class AutoTripService: ObservableObject {
             settings.saveSettings()
         }
 
-        // Try to recover the real trip start time from CMMotion history
+        // Try to recover the real trip start time from CMMotion history.
+        // The query is async (~seconds), so re-check `vm.isRecording` inside
+        // the callback — the user may have manually started recording in
+        // that window and we'd otherwise fire a redundant "you're in the
+        // car" notification on top of an already-running trip.
         motionDetector.queryAutomotiveStartTime { [weak self] automotiveStartDate in
             guard let self else { return }
+            guard !vm.isRecording else { return }
             let deviceName = self.audioRouteDetector.currentBluetoothOutput()
                 ?? AppStrings.car(LanguageManager.currentLanguage)
             self.triggerTripStart(vm: vm, deviceName: deviceName, estimatedStartDate: automotiveStartDate)
@@ -184,6 +189,12 @@ final class AutoTripService: ObservableObject {
     // MARK: - Unified Trip Trigger
 
     private func triggerTripStart(vm: MapViewModel, deviceName: String, estimatedStartDate: Date? = nil) {
+        // Defence-in-depth: every caller already gates on `!vm.isRecording`
+        // up the stack, but those checks happen before async hops (motion
+        // query, dispatch barriers). One last guard here so a slow callback
+        // never sends an "are you in the car?" prompt while a trip is
+        // already running.
+        guard !vm.isRecording else { return }
         let isInForeground = UIApplication.shared.applicationState == .active
 
         // Request background task to prevent iOS from suspending before GPS warms up
