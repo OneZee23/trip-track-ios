@@ -122,10 +122,14 @@ final class AuthService: ObservableObject {
         SyncEnqueuer.enqueue(SyncOperation(
             entityType: .settings, entityId: SettingsManager.shared.localUserId, action: .upload))
 
-        // Photos that are pending upload (never sent to R2)
+        // Photos that aren't fully on R2 yet — `localOnly` (never uploaded),
+        // `uploading` (thumb sent but original stuck behind a Wi-Fi gate),
+        // and `failed` (previous attempt errored). Mirrors the predicate in
+        // `CloudSyncView.enableCloudSync` so first-sign-in and toggle-on
+        // paths backfill the same set.
         let ctx = PersistenceController.shared.container.viewContext
         let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
-        req.predicate = NSPredicate(format: "uploadStatus == %d", PhotoUploadStatus.localOnly.rawValue)
+        req.predicate = NSPredicate(format: "uploadStatus != %d", PhotoUploadStatus.uploaded.rawValue)
         if let photos = try? ctx.fetch(req) {
             for p in photos {
                 if let pid = p.id {

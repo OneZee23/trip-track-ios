@@ -226,6 +226,27 @@ struct CloudSyncView: View {
             }
             SyncEnqueuer.enqueue(SyncOperation(
                 entityType: .settings, entityId: settings.localUserId, action: .upload))
+
+            // Photos are gated by their own `uploadStatus` (separate from
+            // `syncStatus`), so `markAllPendingUpload()` doesn't push them
+            // back into the upload queue. Enqueue every photo that isn't
+            // already fully on R2 — `localOnly` (never uploaded), `uploading`
+            // (thumb sent, original stuck on cellular), and `failed` (prior
+            // attempt errored). `APISyncTransport.uploadPhoto` is idempotent
+            // — it skips thumb/original parts that already have a key.
+            let ctx = PersistenceController.shared.container.viewContext
+            let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+            req.predicate = NSPredicate(
+                format: "uploadStatus != %d", PhotoUploadStatus.uploaded.rawValue)
+            if let photos = try? ctx.fetch(req) {
+                for p in photos {
+                    if let pid = p.id {
+                        SyncEnqueuer.enqueue(SyncOperation(
+                            entityType: .photo, entityId: pid, action: .upload))
+                    }
+                }
+            }
+
             await SyncCoordinator.shared.runFullSync()
         }
     }
