@@ -201,8 +201,9 @@ private extension SocialFeedTrip {
             maxSpeed: maxSpeed, elevation: elevation, region: region,
             previewPolyline: previewPolyline,
             photoCount: photoCount, firstPhotoThumbnail: firstPhotoThumbnail,
+            vehicle: vehicle,
             reactionCount: reactionCount, reactionBreakdown: updated,
-            myReaction: myReaction, badgeIds: badgeIds, vehicle: vehicle
+            myReaction: myReaction, badgeIds: badgeIds
         )
     }
 }
