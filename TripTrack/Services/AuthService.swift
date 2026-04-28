@@ -161,6 +161,20 @@ final class AuthService: ObservableObject {
         repo.markAllPendingUpload()
     }
 
+    /// User-set display name. Apple Sign In delivers `fullName` only on the
+    /// very first authorization for a given Apple ID — re-sign-in (after
+    /// account delete or token revoke) returns nil and we'd otherwise have
+    /// no way to recover the name. This lets the user enter / edit their
+    /// name directly in the profile, persisting to Keychain + syncing to
+    /// the server so it lands on every public trip card.
+    func updateUserName(_ rawName: String) async {
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        try? KeychainHelper.saveString(trimmed, for: Keys.userName)
+        userName = trimmed
+        await syncProfileToServer()
+    }
+
     // MARK: - Profile sync to server
 
     /// Push all mutable client-authoritative profile fields to the server so

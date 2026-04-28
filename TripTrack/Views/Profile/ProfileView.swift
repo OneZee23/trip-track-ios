@@ -42,6 +42,8 @@ struct ProfileView: View {
     /// the preview flow's path.
     @State private var followListPath: [ProfilePreviewDest] = []
     @State private var signInPrompt: SignInPromptSheet.Action?
+    @State private var showNameEditor = false
+    @State private var editedName: String = ""
 
     private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
 
@@ -261,6 +263,22 @@ struct ProfileView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .alert(
+            lang.language == .ru ? "Ваше имя" : "Your name",
+            isPresented: $showNameEditor
+        ) {
+            TextField(lang.language == .ru ? "Имя" : "Name", text: $editedName)
+                .textInputAutocapitalization(.words)
+                .submitLabel(.done)
+            Button(lang.language == .ru ? "Сохранить" : "Save") {
+                Task { await auth.updateUserName(editedName) }
+            }
+            Button(lang.language == .ru ? "Отмена" : "Cancel", role: .cancel) {}
+        } message: {
+            Text(lang.language == .ru
+                 ? "Так Ваше имя будет отображаться на публичных поездках и в профиле."
+                 : "This name will appear on your public trips and profile.")
         }
         .sheet(isPresented: $showVehicleDetail) {
             if let vehicle = selectedVehicle {
@@ -537,14 +555,26 @@ struct ProfileView: View {
                     signedInHeader(c)
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            // Whole header opens "preview as others see you" —
-                            // replaces the dedicated CTA button below the
-                            // counters that used to feel like clutter.
-                            // Edit-avatar mode owns its own grid below, so
-                            // suppress the gesture there to avoid hijacking.
+                            // Edit-avatar mode owns its own grid below — suppress
+                            // the gesture there.
                             guard !isEditingAvatar else { return }
                             Haptics.tap()
-                            previewingOwnProfile = true
+                            // No name yet (Apple Sign In doesn't redeliver
+                            // the name after re-auth) → first tap routes to
+                            // the editor instead of preview, so the user
+                            // sees "fix your identity" before "see your
+                            // public profile". Once a name exists, tap
+                            // returns to the preview behaviour.
+                            if headerTapShouldEditName {
+                                presentNameEditor()
+                            } else {
+                                previewingOwnProfile = true
+                            }
+                        }
+                        .onLongPressGesture(minimumDuration: 0.4) {
+                            guard !isEditingAvatar else { return }
+                            Haptics.action()
+                            presentNameEditor()
                         }
                 } else {
                     guestHeader(c)
@@ -666,12 +696,23 @@ struct ProfileView: View {
 
     @ViewBuilder
     private func signedInHeader(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        let hasName = (auth.userName?.trimmingCharacters(in: .whitespaces).isEmpty == false)
         VStack(spacing: 6) {
-            Text(auth.userName ?? AppStrings.signedIn(lang.language))
-                .font(.system(size: 22, weight: .heavy))
-                .tracking(-0.3)
-                .foregroundStyle(c.text)
-                .multilineTextAlignment(.center)
+            HStack(spacing: 6) {
+                Text(hasName
+                     ? (auth.userName ?? "")
+                     : (isRu ? "Добавьте имя" : "Add your name"))
+                    .font(.system(size: 22, weight: .heavy))
+                    .tracking(-0.3)
+                    .foregroundStyle(hasName ? c.text : c.textTertiary)
+                    .multilineTextAlignment(.center)
+                if !hasName {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+                }
+            }
             if let email = auth.userEmail {
                 Text(email)
                     .font(.system(size: 12))
@@ -680,6 +721,21 @@ struct ProfileView: View {
             syncStatusIndicator(c)
                 .padding(.top, 4)
         }
+    }
+
+    /// Whether tapping the hero header should open the name editor instead
+    /// of the public-profile preview. Apple Sign In doesn't redeliver the
+    /// name after a delete-account → re-sign-in, so we surface the editor
+    /// as the primary action until the user has entered something.
+    private var headerTapShouldEditName: Bool {
+        guard auth.isSignedIn else { return false }
+        let trimmed = auth.userName?.trimmingCharacters(in: .whitespaces) ?? ""
+        return trimmed.isEmpty
+    }
+
+    private func presentNameEditor() {
+        editedName = auth.userName ?? ""
+        showNameEditor = true
     }
 
     @ViewBuilder
