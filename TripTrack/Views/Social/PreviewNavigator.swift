@@ -69,9 +69,8 @@ struct PreviewNavigator: View {
     }
 
     private var isSelfPreview: Bool {
-        guard let myId = TokenStore.shared.accountId,
-              let myUUID = UUID(uuidString: myId) else { return false }
-        if case .profile(let id, _) = rootDest, id == myUUID { return true }
+        guard let myId = TokenStore.shared.accountId else { return false }
+        if case .profile(let id, _) = rootDest, id == myId { return true }
         return false
     }
 
