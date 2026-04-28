@@ -207,7 +207,16 @@ enum AppStrings {
         lang == .ru ? "Добро пожаловать в TripTrack" : "Welcome to TripTrack"
     }
     static func onboardingWelcomeSub(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Дневник Ваших дорог — маршруты, статистика, расход топлива и гараж" : "Your road diary — routes, stats, fuel costs, and your garage"
+        // Privacy-first framing — TripTrack's competitive differentiator.
+        // Surfaced on page 1 so the user gets the value prop before any
+        // permission prompt: "this stays on your phone unless you say so."
+        if lang == .ru {
+            return "Автодневник Ваших дорог — маршруты, статистика, расход. Хранится на устройстве, в облако ничего не уезжает без Вашего согласия."
+        }
+        return "Your road diary — routes, stats, fuel costs. Stays on your device. Nothing goes to the cloud unless you opt in."
+    }
+    static func onboardingPrivacyPill(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Приватно по умолчанию" : "Private by default"
     }
     static func onboardingRecord(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Записывайте поездки" : "Record your trips"

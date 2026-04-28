@@ -18,12 +18,8 @@ struct OnboardingView: View {
 
             VStack(spacing: 0) {
                 TabView(selection: $currentPage) {
-                    onboardingPage(
-                        icon: "car.fill",
-                        title: AppStrings.onboardingWelcome(lang.language),
-                        subtitle: AppStrings.onboardingWelcomeSub(lang.language)
-                    )
-                    .tag(0)
+                    welcomePage
+                        .tag(0)
 
                     onboardingPage(
                         icon: "location.fill",
@@ -43,6 +39,47 @@ struct OnboardingView: View {
                 .tabViewStyle(.page(indexDisplayMode: .always))
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
             }
+        }
+    }
+
+    // MARK: - Welcome Page (with privacy pill)
+
+    private var welcomePage: some View {
+        let c = AppTheme.colors(for: scheme)
+        return VStack(spacing: 24) {
+            Spacer()
+
+            Image(systemName: "car.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(AppTheme.accent)
+
+            Text(AppStrings.onboardingWelcome(lang.language))
+                .font(.system(size: 24, weight: .heavy))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+
+            Text(AppStrings.onboardingWelcomeSub(lang.language))
+                .font(.system(size: 16))
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+
+            // Privacy-first pill — visual reinforcement of the subtitle.
+            // Same pattern Signal/Proton use to build trust before permission
+            // prompts; sells the differentiator without slowing the flow.
+            HStack(spacing: 6) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(AppStrings.onboardingPrivacyPill(lang.language))
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(.green)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.green.opacity(0.15), in: Capsule())
+
+            Spacer()
+            Spacer()
         }
     }
 
