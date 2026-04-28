@@ -333,13 +333,16 @@ struct ProfileView: View {
             Haptics.tap()
             previewingOwnProfile = true
         } label: {
-            HStack {
+            HStack(spacing: 12) {
                 Image(systemName: "eye")
                     .font(.system(size: 15))
                     .foregroundStyle(AppTheme.blue)
+                    .frame(width: 22, alignment: .center)
                 Text(isRu ? "Посмотреть глазами других" : "Preview as others see you")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(c.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
@@ -356,13 +359,16 @@ struct ProfileView: View {
             Haptics.tap()
             presentShareProfile()
         } label: {
-            HStack {
+            HStack(spacing: 12) {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 15))
                     .foregroundStyle(AppTheme.accent)
+                    .frame(width: 22, alignment: .center)
                 Text(isRu ? "Поделиться профилем" : "Share profile")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(c.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
