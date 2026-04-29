@@ -749,8 +749,9 @@ struct ProfileView: View {
         let hasName = !trimmed.isEmpty
         let isPlaceholder = RandomDisplayName.isPlaceholder(auth.userName)
         // "Identity is unsettled" — placeholder names look real but aren't.
-        // We surface the same pencil affordance + hint we use for missing
-        // names so users on a fresh device understand they can rename.
+        // The pencil sticks around in both states (always-editable affordance);
+        // placeholders get a stronger accent color + sub-hint, real names get
+        // a subdued treatment so the chrome doesn't shout when nothing is wrong.
         let needsEditCue = !hasName || isPlaceholder
         return VStack(spacing: 6) {
             HStack(spacing: 6) {
@@ -761,11 +762,22 @@ struct ProfileView: View {
                     .tracking(-0.3)
                     .foregroundStyle(hasName ? c.text : c.textTertiary)
                     .multilineTextAlignment(.center)
-                if needsEditCue {
+                // The pencil is its own button — tapping it only opens the
+                // editor, never the public-profile preview. Lets the user
+                // rename even when their name is a real / accepted one,
+                // without forcing them to long-press (which is hidden).
+                Button {
+                    Haptics.tap()
+                    presentNameEditor()
+                } label: {
                     Image(systemName: "pencil")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
+                        .foregroundStyle(needsEditCue ? AppTheme.accent : c.textTertiary)
+                        .padding(6)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isRu ? "Изменить имя" : "Edit name")
             }
             if needsEditCue {
                 // Sub-hint sells the affordance — without this, the pencil
@@ -787,11 +799,12 @@ struct ProfileView: View {
         .animation(.easeInOut(duration: 0.2), value: needsEditCue)
     }
 
-    /// Whether tapping the hero header should open the name editor instead
-    /// of the public-profile preview. Empty names obviously route there;
-    /// placeholder names (random "Дерзкий Гонщик 472" generated when SIWA
-    /// didn't redeliver the user's real name) also route to the editor so
-    /// the user gets a clean way to rename without long-pressing.
+    /// Whether tapping the hero header (outside the pencil button) should
+    /// open the editor instead of the public-profile preview. Pencil is
+    /// always tappable; this only governs the surrounding area. Empty /
+    /// placeholder names still route to the editor on hero-tap so a fresh-
+    /// install user is nudged to set their name — but real-name users get
+    /// the preview, which is the more useful action when identity is set.
     private var headerTapShouldEditName: Bool {
         guard auth.isSignedIn else { return false }
         let trimmed = auth.userName?.trimmingCharacters(in: .whitespaces) ?? ""

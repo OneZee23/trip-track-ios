@@ -14,7 +14,7 @@ struct DebugLogsView: View {
         let c = AppTheme.colors(for: scheme)
         let isRu = lang.language == .ru
 
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
                     hero(c, isRu: isRu)
