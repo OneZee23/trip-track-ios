@@ -53,8 +53,17 @@ final class AuthService: ObservableObject {
         try? KeychainHelper.saveString(userId, for: Keys.userIdentifier)
         userIdentifier = userId
 
-        // Name and email only come on first sign-in.
-        // On re-sign-in, restore from Keychain.
+        // Name resolution order — first non-empty wins:
+        //   1. Apple Sign In `fullName` — only delivered on the *very first*
+        //      authorization for an Apple ID across all devices. Most
+        //      authoritative when present.
+        //   2. Local Keychain — preserved across re-sign-ins on this device.
+        //   3. Server's `account.displayName` (set further below, after the
+        //      login round-trip) — tied to the Apple ID via `appleSubject`,
+        //      so a name set on a previous device with the same Apple ID
+        //      flows here.
+        //   4. Random road-trip-themed fallback — only when no other source
+        //      had anything.
         if let fullName = credential.fullName {
             let name = [fullName.givenName, fullName.familyName]
                 .compactMap { $0 }
@@ -66,16 +75,6 @@ final class AuthService: ObservableObject {
         }
         if userName == nil {
             userName = KeychainHelper.loadString(key: Keys.userName)
-        }
-        // Reddit-style fallback: Apple Sign In returns `fullName` only on
-        // the very first authorization for an Apple ID. Re-sign-in (after
-        // delete-account, hide-my-email, or token revoke) leaves us with
-        // `null` — generate a road-trip-themed placeholder so the user has
-        // an identity from the start. They can rename via profile header.
-        if userName == nil {
-            let generated = RandomDisplayName.generate(language: LanguageManager.currentLanguage)
-            try? KeychainHelper.saveString(generated, for: Keys.userName)
-            userName = generated
         }
 
         if let email = credential.email {
@@ -108,6 +107,27 @@ final class AuthService: ObservableObject {
             TokenStore.shared.set(accessToken: response.accessToken, refreshToken: response.refreshToken)
             TokenStore.shared.setAccountId(response.account.id)
             isSignedIn = true
+
+            // Step 3 of the resolution order — pull the server's stored name
+            // when we still don't have one. Without this, signing in on a
+            // fresh phone with an Apple ID that already has an account would
+            // generate a random name *and clobber the server's real one*
+            // through the `syncProfileToServer` call below.
+            if (userName?.isEmpty ?? true), let serverName = response.account.displayName,
+               !serverName.trimmingCharacters(in: .whitespaces).isEmpty {
+                userName = serverName
+                try? KeychainHelper.saveString(serverName, for: Keys.userName)
+            }
+
+            // Step 4 — random fallback when neither Apple, Keychain, nor the
+            // server had a name. Genuine first-ever sign-in on a fresh
+            // Apple ID where SIWA didn't redeliver fullName (rare but real).
+            if userName == nil {
+                let generated = RandomDisplayName.generate(language: LanguageManager.currentLanguage)
+                try? KeychainHelper.saveString(generated, for: Keys.userName)
+                userName = generated
+            }
+
             await performFirstSync()
             await syncProfileToServer()
             // If APNs already handed us a token (likely — onboarding registers
