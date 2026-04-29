@@ -276,21 +276,16 @@ struct ProfileView: View {
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
-        .alert(
-            lang.language == .ru ? "Ваше имя" : "Your name",
-            isPresented: $showNameEditor
-        ) {
-            TextField(lang.language == .ru ? "Имя" : "Name", text: $editedName)
-                .textInputAutocapitalization(.words)
-                .submitLabel(.done)
-            Button(lang.language == .ru ? "Сохранить" : "Save") {
-                Task { await auth.updateUserName(editedName) }
-            }
-            Button(lang.language == .ru ? "Отмена" : "Cancel", role: .cancel) {}
-        } message: {
-            Text(lang.language == .ru
-                 ? "Так Ваше имя будет отображаться на публичных поездках и в профиле."
-                 : "This name will appear on your public trips and profile.")
+        .sheet(isPresented: $showNameEditor) {
+            NameEditorSheet(
+                initialName: auth.userName ?? "",
+                isPlaceholder: RandomDisplayName.isPlaceholder(auth.userName),
+                onSave: { newName in
+                    Task { await auth.updateUserName(newName) }
+                }
+            )
+            .environmentObject(lang)
+            .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showVehicleDetail) {
             if let vehicle = selectedVehicle {
@@ -750,8 +745,14 @@ struct ProfileView: View {
     @ViewBuilder
     private func signedInHeader(_ c: AppTheme.Colors) -> some View {
         let isRu = lang.language == .ru
-        let hasName = (auth.userName?.trimmingCharacters(in: .whitespaces).isEmpty == false)
-        VStack(spacing: 6) {
+        let trimmed = auth.userName?.trimmingCharacters(in: .whitespaces) ?? ""
+        let hasName = !trimmed.isEmpty
+        let isPlaceholder = RandomDisplayName.isPlaceholder(auth.userName)
+        // "Identity is unsettled" — placeholder names look real but aren't.
+        // We surface the same pencil affordance + hint we use for missing
+        // names so users on a fresh device understand they can rename.
+        let needsEditCue = !hasName || isPlaceholder
+        return VStack(spacing: 6) {
             HStack(spacing: 6) {
                 Text(hasName
                      ? (auth.userName ?? "")
@@ -760,13 +761,22 @@ struct ProfileView: View {
                     .tracking(-0.3)
                     .foregroundStyle(hasName ? c.text : c.textTertiary)
                     .multilineTextAlignment(.center)
-                if !hasName {
+                if needsEditCue {
                     Image(systemName: "pencil")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                 }
             }
-            if let email = auth.userEmail {
+            if needsEditCue {
+                // Sub-hint sells the affordance — without this, the pencil
+                // is easy to miss and users assume the random name is theirs
+                // forever. Tone matches the "name yourself" framing in the
+                // editor sheet, not "fix something broken".
+                Text(isRu ? "Тапните, чтобы изменить" : "Tap to change")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(c.textTertiary)
+                    .transition(.opacity)
+            } else if let email = auth.userEmail {
                 Text(email)
                     .font(.system(size: 12))
                     .foregroundStyle(c.textTertiary)
@@ -774,16 +784,19 @@ struct ProfileView: View {
             syncStatusIndicator(c)
                 .padding(.top, 4)
         }
+        .animation(.easeInOut(duration: 0.2), value: needsEditCue)
     }
 
     /// Whether tapping the hero header should open the name editor instead
-    /// of the public-profile preview. Apple Sign In doesn't redeliver the
-    /// name after a delete-account → re-sign-in, so we surface the editor
-    /// as the primary action until the user has entered something.
+    /// of the public-profile preview. Empty names obviously route there;
+    /// placeholder names (random "Дерзкий Гонщик 472" generated when SIWA
+    /// didn't redeliver the user's real name) also route to the editor so
+    /// the user gets a clean way to rename without long-pressing.
     private var headerTapShouldEditName: Bool {
         guard auth.isSignedIn else { return false }
         let trimmed = auth.userName?.trimmingCharacters(in: .whitespaces) ?? ""
-        return trimmed.isEmpty
+        if trimmed.isEmpty { return true }
+        return RandomDisplayName.isPlaceholder(auth.userName)
     }
 
     private func presentNameEditor() {

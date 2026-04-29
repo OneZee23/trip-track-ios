@@ -17,6 +17,20 @@ enum RandomDisplayName {
         return "\(adj) \(noun) \(suffix)"
     }
 
+    /// Whether `name` looks like one we generated — three tokens, last is a
+    /// 2–4 digit number, first matches one of our seed adjectives. Lets the
+    /// UI flag the name as a placeholder ("tap to change") so users on a
+    /// fresh device don't end up thinking "Дерзкий Гонщик 472" is their
+    /// permanent identity.
+    static func isPlaceholder(_ name: String?) -> Bool {
+        guard let name, !name.isEmpty else { return false }
+        let parts = name.trimmingCharacters(in: .whitespaces).split(separator: " ")
+        guard parts.count == 3 else { return false }
+        guard Int(parts[2]) != nil else { return false }
+        let firstWord = String(parts[0])
+        return ruPool.adjectives.contains(firstWord) || enPool.adjectives.contains(firstWord)
+    }
+
     private struct Pool {
         let adjectives: [String]
         let nouns: [String]
