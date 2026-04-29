@@ -16,6 +16,10 @@ struct TripTrackApp: App {
         AutoTripService.shared.handleBackgroundLaunch()
         SyncQueue.shared.configure(transport: APISyncTransport.shared)
         SyncCoordinator.shared.start()
+        // Diagnostic — verifies our ISO date parser produces UTC-correct
+        // dates. Output goes to OSLog under subsystem `com.triptrack`,
+        // category `iso-date`. Single call per cold launch.
+        ISODate.runSelfTest()
     }
 
     var body: some Scene {

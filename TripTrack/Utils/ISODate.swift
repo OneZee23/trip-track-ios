@@ -1,4 +1,7 @@
 import Foundation
+import OSLog
+
+private let isoLog = Logger(subsystem: "com.triptrack", category: "iso-date")
 
 /// Thread-safe ISO-8601 (RFC 3339) date parsing pinned to UTC.
 ///
@@ -24,6 +27,24 @@ enum ISODate {
         if let date = withMs.date(from: value) { return date }
         if let date = withoutMs.date(from: value) { return date }
         return nil
+    }
+
+    /// Parses a known fixture and logs what comes out. Lets us see in
+    /// production logs whether the decoder is honoring the `Z` suffix the
+    /// way we expect — if `epoch` is wrong by some clean offset, we know
+    /// there's a timezone bug somewhere. Called once on cold launch.
+    static func runSelfTest() {
+        let fixture = "2026-04-29T08:33:35.049Z"
+        let expectedEpoch: TimeInterval = 1777660415.049
+        let parsed = parse(fixture)
+        if let parsed {
+            let drift = parsed.timeIntervalSince1970 - expectedEpoch
+            isoLog.log(
+                "self-test fixture=\(fixture) parsed=\(parsed.description) epoch=\(parsed.timeIntervalSince1970) drift=\(drift)s",
+            )
+        } else {
+            isoLog.error("self-test FAILED to parse fixture=\(fixture)")
+        }
     }
 
     /// Serializes a Date as an ISO-8601 UTC string with millisecond precision
