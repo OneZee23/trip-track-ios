@@ -62,11 +62,7 @@ final class SyncCoordinator {
             let res: SyncPullResponse = try await client.post(APIEndpoint.syncPull, body: req)
             coordinatorLog.debug("pull got trips=\(res.trips.upserted.count) vehicles=\(res.vehicles.upserted.count) photos=\(res.photos.upserted.count) settings=\(res.settings != nil) serverTime=\(res.serverTime)")
             pullApplier.apply(res)
-            let withFrac = ISO8601DateFormatter()
-            withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            let plain = ISO8601DateFormatter()
-            plain.formatOptions = [.withInternetDateTime]
-            if let serverTime = withFrac.date(from: res.serverTime) ?? plain.date(from: res.serverTime) {
+            if let serverTime = ISODate.parse(res.serverTime) {
                 LastSyncedAtStore.set(serverTime, for: accountId)
                 coordinatorLog.debug("lastSyncedAt advanced to \(serverTime)")
             } else {

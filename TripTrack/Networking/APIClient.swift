@@ -17,21 +17,20 @@ final class APIClient {
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
 
-        let withFrac = ISO8601DateFormatter()
-        withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-
+        // Codable strategies use the dedicated `ISODate` helpers below, which
+        // wrap explicit `DateFormatter`s pinned to UTC + `en_US_POSIX`. We
+        // moved off `ISO8601DateFormatter` because under iOS 18 concurrency
+        // it intermittently parsed `Z`-suffixed timestamps as if they were
+        // device-local time, surfacing as a "3 hours ago" reaction in MSK.
         decoder.dateDecodingStrategy = .custom { d in
             let c = try d.singleValueContainer()
             let s = try c.decode(String.self)
-            if let date = withFrac.date(from: s) { return date }
-            if let date = plain.date(from: s) { return date }
+            if let date = ISODate.parse(s) { return date }
             throw APIError.decoding("invalid ISO8601: \(s)")
         }
         encoder.dateEncodingStrategy = .custom { date, enc in
             var c = enc.singleValueContainer()
-            try c.encode(withFrac.string(from: date))
+            try c.encode(ISODate.format(date))
         }
     }
 
@@ -107,11 +106,7 @@ final class APIClient {
                 return try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: true)
             }
             postBanIfNeeded(code)
-            let iso = ISO8601DateFormatter()
-            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            let lastModified = envelope.serverLastModifiedAt.flatMap { s -> Date? in
-                iso.date(from: s) ?? ISO8601DateFormatter().date(from: s)
-            }
+            let lastModified = envelope.serverLastModifiedAt.flatMap { ISODate.parse($0) }
             throw APIError.from(code: code, message: message, serverVersion: envelope.serverVersion, serverLastModifiedAt: lastModified)
         }
     }
