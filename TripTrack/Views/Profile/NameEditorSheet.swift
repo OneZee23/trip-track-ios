@@ -153,24 +153,27 @@ struct NameEditorSheet: View {
     }
 
     private func commit() {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, validationError == nil else { return }
-        onSave(trimmed)
+        // Sanitize one final time on commit so what we send up matches the
+        // visible state — protects against a paste that placed an invisible
+        // char between the last `onChange` and the user tapping Save.
+        let sanitized = ContentFilter.sanitize(text)
+        guard !sanitized.isEmpty, validationError == nil else { return }
+        onSave(sanitized)
         dismiss()
     }
 
     private func validate(_ value: String) -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitized = ContentFilter.sanitize(value)
         let isRu = lang.language == .ru
-        if trimmed.count < 2 && !trimmed.isEmpty {
+        if sanitized.count < 2 && !sanitized.isEmpty {
             return isRu ? "Слишком коротко" : "Too short"
         }
         // Reuse the same content filter the rest of the app validates with
-        // (profanity / banned chars / punctuation rules). Keeping a single
-        // source of truth means a name accepted here is also accepted on
-        // the server-side, with identical localized messaging.
-        if !trimmed.isEmpty,
-           let err = ContentFilter.validate(trimmed, field: .displayName, language: lang.language) {
+        // (profanity / mixed-script / repeats / punctuation flood). Keeping
+        // a single source of truth means a name accepted here is also
+        // accepted on the server-side, with identical localized messaging.
+        if !sanitized.isEmpty,
+           let err = ContentFilter.validate(sanitized, field: .displayName, language: lang.language) {
             return err
         }
         return nil
