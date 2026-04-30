@@ -52,6 +52,18 @@ targets:
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     entitlements:
       path: TripTrack/TripTrack.entitlements
+      # Source of truth for capabilities — xcodegen rewrites the
+      # entitlements file from these properties on every generate. Without
+      # this block, toggling a capability off in Xcode's Signing pane
+      # leaves the file as empty <dict/> and the next generate keeps it
+      # empty, breaking Sign in with Apple and Push.
+      # NOTE: `aps-environment: development` is correct for dev builds.
+      # Archives for App Store automatically rewrite to `production` when
+      # signed against a prod provisioning profile.
+      properties:
+        aps-environment: development
+        com.apple.developer.applesignin:
+          - Default
 
   TripTrackLiveActivityExtension:
     type: app-extension

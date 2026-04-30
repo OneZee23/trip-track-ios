@@ -95,9 +95,7 @@ struct SignInPromptSheet: View {
                             signInPromptLog.error("❌ domain=\(ns.domain) code=\(ns.code) desc=\(ns.localizedDescription)")
                             // Code 1001 = user cancelled — silent. Anything else, show.
                             if ns.code != ASAuthorizationError.canceled.rawValue {
-                                lastError = isRu
-                                    ? "Apple-вход не сработал. Проверьте, что Вы залогинены в iCloud в настройках устройства."
-                                    : "Apple sign-in failed. Make sure you're signed into iCloud in device Settings."
+                                lastError = AppStrings.signInPromptAppleFailed(lang.language)
                             }
                         }
                     })
@@ -105,7 +103,7 @@ struct SignInPromptSheet: View {
                     .frame(height: 50)
                     .padding(.horizontal, 24)
 
-                Button(isRu ? "Не сейчас" : "Maybe later") {
+                Button(AppStrings.signInPromptMaybeLater(lang.language)) {
                     dismiss()
                 }
                 .font(.system(size: 14, weight: .medium))
@@ -122,13 +120,13 @@ struct SignInPromptSheet: View {
     private func bulletList(c: AppTheme.Colors, isRu: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             bullet(icon: "icloud.fill", color: AppTheme.blue,
-                   text: isRu ? "Синхронизация на всех Ваших устройствах" : "Sync across your devices",
+                   text: AppStrings.signInPromptBulletSync(lang.language),
                    c: c)
             bullet(icon: "heart.fill", color: .red,
-                   text: isRu ? "Реакции и подписки" : "React and follow people",
+                   text: AppStrings.signInPromptBulletReact(lang.language),
                    c: c)
             bullet(icon: "square.and.arrow.up", color: AppTheme.accent,
-                   text: isRu ? "Публикация поездок и шеринг" : "Publish your trips and share",
+                   text: AppStrings.signInPromptBulletPublish(lang.language),
                    c: c)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -143,6 +141,11 @@ struct SignInPromptSheet: View {
             Text(text)
                 .font(.system(size: 14))
                 .foregroundStyle(c.textSecondary)
+                // Long RU bullet ("Синхронизация на всех Ваших устройствах"
+                // = 38 chars) otherwise wraps to two lines and breaks
+                // vertical rhythm with the other 1-line bullets.
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

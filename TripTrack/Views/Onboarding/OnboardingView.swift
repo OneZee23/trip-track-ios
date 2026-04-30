@@ -62,6 +62,12 @@ struct OnboardingView: View {
                 .font(.system(size: 16))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
+                // Long RU subtitles (210-char auto-record copy) otherwise
+                // wrap to 9-10 lines on iPhone SE and push buttons under
+                // the page-indicator dots. `minimumScaleFactor(0.9)` plus
+                // a fixed-size cap keeps the bottom CTA stack visible.
+                .minimumScaleFactor(0.9)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 32)
 
             // Privacy-first pill — visual reinforcement of the subtitle.
@@ -103,6 +109,12 @@ struct OnboardingView: View {
                 .font(.system(size: 16))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
+                // Long RU subtitles (210-char auto-record copy) otherwise
+                // wrap to 9-10 lines on iPhone SE and push buttons under
+                // the page-indicator dots. `minimumScaleFactor(0.9)` plus
+                // a fixed-size cap keeps the bottom CTA stack visible.
+                .minimumScaleFactor(0.9)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 32)
 
             Spacer()
@@ -147,6 +159,12 @@ struct OnboardingView: View {
                 .font(.system(size: 16))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
+                // Long RU subtitles (210-char auto-record copy) otherwise
+                // wrap to 9-10 lines on iPhone SE and push buttons under
+                // the page-indicator dots. `minimumScaleFactor(0.9)` plus
+                // a fixed-size cap keeps the bottom CTA stack visible.
+                .minimumScaleFactor(0.9)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 32)
 
             Spacer()
@@ -217,6 +235,12 @@ struct OnboardingView: View {
                 .font(.system(size: 16))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
+                // Long RU subtitles (210-char auto-record copy) otherwise
+                // wrap to 9-10 lines on iPhone SE and push buttons under
+                // the page-indicator dots. `minimumScaleFactor(0.9)` plus
+                // a fixed-size cap keeps the bottom CTA stack visible.
+                .minimumScaleFactor(0.9)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 32)
 
             Spacer()

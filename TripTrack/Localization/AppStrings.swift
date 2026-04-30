@@ -691,6 +691,23 @@ enum AppStrings {
             ? "Через Apple ID. Без паролей и регистраций. Ваш автодневник остаётся приватным — Вы сами решаете, что выкладывать."
             : "Sign in with Apple. No passwords, no email confirmations. Your driving log stays private — you choose what to publish."
     }
+    static func signInPromptBulletSync(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Синхронизация на всех Ваших устройствах" : "Sync across your devices"
+    }
+    static func signInPromptBulletReact(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Реакции и подписки" : "React and follow people"
+    }
+    static func signInPromptBulletPublish(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Публикация поездок и шеринг" : "Publish your trips and share"
+    }
+    static func signInPromptMaybeLater(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не сейчас" : "Maybe later"
+    }
+    static func signInPromptAppleFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Apple-вход не сработал. Проверьте, что Вы залогинены в iCloud в настройках устройства."
+            : "Apple sign-in failed. Make sure you're signed into iCloud in device Settings."
+    }
 
     // MARK: - Guest mode banners / CTAs
 
