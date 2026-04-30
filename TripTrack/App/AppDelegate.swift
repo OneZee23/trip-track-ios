@@ -41,13 +41,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        // Whenever APNs delivers a push (foreground or background), refresh
-        // the unread badge so the count stays in sync without needing a
-        // foreground transition. The actual content fetch is paginated +
-        // lazy via the inbox screen, so a single quick count call here is
-        // enough to keep the UI honest.
+        // Push delivery refreshes the inbox so a user already on the
+        // notifications screen sees the new row without pull-to-refresh,
+        // and the badge count updates regardless of which screen is open.
+        // `.refresh()` covers both — pulls page 1 + recomputes unread.
         Task { @MainActor in
-            await NotificationsInboxStore.shared.refreshUnreadOnly()
+            await NotificationsInboxStore.shared.refresh()
             completionHandler(.newData)
         }
     }

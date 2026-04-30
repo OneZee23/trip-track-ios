@@ -180,13 +180,30 @@ struct NotificationsInboxView: View {
     private func handleTap(_ item: NotificationItem) {
         Task { await store.markRead(item) }
         // Routing:
-        //   reaction → push the actor's profile (the trip itself opens
-        //              from there if the user wants); keeps inbox a
-        //              "people who reacted" map rather than another
-        //              trip viewer that races with the social feed.
-        //   follow   → push the follower's profile.
-        guard let actor = item.actor else { return }
-        path.cappedAppend(.profile(actor.id, actor))
+        //   reaction → close inbox + post `.openTripDetail` so the Mine
+        //              tab pushes the user's own trip detail. Reactions
+        //              by definition are on the user's own trips, so the
+        //              receiver's interest is the trip ("who liked it"),
+        //              not the actor's profile in isolation.
+        //   follow   → push the follower's profile (so the user can
+        //              decide whether to follow back).
+        switch item.typedKind {
+        case .reaction:
+            if let tripId = item.tripId {
+                dismiss()
+                // Small async hop so the sheet finishes dismissing before
+                // the receiving feed acts on the route — same pattern
+                // `triptrack://trip/{uuid}` deep links use.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(name: .openTripDetail, object: tripId)
+                }
+            } else if let actor = item.actor {
+                path.cappedAppend(.profile(actor.id, actor))
+            }
+        case .follow, .none:
+            guard let actor = item.actor else { return }
+            path.cappedAppend(.profile(actor.id, actor))
+        }
     }
 
     @ViewBuilder
