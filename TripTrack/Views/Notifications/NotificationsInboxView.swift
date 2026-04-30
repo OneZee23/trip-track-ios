@@ -14,6 +14,7 @@ struct NotificationsInboxView: View {
     /// Trip) doesn't trigger SwiftUI's navigation-stack flash bug we hit
     /// on Discover before. Same pattern as DiscoverView / FeedView.
     @State private var path: [ProfilePreviewDest] = []
+    @State private var showPreferences = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -37,7 +38,22 @@ struct NotificationsInboxView: View {
                             }
                         }
                     }
-                    ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        HStack(spacing: 6) {
+                            Button { showPreferences = true } label: {
+                                Image(systemName: "gearshape")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(c.textSecondary)
+                            }
+                            SheetCloseButton()
+                        }
+                    }
+                }
+                .sheet(isPresented: $showPreferences) {
+                    NotificationPreferencesView()
+                        .environmentObject(lang)
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
                 }
                 .navigationDestination(for: ProfilePreviewDest.self) { dest in
                     switch dest {

@@ -46,5 +46,8 @@ enum APIEndpoint {
     static let notificationsUnreadCount = "/notifications/unread-count"
     static let notificationsMarkRead    = "/notifications/mark-read"
 
+    static let notificationPrefsGet     = "/auth/notification-prefs/get"
+    static let notificationPrefsUpdate  = "/auth/notification-prefs/update"
+
     static func userProfile(_ id: String) -> String { "/users/\(id)/profile" }
 }
