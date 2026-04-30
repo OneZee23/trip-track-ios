@@ -72,7 +72,13 @@ final class R2PhotoStorage: RemotePhotoStorage {
             ("tripId", tripId.uuidString),
             ("photoId", photoId.uuidString),
             ("type", type.rawValue),
-            ("timestamp", Self.iso8601.string(from: timestamp))
+            // `ISODate.format` is the rest-of-app date encoder. The previous
+            // `ISO8601DateFormatter()` here was the same flake we replaced
+            // everywhere else (3-hour timezone drift on iOS 18 concurrency).
+            // Backend's multipart parser accepts either, but staying on
+            // one path means a future server-side parser change can't
+            // regress only this code path.
+            ("timestamp", ISODate.format(timestamp)),
         ]
         if let caption = caption { fields.append(("caption", caption)) }
         return try await client.uploadMultipart(
@@ -81,8 +87,6 @@ final class R2PhotoStorage: RemotePhotoStorage {
             file: (name: "file", filename: "photo.jpg", mimeType: "image/jpeg", data: cleanData)
         )
     }
-
-    private static let iso8601 = ISO8601DateFormatter()
 
     func fetchPresignedURL(photoId: UUID, type: PhotoType) async throws -> URL {
         let res: PhotoURLResponse = try await client.post(
