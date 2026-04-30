@@ -137,6 +137,9 @@ final class AuthService: ObservableObject {
             // existing cached token is still valid.
             PushNotificationManager.shared.registerForRemoteNotifications()
             await PushNotificationManager.shared.syncTokenToServer()
+            // Pull the inbox once so the badge is accurate the first time
+            // the user looks at Profile after signing in.
+            await NotificationsInboxStore.shared.refresh()
         } catch let e as APIError {
             lastAuthError = e
         } catch {
@@ -192,6 +195,10 @@ final class AuthService: ObservableObject {
         userEmail = nil
         userIdentifier = nil
         SyncQueue.shared.clearAll()
+        // Drop in-app inbox state — the next account that signs in on
+        // this device should not inherit the previous user's badge or
+        // notification list.
+        NotificationsInboxStore.shared.clear()
 
         // Reset all local entities so next sign-in re-pushes
         let repo: TripRepository = CoreDataTripRepository()

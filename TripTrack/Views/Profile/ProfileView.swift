@@ -27,6 +27,8 @@ struct ProfileView: View {
     @State private var showCloudSync = false
     @State private var showSyncStatus = false
     @State private var showDebugLogs = false
+    @State private var showNotificationsInbox = false
+    @ObservedObject private var notificationsInbox = NotificationsInboxStore.shared
     @State private var socialProfile: SocialProfile?
     @State private var followListMode: FollowListMode?
     @State private var showBackgroundPicker = false
@@ -156,6 +158,21 @@ struct ProfileView: View {
                         )
                     }
                     .buttonStyle(.plain)
+
+                    // Notifications inbox — visible only when signed in,
+                    // since the inbox is per-account. Red dot inside the
+                    // row when there's anything unread; matches the
+                    // pattern Instagram / Strava use.
+                    Button { showNotificationsInbox = true } label: {
+                        profileNavButton(
+                            icon: "bell.fill",
+                            iconColor: AppTheme.accent,
+                            label: isRu ? "Уведомления" : "Notifications",
+                            badge: notificationsInbox.unreadCount,
+                            c: c
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 // Debug logs (always available — useful even for guest mode bug reports)
@@ -226,6 +243,12 @@ struct ProfileView: View {
                 .environmentObject(themeManager)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .sheet(isPresented: $showNotificationsInbox) {
+            NotificationsInboxView()
+                .environmentObject(lang)
+                .environmentObject(themeManager)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showBackgroundPicker) {
@@ -465,7 +488,13 @@ struct ProfileView: View {
         .surfaceCard(cornerRadius: 12)
     }
 
-    private func profileNavButton(icon: String, iconColor: Color, label: String, c: AppTheme.Colors) -> some View {
+    private func profileNavButton(
+        icon: String,
+        iconColor: Color,
+        label: String,
+        badge: Int = 0,
+        c: AppTheme.Colors,
+    ) -> some View {
         HStack {
             Image(systemName: icon)
                 .font(.system(size: 16))
@@ -473,6 +502,16 @@ struct ProfileView: View {
             Text(label)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(c.text)
+            // Capped at 99+ so a noisy account doesn't widen the row.
+            if badge > 0 {
+                Text(badge > 99 ? "99+" : "\(badge)")
+                    .font(.system(size: 11, weight: .bold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(AppTheme.accent, in: Capsule())
+                    .fixedSize()
+            }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 13, weight: .semibold))
