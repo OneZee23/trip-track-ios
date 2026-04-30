@@ -41,13 +41,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        // Push delivery refreshes the inbox so a user already on the
-        // notifications screen sees the new row without pull-to-refresh,
-        // and the badge count updates regardless of which screen is open.
-        // `.refresh()` covers both — pulls page 1 + recomputes unread.
-        Task { @MainActor in
-            await NotificationsInboxStore.shared.refresh()
-            completionHandler(.newData)
-        }
+        // Only fires for `content-available: 1` data pushes — our backend
+        // currently only sends visible alert pushes, so this path is
+        // dormant. Foreground refreshes happen in
+        // `UNUserNotificationCenter.willPresent`, tap-routing in
+        // `didReceive response`. Kept as a forward-compat acknowledgement
+        // so APNs doesn't think the app is unreachable.
+        completionHandler(.noData)
     }
 }

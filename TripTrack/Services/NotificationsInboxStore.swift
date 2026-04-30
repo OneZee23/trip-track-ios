@@ -24,6 +24,9 @@ final class NotificationsInboxStore: ObservableObject {
 
     private var nextCursor: String?
     private var cancellables = Set<AnyCancellable>()
+    /// In-flight refresh task. Concurrent callers wait on this instead of
+    /// kicking off a duplicate request.
+    private var activeRefresh: Task<Void, Never>?
 
     private init() {
         // Foreground bring-up — refresh both the list and unread count so
@@ -39,13 +42,29 @@ final class NotificationsInboxStore: ObservableObject {
 
     /// Loads page 1 of the inbox + refreshes the unread count. Called by
     /// the inbox view's `.task` modifier on first appear, and by pull-to-
-    /// refresh.
+    /// refresh, and by foreground push delivery. Concurrent calls coalesce
+    /// onto the in-flight task so a foreground transition that races
+    /// `view.task` doesn't interleave the two responses (causing the
+    /// second-finished-overwrites-first-finished stale-data bug).
     func refresh() async {
+        if let inflight = activeRefresh {
+            await inflight.value
+            return
+        }
         guard AuthService.shared.isSignedIn else {
             items = []
             unreadCount = 0
             return
         }
+        let task = Task<Void, Never> { [weak self] in
+            await self?.performRefresh()
+        }
+        activeRefresh = task
+        await task.value
+        activeRefresh = nil
+    }
+
+    private func performRefresh() async {
         isLoading = true
         defer { isLoading = false }
         nextCursor = nil

@@ -222,8 +222,14 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
                         NotificationCenter.default.post(name: .openTripDetail, object: tripId)
                     }
                 }
+                Task { @MainActor in
+                    await NotificationsInboxStore.shared.refresh()
+                }
             } else if category == "FOLLOW" {
                 NotificationCenter.default.post(name: .switchToFeedTab, object: nil)
+                Task { @MainActor in
+                    await NotificationsInboxStore.shared.refresh()
+                }
             }
         default:
             break
@@ -244,6 +250,13 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         // announcement is the right interaction (matches Strava, Twitter).
         switch category {
         case "REACTION", "FOLLOW":
+            // Refresh the inbox synchronously with banner display — this
+            // is the canonical "foreground push received" hook (vs
+            // `application(_:didReceiveRemoteNotification:)` which only
+            // fires for `content-available: 1` data pushes we don't send).
+            Task { @MainActor in
+                await NotificationsInboxStore.shared.refresh()
+            }
             completionHandler([.banner, .sound])
         default:
             completionHandler([])
