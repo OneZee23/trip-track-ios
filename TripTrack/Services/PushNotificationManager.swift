@@ -60,6 +60,15 @@ final class PushNotificationManager {
         pushLog.error("APNs registration failed: \(error.localizedDescription)")
     }
 
+    /// Drops the cached APNs token on sign-out. Called by `AuthService`
+    /// after the server-side `/auth/logout` (which also clears the token
+    /// row server-side). On next sign-in `registerForRemoteNotifications`
+    /// re-issues a token from APNs and we replay it.
+    func clearCachedToken() {
+        deviceToken = nil
+        pushLog.log("APNs token cleared on sign-out")
+    }
+
     /// Pushes the current token to the backend. Called after sign-in and
     /// whenever APNs hands us a fresh token. No-op if we don't have a token
     /// yet (the AppDelegate callback will fire it once one arrives).

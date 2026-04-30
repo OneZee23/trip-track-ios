@@ -41,9 +41,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        // Server may eventually send `content-available: 1` data pushes (e.g.
-        // refresh feed badge counts). For now we just acknowledge so APNs
-        // doesn't think the app is unreachable.
-        completionHandler(.noData)
+        // Whenever APNs delivers a push (foreground or background), refresh
+        // the unread badge so the count stays in sync without needing a
+        // foreground transition. The actual content fetch is paginated +
+        // lazy via the inbox screen, so a single quick count call here is
+        // enough to keep the UI honest.
+        Task { @MainActor in
+            await NotificationsInboxStore.shared.refreshUnreadOnly()
+            completionHandler(.newData)
+        }
     }
 }

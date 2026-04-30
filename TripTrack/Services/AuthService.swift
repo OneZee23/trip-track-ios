@@ -199,6 +199,11 @@ final class AuthService: ObservableObject {
         // this device should not inherit the previous user's badge or
         // notification list.
         NotificationsInboxStore.shared.clear()
+        // Wipe the cached APNs device token. The server already cleared
+        // the row inside `/auth/logout`, but the local UserDefaults copy
+        // would otherwise resurface in `syncTokenToServer` and re-bind
+        // the token to whatever account signs in next.
+        PushNotificationManager.shared.clearCachedToken()
 
         // Reset all local entities so next sign-in re-pushes
         let repo: TripRepository = CoreDataTripRepository()
