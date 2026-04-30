@@ -62,8 +62,8 @@ final class TripSyncPayloadMapperTests: XCTestCase {
         XCTAssertEqual(p.badgesJson, #"["badge1","badge2"]"#)
         XCTAssertEqual(p.xpEarned, 150)
         XCTAssertEqual(p.conflictVersion, 3)
-        XCTAssertEqual(p.trackPoints.count, 1)
-        XCTAssertEqual(p.trackPoints.first?.latitude, 50.0)
+        XCTAssertEqual(p.trackPoints?.count, 1)
+        XCTAssertEqual(p.trackPoints?.first?.latitude, 50.0)
     }
 
     func testTripWithNoOptionals() throws {
@@ -88,6 +88,6 @@ final class TripSyncPayloadMapperTests: XCTestCase {
         XCTAssertNil(p.title)
         XCTAssertNil(p.previewPolyline)
         XCTAssertNil(p.badgesJson)
-        XCTAssertEqual(p.trackPoints.count, 0)
+        XCTAssertEqual(p.trackPoints?.count ?? 0, 0)
     }
 }

@@ -26,30 +26,34 @@ struct TripBadgesRow: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
 
-        // Wrap in horizontal ScrollView so a high `maxVisible` (e.g. 8 in
-        // trip detail) plus an overflow `+N` pill never overflows iPhone SE
-        // width (343pt usable inside a 16pt-padded panel). Bounce stays off
-        // when content fits; users only see the scroll affordance when it
-        // actually clips.
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: size * 0.2) {
-                ForEach(visibleBadges) { badge in
-                    badgeIcon(badge, count: earnCounts[badge.id] ?? 1, c: c)
-                        .onTapGesture {
-                            onTap?(badge)
-                        }
-                }
-
-                if overflowCount > 0 {
-                    Text("+\(overflowCount)")
-                        .font(.system(size: size * 0.45, weight: .bold))
-                        .foregroundStyle(c.textSecondary)
-                        .frame(width: size, height: size)
-                        .background(c.textSecondary.opacity(0.1), in: Circle())
-                }
+        // ViewThatFits picks the static HStack when the badges + overflow
+        // pill fit, falling back to the horizontal ScrollView only when
+        // they actually overflow the parent. Avoids spawning a
+        // ScrollView per feed card when (most of the time) 4 badges fit
+        // cleanly — measurable scroll-stutter reduction on long feeds.
+        let row = HStack(spacing: size * 0.2) {
+            ForEach(visibleBadges) { badge in
+                badgeIcon(badge, count: earnCounts[badge.id] ?? 1, c: c)
+                    .onTapGesture {
+                        onTap?(badge)
+                    }
+            }
+            if overflowCount > 0 {
+                Text("+\(overflowCount)")
+                    .font(.system(size: size * 0.45, weight: .bold))
+                    .foregroundStyle(c.textSecondary)
+                    .frame(width: size, height: size)
+                    .background(c.textSecondary.opacity(0.1), in: Circle())
             }
         }
-        .scrollBounceBehavior(.basedOnSize)
+
+        ViewThatFits(in: .horizontal) {
+            row
+            ScrollView(.horizontal, showsIndicators: false) {
+                row
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
     }
 
     private func badgeIcon(_ badge: Badge, count: Int, c: AppTheme.Colors) -> some View {

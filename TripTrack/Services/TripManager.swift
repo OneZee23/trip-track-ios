@@ -6,7 +6,18 @@ import UIKit
 
 final class TripManager: ObservableObject {
     @Published var activeTrip: Trip?
-    @Published var isRecording = false
+    @Published var isRecording = false {
+        didSet {
+            // Mirror to a static flag so non-instance-holding services
+            // (SyncCoordinator, push handlers) can short-circuit without
+            // pulling a TripManager reference through their hierarchy.
+            Self.isAnyRecording = isRecording
+        }
+    }
+
+    /// Process-wide "is any TripManager currently recording" flag. Read by
+    /// SyncCoordinator to skip pulls that would clobber live state.
+    static private(set) var isAnyRecording = false
 
     var isPaused: Bool = false
 
@@ -190,13 +201,17 @@ final class TripManager: ObservableObject {
     }
 
     func deleteTrip(id: UUID) {
-        // Cancel any in-flight upload/update for this trip BEFORE the local
-        // delete — otherwise a junk trip auto-stopped → upload-enqueued →
-        // junk-filter-deleted would briefly POST the doomed trip to the
-        // server. After the cancel, repository.deleteTrip enqueues the
-        // actual delete via SyncStatus=.pendingDelete.
+        // Snapshot photo IDs BEFORE the soft-delete so we can cancel any
+        // queued uploads for them. Without this, a `.photo .upload` could
+        // run AFTER the trip was deleted client-side, landing a permanent
+        // orphan blob in R2 (server cascade only deletes the photo *row*,
+        // not the R2 object since the upload pre-creates that key).
+        let photoIds = repository.fetchTripDetail(id: id)?.photos.map(\.id) ?? []
         Task { @MainActor in
             SyncQueue.shared.cancelOperations(for: id, entityType: .trip)
+            for pid in photoIds {
+                SyncQueue.shared.cancelOperations(for: pid, entityType: .photo)
+            }
         }
         repository.deleteTrip(id: id)
     }

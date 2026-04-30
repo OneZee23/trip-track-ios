@@ -35,7 +35,9 @@ enum ISODate {
     /// there's a timezone bug somewhere. Called once on cold launch.
     static func runSelfTest() {
         let fixture = "2026-04-29T08:33:35.049Z"
-        let expectedEpoch: TimeInterval = 1777660415.049
+        // Real epoch for this fixture — earlier code carried the wrong
+        // value here and reported a fake -58h drift on every cold launch.
+        let expectedEpoch: TimeInterval = 1777451615.049
         let parsed = parse(fixture)
         if let parsed {
             let drift = parsed.timeIntervalSince1970 - expectedEpoch

@@ -44,6 +44,16 @@ final class SyncCoordinator {
         guard SettingsManager.shared.cloudSyncEnabled else { return }
         guard !CacheManager.shared.isOffline else { return }
         guard !isPulling else { return }
+        // Skip pulls while a trip is being recorded — `applyRemoteTrip`'s
+        // skip-guard checks pendingUpload status, but a freshly-recovered
+        // orphan trip may still be marked .synced (last upload succeeded)
+        // while live mutation is happening; pulling that down would blow
+        // away in-progress distance/maxSpeed/trackPoints. Push still runs
+        // — outbound is safe.
+        if TripManager.isAnyRecording {
+            await queue.processQueue()
+            return
+        }
         isPulling = true
         defer { isPulling = false }
         await runPull()

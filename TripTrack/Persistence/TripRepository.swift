@@ -172,6 +172,11 @@ final class CoreDataTripRepository: TripRepository {
         guard let entity = fetchEntity(id: tripId) else { return }
         entity.title = title.isEmpty ? nil : title
         entity.lastModifiedAt = Date()
+        // Flip syncStatus too — without this, an edit followed by a
+        // force-quit before the SyncEnqueuer Task fires leaves the entity
+        // marked .synced, so `recoverPendingEntities` skips it on next
+        // launch and the change is lost forever. Mirrors `updatePrivacy`.
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
         persistenceController.save()
     }
 
@@ -179,6 +184,7 @@ final class CoreDataTripRepository: TripRepository {
         guard let entity = fetchEntity(id: tripId) else { return }
         entity.tripDescription = notes
         entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
         persistenceController.save()
     }
 
@@ -220,6 +226,7 @@ final class CoreDataTripRepository: TripRepository {
            let json = String(data: data, encoding: .utf8) {
             entity.badgesJSON = json
             entity.lastModifiedAt = Date()
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
             persistenceController.save()
             Task { @MainActor in
                 SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
@@ -354,19 +361,33 @@ final class CoreDataTripRepository: TripRepository {
     // MARK: - Sync Helpers
 
     func markAllPendingUpload() {
+        // Scope each batch update to the CURRENT user's localUserId so we
+        // never re-upload another account's leftover entities. Without
+        // this, signing out User A and signing in User B on the same
+        // device caused User A's trips/vehicles/photos to be flipped to
+        // pendingUpload, then enqueued during User B's `performFirstSync`
+        // — server rejected with TripNotFound (good), but the client UI
+        // showed User A's trips because no layer filters by userId.
+        let userId = SettingsManager.shared.localUserId as NSUUID
+        let predicate = NSPredicate(format: "userId == %@", userId)
+
         let trips = NSBatchUpdateRequest(entityName: "TripEntity")
+        trips.predicate = predicate
         trips.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
         _ = try? context.execute(trips)
 
         let vehicles = NSBatchUpdateRequest(entityName: "VehicleEntity")
+        vehicles.predicate = predicate
         vehicles.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
         _ = try? context.execute(vehicles)
 
         let photos = NSBatchUpdateRequest(entityName: "TripPhotoEntity")
+        photos.predicate = predicate
         photos.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
         _ = try? context.execute(photos)
 
         let settings = NSBatchUpdateRequest(entityName: "UserSettingsEntity")
+        settings.predicate = NSPredicate(format: "id == %@", userId)
         settings.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
         _ = try? context.execute(settings)
 

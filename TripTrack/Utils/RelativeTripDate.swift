@@ -30,7 +30,14 @@ enum RelativeTripDate {
             return language == .ru ? "только что" : "just now"
         }
 
-        if calendar.isDateInToday(date) {
+        // `Calendar.isDateInToday`/`isDateInYesterday` compare to the
+        // SYSTEM clock, not the injected `now` — that broke unit tests
+        // anchored to a fixed epoch and would also misclassify in the
+        // unlikely-but-real case where the user's device clock drifts
+        // mid-session. Use `isDate(_:inSameDayAs:)` against `now` for
+        // the "today" branch and a manual day-1 calc for "yesterday" so
+        // both honor the caller-supplied reference time.
+        if calendar.isDate(date, inSameDayAs: now) {
             if secondsAgo < 3600 {
                 let m = secondsAgo / 60
                 return language == .ru
@@ -42,7 +49,8 @@ enum RelativeTripDate {
                 : "Today, \(timeString(date, language: language))"
         }
 
-        if calendar.isDateInYesterday(date) {
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
             return language == .ru
                 ? "Вчера, \(timeString(date, language: language))"
                 : "Yesterday, \(timeString(date, language: language))"

@@ -28,6 +28,15 @@ final class AuthService: ObservableObject {
 
     private init() {
         loadFromKeychain()
+        // If the previous session was force-quit (instead of cleanly
+        // signed out) the cached APNs token in UserDefaults survives.
+        // Drop it on cold launch when we're not signed in — otherwise
+        // the next sign-in could replay the stale token onto a different
+        // account, briefly binding the wrong device row. The token is
+        // re-issued by APNs after registerForRemoteNotifications anyway.
+        if !isSignedIn {
+            PushNotificationManager.shared.clearCachedToken()
+        }
         // Listen for server-reported ban. `APIClient` posts this when any
         // endpoint returns `USER_BANNED`. We sign out to drop tokens and
         // stop sync attempts — local CoreData is preserved so the user can
