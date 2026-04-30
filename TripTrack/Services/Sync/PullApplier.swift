@@ -13,6 +13,12 @@ final class PullApplier {
         for id in response.photos.deleted { repo.deletePhotoHard(id: id) }
         if let s = response.settings {
             repo.applyRemoteSettings(s)
+        }
+        // One save for the whole batch instead of N saves (one per row).
+        // CoreData performance scales linearly with save count, so a
+        // pull of 50 trips drops from 50× saveContext() to 1×.
+        repo.flushPendingApplies()
+        if response.settings != nil {
             SettingsManager.shared.reloadFromCoreData()
         }
     }

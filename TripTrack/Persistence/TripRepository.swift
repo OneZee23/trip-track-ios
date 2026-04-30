@@ -35,6 +35,10 @@ protocol TripRepository {
     func applyRemoteTrip(_ payload: TripSyncPayload)
     func applyRemoteVehicle(_ payload: VehicleSyncPayload)
     func applyRemotePhoto(_ payload: PhotoSyncPayload)
+    /// Flushes pending CoreData changes after a batch of `applyRemote*`
+    /// calls. The applyRemote methods skip per-item saves so a `/sync/pull`
+    /// with 50 trips makes ONE save instead of 50.
+    func flushPendingApplies()
     func applyRemoteSettings(_ payload: SettingsSyncPayload)
     func deleteTripHard(id: UUID)
     func deleteVehicleHard(id: UUID)
@@ -457,7 +461,8 @@ final class CoreDataTripRepository: TripRepository {
             }
         }
 
-        saveIfNeeded()
+        // Save deferred to PullApplier.flushPendingApplies() — batches a
+        // /sync/pull's worth of writes into a single CoreData save call.
     }
 
     func applyRemoteVehicle(_ p: VehicleSyncPayload) {
@@ -477,7 +482,7 @@ final class CoreDataTripRepository: TripRepository {
         entity.conflictVersion = Int32(p.conflictVersion)
         entity.lastModifiedAt = p.lastModifiedAt
         entity.syncStatus = SyncStatus.synced.rawValue
-        saveIfNeeded()
+        // Save deferred — see flushPendingApplies().
     }
 
     func applyRemotePhoto(_ p: PhotoSyncPayload) {
@@ -498,7 +503,7 @@ final class CoreDataTripRepository: TripRepository {
         entity.uploadStatus = p.uploadStatus
         entity.lastModifiedAt = p.lastModifiedAt
         entity.syncStatus = SyncStatus.synced.rawValue
-        saveIfNeeded()
+        // Save deferred — see flushPendingApplies().
     }
 
     func applyRemoteSettings(_ p: SettingsSyncPayload) {
@@ -523,6 +528,13 @@ final class CoreDataTripRepository: TripRepository {
         entity.conflictVersion = Int32(p.conflictVersion)
         entity.lastModifiedAt = p.lastModifiedAt
         entity.syncStatus = SyncStatus.synced.rawValue
+        // Save deferred — see flushPendingApplies().
+    }
+
+    /// Persist all `applyRemote*` mutations accumulated since the last
+    /// flush. PullApplier calls this once per pull instead of after every
+    /// row, collapsing N saves into 1.
+    func flushPendingApplies() {
         saveIfNeeded()
     }
 
