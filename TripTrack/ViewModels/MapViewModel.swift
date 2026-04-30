@@ -346,6 +346,14 @@ final class MapViewModel: ObservableObject {
     }
 
     func stopRecording() {
+        // Re-entry guard — manual Stop tap + Live Activity Stop intent can
+        // both fire on the same MainActor tick. Without this, side
+        // effects (haptic, fogRebuild, lastCompletedTrip overwrite, the
+        // junk-discard branch) would execute twice. Both callers are
+        // already MainActor-isolated, but the second call still finds
+        // `tripManager.activeTripEntity == nil` and runs through the
+        // body before discovering `completedTrip == nil`.
+        guard isRecording else { return }
         // Notify subscribers (Feed, Stats) regardless of which cleanup branch runs,
         // including silent junk-discard where the trip is deleted
         defer { NotificationCenter.default.post(name: .tripRecordingEnded, object: nil) }

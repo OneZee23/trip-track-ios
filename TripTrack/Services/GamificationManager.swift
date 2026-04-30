@@ -145,6 +145,16 @@ final class GamificationManager {
             let lastDay = calendar.startOfDay(for: lastDate)
             let daysBetween = calendar.dateComponents([.day], from: lastDay, to: today).day ?? 0
 
+            // Backdated / out-of-order trip (auto-trip recovery rewinds
+            // startDate, manual edit, async sync replay, etc.) — leave
+            // streak untouched and DON'T overwrite `lastTripDate` with an
+            // older value. Without this, recording a real trip after a
+            // backdated import would compute negative `daysBetween`,
+            // hit the "broken" branch, and reset the streak to 1.
+            if daysBetween < 0 {
+                return Int(entity.currentStreak)
+            }
+
             if daysBetween == 0 {
                 // Same day, no change
                 return Int(entity.currentStreak)

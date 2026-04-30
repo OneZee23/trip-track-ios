@@ -280,6 +280,16 @@ final class TripManager: ObservableObject {
         }
 
         persistenceController.save()
+        // Sweep ANY lingering Live Activities on launch when we're not
+        // actively recording — without this a force-quit during recording
+        // leaves the prior banner on Lock Screen / Dynamic Island until
+        // iOS times it out (~8h). `endActivity()` walks
+        // `Activity<TripActivityAttributes>.activities` and ends each one.
+        if !isRecording {
+            Task { @MainActor in
+                LiveActivityManager.shared.endActivity()
+            }
+        }
     }
 
     // MARK: - Private

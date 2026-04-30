@@ -6,16 +6,27 @@ final class AudioRouteDetector: ObservableObject {
     var onDeviceEvent: ((BluetoothEvent) -> Void)?
 
     private var lastKnownBluetoothDevice: String?
+    /// Idempotence flag — `selector:`-style observers don't dedupe and a
+    /// second `startMonitoring()` would stack a second copy. The
+    /// AutoTripService side now also gates, but defense-in-depth here.
+    private var isMonitoring = false
 
     init() {}
 
     // MARK: - Lifecycle
 
     func startMonitoring() {
-        // Activate audio session so we receive route change notifications in background
+        guard !isMonitoring else { return }
+        isMonitoring = true
+        // Activate audio session so we receive route change notifications in
+        // background. Use `.ambient` instead of `.playback` — `.playback`
+        // marks the app as a Now Playing candidate and pauses other apps
+        // that don't use `.mixWithOthers`. `.ambient` with `.mixWithOthers`
+        // gets us the route notifications we need without the audio
+        // interruption side effects.
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, options: .mixWithOthers)
+            try session.setCategory(.ambient, options: .mixWithOthers)
             try session.setActive(true)
         } catch {
             // Non-fatal: route monitoring may not work in background
@@ -43,8 +54,13 @@ final class AudioRouteDetector: ObservableObject {
     }
 
     func stopMonitoring() {
+        guard isMonitoring else { return }
+        isMonitoring = false
         NotificationCenter.default.removeObserver(self, name: AVAudioSession.routeChangeNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
+        // Deactivate the audio session so we stop showing as a Now Playing
+        // candidate / battery-warming the audio HAL when no longer needed.
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         lastKnownBluetoothDevice = nil
     }
 

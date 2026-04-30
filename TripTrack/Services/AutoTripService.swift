@@ -68,7 +68,18 @@ final class AutoTripService: ObservableObject {
         startMonitoring()
     }
 
+    private var isMonitoringActive = false
+
     func startMonitoring() {
+        // Idempotence guard — `ContentView.onAppear` calls
+        // `startIfNeeded()` every reappear, and several Settings flows
+        // also fire it. Without this, each call stacked another set of
+        // selector observers in `AudioRouteDetector` (which uses the
+        // `selector:` API that doesn't dedupe), and re-armed BLE / motion
+        // monitoring redundantly. First call wins; subsequent calls
+        // no-op until `stopMonitoring`.
+        guard !isMonitoringActive else { return }
+        isMonitoringActive = true
         bluetoothDetector.startMonitoring()
         audioRouteDetector.startMonitoring()
         motionDetector.startLiveUpdates()
@@ -76,6 +87,8 @@ final class AutoTripService: ObservableObject {
     }
 
     func stopMonitoring() {
+        guard isMonitoringActive else { return }
+        isMonitoringActive = false
         bluetoothDetector.stopMonitoring()
         audioRouteDetector.stopMonitoring()
         motionDetector.stopLiveUpdates()
@@ -190,7 +203,7 @@ final class AutoTripService: ObservableObject {
             }
             if let start = lowSpeedStartTime,
                Date().timeIntervalSince(start) > Self.inactivityTimeout {
-                // Stationary for 20 minutes — trigger auto-stop
+                // Stationary for 10 minutes — trigger auto-stop
                 let timeout = settings.autoStopTimeout
                 notificationManager.sendTripStopPrompt(minutes: timeout, reason: .inactivity)
                 startAutoStopTimer(minutes: timeout)
