@@ -2,6 +2,7 @@ import Foundation
 import CoreData
 import CoreLocation
 import UIKit
+import OSLog
 
 // MARK: - Protocol
 
@@ -564,7 +565,15 @@ final class CoreDataTripRepository: TripRepository {
 
     private func saveIfNeeded() {
         if context.hasChanges {
-            try? context.save()
+            // Surface CoreData save failures via OSLog instead of `try?` —
+            // a silent save failure during sync apply is the kind of bug
+            // that takes weeks to spot via "user trip didn't appear".
+            do {
+                try context.save()
+            } catch {
+                let logger = Logger(subsystem: "com.triptrack", category: "core-data")
+                logger.error("saveIfNeeded failed: \(error.localizedDescription)")
+            }
         }
     }
 }

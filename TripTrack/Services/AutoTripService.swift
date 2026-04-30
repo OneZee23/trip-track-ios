@@ -30,6 +30,21 @@ final class AutoTripService: ObservableObject {
         setupNotificationObservers()
     }
 
+    deinit {
+        // Defensive — observer tokens stored in `notificationObservers`
+        // need explicit removal even though `addObserver(forName:queue:using:)`
+        // captures `[weak self]`. Without this, the closures stay registered
+        // for the process lifetime if AutoTripService ever becomes instance-
+        // based instead of a singleton.
+        for token in notificationObservers {
+            NotificationCenter.default.removeObserver(token)
+        }
+        if let token = foregroundRetryObserver {
+            NotificationCenter.default.removeObserver(token)
+        }
+        autoStopTimer?.invalidate()
+    }
+
     // MARK: - Setup
 
     func configure(mapViewModel: MapViewModel) {
