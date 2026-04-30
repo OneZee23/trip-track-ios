@@ -212,7 +212,11 @@ enum ContentFilter {
             switch self {
             case .tripTitle: return 200
             case .tripNote: return 2000
-            case .displayName: return 64
+            // Match the server's `@MaxLength(30)` on `displayName` —
+            // previously 64 here would let `ContentFilter.validate` accept
+            // 30–64 char names that the server then rejected with a
+            // generic 400. Single binding constraint avoids drift.
+            case .displayName: return 30
             case .vehicleName: return 60
             }
         }

@@ -103,7 +103,10 @@ final class NotificationsInboxStore: ObservableObject {
     }
 
     /// Pagination — fires when the inbox view scrolls near the end of the
-    /// loaded page. Idempotent if already at the end.
+    /// loaded page. Idempotent if already at the end. After the append,
+    /// trim the head if the buffered list grows above `Self.maxBufferedItems`
+    /// — keeps memory bounded across long sessions even if the user
+    /// pages way back. The user can always pull-to-refresh to start over.
     func loadMoreIfNeeded(currentItem: NotificationItem) async {
         guard hasMore, let cursor = nextCursor else { return }
         guard let last = items.last, last.id == currentItem.id else { return }
@@ -112,6 +115,9 @@ final class NotificationsInboxStore: ObservableObject {
                 APIEndpoint.notificationsFeed,
                 body: NotificationsFeedRequest(limit: 30, cursor: cursor))
             items.append(contentsOf: res.items)
+            if items.count > Self.maxBufferedItems {
+                items.removeFirst(items.count - Self.maxBufferedItems)
+            }
             nextCursor = res.nextCursor
             hasMore = res.nextCursor != nil
         } catch {
@@ -119,13 +125,19 @@ final class NotificationsInboxStore: ObservableObject {
         }
     }
 
+    private static let maxBufferedItems = 200
+
     /// Marks a single notification read locally + on the server. Optimistic:
     /// flips `isRead` immediately and decrements `unreadCount`, then sends
-    /// the network request; on failure we don't revert because the next
-    /// refresh will reconcile.
+    /// the network request. If the network call fails we revert the local
+    /// state so the unread badge / row underline stay accurate — without
+    /// the revert the user would see "0 unread" while the server still
+    /// has the row pending, which `refreshUnreadOnly` then corrects by
+    /// jumping the badge back up unprompted.
     func markRead(_ item: NotificationItem) async {
         guard !item.isRead, let idx = items.firstIndex(where: { $0.id == item.id }) else { return }
-        items[idx] = makeRead(items[idx])
+        let original = items[idx]
+        items[idx] = makeRead(original)
         unreadCount = max(0, unreadCount - 1)
         do {
             let _: EmptyResponse = try await APIClient.shared.post(
@@ -133,6 +145,14 @@ final class NotificationsInboxStore: ObservableObject {
                 body: NotificationsMarkReadRequest(ids: [item.id]))
         } catch {
             inboxLog.error("mark-read failed: \(error.localizedDescription)")
+            // Revert — only if the row hasn't been replaced by a refresh
+            // mid-flight (defensive: refresh would have set `isRead`
+            // authoritatively from the server).
+            if let stillIdx = items.firstIndex(where: { $0.id == original.id }),
+               items[stillIdx].isRead {
+                items[stillIdx] = original
+                unreadCount += 1
+            }
         }
     }
 

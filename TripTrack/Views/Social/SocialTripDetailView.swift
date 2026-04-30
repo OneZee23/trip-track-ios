@@ -1,8 +1,5 @@
 import SwiftUI
 import MapKit
-import OSLog
-
-private let reactionTimeLog = Logger(subsystem: "com.triptrack", category: "reaction-time")
 
 /// Read-only detail view for a trip from the social feed.
 /// Unlike the local TripDetailView, it shows a friend's trip — no editing,
@@ -603,50 +600,11 @@ struct SocialTripDetailView: View {
     }
 
     private func relativeTime(_ date: Date, isRu: Bool) -> String {
-        // Manual diff — bypasses `RelativeDateTimeFormatter`'s opaque
-        // unit-rounding so we know the displayed value matches the actual
-        // wall-clock delta. Also logs raw decoded date + epoch so we can
-        // catch a timezone-decode regression visibly the next time it bites.
-        let now = Date()
-        let secondsAgo = Int(now.timeIntervalSince(date))
-        reactionTimeLog.log(
-            "row date=\(date.description) epoch=\(date.timeIntervalSince1970) now=\(now.description) diff=\(secondsAgo)s",
-        )
-        if secondsAgo < 60 {
-            return isRu ? "только что" : "just now"
-        }
-        if secondsAgo < 3600 {
-            let m = secondsAgo / 60
-            return isRu ? "\(m) мин назад" : (m == 1 ? "1 min ago" : "\(m) min ago")
-        }
-        if secondsAgo < 24 * 3600 {
-            let h = secondsAgo / 3600
-            if isRu {
-                let mod10 = h % 10
-                let mod100 = h % 100
-                let word: String
-                if mod100 >= 11 && mod100 <= 14 { word = "часов" }
-                else if mod10 == 1 { word = "час" }
-                else if (2...4).contains(mod10) { word = "часа" }
-                else { word = "часов" }
-                return "\(h) \(word) назад"
-            } else {
-                return h == 1 ? "1 hr ago" : "\(h) hr ago"
-            }
-        }
-        let days = secondsAgo / (24 * 3600)
-        if isRu {
-            let mod10 = days % 10
-            let mod100 = days % 100
-            let word: String
-            if mod100 >= 11 && mod100 <= 14 { word = "дней" }
-            else if mod10 == 1 { word = "день" }
-            else if (2...4).contains(mod10) { word = "дня" }
-            else { word = "дней" }
-            return "\(days) \(word) назад"
-        } else {
-            return days == 1 ? "1 day ago" : "\(days) days ago"
-        }
+        // Single source of truth lives in `RelativeTripDate`. The previous
+        // hand-rolled fork existed only to debug the timezone bug (now
+        // fixed by `process.env.TZ='UTC'` server-side + `ISODate.parse`
+        // client-side); the diag log it carried is no longer needed.
+        return RelativeTripDate.string(from: date, language: isRu ? .ru : .en)
     }
 
     // MARK: - Formatters

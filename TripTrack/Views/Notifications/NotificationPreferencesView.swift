@@ -126,6 +126,11 @@ struct NotificationPreferencesView: View {
                 .tint(AppTheme.accent)
                 .disabled(!isLoaded || isSaving)
                 .onChange(of: isOn.wrappedValue) { _, _ in
+                    // Gate on `isLoaded` — without this, the assignment
+                    // inside `load()` itself fires `.onChange` and
+                    // schedules a redundant POST with values that just
+                    // came back from the server.
+                    guard isLoaded else { return }
                     Task { await save() }
                 }
         }

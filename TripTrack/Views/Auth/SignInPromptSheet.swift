@@ -86,8 +86,13 @@ struct SignInPromptSheet: View {
                             Task {
                                 await auth.handleAuthorization(authorization)
                                 if auth.isSignedIn { dismiss() }
-                                else if let e = auth.lastAuthError {
-                                    lastError = String(describing: e)
+                                else if auth.lastAuthError != nil {
+                                    // Never echo `String(describing: APIError)` — for
+                                    // `unknownServer` it would surface server-controlled
+                                    // text that could leak DB/internal details. The
+                                    // generic localized copy covers every error mode
+                                    // in a way appropriate for the sign-in surface.
+                                    lastError = AppStrings.signInPromptAppleFailed(lang.language)
                                 }
                             }
                         case .failure(let error):
