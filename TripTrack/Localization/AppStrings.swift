@@ -708,6 +708,12 @@ enum AppStrings {
             ? "Apple-вход не сработал. Проверьте, что Вы залогинены в iCloud в настройках устройства."
             : "Apple sign-in failed. Make sure you're signed into iCloud in device Settings."
     }
+    static func signInFailedTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось войти" : "Sign in failed"
+    }
+    static func ok(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ОК" : "OK"
+    }
 
     // MARK: - Guest mode banners / CTAs
 

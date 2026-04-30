@@ -98,6 +98,22 @@ final class SyncQueue: ObservableObject {
         republishSnapshots()
     }
 
+    /// Cancels every pending op for a given entity. Called when an entity
+    /// is deleted before its other queued ops (upload/update) get a chance
+    /// to fire — without this, a junk trip that fails the post-stop filter
+    /// could be POSTed to the server moments before its DELETE arrives.
+    /// Order matters because the queue is FIFO — by purging on delete-
+    /// enqueue we guarantee the server never sees the doomed trip.
+    func cancelOperations(for entityId: UUID, entityType: SyncOperation.EntityType) {
+        let beforeCount = queue.count
+        queue.removeAll { $0.entityId == entityId && $0.entityType == entityType }
+        failedQueue.removeAll { $0.entityId == entityId && $0.entityType == entityType }
+        if queue.count != beforeCount {
+            updatePendingCount()
+            republishSnapshots()
+        }
+    }
+
     func processQueue() async {
         guard !isSyncing else { return }
         guard let activeTransport = transport else { return }

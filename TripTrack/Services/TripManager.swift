@@ -88,6 +88,14 @@ final class TripManager: ObservableObject {
             return updated
         }
         persistenceController.save()
+        // Notify the live UI (MapViewModel) so its `recordingStartDate`
+        // and the duration timer match the entity's new wall-clock start.
+        // Without this, the on-screen timer reads ~0:00 for an auto-trip
+        // that actually began 5–10 minutes ago.
+        NotificationCenter.default.post(
+            name: .tripStartDateBackdated,
+            object: date,
+        )
     }
 
     @discardableResult
@@ -182,6 +190,14 @@ final class TripManager: ObservableObject {
     }
 
     func deleteTrip(id: UUID) {
+        // Cancel any in-flight upload/update for this trip BEFORE the local
+        // delete — otherwise a junk trip auto-stopped → upload-enqueued →
+        // junk-filter-deleted would briefly POST the doomed trip to the
+        // server. After the cancel, repository.deleteTrip enqueues the
+        // actual delete via SyncStatus=.pendingDelete.
+        Task { @MainActor in
+            SyncQueue.shared.cancelOperations(for: id, entityType: .trip)
+        }
         repository.deleteTrip(id: id)
     }
 

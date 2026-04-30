@@ -107,7 +107,7 @@ struct TrackingView: View {
                         .foregroundStyle(speedColor)
                         .contentTransition(.numericText())
                         .animation(.easeInOut(duration: 0.2), value: Int(viewModel.speed))
-                    Text("km/h")
+                    Text(AppStrings.kmh(lang.language))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.white.opacity(0.5))
                 }

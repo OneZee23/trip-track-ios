@@ -315,14 +315,18 @@ struct ProfileView: View {
                 VehicleDetailView(vehicleId: vehicle.id)
             }
         }
-        .alert("Sign in failed",
+        .alert(AppStrings.signInFailedTitle(lang.language),
                isPresented: Binding(
                  get: { auth.lastAuthError != nil },
                  set: { if !$0 { auth.lastAuthError = nil } })
         ) {
-            Button("OK", role: .cancel) {}
+            Button(AppStrings.ok(lang.language), role: .cancel) {}
         } message: {
-            Text(String(describing: auth.lastAuthError ?? .transport("unknown")))
+            // Generic localized copy — same defence as SignInPromptSheet:
+            // never echo `String(describing: APIError)` because the
+            // `unknownServer.message` case would surface server-controlled
+            // text into a system alert.
+            Text(AppStrings.signInPromptAppleFailed(lang.language))
         }
     }
 

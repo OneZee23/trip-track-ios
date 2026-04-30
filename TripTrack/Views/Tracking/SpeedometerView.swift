@@ -4,13 +4,15 @@ struct SpeedometerView: View {
     let speed: Double
     var compact: Bool = false
 
+    @EnvironmentObject private var lang: LanguageManager
+
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 2) {
             Text("\(Int(speed))")
                 .font(.system(size: compact ? 36 : 48, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .contentTransition(.numericText())
-            Text("km/h")
+            Text(AppStrings.kmh(lang.language))
                 .font(compact ? .caption : .subheadline)
                 .foregroundStyle(.secondary)
         }

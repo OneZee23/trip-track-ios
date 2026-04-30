@@ -21,6 +21,10 @@ extension Notification.Name {
     /// observes this and triggers `signOut()` — local data stays intact so the
     /// user can still view (read-only) what they already have on device.
     static let userBanned = Notification.Name("userBanned")
+    /// AutoTrip recovery rewound the active trip's start to a real motion
+    /// onset N minutes ago. MapViewModel observes so its `recordingStartDate`
+    /// + duration timer match. Object is the new `Date`.
+    static let tripStartDateBackdated = Notification.Name("tripStartDateBackdated")
 }
 
 /// Payload for `.tripPrivacyChanged` — lets the feed optimistically remove/add the

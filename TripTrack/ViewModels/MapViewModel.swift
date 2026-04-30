@@ -125,6 +125,18 @@ final class MapViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // AutoTrip recovery rewound the entity's startDate — pull our
+        // recording start in sync so the live duration timer reads
+        // correctly for the rest of the trip.
+        NotificationCenter.default.publisher(for: .tripStartDateBackdated)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] note in
+                guard let self, let newStart = note.object as? Date else { return }
+                self.recordingStartDate = newStart
+                self.updateDuration()
+            }
+            .store(in: &cancellables)
+
         Task { @MainActor [tripManager, gamificationManager, territoryManager] in
             // Mark existing trips as processed (one-time migration)
             tripManager.migrateMarkExistingTripsProcessed()

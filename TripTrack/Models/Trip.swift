@@ -23,9 +23,37 @@ struct Trip: Identifiable, Codable {
     var earnedBadgeIds: [String]
 
     /// Decoded simplified coordinates for feed card route previews.
+    /// Hits an `NSCache` keyed by trip id so a feed scroll past 30 cards
+    /// doesn't redecode 30 polylines × 60Hz. Cache is bounded so memory
+    /// stays in check across long sessions; eviction is automatic on
+    /// memory pressure.
     var previewCoordinates: [CLLocationCoordinate2D] {
         guard let data = previewPolyline else { return trackPoints.map(\.coordinate) }
-        return Self.decodePolyline(data)
+        if let cached = Self.previewCache.object(forKey: id as NSUUID) {
+            return cached.coords
+        }
+        let coords = Self.decodePolyline(data)
+        Self.previewCache.setObject(CoordsBox(coords: coords), forKey: id as NSUUID)
+        return coords
+    }
+
+    /// Wrapper class because `NSCache` requires an `AnyObject` value type.
+    private final class CoordsBox {
+        let coords: [CLLocationCoordinate2D]
+        init(coords: [CLLocationCoordinate2D]) { self.coords = coords }
+    }
+
+    private static let previewCache: NSCache<NSUUID, CoordsBox> = {
+        let cache = NSCache<NSUUID, CoordsBox>()
+        cache.countLimit = 200
+        return cache
+    }()
+
+    /// Drops cached coords for a single trip — called when the trip is
+    /// edited / its polyline regenerated. Without this, the next feed
+    /// render shows the stale pre-edit shape until app relaunch.
+    static func invalidatePreviewCache(for tripId: UUID) {
+        previewCache.removeObject(forKey: tripId as NSUUID)
     }
 
     /// Encode an array of coordinates into compact binary data (pairs of Float32).
@@ -40,23 +68,22 @@ struct Trip: Identifiable, Codable {
         return data
     }
 
-    /// Decode binary polyline data back into coordinates.
+    /// Decode binary polyline data back into coordinates. Bulk-binds the
+    /// whole `Data` blob as `Float32` once instead of per-coord
+    /// `withUnsafeMutableBytes` round-trips.
     static func decodePolyline(_ data: Data) -> [CLLocationCoordinate2D] {
         guard data.count >= 8, data.count % 8 == 0 else { return [] }
         let count = data.count / 8
         var coords: [CLLocationCoordinate2D] = []
         coords.reserveCapacity(count)
-        for i in 0..<count {
-            let byteOffset = i * 8
-            var lat: Float32 = 0
-            var lon: Float32 = 0
-            _ = withUnsafeMutableBytes(of: &lat) { dest in
-                data.copyBytes(to: dest, from: byteOffset..<(byteOffset + 4))
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            let buffer = raw.bindMemory(to: Float32.self)
+            // Two Float32 per coord: lat, lon. Iterate paired indices.
+            for i in stride(from: 0, to: buffer.count, by: 2) {
+                let lat = Double(buffer[i])
+                let lon = Double(buffer[i + 1])
+                coords.append(CLLocationCoordinate2D(latitude: lat, longitude: lon))
             }
-            _ = withUnsafeMutableBytes(of: &lon) { dest in
-                data.copyBytes(to: dest, from: (byteOffset + 4)..<(byteOffset + 8))
-            }
-            coords.append(CLLocationCoordinate2D(latitude: Double(lat), longitude: Double(lon)))
         }
         return coords
     }
