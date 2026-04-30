@@ -251,52 +251,66 @@ struct GarageView: View {
 
     private func addVehicleSheet(c: AppTheme.Colors, isRu: Bool) -> some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // Emoji selector
-                Text(newEmoji)
-                    .font(.system(size: 56))
-                    .frame(width: 88, height: 88)
-                    .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 20))
+            // Wrap in ScrollView so iPhone SE — where preview/grid/textfield/
+            // button overflow the medium-detent height — still lets the user
+            // reach the Add button. Bottom-anchored CTA sticks via
+            // `safeAreaInset` so it stays tappable as the user types.
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Emoji selector
+                    Text(newEmoji)
+                        .font(.system(size: 56))
+                        .frame(width: 88, height: 88)
+                        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 20))
 
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
-                    ForEach(vehicleEmojis, id: \.self) { emoji in
-                        Button {
-                            Haptics.tap()
-                            newEmoji = emoji
-                        } label: {
-                            Text(emoji)
-                                .font(.system(size: 28))
-                                .frame(width: 52, height: 52)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(newEmoji == emoji ? AppTheme.accentBg : c.cardAlt)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(newEmoji == emoji ? AppTheme.accent : .clear, lineWidth: 2)
-                                )
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                        ForEach(vehicleEmojis, id: \.self) { emoji in
+                            Button {
+                                Haptics.tap()
+                                newEmoji = emoji
+                            } label: {
+                                Text(emoji)
+                                    .font(.system(size: 28))
+                                    .frame(width: 52, height: 52)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(newEmoji == emoji ? AppTheme.accentBg : c.cardAlt)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(newEmoji == emoji ? AppTheme.accent : .clear, lineWidth: 2)
+                                    )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
-                }
-                .padding(.horizontal, 32)
-
-                // Name input
-                TextField(isRu ? "Название авто" : "Vehicle name", text: $newName)
-                    .font(.system(size: 18, weight: .semibold))
-                    .multilineTextAlignment(.center)
-                    .padding(14)
-                    .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 14))
                     .padding(.horizontal, 32)
 
-                Spacer()
-
-                // Add button
+                    // Name input
+                    TextField(isRu ? "Название авто" : "Vehicle name", text: $newName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .multilineTextAlignment(.center)
+                        .padding(14)
+                        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 14))
+                        .padding(.horizontal, 32)
+                }
+                .padding(.top, 24)
+                .padding(.bottom, 24)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(c.bg)
+            .navigationTitle(isRu ? "Новый автомобиль" : "New vehicle")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+            }
+            .safeAreaInset(edge: .bottom) {
+                // Add button — pinned to bottom regardless of scroll
+                // position, padded so it doesn't sit on the home indicator.
                 Button {
                     let name = newName.trimmingCharacters(in: .whitespaces)
                     guard !name.isEmpty else { return }
                     settings.addVehicle(name: name, emoji: newEmoji)
-                    // Select the new vehicle
                     if let newVehicle = settings.vehicles.last {
                         settings.selectedVehicleId = newVehicle.id
                         settings.saveSettings()
@@ -319,17 +333,11 @@ struct GarageView: View {
                 }
                 .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
                 .padding(.horizontal, 32)
-                .padding(.bottom, 24)
-            }
-            .padding(.top, 24)
-            .background(c.bg)
-            .navigationTitle(isRu ? "Новый автомобиль" : "New vehicle")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+                .padding(.bottom, 12)
+                .background(.ultraThinMaterial)
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }
 

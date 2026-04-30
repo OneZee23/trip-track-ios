@@ -316,21 +316,24 @@ struct TripDetailView: View {
 
     @ViewBuilder
     private func infoPanel(trip: Trip, c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Date + time + vehicle. Share moved to the overflow menu in the
-            // top chrome so the info panel reads cleaner — `isGeneratingShare`
-            // still gates the Menu item so double-taps don't double-fire.
-            dateTimeLine(trip: trip, c: c)
-                .padding(.bottom, 8)
-
-            // Title with edit button
-            titleSection(trip: trip, c: c)
-
-            privacyToggle(trip: trip, c: c)
-                .padding(.top, 10)
+        // VStack(spacing: 16) at the panel level replaces a previous mix
+        // of per-section `.padding(.top, 16)` plus inline `.padding(.bottom)`
+        // that produced visibly different gaps when conditional sections
+        // (badges, reactions) appeared/disappeared. Single source of
+        // vertical rhythm here = stable layout regardless of what's shown.
+        VStack(alignment: .leading, spacing: 16) {
+            // Date + title sit closer together as a single identity block
+            // (matches Strava trip-detail header), so we keep them in a
+            // tighter inner stack and let the outer 16pt spacing put the
+            // 16pt gap between them and everything below.
+            VStack(alignment: .leading, spacing: 8) {
+                dateTimeLine(trip: trip, c: c)
+                titleSection(trip: trip, c: c)
+                privacyToggle(trip: trip, c: c)
+                    .padding(.top, 2)
+            }
 
             statsGrid(trip: trip, c: c)
-                .padding(.top, 16)
 
             // Reactions surface — Strava-style:
             //   * Public + has reactions → render breakdown.
@@ -339,7 +342,6 @@ struct TripDetailView: View {
             //   * Guest (private fallback) — nothing, no payoff to show.
             if auth.isSignedIn {
                 reactionsArea(trip: trip, c: c)
-                    .padding(.top, 16)
             }
 
             badgesSection(trip: trip, c: c)
@@ -781,7 +783,9 @@ struct TripDetailView: View {
                     onTap: { badge in selectedDetailBadge = badge }
                 )
             }
-            .padding(.top, 16)
+            // Outer infoPanel VStack already supplies the 16pt gap; the
+            // inner padding here used to double-up when the section was
+            // visible (badges → 32pt visible gap, no badges → 0).
         }
     }
 
@@ -843,7 +847,7 @@ struct TripDetailView: View {
                 .onTapGesture { showPhotoPicker = true }
             }
         }
-        .padding(.top, 16)
+        // Spacing handled by outer infoPanel VStack(spacing: 16).
     }
 
     // MARK: - Helpers

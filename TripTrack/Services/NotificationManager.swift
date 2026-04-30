@@ -236,8 +236,18 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // Don't show notification banner when the app is in foreground
-        completionHandler([])
+        let category = notification.request.content.categoryIdentifier
+        // Local trip-start / trip-stop prompts are presented inline via the
+        // recording UI itself, so silencing them in foreground avoids a
+        // double surface. Remote social pushes (REACTION / FOLLOW) DO get
+        // a foreground banner — the user is already in the app, so a quiet
+        // announcement is the right interaction (matches Strava, Twitter).
+        switch category {
+        case "REACTION", "FOLLOW":
+            completionHandler([.banner, .sound])
+        default:
+            completionHandler([])
+        }
     }
 }
 
