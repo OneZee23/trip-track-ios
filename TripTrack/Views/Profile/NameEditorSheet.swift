@@ -128,13 +128,12 @@ struct NameEditorSheet: View {
             .padding(.bottom, 16)
             .background(c.bg)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(isRu ? "Отмена" : "Cancel") {
-                        Haptics.tap()
-                        dismiss()
-                    }
-                    .foregroundStyle(c.textSecondary)
-                }
+                // Use the unified close affordance so every sheet across
+                // the app dismisses in the same place. Save button sits
+                // bottom-anchored as the affirmative action; the X is the
+                // exit, matching ProfileBackgroundPickerSheet, BluetoothScanSheet,
+                // CloudSyncView, SyncStatusSheetView, and DebugLogsView.
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
             .navigationBarTitleDisplayMode(.inline)
         }

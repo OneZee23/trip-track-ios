@@ -19,15 +19,18 @@ struct VehicleDetailView: View {
         settings.vehicles.first { $0.id == vehicleId }
     }
 
+    @ViewBuilder
     var body: some View {
-        guard let vehicle else {
-            return AnyView(EmptyView())
-        }
-        let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
-        let frame = frameColor(for: vehicle)
+        // `@ViewBuilder` lets us early-return without `AnyView`. The
+        // previous implementation wrapped the NavigationStack in AnyView
+        // (CLAUDE.md flagged that as a perf footgun) just so the guard
+        // branch could compile. ViewBuilder + Group makes both branches
+        // valid `some View` returns.
+        if let vehicle {
+            let c = AppTheme.colors(for: scheme)
+            let isRu = lang.language == .ru
+            let frame = frameColor(for: vehicle)
 
-        return AnyView(
             NavigationStack {
                 ScrollView {
                     VStack(spacing: 12) {
@@ -64,7 +67,7 @@ struct VehicleDetailView: View {
                     ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
                 }
             }
-        )
+        }
     }
 
     // MARK: - Header
@@ -207,27 +210,23 @@ struct VehicleDetailView: View {
                 // Pixel cars
                 ForEach(Vehicle.pixelCarAssets, id: \.self) { asset in
                     avatarOption(
-                        content: AnyView(
-                            Image(asset).resizable().scaledToFit().frame(width: 32, height: 32)
-                        ),
                         isSelected: vehicle.avatarEmoji == asset,
                         frame: frame,
-                        c: c
+                        c: c,
+                        action: { settings.updateVehicleAvatar(id: vehicleId, emoji: asset) }
                     ) {
-                        settings.updateVehicleAvatar(id: vehicleId, emoji: asset)
+                        Image(asset).resizable().scaledToFit().frame(width: 32, height: 32)
                     }
                 }
                 // Emoji avatars
                 ForEach(Vehicle.defaultAvatars, id: \.self) { emoji in
                     avatarOption(
-                        content: AnyView(
-                            Text(emoji).font(.system(size: 28))
-                        ),
                         isSelected: vehicle.avatarEmoji == emoji,
                         frame: frame,
-                        c: c
+                        c: c,
+                        action: { settings.updateVehicleAvatar(id: vehicleId, emoji: emoji) }
                     ) {
-                        settings.updateVehicleAvatar(id: vehicleId, emoji: emoji)
+                        Text(emoji).font(.system(size: 28))
                     }
                 }
             }
@@ -236,7 +235,16 @@ struct VehicleDetailView: View {
         .surfaceCard(cornerRadius: 16)
     }
 
-    private func avatarOption(content: AnyView, isSelected: Bool, frame: Color, c: AppTheme.Colors, action: @escaping () -> Void) -> some View {
+    /// Generic over `Content: View` so callers pass `Image` or `Text` without
+    /// erasing through `AnyView` (CLAUDE.md project rule). The `@ViewBuilder`
+    /// closure lets the caller assemble the avatar content inline.
+    private func avatarOption<Content: View>(
+        isSelected: Bool,
+        frame: Color,
+        c: AppTheme.Colors,
+        action: @escaping () -> Void,
+        @ViewBuilder content: () -> Content,
+    ) -> some View {
         Button(action: action) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
@@ -246,7 +254,7 @@ struct VehicleDetailView: View {
                         RoundedRectangle(cornerRadius: 12)
                             .strokeBorder(isSelected ? frame : .clear, lineWidth: 2)
                     )
-                content
+                content()
             }
         }
         .buttonStyle(.plain)

@@ -175,6 +175,10 @@ struct CustomTabBar: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(isActive ? activeTint : c.textTertiary)
                 .lineLimit(1)
+                // Dynamic Type up to AX5 plus 3 tabs × ~110pt slots starves
+                // the label width — without scale-fit the RU "Поездки" gets
+                // ellipsised. 0.7 is the lowest legible step at 10pt.
+                .minimumScaleFactor(0.7)
 
             ZStack {
                 if isActive {

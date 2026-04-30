@@ -365,6 +365,8 @@ struct TripDetailView: View {
         return Text("\(datePart), \(timePart)\(vehiclePart)")
             .font(.system(size: 13))
             .foregroundStyle(c.textSecondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
     }
 
     private var tripVehicle: Vehicle? {
@@ -375,7 +377,11 @@ struct TripDetailView: View {
     }
 
     private func titleSection(trip: Trip, c: AppTheme.Colors) -> some View {
-        HStack {
+        // Pin both edit/view branches to the same minimum height so toggling
+        // edit mode doesn't snap the title up by ~10pt. `minHeight: 32`
+        // matches the visual height of the 24pt heavy text rendered single-
+        // line; multi-line titles grow naturally above that.
+        HStack(alignment: .top) {
             if isEditingTitle {
                 TextField(
                     AppStrings.tripTitlePlaceholder(lang.language),
@@ -385,11 +391,20 @@ struct TripDetailView: View {
                 .foregroundStyle(c.text)
                 .focused($isTitleFieldFocused)
                 .onSubmit { commitTitleEdit() }
+                .frame(minHeight: 32, alignment: .topLeading)
                 .transition(.opacity)
             } else {
                 Text(trip.title ?? formattedDateFallback(trip.startDate))
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(c.text)
+                    // Long titles ("Поездка к маме на дачу через всю
+                    // Центральную Россию") wrap to 2 lines and shrink-fit
+                    // to fit the third line worth of content into the
+                    // visible area without pushing the stats grid down.
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .multilineTextAlignment(.leading)
+                    .frame(minHeight: 32, alignment: .topLeading)
                     .transition(.opacity)
             }
 
@@ -940,6 +955,11 @@ private struct DetailStatCard: View {
                 .foregroundStyle(AppTheme.colors(for: scheme).textSecondary)
                 .textCase(.uppercase)
                 .tracking(0.5)
+                // Long localized labels ("ELEVATION GAIN" / "НАБОР ВЫСОТЫ")
+                // need to fit within ~133pt cell on iPhone SE without
+                // wrapping to a second line which would push value down.
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
 
             Text(value)
                 .font(.system(size: 24, weight: .bold))

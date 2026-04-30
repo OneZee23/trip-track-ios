@@ -762,6 +762,11 @@ struct ProfileView: View {
                     .tracking(-0.3)
                     .foregroundStyle(hasName ? c.text : c.textTertiary)
                     .multilineTextAlignment(.center)
+                    // 30-char names + Dynamic Type otherwise wrap to 3 lines
+                    // and break the avatar overlap math (`avatarOverlap` =
+                    // half avatar size). Cap at 2 lines + scale-fit.
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
                 // The pencil is its own button — tapping it only opens the
                 // editor, never the public-profile preview. Lets the user
                 // rename even when their name is a real / accepted one,
