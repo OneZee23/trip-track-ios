@@ -198,6 +198,16 @@ final class AuthService: ObservableObject {
         TokenStore.shared.clear()
         KeychainHelper.delete(key: Keys.identityToken)
         KeychainHelper.delete(key: Keys.isSignedIn)
+        // Wipe identity-shaped Keychain entries too. Without this, signing
+        // out User A and signing in User B on the same physical device
+        // had `loadFromKeychain` (or `handleAuthorization`'s name-fallback
+        // chain) replay User A's name onto User B's account before the
+        // server-side canonical name lookup got a chance — User B would
+        // see User A's name pushed to their backend account via the
+        // automatic `syncProfileToServer` after sign-in.
+        KeychainHelper.delete(key: Keys.userIdentifier)
+        KeychainHelper.delete(key: Keys.userName)
+        KeychainHelper.delete(key: Keys.userEmail)
 
         isSignedIn = false
         userName = nil
