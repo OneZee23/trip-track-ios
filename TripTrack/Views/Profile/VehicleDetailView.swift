@@ -98,9 +98,13 @@ struct VehicleDetailView: View {
                     isEditingName = true
                 } label: {
                     HStack(spacing: 6) {
+                        // Long names shrink first, then middle-truncate so brand+model both stay visible
                         Text(vehicle.name.isEmpty ? (isRu ? "Мой авто" : "My car") : vehicle.name)
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(c.text)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .minimumScaleFactor(0.7)
                         Image(systemName: "pencil")
                             .font(.system(size: 13))
                             .foregroundStyle(c.textTertiary)

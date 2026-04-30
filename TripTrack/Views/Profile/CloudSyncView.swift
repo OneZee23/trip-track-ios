@@ -331,6 +331,8 @@ struct CloudSyncView: View {
                 Text(isRu ? "Заблокированные пользователи" : "Blocked users")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(c.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
@@ -358,6 +360,7 @@ struct CloudSyncView: View {
                     Text(AppStrings.signOut(lang.language))
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(c.text)
+                        .lineLimit(1)
                     Spacer()
                 }
                 .padding(14)
@@ -378,6 +381,7 @@ struct CloudSyncView: View {
                         Text(isRu ? "Удаление…" : "Deleting…")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.red)
+                            .lineLimit(1)
                     } else {
                         Image(systemName: "trash")
                             .font(.system(size: 16, weight: .medium))
@@ -386,6 +390,7 @@ struct CloudSyncView: View {
                         Text(AppStrings.deleteAccount(lang.language))
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.red)
+                            .lineLimit(1)
                     }
                     Spacer()
                 }
@@ -417,6 +422,7 @@ struct CloudSyncView: View {
                 .foregroundStyle(iconColor)
                 .frame(width: 24, alignment: .center)
                 .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 }
+            // Claim leftover row width so multi-line body wraps within the card edges
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 15, weight: .semibold))
@@ -426,6 +432,7 @@ struct CloudSyncView: View {
                     .foregroundStyle(c.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             Spacer(minLength: 0)
         }
         .padding(14)

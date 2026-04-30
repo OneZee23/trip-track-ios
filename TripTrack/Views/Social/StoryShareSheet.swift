@@ -160,6 +160,8 @@ struct StoryShareSheet: View {
                         Circle()
                             .fill(isPrimary ? AppTheme.accent : AppTheme.accentBg)
                     )
+                // Claim leftover row width so the trailing chevron stays pinned right
+                // and long titles can't squeeze the Spacer to zero on narrow phones.
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 15, weight: .semibold))
@@ -170,6 +172,7 @@ struct StoryShareSheet: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))

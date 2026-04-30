@@ -61,13 +61,17 @@ struct BluetoothScanSheet: View {
                         Image(systemName: "car.rear.and.tire.marks")
                             .font(.system(size: 14))
                             .foregroundStyle(AppTheme.accent)
+                        // Long stereo names truncate first so the trailing + button never falls off
                         VStack(alignment: .leading, spacing: 2) {
                             Text(audioDevice)
                                 .font(.system(size: 15))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                             Text(AppStrings.bluetoothAudio(l))
                                 .font(.system(size: 12))
                                 .foregroundStyle(c.textTertiary)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         Spacer()
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 20))
@@ -186,10 +190,13 @@ private struct DeviceRow: View {
         } label: {
             HStack(spacing: 10) {
                 signalBars
+                // Long device names truncate first so the trailing badge stays visible
                 Text(name)
                     .font(.system(size: 15))
                     .foregroundStyle(saved ? c.textTertiary : AppTheme.textPrimary)
-                Spacer()
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if saved {
                     Text(AppStrings.added(LanguageManager.currentLanguage))
                         .font(.system(size: 13, weight: .medium))

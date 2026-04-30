@@ -150,10 +150,13 @@ struct GarageView: View {
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
+                            .truncationMode(.tail)
                         if isActive {
+                            // fixedSize so the active checkmark never gets squeezed by long names
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 14))
                                 .foregroundStyle(AppTheme.accent)
+                                .fixedSize()
                         }
                     }
 
@@ -171,7 +174,7 @@ struct GarageView: View {
 
                 Spacer()
 
-                // Stickers count
+                // Stickers count — capped width so they can't push the name into the ellipsis zone
                 if !vehicle.stickers.isEmpty {
                     HStack(spacing: 2) {
                         ForEach(vehicle.stickers.prefix(3), id: \.self) { sticker in
@@ -185,6 +188,7 @@ struct GarageView: View {
                                 .foregroundStyle(c.textTertiary)
                         }
                     }
+                    .frame(maxWidth: 80)
                 }
 
                 // Edit menu

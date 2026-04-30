@@ -199,15 +199,19 @@ struct SyncStatusSheetView: View {
                     Text(entity)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(c.text)
+                        .lineLimit(1)
                     Text("·")
                         .foregroundStyle(c.textTertiary)
                     Text(action)
                         .font(.system(size: 13))
                         .foregroundStyle(c.textSecondary)
+                        .lineLimit(1)
                     Spacer()
+                    // ID is the least informative chunk — let it truncate before entity/action labels
                     Text(idShort)
                         .font(.system(size: 11, weight: .medium).monospaced())
                         .foregroundStyle(c.textTertiary)
+                        .layoutPriority(-1)
                 }
                 if op.retryCount > 0 || isFailed {
                     Text(AppStrings.syncAttemptsLabel(max(op.retryCount, 1), lang.language))
@@ -314,10 +318,13 @@ struct SyncStatusSheetView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(c.text)
                 Spacer()
+                // Long summaries ("X в облаке · Y в очереди") wrap to a 2nd line and shrink slightly before clipping
                 Text(summary)
                     .font(.system(size: 12, weight: .medium).monospacedDigit())
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.trailing)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)

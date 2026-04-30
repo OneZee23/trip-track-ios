@@ -18,8 +18,8 @@ struct RoadCollectionView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 12) {
-                    // Stats header
-                    HStack(spacing: 16) {
+                    // Stats header — fixed-width columns so the second stat doesn't shift sideways when it appears
+                    HStack(spacing: 32) {
                         VStack {
                             Text("\(roads.count)")
                                 .font(.system(size: 24, weight: .heavy))
@@ -28,6 +28,7 @@ struct RoadCollectionView: View {
                                 .font(.system(size: 11))
                                 .foregroundStyle(c.textTertiary)
                         }
+                        .frame(width: 80, alignment: .leading)
 
                         let mastered = roads.filter { $0.level == .mastered }.count
                         if mastered > 0 {
@@ -39,6 +40,7 @@ struct RoadCollectionView: View {
                                     .font(.system(size: 11))
                                     .foregroundStyle(c.textTertiary)
                             }
+                            .frame(width: 80, alignment: .leading)
                         }
 
                         Spacer()
@@ -135,30 +137,39 @@ struct RoadCardView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
+                    .truncationMode(.tail)
 
                 Spacer()
 
+                // fixedSize keeps the rarity pill at intrinsic width — long road names truncate first
                 Text(road.rarity.title(lang.language))
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(road.rarity.color, in: Capsule())
+                    .fixedSize()
             }
 
-            // Stats row
+            // Stats row — each label shrinks slightly before clipping when localizations get long
             HStack(spacing: 16) {
                 Label(String(format: "%.1f km", road.distanceKm), systemImage: "arrow.left.and.right")
                     .font(.system(size: 12))
                     .foregroundStyle(c.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
 
                 Label(road.level.title(lang.language), systemImage: "trophy.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(road.level.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
 
                 Label("×\(road.timesDriven)", systemImage: "repeat")
                     .font(.system(size: 12))
                     .foregroundStyle(c.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
 
                 Spacer()
             }

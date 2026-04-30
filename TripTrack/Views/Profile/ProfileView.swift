@@ -476,9 +476,12 @@ struct ProfileView: View {
             Image(systemName: icon)
                 .font(.system(size: 14))
                 .foregroundStyle(color)
+            // Big totals (10000+ km, 999+ trips) shrink before truncating so all three pills stay equal-width
             Text(value)
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(c.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text(label)
                 .font(.system(size: 10))
                 .foregroundStyle(c.textTertiary)
@@ -915,6 +918,8 @@ struct ProfileView: View {
                     .padding(.leading, 2)
             }
         }
+        // Pin a min height so the pill doesn't pop in/out as states swap (off vs syncing vs synced have different glyph sizes)
+        .frame(minHeight: 22)
         .padding(.horizontal, isTappable ? 10 : 0)
         .padding(.vertical, isTappable ? 4 : 0)
         .background(
