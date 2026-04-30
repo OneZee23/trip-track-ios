@@ -172,12 +172,15 @@ struct FollowListView: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     Text("LVL \(user.profileLevel)")
                         .font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
-
-                Spacer()
+                // Claim leftover space — without this short names left a gap
+                // before the chevron while long names crowded it, breaking
+                // visual rhythm across rows in the list.
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))

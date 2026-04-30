@@ -221,12 +221,16 @@ struct DiscoverView: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     Text("LVL \(user.profileLevel)")
                         .font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
-
-                Spacer()
+                // Claim leftover horizontal space — without this the follow
+                // button would shift x-position depending on display-name
+                // length, especially noticeable when toggling Follow ↔
+                // Following (different label widths).
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 followButton(for: user, c: c, isRu: isRu)
             }
@@ -250,8 +254,14 @@ struct DiscoverView: View {
                  ? (isRu ? "Подписан" : "Following")
                  : (isRu ? "Подписаться" : "Follow"))
                 .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
+                // Lock the button's footprint to its widest label —
+                // "Подписаться" (11 chars) vs "Подписан" (8 chars) caused
+                // visible row-content jump on toggle. Pinning width keeps
+                // the row stable between states.
+                .frame(minWidth: 110)
                 .background(
                     isFollowed ? c.cardAlt : AppTheme.accent,
                     in: RoundedRectangle(cornerRadius: 10)

@@ -440,12 +440,14 @@ struct PublicProfileView: View {
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
+                            .truncationMode(.tail)
 
                         Spacer()
 
                         Text("LVL \(v.level)")
                             .font(.custom("PressStart2P-Regular", size: 9))
                             .foregroundStyle(frame)
+                            .fixedSize()
                     }
 
                     Text(title)
@@ -469,6 +471,9 @@ struct PublicProfileView: View {
                             .fixedSize()
                     }
                 }
+                // Claim leftover space so long vehicle names truncate
+                // instead of pushing the LVL pill off-screen.
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(14)
             .surfaceCard(cornerRadius: 16)

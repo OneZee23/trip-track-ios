@@ -109,16 +109,23 @@ struct SocialFeedCardView: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
+                        // `truncationMode: .tail` is the default but be explicit
+                        // since a long name + "Вы" pill needs the truncation
+                        // to land on the name, not somewhere weird in the pill.
+                        .truncationMode(.tail)
                     if isOwn {
                         // Subtle "this is you" badge — explicit signal that
                         // the card is yours without breaking the unified
-                        // chrome. NN/g recognition heuristic.
+                        // chrome. NN/g recognition heuristic. `fixedSize`
+                        // stops the pill from being squeezed by a long name —
+                        // the name truncates first, the pill stays full size.
                         Text(isRu ? "Вы" : "You")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(AppTheme.accent)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(AppTheme.accentBg, in: Capsule())
+                            .fixedSize()
                     }
                 }
                 Text(dateRegionText(isRu: isRu))
@@ -126,13 +133,19 @@ struct SocialFeedCardView: View {
                     .foregroundStyle(c.textTertiary)
                     .lineLimit(1)
             }
+            // Claim every pixel of leftover horizontal space. Without this
+            // the VStack sized to its intrinsic content, so a short name
+            // left a giant gap that the optional photo pill filled with
+            // wildly different alignment depending on whether the trip had
+            // photos. Forcing maxWidth=.infinity normalises the layout: the
+            // photo pill (when present) sits flush right; otherwise the row
+            // ends cleanly at the trailing edge.
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture {
                 Haptics.tap()
                 onTapAuthor?()
             }
-
-            Spacer()
 
             if trip.photoCount > 0 {
                 HStack(spacing: 4) {
@@ -146,6 +159,10 @@ struct SocialFeedCardView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(c.cardAlt, in: Capsule())
+                // Pin width — without this the pill could stretch when the
+                // VStack on the left finds room, breaking the symmetry across
+                // cards in the same scroll list.
+                .fixedSize()
             }
         }
     }

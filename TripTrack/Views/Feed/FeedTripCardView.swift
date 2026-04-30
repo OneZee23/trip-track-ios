@@ -88,22 +88,29 @@ struct FeedTripCardView: View {
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                     if trip.isPrivate {
                         // Visual cue that the trip is local-only — drives
                         // recognition that publishing unlocks reactions /
                         // shares from followers. Tap of the whole card
                         // opens detail where the privacy toggle lives.
-                        privacyPill(c)
+                        // `fixedSize` so a long vehicle name truncates
+                        // first instead of squeezing the pill.
+                        privacyPill(c).fixedSize()
                     }
                 }
                 Text(formattedDateShort)
                     .font(.system(size: 11))
                     .foregroundStyle(c.textTertiary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
             }
-
-            Spacer()
+            // Claim leftover space so the trailing photo pill (when present)
+            // and the absence of one produce identical alignment across cards.
+            // Without this, an empty `Spacer()` and the optional pill caused
+            // the same intrinsic-width drift that hit SocialFeedCardView.
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if !trip.photos.isEmpty {
                 HStack(spacing: 4) {
@@ -117,6 +124,7 @@ struct FeedTripCardView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(c.cardAlt, in: Capsule())
+                .fixedSize()
             }
         }
     }

@@ -253,9 +253,12 @@ struct SocialTripDetailView: View {
                     Text(trip.author.displayName ?? (isRu ? "Без имени" : "No name"))
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(c.text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Text(dateLine(isRu: isRu))
                         .font(.system(size: 12))
                         .foregroundStyle(c.textTertiary)
+                        .lineLimit(1)
                     // Vehicle metadata sits on the identity strip, Strava-
                     // style: the avatar is identity, the vehicle is "what
                     // they were driving". Server now ships this for every
