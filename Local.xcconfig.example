@@ -6,13 +6,16 @@
 PRODUCT_BUNDLE_IDENTIFIER = com.yourname.TripTrack
 DEVELOPMENT_TEAM = YOUR_TEAM_ID
 
-// API base URL — backend NestJS server. Debug defaults to localhost:3003.
+// API base URL — backend NestJS server.
 // Use $() to escape slashes in URLs (xcconfig treats // as comment).
 //
-// Simulator: http:/$()/localhost:3003 works out of the box.
-// Real device: use your Mac's LAN IP instead of localhost (e.g. 192.168.1.50).
-//              You MUST also add that IP to TripTrack/Info.plist under
-//              NSAppTransportSecurity > NSExceptionDomains (see localhost
-//              entry for reference). Info.plist is committed; make your
-//              local edit but don't push it.
-API_BASE_URL = http:/$()/localhost:3003
+// Per-config split: Debug for local backend, Release for prod (App Store
+// + TestFlight builds use Release). When Apple builds the app for review
+// they pick up the Release line — leaving it pointing at localhost will
+// silently kill the production build.
+//
+// Debug — simulator uses localhost, real device needs Mac LAN IP, and
+// any HTTP host you target must be in Info.plist's NSExceptionDomains.
+// Release — must be HTTPS (no ATS exception needed for trusted CA certs).
+API_BASE_URL[config=Debug]   = http:/$()/localhost:3003
+API_BASE_URL[config=Release] = https:/$()/api.your-domain.com
