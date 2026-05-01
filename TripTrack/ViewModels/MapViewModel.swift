@@ -278,6 +278,10 @@ final class MapViewModel: ObservableObject {
     }
 
     func startRecording() {
+        // Re-entry guard — BT auto-trigger + notification action + manual tap
+        // can all reach this method on the same MainActor tick. Without the
+        // guard each call would create its own TripEntity, leaving orphans.
+        guard !isRecording else { return }
         // Reset state
         isPaused = false
         tripManager.isPaused = false
@@ -345,15 +349,15 @@ final class MapViewModel: ObservableObject {
         generator.impactOccurred()
     }
 
-    func stopRecording() {
-        // Re-entry guard — manual Stop tap + Live Activity Stop intent can
-        // both fire on the same MainActor tick. Without this, side
-        // effects (haptic, fogRebuild, lastCompletedTrip overwrite, the
-        // junk-discard branch) would execute twice. Both callers are
-        // already MainActor-isolated, but the second call still finds
-        // `tripManager.activeTripEntity == nil` and runs through the
-        // body before discovering `completedTrip == nil`.
+    func stopRecording(suggestedEndDate: Date? = nil) {
+        // Re-entry guard — manual Stop tap, Live Activity Stop intent, and
+        // AutoTripService.autoStopTrip can all reach this method on the same
+        // MainActor tick. Flip `isRecording` to false BEFORE the body runs
+        // so any second concurrent call fails the guard and bails — without
+        // this, `tripManager.stopTrip()` ran twice and side effects (Live
+        // Activity end, gamification, junk-discard delete) executed twice.
         guard isRecording else { return }
+        isRecording = false
         // Notify subscribers (Feed, Stats) regardless of which cleanup branch runs,
         // including silent junk-discard where the trip is deleted
         defer { NotificationCenter.default.post(name: .tripRecordingEnded, object: nil) }
@@ -363,10 +367,9 @@ final class MapViewModel: ObservableObject {
         haptic.prepare()
         haptic.notificationOccurred(.success)
 
-        let completedTrip = tripManager.stopTrip()
+        let completedTrip = tripManager.stopTrip(suggestedEndDate: suggestedEndDate)
         trackManager.stopAnimation()
         stopFogAnimation()
-        isRecording = false
         isPaused = false
         tripManager.isPaused = false
         userTrackingMode = .follow
@@ -397,13 +400,7 @@ final class MapViewModel: ObservableObject {
             }
         }
 
-        // Auto-delete junk trips. Two kinds:
-        //  1. Very short: <500m AND <2 min (parking-lot manoeuvres)
-        //  2. Walking-speed only: max speed <15 km/h for >3 min (CMMotion misfires
-        //     that record the user walking instead of driving)
-        if let trip = completedTrip,
-           (trip.distance < 500 && trip.duration < 120) ||
-           (trip.maxSpeedKmh < 15 && trip.duration > 180) {
+        if let trip = completedTrip, trip.isJunk {
             LiveActivityManager.shared.endActivity()
             tripManager.deleteTrip(id: trip.id)
             discardedJunkTrip = true
@@ -517,7 +514,7 @@ final class MapViewModel: ObservableObject {
                     self.smoothedSpeed = alpha * speedKmh + (1 - alpha) * self.smoothedSpeed
                 }
                 self.speed = self.smoothedSpeed
-                AutoTripService.shared.updateSpeedForInactivity(self.smoothedSpeed)
+                AutoTripService.shared.updateMovementForInactivity()
 
                 self.lastSpeedUpdate = Date()
                 self.altitude = update.altitude

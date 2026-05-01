@@ -20,10 +20,14 @@ final class AutoTripService: ObservableObject {
     private var keepAliveLocationManager: CLLocationManager?
     private var keepAliveDelegate: KeepAliveLocationDelegate?
 
-    // Debounce: ignore duplicate events within this window
-    private let deduplicationInterval: TimeInterval = 5
-    private var lastProcessedEvent: (type: EventType, name: String, time: Date)?
     private enum EventType { case connected, disconnected }
+    private struct EventKey: Hashable {
+        let type: EventType
+        let name: String
+    }
+    private var eventDebouncer = TimeWindowDebouncer<EventKey>(
+        window: AutoTripPolicy.eventDeduplicationWindow
+    )
 
     private init() {
         setupDetectors()
@@ -148,19 +152,28 @@ final class AutoTripService: ObservableObject {
     /// Timestamp of the last `automotive → not automotive` transition. Used to detect
     /// when a new driving session starts (long gap → treat next `automotive` as a new session).
     private var lastAutomotiveEndTime: Date?
-    /// Gap between automotive-ended and next automotive-detected above which we treat
-    /// the next activity as a new driving session (resets the remind-once flag).
-    private static let newSessionGap: TimeInterval = 10 * 60
     private var foregroundRetryObserver: Any?
 
     private func handleAutomotiveDetected() {
-        guard let vm = mapViewModel, !vm.isRecording else { return }
+        guard let vm = mapViewModel else { return }
+
+        // If a trip is already recording but it's been parked > staleTripTimeout,
+        // this automotive event is the start of a *new* session — finish the
+        // stale one before triggering. Without this, a previous trip whose
+        // background auto-stop never fired (Timer.scheduledTimer doesn't run
+        // while the app is suspended) silently absorbs the next drive.
+        if vm.isRecording {
+            guard isStaleByMovement else { return }
+            cancelAutoStopTimer()
+            autoStopTrip()
+        }
 
         // Don't re-remind for the same driving session
         if settings.autoRecordMode == .remind && hasRemindedForCurrentTrip { return }
 
-        // Deduplicate: don't trigger twice within 30s (BT + Motion can fire together)
-        if let last = lastTripTriggerTime, Date().timeIntervalSince(last) < 30 { return }
+        // Deduplicate: BT + Motion can fire together within milliseconds
+        if let last = lastTripTriggerTime,
+           Date().timeIntervalSince(last) < AutoTripPolicy.triggerDeduplicationWindow { return }
         lastTripTriggerTime = Date()
 
         // Check if BT audio route matches a saved device → select vehicle
@@ -184,34 +197,55 @@ final class AutoTripService: ObservableObject {
         }
     }
 
-    // MARK: - Inactivity Auto-stop
+    // MARK: - Inactivity Auto-stop (distance-based)
 
-    private var lowSpeedStartTime: Date?
-    private static let inactivityTimeout: TimeInterval = 10 * 60 // 10 minutes
-    private static let lowSpeedThreshold: Double = 2.0 // km/h
+    private var movementTracker = RecordingMovementTracker()
 
-    /// Called periodically from MapViewModel speed updates to track inactivity
-    func updateSpeedForInactivity(_ speedKmh: Double) {
-        guard let vm = mapViewModel, vm.isRecording else {
-            lowSpeedStartTime = nil
+    /// Called from `MapViewModel` on every published location update to track
+    /// real movement. Uses `RecordingMovementTracker` to gate on actual
+    /// distance growth instead of speed (the old EMA-on-GPS-speed approach
+    /// kept resetting on noisy readings during long stops in city centers).
+    func updateMovementForInactivity() {
+        guard let vm = mapViewModel, vm.isRecording,
+              let distance = vm.tripManager.activeTrip?.distance else {
+            // Tracker is reused across recordings; clear it when none is active.
+            movementTracker.reset()
             return
         }
 
-        if speedKmh < Self.lowSpeedThreshold {
-            if lowSpeedStartTime == nil {
-                lowSpeedStartTime = Date()
-            }
-            if let start = lowSpeedStartTime,
-               Date().timeIntervalSince(start) > Self.inactivityTimeout {
-                // Stationary for 10 minutes — trigger auto-stop
-                let timeout = settings.autoStopTimeout
-                notificationManager.sendTripStopPrompt(minutes: timeout, reason: .inactivity)
-                startAutoStopTimer(minutes: timeout)
-                lowSpeedStartTime = nil // reset so we don't re-trigger
-            }
-        } else {
-            lowSpeedStartTime = nil
-        }
+        // Returns true on meaningful gain (>=100m); the tracker resets its
+        // internal clock and we can bail. False means we're still in the
+        // same idle window — check whether it's overstayed.
+        if movementTracker.record(currentDistance: distance) { return }
+
+        // Inactivity prompts only fire in `.auto` mode. In `.remind` and
+        // `.off` the user opted out of automatic management; if they started
+        // manually they expect to stop manually. The tracker still stays
+        // populated for `recoverStaleTripIfNeeded`, which IS active in all
+        // modes since a 15+ min frozen trip is junk regardless.
+        guard settings.autoRecordMode == .auto,
+              movementTracker.isStale(threshold: AutoTripPolicy.inactivityTimeout) else { return }
+        let timeout = settings.autoStopTimeout
+        notificationManager.sendTripStopPrompt(minutes: timeout, reason: .inactivity)
+        startAutoStopTimer(minutes: timeout)
+        // Re-arm the window so we don't re-trigger every location update
+        // until the next full inactivity stretch.
+        movementTracker.extendWindow()
+    }
+
+    /// Called from `didBecomeActive` to recover from the case where the app
+    /// was suspended past the inactivity window — `Timer.scheduledTimer`
+    /// doesn't fire while suspended, so a trip that idled 30+ minutes in
+    /// background ends up still recording when the user re-opens the app.
+    private func recoverStaleTripIfNeeded() {
+        // Only auto-end stale trips in `.auto` mode. In `.remind` and `.off`
+        // the user opted out of automatic management — silently ending their
+        // trip on foreground entry would feel like the app stole their data.
+        // They'll see the trip is still recording and can stop it manually.
+        guard settings.autoRecordMode == .auto else { return }
+        guard let vm = mapViewModel, vm.isRecording else { return }
+        guard movementTracker.isStale(threshold: AutoTripPolicy.staleTripTimeout) else { return }
+        autoStopTrip()
     }
 
     // MARK: - Unified Trip Trigger
@@ -231,9 +265,8 @@ final class AutoTripService: ObservableObject {
             bgTaskId = UIApplication.shared.beginBackgroundTask {
                 UIApplication.shared.endBackgroundTask(bgTaskId)
             }
-            // End after 25 seconds or when recording is stable
             Task {
-                try? await Task.sleep(for: .seconds(25))
+                try? await Task.sleep(for: .seconds(AutoTripPolicy.backgroundLaunchTaskTimeout))
                 await MainActor.run {
                     UIApplication.shared.endBackgroundTask(bgTaskId)
                 }
@@ -285,7 +318,7 @@ final class AutoTripService: ObservableObject {
             guard let self else { return }
             // Long gap since the car last stopped moving → treat as a new driving session
             if let lastEnd = self.lastAutomotiveEndTime,
-               Date().timeIntervalSince(lastEnd) > Self.newSessionGap {
+               Date().timeIntervalSince(lastEnd) > AutoTripPolicy.newDrivingSessionGap {
                 self.hasRemindedForCurrentTrip = false
             }
             if let vm = self.mapViewModel, vm.isRecording {
@@ -315,16 +348,39 @@ final class AutoTripService: ObservableObject {
 
     private func handleDeviceConnected(name: String) {
         guard let vm = mapViewModel else { return }
-        guard !vm.isRecording else { return }
         guard shouldProcessEvent(.connected, name: name) else { return }
-
-        cancelAutoStopTimer()
 
         if let vehicleId = settings.vehicleId(forDeviceName: name) {
             settings.selectedVehicleId = vehicleId
             settings.saveSettings()
         }
 
+        if vm.isRecording {
+            // Already recording. Was the prior trip parked long enough that
+            // this reconnect is really a new session? If so split — without
+            // this, a return-to-car after >15 min (e.g. parked downtown for an
+            // errand, came back) silently merges into the previous trip,
+            // producing the "1-hour 3.1 km" zombie trips the user reported.
+            // Otherwise (BT just flapped, came back) keep the trip going and
+            // cancel any pending auto-stop.
+            if isStaleByMovement {
+                cancelAutoStopTimer()
+                autoStopTrip()
+                // Brief gap so the auto-stop notification renders before the
+                // new-trip start — without it the user can miss the visual
+                // cue that a split actually happened.
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(1))
+                    guard let self, let vm = self.mapViewModel, !vm.isRecording else { return }
+                    self.triggerTripStart(vm: vm, deviceName: name)
+                }
+            } else {
+                cancelAutoStopTimer()
+            }
+            return
+        }
+
+        cancelAutoStopTimer()
         triggerTripStart(vm: vm, deviceName: name)
     }
 
@@ -337,9 +393,41 @@ final class AutoTripService: ObservableObject {
 
         guard vm.isRecording else { return }
 
+        // BT off + already-idle trip = double confirmation user has parked.
+        // Skip the 3-min grace and end now — the grace is for BT-flap
+        // glitches, not for an obviously-finished trip.
+        if isStaleByMovement(threshold: AutoTripPolicy.bluetoothDisconnectFastStopIdleThreshold) {
+            autoStopTrip()
+            return
+        }
+
+        // BT off after a real drive = user got out and is now walking. If
+        // we wait the 3-min grace, GPS keeps logging footsteps (~5 km/h,
+        // points >5m apart so drift filter doesn't reject them) and a
+        // 50-min drive becomes a 53-min "drive" with 250m of walking
+        // tacked on. End now and trim to the last distance-change time.
+        // The 3-min grace is reserved for trips so short they could only
+        // be a BT glitch in the first place.
+        if let trip = vm.tripManager.activeTrip,
+           trip.distance >= AutoTripPolicy.immediateEndOnBtDisconnectMinDistance,
+           trip.duration >= AutoTripPolicy.immediateEndOnBtDisconnectMinDuration {
+            autoStopTrip()
+            return
+        }
+
         let timeout = settings.autoStopTimeout
         notificationManager.sendTripStopPrompt(minutes: timeout, reason: .bluetooth)
         startAutoStopTimer(minutes: timeout)
+    }
+
+    /// Has the active trip's distance been frozen long enough that the next
+    /// trigger should be treated as a new session?
+    private var isStaleByMovement: Bool {
+        movementTracker.isStale(threshold: AutoTripPolicy.staleTripTimeout)
+    }
+
+    private func isStaleByMovement(threshold: TimeInterval) -> Bool {
+        movementTracker.isStale(threshold: threshold)
     }
 
     // MARK: - Auto-stop Timer
@@ -389,7 +477,12 @@ final class AutoTripService: ObservableObject {
         if let trip = vm.tripManager.activeTrip {
             notificationManager.sendAutoStopNotification(distanceKm: trip.distanceKm, duration: trip.formattedDuration)
         }
-        vm.stopRecording()
+        // Hand the moment the trip stopped moving down to `stopTrip` — for
+        // stale-recovery / inactivity-fired auto-stops the wall clock is
+        // 10–15+ min past the real end, and `trimmedEndDate` can't recover
+        // it from track points (parked tails are all-filtered-out). Without
+        // this the trip duration includes the entire detection window.
+        vm.stopRecording(suggestedEndDate: movementTracker.lastChangeTime)
         hasRemindedForCurrentTrip = false
     }
 
@@ -421,25 +514,29 @@ final class AutoTripService: ObservableObject {
             forName: .autoTripContinueRequested, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.cancelAutoStopTimer()
+                guard let self else { return }
+                self.cancelAutoStopTimer()
+                // Push the inactivity window forward — user explicitly said
+                // "keep going", so don't re-prompt them in another second.
+                self.movementTracker.extendWindow()
             }
         }
 
-        notificationObservers = [startObs, stopObs, continueObs]
+        let foregroundObs = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.recoverStaleTripIfNeeded()
+            }
+        }
+
+        notificationObservers = [startObs, stopObs, continueObs, foregroundObs]
     }
 
     // MARK: - Deduplication
 
     private func shouldProcessEvent(_ type: EventType, name: String) -> Bool {
-        let now = Date()
-        if let last = lastProcessedEvent,
-           last.type == type,
-           last.name == name,
-           now.timeIntervalSince(last.time) < deduplicationInterval {
-            return false
-        }
-        lastProcessedEvent = (type: type, name: name, time: now)
-        return true
+        eventDebouncer.shouldProcess(EventKey(type: type, name: name))
     }
     // MARK: - Live Activity Foreground Retry
 

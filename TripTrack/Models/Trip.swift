@@ -169,6 +169,32 @@ struct Trip: Identifiable, Codable {
     }
 }
 
+extension Trip {
+    /// Trips classified as junk are auto-discarded after recording. Two cases:
+    /// 1. Parking-lot manoeuvres — short distance AND short duration.
+    /// 2. CMMotion misfires — capped at walking speed but recorded for long
+    ///    enough that they're clearly not a real drive.
+    var isJunk: Bool {
+        TripJunkClassifier.isJunk(
+            distanceMeters: distance,
+            durationSeconds: duration,
+            maxSpeedKmh: maxSpeedKmh
+        )
+    }
+}
+
+/// Shared classifier so post-trip cleanup (MapViewModel.stopRecording) and
+/// orphan recovery (TripManager.cleanupOrphanedTrips) can't drift apart.
+enum TripJunkClassifier {
+    static func isJunk(distanceMeters: Double, durationSeconds: TimeInterval, maxSpeedKmh: Double) -> Bool {
+        let isParkingManeuver = distanceMeters < AutoTripPolicy.junkTripMinDistance
+            && durationSeconds < AutoTripPolicy.junkTripMinDuration
+        let isWalkingMisfire = maxSpeedKmh < AutoTripPolicy.junkTripWalkingSpeedKmh
+            && durationSeconds > AutoTripPolicy.junkTripWalkingMinDuration
+        return isParkingManeuver || isWalkingMisfire
+    }
+}
+
 // Manual Equatable: excludes trackPoints (large array kills SwiftUI diffing)
 // and rarely-changing fields (tripDescription, isPrivate, vehicleId, fuelUsed,
 // elevation, maxSpeed, averageSpeed) that don't affect feed card rendering.

@@ -50,7 +50,14 @@ final class AudioRouteDetector: ObservableObject {
     }
 
     @objc private func handleAppBecameActive() {
-        checkCurrentRoute()
+        // At unlock iOS audio routing can briefly show a non-BT output
+        // (e.g. .builtInSpeaker) for a tick before settling back on the BT
+        // route, which `checkCurrentRoute` would otherwise interpret as a
+        // disconnect and fire a stop prompt while the engine is still
+        // running and BT is still actually connected. Wait for it to settle.
+        DispatchQueue.main.asyncAfter(deadline: .now() + AutoTripPolicy.audioRouteSettleDelay) { [weak self] in
+            self?.checkCurrentRoute()
+        }
     }
 
     func stopMonitoring() {

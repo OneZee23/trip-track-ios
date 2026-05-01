@@ -110,12 +110,21 @@ final class TripManager: ObservableObject {
     }
 
     @discardableResult
-    func stopTrip() -> Trip? {
+    func stopTrip(suggestedEndDate: Date? = nil) -> Trip? {
         locationManager.stopTracking()
         isRecording = false
 
         guard let entity = activeTripEntity else { return nil }
-        entity.endDate = trimmedEndDate(for: entity) ?? Date()
+        // Priority: trimmed tail (most precise — uses actual track point
+        // timestamps) → caller-supplied hint (e.g. AutoTripService passes the
+        // last distance-change time when auto-stopping after stale window) →
+        // now. The hint matters when the trip stopped moving but no
+        // stationary track points were recorded — `TripManager.handleNewLocation`
+        // filters out drift / sub-5m points so a parked-and-quiet tail can
+        // contain zero new points, leaving `trimmedEndDate` unable to detect
+        // it. Without the hint, an auto-stop fired 15 min after the user
+        // really parked would record a 65-min trip for a 50-min drive.
+        entity.endDate = trimmedEndDate(for: entity) ?? suggestedEndDate ?? Date()
         entity.lastModifiedAt = Date()
         updateEntityStats(entity)
         generatePreviewPolyline(for: entity)
@@ -249,7 +258,13 @@ final class TripManager: ObservableObject {
 
             let lastTimestamp = points.compactMap { $0.timestamp }.max() ?? Date()
             let actualDuration = max(0, entity.startDate.map { lastTimestamp.timeIntervalSince($0) } ?? 0)
-            let isJunk = entity.distance < 500 && actualDuration < 120
+            // entity.maxSpeed is m/s — convert to km/h for the shared classifier.
+            let maxSpeedKmh = entity.maxSpeed * 3.6
+            let isJunk = TripJunkClassifier.isJunk(
+                distanceMeters: entity.distance,
+                durationSeconds: actualDuration,
+                maxSpeedKmh: maxSpeedKmh
+            )
 
             if isJunk {
                 context.delete(entity)
