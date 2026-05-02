@@ -386,8 +386,14 @@ final class CoreDataTripRepository: TripRepository {
         vehicles.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
         _ = try? context.execute(vehicles)
 
+        // TripPhotoEntity is scoped to its parent trip, not directly to a user
+        // (see CoreData model — only a `trip` relationship, no `userId` field).
+        // Going through the relationship keeps the per-user filter without
+        // adding a denormalized column. The `userId == %@` shortcut blew up
+        // here with an NSException ("keypath userId not found in entity") that
+        // `try?` doesn't catch — Swift only intercepts Swift errors.
         let photos = NSBatchUpdateRequest(entityName: "TripPhotoEntity")
-        photos.predicate = predicate
+        photos.predicate = NSPredicate(format: "trip.userId == %@", userId)
         photos.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
         _ = try? context.execute(photos)
 
