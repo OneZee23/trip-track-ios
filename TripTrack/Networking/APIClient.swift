@@ -76,25 +76,34 @@ final class APIClient {
             apiAuthLog.notice("POST \(path, privacy: .public) hasToken=\(hasToken) isRetry=\(isRetry)")
         }
         let jsonData = try encoder.encode(body)
-        req.httpBody = jsonData
-        // URLSession's default 60s `timeoutIntervalForRequest` is for "between
-        // packets," but observed in prod that large /trips/upsert bodies get
-        // stuck without progress and never time out. Override with a per-request
-        // 90s ceiling that bounds the whole roundtrip — failure is preferable
-        // to silent infinite hang for the SyncQueue.
+        // Per-request 90s ceiling — URLSession's default 60s
+        // timeoutIntervalForRequest is "between packets" and observed in prod
+        // to never fire for stalled large uploads. Hard cap the whole roundtrip
+        // so SyncQueue never silently hangs.
         req.timeoutInterval = 90
         let bodySize = jsonData.count
-        if bodySize >= 10_000 {
-            apiAuthLog.notice("POST \(path, privacy: .public) bodySize=\(bodySize) bytes (large)")
+        let isLargeBody = bodySize >= 10_000
+        if isLargeBody {
+            apiAuthLog.notice("POST \(path, privacy: .public) bodySize=\(bodySize) bytes (large, upload task)")
         }
         logger.log(request: req, bodyPreview: String(data: jsonData, encoding: .utf8))
 
         let start = Date()
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await session.data(for: req)
+            // For large bodies, route through `session.upload(for:from:)` —
+            // internally a different pathway than `data(for:)` and observed
+            // to actually deliver bytes for ~80KB JSON POSTs that hung
+            // forever via the data(for:) variant. Don't set req.httpBody
+            // when using upload(for:from:) — the data parameter takes over.
+            if isLargeBody {
+                (data, response) = try await session.upload(for: req, from: jsonData)
+            } else {
+                req.httpBody = jsonData
+                (data, response) = try await session.data(for: req)
+            }
         } catch let e as URLError {
-            apiAuthLog.error("POST \(path, privacy: .public) failed: \(e.localizedDescription, privacy: .public) code=\(e.code.rawValue)")
+            apiAuthLog.error("POST \(path, privacy: .public) failed after \(Int(Date().timeIntervalSince(start) * 1000))ms: \(e.localizedDescription, privacy: .public) code=\(e.code.rawValue)")
             throw APIError.network(e)
         }
         logger.log(response: response, data: data, duration: Date().timeIntervalSince(start))
