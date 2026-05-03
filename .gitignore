@@ -54,3 +54,5 @@ Package.resolved
 
 # Design prototypes / handoff (not part of iOS build)
 design/
+
+crashes/

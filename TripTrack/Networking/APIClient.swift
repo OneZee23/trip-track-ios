@@ -1,4 +1,7 @@
 import Foundation
+import OSLog
+
+private let apiAuthLog = Logger(subsystem: "com.triptrack", category: "api-auth")
 
 @MainActor
 final class APIClient {
@@ -65,8 +68,12 @@ final class APIClient {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let hasToken = tokenStore.accessToken != nil
         if requiresAuth, let token = tokenStore.accessToken {
             req.setValue(token, forHTTPHeaderField: "x-access-token")
+        }
+        if requiresAuth {
+            apiAuthLog.notice("POST \(path, privacy: .public) hasToken=\(hasToken) isRetry=\(isRetry)")
         }
         let jsonData = try encoder.encode(body)
         req.httpBody = jsonData
@@ -221,6 +228,7 @@ final class APIClient {
 
     private func refreshIfNeeded() async throws {
         if let existing = refreshTask {
+            apiAuthLog.notice("refresh: awaiting in-flight task")
             try await existing.value
             return
         }
@@ -228,12 +236,28 @@ final class APIClient {
             guard let self else { return }
             defer { Task { @MainActor in self.refreshTask = nil } }
             guard let refresh = self.tokenStore.refreshToken else {
+                apiAuthLog.error("refresh: no refresh token in keychain — forcing signout")
+                AuthService.shared.forceSignOut()
                 throw APIError.invalidRefreshToken
             }
-            let res: RefreshResponse = try await self.performPost(
-                path: APIEndpoint.refresh, body: RefreshRequest(refreshToken: refresh),
-                requiresAuth: false, isRetry: true)  // isRetry=true prevents infinite loop
-            self.tokenStore.set(accessToken: res.accessToken, refreshToken: res.refreshToken)
+            apiAuthLog.notice("refresh: posting /auth/refresh")
+            do {
+                let res: RefreshResponse = try await self.performPost(
+                    path: APIEndpoint.refresh, body: RefreshRequest(refreshToken: refresh),
+                    requiresAuth: false, isRetry: true)  // isRetry=true prevents infinite loop
+                self.tokenStore.set(accessToken: res.accessToken, refreshToken: res.refreshToken)
+                apiAuthLog.notice("refresh: succeeded, new tokens stored")
+            } catch {
+                // Refresh failed permanently — backend rejected our refresh
+                // token (expired 7d, row deleted, secret rotated). Without a
+                // forceSignOut here the app would be stuck: isSignedIn=true,
+                // every authed call returns USER_NOT_AUTH, no recovery path.
+                // Tearing down the session lets the user re-authenticate via
+                // Sign in with Apple instead of a permanent silent failure.
+                apiAuthLog.error("refresh: failed (\(String(describing: error), privacy: .public)) — forcing signout")
+                AuthService.shared.forceSignOut()
+                throw error
+            }
         }
         refreshTask = task
         try await task.value

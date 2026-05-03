@@ -340,7 +340,22 @@ final class AuthService: ObservableObject {
         userIdentifier = KeychainHelper.loadString(key: Keys.userIdentifier)
         userName = KeychainHelper.loadString(key: Keys.userName)
         userEmail = KeychainHelper.loadString(key: Keys.userEmail)
-        isSignedIn = KeychainHelper.loadString(key: Keys.isSignedIn) != nil && userIdentifier != nil
+        // Tie isSignedIn to actual token presence, not just the marker key.
+        // Without this guard a stale `isSignedIn=true` marker can survive a
+        // crash/wipe of the token entries → `tokenStore.accessToken == nil`
+        // on every request → backend returns USER_NOT_AUTH forever, but the
+        // app keeps thinking the user is logged in and never offers re-auth.
+        let hasMarker = KeychainHelper.loadString(key: Keys.isSignedIn) != nil
+        let hasUserId = userIdentifier != nil
+        let hasTokens = TokenStore.shared.accessToken != nil && TokenStore.shared.refreshToken != nil
+        isSignedIn = hasMarker && hasUserId && hasTokens
+        authLog.notice("hydrate isSignedIn=\(self.isSignedIn) marker=\(hasMarker) userId=\(hasUserId) tokens=\(hasTokens)")
+        if hasMarker && hasUserId && !hasTokens {
+            // Marker present but tokens missing — clean up the lie so future
+            // launches start in the signed-out state cleanly.
+            authLog.error("inconsistent auth state: marker+userId present, tokens missing — clearing marker")
+            KeychainHelper.delete(key: Keys.isSignedIn)
+        }
 
         // Backfill for accounts created before the random-name fallback
         // existed: signed-in with no name (Apple Sign In didn't redeliver
