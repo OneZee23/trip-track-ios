@@ -14,8 +14,26 @@ final class APIClient {
     private let logger = APILogger()
     private var refreshTask: Task<Void, Error>?
 
-    init(session: URLSession = .shared, tokenStore: TokenStore = .shared) {
-        self.session = session
+    init(session: URLSession? = nil, tokenStore: TokenStore = .shared) {
+        // Custom URLSession instead of `.shared` so we control connectivity
+        // semantics. URLSession.shared has 60s "between packets" timeout that
+        // never actually fires for stalled uploads on flaky networks (observed
+        // /trips/upsert hanging indefinitely on Russian ISPs DPI-throttling
+        // direct-to-DigitalOcean traffic). `waitsForConnectivity` makes the
+        // session retry transparently when the network drops out instead of
+        // failing immediately, and the longer timeoutIntervalForResource gives
+        // big trip uploads with many trackPoints actual time to finish over
+        // unstable connections.
+        if let session {
+            self.session = session
+        } else {
+            let config = URLSessionConfiguration.default
+            config.waitsForConnectivity = true
+            config.timeoutIntervalForRequest = 180
+            config.timeoutIntervalForResource = 600
+            config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            self.session = URLSession(configuration: config)
+        }
         self.tokenStore = tokenStore
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
@@ -75,18 +93,37 @@ final class APIClient {
         if requiresAuth {
             apiAuthLog.notice("POST \(path, privacy: .public) hasToken=\(hasToken) isRetry=\(isRetry)")
         }
-        let jsonData = try encoder.encode(body)
-        // Per-request 90s ceiling — URLSession's default 60s
+        let rawJsonData = try encoder.encode(body)
+        // Per-request 90s ceiling. URLSession's default 60s
         // timeoutIntervalForRequest is "between packets" and observed in prod
-        // to never fire for stalled large uploads. Hard cap the whole roundtrip
-        // so SyncQueue never silently hangs.
+        // to never fire for stalled large uploads on RU networks. Hard cap.
         req.timeoutInterval = 90
-        let bodySize = jsonData.count
+        let rawSize = rawJsonData.count
+
+        // Gzip bodies >4KB. Russian ISPs DPI-throttle TLS streams >16KB to
+        // foreign DC IPs (DigitalOcean, Cloudflare) — large uploads stall
+        // permanently with NSURLErrorNetworkConnectionLost cascade. Trip JSON
+        // with hundreds of trackPoints compresses ~80% (repetitive floats),
+        // bringing 50KB payloads under the 16KB DPI threshold. Backend nginx
+        // has `gunzip on;` to transparently decompress before reaching Express.
+        let jsonData: Data
+        let bodySize: Int
+        if rawSize >= 4_096, let gz = rawJsonData.gzipped() {
+            jsonData = gz
+            bodySize = gz.count
+            req.setValue("gzip", forHTTPHeaderField: "Content-Encoding")
+            apiAuthLog.notice("POST \(path, privacy: .public) gzipped \(rawSize)→\(gz.count) bytes")
+        } else {
+            jsonData = rawJsonData
+            bodySize = rawSize
+        }
         let isLargeBody = bodySize >= 10_000
         if isLargeBody {
             apiAuthLog.notice("POST \(path, privacy: .public) bodySize=\(bodySize) bytes (large, upload task)")
         }
-        logger.log(request: req, bodyPreview: String(data: jsonData, encoding: .utf8))
+        // Log the original (un-gzipped) JSON for human readability — gzipped
+        // bytes would just be opaque binary in the diagnostic log.
+        logger.log(request: req, bodyPreview: String(data: rawJsonData, encoding: .utf8))
 
         let start = Date()
         let (data, response): (Data, URLResponse)
