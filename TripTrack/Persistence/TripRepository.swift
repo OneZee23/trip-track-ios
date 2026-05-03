@@ -386,16 +386,16 @@ final class CoreDataTripRepository: TripRepository {
         vehicles.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
         _ = try? context.execute(vehicles)
 
-        // TripPhotoEntity is scoped to its parent trip, not directly to a user
-        // (see CoreData model — only a `trip` relationship, no `userId` field).
-        // Going through the relationship keeps the per-user filter without
-        // adding a denormalized column. The `userId == %@` shortcut blew up
-        // here with an NSException ("keypath userId not found in entity") that
-        // `try?` doesn't catch — Swift only intercepts Swift errors.
-        let photos = NSBatchUpdateRequest(entityName: "TripPhotoEntity")
-        photos.predicate = NSPredicate(format: "trip.userId == %@", userId)
-        photos.propertiesToUpdate = ["syncStatus": SyncStatus.pendingUpload.rawValue]
-        _ = try? context.execute(photos)
+        // TripPhotoEntity has no `userId` column (only a `trip` relationship),
+        // and NSBatchUpdateRequest can't traverse relationships — CoreData's
+        // batch SQL generator refuses to emit a JOIN, throwing an NSException
+        // that `try?` cannot catch. So we fall back to fetch + iterate. Photo
+        // count per user is in the hundreds at worst; the perf hit is invisible.
+        let photoFetch: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        photoFetch.predicate = NSPredicate(format: "trip.userId == %@", userId)
+        if let userPhotos = try? context.fetch(photoFetch) {
+            for photo in userPhotos { photo.syncStatus = SyncStatus.pendingUpload.rawValue }
+        }
 
         let settings = NSBatchUpdateRequest(entityName: "UserSettingsEntity")
         settings.predicate = NSPredicate(format: "id == %@", userId)
