@@ -14,26 +14,16 @@ final class APIClient {
     private let logger = APILogger()
     private var refreshTask: Task<Void, Error>?
 
-    init(session: URLSession? = nil, tokenStore: TokenStore = .shared) {
-        // Custom URLSession instead of `.shared` so we control connectivity
-        // semantics. URLSession.shared has 60s "between packets" timeout that
-        // never actually fires for stalled uploads on flaky networks (observed
-        // /trips/upsert hanging indefinitely on Russian ISPs DPI-throttling
-        // direct-to-DigitalOcean traffic). `waitsForConnectivity` makes the
-        // session retry transparently when the network drops out instead of
-        // failing immediately, and the longer timeoutIntervalForResource gives
-        // big trip uploads with many trackPoints actual time to finish over
-        // unstable connections.
-        if let session {
-            self.session = session
-        } else {
-            let config = URLSessionConfiguration.default
-            config.waitsForConnectivity = true
-            config.timeoutIntervalForRequest = 180
-            config.timeoutIntervalForResource = 600
-            config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            self.session = URLSession(configuration: config)
-        }
+    init(session: URLSession = .shared, tokenStore: TokenStore = .shared) {
+        // Reverted: a custom URLSession (waitsForConnectivity / longer
+        // timeouts / reloadIgnoringCache) made things STRICTLY WORSE in
+        // prod — every request started getting -1005 networkConnectionLost,
+        // even small ones. The shared session's connection pool reuse from
+        // earlier successful requests was apparently masking RU-DPI breakage
+        // for small bodies. Keep `.shared` and rely on gzip + per-request
+        // 90s timeoutInterval (set on URLRequest in performPost) to stop
+        // silent infinite hangs.
+        self.session = session
         self.tokenStore = tokenStore
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
