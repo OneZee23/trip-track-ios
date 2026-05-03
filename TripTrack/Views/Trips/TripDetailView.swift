@@ -329,8 +329,14 @@ struct TripDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 dateTimeLine(trip: trip, c: c)
                 titleSection(trip: trip, c: c)
-                privacyToggle(trip: trip, c: c)
-                    .padding(.top, 2)
+                // The privacy toggle promises social visibility — without
+                // Cloud Sync the trip never reaches the server, so the toggle
+                // is a lie. Hide it entirely until sync is enabled (cleaner
+                // than showing a "won't actually publish" hint).
+                if settings.cloudSyncEnabled {
+                    privacyToggle(trip: trip, c: c)
+                        .padding(.top, 2)
+                }
             }
 
             statsGrid(trip: trip, c: c)

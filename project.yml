@@ -40,7 +40,7 @@ targets:
         INFOPLIST_KEY_NSMotionUsageDescription: "TripTrack uses motion data to detect when you're driving and automatically start recording trips."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         MARKETING_VERSION: "0.5.0"
-        CURRENT_PROJECT_VERSION: "14"
+        CURRENT_PROJECT_VERSION: "15"
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.dev
@@ -83,7 +83,7 @@ targets:
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Live"
         MARKETING_VERSION: "0.5.0"
-        CURRENT_PROJECT_VERSION: "14"
+        CURRENT_PROJECT_VERSION: "15"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         APP_INTENTS_DEPLOYMENT_POSTPROCESSING: NO

@@ -58,6 +58,12 @@ final class SyncCoordinator {
         defer { isPulling = false }
         await runPull()
         await queue.processQueue()
+        // Without this, any op that failed once (transient auth glitch on
+        // launch, refresh-token race, network blip) sits in `failedQueue`
+        // forever — the queue's pendingCount stays at 1, the user sees a
+        // permanent "0/1" until they manually tap Retry. retryFailed has
+        // its own 2^maxRetry backoff sleep so we won't hot-spin.
+        await queue.retryFailed()
     }
 
     private func runPull() async {
