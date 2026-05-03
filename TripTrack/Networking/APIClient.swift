@@ -91,16 +91,27 @@ final class APIClient {
         let start = Date()
         let (data, response): (Data, URLResponse)
         do {
-            // For large bodies, route through `session.upload(for:from:)` —
-            // internally a different pathway than `data(for:)` and observed
-            // to actually deliver bytes for ~80KB JSON POSTs that hung
-            // forever via the data(for:) variant. Don't set req.httpBody
-            // when using upload(for:from:) — the data parameter takes over.
-            if isLargeBody {
-                (data, response) = try await session.upload(for: req, from: jsonData)
-            } else {
-                req.httpBody = jsonData
-                (data, response) = try await session.data(for: req)
+            (data, response) = try await sendOnce(req: req, body: jsonData, isLargeBody: isLargeBody, session: session)
+        } catch let e as URLError where e.code == .networkConnectionLost {
+            // -1005 (NSURLErrorNetworkConnectionLost) is the classic URLSession
+            // failure mode when a pooled HTTP/1.1 connection was already closed
+            // by the server-side keepalive timer but URLSession tried to write
+            // to it anyway. Apple-recommended remedy: catch and retry once on a
+            // fresh ephemeral session — that connection is guaranteed not to
+            // come from the broken pool entry. Without this the SyncQueue
+            // looped forever on /trips/upsert because every retry hit the same
+            // dead pool slot. One-shot retry only; if it fails again, give up
+            // and let SyncQueue's normal failedQueue path take over.
+            apiAuthLog.notice("POST \(path, privacy: .public) -1005 networkConnectionLost — retrying on fresh ephemeral session")
+            let freshConfig = URLSessionConfiguration.ephemeral
+            freshConfig.timeoutIntervalForRequest = 90
+            let freshSession = URLSession(configuration: freshConfig)
+            defer { freshSession.invalidateAndCancel() }
+            do {
+                (data, response) = try await sendOnce(req: req, body: jsonData, isLargeBody: isLargeBody, session: freshSession)
+            } catch let e2 as URLError {
+                apiAuthLog.error("POST \(path, privacy: .public) retry also failed: \(e2.localizedDescription, privacy: .public) code=\(e2.code.rawValue)")
+                throw APIError.network(e2)
             }
         } catch let e as URLError {
             apiAuthLog.error("POST \(path, privacy: .public) failed after \(Int(Date().timeIntervalSince(start) * 1000))ms: \(e.localizedDescription, privacy: .public) code=\(e.code.rawValue)")
@@ -242,6 +253,23 @@ final class APIClient {
     private func postBanIfNeeded(_ code: String) {
         guard code == "USER_BANNED" else { return }
         NotificationCenter.default.post(name: .userBanned, object: nil)
+    }
+
+    // MARK: - HTTP transport helper
+
+    /// Single HTTP roundtrip. Picks `upload(for:from:)` for large bodies and
+    /// `data(for:)` for small ones — the upload variant tolerates ~80KB JSON
+    /// POSTs that would hang via data(for:) on flakey connections. The
+    /// network-connection-lost retry in the callers wraps this whole call.
+    private func sendOnce(
+        req: URLRequest, body: Data?, isLargeBody: Bool, session: URLSession,
+    ) async throws -> (Data, URLResponse) {
+        if let body, isLargeBody {
+            return try await session.upload(for: req, from: body)
+        }
+        var req = req
+        if let body { req.httpBody = body }
+        return try await session.data(for: req)
     }
 
     // MARK: - Token refresh (single-flight)
