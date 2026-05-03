@@ -77,6 +77,16 @@ final class APIClient {
         }
         let jsonData = try encoder.encode(body)
         req.httpBody = jsonData
+        // URLSession's default 60s `timeoutIntervalForRequest` is for "between
+        // packets," but observed in prod that large /trips/upsert bodies get
+        // stuck without progress and never time out. Override with a per-request
+        // 90s ceiling that bounds the whole roundtrip — failure is preferable
+        // to silent infinite hang for the SyncQueue.
+        req.timeoutInterval = 90
+        let bodySize = jsonData.count
+        if bodySize >= 10_000 {
+            apiAuthLog.notice("POST \(path, privacy: .public) bodySize=\(bodySize) bytes (large)")
+        }
         logger.log(request: req, bodyPreview: String(data: jsonData, encoding: .utf8))
 
         let start = Date()
@@ -84,6 +94,7 @@ final class APIClient {
         do {
             (data, response) = try await session.data(for: req)
         } catch let e as URLError {
+            apiAuthLog.error("POST \(path, privacy: .public) failed: \(e.localizedDescription, privacy: .public) code=\(e.code.rawValue)")
             throw APIError.network(e)
         }
         logger.log(response: response, data: data, duration: Date().timeIntervalSince(start))
