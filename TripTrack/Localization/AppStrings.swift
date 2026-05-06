@@ -315,6 +315,40 @@ enum AppStrings {
         }
         return "\(count) \(count == 1 ? "Region" : "Regions")"
     }
+
+    /// Sign-out warning copy when the user has public trips on the server.
+    /// Russian needs full plural agreement: 1 → "публичная поездка", 2-4 →
+    /// "публичные поездки", 5+ → "публичных поездок", with the verb form
+    /// matching ("она" vs "они"). The "11-14" carve-out is the standard
+    /// Slavic exception (11 takes the genitive plural). Copy avoids the word
+    /// "удалить" — "Hide public" describes the user-visible effect; the
+    /// implementation detail (server DELETE + local mark private) is
+    /// invisible to them and doesn't touch private trips or local data.
+    static func publishedTripsSignOutMessage(_ lang: LanguageManager.Language, count: Int) -> String {
+        if lang == .ru {
+            let lastDigit = count % 10
+            let lastTwo = count % 100
+            let noun: String
+            let verb: String
+            if lastTwo >= 11 && lastTwo <= 14 {
+                noun = "публичных поездок"
+                verb = "Они останутся в ленте"
+            } else if lastDigit == 1 {
+                noun = "публичная поездка"
+                verb = "Она останется в ленте"
+            } else if lastDigit >= 2 && lastDigit <= 4 {
+                noun = "публичные поездки"
+                verb = "Они останутся в ленте"
+            } else {
+                noun = "публичных поездок"
+                verb = "Они останутся в ленте"
+            }
+            return "В общей ленте у Вас \(count) \(noun). \(verb) после выхода, если Вы их не скроете.\n\nПриватные поездки и локальные данные не затрагиваются — Вы сможете снова войти и продолжить."
+        }
+        let noun = count == 1 ? "public trip" : "public trips"
+        let pron = count == 1 ? "It will stay in the feed" : "They will stay in the feed"
+        return "You have \(count) \(noun) in the social feed. \(pron) after sign out unless you hide them.\n\nPrivate trips and local data are not affected — you can sign back in anytime."
+    }
     static func exploredPercent(_ lang: LanguageManager.Language, percent: String, place: String) -> String {
         lang == .ru ? "\(percent)% от \(place) исследовано" : "\(percent)% of \(place) explored"
     }

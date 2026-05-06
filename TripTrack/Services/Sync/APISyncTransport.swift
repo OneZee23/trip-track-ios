@@ -51,17 +51,23 @@ final class APISyncTransport: SyncTransport {
             try await uploadTrip(id: operation.entityId)
         case (.trip, .delete):
             try await deleteTrip(id: operation.entityId)
+        case (.trip, .unpublish):
+            try await unpublishTrip(id: operation.entityId)
         case (.vehicle, .upload), (.vehicle, .update):
             try await uploadVehicle(id: operation.entityId)
         case (.vehicle, .delete):
             try await deleteVehicle(id: operation.entityId)
+        case (.vehicle, .unpublish):
+            break  // vehicles are never publishable on their own
         case (.photo, .upload), (.photo, .update):
             try await uploadPhoto(id: operation.entityId)
         case (.photo, .delete):
             try await deletePhoto(id: operation.entityId)
+        case (.photo, .unpublish):
+            break  // photo unpublish rides along with the parent trip's unpublish
         case (.settings, .upload), (.settings, .update):
             try await uploadSettings()
-        case (.settings, .delete):
+        case (.settings, .delete), (.settings, .unpublish):
             break
         }
     }
@@ -70,6 +76,21 @@ final class APISyncTransport: SyncTransport {
 
     private func uploadTrip(id: UUID) async throws {
         guard let trip = repo.fetchTripDetail(id: id), let entity = repo.fetchEntity(id: id) else { return }
+        // Re-check the privacy gate at execute time. SyncEnqueuer's gate
+        // fires at enqueue, but the op can sit in the queue across rapid
+        // user toggles. Cloud Sync ON bypasses (full mirror).
+        if !SettingsManager.shared.cloudSyncEnabled && entity.isPrivate {
+            // If the trip already has a server copy, demoting locally
+            // isn't enough — we need to strip the server side too.
+            // Schedule an unpublish instead of just dropping the op.
+            if entity.serverCreatedAt != nil {
+                try await unpublishTrip(id: id)
+            } else {
+                entity.syncStatus = SyncStatus.synced.rawValue
+                try? PersistenceController.shared.container.viewContext.save()
+            }
+            return
+        }
         let payload = TripSyncPayload(trip: trip, entity: entity)
         do {
             let res: TripUpsertResponse = try await client.post(APIEndpoint.tripUpsert, body: payload)
@@ -105,6 +126,27 @@ final class APISyncTransport: SyncTransport {
             // as success so the queue stops retrying — local hard-delete still happens below.
         }
         repo.deleteTripHard(id: id)
+    }
+
+    /// Server-side delete that preserves the local entity. The user un-published
+    /// a trip (public→private) while Cloud Sync is OFF, so we want zero trace
+    /// on the server (privacy-first) but the trip itself stays in their local
+    /// "Мои" tab. Backend `softDelete` cascades to all photos in R2, so we
+    /// don't need a separate photo-delete loop.
+    private func unpublishTrip(id: UUID) async throws {
+        guard let entity = repo.fetchEntity(id: id) else { return }
+        // No serverCreatedAt = trip never reached the server → nothing to delete.
+        guard entity.serverCreatedAt != nil else {
+            repo.markUnpublished(tripId: id)
+            return
+        }
+        let req = TripDeleteRequest(id: id, conflictVersion: Int(entity.conflictVersion))
+        do {
+            let _: EmptyResponse = try await client.post(APIEndpoint.tripDelete, body: req)
+        } catch APIError.tripNotFound {
+            // Already gone — treat as success, fall through to local cleanup.
+        }
+        repo.markUnpublished(tripId: id)
     }
 
     // MARK: Vehicle
@@ -201,6 +243,15 @@ final class APISyncTransport: SyncTransport {
         guard let entity = try? ctx.fetch(req).first,
               let filename = entity.filename,
               let tripIdValue = entity.trip?.id else { return }
+        // Mirror of `uploadTrip`'s privacy re-check. If the parent trip was
+        // toggled back to private after this op was enqueued, don't ship the
+        // photo bytes to R2.
+        if !SettingsManager.shared.cloudSyncEnabled,
+           let parentTrip = entity.trip, parentTrip.isPrivate {
+            entity.syncStatus = SyncStatus.synced.rawValue
+            try? ctx.save()
+            return
+        }
 
         guard let originalData = PhotoStorageService.photoData(filename: filename),
               let sourceImage = UIImage(data: originalData) else {
@@ -223,28 +274,45 @@ final class APISyncTransport: SyncTransport {
                 data: thumbData, caption: entity.caption, timestamp: entity.timestamp ?? Date(),
                 metadataAlreadyClean: true)
             entity.thumbnailURL = r.url
+            // Persist the thumbnail-only state immediately so a subsequent
+            // original-upload failure doesn't lose the win we just earned.
+            try? ctx.save()
         }
 
-        // Original capped at 1920pt @ quality 0.8 so we don't upload 4-8 MB
-        // iPhone source files straight to R2. If the source is already
-        // smaller than the re-encode, ship it as-is.
+        // Original re-encoded at 1440pt @ quality 0.7 — 1920×0.8 was producing
+        // 100-300 KB blobs that consistently timed out on RU mobile networks
+        // (DPI-throttled above ~150KB). 1440×0.7 lands at 50-120 KB which
+        // squeezes through. The full-screen viewer doesn't need pixel-peeping
+        // resolution; we're not running a photo lab.
+        // Wrapped in do/catch so an original-upload failure doesn't propagate
+        // and cancel the whole op — the thumbnail above is the minimum viable
+        // upload (feed cards + detail grid render fine from it). The queue
+        // will retry uploadPhoto until the original lands too; meanwhile the
+        // user sees their photo immediately rather than "0 загружено · ждёт
+        // Wi-Fi" forever.
         if entity.remoteURL == nil && CacheManager.shared.isOnWiFi {
-            guard let bounded = sourceImage.resized(maxDimension: 1920, scale: 1.0),
-                  let boundedData = bounded.jpegData(compressionQuality: 0.8) else {
-                entity.uploadStatus = PhotoUploadStatus.failed.rawValue
-                try? ctx.save()
-                return
+            if let bounded = sourceImage.resized(maxDimension: 1440, scale: 1.0),
+               let boundedData = bounded.jpegData(compressionQuality: 0.7) {
+                let useReEncoded = boundedData.count < originalData.count
+                let payload = useReEncoded ? boundedData : originalData
+                do {
+                    let r = try await photos.uploadPhotoPart(
+                        tripId: tripIdValue, photoId: id, type: .original,
+                        data: payload, caption: entity.caption, timestamp: entity.timestamp ?? Date(),
+                        metadataAlreadyClean: useReEncoded)
+                    entity.remoteURL = r.url
+                } catch {
+                    // Best-effort. Thumbnail is on R2; the photo is viewable
+                    // in feed and detail. Original will retry next sync cycle.
+                }
             }
-            let useReEncoded = boundedData.count < originalData.count
-            let payload = useReEncoded ? boundedData : originalData
-            let r = try await photos.uploadPhotoPart(
-                tripId: tripIdValue, photoId: id, type: .original,
-                data: payload, caption: entity.caption, timestamp: entity.timestamp ?? Date(),
-                metadataAlreadyClean: useReEncoded)
-            entity.remoteURL = r.url
         }
 
-        entity.uploadStatus = (entity.remoteURL != nil && entity.thumbnailURL != nil)
+        // "Uploaded" once the thumbnail is on R2 — that's enough for the feed
+        // card and detail grid. Original is a bonus that the queue keeps
+        // retrying behind the scenes (since `entity.remoteURL == nil` will
+        // re-enter the original branch on next uploadPhoto pass).
+        entity.uploadStatus = (entity.thumbnailURL != nil)
             ? PhotoUploadStatus.uploaded.rawValue
             : PhotoUploadStatus.uploading.rawValue
         entity.lastModifiedAt = Date()

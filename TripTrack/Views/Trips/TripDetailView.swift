@@ -26,6 +26,14 @@ struct TripDetailView: View {
     @State private var storyShare: (data: StoryShareData, url: String?)?
     @State private var isGeneratingShare = false
     @State private var showDeleteConfirm = false
+    /// Two-step publish confirmation. The user has to consciously acknowledge
+    /// One alert with destructive "Publish" — single-step is enough to make
+    /// the privacy implication clear without nagging on every toggle.
+    @State private var publishStage1 = false
+    /// Going public→private is also gated: once a trip has been seen by
+    /// others, demoting it isn't undoable in the social-record sense
+    /// (reactions/comments don't survive a republish). One-shot confirm.
+    @State private var unpublishConfirm = false
     @State private var reactionEntries: [SocialReactionEntry] = []
     @State private var selectedReactorAuthor: SocialAuthor?
     @State private var isMapFullscreen = false
@@ -202,8 +210,21 @@ struct TripDetailView: View {
             if trip == nil {
                 trip = viewModel.tripDetail(id: tripId)
                 if let t = trip {
-                    cachedCoordinates = t.trackPoints.map(\.coordinate)
-                    cachedSpeeds = t.trackPoints.map(\.speed)
+                    let points = t.trackPoints.map(\.coordinate)
+                    if points.count > 1 {
+                        cachedCoordinates = points
+                        cachedSpeeds = t.trackPoints.map(\.speed)
+                    } else if let preview = t.previewPolyline {
+                        // Trips synced down via /sync/pull only carry metadata
+                        // + the preview polyline (server doesn't return full
+                        // trackPoints — that response would be megabytes per
+                        // user). Fall back to the simplified polyline so the
+                        // detail map isn't empty for these. Speeds aren't in
+                        // the preview, so we leave the speed array empty —
+                        // RouteMapView renders a flat-color line in that case.
+                        cachedCoordinates = Trip.decodePolyline(preview)
+                        cachedSpeeds = []
+                    }
                 }
                 badgeLastEarnedDates = BadgeManager.lastEarnedDates(for: trip?.earnedBadgeIds ?? [], using: mapVM.tripManager)
             }
@@ -281,6 +302,35 @@ struct TripDetailView: View {
                     .environmentObject(lang)
             }
         }
+        .alert(
+            lang.language == .ru ? "Сделать поездку публичной?" : "Make trip public?",
+            isPresented: $publishStage1
+        ) {
+            Button(lang.language == .ru ? "Отмена" : "Cancel", role: .cancel) {}
+            Button(
+                lang.language == .ru ? "Опубликовать" : "Publish",
+                role: .destructive
+            ) {
+                applyPrivacyChange(isPrivate: false)
+            }
+        } message: {
+            Text(lang.language == .ru
+                 ? "Эта поездка появится в общей ленте TripTrack — её увидят другие пользователи приложения, в том числе незнакомые. Маршрут, дата, регион и фото станут публичными.\n\nВы всегда сможете убрать её обратно в приватные."
+                 : "This trip will appear in the public TripTrack feed — other users, including strangers, will be able to see it. Route, date, region, and photos become public.\n\nYou can switch it back to private anytime.")
+        }
+        .alert(
+            lang.language == .ru ? "Сделать поездку приватной?" : "Make trip private?",
+            isPresented: $unpublishConfirm
+        ) {
+            Button(lang.language == .ru ? "Отмена" : "Cancel", role: .cancel) {}
+            Button(lang.language == .ru ? "Сделать приватной" : "Make private") {
+                applyPrivacyChange(isPrivate: true)
+            }
+        } message: {
+            Text(lang.language == .ru
+                 ? "Поездка пропадёт из общей ленты и из профилей других пользователей. Её увидите только Вы.\n\nРеакции и комментарии не сохранятся, если Вы потом снова сделаете её публичной."
+                 : "This trip will disappear from the social feed and from other users' profiles. Only you will see it.\n\nReactions and comments won't be preserved if you make it public again later.")
+        }
     }
 
     // MARK: - Story Share
@@ -329,11 +379,13 @@ struct TripDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 dateTimeLine(trip: trip, c: c)
                 titleSection(trip: trip, c: c)
-                // The privacy toggle promises social visibility — without
-                // Cloud Sync the trip never reaches the server, so the toggle
-                // is a lie. Hide it entirely until sync is enabled (cleaner
-                // than showing a "won't actually publish" hint).
-                if settings.cloudSyncEnabled {
+                // Privacy toggle is per-trip and works independently of
+                // global Cloud Sync (privacy-first model: publishing one
+                // trip should NOT require turning on full-account mirror).
+                // The transport handles upload (private→public) and
+                // server-delete (public→private) on its own; Cloud Sync OFF
+                // just means everything else stays local.
+                if auth.isSignedIn {
                     privacyToggle(trip: trip, c: c)
                         .padding(.top, 2)
                 }
@@ -488,24 +540,7 @@ struct TripDetailView: View {
         let isRu = lang.language == .ru
         return Button {
             Haptics.tap()
-            // Reuse the privacy toggle's flow so first-publish toast and
-            // notification fire identically.
-            let newValue = false
-            mapVM.tripManager.updatePrivacy(for: tripId, isPrivate: newValue)
-            self.trip = viewModel.tripDetail(id: tripId)
-            NotificationCenter.default.post(
-                name: .tripPrivacyChanged,
-                object: PrivacyChangePayload(tripId: tripId, isPrivate: newValue)
-            )
-            let firstPublishKey = "com.triptrack.firstPublishToastShown"
-            if !UserDefaults.standard.bool(forKey: firstPublishKey) {
-                UserDefaults.standard.set(true, forKey: firstPublishKey)
-                toastItem = ToastItem(
-                    type: .success,
-                    message: isRu
-                        ? "Первая публичная поездка! Поездки с фото получают больше реакций"
-                        : "Your first public trip! Trips with photos get more reactions")
-            }
+            publishStage1 = true
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "sparkles")
@@ -620,7 +655,7 @@ struct TripDetailView: View {
                 .font(.system(size: 11, weight: .semibold))
             Text(isPrivate
                  ? (isRu ? "Только для меня" : "Only me")
-                 : (isRu ? "Видна друзьям" : "Visible to followers"))
+                 : (isRu ? "Видна всем" : "Public"))
                 .font(.system(size: 12, weight: .semibold))
             Image(systemName: "arrow.left.arrow.right")
                 .font(.system(size: 9, weight: .semibold))
@@ -635,30 +670,38 @@ struct TripDetailView: View {
         .contentShape(Capsule())
         .onTapGesture {
             Haptics.selection()
-            let newValue = !isPrivate
-            mapVM.tripManager.updatePrivacy(for: tripId, isPrivate: newValue)
-            self.trip = viewModel.tripDetail(id: tripId)
-            // Pass the new privacy state so the feed can optimistically remove/add the
-            // card before the server round-trip completes.
-            NotificationCenter.default.post(
-                name: .tripPrivacyChanged,
-                object: PrivacyChangePayload(tripId: tripId, isPrivate: newValue)
-            )
-            // Celebrate the user's first-ever publish — once-per-app via
-            // UserDefaults flag. Subsequent toggles are quiet (the pill
-            // colour change is enough). Strava's "share to earn kudos"
-            // coaching cites ~3× engagement on photo-bearing trips, so we
-            // lead with that hint after celebrating.
-            let wentPublic = newValue == false
-            let firstPublishKey = "com.triptrack.firstPublishToastShown"
-            if wentPublic && !UserDefaults.standard.bool(forKey: firstPublishKey) {
-                UserDefaults.standard.set(true, forKey: firstPublishKey)
-                toastItem = ToastItem(
-                    type: .success,
-                    message: lang.language == .ru
-                        ? "Первая публичная поездка! Поездки с фото получают больше реакций"
-                        : "Your first public trip! Trips with photos get more reactions")
+            // Both directions surface a one-shot confirm — going public has
+            // privacy implications (visible to strangers), going private
+            // discards reactions/comments accrued while public.
+            if isPrivate {
+                publishStage1 = true
+            } else {
+                unpublishConfirm = true
             }
+        }
+    }
+
+    /// Performs the actual privacy mutation + side effects. Extracted from
+    /// the privacy toggle and the publish nudge so both code paths share
+    /// the same notification + first-publish toast behavior, and so the
+    /// two-step publish-confirmation flow has a single commit point.
+    private func applyPrivacyChange(isPrivate newValue: Bool) {
+        let isRu = lang.language == .ru
+        mapVM.tripManager.updatePrivacy(for: tripId, isPrivate: newValue)
+        self.trip = viewModel.tripDetail(id: tripId)
+        NotificationCenter.default.post(
+            name: .tripPrivacyChanged,
+            object: PrivacyChangePayload(tripId: tripId, isPrivate: newValue)
+        )
+        let wentPublic = newValue == false
+        let firstPublishKey = "com.triptrack.firstPublishToastShown"
+        if wentPublic && !UserDefaults.standard.bool(forKey: firstPublishKey) {
+            UserDefaults.standard.set(true, forKey: firstPublishKey)
+            toastItem = ToastItem(
+                type: .success,
+                message: isRu
+                    ? "Первая публичная поездка! Поездки с фото получают больше реакций"
+                    : "Your first public trip! Trips with photos get more reactions")
         }
     }
 

@@ -12,11 +12,15 @@ struct CloudSyncView: View {
     @ObservedObject private var auth = AuthService.shared
 
     @State private var showSignOutAlert = false
+    @State private var showSignOutPublishedDialog = false
+    @State private var publishedAtSignOut = 0
     @State private var showDeleteAccountAlert = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
     @State private var showEnableConfirm = false
     @State private var showBlockedList = false
+    @State private var showWipeServerConfirm = false
+    @State private var isWipingServer = false
     @AppStorage("com.triptrack.sync.firstToggleShown") private var firstToggleShown = false
 
     var body: some View {
@@ -88,6 +92,7 @@ struct CloudSyncView: View {
 
                     if auth.isSignedIn {
                         blockedEntry(c, isRu: isRu)
+                        wipeServerEntry(c, isRu: isRu)
                         accountActions(c, isRu: isRu)
                             .padding(.top, 8)
                     }
@@ -117,13 +122,68 @@ struct CloudSyncView: View {
             ) {
                 Button(AppStrings.cancel(lang.language), role: .cancel) {}
                 Button(AppStrings.signOut(lang.language), role: .destructive) {
+                    // Branch on whether the user has any public trips on the
+                    // server. With public trips → show 3-way confirmation
+                    // (delete vs keep). Without → straight sign-out.
+                    let count = auth.publishedTripCount()
+                    if count > 0 {
+                        publishedAtSignOut = count
+                        showSignOutPublishedDialog = true
+                    } else {
+                        Task {
+                            await auth.signOut()
+                            dismiss()
+                        }
+                    }
+                }
+            } message: {
+                Text(AppStrings.signOutConfirmMessage(lang.language))
+            }
+            .confirmationDialog(
+                isRu ? "У Вас есть публичные поездки" : "You have public trips",
+                isPresented: $showSignOutPublishedDialog,
+                titleVisibility: .visible
+            ) {
+                Button(
+                    isRu
+                        ? "Скрыть публичные и выйти"
+                        : "Hide public and sign out",
+                    role: .destructive
+                ) {
+                    Task {
+                        await auth.unpublishAllPublicTrips()
+                        await auth.signOut()
+                        dismiss()
+                    }
+                }
+                Button(
+                    isRu ? "Выйти, оставить публичные в ленте" : "Sign out, leave public in feed"
+                ) {
                     Task {
                         await auth.signOut()
                         dismiss()
                     }
                 }
+                Button(AppStrings.cancel(lang.language), role: .cancel) {}
             } message: {
-                Text(AppStrings.signOutConfirmMessage(lang.language))
+                Text(AppStrings.publishedTripsSignOutMessage(lang.language, count: publishedAtSignOut))
+            }
+            .alert(
+                isRu ? "Очистить данные с сервера?" : "Clear server data?",
+                isPresented: $showWipeServerConfirm
+            ) {
+                Button(AppStrings.cancel(lang.language), role: .cancel) {}
+                Button(isRu ? "Очистить" : "Clear", role: .destructive) {
+                    Task {
+                        isWipingServer = true
+                        await auth.wipeServerData()
+                        isWipingServer = false
+                    }
+                }
+            } message: {
+                Text(isRu
+                     ? "Все Ваши поездки и фото будут удалены с сервера. Локальные данные сохранятся, Вы останетесь в аккаунте.\n\nСинхронизация будет выключена — Вы сможете включить её снова, когда захотите."
+                     : "All your trips and photos will be removed from the server. Local data stays on this device, your account is preserved.\n\nCloud sync will be turned off — you can re-enable it anytime.")
             }
             .alert(
                 AppStrings.deleteAccountConfirmTitle(lang.language),
@@ -147,7 +207,7 @@ struct CloudSyncView: View {
                 Text(deleteAccountError ?? "")
             }
             .background(c.bg)
-            .navigationTitle(isRu ? "Синхронизация" : "Sync")
+            .navigationTitle(isRu ? "Аккаунт" : "Account")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
@@ -280,8 +340,17 @@ struct CloudSyncView: View {
                 Image(systemName: "icloud.slash")
                     .font(.system(size: 18))
                     .foregroundStyle(c.textTertiary)
-                Text(isRu ? "Выключено" : "Disabled")
-                    .foregroundStyle(c.textSecondary)
+                if syncQueue.pendingCount > 0 {
+                    // Even with global Cloud Sync OFF, the queue can hold ops
+                    // for explicitly-public trips (and their photos). Show
+                    // them so the user sees something is happening.
+                    Text((isRu ? "Выключено · публикация: " : "Off · publishing: ")
+                         + "\(syncQueue.pendingCount)")
+                        .foregroundStyle(c.text)
+                } else {
+                    Text(isRu ? "Выключено" : "Disabled")
+                        .foregroundStyle(c.textSecondary)
+                }
             } else if syncQueue.isSyncing {
                 ProgressView()
                     .scaleEffect(0.75)
@@ -342,6 +411,50 @@ struct CloudSyncView: View {
             .surfaceCard(cornerRadius: 14)
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Wipe server data (signed-in, account intact)
+
+    private func wipeServerEntry(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        Button {
+            Haptics.tap()
+            showWipeServerConfirm = true
+        } label: {
+            HStack(spacing: 12) {
+                if isWipingServer {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .tint(c.textSecondary)
+                        .frame(width: 24, alignment: .center)
+                    Text(isRu ? "Очищаем…" : "Clearing…")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(c.textSecondary)
+                        .lineLimit(1)
+                } else {
+                    Image(systemName: "trash.slash")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(c.textSecondary)
+                        .frame(width: 24, alignment: .center)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isRu ? "Очистить мои данные с сервера" : "Clear my server data")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(c.text)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Text(isRu ? "Локальные останутся, аккаунт не удаляется" : "Local data stays, account preserved")
+                            .font(.system(size: 12))
+                            .foregroundStyle(c.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+                Spacer()
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
+        .disabled(isWipingServer)
     }
 
     // MARK: - Account actions (sign out + delete)

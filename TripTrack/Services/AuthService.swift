@@ -17,6 +17,12 @@ final class AuthService: ObservableObject {
 
     @Published private(set) var isAuthenticating = false
     @Published var lastAuthError: APIError?
+    /// Handle to the post-sign-in sync chain (performFirstSync + profile +
+    /// push + inbox). Held so signOut can cancel it — otherwise an in-flight
+    /// chain from a previous account can finish AFTER a new account signs
+    /// in, applying the previous account's data with the new account's
+    /// tokens and creating a cross-account contamination window.
+    private var postSignInSyncTask: Task<Void, Never>?
 
     private enum Keys {
         static let userIdentifier = "com.triptrack.auth.userIdentifier"
@@ -36,6 +42,13 @@ final class AuthService: ObservableObject {
         // re-issued by APNs after registerForRemoteNotifications anyway.
         if !isSignedIn {
             PushNotificationManager.shared.clearCachedToken()
+        } else {
+            // Already-signed-in upgrader path: SettingsManager just ran the
+            // privacy-by-default migration (which only PERSISTS server-side
+            // unpublish IDs — never enqueues directly). Drain them now so
+            // the user doesn't need a fresh SIWA flow to strip old public
+            // copies. Idempotent: removeObject after read.
+            Task { @MainActor in self.drainPendingPrivateMigrationUnpublish() }
         }
         // Listen for server-reported ban. `APIClient` posts this when any
         // endpoint returns `USER_BANNED`. We sign out to drop tokens and
@@ -98,8 +111,6 @@ final class AuthService: ObservableObject {
             lastAuthError = .invalidAppleToken("nil")
             return
         }
-        try? KeychainHelper.save(tokenData, for: Keys.identityToken)
-        try? KeychainHelper.saveString("true", for: Keys.isSignedIn)
 
         // Call server /auth/login
         isAuthenticating = true
@@ -109,10 +120,18 @@ final class AuthService: ObservableObject {
             let body = LoginRequest(
                 identityToken: tokenData.base64EncodedString(),
                 localUserId: SettingsManager.shared.localUserId.uuidString,
-                deviceName: UIDevice.current.name
+                deviceName: UIDevice.current.name,
+                nonce: SIWANonce.consumeRawNonce()
             )
             let response: LoginResponse = try await APIClient.shared.post(
                 APIEndpoint.login, body: body, requiresAuth: false)
+            // Persist identity AND signed-in marker only AFTER /auth/login
+            // succeeds. Earlier ordering wrote the marker before the network
+            // call, leaving a half-registered keychain state on transient
+            // login failure (marker=true, tokens=nil) that confused the
+            // hydrate path on next launch.
+            try? KeychainHelper.save(tokenData, for: Keys.identityToken)
+            try? KeychainHelper.saveString("true", for: Keys.isSignedIn)
             TokenStore.shared.set(accessToken: response.accessToken, refreshToken: response.refreshToken)
             TokenStore.shared.setAccountId(response.account.id)
             isSignedIn = true
@@ -137,18 +156,26 @@ final class AuthService: ObservableObject {
                 userName = generated
             }
 
-            await performFirstSync()
-            await syncProfileToServer()
-            // If APNs already handed us a token (likely — onboarding registers
-            // before sign-in), push it now so backend can dispatch reactions /
-            // follow notifications to this device. Re-registering here also
-            // covers the case where the user signed out, came back, and the
-            // existing cached token is still valid.
-            PushNotificationManager.shared.registerForRemoteNotifications()
-            await PushNotificationManager.shared.syncTokenToServer()
-            // Pull the inbox once so the badge is accurate the first time
-            // the user looks at Profile after signing in.
-            await NotificationsInboxStore.shared.refresh()
+            // Sync chain runs detached so the SIWA prompt dismisses the
+            // moment `isSignedIn` flips to true (was: stuck for minutes on
+            // flaky RU networks while every sub-call retried). The Task
+            // handle is captured so signOut can cancel it — without that,
+            // a slow chain from User A could land /trips/upsert calls with
+            // User A's data tagged with User B's freshly-issued token after
+            // a quick sign-out + sign-in, mixing accounts.
+            postSignInSyncTask?.cancel()
+            postSignInSyncTask = Task { [weak self] in
+                guard let self else { return }
+                self.drainPendingPrivateMigrationUnpublish()
+                await self.performFirstSync()
+                if Task.isCancelled { return }
+                await self.syncProfileToServer()
+                if Task.isCancelled { return }
+                PushNotificationManager.shared.registerForRemoteNotifications()
+                await PushNotificationManager.shared.syncTokenToServer()
+                if Task.isCancelled { return }
+                await NotificationsInboxStore.shared.refresh()
+            }
         } catch let e as APIError {
             lastAuthError = e
         } catch {
@@ -159,30 +186,39 @@ final class AuthService: ObservableObject {
     // MARK: - First Sync
 
     private func performFirstSync() async {
-        let repo: TripRepository = CoreDataTripRepository()
-        repo.markAllPendingUpload()
+        // Skip the full backfill when Cloud Sync is OFF. The privacy-first
+        // model says: signing in alone doesn't mass-upload personal content;
+        // the user has to explicitly opt into Cloud Sync from settings.
+        // Without this guard we'd flip every entity to `.pendingUpload`,
+        // enqueue them, and then the SyncEnqueuer privacy gate would deny
+        // the private/vehicle/settings ones — leaving phantom pending ops
+        // visible in the status sheet forever.
+        // We still call runFullSync at the end so any explicitly-public
+        // trips queued via the privacy-migration drain or earlier sessions
+        // get pushed.
+        if SettingsManager.shared.cloudSyncEnabled {
+            let repo: TripRepository = CoreDataTripRepository()
+            repo.markAllPendingUpload()
 
-        for trip in repo.fetchAllTrips() {
-            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: trip.id, action: .upload))
-        }
-        for vehicle in SettingsManager.shared.vehicles {
-            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: vehicle.id, action: .upload))
-        }
-        SyncEnqueuer.enqueue(SyncOperation(
-            entityType: .settings, entityId: SettingsManager.shared.localUserId, action: .upload))
+            for trip in repo.fetchAllTrips() {
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: trip.id, action: .upload))
+            }
+            for vehicle in SettingsManager.shared.vehicles {
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: vehicle.id, action: .upload))
+            }
+            SyncEnqueuer.enqueue(SyncOperation(
+                entityType: .settings, entityId: SettingsManager.shared.localUserId, action: .upload))
 
-        // Photos that aren't fully on R2 yet — `localOnly` (never uploaded),
-        // `uploading` (thumb sent but original stuck behind a Wi-Fi gate),
-        // and `failed` (previous attempt errored). Mirrors the predicate in
-        // `CloudSyncView.enableCloudSync` so first-sign-in and toggle-on
-        // paths backfill the same set.
-        let ctx = PersistenceController.shared.container.viewContext
-        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
-        req.predicate = NSPredicate(format: "uploadStatus != %d", PhotoUploadStatus.uploaded.rawValue)
-        if let photos = try? ctx.fetch(req) {
-            for p in photos {
-                if let pid = p.id {
-                    SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: pid, action: .upload))
+            // Photos not fully on R2 yet. Mirrors the predicate in
+            // `CloudSyncView.enableCloudSync`.
+            let ctx = PersistenceController.shared.container.viewContext
+            let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "uploadStatus != %d", PhotoUploadStatus.uploaded.rawValue)
+            if let photos = try? ctx.fetch(req) {
+                for p in photos {
+                    if let pid = p.id {
+                        SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: pid, action: .upload))
+                    }
                 }
             }
         }
@@ -192,19 +228,153 @@ final class AuthService: ObservableObject {
 
     // MARK: - Sign Out
 
+    /// Pre-signOut cleanup. Flips any locally-public trip that hasn't
+    /// reached the server yet back to private, so the next account's
+    /// `recoverPendingEntities` doesn't accidentally re-enqueue it under
+    /// the wrong user. Mirror of the `unpublishAllPublicTrips` logic but
+    /// for trips without a server copy (those go to private locally; no
+    /// server delete needed since there's nothing to delete).
+    @MainActor
+    private static func demotePendingPublicTripsToPrivate() {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        req.predicate = NSPredicate(
+            format: "isPrivate == NO AND serverCreatedAt == nil AND syncStatus == %d",
+            SyncStatus.pendingUpload.rawValue
+        )
+        guard let entities = try? ctx.fetch(req) else { return }
+        for entity in entities {
+            entity.isPrivate = true
+            entity.syncStatus = SyncStatus.synced.rawValue
+        }
+        if !entities.isEmpty {
+            try? ctx.save()
+            authLog.notice("demoted \(entities.count) pending-public-unsynced trip(s) to private on signOut")
+        }
+    }
+
+    /// Drains the queue of `.unpublish` ops left over from the
+    /// privacy-by-default migration. SettingsManager runs the migration at
+    /// app launch (before SIWA can complete), so it can't enqueue from
+    /// SyncEnqueuer's auth-gate; it persists the IDs in UserDefaults
+    /// instead. After successful sign-in, we replay them. Idempotent —
+    /// once the list is drained, the UserDefaults key is removed.
+    @MainActor
+    private func drainPendingPrivateMigrationUnpublish() {
+        let defaults = UserDefaults.standard
+        guard let raw = defaults.array(forKey: SettingsManager.pendingPrivateMigrationUnpublishKey) as? [String],
+              !raw.isEmpty else { return }
+        for s in raw {
+            guard let id = UUID(uuidString: s) else { continue }
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .unpublish))
+        }
+        defaults.removeObject(forKey: SettingsManager.pendingPrivateMigrationUnpublishKey)
+        authLog.notice("drained \(raw.count) pending private-migration unpublish op(s)")
+    }
+
+    /// Number of the user's trips that currently exist on the server with
+    /// `is_private = false`. Surfaces in the sign-out confirmation so the
+    /// user can decide whether to take their public footprint with them.
+    /// Cheap CoreData fetch — no network.
+    func publishedTripCount() -> Int {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "isPrivate == NO AND serverCreatedAt != nil")
+        return (try? ctx.count(for: req)) ?? 0
+    }
+
+    /// Soft-unpublish every public-and-synced trip on the way out. Sends a
+    /// regular upsert with `is_private=true` instead of a hard DELETE — the
+    /// trip stays on the server, just hidden from the social feed (server
+    /// `is_private=true` filter), so reactions/comments survive a re-login.
+    /// User wording: "Hide public and sign out". For a true wipe the user
+    /// has the separate `wipeServerData` action (or Delete Account).
+    /// Best-effort: failures leave the trip's privacy unchanged on the
+    /// server; caller decides whether to abort sign-out.
+    func unpublishAllPublicTrips() async {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "isPrivate == NO AND serverCreatedAt != nil")
+        guard let entities = try? ctx.fetch(req) else { return }
+        let repo: TripRepository = CoreDataTripRepository()
+        for entity in entities {
+            guard let id = entity.id, var trip = repo.fetchTripDetail(id: id) else { continue }
+            trip.isPrivate = true
+            let payload = TripSyncPayload(trip: trip, entity: entity)
+            do {
+                let res: TripUpsertResponse = try await APIClient.shared.post(
+                    APIEndpoint.tripUpsert, body: payload)
+                entity.isPrivate = true
+                entity.lastModifiedAt = payload.lastModifiedAt
+                repo.markSynced(tripId: id, conflictVersion: res.conflictVersion, serverCreatedAt: res.serverCreatedAt)
+            } catch {
+                authLog.error("soft unpublish failed for trip \(id, privacy: .public): \(String(describing: error), privacy: .public)")
+                continue
+            }
+        }
+    }
+
+    /// Hard-wipes every server-synced trip (and via cascade, its photos in
+    /// R2) belonging to the signed-in user. Caller stays signed in and
+    /// keeps the local copy — every trip is flipped to private locally
+    /// and its server bookkeeping cleared. Cloud Sync is forced OFF so
+    /// the next sync run doesn't immediately re-upload them. User wants
+    /// "clean slate on the server, account intact".
+    func wipeServerData() async {
+        await MainActor.run {
+            SettingsManager.shared.cloudSyncEnabled = false
+            SyncQueue.shared.clearAll()
+        }
+        let ctx = PersistenceController.shared.container.viewContext
+        let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "serverCreatedAt != nil")
+        guard let entities = try? ctx.fetch(req) else { return }
+        let repo: TripRepository = CoreDataTripRepository()
+        for entity in entities {
+            guard let id = entity.id else { continue }
+            let body = TripDeleteRequest(id: id, conflictVersion: Int(entity.conflictVersion))
+            do {
+                let _: EmptyResponse = try await APIClient.shared.post(
+                    APIEndpoint.tripDelete, body: body)
+            } catch APIError.tripNotFound {
+                // Already gone — proceed to local cleanup.
+            } catch {
+                authLog.error("wipeServerData failed for trip \(id, privacy: .public): \(String(describing: error), privacy: .public)")
+                continue
+            }
+            entity.isPrivate = true
+            repo.markUnpublished(tripId: id)
+        }
+    }
+
     func signOut() async {
+        // Cancel any in-flight post-signin sync chain BEFORE wiping tokens.
+        // If we wipe first, the chain's API calls fail with USER_NOT_AUTH,
+        // forceSignOut fires, double-signOut chaos. Cancellation lets each
+        // step exit cleanly via `Task.isCancelled` checks.
         // Best-effort logout — ignore error
         let _: EmptyResponse? = try? await APIClient.shared.post(APIEndpoint.logout, body: EmptyRequest())
+        clearLocalIdentity()
+    }
+
+    /// Shared local cleanup invoked after both `signOut` (via `/auth/logout`)
+    /// and `deleteAccount` (via `/auth/delete-account`). Centralizes the 6
+    /// non-network steps that previously diverged between the two paths and
+    /// silently left identity residue from the prior account on the device.
+    @MainActor
+    private func clearLocalIdentity() {
+        // Cancel any in-flight post-sign-in chain BEFORE wiping tokens. The
+        // chain holds the old account's token and would otherwise fail mid-
+        // flight with USER_NOT_AUTH and trigger a second forceSignOut.
+        postSignInSyncTask?.cancel()
+        postSignInSyncTask = nil
+
         TokenStore.shared.clear()
         KeychainHelper.delete(key: Keys.identityToken)
         KeychainHelper.delete(key: Keys.isSignedIn)
-        // Wipe identity-shaped Keychain entries too. Without this, signing
-        // out User A and signing in User B on the same physical device
-        // had `loadFromKeychain` (or `handleAuthorization`'s name-fallback
-        // chain) replay User A's name onto User B's account before the
-        // server-side canonical name lookup got a chance — User B would
-        // see User A's name pushed to their backend account via the
-        // automatic `syncProfileToServer` after sign-in.
+        // Wipe identity-shaped Keychain entries. Without this, signing out
+        // User A and signing in User B on the same physical device had
+        // `loadFromKeychain` replay User A's name onto User B's account.
         KeychainHelper.delete(key: Keys.userIdentifier)
         KeychainHelper.delete(key: Keys.userName)
         KeychainHelper.delete(key: Keys.userEmail)
@@ -214,19 +384,21 @@ final class AuthService: ObservableObject {
         userEmail = nil
         userIdentifier = nil
         SyncQueue.shared.clearAll()
-        // Drop in-app inbox state — the next account that signs in on
-        // this device should not inherit the previous user's badge or
-        // notification list.
+        // Drop in-app inbox state — the next account on this device should
+        // not inherit the previous user's badge or notification list.
         NotificationsInboxStore.shared.clear()
-        // Wipe the cached APNs device token. The server already cleared
-        // the row inside `/auth/logout`, but the local UserDefaults copy
-        // would otherwise resurface in `syncTokenToServer` and re-bind
-        // the token to whatever account signs in next.
+        // Wipe the cached APNs device token so it isn't replayed by the
+        // next account's `syncTokenToServer`.
         PushNotificationManager.shared.clearCachedToken()
 
-        // Reset all local entities so next sign-in re-pushes
-        let repo: TripRepository = CoreDataTripRepository()
-        repo.markAllPendingUpload()
+        // Cross-account leak prevention for trips toggled public locally
+        // but never uploaded — see `demotePendingPublicTripsToPrivate`.
+        Self.demotePendingPublicTripsToPrivate()
+
+        // Reset Cloud Sync to OFF so the next account makes its own consent
+        // choice; clear the GDPR-shown marker so the dialog re-fires.
+        SettingsManager.shared.cloudSyncEnabled = false
+        UserDefaults.standard.set(false, forKey: "com.triptrack.sync.firstToggleShown")
     }
 
     /// User-set display name. Apple Sign In delivers `fullName` only on the
@@ -288,20 +460,12 @@ final class AuthService: ObservableObject {
     func deleteAccount() async throws {
         let _: EmptyResponse = try await APIClient.shared.post(
             APIEndpoint.deleteAccount, body: EmptyRequest())
-
-        TokenStore.shared.clear()
-        KeychainHelper.delete(key: Keys.identityToken)
-        KeychainHelper.delete(key: Keys.isSignedIn)
-        KeychainHelper.delete(key: Keys.userIdentifier)
-        KeychainHelper.delete(key: Keys.userName)
-        KeychainHelper.delete(key: Keys.userEmail)
-
-        isSignedIn = false
-        userName = nil
-        userEmail = nil
-        userIdentifier = nil
-        SyncQueue.shared.clearAll()
-
+        // Use the shared cleanup so deleteAccount and signOut leave the
+        // device in identical post-state. Earlier divergence missed APNs
+        // token wipe, in-flight sync cancel, NotificationsInbox clear,
+        // Cloud Sync reset, GDPR-marker reset, and the cross-account
+        // demote — all of which leaked into the next account's session.
+        clearLocalIdentity()
         authLog.log("Account deleted, returned to guest mode")
     }
 

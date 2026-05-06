@@ -41,9 +41,9 @@ final class SyncCoordinator {
 
     func runFullSync() async {
         guard AuthService.shared.isSignedIn else { return }
-        guard SettingsManager.shared.cloudSyncEnabled else { return }
         guard !CacheManager.shared.isOffline else { return }
         guard !isPulling else { return }
+        let cloudOn = SettingsManager.shared.cloudSyncEnabled
         // Skip pulls while a trip is being recorded — `applyRemoteTrip`'s
         // skip-guard checks pendingUpload status, but a freshly-recovered
         // orphan trip may still be marked .synced (last upload succeeded)
@@ -54,9 +54,30 @@ final class SyncCoordinator {
             await queue.processQueue()
             return
         }
+        // Cloud Sync OFF mode (privacy-first): we still process the queue —
+        // it can hold .upload/.update/.unpublish ops for explicitly-public
+        // trips, plus the photos that ride along — but we DO NOT pull or
+        // reconcile. Pulling would either find nothing (the user has only
+        // published one or two trips, server has nothing to send back) and
+        // is just wasted bandwidth, or worse, the ownedCounts reconcile
+        // would notice "local has 100 trips, server has 1" and re-upload
+        // everything, defeating the privacy choice.
+        guard cloudOn else {
+            // Even at OFF a public trip's photo might still be missing the
+            // original on R2 — re-enqueue so we keep trying on each sync.
+            enqueuePendingOriginals()
+            await queue.processQueue()
+            await queue.retryFailed()
+            return
+        }
         isPulling = true
         defer { isPulling = false }
         await runPull()
+        // Re-enqueue photos whose original blob never landed (thumbnail OK,
+        // remoteURL nil). Was previously only fired on wifiConnected events,
+        // which never reach the SyncCoordinator if the device booted already
+        // on Wi-Fi. Per-sync poll guarantees originals eventually upload.
+        enqueuePendingOriginals()
         await queue.processQueue()
         // Without this, any op that failed once (transient auth glitch on
         // launch, refresh-token race, network blip) sits in `failedQueue`
@@ -217,9 +238,16 @@ final class SyncCoordinator {
         let ctx = PersistenceController.shared.container.viewContext
         let pending = SyncStatus.pendingUpload.rawValue
         let pendingDelete = SyncStatus.pendingDelete.rawValue
+        // Scope to current localUserId so a fresh sign-in doesn't drag a
+        // previous account's leftover ops into the queue. With the privacy
+        // gate this would mostly fail-deny anyway, but defense in depth.
+        let userId = SettingsManager.shared.localUserId
 
         let tripReq: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        tripReq.predicate = NSPredicate(format: "syncStatus == %d OR syncStatus == %d", pending, pendingDelete)
+        tripReq.predicate = NSPredicate(
+            format: "(syncStatus == %d OR syncStatus == %d) AND userId == %@",
+            pending, pendingDelete, userId as CVarArg
+        )
         let trips = (try? ctx.fetch(tripReq)) ?? []
         for t in trips {
             guard let id = t.id else { continue }
@@ -228,15 +256,20 @@ final class SyncCoordinator {
         }
 
         let vehReq: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
-        vehReq.predicate = NSPredicate(format: "syncStatus == %d", pending)
+        vehReq.predicate = NSPredicate(
+            format: "syncStatus == %d AND userId == %@", pending, userId as CVarArg
+        )
         let vehicles = (try? ctx.fetch(vehReq)) ?? []
         for v in vehicles {
             guard let id = v.id else { continue }
             SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
         }
 
+        // TripPhotoEntity has no `userId` column — scope by parent trip's userId instead.
         let photoReq: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
-        photoReq.predicate = NSPredicate(format: "syncStatus == %d", pending)
+        photoReq.predicate = NSPredicate(
+            format: "syncStatus == %d AND trip.userId == %@", pending, userId as CVarArg
+        )
         let photos = (try? ctx.fetch(photoReq)) ?? []
         for p in photos {
             guard let id = p.id else { continue }

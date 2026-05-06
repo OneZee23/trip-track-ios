@@ -153,7 +153,7 @@ struct ProfileView: View {
                         profileNavButton(
                             icon: settings.cloudSyncEnabled ? "icloud.fill" : "icloud.slash",
                             iconColor: settings.cloudSyncEnabled ? AppTheme.blue : c.textTertiary,
-                            label: isRu ? "Синхронизация в облаке" : "Cloud sync",
+                            label: isRu ? "Аккаунт и синхронизация" : "Account & sync",
                             c: c
                         )
                     }
@@ -761,6 +761,7 @@ struct ProfileView: View {
         ZStack {
             SignInWithAppleButton(.signIn) { request in
                 request.requestedScopes = [.fullName, .email]
+                request.nonce = SIWANonce.generate()
                 signInLog.debug("→ request scopes, bundle=\(Bundle.main.bundleIdentifier ?? "?")")
             } onCompletion: { result in
                 switch result {

@@ -122,8 +122,18 @@ struct SyncStatusSheetView: View {
                 Image(systemName: "icloud.slash")
                     .font(.system(size: 18))
                     .foregroundStyle(c.textTertiary)
-                Text(isRu ? "Синхронизация выключена" : "Sync is off")
-                    .foregroundStyle(c.textSecondary)
+                if syncQueue.pendingCount > 0 {
+                    // Same as CloudSyncView: with sync OFF the queue can hold
+                    // ops for explicitly-public trips. Don't pretend nothing
+                    // is happening.
+                    Text(isRu
+                         ? "Синхр. выключена · публикация: \(syncQueue.pendingCount)"
+                         : "Sync off · publishing: \(syncQueue.pendingCount)")
+                        .foregroundStyle(c.text)
+                } else {
+                    Text(isRu ? "Синхронизация выключена" : "Sync is off")
+                        .foregroundStyle(c.textSecondary)
+                }
             } else if syncQueue.isSyncing {
                 ProgressView().scaleEffect(0.75)
                 let total = syncQueue.batchTotal

@@ -77,6 +77,7 @@ final class SettingsManager: ObservableObject {
     init(persistenceController: PersistenceController = .shared) {
         self.persistenceController = persistenceController
         migrateCloudSyncToOptIn()
+        migrateTripsToPrivateByDefault()
         loadAutoRecordSettings()
         loadSettings()
         persistenceController.migrateUserIdIfNeeded(userId: localUserId)
@@ -84,6 +85,30 @@ final class SettingsManager: ObservableObject {
         ensureDefaultVehicle()
         migrateDefaultVehicleName()
     }
+
+    /// Privacy-by-default: trips created before this version were public by
+    /// default. Flip every local trip private. Stripping the server copies
+    /// (`.unpublish`) requires the user to be signed in — at SettingsManager
+    /// init time `AuthService` may not have hydrated yet, so we persist the
+    /// IDs and let `AuthService.drainPendingPrivateMigrationUnpublish()`
+    /// flush them after sign-in instead of firing a doomed enqueue here.
+    private func migrateTripsToPrivateByDefault() {
+        let key = "com.triptrack.settings.privateByDefaultMigrationV1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let repo: TripRepository = CoreDataTripRepository(persistenceController: persistenceController)
+        let serverSideIds = repo.migrateAllTripsToPrivate()
+        if !serverSideIds.isEmpty {
+            let strings = serverSideIds.map { $0.uuidString }
+            UserDefaults.standard.set(strings, forKey: Self.pendingPrivateMigrationUnpublishKey)
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    /// Key for the UUIDs (as strings) of trips whose server copies still
+    /// need unpublishing as part of the privacy-by-default migration. Drained
+    /// by `AuthService` after a successful sign-in.
+    static let pendingPrivateMigrationUnpublishKey =
+        "com.triptrack.settings.pendingPrivateMigrationUnpublish"
 
     /// One-shot privacy-default migration. Existing installs may have
     /// `cloudSyncEnabled = true` cached in UserDefaults from before TripTrack

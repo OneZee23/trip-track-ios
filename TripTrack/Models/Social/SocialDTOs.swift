@@ -15,6 +15,11 @@ struct SocialAuthor: Codable, Hashable {
 struct SocialFeedVehicle: Codable, Hashable {
     let name: String
     let avatarEmoji: String
+
+    /// True when `avatarEmoji` is a `pixel_car_*` asset name rather than a
+    /// real emoji glyph — caller must render the bundled PNG instead of
+    /// drawing the asset name as text.
+    var isPixelAvatar: Bool { avatarEmoji.hasPrefix("pixel_car_") }
 }
 
 // MARK: - Feed

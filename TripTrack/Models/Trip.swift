@@ -140,7 +140,7 @@ struct Trip: Identifiable, Codable {
          trackPoints: [TrackPoint] = [], photos: [TripPhoto] = [],
          title: String? = nil, tripDescription: String? = nil,
          fuelUsed: Double = 0, elevation: Double = 0,
-         region: String? = nil, isPrivate: Bool = false, vehicleId: UUID? = nil,
+         region: String? = nil, isPrivate: Bool = true, vehicleId: UUID? = nil,
          fuelCurrency: String? = nil,
          previewPolyline: Data? = nil, earnedBadgeIds: [String] = []) {
         self.id = id

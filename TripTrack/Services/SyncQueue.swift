@@ -24,6 +24,12 @@ struct SyncOperation: Identifiable, Equatable {
         case upload
         case update
         case delete
+        /// Server-side delete that does NOT touch local storage. Used when a
+        /// trip is flipped public→private with Cloud Sync OFF — we want the
+        /// public copy gone from the server (privacy-first, no leftovers in
+        /// the social feed) while the trip itself stays in the user's local
+        /// "Мои" tab. Distinct from `.delete`, which hard-removes locally.
+        case unpublish
     }
 
     init(entityType: EntityType, entityId: UUID, action: Action) {

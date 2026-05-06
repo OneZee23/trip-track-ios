@@ -21,6 +21,11 @@ protocol TripRepository {
     func updateTitle(for tripId: UUID, title: String)
     func updateNotes(for tripId: UUID, notes: String)
     func updatePrivacy(for tripId: UUID, isPrivate: Bool)
+    /// Resets server-side metadata after a successful `/trips/delete` triggered
+    /// by un-publishing. The local entity stays — only the bookkeeping that
+    /// links it to the server copy is cleared, so subsequent re-publish treats
+    /// it as a fresh upload (`.upload`, not `.update`).
+    func markUnpublished(tripId: UUID)
     @discardableResult
     func migrateAllTripsToPrivate() -> [UUID]
     func saveBadgesJSON(tripId: UUID, badgeIds: [String])
@@ -150,6 +155,19 @@ final class CoreDataTripRepository: TripRepository {
 
     func deleteTrip(id: UUID) {
         guard let entity = fetchEntity(id: id) else { return }
+        // If the trip never reached the server (no serverCreatedAt) we can
+        // skip the soft-delete + enqueue dance entirely — there's nothing for
+        // the server to delete. Without this short-circuit, a private trip
+        // deleted while Cloud Sync is OFF would sit in `pendingDelete` state
+        // forever: the SyncEnqueuer privacy gate blocks the .delete op (no
+        // server copy → nothing publish-related to clean up), and
+        // deleteTripHard only runs from the transport on a successful
+        // server-delete. Result: ghost entry hidden in the UI but never
+        // garbage-collected.
+        if entity.serverCreatedAt == nil {
+            deleteTripHard(id: id)
+            return
+        }
         entity.syncStatus = SyncStatus.pendingDelete.rawValue
         entity.lastModifiedAt = Date()
         persistenceController.save()
@@ -177,11 +195,14 @@ final class CoreDataTripRepository: TripRepository {
         guard let entity = fetchEntity(id: tripId) else { return }
         entity.title = title.isEmpty ? nil : title
         entity.lastModifiedAt = Date()
-        // Flip syncStatus too — without this, an edit followed by a
-        // force-quit before the SyncEnqueuer Task fires leaves the entity
-        // marked .synced, so `recoverPendingEntities` skips it on next
-        // launch and the change is lost forever. Mirrors `updatePrivacy`.
-        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        // Only flip syncStatus when the change can actually drain. For a
+        // private trip at Cloud Sync OFF the per-op gate denies enqueue, so
+        // marking pendingUpload would leave the entity stuck in that state
+        // forever — visible as phantom "1 pending" in the status sheet.
+        // Cloud Sync ON or public trip → both can sync, so flip as before.
+        if Self.shouldFlipPendingUpload(for: entity) {
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        }
         persistenceController.save()
     }
 
@@ -189,40 +210,172 @@ final class CoreDataTripRepository: TripRepository {
         guard let entity = fetchEntity(id: tripId) else { return }
         entity.tripDescription = notes
         entity.lastModifiedAt = Date()
-        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        if Self.shouldFlipPendingUpload(for: entity) {
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        }
         persistenceController.save()
+    }
+
+    /// True when a metadata edit on `entity` should mark it pending for the
+    /// sync queue. Returns false for private trips at Cloud Sync OFF — those
+    /// can't drain (the privacy gate denies them), so flipping their status
+    /// leaves a phantom pending op forever. When the user later enables
+    /// Cloud Sync, `markAllPendingUpload` flips everything back to pending.
+    /// Nonisolated: callers run on whatever context the repo update lives in
+    /// (viewContext = main thread for now, but we don't want to force that).
+    /// Reads only — `cloudSyncEnabled` is a UserDefaults-backed Bool that's
+    /// safe to read from any thread; `entity.isPrivate` access matches the
+    /// caller's current isolation.
+    private static func shouldFlipPendingUpload(for entity: TripEntity) -> Bool {
+        if SettingsManager.shared.cloudSyncEnabled { return true }
+        return entity.isPrivate == false
     }
 
     func updatePrivacy(for tripId: UUID, isPrivate: Bool) {
         guard let entity = fetchEntity(id: tripId) else { return }
+        let wasSynced = entity.serverCreatedAt != nil
+        let cloudOn = SettingsManager.shared.cloudSyncEnabled
+
+        // Privacy-first split:
+        //   * Going public → upload (or update if already on server). Photos
+        //     of a freshly-public trip get enqueued so the social card has
+        //     visuals immediately, not after the next /trips/upsert.
+        //   * Going private + already on server + Cloud Sync OFF → unpublish
+        //     (server-delete, local stays). The user wants ZERO trace.
+        //   * Going private + Cloud Sync ON → just an update (server keeps
+        //     the trip, just hides it from feed via is_private flag).
+        //   * Going private + never on server → no-op beyond the local flip.
+        let pendingOp: SyncOperation.Action?
+        let syncStatus: SyncStatus
+        let enqueuePhotos: Bool
+        if !isPrivate {
+            pendingOp = wasSynced ? .update : .upload
+            syncStatus = .pendingUpload
+            enqueuePhotos = true
+        } else if wasSynced && !cloudOn {
+            // .pendingUpload (rather than .synced) so a concurrent /sync/pull
+            // can't overwrite our `isPrivate=true` flip via the skip-guard
+            // in `applyRemoteTrip` (which only honors locally-pending state).
+            // The .unpublish op is what carries the server-delete; once it
+            // lands, `markUnpublished` resets status back to .synced.
+            pendingOp = .unpublish
+            syncStatus = .pendingUpload
+            enqueuePhotos = false
+        } else if wasSynced {
+            pendingOp = .update
+            syncStatus = .pendingUpload
+            enqueuePhotos = false
+        } else {
+            pendingOp = nil
+            syncStatus = .synced
+            enqueuePhotos = false
+        }
+
         entity.isPrivate = isPrivate
         entity.lastModifiedAt = Date()
-        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        entity.syncStatus = syncStatus.rawValue
         persistenceController.save()
-        Task { @MainActor in
-            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+
+        if let action = pendingOp {
+            Task { @MainActor in
+                // Cancel any conflicting queued ops BEFORE enqueueing the
+                // new one. Both directions need this:
+                //   * Going .unpublish: drop any queued .upload/.update for
+                //     the trip + photo ops so they don't briefly publish
+                //     before our server-delete lands.
+                //   * Going .upload/.update (re-publish after a previous
+                //     unpublish): drop the queued .unpublish so it doesn't
+                //     server-delete a trip we just decided to keep public.
+                SyncQueue.shared.cancelOperations(for: tripId, entityType: .trip)
+                if action == .unpublish {
+                    let photoIds = self.photoIdsForTrip(tripId: tripId)
+                    for pid in photoIds {
+                        SyncQueue.shared.cancelOperations(for: pid, entityType: .photo)
+                    }
+                }
+                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: action))
+                if enqueuePhotos {
+                    self.enqueuePhotosForPublicTrip(tripId: tripId)
+                }
+            }
         }
     }
 
-    /// One-time migration for the privacy-by-default launch (v0.6.0+). Flips every
-    /// existing local trip to `isPrivate = true` and marks it for re-upload. Runs
-    /// once per install (guarded by UserDefaults at the call site). Returns the
-    /// number of trips flipped so the caller can enqueue sync operations.
+    @MainActor
+    private func photoIdsForTrip(tripId: UUID) -> [UUID] {
+        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "trip.id == %@", tripId as CVarArg)
+        return (try? context.fetch(req))?.compactMap(\.id) ?? []
+    }
+
+    func markUnpublished(tripId: UUID) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        // Do NOT force isPrivate = true — the user may have flipped the trip
+        // back to public while the .unpublish op was in flight. In that
+        // case the queue already holds a fresh `.upload` op (since we
+        // entered the public branch with `wasSynced = true && cloudOn`
+        // false → `pendingOp = .upload`). Clobbering isPrivate here would
+        // wipe the user's most recent intent. We just clear the
+        // server-side bookkeeping so a re-publish enqueues `.upload`,
+        // not `.update`.
+        entity.serverCreatedAt = nil
+        entity.conflictVersion = 0
+        if entity.isPrivate {
+            entity.syncStatus = SyncStatus.synced.rawValue
+        }
+        entity.lastModifiedAt = Date()
+        persistenceController.save()
+    }
+
+    /// Forces fresh photo-upload ops for every photo of a trip that was just
+    /// flipped public. Without this, photos taken while the trip was private
+    /// would have been blocked by the per-op gate (parent was private at
+    /// enqueue time) and stay local-only forever — the public feed card would
+    /// render the trip without any of its photos.
+    /// Filter is by `remoteURL == nil` — covers both never-uploaded photos
+    /// (thumb missing) and thumb-only-uploaded photos (which transport now
+    /// marks as `.uploaded` so the queue won't auto-retry them, but the
+    /// original blob still needs to land before fullscreen view works).
+    @MainActor
+    private func enqueuePhotosForPublicTrip(tripId: UUID) {
+        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        req.predicate = NSPredicate(
+            format: "trip.id == %@ AND remoteURL == nil",
+            tripId as CVarArg
+        )
+        guard let photos = try? context.fetch(req) else { return }
+        for photo in photos {
+            guard let pid = photo.id else { continue }
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: pid, action: .upload))
+        }
+    }
+
+    /// One-time migration for the privacy-by-default launch. Flips every
+    /// pre-existing public trip to `isPrivate = true`. For trips that have a
+    /// `serverCreatedAt` (already on the server from a prior Cloud Sync ON
+    /// era), returns those IDs so the caller can enqueue `.unpublish` ops to
+    /// strip the server copies — otherwise the user would silently keep
+    /// trips public on the server even after the local default flipped.
+    /// Runs once per install (guarded by UserDefaults at the call site).
+    /// Note: we do NOT flip `syncStatus` to `pendingUpload` here. With the
+    /// privacy-first SyncEnqueuer gate, a private trip at Cloud Sync OFF
+    /// would never drain — leaving the queue with phantom pending work.
     @discardableResult
     func migrateAllTripsToPrivate() -> [UUID] {
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = NSPredicate(format: "isPrivate == NO")
         guard let entities = try? context.fetch(request) else { return [] }
         let now = Date()
-        var flippedIds: [UUID] = []
+        var serverSideToUnpublish: [UUID] = []
         for entity in entities {
             entity.isPrivate = true
             entity.lastModifiedAt = now
-            entity.syncStatus = SyncStatus.pendingUpload.rawValue
-            if let id = entity.id { flippedIds.append(id) }
+            if entity.serverCreatedAt != nil, let id = entity.id {
+                serverSideToUnpublish.append(id)
+            }
         }
         persistenceController.save()
-        return flippedIds
+        return serverSideToUnpublish
     }
 
     func saveBadgesJSON(tripId: UUID, badgeIds: [String]) {
@@ -231,8 +384,12 @@ final class CoreDataTripRepository: TripRepository {
            let json = String(data: data, encoding: .utf8) {
             entity.badgesJSON = json
             entity.lastModifiedAt = Date()
-            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+            if Self.shouldFlipPendingUpload(for: entity) {
+                entity.syncStatus = SyncStatus.pendingUpload.rawValue
+            }
             persistenceController.save()
+            // Enqueue is unconditional — the gate filters per-op, so harmless
+            // for private trips at OFF (denied silently).
             Task { @MainActor in
                 SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
             }
