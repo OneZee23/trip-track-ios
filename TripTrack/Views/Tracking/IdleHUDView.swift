@@ -5,6 +5,13 @@ struct IdleHUDView: View {
     let tripCount: Int
     let onStartTrip: () -> Void
     @EnvironmentObject private var lang: LanguageManager
+    @ObservedObject private var settings = SettingsManager.shared
+
+    private var activeVehicle: Vehicle? {
+        settings.vehicles.first { $0.id == settings.selectedVehicleId }
+            ?? settings.vehicles.first
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Pulsing accent ring with pixel car
@@ -39,6 +46,15 @@ struct IdleHUDView: View {
                 .foregroundStyle(.white)
                 .padding(.bottom, 6)
 
+            // Quick vehicle picker — multi-car users were skipping the
+            // start because flipping vehicles meant a trip into Profile →
+            // Garage. Tap-to-switch right here removes that friction; the
+            // chip is hidden when only one vehicle exists.
+            if settings.vehicles.count > 1 {
+                vehicleChip
+                    .padding(.bottom, 10)
+            }
+
             if totalKm > 0 || tripCount > 0 {
                 Text("\(formatKmWithSeparator(totalKm)) \(AppStrings.totalKm(lang.language)) · \(tripCount) \(AppStrings.trips(lang.language))")
                     .font(.system(size: 14, weight: .medium).monospacedDigit())
@@ -63,6 +79,55 @@ struct IdleHUDView: View {
         )
         .environment(\.colorScheme, .dark)
         .padding(.horizontal, 20)
+    }
+
+    @ViewBuilder
+    private var vehicleChip: some View {
+        Menu {
+            ForEach(settings.vehicles) { vehicle in
+                Button {
+                    Haptics.selection()
+                    settings.selectedVehicleId = vehicle.id
+                } label: {
+                    if vehicle.id == settings.selectedVehicleId {
+                        Label(vehicle.name, systemImage: "checkmark")
+                    } else {
+                        Text(vehicle.name)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                if let v = activeVehicle {
+                    if v.isPixelAvatar {
+                        Image(v.avatarEmoji)
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                    } else {
+                        Text(v.avatarEmoji).font(.system(size: 14))
+                    }
+                    Text(v.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineLimit(1)
+                } else {
+                    Image(systemName: "car")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.6))
+                    Text(lang.language == .ru ? "Без авто" : "No vehicle")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(.white.opacity(0.12)))
+        }
     }
 
     private static let kmFormatter: NumberFormatter = {

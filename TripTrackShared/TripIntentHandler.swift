@@ -8,6 +8,11 @@ final class TripIntentHandler {
 
     var onPause: (() -> Void)?
     var onStop: (() -> Void)?
+    /// Fired by `StartTripIntent` (e.g. via Shortcuts personal automation
+    /// "When CarPlay connects → Start Trip with vehicle X"). Optional UUID
+    /// is the vehicle id to switch to before recording starts; nil keeps
+    /// the currently-selected one.
+    var onStart: ((UUID?) -> Void)?
 
     private init() {}
 
@@ -17,5 +22,9 @@ final class TripIntentHandler {
 
     func handleStop() {
         onStop?()
+    }
+
+    func handleStart(vehicleId: UUID?) {
+        onStart?(vehicleId)
     }
 }

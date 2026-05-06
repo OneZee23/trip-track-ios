@@ -94,10 +94,22 @@ final class MapViewModel: ObservableObject {
         self.locationManager = manager
         self.tripManager = TripManager(locationManager: manager)
 
-        // Wire up Live Activity intent handlers
+        // Wire up Live Activity + Shortcuts intent handlers
         TripIntentHandler.shared.onPause = { [weak self] in self?.togglePause() }
         TripIntentHandler.shared.onStop = { [weak self] in
             guard let self, self.isRecording else { return }
+            self.toggleRecording()
+        }
+        // StartTripIntent fires from the Shortcuts app / personal
+        // automations. If a vehicle id was supplied (CarPlay-aware
+        // automations typically pass one) we flip it into settings BEFORE
+        // toggling recording so the trip is stamped with the right car.
+        // Idempotent: if already recording, do nothing.
+        TripIntentHandler.shared.onStart = { [weak self] vehicleId in
+            guard let self, !self.isRecording else { return }
+            if let vid = vehicleId {
+                SettingsManager.shared.selectedVehicleId = vid
+            }
             self.toggleRecording()
         }
 
