@@ -2,19 +2,26 @@ import SwiftUI
 
 /// Fullscreen viewer for another user's public photos. Unlike the owner's
 /// `PhotoFullScreenView` which loads from the local Documents directory by
-/// filename, this one loads presigned R2 URLs. Gestures are intentionally
-/// minimal (swipe between pages, tap to dismiss) — pinch/zoom can come
-/// later once the basic flow feels right.
+/// filename, this one loads presigned R2 URLs. Mirrors the owner viewer's
+/// drag-to-dismiss gesture so the dismiss feel is consistent across local
+/// and social trips — pinch/zoom can come later.
 struct SocialPhotoFullScreenView: View {
     let photos: [SocialTripPhoto]
     let initialIndex: Int
     let onDismiss: () -> Void
 
     @State private var currentIndex: Int = 0
+    @State private var dragOffset: CGSize = .zero
+
+    private var opacity: Double {
+        let progress = min(abs(dragOffset.height) / 300, 1.0)
+        return 1.0 - progress * 0.5
+    }
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black.opacity(opacity)
+                .ignoresSafeArea()
                 .onTapGesture { onDismiss() }
 
             TabView(selection: $currentIndex) {
@@ -25,6 +32,22 @@ struct SocialPhotoFullScreenView: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .automatic))
             .ignoresSafeArea()
+            .offset(y: dragOffset.height)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        dragOffset = value.translation
+                    }
+                    .onEnded { value in
+                        if abs(value.translation.height) > 120 || abs(value.predictedEndTranslation.height) > 300 {
+                            onDismiss()
+                        } else {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                dragOffset = .zero
+                            }
+                        }
+                    }
+            )
 
             VStack {
                 HStack {

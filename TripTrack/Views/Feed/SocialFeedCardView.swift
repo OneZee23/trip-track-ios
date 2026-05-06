@@ -147,6 +147,17 @@ struct SocialFeedCardView: View {
                 onTapAuthor?()
             }
 
+            if isFreshlyPublished {
+                Text(isRu ? "НОВОЕ" : "NEW")
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(0.6)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(AppTheme.accent, in: Capsule())
+                    .fixedSize()
+            }
+
             if trip.photoCount > 0 {
                 HStack(spacing: 4) {
                     Image(systemName: "camera.fill")
@@ -165,6 +176,15 @@ struct SocialFeedCardView: View {
                 .fixedSize()
             }
         }
+    }
+
+    /// True when the trip ended within the freshness window. Lives in the
+    /// outer HStack of `authorRow` so the pill can never overlap the inline
+    /// "Вы" badge that sits inside the name VStack — they're in different
+    /// stacks so SwiftUI lays them out independently.
+    private var isFreshlyPublished: Bool {
+        let publishedAt = trip.endDate ?? trip.startDate
+        return Date().timeIntervalSince(publishedAt) < 12 * 3600
     }
 
     // MARK: - Map
@@ -214,12 +234,15 @@ struct SocialFeedCardView: View {
                 let trimmedName = v.name.trimmingCharacters(in: .whitespaces)
                 if !trimmedName.isEmpty {
                     HStack(spacing: 6) {
-                        // Pixel-avatar PNGs only exist locally for the
-                        // signed-in user's own vehicles. For other authors
-                        // we always have the server-stored emoji column,
-                        // which renders cleanly regardless of pixel/emoji.
-                        if isOwn, let local = ownVehicle, local.isPixelAvatar {
-                            local.avatarView(size: 14)
+                        // Pixel-car asset names are stored as `pixel_car_*`
+                        // in `avatarEmoji`. The PNGs live in the iOS bundle,
+                        // so they render for any author — own or others alike.
+                        // Without this the asset name renders as literal text.
+                        if v.isPixelAvatar {
+                            Image(v.avatarEmoji)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)
                         } else {
                             Text(v.avatarEmoji)
                                 .font(.system(size: 12))

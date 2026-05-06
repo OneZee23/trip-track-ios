@@ -57,7 +57,7 @@ struct MapSnapshotPreview: View {
     }
 
     private var cacheKey: String {
-        "\(tripId.uuidString)-\(scheme == .dark ? "d" : "l")-w\(Int(width))-h\(Int(height))-v3"
+        "\(tripId.uuidString)-\(scheme == .dark ? "d" : "l")-w\(Int(width))-h\(Int(height))-v4"
     }
 
     @MainActor
@@ -79,15 +79,32 @@ struct MapSnapshotPreview: View {
 
         let snapshotSize = CGSize(width: width, height: height)
         let isDark = scheme == .dark
-        let image = await Task.detached(priority: .userInitiated) {
-            await Self.renderSnapshot(
-                coordinates: coordinates,
-                region: region,
-                size: snapshotSize,
-                scale: scale,
-                isDark: isDark
-            )
-        }.value
+
+        // MKMapSnapshotter occasionally returns nil on cold network (especially
+        // on the first card render after app launch over a flaky link, and in
+        // anonymous-feed mode where tile fetches can race the SwiftUI render).
+        // The earlier code returned silently and left the shimmer up forever
+        // — only a pull-to-refresh recreated the view and re-triggered the
+        // task. Retry with a short backoff so the user just waits a beat
+        // instead of having to manually pull.
+        let backoffs: [UInt64] = [0, 1_500_000_000, 4_000_000_000] // ns: 0s, 1.5s, 4s
+        var image: UIImage?
+        for delay in backoffs {
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: delay)
+                if Task.isCancelled { return }
+            }
+            image = await Task.detached(priority: .userInitiated) {
+                await Self.renderSnapshot(
+                    coordinates: coordinates,
+                    region: region,
+                    size: snapshotSize,
+                    scale: scale,
+                    isDark: isDark
+                )
+            }.value
+            if image != nil { break }
+        }
 
         guard let image else { return }
         Self.snapshotCache.setObject(image, forKey: key)
@@ -130,9 +147,13 @@ struct MapSnapshotPreview: View {
 
             let gc = ctx.cgContext
 
-            // Draw polyline
+            // Draw polyline. All sizes here are in POINTS — UIGraphicsImageRenderer
+            // already scales to the device backing buffer via its own scale, so
+            // multiplying by `scale` on top would over-double on retina (visibly
+            // thicker line on 3x devices vs 2x). The previous `* scale` form made
+            // iPhone 17 (3x) render the polyline 1.5× thicker than iPhone 11 (2x).
             gc.setStrokeColor(UIColor(AppTheme.accent).withAlphaComponent(0.75).cgColor)
-            gc.setLineWidth(2 * scale)
+            gc.setLineWidth(2)
             gc.setLineCap(.round)
             gc.setLineJoin(.round)
 
@@ -145,7 +166,7 @@ struct MapSnapshotPreview: View {
             gc.strokePath()
 
             // Start dot (green)
-            let dotRadius: CGFloat = 2.5 * scale
+            let dotRadius: CGFloat = 2.5
             let startPt = points[0]
             gc.setFillColor(UIColor.systemGreen.cgColor)
             gc.fillEllipse(in: CGRect(
@@ -155,20 +176,19 @@ struct MapSnapshotPreview: View {
 
             // End marker: checkered flag (adaptive direction)
             let endPt = points[points.count - 1]
-            let poleH: CGFloat = 6 * scale
-            let flagW: CGFloat = 4 * scale
-            let flagH: CGFloat = 3 * scale
+            let poleH: CGFloat = 6
+            let flagW: CGFloat = 4
+            let flagH: CGFloat = 3
             let cellW = flagW / 2
             let cellH = flagH / 2
 
             // Flip flag downward if endpoint is near top edge
-            let imageH = result.image.size.height
-            let drawUp = endPt.y > poleH + flagH + 2 * scale
+            let drawUp = endPt.y > poleH + flagH + 2
             let poleDir: CGFloat = drawUp ? -1 : 1
 
             // Flagpole
             gc.setStrokeColor(UIColor.label.cgColor)
-            gc.setLineWidth(1 * scale)
+            gc.setLineWidth(1)
             gc.beginPath()
             gc.move(to: CGPoint(x: endPt.x, y: endPt.y))
             gc.addLine(to: CGPoint(x: endPt.x, y: endPt.y + poleH * poleDir))

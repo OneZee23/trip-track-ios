@@ -28,6 +28,7 @@ struct SocialTripDetailView: View {
     @State private var photos: [SocialTripPhoto] = []
     @State private var isLoadingPhotos = false
     @State private var selectedPhotoIndex: Int?
+    @State private var selectedDetailBadge: Badge?
 
     /// Always-current view of the trip: prefer store's copy (reflects
     /// optimistic reaction toggles) and fall back to the original snapshot
@@ -64,8 +65,13 @@ struct SocialTripDetailView: View {
                         descriptionSection(c)
                         metricsGrid(c, isRu: isRu)
                         if !trip.badgeIds.isEmpty {
-                            TripBadgesRow(badgeIds: trip.badgeIds, maxVisible: 6, size: 26)
-                                .padding(.top, 2)
+                            TripBadgesRow(
+                                badgeIds: trip.badgeIds,
+                                maxVisible: 6,
+                                size: 26,
+                                onTap: { badge in selectedDetailBadge = badge }
+                            )
+                            .padding(.top, 2)
                         }
                         // Render a photos strip only when the server actually
                         // returned any — unlike the owner's detail view which
@@ -119,6 +125,11 @@ struct SocialTripDetailView: View {
         .background(c.bg)
         .ignoresSafeArea()
         .navigationBarHidden(true)
+        // NavBarKiller force-enables the interactive pop gesture in
+        // viewWillAppear — without it, `.navigationBarHidden(true)` here
+        // disabled the swipe-back-to-feed gesture (TripDetailView wires
+        // this in for the same reason).
+        .background(NavBarKiller())
         .modifier(SocialTripDetailLocalDestination(
             selectedAuthor: $selectedAuthor,
             enabled: pushPath == nil
@@ -158,6 +169,18 @@ struct SocialTripDetailView: View {
                 .environmentObject(auth)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+        }
+        .overlay {
+            if let badge = selectedDetailBadge {
+                BadgeDetailOverlay(
+                    badge: badge,
+                    isUnlocked: true,
+                    language: lang.language,
+                    colorScheme: scheme,
+                    lastEarnedDate: nil,
+                    onDismiss: { selectedDetailBadge = nil }
+                )
+            }
         }
     }
 
@@ -264,8 +287,15 @@ struct SocialTripDetailView: View {
                         let n = v.name.trimmingCharacters(in: .whitespaces)
                         if !n.isEmpty {
                             HStack(spacing: 4) {
-                                Text(v.avatarEmoji)
-                                    .font(.system(size: 11))
+                                if v.isPixelAvatar {
+                                    Image(v.avatarEmoji)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 13, height: 13)
+                                } else {
+                                    Text(v.avatarEmoji)
+                                        .font(.system(size: 11))
+                                }
                                 Text(n)
                                     .font(.system(size: 11, weight: .semibold))
                                     .foregroundStyle(c.textTertiary)

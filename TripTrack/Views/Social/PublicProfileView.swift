@@ -130,9 +130,10 @@ struct PublicProfileView: View {
                             .font(.system(size: 22))
                             .foregroundStyle(c.textTertiary)
                     }
-                } else if !isOwnProfile {
-                    // Report entry point removed pending a moderation UI;
-                    // block/unblock still actionable so left intact.
+                } else if !isOwnProfile && auth.isSignedIn {
+                    // Block requires an account — guests see no button at all
+                    // (the action would just bounce them to the sign-in sheet,
+                    // which is a confusing UX for a moderation control).
                     Button(role: .destructive) {
                         Haptics.tap()
                         showBlockConfirm = true

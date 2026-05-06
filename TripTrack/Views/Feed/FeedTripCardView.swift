@@ -68,37 +68,45 @@ struct FeedTripCardView: View {
     // MARK: - Header Row
 
     private func headerRow(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 10) {
+        let isRu = lang.language == .ru
+        let resolvedName: String = {
+            if let n = vehicleName?.trimmingCharacters(in: .whitespaces), !n.isEmpty { return n }
+            return isRu ? "Без авто" : "No vehicle"
+        }()
+        return HStack(spacing: 10) {
             Circle()
                 .fill(AppTheme.accentBg)
                 .frame(width: 34, height: 34)
                 .overlay {
                     if let vehicle, vehicle.isPixelAvatar {
                         vehicle.avatarView(size: 28)
-                    } else {
+                    } else if vehicle != nil {
                         Text(vehicleEmoji)
                             .font(.system(size: 17))
+                    } else {
+                        // Fallback for trips with no attached vehicle (typical
+                        // for trips synced down from server where the original
+                        // device never assigned one). Generic car keeps the
+                        // header structure identical across cards instead of
+                        // collapsing into a "lone avatar + date" look.
+                        Image(systemName: "car.fill")
+                            .font(.system(size: 15))
+                            .foregroundStyle(c.textTertiary)
                     }
                 }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    if let name = vehicleName, !name.isEmpty {
-                        Text(name)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(c.text)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    if trip.isPrivate {
-                        // Visual cue that the trip is local-only — drives
-                        // recognition that publishing unlocks reactions /
-                        // shares from followers. Tap of the whole card
-                        // opens detail where the privacy toggle lives.
-                        // `fixedSize` so a long vehicle name truncates
-                        // first instead of squeezing the pill.
-                        privacyPill(c).fixedSize()
-                    }
+                    Text(resolvedName)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    // Privacy pill renders for BOTH states so the row is
+                    // structurally identical card-to-card. Public is the
+                    // less alarming color (accent vs orange) so it doesn't
+                    // pull the eye over actually-private content.
+                    privacyPill(c, isPrivate: trip.isPrivate, isRu: isRu).fixedSize()
                 }
                 Text(formattedDateShort)
                     .font(.system(size: 11))
@@ -129,18 +137,19 @@ struct FeedTripCardView: View {
         }
     }
 
-    private func privacyPill(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
-        return HStack(spacing: 3) {
-            Image(systemName: "lock.fill")
+    private func privacyPill(_ c: AppTheme.Colors, isPrivate: Bool, isRu: Bool) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: isPrivate ? "lock.fill" : "globe")
                 .font(.system(size: 8, weight: .bold))
-            Text(isRu ? "Только Вы" : "Only you")
+            Text(isPrivate
+                 ? (isRu ? "Только Вы" : "Only you")
+                 : (isRu ? "Видна всем" : "Public"))
                 .font(.system(size: 10, weight: .bold))
         }
-        .foregroundStyle(.orange)
+        .foregroundStyle(isPrivate ? .orange : AppTheme.accent)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(Color.orange.opacity(0.15), in: Capsule())
+        .background((isPrivate ? Color.orange : AppTheme.accent).opacity(0.15), in: Capsule())
     }
 
     // MARK: - Map Section

@@ -7,6 +7,9 @@ struct FeedView: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
     @ObservedObject private var socialFeed = SocialFeedStore.shared
+    /// Drives the connectivity banner — when ops accumulate in `failed`,
+    /// the network is genuinely broken and we surface that to the user.
+    @ObservedObject private var syncQueue = SyncQueue.shared
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
@@ -368,6 +371,7 @@ struct FeedView: View {
             ScrollView {
                 LazyVStack(spacing: 6) {
                     Color.clear.frame(height: 0).id("feedTopAll")
+                    connectivityBanner(c)
                     if !auth.isSignedIn {
                         guestSignInBanner(c)
                             .padding(.horizontal, 0)
@@ -518,6 +522,41 @@ struct FeedView: View {
                 ProgressView()
                     .padding(.vertical, 16)
             }
+        }
+    }
+
+    /// Surfaced when the SyncQueue has parked one or more ops in `failedQueue`
+    /// — that only happens after a full retry exhaustion (3 attempts × all
+    /// underlying network retries), so a single entry here is already a
+    /// "the network is genuinely refusing to cooperate" signal. Carefully
+    /// avoids suggesting a specific remediation (no VPN mention) — just
+    /// nudges the user to try a different connection. Auto-dismisses when
+    /// the queue drains, so no manual close button.
+    @ViewBuilder
+    private func connectivityBanner(_ c: AppTheme.Colors) -> some View {
+        if !syncQueue.failed.isEmpty {
+            HStack(spacing: 12) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(lang.language == .ru
+                         ? "Нет связи с сервером"
+                         : "Server unreachable")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(c.text)
+                    Text(lang.language == .ru
+                         ? "Попробуйте сменить сеть или подождите — мы повторим автоматически."
+                         : "Try a different network or wait — we'll retry automatically.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 14)
+            .padding(.top, 6)
         }
     }
 
