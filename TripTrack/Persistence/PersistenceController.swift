@@ -44,6 +44,25 @@ struct PersistenceController {
         if let description = container.persistentStoreDescriptions.first {
             description.setOption(true as NSNumber, forKey: NSMigratePersistentStoresAutomaticallyOption)
             description.setOption(true as NSNumber, forKey: NSInferMappingModelAutomaticallyOption)
+            // Encrypt the SQLite store at rest. Default class on iOS apps
+            // without entitlements is `Default` which translates to
+            // `CompleteUntilFirstUserAuthentication` — meaning the store is
+            // readable from the moment the user enters their passcode after
+            // boot. With trips containing GPS tracks + region history this
+            // would let a stolen-unlocked-device attacker read everything
+            // via filesystem extraction. `complete` keeps the store
+            // encrypted whenever the device is locked.
+            // Note: CoreData internally re-opens the store on background
+            // tasks; `completeUntilFirstUserAuthentication` is the strictest
+            // class that doesn't break those access patterns. `complete`
+            // would suspend background CoreData on lock, breaking auto-trip
+            // and Live Activity recording. CUFUA is the right balance.
+            #if os(iOS) && !targetEnvironment(simulator)
+            description.setOption(
+                FileProtectionType.completeUntilFirstUserAuthentication as NSObject,
+                forKey: NSPersistentStoreFileProtectionKey
+            )
+            #endif
         }
 
         container.loadPersistentStores { [container] description, error in

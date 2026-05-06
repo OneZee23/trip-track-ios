@@ -15,14 +15,13 @@ final class APIClient {
     private var refreshTask: Task<Void, Error>?
 
     init(session: URLSession = .shared, tokenStore: TokenStore = .shared) {
-        // Reverted: a custom URLSession (waitsForConnectivity / longer
-        // timeouts / reloadIgnoringCache) made things STRICTLY WORSE in
-        // prod — every request started getting -1005 networkConnectionLost,
-        // even small ones. The shared session's connection pool reuse from
-        // earlier successful requests was apparently masking RU-DPI breakage
-        // for small bodies. Keep `.shared` and rely on gzip + per-request
-        // 90s timeoutInterval (set on URLRequest in performPost) to stop
-        // silent infinite hangs.
+        // iOS picks HTTP/3 automatically via Alt-Svc header from server
+        // (Cloudflare advertises `alt-svc: h3=":443"`). On flaky RU networks
+        // QUIC sometimes survives where HTTP/2 over TCP gets reset because
+        // the operator's DPI box doesn't fingerprint UDP/QUIC handshakes
+        // as aggressively. Use shared session — earlier custom-session
+        // experiments (waitsForConnectivity + long timeouts) made
+        // everything fail with -1005, so we stay conservative.
         self.session = session
         self.tokenStore = tokenStore
         self.decoder = JSONDecoder()
@@ -62,6 +61,18 @@ final class APIClient {
     }
 
     func getBytes(url: URL) async throws -> Data {
+        // Host whitelist for SSRF defense. `getBytes` only ever fetches
+        // photos from R2 presigned URLs (issued by our own backend). If the
+        // backend were ever compromised or a man-in-the-middle injected a
+        // malicious URL into a `/sync/pull` payload, an unrestricted fetch
+        // could be used to probe internal services on the user's network
+        // (`http://router.local/admin`) or sniff via tracking pixels.
+        // Allow only HTTPS to known R2/Cloudflare hosts.
+        guard url.scheme == "https",
+              let host = url.host?.lowercased(),
+              Self.isAllowedPhotoHost(host) else {
+            throw APIError.transport("disallowed photo host: \(url.host ?? "?")")
+        }
         let (data, response) = try await session.data(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw APIError.invalidHTTPStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
@@ -69,9 +80,18 @@ final class APIClient {
         return data
     }
 
+    /// Allowlist of hosts that legit photo URLs can come from. Adjust here
+    /// if the storage backend changes (e.g. moving to R2 custom domain).
+    private static func isAllowedPhotoHost(_ host: String) -> Bool {
+        host.hasSuffix(".r2.cloudflarestorage.com") ||
+        host.hasSuffix(".r2.dev") ||
+        host == "trip-track.app" ||
+        host.hasSuffix(".trip-track.app")
+    }
+
     // MARK: - Core request path
 
-    private func performPost<Req: Encodable, Res: Decodable>(path: String, body: Req, requiresAuth: Bool, isRetry: Bool) async throws -> Res {
+    private func performPost<Req: Encodable, Res: Decodable>(path: String, body: Req, requiresAuth: Bool, isRetry: Bool, singleAttempt: Bool = false) async throws -> Res {
         let url = AppConfig.apiBaseURL.appendingPathComponent(path)
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -84,11 +104,14 @@ final class APIClient {
             apiAuthLog.notice("POST \(path, privacy: .public) hasToken=\(hasToken) isRetry=\(isRetry)")
         }
         let rawJsonData = try encoder.encode(body)
-        // Per-request 90s ceiling. URLSession's default 60s
-        // timeoutIntervalForRequest is "between packets" and observed in prod
-        // to never fire for stalled large uploads on RU networks. Hard cap.
-        req.timeoutInterval = 90
         let rawSize = rawJsonData.count
+        // Tiered per-request ceiling. Reads (tiny request bodies — feed,
+        // profile, reactions) get 30s so a stalled cold connection on a RU
+        // network errors fast and the auto-retry path below has time to
+        // recover within a single user "load" wait. Uploads (large bodies)
+        // keep the original 90s headroom — shaving them aborts perfectly
+        // healthy slow-mobile POSTs mid-stream.
+        req.timeoutInterval = rawSize >= 4_096 ? 90 : 30
 
         // Gzip bodies >4KB. Russian ISPs DPI-throttle TLS streams >16KB to
         // foreign DC IPs (DigitalOcean, Cloudflare) — large uploads stall
@@ -116,33 +139,28 @@ final class APIClient {
         logger.log(request: req, bodyPreview: String(data: rawJsonData, encoding: .utf8))
 
         let start = Date()
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await sendOnce(req: req, body: jsonData, isLargeBody: isLargeBody, session: session)
-        } catch let e as URLError where e.code == .networkConnectionLost {
-            // -1005 (NSURLErrorNetworkConnectionLost) is the classic URLSession
-            // failure mode when a pooled HTTP/1.1 connection was already closed
-            // by the server-side keepalive timer but URLSession tried to write
-            // to it anyway. Apple-recommended remedy: catch and retry once on a
-            // fresh ephemeral session — that connection is guaranteed not to
-            // come from the broken pool entry. Without this the SyncQueue
-            // looped forever on /trips/upsert because every retry hit the same
-            // dead pool slot. One-shot retry only; if it fails again, give up
-            // and let SyncQueue's normal failedQueue path take over.
-            apiAuthLog.notice("POST \(path, privacy: .public) -1005 networkConnectionLost — retrying on fresh ephemeral session")
-            let freshConfig = URLSessionConfiguration.ephemeral
-            freshConfig.timeoutIntervalForRequest = 90
-            let freshSession = URLSession(configuration: freshConfig)
-            defer { freshSession.invalidateAndCancel() }
-            do {
-                (data, response) = try await sendOnce(req: req, body: jsonData, isLargeBody: isLargeBody, session: freshSession)
-            } catch let e2 as URLError {
-                apiAuthLog.error("POST \(path, privacy: .public) retry also failed: \(e2.localizedDescription, privacy: .public) code=\(e2.code.rawValue)")
-                throw APIError.network(e2)
-            }
-        } catch let e as URLError {
-            apiAuthLog.error("POST \(path, privacy: .public) failed after \(Int(Date().timeIntervalSince(start) * 1000))ms: \(e.localizedDescription, privacy: .public) code=\(e.code.rawValue)")
-            throw APIError.network(e)
+        // Multi-attempt retry for transient TLS/connection failures. -1005
+        // (NSURLErrorNetworkConnectionLost) hits when a pooled HTTP/2 stream
+        // got reset by server-side keepalive; -1001 (timedOut) hits on cold
+        // RU connections where TLS handshake to Cloudflare exceeds the
+        // per-request ceiling before the response lands. Both heal on a
+        // fresh ephemeral session — usually first retry, but in production
+        // we observed two consecutive -1005s on /auth/login with a single
+        // retry, leaving the user permanently locked out at the sign-in
+        // screen. Three total attempts (1 + 2 retries) with progressive
+        // backoff lets a flaky RU network recover within a single user
+        // wait without making large-body uploads waste bandwidth on repeat
+        // sends — those keep the original 1-retry budget.
+        // singleAttempt is set by the refresh path so the auth-token rotation
+        // call doesn't burn 90+ seconds on its own retries while everyone
+        // else is awaiting the refreshTask. Large bodies get 2 attempts (one
+        // retry's worth of bandwidth is enough for 100KB+ uploads); small
+        // bodies get 3 attempts (cheap to retry, helpful on flaky RU TLS).
+        let maxAttempts = singleAttempt ? 1 : (isLargeBody ? 2 : 3)
+        let (data, response) = try await retrying(
+            maxAttempts: maxAttempts, label: "POST \(path)"
+        ) { attemptSession in
+            try await self.sendOnce(req: req, body: jsonData, isLargeBody: isLargeBody, session: attemptSession)
         }
         logger.log(response: response, data: data, duration: Date().timeIntervalSince(start))
 
@@ -169,6 +187,14 @@ final class APIClient {
             if code == "USER_NOT_AUTH", requiresAuth, !isRetry {
                 try await refreshIfNeeded()
                 return try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: true)
+            }
+            // Post-refresh USER_NOT_AUTH means our freshly-rotated access
+            // token is itself invalid (server-side JWT secret rotation,
+            // race with a concurrent revoke). No more refresh attempts —
+            // sign out so SIWA can re-establish a clean session.
+            if code == "USER_NOT_AUTH", requiresAuth, isRetry {
+                apiAuthLog.error("POST \(path, privacy: .public) USER_NOT_AUTH after refresh — forcing signout")
+                AuthService.shared.forceSignOut()
             }
             postBanIfNeeded(code)
             let lastModified = envelope.serverLastModifiedAt.flatMap { ISODate.parse($0) }
@@ -217,6 +243,11 @@ final class APIClient {
                 try await refreshIfNeeded()
                 return try await performGet(path: path, requiresAuth: requiresAuth, isRetry: true)
             }
+            // Mirrors performPost: post-refresh USER_NOT_AUTH = dead session.
+            if code == "USER_NOT_AUTH", requiresAuth, isRetry {
+                apiAuthLog.error("GET \(path, privacy: .public) USER_NOT_AUTH after refresh — forcing signout")
+                AuthService.shared.forceSignOut()
+            }
             postBanIfNeeded(code)
             throw APIError.from(code: code, message: envelope.message ?? "", serverVersion: envelope.serverVersion, serverLastModifiedAt: nil)
         }
@@ -244,11 +275,10 @@ final class APIClient {
         logger.log(request: req, bodyPreview: "<multipart \(builder.body.count) bytes>")
 
         let start = Date()
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await session.data(for: req)
-        } catch let e as URLError {
-            throw APIError.network(e)
+        let (data, response) = try await retrying(
+            maxAttempts: 3, label: "MULTIPART \(path)"
+        ) { attemptSession in
+            try await attemptSession.data(for: req)
         }
         logger.log(response: response, data: data, duration: Date().timeIntervalSince(start))
 
@@ -269,6 +299,11 @@ final class APIClient {
                 try await refreshIfNeeded()
                 return try await performMultipart(path: path, fields: fields, file: file, isRetry: true)
             }
+            // Mirrors performPost: post-refresh USER_NOT_AUTH = dead session.
+            if code == "USER_NOT_AUTH", isRetry {
+                apiAuthLog.error("MULTIPART \(path, privacy: .public) USER_NOT_AUTH after refresh — forcing signout")
+                AuthService.shared.forceSignOut()
+            }
             postBanIfNeeded(code)
             throw APIError.from(code: code, message: envelope.message ?? "", serverVersion: envelope.serverVersion, serverLastModifiedAt: nil)
         }
@@ -284,10 +319,50 @@ final class APIClient {
 
     // MARK: - HTTP transport helper
 
+    /// Multi-attempt wrapper. -1005 (NSURLErrorNetworkConnectionLost) and
+    /// -1001 (timedOut) are the dominant transient failures on RU mobile
+    /// networks via Cloudflare; both heal on a fresh ephemeral session.
+    /// First attempt uses the shared session (warm pool); subsequent
+    /// attempts spin a fresh ephemeral session with a brief backoff. Other
+    /// URLError codes (.cancelled, .dataNotAllowed) bail immediately.
+    private func retrying(
+        maxAttempts: Int,
+        label: String,
+        perform: (URLSession) async throws -> (Data, URLResponse)
+    ) async throws -> (Data, URLResponse) {
+        var lastError: URLError?
+        for attempt in 0..<maxAttempts {
+            let attemptSession: URLSession
+            if attempt == 0 {
+                attemptSession = session
+            } else {
+                let freshConfig = URLSessionConfiguration.ephemeral
+                freshConfig.timeoutIntervalForRequest = 90
+                attemptSession = URLSession(configuration: freshConfig)
+                // Backoff 0.8s, 1.2s before attempts 2 and 3 — formula
+                // `attempt * 0.4 + 0.4`. Small enough not to compound, big
+                // enough to let TLS state settle between cold reconnects.
+                try? await Task.sleep(nanoseconds: UInt64((Double(attempt) * 0.4 + 0.4) * 1_000_000_000))
+            }
+            defer { if attempt > 0 { attemptSession.invalidateAndCancel() } }
+            do {
+                return try await perform(attemptSession)
+            } catch let e as URLError where e.code == .networkConnectionLost || e.code == .timedOut {
+                apiAuthLog.notice("\(label, privacy: .public) attempt \(attempt + 1)/\(maxAttempts) \(e.code.rawValue)")
+                lastError = e
+                continue
+            } catch let e as URLError {
+                apiAuthLog.error("\(label, privacy: .public) non-retryable \(e.code.rawValue) \(e.localizedDescription, privacy: .public)")
+                throw APIError.network(e)
+            }
+        }
+        apiAuthLog.error("\(label, privacy: .public) all \(maxAttempts) attempts failed code=\(lastError?.code.rawValue ?? -1)")
+        throw APIError.network(lastError ?? URLError(.networkConnectionLost))
+    }
+
     /// Single HTTP roundtrip. Picks `upload(for:from:)` for large bodies and
     /// `data(for:)` for small ones — the upload variant tolerates ~80KB JSON
-    /// POSTs that would hang via data(for:) on flakey connections. The
-    /// network-connection-lost retry in the callers wraps this whole call.
+    /// POSTs that would hang via data(for:) on flakey connections.
     private func sendOnce(
         req: URLRequest, body: Data?, isLargeBody: Bool, session: URLSession,
     ) async throws -> (Data, URLResponse) {
@@ -317,20 +392,50 @@ final class APIClient {
             }
             apiAuthLog.notice("refresh: posting /auth/refresh")
             do {
+                // singleAttempt: refresh shares the refreshTask with every
+                // other in-flight authed call; if it loops 3×30s on a flaky
+                // network, the entire app stalls for 90+ seconds. One shot —
+                // if it fails transiently the next authed call retriggers a
+                // fresh refresh anyway.
                 let res: RefreshResponse = try await self.performPost(
                     path: APIEndpoint.refresh, body: RefreshRequest(refreshToken: refresh),
-                    requiresAuth: false, isRetry: true)  // isRetry=true prevents infinite loop
+                    requiresAuth: false, isRetry: true, singleAttempt: true)
                 self.tokenStore.set(accessToken: res.accessToken, refreshToken: res.refreshToken)
                 apiAuthLog.notice("refresh: succeeded, new tokens stored")
+            } catch APIError.network(let urlErr) {
+                // Transient network failure — keep session. The next user
+                // action will trigger another refresh; the refresh token in
+                // keychain is still valid as far as we know.
+                apiAuthLog.notice("refresh: network failure code=\(urlErr.code.rawValue) — keeping session")
+                throw APIError.network(urlErr)
+            } catch let error as APIError {
+                // Whitelist of transient APIError cases that should NOT sign
+                // the user out. Everything else (including unknown server
+                // codes the backend may add later) → forceSignOut. Inverting
+                // the default this way prevents zombie sessions from new
+                // server error codes that no one updated this switch for.
+                let isTransient: Bool
+                switch error {
+                case .network, .decoding, .transport:
+                    isTransient = true
+                case .invalidHTTPStatus(let code):
+                    // 5xx = server hiccup (retry later); 4xx = our auth is
+                    // bad (sign out). Without this split a hypothetical 401
+                    // response without the typed envelope would be treated
+                    // as transient and leave a dead session forever.
+                    isTransient = code >= 500
+                default:
+                    isTransient = false
+                }
+                if isTransient {
+                    apiAuthLog.notice("refresh: transient (\(String(describing: error), privacy: .public)) — keeping session")
+                } else {
+                    apiAuthLog.error("refresh: rejected (\(String(describing: error), privacy: .public)) — forcing signout")
+                    AuthService.shared.forceSignOut()
+                }
+                throw error
             } catch {
-                // Refresh failed permanently — backend rejected our refresh
-                // token (expired 7d, row deleted, secret rotated). Without a
-                // forceSignOut here the app would be stuck: isSignedIn=true,
-                // every authed call returns USER_NOT_AUTH, no recovery path.
-                // Tearing down the session lets the user re-authenticate via
-                // Sign in with Apple instead of a permanent silent failure.
-                apiAuthLog.error("refresh: failed (\(String(describing: error), privacy: .public)) — forcing signout")
-                AuthService.shared.forceSignOut()
+                apiAuthLog.notice("refresh: unknown error (\(String(describing: error), privacy: .public)) — keeping session")
                 throw error
             }
         }

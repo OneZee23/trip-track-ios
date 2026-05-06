@@ -14,12 +14,20 @@ enum KeychainHelper {
     static func save(_ data: Data, for key: String) throws {
         delete(key: key)
 
+        // `ThisDeviceOnly` so tokens & identity DO NOT replicate via iCloud
+        // Keychain or encrypted device backup. Without this, an attacker who
+        // restores a backup of the user's iPhone (including via known passcode-
+        // bypass attacks at low PIN entropy) inherits a valid session.
+        // `kSecAttrSynchronizable = false` is the explicit "no iCloud sync"
+        // belt to the suspenders — defense-in-depth for future iOS versions
+        // where the default may change.
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecAttrSynchronizable as String: false
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -33,6 +41,9 @@ enum KeychainHelper {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
+            // Match the saved record's synchronizable flag so we never read
+            // a stale iCloud-synced copy from a previous install era.
+            kSecAttrSynchronizable as String: false,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -45,10 +56,13 @@ enum KeychainHelper {
 
     @discardableResult
     static func delete(key: String) -> Bool {
+        // `kSecAttrSynchronizableAny` ensures the delete sweeps any old
+        // iCloud-synced records left over from pre-hardening builds.
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key
+            kSecAttrAccount as String: key,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
         ]
         return SecItemDelete(query as CFDictionary) == errSecSuccess
     }

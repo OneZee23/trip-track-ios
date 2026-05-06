@@ -22,8 +22,32 @@ final class APILogger {
     }
 
     private func redact(_ s: String) -> String {
-        s.replacingOccurrences(of: #""refreshToken"\s*:\s*"[^"]+""#, with: "\"refreshToken\":\"***\"", options: .regularExpression)
-         .replacingOccurrences(of: #""accessToken"\s*:\s*"[^"]+""#, with: "\"accessToken\":\"***\"", options: .regularExpression)
-         .replacingOccurrences(of: #""identityToken"\s*:\s*"[^"]+""#, with: "\"identityToken\":\"***\"", options: .regularExpression)
+        // Greedy whitelist of "private" JSON fields. Approach: every quoted
+        // value of a sensitive field is replaced with `***`. Sensitive fields
+        // include not just auth tokens but also PII (email, displayName),
+        // server-issued presigned URLs (whoever sees them gets the photo
+        // until expiry), APNs tokens, and refresh tokens.
+        // Earlier blacklist-only redaction missed presigned R2 URLs and
+        // user emails that were appearing in /auth/login response bodies
+        // and /social/feed reactor lists. TestFlight feedback bundles can
+        // ship sysdiagnose containing these logs — privacy-first means we
+        // never let those values land in OSLog.
+        let sensitiveFields = [
+            "refreshToken", "accessToken", "identityToken",
+            "apnsToken", "deviceToken",
+            "email", "userEmail",
+            "displayName", "userName",
+            "thumbnailUrl", "originalUrl", "remoteUrl", "url"
+        ]
+        var redacted = s
+        for field in sensitiveFields {
+            let pattern = #""\#(field)"\s*:\s*"[^"]*""#
+            redacted = redacted.replacingOccurrences(
+                of: pattern,
+                with: "\"\(field)\":\"***\"",
+                options: .regularExpression
+            )
+        }
+        return redacted
     }
 }

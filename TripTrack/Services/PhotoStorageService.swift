@@ -10,6 +10,15 @@ enum PhotoStorageService {
     static func savePhoto(_ image: UIImage, for tripId: UUID) -> String? {
         let tripDir = photosDirectory.appendingPathComponent(tripId.uuidString, isDirectory: true)
         try? FileManager.default.createDirectory(at: tripDir, withIntermediateDirectories: true)
+        // Privacy-first: photos must not silently end up in iCloud / encrypted
+        // device backup. The user's contract with us is "data stays on this
+        // device unless Cloud Sync is enabled" — without `isExcludedFromBackup`
+        // every photo gets uploaded into the user's iCloud backup, which is
+        // recoverable from another device with their Apple ID. Set on the
+        // photosDirectory root and on each tripDir as defense-in-depth (system
+        // walks ancestors but the per-dir flag is the documented path).
+        excludeFromBackupIfNeeded(photosDirectory)
+        excludeFromBackupIfNeeded(tripDir)
 
         let photoFilename = UUID().uuidString + ".jpg"
         let fullPath = tripDir.appendingPathComponent(photoFilename)
@@ -21,6 +30,14 @@ enum PhotoStorageService {
         } catch {
             return nil
         }
+    }
+
+    private static func excludeFromBackupIfNeeded(_ url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        var url = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
     }
 
     /// Validate that a resolved path stays within photosDirectory (prevents path traversal).

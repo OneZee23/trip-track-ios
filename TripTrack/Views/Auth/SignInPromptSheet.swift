@@ -78,7 +78,15 @@ struct SignInPromptSheet: View {
                 }
 
                 SignInWithAppleButton(.signIn,
-                    onRequest: { req in req.requestedScopes = [.fullName, .email] },
+                    onRequest: { req in
+                        req.requestedScopes = [.fullName, .email]
+                        // Bind the authorization to a one-shot nonce so a
+                        // leaked identityToken can't be replayed. Apple
+                        // embeds this hash into the JWT `nonce` claim; the
+                        // backend compares it against the raw nonce we send
+                        // alongside the token at login time.
+                        req.nonce = SIWANonce.generate()
+                    },
                     onCompletion: { result in
                         switch result {
                         case .success(let authorization):
