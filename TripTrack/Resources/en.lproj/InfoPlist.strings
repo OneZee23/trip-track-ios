@@ -3,3 +3,15 @@
 
 /* Location permission: always (background) */
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack uses your location in the background to continue recording your driving route while the app is minimized, so you don't lose any part of your trip.";
+
+/* Motion: auto-detect driving */
+"NSMotionUsageDescription" = "TripTrack uses motion data to detect when you're driving and automatically start recording trips.";
+
+/* Bluetooth: auto-start/stop on car connection */
+"NSBluetoothAlwaysUsageDescription" = "TripTrack detects when you connect to your car's Bluetooth so it can automatically start and end trip recording.";
+
+/* Photo Library: add only — saving share-card to Photos */
+"NSPhotoLibraryAddUsageDescription" = "TripTrack saves your trip story image to Photos so you can share it as a story or post.";
+
+/* Local network: dev/beta only */
+"NSLocalNetworkUsageDescription" = "TripTrack uses the local network to discover services on your Wi-Fi when you opt into developer or beta builds.";
