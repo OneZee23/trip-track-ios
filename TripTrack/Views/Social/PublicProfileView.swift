@@ -335,41 +335,70 @@ struct PublicProfileView: View {
 
     // MARK: - Stats
 
+    /// Account is signed in + has gamification activity (level / streak)
+    /// but zero trips on the server. Two ways to land here:
+    ///   1. Cloud Sync OFF — drives are happening locally but never synced
+    ///      (profile metadata is pushed unconditionally by `syncProfileToServer`).
+    ///   2. User wiped server data via "Clear my server data" but kept the
+    ///      account.
+    /// Either way, showing "0 поездок · 0 км · 0 регионов" reads as a bug
+    /// to the viewer. Replace the numbers with placeholder dots and a
+    /// gentle "private routes" footnote — the LVL pill above still
+    /// signals the account is active. Owner-side view is untouched
+    /// (they see their own truth, which is just the zero state).
+    private var isPrivacyMode: Bool {
+        guard !isOwnProfile, let p = profile else { return false }
+        let tripCount = p.stats.tripCount
+        return tripCount == 0 && (p.profileLevel > 1 || p.currentStreak > 0 || p.bestStreak > 0)
+    }
+
     private func statsGrid(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         let stats = profile?.stats
         let streakValue = profile?.currentStreak ?? 0
-        return HStack(spacing: 0) {
-            statCell(
-                value: stats.map { String($0.tripCount) } ?? "—",
-                label: isRu ? "поездок" : "trips",
-                c: c
-            )
-            divider(c)
-            statCell(
-                value: stats.map { String(format: "%.0f", $0.totalKm) } ?? "—",
-                label: "км",
-                c: c
-            )
-            divider(c)
-            statCell(
-                value: stats.map { String($0.regionsCount) } ?? "—",
-                label: isRu ? "регионов" : "regions",
-                c: c
-            )
-            divider(c)
-            statCell(
-                value: profile == nil ? "—" : "\(streakValue)",
-                // Spelled out "day streak" so the icon+number doesn't look
-                // like a generic score — it's specifically consecutive days
-                // of recording trips.
-                label: isRu ? "дней подряд" : "day streak",
-                c: c,
-                accent: streakValue > 0 ? AppTheme.accent : nil,
-                iconSystemName: streakValue > 0 ? "flame.fill" : nil
-            )
+        let privacy = isPrivacyMode
+        let dots = "•••"
+        let tripsValue = privacy ? dots : (stats.map { String($0.tripCount) } ?? "—")
+        let kmValue = privacy ? dots : (stats.map { String(format: "%.0f", $0.totalKm) } ?? "—")
+        let regionsValue = privacy ? dots : (stats.map { String($0.regionsCount) } ?? "—")
+        let streakDisplay = privacy ? dots : (profile == nil ? "—" : "\(streakValue)")
+        return VStack(spacing: 8) {
+            HStack(spacing: 0) {
+                statCell(value: tripsValue, label: isRu ? "поездок" : "trips", c: c)
+                divider(c)
+                statCell(value: kmValue, label: "км", c: c)
+                divider(c)
+                statCell(value: regionsValue, label: isRu ? "регионов" : "regions", c: c)
+                divider(c)
+                statCell(
+                    value: streakDisplay,
+                    // Spelled out "day streak" so the icon+number doesn't look
+                    // like a generic score — it's specifically consecutive days
+                    // of recording trips.
+                    label: isRu ? "дней подряд" : "day streak",
+                    c: c,
+                    accent: !privacy && streakValue > 0 ? AppTheme.accent : nil,
+                    iconSystemName: !privacy && streakValue > 0 ? "flame.fill" : nil
+                )
+            }
+            .padding(.vertical, 12)
+            .surfaceCard(cornerRadius: 14)
+
+            if privacy {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(c.textTertiary)
+                    Text(isRu
+                         ? "Тайные дороги — водитель оставил поездки приватными"
+                         : "Hidden roads — this driver keeps their trips private")
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textTertiary)
+                        .multilineTextAlignment(.leading)
+                }
+                .padding(.horizontal, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
-        .padding(.vertical, 12)
-        .surfaceCard(cornerRadius: 14)
     }
 
     private func statCell(
