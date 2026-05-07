@@ -109,6 +109,38 @@ struct Trip: Identifiable, Codable {
         averageSpeed * 3.6
     }
 
+    /// Time spent actually moving vs sitting stationary (engine running but
+    /// not making progress — traffic, lights, parked-but-recording). Computed
+    /// from track points: walks pairs of points, classifies each gap by the
+    /// pair's speed, and ignores gaps >60s as pauses/GPS dropouts so a
+    /// lunch-break-with-pause-pressed doesn't inflate stoppedTime.
+    ///
+    /// Why a stat split instead of a smarter fuel formula: any GPS-only fuel
+    /// model has ±30% intrinsic error (cold-start, idle rate variance per
+    /// engine, acceleration profile). Showing "Driving 1h / Stopped 4h" is
+    /// honest data the user calibrates their own intuition against.
+    private var movementSplit: (driving: TimeInterval, stopped: TimeInterval) {
+        guard trackPoints.count >= 2 else { return (0, 0) }
+        let idleSpeedKmh = 5.0
+        let maxGap: TimeInterval = 60
+        var drv: TimeInterval = 0
+        var stp: TimeInterval = 0
+        for i in 1..<trackPoints.count {
+            let dt = trackPoints[i].timestamp.timeIntervalSince(trackPoints[i - 1].timestamp)
+            guard dt > 0, dt <= maxGap else { continue }
+            let avgKmh = ((trackPoints[i].speed + trackPoints[i - 1].speed) / 2.0) * 3.6
+            if avgKmh < idleSpeedKmh {
+                stp += dt
+            } else {
+                drv += dt
+            }
+        }
+        return (drv, stp)
+    }
+
+    var drivingTime: TimeInterval { movementSplit.driving }
+    var stoppedTime: TimeInterval { movementSplit.stopped }
+
     var formattedDuration: String {
         let totalSeconds = Int(duration)
         let hours = totalSeconds / 3600
@@ -121,18 +153,24 @@ struct Trip: Identifiable, Codable {
     }
 
     func formattedDurationHuman(_ lang: LanguageManager.Language) -> String {
-        let totalSeconds = Int(duration)
+        Self.formattedTimeHuman(duration, lang: lang)
+    }
+
+    /// Formats an arbitrary time interval the same way `formattedDurationHuman`
+    /// does — for the trip's drivingTime / stoppedTime split which needs the
+    /// same compact "X ч Y мин" rendering as the duration card next to it.
+    static func formattedTimeHuman(_ seconds: TimeInterval, lang: LanguageManager.Language) -> String {
+        let totalSeconds = Int(seconds)
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
-        let seconds = totalSeconds % 60
-
+        let secs = totalSeconds % 60
         if hours > 0 {
             return lang == .ru ? "\(hours) ч \(minutes) мин" : "\(hours) h \(minutes) min"
         }
         if minutes > 0 {
-            return lang == .ru ? "\(minutes) мин \(seconds) сек" : "\(minutes) min \(seconds) sec"
+            return lang == .ru ? "\(minutes) мин \(secs) сек" : "\(minutes) min \(secs) sec"
         }
-        return lang == .ru ? "\(seconds) сек" : "\(seconds) sec"
+        return lang == .ru ? "\(secs) сек" : "\(secs) sec"
     }
 
     init(id: UUID = UUID(), startDate: Date = Date(), endDate: Date? = nil,

@@ -748,6 +748,24 @@ struct TripDetailView: View {
                 color: AppTheme.accent,
                 staggerIndex: 1
             )
+            // Movement split surfaces "actually driving" vs "stationary
+            // with engine on" — the only honest answer to the recurring
+            // "why does my fuel feel off in traffic?" question. Hidden
+            // when the trip has no usable track-point data.
+            if (trip.drivingTime + trip.stoppedTime) > 0 {
+                DetailStatCard(
+                    value: Trip.formattedTimeHuman(trip.drivingTime, lang: l),
+                    label: l == .ru ? "В движении" : "Driving",
+                    color: AppTheme.blue,
+                    staggerIndex: 2
+                )
+                DetailStatCard(
+                    value: Trip.formattedTimeHuman(trip.stoppedTime, lang: l),
+                    label: l == .ru ? "Стоял" : "Stopped",
+                    color: AppTheme.textTertiary,
+                    staggerIndex: 3
+                )
+            }
             DetailStatCard(
                 value: String(format: "%.0f %@", trip.averageSpeedKmh, AppStrings.kmh(l)),
                 label: AppStrings.avgSpeed(l),
