@@ -628,24 +628,78 @@ struct FeedView: View {
         .padding(.bottom, 40)
     }
 
+    /// Empty social-feed state. Three jobs in one view:
+    ///   1. Friendly hero so the page never reads as "broken / no data".
+    ///   2. Inline `SuggestedUsersCarousel` — fixes the cold-start
+    ///      problem where the feed is dormant simply because nobody is
+    ///      followed yet. Tap on a user pushes onto the same nav stack
+    ///      the regular feed uses, so the empty state isn't a dead-end.
+    ///   3. First-publish nudge for signed-in users who have private
+    ///      trips locally. Without this, the feed only ever fills via
+    ///      "follow someone" — but a user who already has trips can
+    ///      seed the feed themselves by publishing one.
+    @ViewBuilder
     private func socialEmptyState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 44, weight: .light))
-                .foregroundStyle(c.textTertiary)
-                .padding(.top, 40)
-            Text(isRu ? "Здесь появятся поездки друзей" : "Friends' trips will appear here")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(c.text)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Text(isRu
-                 ? "Подпишитесь на кого-нибудь выше, чтобы видеть их поездки."
-                 : "Follow someone above to see their trips.")
-                .font(.system(size: 13))
-                .foregroundStyle(c.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+        let hasPrivateTrips = feedVM.tripManager.fetchTrips().contains { $0.isPrivate }
+        let signedIn = auth.isSignedIn
+        VStack(spacing: 18) {
+            VStack(spacing: 12) {
+                Image(systemName: "road.lanes")
+                    .font(.system(size: 44, weight: .light))
+                    .foregroundStyle(c.textTertiary)
+                    .padding(.top, 40)
+                Text(isRu ? "Здесь будут поездки людей" : "Here come other people's trips")
+                    .font(.system(size: 18, weight: .heavy))
+                    .foregroundStyle(c.text)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                Text(signedIn
+                     ? (isRu
+                        ? "Подпишитесь на кого-нибудь — и их публичные поездки появятся здесь."
+                        : "Follow a few drivers and their public trips will land here.")
+                     : (isRu
+                        ? "Войдите, чтобы подписываться на других водителей и публиковать свои поездки."
+                        : "Sign in to follow other drivers and publish your own trips."))
+                    .font(.system(size: 13))
+                    .foregroundStyle(c.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+            // Inline suggestions — the same carousel that lives in
+            // DiscoverView, embedded here so users don't have to leave
+            // the feed to find their first follow.
+            SuggestedUsersCarousel { author in
+                authorPath.cappedAppend(.profile(author.id, author))
+            }
+            .environmentObject(lang)
+            .padding(.horizontal, 12)
+
+            // Signed-in user with private trips: nudge them to publish.
+            // We don't deep-link to a specific trip — sending them to
+            // the "Мои" tab lets them pick which one to share. Avoids
+            // a "we picked your most recent" surprise.
+            if signedIn && hasPrivateTrips {
+                Button {
+                    Haptics.tap()
+                    feedMode = .mine
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "globe")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(isRu
+                             ? "Опубликовать свою поездку"
+                             : "Publish one of your trips")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(AppTheme.accent))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 40)
