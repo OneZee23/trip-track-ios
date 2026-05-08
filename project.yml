@@ -6,6 +6,14 @@ options:
   xcodeVersion: "16.0"
   generateEmptyDirectories: true
 
+# External SPM dependencies. Sentry is the first (and so far only) third-
+# party package — added for crash + error reporting. The SDK no-ops when
+# the DSN env-var is empty, so dev / simulator builds are zero-impact.
+packages:
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa.git
+    majorVersion: 8.36.0
+
 settings:
   base:
     SWIFT_VERSION: "5.9"
@@ -25,6 +33,8 @@ targets:
       - path: TripTrackShared
     dependencies:
       - target: TripTrackLiveActivityExtension
+      - package: Sentry
+        product: Sentry
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig

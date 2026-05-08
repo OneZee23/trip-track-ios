@@ -11,6 +11,10 @@ struct TripTrackApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
+        // Crash reporting MUST start first — otherwise any panic in the
+        // services below would crash silently. No-op when SENTRY_DSN
+        // is empty (dev / simulator).
+        SentryService.start()
         // Handle background relaunch by significant location change
         // iOS relaunches the app after force-quit when cell tower changes
         AutoTripService.shared.handleBackgroundLaunch()

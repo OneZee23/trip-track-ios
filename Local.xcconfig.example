@@ -19,3 +19,13 @@ DEVELOPMENT_TEAM = YOUR_TEAM_ID
 // Release — must be HTTPS (no ATS exception needed for trusted CA certs).
 API_BASE_URL[config=Debug]   = http:/$()/localhost:3003
 API_BASE_URL[config=Release] = https:/$()/api.your-domain.com
+
+// Sentry DSN for crash + error reporting. Leave EMPTY in Debug so the
+// SDK no-ops and dev events don't pollute production project metrics.
+// Release build picks up your real project DSN.
+//
+// Public DSNs are safe to ship in the binary (Sentry rate-limits per
+// project), but treat the project as exposed: don't enable PII capture,
+// don't enable session replay. Project setup at https://sentry.io.
+SENTRY_DSN[config=Debug]   =
+SENTRY_DSN[config=Release] = https:/$()/your-key@o0.ingest.sentry.io/0

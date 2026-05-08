@@ -135,6 +135,9 @@ final class AuthService: ObservableObject {
             TokenStore.shared.set(accessToken: response.accessToken, refreshToken: response.refreshToken)
             TokenStore.shared.setAccountId(response.account.id)
             isSignedIn = true
+            // Stamp anon account id on Sentry scope — group events per
+            // user without revealing identity (no email, no name).
+            SentryService.setAccount(id: response.account.id.uuidString)
 
             // Step 3 of the resolution order — pull the server's stored name
             // when we still don't have one. Without this, signing in on a
@@ -382,6 +385,7 @@ final class AuthService: ObservableObject {
         isSignedIn = false
         userName = nil
         userEmail = nil
+        SentryService.setAccount(id: nil)
         userIdentifier = nil
         SyncQueue.shared.clearAll()
         // Drop in-app inbox state — the next account on this device should
@@ -428,6 +432,17 @@ final class AuthService: ObservableObject {
         // `displayName` is nil for users who signed in before SIWA returned a
         // name — pass nil (skipped in JSON via `encodeIfPresent`) instead of
         // null, otherwise the server would CLEAR a previously-stored name.
+        // First two chars of the user's preferred locale. Backend
+        // whitelist is "ru"/"en" only; anything else gets dropped by the
+        // class-validator @Matches in ProfileUpdateRequestDto, in which
+        // case the column stays at its previous value (server treats
+        // missing keys as "leave unchanged").
+        let preferredLanguage: String? = {
+            guard let raw = Locale.preferredLanguages.first else { return nil }
+            let prefix = String(raw.prefix(2)).lowercased()
+            return (prefix == "ru" || prefix == "en") ? prefix : nil
+        }()
+
         let req = ProfileUpdateRequest(
             displayName: userName,
             avatarEmoji: settings.avatarEmoji,
@@ -436,7 +451,8 @@ final class AuthService: ObservableObject {
             profileXp: settings.profileXP,
             currentStreak: settings.currentStreak,
             bestStreak: settings.bestStreak,
-            activeVehicleId: settings.selectedVehicleId?.uuidString
+            activeVehicleId: settings.selectedVehicleId?.uuidString,
+            language: preferredLanguage
         )
         do {
             let _: EmptyResponse = try await APIClient.shared.post(
@@ -489,6 +505,9 @@ final class AuthService: ObservableObject {
                 switch state {
                 case .authorized:
                     if self?.isSignedIn != true { self?.isSignedIn = true }
+                    if let accountId = TokenStore.shared.accountId {
+                        SentryService.setAccount(id: accountId.uuidString)
+                    }
                 case .revoked, .notFound:
                     await self?.signOut()
                 default:

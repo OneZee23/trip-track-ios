@@ -21,6 +21,15 @@ enum AppConfig {
         #endif
     }
 
+    /// Sentry project DSN. Empty = SDK no-op (dev / simulator builds).
+    /// Sourced from Info.plist (`SENTRY_DSN`), wired via Local.xcconfig
+    /// per build config.
+    static var sentryDSN: String? {
+        let raw = Bundle.main.object(forInfoDictionaryKey: "SENTRY_DSN") as? String ?? ""
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     // MARK: - Legal URLs
 
     static func privacyPolicyURL(_ lang: LanguageManager.Language) -> URL {
