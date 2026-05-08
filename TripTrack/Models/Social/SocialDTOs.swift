@@ -231,6 +231,9 @@ struct ProfileUpdateRequest: Encodable {
     /// UUID string of the active vehicle. Empty string clears the selection
     /// server-side; nil means "don't change".
     let activeVehicleId: String?
+    /// `"ru"` or `"en"`. Server uses this to localise scheduled push texts
+    /// (weekly recap and similar). nil = "don't change".
+    let language: String?
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -242,12 +245,13 @@ struct ProfileUpdateRequest: Encodable {
         try c.encodeIfPresent(currentStreak, forKey: .currentStreak)
         try c.encodeIfPresent(bestStreak, forKey: .bestStreak)
         try c.encodeIfPresent(activeVehicleId, forKey: .activeVehicleId)
+        try c.encodeIfPresent(language, forKey: .language)
     }
 
     private enum CodingKeys: String, CodingKey {
         case displayName, avatarEmoji, profileBackground
         case profileLevel, profileXp, currentStreak, bestStreak
-        case activeVehicleId
+        case activeVehicleId, language
     }
 }
 

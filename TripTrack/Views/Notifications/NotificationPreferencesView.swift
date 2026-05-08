@@ -6,11 +6,13 @@ private let prefsLog = Logger(subsystem: "com.triptrack", category: "notificatio
 private struct NotificationPrefsResponse: Codable {
     let notifyReactions: Bool
     let notifyFollows: Bool
+    let notifyWeeklyRecap: Bool
 }
 
 private struct NotificationPrefsUpdateRequest: Codable {
     let notifyReactions: Bool?
     let notifyFollows: Bool?
+    let notifyWeeklyRecap: Bool?
 }
 
 /// Account-level toggles for each notification category. Lives behind a
@@ -27,6 +29,7 @@ struct NotificationPreferencesView: View {
 
     @State private var notifyReactions = true
     @State private var notifyFollows = true
+    @State private var notifyWeeklyRecap = true
     @State private var isLoaded = false
     @State private var isSaving = false
 
@@ -59,6 +62,17 @@ struct NotificationPreferencesView: View {
                                 ? "Когда кто-то подписывается на Ваш профиль"
                                 : "When someone follows your profile",
                             isOn: $notifyFollows,
+                            c: c,
+                        )
+                        Divider().padding(.leading, 56)
+                        toggleRow(
+                            icon: "calendar.badge.clock",
+                            iconTint: AppTheme.blue,
+                            title: isRu ? "Итоги недели" : "Weekly recap",
+                            subtitle: isRu
+                                ? "Каждый понедельник — сколько Вы проехали за прошлую неделю"
+                                : "Every Monday — how much you drove last week",
+                            isOn: $notifyWeeklyRecap,
                             c: c,
                         )
                     }
@@ -154,6 +168,7 @@ struct NotificationPreferencesView: View {
                 APIEndpoint.notificationPrefsGet, body: EmptyRequest())
             notifyReactions = res.notifyReactions
             notifyFollows = res.notifyFollows
+            notifyWeeklyRecap = res.notifyWeeklyRecap
             isLoaded = true
         } catch {
             prefsLog.error("load failed: \(error.localizedDescription)")
@@ -174,6 +189,7 @@ struct NotificationPreferencesView: View {
                 body: NotificationPrefsUpdateRequest(
                     notifyReactions: notifyReactions,
                     notifyFollows: notifyFollows,
+                    notifyWeeklyRecap: notifyWeeklyRecap,
                 ))
         } catch {
             prefsLog.error("save failed: \(error.localizedDescription)")
