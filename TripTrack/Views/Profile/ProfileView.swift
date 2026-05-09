@@ -47,7 +47,18 @@ struct ProfileView: View {
     @State private var showNameEditor = false
     @State private var editedName: String = ""
 
-    private let profileAvatars = ["😎", "🧑‍💻", "👨‍🚀", "🧔", "🤠", "🥷", "🏂", "🎸"]
+    /// 16-emoji preset grid (4×4) — broadened from the original 8 so
+    /// users have a real personality choice instead of "pick a guy".
+    /// Backend regex (`AVATAR_EMOJI_PATTERN`) accepts any non-whitespace
+    /// 1–16 char string, so this list could grow further without a
+    /// schema change. Personas first, then activities, then small set
+    /// of "iconic" non-people emojis.
+    private let profileAvatars = [
+        "😎", "🤓", "🤠", "🥸",
+        "🧔", "🥷", "🧑‍💻", "👨‍🚀",
+        "🏂", "🎸", "🎮", "📷",
+        "🌅", "🐱", "🐶", "🚀",
+    ]
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)

@@ -258,10 +258,16 @@ struct ProfileUpdateRequest: Encodable {
 // MARK: - Allowed reaction emoji (matches backend whitelist)
 
 enum ReactionEmoji {
-    /// Car / road themed reactions for TripTrack.
-    /// 🔥 — awesome, 🏁 — reached destination, 🏎️ — fast/impressive,
-    /// 🛣️ — nice road, 🗺️ — new places explored.
-    static let all: [String] = ["🔥", "🏁", "🏎️", "🛣️", "🗺️"]
+    /// Reactions ordered for the horizontal pill row in
+    /// `SocialTripDetailView` and `ReactionPickerOverlay`. Order kept
+    /// stable across releases — adding a new emoji at the end avoids
+    /// reshuffling the muscle memory of repeat reactors.
+    /// MUST mirror `ALLOWED_EMOJI` in `react.dto.ts` on the backend
+    /// (validated server-side via `@IsIn`).
+    /// 🔥 — awesome, ❤️ — love, 🏁 — reached destination,
+    /// 🏎️ — fast/impressive, 🛣️ — nice road, 🗺️ — new places explored,
+    /// 🌅 — beautiful view, 🤯 — wild.
+    static let all: [String] = ["🔥", "❤️", "🏁", "🏎️", "🛣️", "🗺️", "🌅", "🤯"]
 }
 
 // MARK: - Block / Report

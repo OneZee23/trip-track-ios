@@ -29,6 +29,18 @@ struct SocialTripDetailView: View {
     @State private var isLoadingPhotos = false
     @State private var selectedPhotoIndex: Int?
     @State private var selectedDetailBadge: Badge?
+    /// Emojis whose pills are currently playing the "burst" animation.
+    /// Set on tap-that-adds (not tap-that-removes), cleared 0.7s later.
+    /// Uses Set so two quick consecutive reactions don't stomp the
+    /// floating sprite for the first one.
+    @State private var burstingEmojis: Set<String> = []
+    /// Route playback state — same shape as TripDetailView so a friend's
+    /// trip plays back the same way as your own. Note: previewPolyline
+    /// from the social feed is RDP-simplified (sparser points than a
+    /// local Trip), so the animation is still smooth but a hair more
+    /// "stepped" between sample points.
+    @State private var routePlaybackProgress: Double? = nil
+    @State private var routePlaybackTimer: Timer?
 
     /// Always-current view of the trip: prefer store's copy (reflects
     /// optimistic reaction toggles) and fall back to the original snapshot
@@ -184,6 +196,50 @@ struct SocialTripDetailView: View {
         }
     }
 
+    // MARK: - Route Playback (mirrors TripDetailView)
+
+    private var routePlaybackButton: some View {
+        let isPlaying = routePlaybackProgress != nil
+        return Button {
+            Haptics.tap()
+            if isPlaying { stopRoutePlayback() } else { startRoutePlayback() }
+        } label: {
+            Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(.black.opacity(0.45), in: Circle())
+        }
+    }
+
+    private func startRoutePlayback() {
+        stopRoutePlayback()
+        let totalSeconds: Double = 8.0
+        let tickHz: Double = 30
+        var elapsed: Double = 0
+        routePlaybackProgress = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / tickHz, repeats: true) { t in
+            elapsed += 1.0 / tickHz
+            let progress = min(1.0, elapsed / totalSeconds)
+            routePlaybackProgress = progress
+            if progress >= 1.0 {
+                t.invalidate()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    routePlaybackProgress = nil
+                    routePlaybackTimer = nil
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        routePlaybackTimer = timer
+    }
+
+    private func stopRoutePlayback() {
+        routePlaybackTimer?.invalidate()
+        routePlaybackTimer = nil
+        routePlaybackProgress = nil
+    }
+
     private func loadReactions() async {
         isLoadingReactions = true
         defer { isLoadingReactions = false }
@@ -228,19 +284,23 @@ struct SocialTripDetailView: View {
                     speeds: [],
                     isInteractive: true,
                     fogCutoffDate: nil,
-                    treatAsPreview: true
+                    treatAsPreview: true,
+                    playbackProgress: routePlaybackProgress
                 )
                 .frame(maxWidth: .infinity)
 
-                Button {
-                    Haptics.tap()
-                    isMapFullscreen = true
-                } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(.black.opacity(0.45), in: Circle())
+                HStack(spacing: 8) {
+                    routePlaybackButton
+                    Button {
+                        Haptics.tap()
+                        isMapFullscreen = true
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(.black.opacity(0.45), in: Circle())
+                    }
                 }
                 .padding(.trailing, 12)
                 .padding(.bottom, 12)
@@ -476,14 +536,22 @@ struct SocialTripDetailView: View {
     private func reactionsRow(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if trip.reactionCount > 0 {
-                Text("\(trip.reactionCount)")
-                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(c.textTertiary)
-                    .tracking(0.5)
-                + Text((lang.language == .ru ? " реакций" : " reactions").uppercased())
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(0.5)
-                    .foregroundStyle(c.textTertiary)
+                // Split into two stacked Texts so `contentTransition` /
+                // `animation` (which return `some View`) don't break the
+                // `Text + Text` concatenation that requires both sides
+                // to stay `Text`-typed.
+                HStack(spacing: 0) {
+                    Text("\(trip.reactionCount)")
+                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(c.textTertiary)
+                        .tracking(0.5)
+                        .contentTransition(.numericText())
+                        .animation(.snappy, value: trip.reactionCount)
+                    Text((lang.language == .ru ? " реакций" : " reactions").uppercased())
+                        .font(.system(size: 11, weight: .bold))
+                        .tracking(0.5)
+                        .foregroundStyle(c.textTertiary)
+                }
             }
             HStack(spacing: 4) {
                 ForEach(ReactionEmoji.all, id: \.self) { emoji in
@@ -509,6 +577,15 @@ struct SocialTripDetailView: View {
             // still render so the user sees what reactions ARE possible —
             // they just don't fire on tap.
             guard !isOwnTrip else { return }
+            // Burst-animate only on the add direction. Tapping again to
+            // remove your reaction shouldn't fire the celebratory sprite —
+            // that would read as "you added it again" which is wrong.
+            if !isMine {
+                burstingEmojis.insert(emoji)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                    burstingEmojis.remove(emoji)
+                }
+            }
             // Toggle + re-fetch chained in one task so `/social/reactions`
             // only fires after the `/social/react` write commits. Firing them
             // in parallel (prior bug) meant the fetch returned stale data —
@@ -532,6 +609,12 @@ struct SocialTripDetailView: View {
                 )
                 .scaleEffect(isMine ? 1.05 : 1.0)
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isMine)
+                .overlay(alignment: .top) {
+                    if burstingEmojis.contains(emoji) {
+                        ReactionBurstSprite(emoji: emoji)
+                            .allowsHitTesting(false)
+                    }
+                }
         }
         .buttonStyle(.plain)
     }

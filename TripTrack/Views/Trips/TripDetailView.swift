@@ -37,6 +37,11 @@ struct TripDetailView: View {
     @State private var reactionEntries: [SocialReactionEntry] = []
     @State private var selectedReactorAuthor: SocialAuthor?
     @State private var isMapFullscreen = false
+    /// Route playback animation state. nil = idle, 0…1 = currently
+    /// drawing the trail. Owned by the view because the timer needs to
+    /// outlive any single render and update the value at ~30Hz.
+    @State private var routePlaybackProgress: Double? = nil
+    @State private var routePlaybackTimer: Timer?
     @ObservedObject private var auth = AuthService.shared
     @FocusState private var isTitleFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -68,7 +73,8 @@ struct TripDetailView: View {
                                         coordinates: cachedCoordinates,
                                         speeds: cachedSpeeds,
                                         isInteractive: true,
-                                        fogCutoffDate: trip.endDate
+                                        fogCutoffDate: trip.endDate,
+                                        playbackProgress: routePlaybackProgress
                                     )
                                 } else {
                                     c.cardAlt
@@ -81,15 +87,18 @@ struct TripDetailView: View {
                             }
 
                             if cachedCoordinates.count > 1 {
-                                Button {
-                                    Haptics.tap()
-                                    isMapFullscreen = true
-                                } label: {
-                                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 36, height: 36)
-                                        .background(.black.opacity(0.45), in: Circle())
+                                HStack(spacing: 8) {
+                                    routePlaybackButton
+                                    Button {
+                                        Haptics.tap()
+                                        isMapFullscreen = true
+                                    } label: {
+                                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(.white)
+                                            .frame(width: 36, height: 36)
+                                            .background(.black.opacity(0.45), in: Circle())
+                                    }
                                 }
                                 .padding(.trailing, 12)
                                 .padding(.bottom, 12)
@@ -314,9 +323,20 @@ struct TripDetailView: View {
                 applyPrivacyChange(isPrivate: false)
             }
         } message: {
-            Text(lang.language == .ru
-                 ? "Эта поездка появится в общей ленте TripTrack — её увидят другие пользователи приложения, в том числе незнакомые. Маршрут, дата, регион и фото станут публичными.\n\nВы всегда сможете убрать её обратно в приватные."
-                 : "This trip will appear in the public TripTrack feed — other users, including strangers, will be able to see it. Route, date, region, and photos become public.\n\nYou can switch it back to private anytime.")
+            // Cloud-Sync-OFF users sometimes hesitate to publish a single
+            // trip because they don't realise it's an opt-in-per-trip
+            // gate. Spell that out explicitly when sync is off so they
+            // see "this is the ONLY trip leaving the device" before
+            // tapping Publish. Privacy-first: the "yes, only this one"
+            // promise is real — every other trip stays local.
+            let isRu = lang.language == .ru
+            let baseCopy = isRu
+                ? "Эта поездка появится в общей ленте TripTrack — её увидят другие пользователи приложения, в том числе незнакомые. Маршрут, дата, регион и фото станут публичными.\n\nВы всегда сможете убрать её обратно в приватные."
+                : "This trip will appear in the public TripTrack feed — other users, including strangers, will be able to see it. Route, date, region, and photos become public.\n\nYou can switch it back to private anytime."
+            let cloudOffCopy = isRu
+                ? "\n\nОблачная синхронизация выключена — на сервер уйдёт только эта поездка, остальные останутся локально."
+                : "\n\nCloud sync is off — only this trip will be sent to our server, every other trip stays on your device."
+            Text(baseCopy + (settings.cloudSyncEnabled ? "" : cloudOffCopy))
         }
         .alert(
             lang.language == .ru ? "Сделать поездку приватной?" : "Make trip private?",
@@ -728,6 +748,60 @@ struct TripDetailView: View {
             isEditingTitle = false
         }
         isTitleFieldFocused = false
+    }
+
+    // MARK: - Route Playback
+
+    /// Floating Play / Stop button on the map. Toggles 8-second
+    /// playback animation: a bright trail grows from start to end while
+    /// a pixel-car marker rides the route. Lets the user "watch" their
+    /// trip back and gives a shareable wow-moment for screenshots.
+    private var routePlaybackButton: some View {
+        let isPlaying = routePlaybackProgress != nil
+        return Button {
+            Haptics.tap()
+            if isPlaying { stopRoutePlayback() } else { startRoutePlayback() }
+        } label: {
+            Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(.black.opacity(0.45), in: Circle())
+        }
+    }
+
+    private func startRoutePlayback() {
+        stopRoutePlayback()
+        let totalSeconds: Double = 8.0
+        let tickHz: Double = 30
+        var elapsed: Double = 0
+        routePlaybackProgress = 0
+        // Foundation Timer is fine here — playback is short-lived and
+        // tied to a visible UI surface; no need for a Combine pipeline.
+        // `.common` runloop mode keeps it firing while the user
+        // interacts with the map (panning, scrolling).
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / tickHz, repeats: true) { t in
+            elapsed += 1.0 / tickHz
+            let progress = min(1.0, elapsed / totalSeconds)
+            routePlaybackProgress = progress
+            if progress >= 1.0 {
+                t.invalidate()
+                // Hold the finished state for a beat so the trail
+                // stays visible at the end before fading out.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    routePlaybackProgress = nil
+                    routePlaybackTimer = nil
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        routePlaybackTimer = timer
+    }
+
+    private func stopRoutePlayback() {
+        routePlaybackTimer?.invalidate()
+        routePlaybackTimer = nil
+        routePlaybackProgress = nil
     }
 
     private func statsGrid(trip: Trip, c: AppTheme.Colors) -> some View {

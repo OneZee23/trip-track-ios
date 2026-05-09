@@ -8,6 +8,18 @@ final class SpeedPolyline: MKPolyline {
     var speed: Double = 0 // m/s
 }
 
+/// Marker subclass so the renderer can pick a brighter style for the
+/// "now playing" trail without confusing it with the static SpeedPolyline
+/// fragments drawn underneath.
+final class PlaybackPolyline: MKPolyline {}
+
+/// Annotation that the renderer recognises as the moving "play head" —
+/// shown as the pixel-car asset travelling along the route.
+final class PlaybackCarAnnotation: NSObject, MKAnnotation {
+    @objc dynamic var coordinate: CLLocationCoordinate2D
+    init(coordinate: CLLocationCoordinate2D) { self.coordinate = coordinate }
+}
+
 struct RouteMapView: UIViewRepresentable {
     let coordinates: [CLLocationCoordinate2D]
     var speeds: [Double] = []
@@ -18,6 +30,12 @@ struct RouteMapView: UIViewRepresentable {
     /// which the 1 km gap threshold treats as discontinuities and leaves the
     /// map with zero drawable segments (so no bounding rect, so no zoom).
     var treatAsPreview: Bool = false
+    /// 0…1 playback progress for the "play the route" animation, or `nil`
+    /// when not playing. The view re-syncs the playback overlay on every
+    /// `updateUIView` — only the moving annotation updates per-frame; the
+    /// trail polyline is replaced when its tail index changes (≤ N times
+    /// for N coordinates), not per-frame.
+    var playbackProgress: Double? = nil
 
     private static let gapThreshold = GeometryUtils.defaultGapThreshold
 
@@ -108,7 +126,13 @@ struct RouteMapView: UIViewRepresentable {
         return mapView
     }
 
-    func updateUIView(_ mapView: MKMapView, context: Context) {}
+    func updateUIView(_ mapView: MKMapView, context: Context) {
+        context.coordinator.applyPlayback(
+            progress: playbackProgress,
+            coords: coordinates,
+            mapView: mapView
+        )
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -213,9 +237,72 @@ struct RouteMapView: UIViewRepresentable {
     // MARK: - Coordinator
 
     class Coordinator: NSObject, MKMapViewDelegate {
+        weak var playbackPolyline: PlaybackPolyline?
+        weak var playbackCar: PlaybackCarAnnotation?
+        /// Last coord index used to draw the trail. Stored so we don't
+        /// remove + re-add the overlay every frame — only when the
+        /// trail's tail actually advanced.
+        var playbackLastIndex: Int = -1
+
+        func applyPlayback(progress: Double?, coords: [CLLocationCoordinate2D], mapView: MKMapView) {
+            guard coords.count >= 2 else { return }
+            // Cleanup path: progress went away → drop overlay + annotation.
+            guard let raw = progress else {
+                if let p = playbackPolyline {
+                    mapView.removeOverlay(p)
+                    playbackPolyline = nil
+                }
+                if let c = playbackCar {
+                    mapView.removeAnnotation(c)
+                    playbackCar = nil
+                }
+                playbackLastIndex = -1
+                return
+            }
+            let clamped = max(0, min(1, raw))
+            let lastIndex = coords.count - 1
+            let index = max(1, min(lastIndex, Int((Double(lastIndex) * clamped).rounded())))
+
+            // Trail polyline — only redraw when tail index advances. For
+            // a 100-coord route playing over 8s at 30Hz that's ≤100
+            // overlay swaps instead of 240+.
+            if index != playbackLastIndex {
+                if let p = playbackPolyline {
+                    mapView.removeOverlay(p)
+                    playbackPolyline = nil
+                }
+                var trail = Array(coords[0...index])
+                let poly = PlaybackPolyline(coordinates: &trail, count: trail.count)
+                mapView.addOverlay(poly, level: .aboveLabels)
+                playbackPolyline = poly
+                playbackLastIndex = index
+            }
+
+            // Moving car — annotation coordinate updates animate
+            // smoothly between sparse points without overlay churn.
+            if let car = playbackCar {
+                car.coordinate = coords[index]
+            } else {
+                let car = PlaybackCarAnnotation(coordinate: coords[index])
+                mapView.addAnnotation(car)
+                playbackCar = car
+            }
+        }
+
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if overlay is FogOverlay {
                 return FogOverlayRenderer(overlay: overlay)
+            }
+            if let playback = overlay as? PlaybackPolyline {
+                let renderer = MKPolylineRenderer(polyline: playback)
+                // Bright accent + thicker stroke so the trail is visibly
+                // "this is what you've covered so far" against the static
+                // route underneath.
+                renderer.strokeColor = UIColor(red: 0xFF/255, green: 0xFF/255, blue: 0xFF/255, alpha: 1.0)
+                renderer.lineWidth = 6
+                renderer.lineCap = .round
+                renderer.lineJoin = .round
+                return renderer
             }
             if let speedLine = overlay as? SpeedPolyline {
                 let renderer = MKPolylineRenderer(polyline: speedLine)
@@ -256,6 +343,26 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            // Pixel-car play head for route playback. Pulled from asset
+            // catalog (`PixelCar`) so it matches the idle HUD car.
+            if annotation is PlaybackCarAnnotation {
+                let id = "PlaybackCar"
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: id)
+                    ?? MKAnnotationView(annotation: annotation, reuseIdentifier: id)
+                view.annotation = annotation
+                view.canShowCallout = false
+                let pixelCar = UIImage(named: "PixelCar")
+                if let img = pixelCar {
+                    let target = CGSize(width: 36, height: 36)
+                    let renderer = UIGraphicsImageRenderer(size: target)
+                    view.image = renderer.image { _ in
+                        img.draw(in: CGRect(origin: .zero, size: target))
+                    }
+                }
+                view.centerOffset = .zero
+                view.layer.zPosition = 1000
+                return view
+            }
             guard let point = annotation as? MKPointAnnotation else { return nil }
 
             let isStart = point.title == "start"
