@@ -236,7 +236,10 @@ struct SocialTripDetailView: View {
 
     @ViewBuilder
     private func mapSection(_ c: AppTheme.Colors) -> some View {
-        let coords = cachedPreviewCoords
+        // Fall back to a fresh decode on the very first render — `.task`
+        // populates `cachedPreviewCoords` after first body, so without
+        // this fallback the map would flash empty for one frame.
+        let coords = cachedPreviewCoords.isEmpty ? trip.previewCoordinates : cachedPreviewCoords
         if coords.count > 1 {
             // Interactive RouteMapView matches TripDetailView so the user can
             // pan/zoom a friend's route the same way as their own. No speed
