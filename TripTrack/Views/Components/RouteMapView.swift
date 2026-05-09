@@ -244,6 +244,19 @@ struct RouteMapView: UIViewRepresentable {
         /// trail's tail actually advanced.
         var playbackLastIndex: Int = -1
 
+        /// Pre-rendered pixel-car bitmap for the playback annotation.
+        /// Drawn once at first access; reused across every annotation
+        /// view dequeue. Saves a 36×36 `UIGraphicsImageRenderer` pass
+        /// each time MapKit recycles the view.
+        private static let playbackCarImage: UIImage? = {
+            guard let img = UIImage(named: "PixelCar") else { return nil }
+            let target = CGSize(width: 36, height: 36)
+            let renderer = UIGraphicsImageRenderer(size: target)
+            return renderer.image { _ in
+                img.draw(in: CGRect(origin: .zero, size: target))
+            }
+        }()
+
         func applyPlayback(progress: Double?, coords: [CLLocationCoordinate2D], mapView: MKMapView) {
             guard coords.count >= 2 else { return }
             // Cleanup path: progress went away → drop overlay + annotation.
@@ -343,22 +356,16 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            // Pixel-car play head for route playback. Pulled from asset
-            // catalog (`PixelCar`) so it matches the idle HUD car.
+            // Pixel-car play head for route playback. Image is the
+            // pre-rendered `playbackCarImage` static — set once per
+            // dequeue, never re-rasterised.
             if annotation is PlaybackCarAnnotation {
                 let id = "PlaybackCar"
                 let view = mapView.dequeueReusableAnnotationView(withIdentifier: id)
                     ?? MKAnnotationView(annotation: annotation, reuseIdentifier: id)
                 view.annotation = annotation
                 view.canShowCallout = false
-                let pixelCar = UIImage(named: "PixelCar")
-                if let img = pixelCar {
-                    let target = CGSize(width: 36, height: 36)
-                    let renderer = UIGraphicsImageRenderer(size: target)
-                    view.image = renderer.image { _ in
-                        img.draw(in: CGRect(origin: .zero, size: target))
-                    }
-                }
+                view.image = Self.playbackCarImage
                 view.centerOffset = .zero
                 view.layer.zPosition = 1000
                 return view

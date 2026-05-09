@@ -34,13 +34,14 @@ struct SocialTripDetailView: View {
     /// Uses Set so two quick consecutive reactions don't stomp the
     /// floating sprite for the first one.
     @State private var burstingEmojis: Set<String> = []
-    /// Route playback state — same shape as TripDetailView so a friend's
-    /// trip plays back the same way as your own. Note: previewPolyline
-    /// from the social feed is RDP-simplified (sparser points than a
-    /// local Trip), so the animation is still smooth but a hair more
-    /// "stepped" between sample points.
-    @State private var routePlaybackProgress: Double? = nil
-    @State private var routePlaybackTimer: Timer?
+    /// Route playback for a friend's trip. previewPolyline is RDP-
+    /// simplified (sparser points than a local Trip), so the animation
+    /// is still smooth but a hair more "stepped" between sample points.
+    @StateObject private var routePlayback = RoutePlaybackController()
+    /// Cached decode of `trip.previewPolyline`. The base64 + polyline
+    /// decode happens once per trip-id, not on every body re-render
+    /// (which during 30Hz playback would mean 30 decodes/sec).
+    @State private var cachedPreviewCoords: [CLLocationCoordinate2D] = []
 
     /// Always-current view of the trip: prefer store's copy (reflects
     /// optimistic reaction toggles) and fall back to the original snapshot
@@ -175,6 +176,14 @@ struct SocialTripDetailView: View {
             async let p: Void = loadPhotos()
             _ = await (r, p)
         }
+        .task(id: trip.id) {
+            // Decode the base64+polyline once per trip-id instead of on
+            // every body re-render. Matters during 30Hz route playback —
+            // the computed `previewCoordinates` getter would otherwise
+            // base64-decode 30×/sec.
+            cachedPreviewCoords = trip.previewCoordinates
+        }
+        .onDisappear { routePlayback.stop() }
         .sheet(item: $signInPrompt) { action in
             SignInPromptSheet(action: action)
                 .environmentObject(lang)
@@ -194,50 +203,6 @@ struct SocialTripDetailView: View {
                 )
             }
         }
-    }
-
-    // MARK: - Route Playback (mirrors TripDetailView)
-
-    private var routePlaybackButton: some View {
-        let isPlaying = routePlaybackProgress != nil
-        return Button {
-            Haptics.tap()
-            if isPlaying { stopRoutePlayback() } else { startRoutePlayback() }
-        } label: {
-            Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(.black.opacity(0.45), in: Circle())
-        }
-    }
-
-    private func startRoutePlayback() {
-        stopRoutePlayback()
-        let totalSeconds: Double = 8.0
-        let tickHz: Double = 30
-        var elapsed: Double = 0
-        routePlaybackProgress = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / tickHz, repeats: true) { t in
-            elapsed += 1.0 / tickHz
-            let progress = min(1.0, elapsed / totalSeconds)
-            routePlaybackProgress = progress
-            if progress >= 1.0 {
-                t.invalidate()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                    routePlaybackProgress = nil
-                    routePlaybackTimer = nil
-                }
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        routePlaybackTimer = timer
-    }
-
-    private func stopRoutePlayback() {
-        routePlaybackTimer?.invalidate()
-        routePlaybackTimer = nil
-        routePlaybackProgress = nil
     }
 
     private func loadReactions() async {
@@ -271,7 +236,7 @@ struct SocialTripDetailView: View {
 
     @ViewBuilder
     private func mapSection(_ c: AppTheme.Colors) -> some View {
-        let coords = trip.previewCoordinates
+        let coords = cachedPreviewCoords
         if coords.count > 1 {
             // Interactive RouteMapView matches TripDetailView so the user can
             // pan/zoom a friend's route the same way as their own. No speed
@@ -285,12 +250,14 @@ struct SocialTripDetailView: View {
                     isInteractive: true,
                     fogCutoffDate: nil,
                     treatAsPreview: true,
-                    playbackProgress: routePlaybackProgress
+                    playbackProgress: routePlayback.progress
                 )
                 .frame(maxWidth: .infinity)
 
                 HStack(spacing: 8) {
-                    routePlaybackButton
+                    RoutePlaybackButton(isPlaying: routePlayback.isPlaying) {
+                        routePlayback.toggle()
+                    }
                     Button {
                         Haptics.tap()
                         isMapFullscreen = true
@@ -298,7 +265,7 @@ struct SocialTripDetailView: View {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                             .background(.black.opacity(0.45), in: Circle())
                     }
                 }
@@ -553,12 +520,18 @@ struct SocialTripDetailView: View {
                         .foregroundStyle(c.textTertiary)
                 }
             }
-            HStack(spacing: 4) {
-                ForEach(ReactionEmoji.all, id: \.self) { emoji in
-                    reactionPill(emoji, c: c)
+            // Horizontal scroll guards against overflow on iPhone SE /
+            // mini — 8 pills × 44pt + spacing = 380pt, exceeds the 375pt
+            // SE screen and the surrounding card padding. On wider
+            // devices the row fits comfortably and scroll never fires.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(ReactionEmoji.all, id: \.self) { emoji in
+                        reactionPill(emoji, c: c)
+                    }
                 }
-                Spacer(minLength: 0)
             }
+            .scrollClipDisabled()
         }
         .padding(14)
         .surfaceCard(cornerRadius: 14)
