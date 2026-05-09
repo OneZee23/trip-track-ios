@@ -181,6 +181,10 @@ final class TripManager: ObservableObject {
         repository.fetchAllTrips()
     }
 
+    func hasAnyPrivateTrip() -> Bool {
+        repository.hasAnyPrivateTrip()
+    }
+
     func fetchTrips(limit: Int, offset: Int) -> [Trip] {
         repository.fetchTrips(limit: limit, offset: offset)
     }

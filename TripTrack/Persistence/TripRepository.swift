@@ -9,6 +9,7 @@ import OSLog
 protocol TripRepository {
     func fetchTrips(limit: Int, offset: Int) -> [Trip]
     func fetchAllTrips() -> [Trip]
+    func hasAnyPrivateTrip() -> Bool
     func fetchTripsWithTrackPoints() -> [Trip]
     func fetchTripsModifiedSince(_ date: Date) -> [Trip]
     func fetchTripDetail(id: UUID) -> Trip?
@@ -71,6 +72,20 @@ final class CoreDataTripRepository: TripRepository {
         request.fetchBatchSize = 25
         guard let entities = try? context.fetch(request) else { return [] }
         return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
+    }
+
+    /// Cheap existence probe — `fetchLimit = 1` + predicate combo bails as
+    /// soon as Core Data finds one match, no entity decode. Used by feed
+    /// empty-state to decide whether to surface the "publish your first
+    /// trip" CTA without paying for `fetchAllTrips()` on every render.
+    func hasAnyPrivateTrip() -> Bool {
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            completedTripPredicate,
+            NSPredicate(format: "isPrivate == YES"),
+        ])
+        request.fetchLimit = 1
+        return ((try? context.count(for: request)) ?? 0) > 0
     }
 
     func fetchTrips(limit: Int, offset: Int) -> [Trip] {

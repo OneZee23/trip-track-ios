@@ -432,16 +432,11 @@ final class AuthService: ObservableObject {
         // `displayName` is nil for users who signed in before SIWA returned a
         // name — pass nil (skipped in JSON via `encodeIfPresent`) instead of
         // null, otherwise the server would CLEAR a previously-stored name.
-        // First two chars of the user's preferred locale. Backend
-        // whitelist is "ru"/"en" only; anything else gets dropped by the
-        // class-validator @Matches in ProfileUpdateRequestDto, in which
-        // case the column stays at its previous value (server treats
-        // missing keys as "leave unchanged").
-        let preferredLanguage: String? = {
-            guard let raw = Locale.preferredLanguages.first else { return nil }
-            let prefix = String(raw.prefix(2)).lowercased()
-            return (prefix == "ru" || prefix == "en") ? prefix : nil
-        }()
+        // Use the in-app language override (LanguageManager) rather
+        // than re-parsing Locale here — the user might be on an English
+        // OS but have set RU manually inside TripTrack, and we want
+        // their weekly-recap push to match what they see in the app.
+        let preferredLanguage = LanguageManager.currentLanguage.rawValue
 
         let req = ProfileUpdateRequest(
             displayName: userName,

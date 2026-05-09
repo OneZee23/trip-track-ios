@@ -640,7 +640,11 @@ struct FeedView: View {
     ///      seed the feed themselves by publishing one.
     @ViewBuilder
     private func socialEmptyState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        let hasPrivateTrips = feedVM.tripManager.fetchTrips().contains { $0.isPrivate }
+        // `hasAnyPrivateTrip` is a `fetchLimit=1` count query so it stays
+        // cheap on every body re-render (the empty state thrashes on
+        // auth/lang changes). Calling `fetchTrips()` here would pull
+        // every trip + decode them just to check `.contains`.
+        let hasPrivateTrips = feedVM.tripManager.hasAnyPrivateTrip()
         let signedIn = auth.isSignedIn
         VStack(spacing: 18) {
             VStack(spacing: 12) {

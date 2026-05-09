@@ -15,14 +15,9 @@ import Sentry
 ///     ON, network performance OFF (URL paths can carry trip ids).
 enum SentryService {
     /// Keys whose values get nuked anywhere they appear in the event
-    /// payload. Mirrors `APILogger.redact` to keep one source of truth
-    /// for "what counts as PII in this app".
-    private static let sensitiveKeys: Set<String> = [
-        "refreshToken", "accessToken", "identityToken", "apnsToken",
-        "deviceToken", "email", "userEmail", "displayName", "userName",
-        "thumbnailUrl", "originalUrl", "remoteUrl", "url", "password",
-        "nonce", "rawNonce",
-    ]
+    /// payload. Shared with `APILogger.redact` via `PIISensitiveKeys.all`
+    /// so diagnostic surfaces evolve in lockstep.
+    private static var sensitiveKeys: Set<String> { PIISensitiveKeys.all }
 
     static func start() {
         guard let dsn = AppConfig.sentryDSN else {
@@ -129,13 +124,21 @@ enum SentryService {
         for (k, v) in dict {
             if sensitiveKeys.contains(k) {
                 out[k] = "<redacted>"
-            } else if let nested = v as? [String: Any] {
-                out[k] = redactDict(nested)
             } else {
-                out[k] = v
+                out[k] = redactValue(v)
             }
         }
         return out
+    }
+
+    /// Walks dicts AND arrays. Without the array branch a payload
+    /// shaped like `[{"accessToken": "..."}]` would slip through —
+    /// Sentry breadcrumb `data` and event `extra` regularly carry
+    /// arrays-of-dicts (request lists, tag chains).
+    private static func redactValue(_ v: Any) -> Any {
+        if let dict = v as? [String: Any] { return redactDict(dict) }
+        if let arr = v as? [Any] { return arr.map(redactValue) }
+        return v
     }
 
     // MARK: - Release string
