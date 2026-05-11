@@ -23,6 +23,15 @@ struct FeedView: View {
     @State private var tripToDelete: Trip?
     @State private var collapsedSections: Set<String> = []
     @State private var feedMode: FeedMode = .all
+    /// Cached "does the user have at least one private trip" flag.
+    /// Read in `socialEmptyState` to gate the "Publish one of your
+    /// trips" CTA. We cache rather than calling
+    /// `tripManager.hasAnyPrivateTrip()` from `body` because the latter
+    /// hits CoreData synchronously during body, and at cold launch
+    /// that competes with the migration batches firing inside
+    /// `MapViewModel.init`, producing an `AttributeGraph: cycle
+    /// detected` warning + extra body invalidations.
+    @State private var hasAnyPrivateTrip: Bool = false
     /// Shared path for the profile → follow list → profile chain. Using a
     /// typed `NavigationPath`-style array with `cappedAppend` keeps depth
     /// ≤ `previewDepthCap`, which dodges the SwiftUI bug that flashes a
@@ -70,7 +79,10 @@ struct FeedView: View {
                 .background(PageViewBounceDisabler())
                 .onChange(of: feedMode) { _, newMode in
                     if newMode == .all {
-                        Task { await socialFeed.refresh() }
+                        // `loadIfNeeded` (not `refresh`) — tab switches
+                        // shouldn't cancel an in-flight fetch. Pull-to-
+                        // refresh below stays explicit.
+                        Task { await socialFeed.loadIfNeeded() }
                     } else if newMode == .mine {
                         feedVM.language = lang.language
                         feedVM.loadTrips()
@@ -170,11 +182,20 @@ struct FeedView: View {
             // user scrolls, so the cost stays bounded even with a large feed.
             feedVM.language = lang.language
             feedVM.loadTrips()
-            // Refresh public/social feed for guests too — the server returns
-            // a trending list when there's no viewer, so the Лента tab is
-            // never empty just because the user isn't signed in.
-            Task { await socialFeed.refresh() }
+            // Cache the private-trip flag here (not in body) — see the
+            // @State declaration for the AttributeGraph rationale.
+            hasAnyPrivateTrip = feedVM.tripManager.hasAnyPrivateTrip()
+            // Initial load via `loadIfNeeded` — if the user previously
+            // saw the feed (data is cached), this no-ops and lets any
+            // earlier in-flight refresh complete. Avoids the
+            // request-storm pattern on slow LAN where every view
+            // appear cancelled the previous fetch.
+            Task { await socialFeed.loadIfNeeded() }
             feedVM.retryGeocodingIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tripRecordingEnded)) { _ in
+            // New trip → may flip the "has any private trip" cache.
+            hasAnyPrivateTrip = feedVM.tripManager.hasAnyPrivateTrip()
         }
         .onChange(of: auth.isSignedIn) { _, _ in
             // Sign-in state flipped (in either direction) — re-fetch so the
@@ -341,7 +362,11 @@ struct FeedView: View {
                 NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
             }
             if mode == .all {
-                Task { await socialFeed.refresh() }
+                // Mode-switcher tap. The `.onChange(of: feedMode)` above
+                // covers the actual load — no need to fire a second
+                // refresh here, that's what was producing the request
+                // storm on slow networks (two parallel fetches, second
+                // cancels the first).
             } else if mode == .mine {
                 feedVM.language = lang.language
                 feedVM.loadTrips()
@@ -640,11 +665,11 @@ struct FeedView: View {
     ///      seed the feed themselves by publishing one.
     @ViewBuilder
     private func socialEmptyState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        // `hasAnyPrivateTrip` is a `fetchLimit=1` count query so it stays
-        // cheap on every body re-render (the empty state thrashes on
-        // auth/lang changes). Calling `fetchTrips()` here would pull
-        // every trip + decode them just to check `.contains`.
-        let hasPrivateTrips = feedVM.tripManager.hasAnyPrivateTrip()
+        // `hasAnyPrivateTrip` is cached in `@State` and refreshed on
+        // `.task` + on `tripRecordingEnded`. Reading it here is a
+        // plain @State read — no CoreData fetch during body, so no
+        // AttributeGraph cycle.
+        let hasPrivateTrips = hasAnyPrivateTrip
         let signedIn = auth.isSignedIn
         VStack(spacing: 18) {
             VStack(spacing: 12) {

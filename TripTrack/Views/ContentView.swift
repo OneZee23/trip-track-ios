@@ -97,6 +97,12 @@ struct ContentView: View {
             }
         }
         .onPreferenceChange(HideTabBarPreferenceKey.self) { newValue in
+            // No-op when the value didn't actually change — without this
+            // guard, the preference write fires every body pass even when
+            // the descendant's reported value is identical, producing the
+            // 3× `AttributeGraph: cycle detected` at cold launch (one per
+            // nested view boundary: ContentView → NavStack → FeedView).
+            guard newValue != hideTabBar else { return }
             withAnimation(.easeInOut(duration: 0.25)) {
                 hideTabBar = newValue
             }

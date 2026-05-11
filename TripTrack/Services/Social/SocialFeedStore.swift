@@ -61,6 +61,21 @@ final class SocialFeedStore: ObservableObject {
 
     // MARK: - Load
 
+    /// Lifecycle-friendly load that no-ops when there's already data on
+    /// screen or a refresh is in flight. Call sites that fire on view
+    /// appear / tab switch / sign-in flip should use this — otherwise
+    /// repeated cancel+restart of `refresh()` torpedoes in-flight
+    /// requests on slow networks (each call cancels the previous and
+    /// the user never sees a completed fetch).
+    ///
+    /// Explicit user actions (pull-to-refresh, retry button) and
+    /// invalidation events (publish/unpublish) keep using `refresh()`.
+    func loadIfNeeded() async {
+        if !trips.isEmpty { return }
+        if currentTask != nil { return }
+        await refresh()
+    }
+
     func refresh() async {
         // Cancel any in-flight refresh so pull-to-refresh always triggers a fresh
         // fetch. The previous URLSession task gets cancelled via Task cooperative
