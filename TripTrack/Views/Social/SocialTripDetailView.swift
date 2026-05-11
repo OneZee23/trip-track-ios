@@ -528,12 +528,14 @@ struct SocialTripDetailView: View {
                         .foregroundStyle(c.textTertiary)
                 }
             }
-            // Horizontal scroll guards against overflow on iPhone SE /
-            // mini — 8 pills × 44pt + spacing = 380pt, exceeds the 375pt
-            // SE screen and the surrounding card padding. On wider
-            // devices the row fits comfortably and scroll never fires.
+            // 8 pills × 40pt + 7 × 2pt spacing = 334pt — fits inside
+            // the surface card on every iPhone width. ScrollView is
+            // kept as a safety net for future emoji additions or
+            // unusually narrow display modes. `.scrollClipDisabled()`
+            // lets the burst sprite float above the row without
+            // getting clipped by the scroll bounds.
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
+                HStack(spacing: 2) {
                     ForEach(ReactionEmoji.all, id: \.self) { emoji in
                         reactionPill(emoji, c: c)
                     }
@@ -579,7 +581,12 @@ struct SocialTripDetailView: View {
         } label: {
             Text(emoji)
                 .font(.system(size: 22))
-                .frame(width: 44, height: 40)
+                // Width tightened from 44→40 so all 8 emojis fit comfortably
+                // inside the surface card on iPhone 14 Pro Max — previously
+                // the 8th pill (🤯) got clipped by the card's rounded edge.
+                // 40×40 keeps the tap target reasonable; .contentShape below
+                // expands the hit region back to 44pt for HIG compliance.
+                .frame(width: 40, height: 40)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
                         .fill(isMine ? AppTheme.accentBg : Color.clear)
