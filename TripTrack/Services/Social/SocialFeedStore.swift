@@ -25,10 +25,12 @@ final class SocialFeedStore: ObservableObject {
     private var refreshGeneration: Int = 0
     /// Wall-clock timestamp of the last successful fetch. `loadIfNeeded`
     /// triggers a fresh fetch once this is older than `staleness`, even
-    /// if `trips` is non-empty — otherwise app reopens days later still
-    /// show yesterday's feed until the user pulls-to-refresh.
+    /// if `trips` is non-empty — otherwise app reopens an hour later
+    /// still show old feed until the user pulls-to-refresh. Trip
+    /// activity is low-frequency (driving sessions) so 15 minutes is a
+    /// reasonable middle ground vs. battery + bandwidth.
     private var lastLoadedAt: Date?
-    private let staleness: TimeInterval = 5 * 60
+    private let staleness: TimeInterval = 15 * 60
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
@@ -126,8 +128,12 @@ final class SocialFeedStore: ObservableObject {
     /// Optimistic removal used when the user flips one of their own trips back to
     /// private from the detail screen — removes the card immediately so the feed
     /// reflects the new privacy state without waiting for the server round-trip.
+    /// Also invalidates `lastLoadedAt` so a subsequent `loadIfNeeded` re-fetches
+    /// the authoritative server state instead of treating the locally-mutated
+    /// cache as fresh (which would let the freshness window mask a missed sync).
     func removeOptimistically(tripId: UUID) {
         trips.removeAll { $0.id == tripId }
+        lastLoadedAt = nil
     }
 
     func loadMoreIfNeeded(currentItem: SocialFeedTrip) async {

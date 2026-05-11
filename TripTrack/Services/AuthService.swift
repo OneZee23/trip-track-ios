@@ -549,15 +549,15 @@ final class AuthService: ObservableObject {
         if isSignedIn, (userName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
             let generated = RandomDisplayName.generate(language: LanguageManager.currentLanguage)
             try? KeychainHelper.saveString(generated, for: Keys.userName)
-            // `Task.yield()` hops to the next runloop tick so the
-            // @Published `userName` write doesn't happen inside the
-            // `.shared` lazy-init path that SwiftUI triggers from the
-            // first body reading `@ObservedObject auth = AuthService.shared`.
-            // Synchronous writes there cause AttributeGraph cycles.
-            // Per CLAUDE.md we prefer `Task { @MainActor }` over the
-            // older DispatchQueue.main.async pattern.
+            // Wrapping the @Published `userName` write in a fresh
+            // `Task { @MainActor ... }` escapes the synchronous lazy-
+            // init call chain that SwiftUI triggers when the first
+            // body reads `@ObservedObject auth = AuthService.shared`.
+            // The Task hop alone is sufficient — the body runs on a
+            // new continuation, not on the init's call stack — so no
+            // AttributeGraph cycle. Per CLAUDE.md we use `Task @MainActor`
+            // rather than DispatchQueue.main.async.
             Task { @MainActor [weak self] in
-                await Task.yield()
                 guard let self else { return }
                 self.userName = generated
                 await self.syncProfileToServer()
