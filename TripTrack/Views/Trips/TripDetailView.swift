@@ -70,48 +70,8 @@ struct TripDetailView: View {
                         // presents the route in a fullscreen cover. The button
                         // only appears when we actually have a route — no
                         // point letting the user expand the blank-map fallback.
-                        ZStack(alignment: .bottomTrailing) {
-                            Group {
-                                if cachedCoordinates.count > 1 {
-                                    RouteMapView(
-                                        coordinates: cachedCoordinates,
-                                        speeds: cachedSpeeds,
-                                        isInteractive: true,
-                                        fogCutoffDate: trip.endDate,
-                                        playbackProgress: routePlayback.progress,
-                                        timestamps: cachedTimestamps.isEmpty ? nil : cachedTimestamps
-                                    )
-                                } else {
-                                    c.cardAlt
-                                        .overlay {
-                                            Image(systemName: "map")
-                                                .font(.largeTitle)
-                                                .foregroundStyle(c.textTertiary)
-                                        }
-                                }
-                            }
-
-                            if cachedCoordinates.count > 1 {
-                                HStack(spacing: 8) {
-                                    RoutePlaybackButton(isPlaying: routePlayback.isPlaying) {
-                                        routePlayback.toggle()
-                                    }
-                                    Button {
-                                        Haptics.tap()
-                                        isMapFullscreen = true
-                                    } label: {
-                                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(.white)
-                                            .frame(width: 44, height: 44)
-                                            .background(.black.opacity(0.45), in: Circle())
-                                    }
-                                }
-                                .padding(.trailing, 12)
-                                .padding(.bottom, 12)
-                            }
-                        }
-                        .frame(height: mapBaseHeight)
+                        mapSection(trip: trip, c: c)
+                            .frame(height: mapBaseHeight)
 
                         // Bottom info panel
                         infoPanel(trip: trip, c: c)
@@ -332,20 +292,11 @@ struct TripDetailView: View {
                 applyPrivacyChange(isPrivate: false)
             }
         } message: {
-            // Cloud-Sync-OFF users sometimes hesitate to publish a single
-            // trip because they don't realise it's an opt-in-per-trip
-            // gate. Spell that out explicitly when sync is off so they
-            // see "this is the ONLY trip leaving the device" before
-            // tapping Publish. Privacy-first: the "yes, only this one"
-            // promise is real — every other trip stays local.
-            let isRu = lang.language == .ru
-            let baseCopy = isRu
-                ? "Эта поездка появится в общей ленте TripTrack — её увидят другие пользователи приложения, в том числе незнакомые. Маршрут, дата, регион и фото станут публичными.\n\nВы всегда сможете убрать её обратно в приватные."
-                : "This trip will appear in the public TripTrack feed — other users, including strangers, will be able to see it. Route, date, region, and photos become public.\n\nYou can switch it back to private anytime."
-            let cloudOffCopy = isRu
-                ? "\n\nОблачная синхронизация выключена — на сервер уйдёт только эта поездка, остальные останутся локально."
-                : "\n\nCloud sync is off — only this trip will be sent to our server, every other trip stays on your device."
-            Text(baseCopy + (settings.cloudSyncEnabled ? "" : cloudOffCopy))
+            // Extracted to a helper — inlining the ternary-heavy copy
+            // chain inside the alert closure overwhelmed Swift's type
+            // checker after the view body grew with the playback
+            // controller wiring.
+            Text(publishConfirmMessage)
         }
         .alert(
             lang.language == .ru ? "Сделать поездку приватной?" : "Make trip private?",
@@ -757,6 +708,81 @@ struct TripDetailView: View {
             isEditingTitle = false
         }
         isTitleFieldFocused = false
+    }
+
+    /// Map section with route + playback controls. Extracted so the
+    /// surrounding ScrollView's type-check pressure stays manageable —
+    /// Swift's inferrer chokes on the deep ZStack/Group/conditional
+    /// nesting when it lives inline.
+    @ViewBuilder
+    private func mapSection(trip: Trip, c: AppTheme.Colors) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            Group {
+                if cachedCoordinates.count > 1 {
+                    RouteMapView(
+                        coordinates: cachedCoordinates,
+                        speeds: cachedSpeeds,
+                        isInteractive: true,
+                        fogCutoffDate: trip.endDate,
+                        playbackCarCoord: routePlayback.currentCoord,
+                        playbackTrailIndex: routePlayback.currentTrailIndex
+                    )
+                } else {
+                    c.cardAlt
+                        .overlay {
+                            Image(systemName: "map")
+                                .font(.largeTitle)
+                                .foregroundStyle(c.textTertiary)
+                        }
+                }
+            }
+
+            if cachedCoordinates.count > 1 {
+                HStack(spacing: 8) {
+                    RoutePlaybackButton(isPlaying: routePlayback.isPlaying) {
+                        routePlayback.toggle(
+                            coords: cachedCoordinates,
+                            timestamps: cachedTimestamps.isEmpty ? nil : cachedTimestamps,
+                            distanceMeters: trip.distance
+                        )
+                    }
+                    Button {
+                        Haptics.tap()
+                        isMapFullscreen = true
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.45), in: Circle())
+                    }
+                }
+                .padding(.trailing, 12)
+                .padding(.bottom, 12)
+            }
+        }
+    }
+
+    /// Body of the "Make trip public?" confirmation alert. Extracted so
+    /// the alert closure stays type-checker friendly — the inline form
+    /// hit the "compiler is unable to type-check in reasonable time"
+    /// once the rest of the view body grew.
+    private var publishConfirmMessage: String {
+        let isRu = lang.language == .ru
+        let baseCopy: String
+        if isRu {
+            baseCopy = "Эта поездка появится в общей ленте TripTrack — её увидят другие пользователи приложения, в том числе незнакомые. Маршрут, дата, регион и фото станут публичными.\n\nВы всегда сможете убрать её обратно в приватные."
+        } else {
+            baseCopy = "This trip will appear in the public TripTrack feed — other users, including strangers, will be able to see it. Route, date, region, and photos become public.\n\nYou can switch it back to private anytime."
+        }
+        if settings.cloudSyncEnabled { return baseCopy }
+        let cloudOff: String
+        if isRu {
+            cloudOff = "\n\nОблачная синхронизация выключена — на сервер уйдёт только эта поездка, остальные останутся локально."
+        } else {
+            cloudOff = "\n\nCloud sync is off — only this trip will be sent to our server, every other trip stays on your device."
+        }
+        return baseCopy + cloudOff
     }
 
     private func statsGrid(trip: Trip, c: AppTheme.Colors) -> some View {

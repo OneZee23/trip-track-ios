@@ -30,21 +30,18 @@ struct RouteMapView: UIViewRepresentable {
     /// which the 1 km gap threshold treats as discontinuities and leaves the
     /// map with zero drawable segments (so no bounding rect, so no zoom).
     var treatAsPreview: Bool = false
-    /// 0…1 playback progress for the "play the route" animation, or `nil`
-    /// when not playing. The view re-syncs the playback overlay on every
-    /// `updateUIView` — only the moving annotation updates per-frame; the
-    /// trail polyline is replaced when its tail index changes (≤ N times
-    /// for N coordinates), not per-frame.
-    var playbackProgress: Double? = nil
-    /// Per-coordinate timestamps. When supplied, playback is *time-driven*:
-    /// the car position is found by mapping `progress × tripDuration` to
-    /// the bracketing pair of (timestamp, coord) points and interpolating
-    /// between them. That makes the car linger in traffic (many seconds,
-    /// few coords) and zip on the highway (few seconds, many coords) —
-    /// no explicit "physics" needed, the recorded data already carries it.
-    /// When nil (social trip with only previewPolyline → no timestamps),
-    /// playback falls back to linear-by-index.
-    var timestamps: [Date]? = nil
+    /// Interpolated car position for the current playback frame, or `nil`
+    /// when not playing. Pre-computed by `RoutePlaybackController` and
+    /// passed through here — the view does not interpolate, it only
+    /// renders. Driven by CADisplayLink at the display's native rate.
+    var playbackCarCoord: CLLocationCoordinate2D? = nil
+    /// Index of the last original GPS coordinate the playback head has
+    /// passed. The view checks this against its remembered last value
+    /// before swapping the trail polyline overlay — replacing the
+    /// overlay every frame is the #1 source of MapKit frame drops, so
+    /// we only do it when the trail tip actually advances to a new
+    /// real waypoint.
+    var playbackTrailIndex: Int = -1
 
     private static let gapThreshold = GeometryUtils.defaultGapThreshold
 
@@ -137,9 +134,9 @@ struct RouteMapView: UIViewRepresentable {
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.applyPlayback(
-            progress: playbackProgress,
+            carCoord: playbackCarCoord,
+            trailIndex: playbackTrailIndex,
             coords: coordinates,
-            timestamps: timestamps,
             mapView: mapView
         )
     }
@@ -268,14 +265,15 @@ struct RouteMapView: UIViewRepresentable {
         }()
 
         func applyPlayback(
-            progress: Double?,
+            carCoord: CLLocationCoordinate2D?,
+            trailIndex: Int,
             coords: [CLLocationCoordinate2D],
-            timestamps: [Date]?,
             mapView: MKMapView,
         ) {
             guard coords.count >= 2 else { return }
-            // Cleanup path: progress went away → drop overlay + annotation.
-            guard let raw = progress else {
+            // Cleanup branch — controller cleared its state (playback ended
+            // or stopped). Drop annotation + overlay.
+            guard let car = carCoord else {
                 if let p = playbackPolyline {
                     mapView.removeOverlay(p)
                     playbackPolyline = nil
@@ -287,90 +285,35 @@ struct RouteMapView: UIViewRepresentable {
                 playbackLastIndex = -1
                 return
             }
-            let clamped = max(0, min(1, raw))
-            let lastIndex = coords.count - 1
-            // Resolve the playback "cursor" — `lo` is the index of the most
-            // recently-passed waypoint, `carCoord` is where the car visually
-            // sits (interpolated between `lo` and `lo+1`).
-            let (lo, carCoord): (Int, CLLocationCoordinate2D)
-            if let ts = timestamps, ts.count == coords.count, ts.count >= 2 {
-                (lo, carCoord) = Self.timeDrivenCursor(
-                    coords: coords, timestamps: ts, progress: clamped,
-                )
-            } else {
-                let i = max(1, min(lastIndex, Int((Double(lastIndex) * clamped).rounded())))
-                (lo, carCoord) = (i, coords[i])
-            }
-
-            // Trail polyline — only redraw when tail index advances (i.e.
-            // a new waypoint was just passed). For a 100-coord route over
-            // 8s at 30Hz that's ≤100 overlay swaps instead of 240+. The
-            // visible car sits a fraction beyond the trail tip, which
-            // reads as "the trail is settling in behind".
-            if lo != playbackLastIndex {
+            // Trail polyline — replace only when the tail index actually
+            // moves to a new original waypoint. This keeps overlay churn
+            // bounded by the GPS sample count, never by display refresh
+            // rate. The visible car (annotation, updated every frame)
+            // moves smoothly ahead of the trail tip during the fractional
+            // sub-segment.
+            if trailIndex != playbackLastIndex && trailIndex >= 1 {
                 if let p = playbackPolyline {
                     mapView.removeOverlay(p)
                     playbackPolyline = nil
                 }
-                var trail = Array(coords[0...lo])
+                let safe = min(trailIndex, coords.count - 1)
+                var trail = Array(coords[0...safe])
                 let poly = PlaybackPolyline(coordinates: &trail, count: trail.count)
                 mapView.addOverlay(poly, level: .aboveLabels)
                 playbackPolyline = poly
-                playbackLastIndex = lo
+                playbackLastIndex = trailIndex
             }
-
-            // Moving car — annotation coordinate updates animate
-            // smoothly between sparse points without overlay churn.
-            if let car = playbackCar {
-                car.coordinate = carCoord
+            // Car position — KVO-observed `@objc dynamic coordinate` on
+            // PlaybackCarAnnotation lets MapKit reposition the view
+            // without any overlay churn. Frame cadence comes from the
+            // controller's CADisplayLink.
+            if let annotation = playbackCar {
+                annotation.coordinate = car
             } else {
-                let car = PlaybackCarAnnotation(coordinate: carCoord)
-                mapView.addAnnotation(car)
-                playbackCar = car
+                let annotation = PlaybackCarAnnotation(coordinate: car)
+                mapView.addAnnotation(annotation)
+                playbackCar = annotation
             }
-        }
-
-        /// Time-driven lookup: compresses the trip's real duration into the
-        /// 0…1 playback range, then binary-searches the timestamps array
-        /// for the bracketing pair around the target time. Result: slow
-        /// segments take proportionally longer, fast segments fly by.
-        private static func timeDrivenCursor(
-            coords: [CLLocationCoordinate2D],
-            timestamps: [Date],
-            progress: Double,
-        ) -> (lo: Int, position: CLLocationCoordinate2D) {
-            let first = timestamps[0]
-            let last = timestamps[timestamps.count - 1]
-            let total = last.timeIntervalSince(first)
-            // Degenerate case: all timestamps identical (single instant).
-            // Fall back to last point.
-            guard total > 0 else {
-                return (timestamps.count - 1, coords[timestamps.count - 1])
-            }
-            let targetOffset = total * progress
-            let target = first.addingTimeInterval(targetOffset)
-
-            // Binary search: largest `lo` with `timestamps[lo] <= target`.
-            var lo = 0
-            var hi = timestamps.count - 1
-            while lo + 1 < hi {
-                let mid = (lo + hi) / 2
-                if timestamps[mid] <= target { lo = mid } else { hi = mid }
-            }
-            // Interpolate within the bracketing pair. `hi` is `lo + 1` once
-            // the loop settles (binary search converges to adjacency).
-            let segDuration = timestamps[hi].timeIntervalSince(timestamps[lo])
-            let frac: Double
-            if segDuration > 0 {
-                frac = max(0, min(1, target.timeIntervalSince(timestamps[lo]) / segDuration))
-            } else {
-                frac = 0
-            }
-            let pos = CLLocationCoordinate2D(
-                latitude: coords[lo].latitude + (coords[hi].latitude - coords[lo].latitude) * frac,
-                longitude: coords[lo].longitude + (coords[hi].longitude - coords[lo].longitude) * frac,
-            )
-            return (lo, pos)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {

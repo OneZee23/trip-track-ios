@@ -253,13 +253,18 @@ struct SocialTripDetailView: View {
                     isInteractive: true,
                     fogCutoffDate: nil,
                     treatAsPreview: true,
-                    playbackProgress: routePlayback.progress
+                    playbackCarCoord: routePlayback.currentCoord,
+                    playbackTrailIndex: routePlayback.currentTrailIndex
                 )
                 .frame(maxWidth: .infinity)
 
                 HStack(spacing: 8) {
                     RoutePlaybackButton(isPlaying: routePlayback.isPlaying) {
-                        routePlayback.toggle()
+                        routePlayback.toggle(
+                            coords: coords,
+                            timestamps: nil,  // social trips carry no timestamps
+                            distanceMeters: trip.distance
+                        )
                     }
                     Button {
                         Haptics.tap()
