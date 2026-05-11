@@ -73,9 +73,13 @@ final class RoutePlaybackController: NSObject, ObservableObject {
         stop()
         guard coords.count >= 2 else { return }
 
-        // ~1s per km, clamped to a watchable window.
+        // ~1.4s per km, clamped to a watchable window. Slower than the
+        // first cut — the original 1s/km gave a "you can barely see the
+        // car move on a long trip" effect. 1.4× pacing reads as
+        // confident playback while still finishing in well under a
+        // minute even for cross-country trips.
         let km = max(0, distanceMeters / 1000.0)
-        durationSeconds = max(5.0, min(30.0, km))
+        durationSeconds = max(7.0, min(40.0, km * 1.4))
 
         // Resample to 60 frames/sec of playback duration. Even if the
         // display link runs at 120Hz, we read the same resampled point

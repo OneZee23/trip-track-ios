@@ -13,6 +13,13 @@ final class SpeedPolyline: MKPolyline {
 /// fragments drawn underneath.
 final class PlaybackPolyline: MKPolyline {}
 
+/// Tip extension that closes the visual gap between the last passed
+/// waypoint (where `PlaybackPolyline` ends) and the interpolated car
+/// position (where `PlaybackCarAnnotation` sits). Without this overlay
+/// the white trail visibly lags the car between GPS samples. Always
+/// exactly two points; rendered with the same brush as the main trail.
+final class PlaybackTipPolyline: MKPolyline {}
+
 /// Annotation that the renderer recognises as the moving "play head" —
 /// shown as the pixel-car asset travelling along the route.
 final class PlaybackCarAnnotation: NSObject, MKAnnotation {
@@ -245,6 +252,10 @@ struct RouteMapView: UIViewRepresentable {
 
     class Coordinator: NSObject, MKMapViewDelegate {
         weak var playbackPolyline: PlaybackPolyline?
+        /// Two-point overlay that bridges the gap between the body
+        /// trail's end and the interpolated car position. Replaced
+        /// every frame so the trail tip tracks the car exactly.
+        weak var playbackTip: PlaybackTipPolyline?
         weak var playbackCar: PlaybackCarAnnotation?
         /// Last coord index used to draw the trail. Stored so we don't
         /// remove + re-add the overlay every frame — only when the
@@ -272,11 +283,15 @@ struct RouteMapView: UIViewRepresentable {
         ) {
             guard coords.count >= 2 else { return }
             // Cleanup branch — controller cleared its state (playback ended
-            // or stopped). Drop annotation + overlay.
+            // or stopped). Drop annotation + both overlays.
             guard let car = carCoord else {
                 if let p = playbackPolyline {
                     mapView.removeOverlay(p)
                     playbackPolyline = nil
+                }
+                if let t = playbackTip {
+                    mapView.removeOverlay(t)
+                    playbackTip = nil
                 }
                 if let c = playbackCar {
                     mapView.removeAnnotation(c)
@@ -285,23 +300,36 @@ struct RouteMapView: UIViewRepresentable {
                 playbackLastIndex = -1
                 return
             }
-            // Trail polyline — replace only when the tail index actually
-            // moves to a new original waypoint. This keeps overlay churn
-            // bounded by the GPS sample count, never by display refresh
-            // rate. The visible car (annotation, updated every frame)
-            // moves smoothly ahead of the trail tip during the fractional
-            // sub-segment.
+            // Body trail polyline — replace only when the tail index
+            // actually moves to a new original waypoint. This keeps
+            // overlay churn bounded by GPS sample count (≤ N swaps per
+            // trip), not display refresh rate (≤ 60×duration swaps).
             if trailIndex != playbackLastIndex && trailIndex >= 1 {
                 if let p = playbackPolyline {
                     mapView.removeOverlay(p)
                     playbackPolyline = nil
                 }
                 let safe = min(trailIndex, coords.count - 1)
-                var trail = Array(coords[0...safe])
-                let poly = PlaybackPolyline(coordinates: &trail, count: trail.count)
+                var body = Array(coords[0...safe])
+                let poly = PlaybackPolyline(coordinates: &body, count: body.count)
                 mapView.addOverlay(poly, level: .aboveLabels)
                 playbackPolyline = poly
                 playbackLastIndex = trailIndex
+            }
+            // Tip segment — closes the visual gap between the body
+            // trail (ends at last passed waypoint) and the car (sits
+            // at the interpolated position between two waypoints). Two
+            // points only, so a per-frame swap is cheap — 60×duration
+            // overlay swaps of tiny polylines vs whole-trail swaps.
+            if trailIndex >= 0 && trailIndex < coords.count {
+                if let t = playbackTip {
+                    mapView.removeOverlay(t)
+                    playbackTip = nil
+                }
+                var tip = [coords[trailIndex], car]
+                let poly = PlaybackTipPolyline(coordinates: &tip, count: 2)
+                mapView.addOverlay(poly, level: .aboveLabels)
+                playbackTip = poly
             }
             // Car position — KVO-observed `@objc dynamic coordinate` on
             // PlaybackCarAnnotation lets MapKit reposition the view
@@ -325,6 +353,17 @@ struct RouteMapView: UIViewRepresentable {
                 // Bright accent + thicker stroke so the trail is visibly
                 // "this is what you've covered so far" against the static
                 // route underneath.
+                renderer.strokeColor = UIColor(red: 0xFF/255, green: 0xFF/255, blue: 0xFF/255, alpha: 1.0)
+                renderer.lineWidth = 6
+                renderer.lineCap = .round
+                renderer.lineJoin = .round
+                return renderer
+            }
+            if let tip = overlay as? PlaybackTipPolyline {
+                // Same brush as the main trail — visually a single
+                // continuous polyline from start to car, but cheaper to
+                // update because the tip is just 2 points.
+                let renderer = MKPolylineRenderer(polyline: tip)
                 renderer.strokeColor = UIColor(red: 0xFF/255, green: 0xFF/255, blue: 0xFF/255, alpha: 1.0)
                 renderer.lineWidth = 6
                 renderer.lineCap = .round
