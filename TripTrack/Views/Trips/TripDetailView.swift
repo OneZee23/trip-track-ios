@@ -23,6 +23,11 @@ struct TripDetailView: View {
     @State private var originalTitle: String = ""
     @State private var cachedCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSpeeds: [Double] = []
+    /// Per-trackpoint timestamps for time-driven route playback (the
+    /// car lingers in traffic, zips on the highway). Empty when the
+    /// trip only has a preview polyline — playback falls back to a
+    /// uniform-speed crawl in that case.
+    @State private var cachedTimestamps: [Date] = []
     @State private var storyShare: (data: StoryShareData, url: String?)?
     @State private var isGeneratingShare = false
     @State private var showDeleteConfirm = false
@@ -73,7 +78,8 @@ struct TripDetailView: View {
                                         speeds: cachedSpeeds,
                                         isInteractive: true,
                                         fogCutoffDate: trip.endDate,
-                                        playbackProgress: routePlayback.progress
+                                        playbackProgress: routePlayback.progress,
+                                        timestamps: cachedTimestamps.isEmpty ? nil : cachedTimestamps
                                     )
                                 } else {
                                     c.cardAlt
@@ -225,6 +231,7 @@ struct TripDetailView: View {
                     if points.count > 1 {
                         cachedCoordinates = points
                         cachedSpeeds = t.trackPoints.map(\.speed)
+                        cachedTimestamps = t.trackPoints.map(\.timestamp)
                     } else if let preview = t.previewPolyline {
                         // Trips synced down via /sync/pull only carry metadata
                         // + the preview polyline (server doesn't return full
