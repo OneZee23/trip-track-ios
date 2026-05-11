@@ -16,6 +16,19 @@ final class SocialFeedStore: ObservableObject {
     private var nextCursor: String?
     private var hasMore = true
     private var currentTask: Task<Void, Never>?
+    /// Monotonic counter incremented on each refresh. Used to detect
+    /// "is the in-flight Task still the one I started?" without relying
+    /// on Task identity (Task is a struct — `===` doesn't compile).
+    /// Without this, a finished refresh from yesterday would leave
+    /// `currentTask` non-nil and `loadIfNeeded()` would silently no-op
+    /// forever.
+    private var refreshGeneration: Int = 0
+    /// Wall-clock timestamp of the last successful fetch. `loadIfNeeded`
+    /// triggers a fresh fetch once this is older than `staleness`, even
+    /// if `trips` is non-empty — otherwise app reopens days later still
+    /// show yesterday's feed until the user pulls-to-refresh.
+    private var lastLoadedAt: Date?
+    private let staleness: TimeInterval = 5 * 60
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
@@ -61,18 +74,25 @@ final class SocialFeedStore: ObservableObject {
 
     // MARK: - Load
 
-    /// Lifecycle-friendly load that no-ops when there's already data on
-    /// screen or a refresh is in flight. Call sites that fire on view
-    /// appear / tab switch / sign-in flip should use this — otherwise
-    /// repeated cancel+restart of `refresh()` torpedoes in-flight
-    /// requests on slow networks (each call cancels the previous and
-    /// the user never sees a completed fetch).
+    /// Lifecycle-friendly load that no-ops when fresh data is already
+    /// on screen or a refresh is in flight. Call sites that fire on
+    /// view appear / tab switch / sign-in flip should use this —
+    /// otherwise repeated cancel+restart of `refresh()` torpedoes
+    /// in-flight requests on slow networks.
+    ///
+    /// "Fresh enough" = loaded within the last `staleness` interval.
+    /// Past that window, even with cached `trips`, we kick a fresh
+    /// fetch so the user doesn't reopen the app the next day to find
+    /// yesterday's feed.
     ///
     /// Explicit user actions (pull-to-refresh, retry button) and
     /// invalidation events (publish/unpublish) keep using `refresh()`.
     func loadIfNeeded() async {
-        if !trips.isEmpty { return }
         if currentTask != nil { return }
+        if !trips.isEmpty, let last = lastLoadedAt,
+           Date().timeIntervalSince(last) < staleness {
+            return
+        }
         await refresh()
     }
 
@@ -81,6 +101,8 @@ final class SocialFeedStore: ObservableObject {
         // fetch. The previous URLSession task gets cancelled via Task cooperative
         // cancellation — its -999 error is swallowed by fetchPage()'s catch.
         currentTask?.cancel()
+        refreshGeneration &+= 1
+        let myGen = refreshGeneration
 
         let task = Task { [weak self] in
             guard let self else { return }
@@ -95,6 +117,10 @@ final class SocialFeedStore: ObservableObject {
         }
         currentTask = task
         await task.value
+        // Clear only if a newer refresh hasn't already replaced us.
+        // Without this, `loadIfNeeded()` would silently no-op forever
+        // — `currentTask` would still hold our finished-but-non-nil Task.
+        if refreshGeneration == myGen { currentTask = nil }
     }
 
     /// Optimistic removal used when the user flips one of their own trips back to
@@ -131,6 +157,7 @@ final class SocialFeedStore: ObservableObject {
             nextCursor = res.nextCursor
             hasMore = res.nextCursor != nil
             lastError = nil
+            lastLoadedAt = Date()
         } catch is CancellationError {
             // Superseded by a newer refresh — ignore silently.
         } catch let e as APIError {
@@ -190,6 +217,7 @@ final class SocialFeedStore: ObservableObject {
         nextCursor = nil
         hasMore = true
         lastError = nil
+        lastLoadedAt = nil
     }
 }
 

@@ -246,10 +246,18 @@ struct FeedView: View {
                     socialFeed.removeOptimistically(tripId: payload.tripId)
                 }
             }
+            // Flipping a trip private↔public can change "has any private
+            // trip" — keep the empty-state CTA cache in sync.
+            hasAnyPrivateTrip = feedVM.tripManager.hasAnyPrivateTrip()
             Task {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 await socialFeed.refresh()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tripDeleted)) { _ in
+            // Trip deletion can drop the last private trip — refresh
+            // the cache so the CTA doesn't keep pointing at nothing.
+            hasAnyPrivateTrip = feedVM.tripManager.hasAnyPrivateTrip()
         }
         .sheet(isPresented: $showProfile) {
             ProfileView()
@@ -355,19 +363,20 @@ struct FeedView: View {
             Haptics.selection()
             let wasActive = active
             withAnimation(.easeInOut(duration: 0.2)) { feedMode = mode }
-            // When switching tabs, scroll back to top so the content change is obvious —
-            // otherwise the ScrollView preserves offset and can leave the user staring at
-            // the bottom of the previous tab's content.
+            // Switching tabs: scroll to top so the content change is
+            // obvious. Tapping the ALREADY-ACTIVE pill: Strava-style
+            // "scroll to top + refresh" — gives the user a way to
+            // explicitly request fresh data without pulling. The
+            // .onChange(of: feedMode) below handles the load for the
+            // tab-switch case (and no-ops here since value didn't
+            // change), so we only fire the refresh on active-tap.
             if !wasActive {
                 NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
+            } else if mode == .all {
+                NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
+                Task { await socialFeed.refresh() }
             }
-            if mode == .all {
-                // Mode-switcher tap. The `.onChange(of: feedMode)` above
-                // covers the actual load — no need to fire a second
-                // refresh here, that's what was producing the request
-                // storm on slow networks (two parallel fetches, second
-                // cancels the first).
-            } else if mode == .mine {
+            if mode == .mine {
                 feedVM.language = lang.language
                 feedVM.loadTrips()
             }
