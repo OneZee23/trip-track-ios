@@ -41,6 +41,15 @@ enum BadgeManager {
         var hasSunday = false
         var hasSeaLevel = false
         var hasWinterMountain = false
+        // 0.5.5 secret-badges aggregates. `distinctMonthsThisYear` uses
+        // calendar-year scoping — "Wrapped" rewards a full year of
+        // driving, so a trip in Dec 2025 + Jan 2026 shouldn't count
+        // toward the 2026 set.
+        var hasAfterMidnight = false
+        var monthsThisYear = Set<Int>()
+        var vehicleCounts: [UUID: Int] = [:]
+        var privateCount = 0
+        let currentYear = Calendar.current.component(.year, from: Date())
 
         for trip in trips {
             totalDist += trip.distanceKm
@@ -72,6 +81,13 @@ enum BadgeManager {
             if (month == 12 || month == 1 || month == 2) && trip.elevation >= 200 {
                 hasWinterMountain = true
             }
+
+            // Secret-badge aggregates
+            if hour < 4 { hasAfterMidnight = true }
+            let year = Calendar.current.component(.year, from: trip.startDate)
+            if year == currentYear { monthsThisYear.insert(month) }
+            if let vid = trip.vehicleId { vehicleCounts[vid, default: 0] += 1 }
+            if trip.isPrivate { privateCount += 1 }
 
             // Track points analysis
             for point in trip.trackPoints {
@@ -117,7 +133,11 @@ enum BadgeManager {
             hasWeekendWarrior: hasWeekendWarrior,
             hasWinterMountainTrip: hasWinterMountain,
             hasSeaLevelTrip: hasSeaLevel,
-            countriesCount: 0 // TODO: populate when country data source is available
+            countriesCount: 0, // TODO: populate when country data source is available
+            hasAfterMidnightTrip: hasAfterMidnight,
+            distinctMonthsWithTrips: monthsThisYear.count,
+            maxTripsOnSingleVehicle: vehicleCounts.values.max() ?? 0,
+            privateTripCount: privateCount,
         )
     }
 

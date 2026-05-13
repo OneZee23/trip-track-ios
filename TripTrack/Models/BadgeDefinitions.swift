@@ -164,6 +164,72 @@ extension Badge {
               icon: "snowflake.circle.fill", color: Color(red: 180/255, green: 220/255, blue: 255/255),
               category: .special, isHidden: true, isRepeatable: true,
               checkUnlocked: { $0.hasWinterMountainTrip }),
+
+        // MARK: - Secret badges (0.5.5 pack)
+        // Surprise rewards — no in-app hint about how to earn them.
+        // The existing `night_wolf` covers 23:00–04:00, this is the
+        // tighter "true midnight" window. Triggers exactly once per
+        // account (non-repeatable) so the celebration sheet only fires
+        // on first late-night drive.
+        Badge(id: "midnight_rider", titleRu: "Полуночник", titleEn: "Midnight Rider",
+              descriptionRu: "Поездка между 00:00 и 04:00",
+              descriptionEn: "Trip between midnight and 4 AM",
+              icon: "moon.stars.fill", color: Color(red: 0.55, green: 0.40, blue: 0.85),
+              category: .special, isHidden: true,
+              checkUnlocked: { $0.hasAfterMidnightTrip }),
+
+        // Sits between `marathon_100` (100 km) and `iron_butt` (500 km).
+        Badge(id: "highway_wolf", titleRu: "Хайвейный волк", titleEn: "Highway Wolf",
+              descriptionRu: "Одна поездка длиной 300+ км",
+              descriptionEn: "Single trip ≥300 km",
+              icon: "road.lanes", color: AppTheme.accent,
+              category: .special, isHidden: true,
+              checkUnlocked: { $0.longestTripKm >= 300 }),
+
+        // Drove during every calendar month of the current year. The
+        // Spotify-Wrapped-style reward, surfaces around mid-December
+        // for people who actually drove year-round.
+        Badge(id: "wrapped_year", titleRu: "Завёрнутый год", titleEn: "Wrapped",
+              descriptionRu: "Поездки во все 12 месяцев года",
+              descriptionEn: "Drove during all 12 months of the year",
+              icon: "calendar.circle.fill", color: AppTheme.green,
+              category: .special, isHidden: true,
+              checkUnlocked: { $0.distinctMonthsWithTrips >= 12 }),
+
+        Badge(id: "centurion", titleRu: "Центурион", titleEn: "Centurion",
+              descriptionRu: "100 поездок записано",
+              descriptionEn: "100 trips recorded",
+              icon: "100.circle.fill", color: Color(red: 1.0, green: 0.85, blue: 0.30),
+              category: .special, isHidden: true,
+              checkUnlocked: { $0.totalTrips >= 100 }),
+
+        // 30+ trips on the same vehicle id — rewards loyalty to "the
+        // car" rather than the app. Multi-car users (e.g. shared
+        // family fleet) will trigger it slower but still get it.
+        Badge(id: "carpool_karaoke", titleRu: "Любимая машина", titleEn: "Carpool Karaoke",
+              descriptionRu: "30+ поездок на одной машине",
+              descriptionEn: "30+ trips on the same vehicle",
+              icon: "music.mic", color: Color(red: 0.95, green: 0.40, blue: 0.55),
+              category: .special, isHidden: true,
+              checkUnlocked: { $0.maxTripsOnSingleVehicle >= 30 }),
+
+        // Rewards staying private. Counts isPrivate trips — works as a
+        // privacy-first counter-balance to the social-feed badges.
+        Badge(id: "vault_keeper", titleRu: "Хранитель тайн", titleEn: "Vault Keeper",
+              descriptionRu: "50 приватных поездок",
+              descriptionEn: "50 private trips",
+              icon: "lock.shield.fill", color: Color(red: 0.65, green: 0.70, blue: 0.80),
+              category: .special, isHidden: true,
+              checkUnlocked: { $0.privateTripCount >= 50 }),
+
+        // Cumulative odometer. Above `ten_thousand` (10k) — for the
+        // long-haul drivers, takes years to earn organically.
+        Badge(id: "expedition", titleRu: "Экспедиция", titleEn: "Expedition",
+              descriptionRu: "50 000 км в сумме",
+              descriptionEn: "50,000 km cumulative",
+              icon: "mountain.2.fill", color: Color(red: 0.65, green: 0.50, blue: 0.35),
+              category: .special, isHidden: true,
+              checkUnlocked: { $0.totalDistanceKm >= 50000 }),
     ]
 
     // MARK: - Streaks

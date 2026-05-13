@@ -53,6 +53,11 @@ struct BadgeStats {
     let hasWinterMountainTrip: Bool // Dec-Feb with elevation
     let hasSeaLevelTrip: Bool      // altitude <10m, >20km
     let countriesCount: Int
+    // Fields for the 0.5.5 secret-badges pack.
+    let hasAfterMidnightTrip: Bool   // started 00:00–03:59 — a step deeper than `hasLateNightTrip`
+    let distinctMonthsWithTrips: Int // 1…12, calendar months in current year that have ≥1 trip
+    let maxTripsOnSingleVehicle: Int // most trips on the same vehicle id — Carpool Karaoke
+    let privateTripCount: Int        // count of `isPrivate == true` trips — Vault Keeper
 }
 
 struct Badge: Identifiable {
