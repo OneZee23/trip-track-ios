@@ -272,6 +272,26 @@ struct PublicProfileView: View {
                         .padding(.vertical, 4)
                         .background(AppTheme.accentBg, in: Capsule())
                     }
+
+                    // Last-trip pill — shows a relative "N days ago"
+                    // derived from the most recent PUBLIC trip the
+                    // server returned. Hidden when the account is in
+                    // privacy mode (already shows "Hidden roads" lower
+                    // down) or has no public trips at all.
+                    if !isPrivacyMode, let lastDate = profile?.recentTrips.first?.startDate {
+                        HStack(spacing: 6) {
+                            Image(systemName: "road.lanes")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(c.textTertiary)
+                            Text(lastActivityCopy(lastDate, isRu: isRu))
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(c.textSecondary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(c.cardAlt, in: Capsule())
+                        .padding(.top, 2)
+                    }
                 }
 
                 if !isOwnProfile, profile?.isFollowing != nil {
@@ -346,6 +366,15 @@ struct PublicProfileView: View {
     /// gentle "private routes" footnote — the LVL pill above still
     /// signals the account is active. Owner-side view is untouched
     /// (they see their own truth, which is just the zero state).
+    /// Builds the "last on the road N ago" copy from the most recent
+    /// public trip's start date. Uses the existing `RelativeTripDate`
+    /// formatter so the wording matches every other date pill in the
+    /// app ("3 days ago" / "вчера" / "только что").
+    private func lastActivityCopy(_ date: Date, isRu: Bool) -> String {
+        let rel = RelativeTripDate.string(from: date, language: isRu ? .ru : .en)
+        return isRu ? "На дороге · \(rel)" : "On the road · \(rel)"
+    }
+
     private var isPrivacyMode: Bool {
         guard !isOwnProfile, let p = profile else { return false }
         let tripCount = p.stats.tripCount

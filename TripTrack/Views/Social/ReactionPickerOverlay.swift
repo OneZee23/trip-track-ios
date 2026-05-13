@@ -1,8 +1,13 @@
 import SwiftUI
 
 /// iMessage/Telegram-style reaction picker: blurred backdrop + floating
-/// capsule with the 5 available emoji. Presented as a full-screen overlay
+/// capsule with the available emoji. Presented as a full-screen overlay
 /// when the user long-presses a trip card.
+///
+/// Layout: the capsule wraps an `HStack` in a horizontal `ScrollView` so
+/// growing the emoji set in the future (currently 8) doesn't blow past
+/// the device width. On phones where everything fits, the scroll never
+/// fires — `.fixedSize` collapses the capsule to content width.
 struct ReactionPickerOverlay: View {
     let currentReaction: String?
     var onPick: (String) -> Void
@@ -24,14 +29,20 @@ struct ReactionPickerOverlay: View {
                     dismiss()
                 }
 
-            // Floating capsule with 5 emojis
-            HStack(spacing: 6) {
-                ForEach(Array(ReactionEmoji.all.enumerated()), id: \.offset) { index, emoji in
-                    pill(emoji: emoji, index: index, c: c)
+            // Floating capsule. Inner scroll only fires when emoji set
+            // exceeds device width — at 8 × 42pt + spacing/padding the
+            // capsule is ~380pt, fits every iPhone since SE.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(Array(ReactionEmoji.all.enumerated()), id: \.offset) { index, emoji in
+                        pill(emoji: emoji, index: index, c: c)
+                    }
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .frame(maxWidth: UIScreen.main.bounds.width - 24)
+            .fixedSize(horizontal: false, vertical: true)
             .background(
                 Capsule()
                     .fill(scheme == .dark ? Color(white: 0.16) : Color.white)
@@ -58,8 +69,8 @@ struct ReactionPickerOverlay: View {
             }
         } label: {
             Text(emoji)
-                .font(.system(size: 30))
-                .frame(width: 48, height: 48)
+                .font(.system(size: 26))
+                .frame(width: 42, height: 42)
                 .background(
                     Circle()
                         .fill(isMine ? AppTheme.accentBg : Color.clear)
