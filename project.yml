@@ -161,7 +161,14 @@ schemes:
       targets:
         TripTrack: all
         TripTrackLiveActivityExtension: all
-        TripTrackWatch: all
+        # Watch target deliberately omitted from the 0.5.5 scheme —
+        # App Store submission requires a complete watchOS app icon
+        # set (1024 marketing + 5+ per-resolution variants), and we
+        # don't have icon assets yet. The target definition + source
+        # stays in the repo so re-enabling for 0.5.6 is a one-line
+        # change once the icon is designed AND the WCSession glue is
+        # tested on real Apple Watch hardware.
+        # TripTrackWatch: all
     run:
       config: Debug
     test:
