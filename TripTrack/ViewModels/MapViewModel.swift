@@ -112,6 +112,9 @@ final class MapViewModel: ObservableObject {
             }
             self.toggleRecording()
         }
+        // Hand the connectivity manager a weak self so commands from
+        // the Watch hit the same control surface as on-screen taps.
+        PhoneConnectivityManager.shared.mapViewModel = self
 
         setupRecordingBindings()
         setupSunBasedTheme()
@@ -221,12 +224,26 @@ final class MapViewModel: ObservableObject {
         } else {
             startRecording()
         }
+        // Push the new state to the Watch immediately. Without this
+        // the wrist UI would stay on the prior "idle" / "recording"
+        // screen until the next GPS sample lands (up to a few seconds
+        // on a cold lock).
+        PhoneConnectivityManager.shared.publish(
+            isRecording: isRecording, isPaused: isPaused,
+            speedKmh: speed, distanceKm: distance,
+            elapsedSeconds: Int(recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0)
+        )
     }
 
     func togglePause() {
         guard isRecording else { return }
         isPaused.toggle()
         tripManager.isPaused = isPaused
+        PhoneConnectivityManager.shared.publish(
+            isRecording: true, isPaused: isPaused,
+            speedKmh: speed, distanceKm: distance,
+            elapsedSeconds: Int(recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0)
+        )
         if isPaused {
             pauseStartDate = Date()
             durationTimer?.cancel()
@@ -547,6 +564,18 @@ final class MapViewModel: ObservableObject {
                         distance: self.distance,
                         isPaused: false,
                         pausedDuration: self.pausedAccumulated
+                    )
+                    // Mirror the same live state to the Watch. WCSession
+                    // `updateApplicationContext` is debounced internally,
+                    // safe to call every GPS tick — only the latest dict
+                    // makes it to the wrist.
+                    let elapsed = Int(self.recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0)
+                    PhoneConnectivityManager.shared.publish(
+                        isRecording: true,
+                        isPaused: false,
+                        speedKmh: self.speed,
+                        distanceKm: self.distance,
+                        elapsedSeconds: elapsed
                     )
                 }
             }

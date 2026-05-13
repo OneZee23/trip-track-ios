@@ -57,7 +57,11 @@ extension View {
 
 struct ContentView: View {
     @StateObject private var mapVM = MapViewModel()
-    @State private var selectedTab = 0
+    /// Selected tab is `@AppStorage`-backed so onboarding can hand the
+    /// user directly into the Tracking tab (index 1) — landing on the
+    /// empty feed after a fresh install gives no obvious next step,
+    /// whereas Tracking shows the slide-to-start affordance.
+    @AppStorage("selectedTab") private var selectedTab = 0
     @State private var hideTabBar = false
     @Environment(\.colorScheme) private var systemScheme
     @EnvironmentObject private var lang: LanguageManager

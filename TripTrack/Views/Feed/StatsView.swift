@@ -10,6 +10,12 @@ struct StatsView: View {
     @State private var allTrips: [Trip] = []
     @State private var currentMonth: MonthStats = .empty
     @State private var previousMonth: MonthStats = .empty
+    /// Per-time-window aggregates for the Strava-style overview grid.
+    /// Computed once per `calculateAll()` pass; the cards just read
+    /// these — no per-render filtering.
+    @State private var thisWeekStats: MonthStats = .empty
+    @State private var ytdStats: MonthStats = .empty
+    @State private var allTimeStats: MonthStats = .empty
     @State private var weeklyData: [WeekData] = []
     @State private var dayOfWeekData: [DayOfWeekData] = []
     @State private var topPlaces: [PlaceStats] = []
@@ -27,7 +33,14 @@ struct StatsView: View {
         NavigationStack {
                 ScrollView {
                     VStack(spacing: 16) {
-                        // 1. Hero — This Month
+                        // 1. Time-window overview — Strava-style 2×2 grid
+                        //    of distance / trips per period (Week → All Time).
+                        //    Click-to-deep-dive could come later; for now
+                        //    it's a read-only at-a-glance card.
+                        timeWindowsGrid(c, isRu: isRu)
+
+                        // 2. Hero — This Month (deeper detail with
+                        //    secondary metrics + month-over-month delta).
                         heroSection(c, isRu: isRu)
 
                         // 2. Weekly Activity Chart
@@ -77,6 +90,99 @@ struct StatsView: View {
             .toolbarBackground(.visible, for: .navigationBar)
         }
         .onAppear { calculateAll() }
+    }
+
+    // MARK: - 0. Time Windows Grid
+
+    /// 2×2 grid of time-window cards: This Week, This Month,
+    /// Year-to-date, All time. Each card surfaces distance + trip count
+    /// + hours so the user gets a complete shape of their activity
+    /// without scrolling through multiple sections. Cards stay compact
+    /// (height ~110pt) so the grid fits above the fold on every
+    /// iPhone since SE.
+    private func timeWindowsGrid(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 10),
+            GridItem(.flexible(), spacing: 10),
+        ], spacing: 10) {
+            windowCard(
+                label: isRu ? "Эта неделя" : "This week",
+                stats: thisWeekStats,
+                accent: AppTheme.green,
+                c: c, isRu: isRu,
+            )
+            windowCard(
+                label: isRu ? "Этот месяц" : "This month",
+                stats: currentMonth,
+                accent: AppTheme.accent,
+                c: c, isRu: isRu,
+            )
+            windowCard(
+                label: isRu ? "С начала года" : "Year so far",
+                stats: ytdStats,
+                accent: AppTheme.blue,
+                c: c, isRu: isRu,
+            )
+            windowCard(
+                label: isRu ? "За всё время" : "All time",
+                stats: allTimeStats,
+                accent: AppTheme.purple,
+                c: c, isRu: isRu,
+            )
+        }
+    }
+
+    private func windowCard(
+        label: String, stats: MonthStats, accent: Color,
+        c: AppTheme.Colors, isRu: Bool,
+    ) -> some View {
+        let hours = Int(stats.totalDuration / 3600)
+        let minutes = Int((stats.totalDuration.truncatingRemainder(dividingBy: 3600)) / 60)
+        let hoursText: String
+        if hours > 0 {
+            hoursText = "\(hours)\(isRu ? "ч" : "h") \(minutes)\(isRu ? "м" : "m")"
+        } else {
+            hoursText = "\(minutes)\(isRu ? " мин" : " min")"
+        }
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(c.textTertiary)
+                .textCase(.uppercase)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(String(format: "%.0f", stats.totalKm))
+                    .font(.system(size: 26, weight: .heavy).monospacedDigit())
+                    .foregroundStyle(accent)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                Text(isRu ? "км" : "km")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(c.textSecondary)
+            }
+            HStack(spacing: 4) {
+                Text("\(stats.tripCount)")
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(c.text)
+                Text(isRu ? "поездок" : "trips")
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+                Spacer(minLength: 4)
+                if stats.totalDuration > 0 {
+                    Image(systemName: "clock.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(c.textTertiary)
+                    Text(hoursText)
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .foregroundStyle(c.textSecondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .surfaceCard(cornerRadius: 14)
     }
 
     // MARK: - 1. Hero Section
@@ -425,6 +531,15 @@ struct StatsView: View {
 
         currentMonth = computeMonthStats(thisMonthTrips)
         previousMonth = computeMonthStats(lastMonthTrips)
+
+        // 4-window overview (computed in one O(N) pass since allTrips
+        // is already in memory). Week start = Monday for RU/EU
+        // convention; YTD = Jan 1 of current calendar year.
+        let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)) ?? now
+        let yearStart = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
+        thisWeekStats = computeMonthStats(allTrips.filter { $0.startDate >= weekStart })
+        ytdStats = computeMonthStats(allTrips.filter { $0.startDate >= yearStart })
+        allTimeStats = computeMonthStats(allTrips)
 
         // Weekly data — last 12 weeks
         weeklyData = computeWeeklyData()

@@ -15,6 +15,9 @@ struct TripTrackApp: App {
         // services below would crash silently. No-op when SENTRY_DSN
         // is empty (dev / simulator).
         SentryService.start()
+        // Persisted cold-launch counter feeds the rating-prompt eligibility
+        // check ("only ask after a real engaged session, not on day 1").
+        RatingPromptService.recordLaunch()
         // Handle background relaunch by significant location change
         // iOS relaunches the app after force-quit when cell tower changes
         AutoTripService.shared.handleBackgroundLaunch()

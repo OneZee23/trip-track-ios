@@ -315,6 +315,17 @@ struct TrackingView: View {
 
     private func dismissSummary() {
         viewModel.lastCompletedTrip = nil
+        // Post-completion is the right emotional moment to ask for a
+        // rating — the user just finished a trip, sees their stats,
+        // and dismisses with a sense of accomplishment. Delay so the
+        // sheet dismiss animation lands before the system prompt
+        // pops up (otherwise they overlap on iOS 17+). All guards
+        // (trip count, launch count, cooldown) live inside the
+        // service — this call is a fire-and-forget hint.
+        let tripCount = viewModel.tripManager.fetchTripCount()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            RatingPromptService.requestReviewIfReady(tripCount: tripCount)
+        }
     }
 
     private var trackingIcon: String {
