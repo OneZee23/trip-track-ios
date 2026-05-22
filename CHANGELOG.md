@@ -6,6 +6,54 @@
 
 ---
 
+## [0.5.6] -- 22 мая 2026
+
+Релиз стабильности и качества данных. Фиксы критичных багов авто-детекта и аутентификации, расширение информации в чужих поездках, производительность пул-ту-рефреш.
+
+### Исправлено
+
+**Авто-детект записи**
+- В режиме `Напоминание` запись больше **не останавливается посреди поездки** на ложные BT-disconnect события. Прошлая логика обходила контракт режима — две "fast-stop" ветки в `handleDeviceDisconnected` вызывали `autoStopTrip()` напрямую, минуя prompt+timer. Теперь обе ветки gated на `.auto` mode (как `recoverStaleTripIfNeeded`)
+- Стале-trip auto-split в `handleAutomotiveDetected` тоже теперь только в `.auto` режиме — silently ending запись при детекте новой сессии нарушало "ask first" контракт `remind`
+- Добавлен **comprehensive OSLog logging** во все 4 сервиса auto-detect (`AutoTripService`, `BluetoothDetector`, `AudioRouteDetector`, `MotionDetector`) — state transitions, decision branches, BT/audio/motion события. Логи попадают в `DebugLogExporter` экспорт, что позволяет реконструировать sequence событий из шаринга юзером
+
+**Аутентификация**
+- **Юзеров перестало автоматически вылогинивать после ~1 недели отсутствия в приложении.** Backend `refreshTokens` теперь **ротирует** refresh token при каждом `/auth/refresh` (удаляет старый, выпускает новый с fresh expiry в одной транзакции). Без ротации JWT `exp` фиксировался на момент SIWA — даже активный юзер вылогинивался по TTL
+- `JWT_REFRESH_TOKEN_EXPIRES_IN` поднят с `7d` до `3650d` (10 лет) — для personal road-trip приложения TTL-based signout добавлял friction без security benefit; единственные осмысленные signout-векторы остались: manual signout, account delete, server ban, Apple credential revoke, app uninstall
+- В `AuthService` добавлены диагностические `[auth.signout_trigger] reason=...` логи на все signOut paths (`apple_credential_revoked`, `apple_credential_not_found`, `user_banned_notification`, `force_sign_out_called_by_api_client`)
+
+**Синхронизация**
+- `APIClient` теперь делает **одну дополнительную попытку** на `UNKNOWN_SERVER_ERROR` envelope с 1-секундной задержкой (мирорит USER_NOT_AUTH refresh-then-retry pattern). Применено к POST, GET и multipart путям. Transient серверные хиккапы (DB blip, pool exhaustion) больше не парятся в `failedQueue` для одноразовых ошибок
+- `SyncQueue` **больше не дропает операции** после `retryCount=3` — данные не теряются молча на персистентных серверных ошибках. Auto-retry cap поднят до `maxRetries=5`; операции сверх лимита остаются в `failedQueue` и доступны через manual "Retry now" вместо тихого исчезновения
+- **Connectivity banner** в ленте теперь различает network outage vs server-side error: если `CacheManager.shared.isOffline` — "Нет связи с сервером" + wifi-icon, иначе — "Не всё синхронизировано" + retry-icon с инструкцией. Старая копия лгала ("Server unreachable" + "we'll retry automatically") когда сеть была в порядке а сервер просто returnил 200-envelope ошибки
+
+**Производительность**
+- **Pull-to-refresh в "Моих" поездках больше не фризит** на iPhone 12+ с 70+ поездок. `CoreDataTripRepository.fetchAllTripsAsync()` теперь использует `newBackgroundContext` + `perform` — fetch + entity-to-Trip mapping происходит на private queue, main thread остаётся свободен для анимации refresh control'а
+- Threaded через `TripManager.fetchTripsAsync` → `FeedViewModel.loadTripsAsync` → `.refreshable` handler
+
+### Добавлено
+
+**Чужие поездки — больше информации**
+- `SocialTripDetailView` теперь показывает тот же набор метрик что и `TripDetailView` для собственных поездок (за исключением расхода и стоимости — это personal economic data): distance, duration, **driving time**, **stopped time** (split), avg speed, max speed, elevation gain, **max altitude**
+- Backend: `TripEntity` расширен 3 nullable колонками — `max_altitude` (double precision), `driving_time` (integer), `stopped_time` (integer). Все nullable для backfill совместимости с pre-0.5.6 записями. Клиент 0.5.6+ вычисляет их локально из track points перед upload'ом
+- Endpoint `/social/feed` возвращает эти поля для каждой публичной поездки (если они есть)
+
+**Читаемый формат времени в чужих поездках**
+- В `SocialTripDetailView` метрика "Время" теперь "**1 ч 19 мин**" вместо ambiguous "1:19" — мирорит owner-side `Trip.formattedDurationHuman`
+- В `SocialFeedCardView` — компактный "**1ч 19м**" (без пробелов между числом и единицей) чтобы влезать в узкий metric column 3-up грида без auto-shrink
+- Тот же compact формат используется в `StoryShareSheet` для socialFeedTrip path'а
+
+### Технические заметки
+
+- `JWT_REFRESH_TOKEN_EXPIRES_IN=3650d` нужно обновить в prod `/opt/trip-track-backend/.env` отдельно (env-файл не в репо); деплой кода + перезапуск `docker compose restart`
+- `DB_LOG` default снижен до `error,warn` в `.env.example` — раньше `true` дампил каждый SQL с тысячами `$N` параметров на крупных track-point batch insert'ах, делая невозможным увидеть реальные backend ошибки в `docker logs`
+- `TripSyncPayload` теперь сериализует `maxAltitude`/`drivingTime`/`stoppedTime` для отправки на сервер. Старые поездки на сервере имеют null для этих полей до пере-аплоада (триггеры: edit privacy, edit title, любой `pendingUpload` flow)
+- `RoundedRectangle` `c.cardAlt` в metric cells unchanged — visual diff минимальный
+- Build number bump: 0.5.5 build 44 → 0.5.6 build 45
+- `JsonRpcExceptionFilter.UNKNOWN_SERVER_ERROR` логирует реальную причину через `logger.error('Unexpected error on ${request}: ...')` — после `DB_LOG` quiet'а эти строки станут видны в `docker logs trip-track-backend`
+
+---
+
 ## [0.6.0] -- 22 апреля 2026
 
 Социальный слой поверх синка v0.5.0: лента поездок, профили, реакции, шеринг, репорты/блоки. Плюс модель приватности "по умолчанию приватно" для всех поездок.
