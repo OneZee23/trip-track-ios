@@ -377,11 +377,16 @@ struct SocialTripDetailView: View {
     }
 
     private func metricsGrid(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        // Match the depth of the owner-side stat grid: distance, duration,
-        // avg speed, max speed, elevation. Region used to live here but it's
-        // redundant with the date line on the identity strip.
+        // Mirrors the owner-side `TripDetailView` stat grid: distance,
+        // duration, driving/stopped split, avg/max speed, elevation gain,
+        // max altitude. The only owner-only fields excluded are fuel and
+        // cost — they're personal economic data tied to the viewer's own
+        // vehicle config, not relevant to a friend reading the trip.
         let hasMaxSpeed = (trip.maxSpeed ?? 0) > 0
         let hasElevation = (trip.elevation ?? 0) > 0.5
+        let hasMaxAltitude = (trip.maxAltitude ?? 0) > 0.5
+        let drivingStr = trip.formattedDrivingTimeHuman(lang.language)
+        let stoppedStr = trip.formattedStoppedTimeHuman(lang.language)
         return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             metricCell(
                 value: String(format: "%.1f", trip.distanceKm),
@@ -390,11 +395,25 @@ struct SocialTripDetailView: View {
                 color: AppTheme.green, c: c
             )
             metricCell(
-                value: trip.formattedDuration,
+                value: trip.formattedDurationHuman(lang.language),
                 unit: "",
                 label: AppStrings.duration(lang.language),
                 color: AppTheme.accent, c: c
             )
+            if let drivingStr {
+                metricCell(
+                    value: drivingStr, unit: "",
+                    label: isRu ? "В движении" : "Driving",
+                    color: AppTheme.blue, c: c
+                )
+            }
+            if let stoppedStr {
+                metricCell(
+                    value: stoppedStr, unit: "",
+                    label: isRu ? "Стоял" : "Stopped",
+                    color: c.textTertiary, c: c
+                )
+            }
             metricCell(
                 value: String(format: "%.0f", trip.averageSpeedKmh),
                 unit: AppStrings.kmh(lang.language),
@@ -413,8 +432,16 @@ struct SocialTripDetailView: View {
                 metricCell(
                     value: String(format: "%.0f", trip.elevation ?? 0),
                     unit: AppStrings.m(lang.language),
-                    label: isRu ? "Перепад высот" : "Elevation",
-                    color: c.textSecondary, c: c
+                    label: AppStrings.elevationGain(lang.language),
+                    color: AppTheme.green, c: c
+                )
+            }
+            if hasMaxAltitude {
+                metricCell(
+                    value: String(format: "%.0f", trip.maxAltitude ?? 0),
+                    unit: AppStrings.m(lang.language),
+                    label: AppStrings.maxAltitude(lang.language),
+                    color: AppTheme.blue, c: c
                 )
             }
         }

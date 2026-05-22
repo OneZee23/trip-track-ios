@@ -213,7 +213,7 @@ struct SocialFeedCardView: View {
                     c: c
                 )
                 metricBlock(
-                    value: trip.formattedDuration,
+                    value: trip.formattedDurationCompact(lang.language),
                     unit: "",
                     label: AppStrings.duration(lang.language),
                     c: c

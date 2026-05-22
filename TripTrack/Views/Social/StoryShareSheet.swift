@@ -28,7 +28,9 @@ extension StoryShareData {
             title: trip.title ?? df.string(from: trip.startDate),
             dateText: df.string(from: trip.startDate),
             distanceKmText: String(format: "%.1f", trip.distanceKm),
-            durationText: trip.formattedDuration,
+            // Compact format ("1ч 19м") fits the story card's metric strip
+            // without the wider "1 ч 19 мин" wrapping or auto-shrinking.
+            durationText: trip.formattedDurationCompact(lang),
             avgSpeedKmhText: String(format: "%.0f", trip.averageSpeedKmh),
             region: trip.region,
             coordinates: trip.previewCoordinates,

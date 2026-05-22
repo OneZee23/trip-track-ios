@@ -54,8 +54,18 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     let duration: Int
     /// m/s — same units as the local Trip model
     let maxSpeed: Double?
-    /// metres — same units as the local Trip model
+    /// metres — elevation gain (sum of positive altitude deltas, computed
+    /// client-side from track points before upload). Same units as local Trip.
     let elevation: Double?
+    /// metres — peak altitude reached during the trip. Optional because old
+    /// clients (pre-0.5.6) don't send it; old server records will be null.
+    let maxAltitude: Double?
+    /// seconds — wall-clock time the car was actually moving. Optional, same
+    /// 0.5.6 backfill story as `maxAltitude`.
+    let drivingTime: Int?
+    /// seconds — wall-clock time the trip stayed stationary (red lights,
+    /// gas stops, drive-thru queues). Optional, see above.
+    let stoppedTime: Int?
     let region: String?
     let previewPolyline: String?
     // `var` so SocialFeedStore can apply optimistic bumps when the user adds
@@ -79,10 +89,33 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
         guard duration > 0 else { return 0 }
         return distanceKm / (Double(duration) / 3600.0)
     }
-    var formattedDuration: String {
-        let hours = duration / 3600
-        let minutes = (duration % 3600) / 60
-        return hours > 0 ? "\(hours):\(String(format: "%02d", minutes))" : "\(minutes) min"
+    /// Human-readable duration formatter that matches the owner-side
+    /// `Trip.formattedDurationHuman(lang:)` — "1 ч 19 мин" / "1 h 19 min"
+    /// instead of the previous ambiguous "1:19". Friends' trips should
+    /// read like the owner's own detail screen for the same trip.
+    func formattedDurationHuman(_ lang: LanguageManager.Language) -> String {
+        Trip.formattedTimeHuman(TimeInterval(duration), lang: lang)
+    }
+    /// Compact variant for the feed-card metric strip where horizontal
+    /// space per column is ~110pt and the full "1 ч 19 мин" overflows.
+    /// Drops the space between number and unit ("1ч 19м") so the typical
+    /// 1–3 hour trip fits without auto-shrink kicking in.
+    func formattedDurationCompact(_ lang: LanguageManager.Language) -> String {
+        let totalSeconds = duration
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        if hours > 0 {
+            return lang == .ru ? "\(hours)ч \(minutes)м" : "\(hours)h \(minutes)m"
+        }
+        return lang == .ru ? "\(minutes)м" : "\(minutes)m"
+    }
+    func formattedDrivingTimeHuman(_ lang: LanguageManager.Language) -> String? {
+        guard let s = drivingTime, s > 0 else { return nil }
+        return Trip.formattedTimeHuman(TimeInterval(s), lang: lang)
+    }
+    func formattedStoppedTimeHuman(_ lang: LanguageManager.Language) -> String? {
+        guard let s = stoppedTime, s > 0 else { return nil }
+        return Trip.formattedTimeHuman(TimeInterval(s), lang: lang)
     }
     var previewCoordinates: [CLLocationCoordinate2D] {
         guard let s = previewPolyline, let data = Data(base64Encoded: s) else { return [] }

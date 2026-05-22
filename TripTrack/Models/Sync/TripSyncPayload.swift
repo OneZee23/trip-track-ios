@@ -19,6 +19,13 @@ struct TripSyncPayload: Codable {
     let averageSpeed: Double
     let fuelUsed: Double
     let elevation: Double
+    /// 0.5.6+ extended metrics — computed locally from track points before
+    /// upload so the server can echo them back on /social/feed without
+    /// having to fetch + reduce track points for every reader. Optional in
+    /// the wire format for forward/backward compat with older servers.
+    let maxAltitude: Double?
+    let drivingTime: Int?
+    let stoppedTime: Int?
     let region: String?
     let isPrivate: Bool
     let vehicleId: UUID?
@@ -46,6 +53,20 @@ extension TripSyncPayload {
         self.averageSpeed = trip.averageSpeed
         self.fuelUsed = trip.fuelUsed
         self.elevation = trip.elevation
+        // Extended metrics — derived from track points. Send only when we
+        // have data to compute from; empty-track-point trips (manual entry,
+        // pre-0.5.6 imports) get nil so the server doesn't store a misleading
+        // "0" that the social UI would later have to special-case.
+        if !trip.trackPoints.isEmpty {
+            self.maxAltitude = trip.trackPoints.map(\.altitude).max()
+            let split = TripSyncPayload.computeMovementSplit(trip.trackPoints)
+            self.drivingTime = Int(split.driving)
+            self.stoppedTime = Int(split.stopped)
+        } else {
+            self.maxAltitude = nil
+            self.drivingTime = nil
+            self.stoppedTime = nil
+        }
         self.region = trip.region
         self.isPrivate = trip.isPrivate
         self.vehicleId = trip.vehicleId
@@ -62,5 +83,28 @@ extension TripSyncPayload {
                 id: pid, filename: fn, caption: pe.caption,
                 timestamp: ts, sortOrder: Int(pe.sortOrder))
         }
+    }
+
+    /// Mirrors `Trip.movementSplit` — duplicated here (not called through the
+    /// Trip getter) because `Trip.movementSplit` is private and we want to
+    /// keep the computation locally side-effect-free, with no reliance on
+    /// CoreData faulting behaviour at upload time.
+    private static func computeMovementSplit(_ points: [TrackPoint]) -> (driving: TimeInterval, stopped: TimeInterval) {
+        guard points.count >= 2 else { return (0, 0) }
+        let idleSpeedKmh = 5.0
+        let maxGap: TimeInterval = 60
+        var drv: TimeInterval = 0
+        var stp: TimeInterval = 0
+        for i in 1..<points.count {
+            let dt = points[i].timestamp.timeIntervalSince(points[i - 1].timestamp)
+            guard dt > 0, dt <= maxGap else { continue }
+            let avgKmh = ((points[i].speed + points[i - 1].speed) / 2.0) * 3.6
+            if avgKmh < idleSpeedKmh {
+                stp += dt
+            } else {
+                drv += dt
+            }
+        }
+        return (drv, stp)
     }
 }
