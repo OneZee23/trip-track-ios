@@ -70,7 +70,12 @@ final class SyncQueue: ObservableObject {
     private var failedQueue: [SyncOperation] = []
     private var cancellables = Set<AnyCancellable>()
     private var transport: SyncTransport?
-    private let maxRetries = 3
+    /// Auto-retry cap. After this many failures, an op stays in `failedQueue`
+    /// but `retryFailed` (the auto-retry path) skips it — only `retryFailedNow`
+    /// (user-initiated) can revive it. Previously ops were *silently dropped*
+    /// after `maxRetries`, causing data loss when the server had a persistent
+    /// problem on a specific record.
+    private let maxRetries = 5
 
     /// Priority order: metadata first, then photos (heavier).
     private let entityPriority: [SyncOperation.EntityType] = [
@@ -159,9 +164,12 @@ final class SyncQueue: ObservableObject {
                 operation.retryCount += 1
                 operation.lastError = (error as? LocalizedError)?.errorDescription
                     ?? String(describing: error)
-                if operation.retryCount < maxRetries {
-                    failedQueue.append(operation)
-                }
+                // Always park in failedQueue. The cap on auto-retry lives in
+                // `retryFailed` (it skips ops with retryCount >= maxRetries);
+                // the op itself stays visible to the user and can be revived
+                // via the manual "Retry now" button. Silent drop on retryCount=3
+                // used to lose data permanently on persistent server errors.
+                failedQueue.append(operation)
                 #if DEBUG
                 print("SyncQueue: operation \(operation.entityType.rawValue)/\(operation.action.rawValue) failed (attempt \(operation.retryCount)): \(error)")
                 #endif
@@ -171,17 +179,22 @@ final class SyncQueue: ObservableObject {
     }
 
     /// Retry failed operations with batch-level exponential backoff.
+    /// Skips ops that have hit the auto-retry cap — those stay in `failedQueue`
+    /// awaiting manual retry. Without this gate, a persistently-failing op
+    /// would re-enter `queue` on every foreground tick, hammering the server.
     func retryFailed() async {
         guard !failedQueue.isEmpty else { return }
         guard !CacheManager.shared.isOffline else { return }
 
-        let maxRetryCount = failedQueue.map(\.retryCount).max() ?? 0
+        let eligible = failedQueue.filter { $0.retryCount < maxRetries }
+        guard !eligible.isEmpty else { return }
+
+        let maxRetryCount = eligible.map(\.retryCount).max() ?? 0
         let batchDelay = pow(2.0, Double(maxRetryCount))
         try? await Task.sleep(for: .seconds(batchDelay))
 
-        let toRetry = failedQueue
-        failedQueue.removeAll()
-        queue.append(contentsOf: toRetry)
+        failedQueue.removeAll { op in eligible.contains(where: { $0.id == op.id }) }
+        queue.append(contentsOf: eligible)
         republishSnapshots()
 
         await processQueue()

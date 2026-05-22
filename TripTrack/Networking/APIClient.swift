@@ -196,6 +196,18 @@ final class APIClient {
                 apiAuthLog.error("POST \(path, privacy: .public) USER_NOT_AUTH after refresh — forcing signout")
                 AuthService.shared.forceSignOut()
             }
+            // UNKNOWN_SERVER_ERROR is the catch-all when the backend's
+            // JsonRpcExceptionFilter sees a non-AppError exception (DB
+            // connection blip, unhandled crash mid-handler, transient
+            // pool exhaustion). These usually heal on a single retry —
+            // retrying once at this layer means the upper-layer
+            // SyncQueue stops parking ops to `failedQueue` for one-off
+            // server hiccups, and the user sees a clean banner.
+            if code == "UNKNOWN_SERVER_ERROR", !isRetry {
+                apiAuthLog.notice("POST \(path, privacy: .public) UNKNOWN_SERVER_ERROR — retrying once after 1s")
+                try? await Task.sleep(for: .seconds(1))
+                return try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: true)
+            }
             postBanIfNeeded(code)
             let lastModified = envelope.serverLastModifiedAt.flatMap { ISODate.parse($0) }
             throw APIError.from(code: code, message: message, serverVersion: envelope.serverVersion, serverLastModifiedAt: lastModified)
@@ -247,6 +259,12 @@ final class APIClient {
             if code == "USER_NOT_AUTH", requiresAuth, isRetry {
                 apiAuthLog.error("GET \(path, privacy: .public) USER_NOT_AUTH after refresh — forcing signout")
                 AuthService.shared.forceSignOut()
+            }
+            // See performPost: retry-once on transient server errors.
+            if code == "UNKNOWN_SERVER_ERROR", !isRetry {
+                apiAuthLog.notice("GET \(path, privacy: .public) UNKNOWN_SERVER_ERROR — retrying once after 1s")
+                try? await Task.sleep(for: .seconds(1))
+                return try await performGet(path: path, requiresAuth: requiresAuth, isRetry: true)
             }
             postBanIfNeeded(code)
             throw APIError.from(code: code, message: envelope.message ?? "", serverVersion: envelope.serverVersion, serverLastModifiedAt: nil)
@@ -303,6 +321,12 @@ final class APIClient {
             if code == "USER_NOT_AUTH", isRetry {
                 apiAuthLog.error("MULTIPART \(path, privacy: .public) USER_NOT_AUTH after refresh — forcing signout")
                 AuthService.shared.forceSignOut()
+            }
+            // See performPost: retry-once on transient server errors.
+            if code == "UNKNOWN_SERVER_ERROR", !isRetry {
+                apiAuthLog.notice("MULTIPART \(path, privacy: .public) UNKNOWN_SERVER_ERROR — retrying once after 1s")
+                try? await Task.sleep(for: .seconds(1))
+                return try await performMultipart(path: path, fields: fields, file: file, isRetry: true)
             }
             postBanIfNeeded(code)
             throw APIError.from(code: code, message: envelope.message ?? "", serverVersion: envelope.serverVersion, serverLastModifiedAt: nil)

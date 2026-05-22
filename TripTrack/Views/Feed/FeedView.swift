@@ -559,29 +559,27 @@ struct FeedView: View {
         }
     }
 
-    /// Surfaced when the SyncQueue has parked one or more ops in `failedQueue`
-    /// — that only happens after a full retry exhaustion (3 attempts × all
-    /// underlying network retries), so a single entry here is already a
-    /// "the network is genuinely refusing to cooperate" signal. Carefully
-    /// avoids suggesting a specific remediation (no VPN mention) — just
-    /// nudges the user to try a different connection. Auto-dismisses when
-    /// the queue drains, so no manual close button.
+    /// Surfaced when the SyncQueue has parked one or more ops in `failedQueue`.
+    /// The cause can be either a network outage or a server-side error
+    /// (UNKNOWN_SERVER_ERROR, 5xx, etc) — they reach the same failed bucket.
+    /// We split the copy: if the network monitor says we're offline → network
+    /// language; otherwise → generic "sync issue" language. Saying "server
+    /// unreachable" while connectivity is fine and the server is just
+    /// returning 200-envelope errors is misleading. Auto-dismisses when the
+    /// queue drains, so no manual close button.
     @ViewBuilder
     private func connectivityBanner(_ c: AppTheme.Colors) -> some View {
         if !syncQueue.failed.isEmpty {
+            let isNetworkDown = CacheManager.shared.isOffline
             HStack(spacing: 12) {
-                Image(systemName: "wifi.exclamationmark")
+                Image(systemName: isNetworkDown ? "wifi.exclamationmark" : "arrow.triangle.2.circlepath")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(.orange)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(lang.language == .ru
-                         ? "Нет связи с сервером"
-                         : "Server unreachable")
+                    Text(bannerTitle(isNetworkDown: isNetworkDown))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(c.text)
-                    Text(lang.language == .ru
-                         ? "Попробуйте сменить сеть или подождите — мы повторим автоматически."
-                         : "Try a different network or wait — we'll retry automatically.")
+                    Text(bannerSubtitle(isNetworkDown: isNetworkDown))
                         .font(.system(size: 12))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -592,6 +590,24 @@ struct FeedView: View {
             .surfaceCard(cornerRadius: 14)
             .padding(.top, 6)
         }
+    }
+
+    private func bannerTitle(isNetworkDown: Bool) -> String {
+        if isNetworkDown {
+            return lang.language == .ru ? "Нет связи с сервером" : "Server unreachable"
+        }
+        return lang.language == .ru ? "Не всё синхронизировано" : "Sync incomplete"
+    }
+
+    private func bannerSubtitle(isNetworkDown: Bool) -> String {
+        if isNetworkDown {
+            return lang.language == .ru
+                ? "Попробуйте сменить сеть или подождите — мы повторим автоматически."
+                : "Try a different network or wait — we'll retry automatically."
+        }
+        return lang.language == .ru
+            ? "Несколько операций не загрузились на сервер. Мы повторим автоматически — также можно нажать «Повторить» в настройках синхронизации."
+            : "A few items didn't upload. We'll retry automatically — or tap Retry in sync settings."
     }
 
     /// Compact "Sign in to follow & react" pill at the top of the public feed
