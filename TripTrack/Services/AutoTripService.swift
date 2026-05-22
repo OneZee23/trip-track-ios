@@ -2,6 +2,13 @@ import Foundation
 import UserNotifications
 import CoreLocation
 import UIKit
+import OSLog
+
+/// Auto-detect debug log. Goes through `com.triptrack` subsystem so
+/// `DebugLogExporter` picks it up in user-shared diagnostic bundles. Every
+/// state transition and decision branch logs at `.notice` so we can replay
+/// the entire sequence post-hoc when a user reports a bug from days ago.
+private let autoLog = Logger(subsystem: "com.triptrack", category: "auto-trip")
 
 @MainActor
 final class AutoTripService: ObservableObject {
@@ -82,8 +89,12 @@ final class AutoTripService: ObservableObject {
         // `selector:` API that doesn't dedupe), and re-armed BLE / motion
         // monitoring redundantly. First call wins; subsequent calls
         // no-op until `stopMonitoring`.
-        guard !isMonitoringActive else { return }
+        guard !isMonitoringActive else {
+            autoLog.notice("[auto.monitor_start.skip] reason=already_active")
+            return
+        }
         isMonitoringActive = true
+        autoLog.notice("[auto.monitor_start] mode=\(self.settings.autoRecordMode.rawValue, privacy: .public)")
         bluetoothDetector.startMonitoring()
         audioRouteDetector.startMonitoring()
         motionDetector.startLiveUpdates()
@@ -93,6 +104,7 @@ final class AutoTripService: ObservableObject {
     func stopMonitoring() {
         guard isMonitoringActive else { return }
         isMonitoringActive = false
+        autoLog.notice("[auto.monitor_stop]")
         bluetoothDetector.stopMonitoring()
         audioRouteDetector.stopMonitoring()
         motionDetector.stopLiveUpdates()
@@ -155,25 +167,47 @@ final class AutoTripService: ObservableObject {
     private var foregroundRetryObserver: Any?
 
     private func handleAutomotiveDetected() {
-        guard let vm = mapViewModel else { return }
+        guard let vm = mapViewModel else {
+            autoLog.notice("[auto.detected.skip] reason=no_view_model")
+            return
+        }
+
+        let lastEndAgo = lastAutomotiveEndTime.map { Int(Date().timeIntervalSince($0)) }
+        autoLog.notice("[auto.detected] mode=\(self.settings.autoRecordMode.rawValue, privacy: .public) isRecording=\(vm.isRecording, privacy: .public) hasReminded=\(self.hasRemindedForCurrentTrip, privacy: .public) lastAutomotiveEnd_s_ago=\(lastEndAgo.map(String.init) ?? "nil", privacy: .public)")
 
         // If a trip is already recording but it's been parked > staleTripTimeout,
         // this automotive event is the start of a *new* session — finish the
         // stale one before triggering. Without this, a previous trip whose
         // background auto-stop never fired (Timer.scheduledTimer doesn't run
         // while the app is suspended) silently absorbs the next drive.
+        //
+        // Only auto-split in `.auto` mode. In `.remind`/`.off` silently ending
+        // the current recording would violate "ask first"; the user will see
+        // the stale trip still active in the UI and can finalize it manually
+        // (consistent with `recoverStaleTripIfNeeded`).
         if vm.isRecording {
-            guard isStaleByMovement else { return }
+            let stale = isStaleByMovement
+            guard settings.autoRecordMode == .auto, stale else {
+                autoLog.notice("[auto.detected.skip] reason=already_recording mode=\(self.settings.autoRecordMode.rawValue, privacy: .public) stale_15min=\(stale, privacy: .public)")
+                return
+            }
+            autoLog.notice("[auto.detected.split_session] reason=stale_recording_in_auto_mode")
             cancelAutoStopTimer()
             autoStopTrip()
         }
 
         // Don't re-remind for the same driving session
-        if settings.autoRecordMode == .remind && hasRemindedForCurrentTrip { return }
+        if settings.autoRecordMode == .remind && hasRemindedForCurrentTrip {
+            autoLog.notice("[auto.detected.skip] reason=already_reminded_this_session")
+            return
+        }
 
         // Deduplicate: BT + Motion can fire together within milliseconds
         if let last = lastTripTriggerTime,
-           Date().timeIntervalSince(last) < AutoTripPolicy.triggerDeduplicationWindow { return }
+           Date().timeIntervalSince(last) < AutoTripPolicy.triggerDeduplicationWindow {
+            autoLog.notice("[auto.detected.skip] reason=dedup_window since_last_s=\(Int(Date().timeIntervalSince(last)), privacy: .public)")
+            return
+        }
         lastTripTriggerTime = Date()
 
         // Check if BT audio route matches a saved device → select vehicle
@@ -242,9 +276,16 @@ final class AutoTripService: ObservableObject {
         // the user opted out of automatic management — silently ending their
         // trip on foreground entry would feel like the app stole their data.
         // They'll see the trip is still recording and can stop it manually.
-        guard settings.autoRecordMode == .auto else { return }
+        guard settings.autoRecordMode == .auto else {
+            autoLog.notice("[auto.recover_stale.skip] reason=mode=\(self.settings.autoRecordMode.rawValue, privacy: .public)")
+            return
+        }
         guard let vm = mapViewModel, vm.isRecording else { return }
-        guard movementTracker.isStale(threshold: AutoTripPolicy.staleTripTimeout) else { return }
+        guard movementTracker.isStale(threshold: AutoTripPolicy.staleTripTimeout) else {
+            autoLog.notice("[auto.recover_stale.skip] reason=not_stale")
+            return
+        }
+        autoLog.notice("[auto.recover_stale.fire] reason=foreground_entry_stale_trip")
         autoStopTrip()
     }
 
@@ -256,8 +297,12 @@ final class AutoTripService: ObservableObject {
         // query, dispatch barriers). One last guard here so a slow callback
         // never sends an "are you in the car?" prompt while a trip is
         // already running.
-        guard !vm.isRecording else { return }
+        guard !vm.isRecording else {
+            autoLog.notice("[auto.trip_start.skip] reason=already_recording device=\"\(deviceName, privacy: .public)\"")
+            return
+        }
         let isInForeground = UIApplication.shared.applicationState == .active
+        autoLog.notice("[auto.trip_start] mode=\(self.settings.autoRecordMode.rawValue, privacy: .public) foreground=\(isInForeground, privacy: .public) device=\"\(deviceName, privacy: .public)\" hasEstimatedStart=\(estimatedStartDate != nil, privacy: .public)")
 
         // Request background task to prevent iOS from suspending before GPS warms up
         if !isInForeground {
@@ -306,12 +351,12 @@ final class AutoTripService: ObservableObject {
     private func setupDetectors() {
         bluetoothDetector.onDeviceEvent = { [weak self] event in
             Task { @MainActor in
-                self?.handleDeviceEvent(event)
+                self?.handleDeviceEvent(event, source: "bt_cb")
             }
         }
         audioRouteDetector.onDeviceEvent = { [weak self] event in
             Task { @MainActor in
-                self?.handleDeviceEvent(event)
+                self?.handleDeviceEvent(event, source: "audio_route")
             }
         }
         motionDetector.onAutomotiveDetected = { [weak self] in
@@ -319,10 +364,12 @@ final class AutoTripService: ObservableObject {
             // Long gap since the car last stopped moving → treat as a new driving session
             if let lastEnd = self.lastAutomotiveEndTime,
                Date().timeIntervalSince(lastEnd) > AutoTripPolicy.newDrivingSessionGap {
+                autoLog.notice("[auto.motion_callback] new_session_gap_detected gap_s=\(Int(Date().timeIntervalSince(lastEnd)), privacy: .public) reset_remind_flag=true")
                 self.hasRemindedForCurrentTrip = false
             }
             if let vm = self.mapViewModel, vm.isRecording {
                 // Car moved again — cancel any pending inactivity auto-stop
+                autoLog.notice("[auto.motion_callback] cancel_stop_timer reason=car_moved_while_recording")
                 self.cancelAutoStopTimer()
             }
             self.handleAutomotiveDetected()
@@ -331,28 +378,39 @@ final class AutoTripService: ObservableObject {
             // CMMotion flickers on red lights / traffic jams — don't drive auto-stop
             // from this signal (GPS-speed inactivity does that instead). We only
             // record the timestamp so onAutomotiveDetected can spot a new session.
+            autoLog.notice("[auto.motion_callback] automotive_ended set_last_automotive_end=now")
             self?.lastAutomotiveEndTime = Date()
         }
     }
 
     // MARK: - BT Event Handling
 
-    private func handleDeviceEvent(_ event: BluetoothEvent) {
+    private func handleDeviceEvent(_ event: BluetoothEvent, source: String = "?") {
         switch event {
         case .connected(let deviceName):
+            autoLog.notice("[auto.event] kind=connect source=\(source, privacy: .public) device=\"\(deviceName, privacy: .public)\"")
             handleDeviceConnected(name: deviceName)
         case .disconnected(let deviceName):
+            autoLog.notice("[auto.event] kind=disconnect source=\(source, privacy: .public) device=\"\(deviceName, privacy: .public)\"")
             handleDeviceDisconnected(name: deviceName)
         }
     }
 
     private func handleDeviceConnected(name: String) {
-        guard let vm = mapViewModel else { return }
-        guard shouldProcessEvent(.connected, name: name) else { return }
+        guard let vm = mapViewModel else {
+            autoLog.notice("[auto.bt_connect.skip] reason=no_view_model device=\"\(name, privacy: .public)\"")
+            return
+        }
+        guard shouldProcessEvent(.connected, name: name) else {
+            autoLog.notice("[auto.bt_connect.skip] reason=debounced device=\"\(name, privacy: .public)\"")
+            return
+        }
+        autoLog.notice("[auto.bt_connect] device=\"\(name, privacy: .public)\" mode=\(self.settings.autoRecordMode.rawValue, privacy: .public) isRecording=\(vm.isRecording, privacy: .public)")
 
         if let vehicleId = settings.vehicleId(forDeviceName: name) {
             settings.selectedVehicleId = vehicleId
             settings.saveSettings()
+            autoLog.notice("[auto.bt_connect.vehicle_matched] vehicle_id=\(vehicleId.uuidString, privacy: .public)")
         }
 
         if vm.isRecording {
@@ -364,6 +422,7 @@ final class AutoTripService: ObservableObject {
             // Otherwise (BT just flapped, came back) keep the trip going and
             // cancel any pending auto-stop.
             if isStaleByMovement {
+                autoLog.notice("[auto.bt_connect.path] taken=split_stale_then_new_trip")
                 cancelAutoStopTimer()
                 autoStopTrip()
                 // Brief gap so the auto-stop notification renders before the
@@ -375,47 +434,75 @@ final class AutoTripService: ObservableObject {
                     self.triggerTripStart(vm: vm, deviceName: name)
                 }
             } else {
+                autoLog.notice("[auto.bt_connect.path] taken=keep_recording_cancel_stop_timer")
                 cancelAutoStopTimer()
             }
             return
         }
 
+        autoLog.notice("[auto.bt_connect.path] taken=trigger_new_trip")
         cancelAutoStopTimer()
         triggerTripStart(vm: vm, deviceName: name)
     }
 
     private func handleDeviceDisconnected(name: String) {
-        guard let vm = mapViewModel else { return }
-        guard shouldProcessEvent(.disconnected, name: name) else { return }
+        guard let vm = mapViewModel else {
+            autoLog.notice("[auto.bt_disconnect.skip] reason=no_view_model device=\"\(name, privacy: .public)\"")
+            return
+        }
+        guard shouldProcessEvent(.disconnected, name: name) else {
+            autoLog.notice("[auto.bt_disconnect.skip] reason=debounced device=\"\(name, privacy: .public)\"")
+            return
+        }
 
         // BT disconnect is a strong end-of-session signal — always reset remind flag
         hasRemindedForCurrentTrip = false
 
-        guard vm.isRecording else { return }
+        let stale5 = isStaleByMovement(threshold: AutoTripPolicy.bluetoothDisconnectFastStopIdleThreshold)
+        let tripDist = vm.tripManager.activeTrip?.distance ?? 0
+        let tripDur = vm.tripManager.activeTrip?.duration ?? 0
+        autoLog.notice("[auto.bt_disconnect] device=\"\(name, privacy: .public)\" mode=\(self.settings.autoRecordMode.rawValue, privacy: .public) isRecording=\(vm.isRecording, privacy: .public) stale_5min=\(stale5, privacy: .public) dist_m=\(Int(tripDist), privacy: .public) dur_s=\(Int(tripDur), privacy: .public)")
 
-        // BT off + already-idle trip = double confirmation user has parked.
-        // Skip the 3-min grace and end now — the grace is for BT-flap
-        // glitches, not for an obviously-finished trip.
-        if isStaleByMovement(threshold: AutoTripPolicy.bluetoothDisconnectFastStopIdleThreshold) {
-            autoStopTrip()
+        guard vm.isRecording else {
+            autoLog.notice("[auto.bt_disconnect.skip] reason=not_recording")
             return
         }
 
-        // BT off after a real drive = user got out and is now walking. If
-        // we wait the 3-min grace, GPS keeps logging footsteps (~5 km/h,
-        // points >5m apart so drift filter doesn't reject them) and a
-        // 50-min drive becomes a 53-min "drive" with 250m of walking
-        // tacked on. End now and trim to the last distance-change time.
-        // The 3-min grace is reserved for trips so short they could only
-        // be a BT glitch in the first place.
-        if let trip = vm.tripManager.activeTrip,
-           trip.distance >= AutoTripPolicy.immediateEndOnBtDisconnectMinDistance,
-           trip.duration >= AutoTripPolicy.immediateEndOnBtDisconnectMinDuration {
-            autoStopTrip()
-            return
+        // Fast-stop heuristics that skip the 3-min grace are valid only in
+        // `.auto` mode. In `.remind` the user opted into "ask first" — silently
+        // ending the recording (even with confidence) violates that contract.
+        // Same gating as `recoverStaleTripIfNeeded`. A false BT-disconnect
+        // event mid-drive used to hit the "real-drive" path and immediately
+        // kill the trip; the prompt+timer path below handles BT flap correctly
+        // via `cancelAutoStopTimer` on reconnect.
+        if settings.autoRecordMode == .auto {
+            // BT off + already-idle trip = double confirmation user has parked.
+            // Skip the 3-min grace and end now — the grace is for BT-flap
+            // glitches, not for an obviously-finished trip.
+            if stale5 {
+                autoLog.notice("[auto.bt_disconnect.path] taken=immediate_stop_stale")
+                autoStopTrip()
+                return
+            }
+
+            // BT off after a real drive = user got out and is now walking. If
+            // we wait the 3-min grace, GPS keeps logging footsteps (~5 km/h,
+            // points >5m apart so drift filter doesn't reject them) and a
+            // 50-min drive becomes a 53-min "drive" with 250m of walking
+            // tacked on. End now and trim to the last distance-change time.
+            // The 3-min grace is reserved for trips so short they could only
+            // be a BT glitch in the first place.
+            if let trip = vm.tripManager.activeTrip,
+               trip.distance >= AutoTripPolicy.immediateEndOnBtDisconnectMinDistance,
+               trip.duration >= AutoTripPolicy.immediateEndOnBtDisconnectMinDuration {
+                autoLog.notice("[auto.bt_disconnect.path] taken=immediate_stop_real_drive thresh_dist_m=\(Int(AutoTripPolicy.immediateEndOnBtDisconnectMinDistance), privacy: .public) thresh_dur_s=\(Int(AutoTripPolicy.immediateEndOnBtDisconnectMinDuration), privacy: .public)")
+                autoStopTrip()
+                return
+            }
         }
 
         let timeout = settings.autoStopTimeout
+        autoLog.notice("[auto.bt_disconnect.path] taken=prompt_timer timeout_min=\(timeout, privacy: .public)")
         notificationManager.sendTripStopPrompt(minutes: timeout, reason: .bluetooth)
         startAutoStopTimer(minutes: timeout)
     }
@@ -433,6 +520,7 @@ final class AutoTripService: ObservableObject {
     // MARK: - Auto-stop Timer
 
     private func startAutoStopTimer(minutes: Int) {
+        autoLog.notice("[auto.stop_timer.start] timeout_min=\(minutes, privacy: .public)")
         cancelAutoStopTimer()
 
         autoStopTimer = Timer.scheduledTimer(
@@ -440,6 +528,7 @@ final class AutoTripService: ObservableObject {
             repeats: false
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                autoLog.notice("[auto.stop_timer.fired]")
                 self?.autoStopTrip()
             }
         }
@@ -464,6 +553,9 @@ final class AutoTripService: ObservableObject {
     }
 
     private func cancelAutoStopTimer() {
+        if autoStopTimer != nil {
+            autoLog.notice("[auto.stop_timer.cancel]")
+        }
         autoStopTimer?.invalidate()
         autoStopTimer = nil
         notificationManager.cancelTripStopPrompt()
@@ -473,16 +565,24 @@ final class AutoTripService: ObservableObject {
     }
 
     private func autoStopTrip() {
-        guard let vm = mapViewModel, vm.isRecording else { return }
+        guard let vm = mapViewModel, vm.isRecording else {
+            autoLog.notice("[auto.trip_stop.skip] reason=not_recording")
+            return
+        }
+        let lastChange = movementTracker.lastChangeTime
+        let lastChangeAgo = lastChange.map { Int(Date().timeIntervalSince($0)) }
         if let trip = vm.tripManager.activeTrip {
+            autoLog.notice("[auto.trip_stop] dist_m=\(Int(trip.distance), privacy: .public) dur_s=\(Int(trip.duration), privacy: .public) last_change_s_ago=\(lastChangeAgo.map(String.init) ?? "nil", privacy: .public)")
             notificationManager.sendAutoStopNotification(distanceKm: trip.distanceKm, duration: trip.formattedDuration)
+        } else {
+            autoLog.notice("[auto.trip_stop] active_trip=nil")
         }
         // Hand the moment the trip stopped moving down to `stopTrip` — for
         // stale-recovery / inactivity-fired auto-stops the wall clock is
         // 10–15+ min past the real end, and `trimmedEndDate` can't recover
         // it from track points (parked tails are all-filtered-out). Without
         // this the trip duration includes the entire detection window.
-        vm.stopRecording(suggestedEndDate: movementTracker.lastChangeTime)
+        vm.stopRecording(suggestedEndDate: lastChange)
         hasRemindedForCurrentTrip = false
     }
 
@@ -493,8 +593,12 @@ final class AutoTripService: ObservableObject {
             forName: .autoTripStartRequested, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                autoLog.notice("[auto.notification_action] action=start_requested_by_user")
                 self?.hasRemindedForCurrentTrip = false
-                guard let vm = self?.mapViewModel, !vm.isRecording else { return }
+                guard let vm = self?.mapViewModel, !vm.isRecording else {
+                    autoLog.notice("[auto.notification_action.skip] action=start reason=already_recording_or_no_vm")
+                    return
+                }
                 // Pre-warm GPS immediately — don't wait for full startRecording() chain
                 vm.locationManager.startTracking()
                 vm.startRecording()
@@ -505,6 +609,7 @@ final class AutoTripService: ObservableObject {
             forName: .autoTripStopRequested, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                autoLog.notice("[auto.notification_action] action=stop_requested_by_user")
                 self?.cancelAutoStopTimer()
                 self?.autoStopTrip()
             }
@@ -514,6 +619,7 @@ final class AutoTripService: ObservableObject {
             forName: .autoTripContinueRequested, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
+                autoLog.notice("[auto.notification_action] action=continue_requested_by_user")
                 guard let self else { return }
                 self.cancelAutoStopTimer()
                 // Push the inactivity window forward — user explicitly said

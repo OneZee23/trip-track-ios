@@ -1,5 +1,8 @@
 import Foundation
 import CoreBluetooth
+import OSLog
+
+private let btLog = Logger(subsystem: "com.triptrack", category: "bluetooth")
 
 enum BluetoothEvent {
     case connected(deviceName: String)
@@ -36,7 +39,11 @@ final class BluetoothDetector: NSObject, ObservableObject {
     // MARK: - Lifecycle
 
     func startMonitoring() {
-        guard centralManager == nil else { return }
+        guard centralManager == nil else {
+            btLog.notice("[bt.start_monitor.skip] reason=already_running")
+            return
+        }
+        btLog.notice("[bt.start_monitor]")
         centralManager = CBCentralManager(delegate: self, queue: nil, options: [
             CBCentralManagerOptionRestoreIdentifierKey: "com.onezee.TripTrack.bluetooth",
             CBCentralManagerOptionShowPowerAlertKey: false
@@ -44,6 +51,7 @@ final class BluetoothDetector: NSObject, ObservableObject {
     }
 
     func stopMonitoring() {
+        btLog.notice("[bt.stop_monitor] tracked_devices=\(self.connectedDeviceNames.count, privacy: .public)")
         stopScanning()
         centralManager = nil
         monitoredPeripherals.removeAll()
@@ -105,6 +113,8 @@ final class BluetoothDetector: NSObject, ObservableObject {
 
 extension BluetoothDetector: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        btLog.notice("[bt.state_changed] state=\(BluetoothDetector.stateString(central.state), privacy: .public) pendingScan=\(self.pendingScan, privacy: .public) connected_count=\(self.connectedDeviceNames.count, privacy: .public)")
+
         Task { @MainActor [weak self] in
             self?.isBluetoothAvailable = central.state == .poweredOn
         }
@@ -117,9 +127,22 @@ extension BluetoothDetector: CBCentralManagerDelegate {
         if central.state == .poweredOff {
             // Treat as disconnect for all connected saved devices
             for name in connectedDeviceNames {
+                btLog.notice("[bt.synthetic_disconnect] reason=bluetooth_powered_off device=\"\(name, privacy: .public)\"")
                 onDeviceEvent?(.disconnected(deviceName: name))
             }
             connectedDeviceNames.removeAll()
+        }
+    }
+
+    private static func stateString(_ state: CBManagerState) -> String {
+        switch state {
+        case .unknown: return "unknown"
+        case .resetting: return "resetting"
+        case .unsupported: return "unsupported"
+        case .unauthorized: return "unauthorized"
+        case .poweredOff: return "poweredOff"
+        case .poweredOn: return "poweredOn"
+        @unknown default: return "undef_\(state.rawValue)"
         }
     }
 
@@ -150,20 +173,32 @@ extension BluetoothDetector: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        guard let name = peripheral.name, isSavedDevice(name: name) else { return }
+        guard let name = peripheral.name, isSavedDevice(name: name) else {
+            btLog.notice("[bt.didConnect.skip] reason=not_saved device=\"\(peripheral.name ?? "<nil>", privacy: .public)\"")
+            return
+        }
         retryCount.removeValue(forKey: peripheral.identifier)
-        guard !connectedDeviceNames.contains(name) else { return }
+        guard !connectedDeviceNames.contains(name) else {
+            btLog.notice("[bt.didConnect.dedup] device=\"\(name, privacy: .public)\" already_tracked=true")
+            return
+        }
+        btLog.notice("[bt.didConnect] device=\"\(name, privacy: .public)\" uuid=\(peripheral.identifier.uuidString, privacy: .public)")
         connectedDeviceNames.insert(name)
         onDeviceEvent?(.connected(deviceName: name))
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        guard let name = peripheral.name, isSavedDevice(name: name) else { return }
+        guard let name = peripheral.name, isSavedDevice(name: name) else {
+            btLog.notice("[bt.didDisconnect.skip] reason=not_saved device=\"\(peripheral.name ?? "<nil>", privacy: .public)\" error=\(error?.localizedDescription ?? "nil", privacy: .public)")
+            return
+        }
+        btLog.notice("[bt.didDisconnect] device=\"\(name, privacy: .public)\" uuid=\(peripheral.identifier.uuidString, privacy: .public) error=\(error?.localizedDescription ?? "nil", privacy: .public)")
         connectedDeviceNames.remove(name)
         onDeviceEvent?(.disconnected(deviceName: name))
 
         // Attempt to reconnect for continued monitoring
         if centralManager?.state == .poweredOn {
+            btLog.notice("[bt.didDisconnect.reconnect_attempt] device=\"\(name, privacy: .public)\"")
             central.connect(peripheral, options: nil)
         }
     }
@@ -171,12 +206,15 @@ extension BluetoothDetector: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         let id = peripheral.identifier
         let count = (retryCount[id] ?? 0) + 1
+        let name = peripheral.name ?? "<unnamed>"
         guard count <= Self.maxRetries else {
+            btLog.notice("[bt.didFailToConnect.give_up] device=\"\(name, privacy: .public)\" retries=\(count - 1, privacy: .public) error=\(error?.localizedDescription ?? "nil", privacy: .public)")
             retryCount.removeValue(forKey: id)
             return
         }
         retryCount[id] = count
         let delay = TimeInterval(count * 5) // backoff: 5s, 10s, 15s
+        btLog.notice("[bt.didFailToConnect.retry] device=\"\(name, privacy: .public)\" attempt=\(count, privacy: .public) delay_s=\(Int(delay), privacy: .public) error=\(error?.localizedDescription ?? "nil", privacy: .public)")
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard self?.centralManager?.state == .poweredOn else { return }
@@ -187,11 +225,12 @@ extension BluetoothDetector: CBCentralManagerDelegate {
     // MARK: - State Restoration
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
-        if let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
-            for peripheral in peripherals {
-                monitoredPeripherals[peripheral.identifier] = peripheral
-                peripheral.delegate = nil
-            }
+        let peripherals = (dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral]) ?? []
+        btLog.notice("[bt.willRestoreState] restored_peripherals=\(peripherals.count, privacy: .public)")
+        for peripheral in peripherals {
+            btLog.notice("[bt.willRestoreState.peripheral] name=\"\(peripheral.name ?? "<nil>", privacy: .public)\" uuid=\(peripheral.identifier.uuidString, privacy: .public)")
+            monitoredPeripherals[peripheral.identifier] = peripheral
+            peripheral.delegate = nil
         }
     }
 }

@@ -57,6 +57,7 @@ final class AuthService: ObservableObject {
         NotificationCenter.default.addObserver(
             forName: .userBanned, object: nil, queue: .main,
         ) { [weak self] _ in
+            authLog.notice("[auth.signout_trigger] reason=user_banned_notification")
             Task { @MainActor in await self?.signOut() }
         }
     }
@@ -351,6 +352,7 @@ final class AuthService: ObservableObject {
     }
 
     func signOut() async {
+        authLog.notice("[auth.signout.start]")
         // Cancel any in-flight post-signin sync chain BEFORE wiping tokens.
         // If we wipe first, the chain's API calls fail with USER_NOT_AUTH,
         // forceSignOut fires, double-signOut chaos. Cancellation lets each
@@ -358,6 +360,7 @@ final class AuthService: ObservableObject {
         // Best-effort logout — ignore error
         let _: EmptyResponse? = try? await APIClient.shared.post(APIEndpoint.logout, body: EmptyRequest())
         clearLocalIdentity()
+        authLog.notice("[auth.signout.done]")
     }
 
     /// Shared local cleanup invoked after both `signOut` (via `/auth/logout`)
@@ -483,6 +486,7 @@ final class AuthService: ObservableObject {
     // MARK: - Force Sign Out (sync wrapper for APIClient fallback)
 
     func forceSignOut() {
+        authLog.notice("[auth.signout_trigger] reason=force_sign_out_called_by_api_client")
         Task { await signOut() }
     }
 
@@ -499,13 +503,19 @@ final class AuthService: ObservableObject {
             Task { @MainActor [weak self] in
                 switch state {
                 case .authorized:
+                    authLog.notice("[auth.credential_state] state=authorized")
                     if self?.isSignedIn != true { self?.isSignedIn = true }
                     if let accountId = TokenStore.shared.accountId {
                         SentryService.setAccount(id: accountId.uuidString)
                     }
-                case .revoked, .notFound:
+                case .revoked:
+                    authLog.notice("[auth.signout_trigger] reason=apple_credential_revoked")
+                    await self?.signOut()
+                case .notFound:
+                    authLog.notice("[auth.signout_trigger] reason=apple_credential_not_found")
                     await self?.signOut()
                 default:
+                    authLog.notice("[auth.credential_state] state=undef_\(state.rawValue, privacy: .public)")
                     break
                 }
             }
