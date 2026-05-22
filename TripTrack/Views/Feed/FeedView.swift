@@ -468,7 +468,10 @@ struct FeedView: View {
             .background(c.bg)
             .refreshable {
                 feedVM.language = lang.language
-                feedVM.loadTrips()
+                // Async variant runs the CoreData fetch on a background
+                // context so the refresh spinner doesn't freeze on iPhone
+                // 12 + sizable trip library.
+                await feedVM.loadTripsAsync()
             }
             .onReceive(NotificationCenter.default.publisher(for: .feedScrollToTop)) { _ in
                 if !authorPath.isEmpty { authorPath.removeAll() }

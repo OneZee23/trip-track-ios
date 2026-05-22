@@ -74,6 +74,34 @@ final class CoreDataTripRepository: TripRepository {
         return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
     }
 
+    /// Async variant of `fetchAllTrips`. Runs the entire fetch on a private
+    /// queue background context so the main thread stays free for the
+    /// SwiftUI refresh control animation. Used by `FeedViewModel.loadTripsAsync`
+    /// which is invoked from pull-to-refresh — on older hardware (iPhone 12
+    /// with 70+ trips) the synchronous viewContext fetch caused a visible
+    /// 100-300ms freeze of the refresh spinner.
+    ///
+    /// Trip is a value type, so the returned array is safe to consume on
+    /// any actor. NSManagedObject access stays inside the perform block
+    /// (the context's private queue) — no entity leaks across queues.
+    func fetchAllTripsAsync() async -> [Trip] {
+        let bgContext = persistenceController.container.newBackgroundContext()
+        return await withCheckedContinuation { (cont: CheckedContinuation<[Trip], Never>) in
+            bgContext.perform {
+                let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+                request.predicate = self.completedTripPredicate
+                request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
+                request.fetchBatchSize = 25
+                guard let entities = try? bgContext.fetch(request) else {
+                    cont.resume(returning: [])
+                    return
+                }
+                let trips = entities.compactMap { self.tripFromEntity($0, includeTrackPoints: false) }
+                cont.resume(returning: trips)
+            }
+        }
+    }
+
     /// Cheap existence probe — `fetchLimit = 1` + predicate combo bails as
     /// soon as Core Data finds one match, no entity decode. Used by feed
     /// empty-state to decide whether to surface the "publish your first

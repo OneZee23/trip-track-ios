@@ -181,6 +181,18 @@ final class TripManager: ObservableObject {
         repository.fetchAllTrips()
     }
 
+    /// Async variant of `fetchTrips()` for callers that can wait — like the
+    /// Feed view's pull-to-refresh handler. Off-loads the CoreData read from
+    /// the main thread so the refresh spinner doesn't freeze on iPhone 12+
+    /// with sizable trip libraries. Falls back to the sync path for mocked
+    /// `TripRepository` implementations in tests.
+    func fetchTripsAsync() async -> [Trip] {
+        if let coreRepo = repository as? CoreDataTripRepository {
+            return await coreRepo.fetchAllTripsAsync()
+        }
+        return repository.fetchAllTrips()
+    }
+
     func hasAnyPrivateTrip() -> Bool {
         repository.hasAnyPrivateTrip()
     }

@@ -118,6 +118,21 @@ final class FeedViewModel: ObservableObject {
         applyFilters()
     }
 
+    /// Async pull-to-refresh entry point. Runs the CoreData fetch on a
+    /// background context (see `CoreDataTripRepository.fetchAllTripsAsync`)
+    /// so the main thread stays free for the SwiftUI `.refreshable` spinner
+    /// animation. Without this, the synchronous viewContext fetch caused a
+    /// visible ~200ms freeze on iPhone 12 / 70+ trip libraries.
+    func loadTripsAsync() async {
+        var fetched = await tripManager.fetchTripsAsync()
+        if let pendingId = pendingDeleteTrip?.id {
+            fetched.removeAll { $0.id == pendingId }
+        }
+        allTrips = fetched
+        rebuildCalendarCaches()
+        applyFilters()
+    }
+
     func retryGeocodingIfNeeded() {
         tripManager.retryGeocodingForUntitledTrips()
     }
