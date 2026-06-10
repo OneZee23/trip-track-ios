@@ -87,7 +87,11 @@ struct IdleHUDView: View {
             ForEach(settings.vehicles) { vehicle in
                 Button {
                     Haptics.selection()
-                    settings.selectedVehicleId = vehicle.id
+                    // Persist the pick — a bare `selectedVehicleId =` would not
+                    // write through to CoreData, so the slide-to-start (which
+                    // re-reads from the settings entity) would record the trip
+                    // against the previously-saved car.
+                    settings.selectVehicle(id: vehicle.id)
                 } label: {
                     if vehicle.id == settings.selectedVehicleId {
                         Label(vehicle.name, systemImage: "checkmark")

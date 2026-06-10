@@ -32,6 +32,11 @@ struct SignInPromptSheet: View {
     }
 
     let action: Action
+    /// Fired exactly once, on a *successful* sign-in, right before the sheet
+    /// dismisses. Lets the presenter resume the action the guest originally
+    /// tapped (e.g. share / react) instead of silently dropping it. Not called
+    /// on cancel / "maybe later" / Apple failure.
+    var onAuthenticated: (() -> Void)? = nil
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var auth: AuthService
     @Environment(\.colorScheme) private var scheme
@@ -93,7 +98,10 @@ struct SignInPromptSheet: View {
                             signInPromptLog.debug("✅ got credential")
                             Task {
                                 await auth.handleAuthorization(authorization)
-                                if auth.isSignedIn { dismiss() }
+                                if auth.isSignedIn {
+                                    onAuthenticated?()
+                                    dismiss()
+                                }
                                 else if auth.lastAuthError != nil {
                                     // Never echo `String(describing: APIError)` — for
                                     // `unknownServer` it would surface server-controlled

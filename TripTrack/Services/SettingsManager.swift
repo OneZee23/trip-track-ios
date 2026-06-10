@@ -227,6 +227,19 @@ final class SettingsManager: ObservableObject {
         scheduleSettingsSync()
     }
 
+    /// Persisting vehicle selection — single source of truth for "which car".
+    /// Always use this instead of assigning `selectedVehicleId` directly: a bare
+    /// assignment mutates only the in-memory @Published value, but the recording
+    /// start path re-reads the vehicle from the *persisted* UserSettingsEntity
+    /// (MapViewModel.selectedVehicleId → fetchSettingsEntity). A missing save
+    /// there is exactly why Shortcuts/automations and the idle quick-picker
+    /// always started with the stale (first) car. Setting + saving here keeps
+    /// the two stores in lockstep.
+    func selectVehicle(id: UUID?) {
+        selectedVehicleId = id
+        saveSettings()
+    }
+
     // MARK: - Vehicles
 
     private func loadVehicles() {

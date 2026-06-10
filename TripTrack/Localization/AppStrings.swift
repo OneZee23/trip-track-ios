@@ -9,7 +9,7 @@ enum AppStrings {
         lang == .ru ? "Запись" : "Record"
     }
     static func regions(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Регионы" : "Regions"
+        lang == .ru ? "Места" : "Places"
     }
     static func profile(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Профиль" : "Profile"

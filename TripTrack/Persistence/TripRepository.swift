@@ -22,6 +22,7 @@ protocol TripRepository {
     func updateTitle(for tripId: UUID, title: String)
     func updateNotes(for tripId: UUID, notes: String)
     func updatePrivacy(for tripId: UUID, isPrivate: Bool)
+    func updateVehicle(for tripId: UUID, vehicleId: UUID?)
     /// Resets server-side metadata after a successful `/trips/delete` triggered
     /// by un-publishing. The local entity stays — only the bookkeeping that
     /// links it to the server copy is cleared, so subsequent re-publish treats
@@ -252,6 +253,20 @@ final class CoreDataTripRepository: TripRepository {
     func updateNotes(for tripId: UUID, notes: String) {
         guard let entity = fetchEntity(id: tripId) else { return }
         entity.tripDescription = notes
+        entity.lastModifiedAt = Date()
+        if Self.shouldFlipPendingUpload(for: entity) {
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        }
+        persistenceController.save()
+    }
+
+    /// Reassign (or clear, when nil) the vehicle on a saved trip. Metadata-only
+    /// like updateTitle/updateNotes — it does NOT rebalance vehicle odometers or
+    /// stats (those accumulate at record time). `vehicleId` already rides the
+    /// existing sync payload, so no transport change is needed.
+    func updateVehicle(for tripId: UUID, vehicleId: UUID?) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        entity.vehicleId = vehicleId
         entity.lastModifiedAt = Date()
         if Self.shouldFlipPendingUpload(for: entity) {
             entity.syncStatus = SyncStatus.pendingUpload.rawValue

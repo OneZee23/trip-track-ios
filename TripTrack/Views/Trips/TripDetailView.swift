@@ -42,6 +42,7 @@ struct TripDetailView: View {
     @State private var reactionEntries: [SocialReactionEntry] = []
     @State private var selectedReactorAuthor: SocialAuthor?
     @State private var isMapFullscreen = false
+    @State private var showVehiclePicker = false
     /// Drives the "Play" button on the route map. Owned via
     /// `@StateObject` so the timer survives view re-renders and is
     /// stopped cleanly on `.onDisappear`.
@@ -359,6 +360,7 @@ struct TripDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 dateTimeLine(trip: trip, c: c)
                 titleSection(trip: trip, c: c)
+                vehicleRow(trip: trip, c: c)
                 // Privacy toggle is per-trip and works independently of
                 // global Cloud Sync (privacy-first model: publishing one
                 // trip should NOT require turning on full-account mirror).
@@ -393,16 +395,9 @@ struct TripDetailView: View {
     }
 
     private func dateTimeLine(trip: Trip, c: AppTheme.Colors) -> some View {
-        let datePart = formattedDate(trip.startDate)
-        let timePart = timeRange(trip)
-
-        var vehiclePart = ""
-        if let vehicle = tripVehicle {
-            let emoji = vehicle.isPixelAvatar ? "🚗" : vehicle.avatarEmoji
-            vehiclePart = " · \(emoji) \(vehicle.name)"
-        }
-
-        return Text("\(datePart), \(timePart)\(vehiclePart)")
+        // Vehicle moved to its own tappable `vehicleRow` below the title so it
+        // can be reassigned; the date line stays date + time only.
+        Text("\(formattedDate(trip.startDate)), \(timeRange(trip))")
             .font(.system(size: 13))
             .foregroundStyle(c.textSecondary)
             .lineLimit(1)
@@ -414,6 +409,59 @@ struct TripDetailView: View {
             return settings.vehicles.first { $0.id == vid }
         }
         return nil
+    }
+
+    /// Tappable vehicle assignment for a saved trip. Presents a picker of the
+    /// garage vehicles plus a "no vehicle" clear option. Reassignment is
+    /// metadata-only (see TripRepository.updateVehicle) — odometer/stats are
+    /// not rebalanced, matching how title/notes edits behave.
+    private func vehicleRow(trip: Trip, c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.selection()
+            showVehiclePicker = true
+        } label: {
+            HStack(spacing: 6) {
+                if let v = tripVehicle {
+                    Text(v.isPixelAvatar ? "🚗" : v.avatarEmoji)
+                        .font(.system(size: 13))
+                    Text(v.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(c.textSecondary)
+                } else {
+                    Image(systemName: "car")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(c.textTertiary)
+                    Text(lang.language == .ru ? "Без машины" : "No vehicle")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(c.textTertiary)
+                }
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+        }
+        .buttonStyle(.plain)
+        .confirmationDialog(
+            lang.language == .ru ? "Машина поездки" : "Trip vehicle",
+            isPresented: $showVehiclePicker,
+            titleVisibility: .visible
+        ) {
+            ForEach(settings.vehicles) { v in
+                Button("\(v.isPixelAvatar ? "🚗" : v.avatarEmoji) \(v.name)") {
+                    applyVehicleChange(v.id)
+                }
+            }
+            Button(lang.language == .ru ? "Без машины" : "No vehicle", role: .destructive) {
+                applyVehicleChange(nil)
+            }
+            Button(AppStrings.cancel(lang.language), role: .cancel) {}
+        }
+    }
+
+    private func applyVehicleChange(_ vehicleId: UUID?) {
+        Haptics.selection()
+        mapVM.tripManager.updateVehicle(for: tripId, vehicleId: vehicleId)
+        trip = viewModel.tripDetail(id: tripId)
     }
 
     private func titleSection(trip: Trip, c: AppTheme.Colors) -> some View {

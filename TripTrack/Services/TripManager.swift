@@ -77,9 +77,13 @@ final class TripManager: ObservableObject {
 
         activeTripEntity = entity
         guard let tripId = entity.id, let startDate = entity.startDate else { return }
+        // Carry the vehicle into the in-memory Trip too — it's already stamped
+        // on the entity above, but consumers reading activeTrip.vehicleId (e.g.
+        // the recording UI) would otherwise see nil.
         activeTrip = Trip(
             id: tripId,
-            startDate: startDate
+            startDate: startDate,
+            vehicleId: vehicleId
         )
         isRecording = true
         lastLocation = nil
@@ -297,7 +301,8 @@ final class TripManager: ObservableObject {
                     startDate: startDate,
                     distance: entity.distance,
                     maxSpeed: entity.maxSpeed,
-                    averageSpeed: entity.averageSpeed
+                    averageSpeed: entity.averageSpeed,
+                    vehicleId: entity.vehicleId
                 )
                 isRecording = true
                 lastLocation = nil
@@ -905,6 +910,13 @@ final class TripManager: ObservableObject {
 
     func updateTitle(for tripId: UUID, title: String) {
         repository.updateTitle(for: tripId, title: title)
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+        }
+    }
+
+    func updateVehicle(for tripId: UUID, vehicleId: UUID?) {
+        repository.updateVehicle(for: tripId, vehicleId: vehicleId)
         Task { @MainActor in
             SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
         }

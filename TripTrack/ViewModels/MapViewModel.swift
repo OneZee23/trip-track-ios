@@ -101,16 +101,19 @@ final class MapViewModel: ObservableObject {
             self.toggleRecording()
         }
         // StartTripIntent fires from the Shortcuts app / personal
-        // automations. If a vehicle id was supplied (CarPlay-aware
-        // automations typically pass one) we flip it into settings BEFORE
-        // toggling recording so the trip is stamped with the right car.
-        // Idempotent: if already recording, do nothing.
+        // automations. If a vehicle id was supplied we (a) persist it as the
+        // selection so the garage UI reflects the automation's choice, and
+        // (b) thread it straight into recording. (b) is the load-bearing part:
+        // startRecording reads the vehicle from the *persisted* settings entity,
+        // so relying on a bare in-memory assignment (the old bug) meant the
+        // trip was stamped with the previously-saved/first car regardless of
+        // what the Shortcut picked. Idempotent: if already recording, do nothing.
         TripIntentHandler.shared.onStart = { [weak self] vehicleId in
             guard let self, !self.isRecording else { return }
             if let vid = vehicleId {
-                SettingsManager.shared.selectedVehicleId = vid
+                SettingsManager.shared.selectVehicle(id: vid)
             }
-            self.toggleRecording()
+            self.toggleRecording(vehicleId: vehicleId)
         }
         // Hand the connectivity manager a weak self so commands from
         // the Watch hit the same control surface as on-screen taps.
@@ -218,11 +221,11 @@ final class MapViewModel: ObservableObject {
 
     // MARK: - Recording
 
-    func toggleRecording() {
+    func toggleRecording(vehicleId: UUID? = nil) {
         if isRecording {
             stopRecording()
         } else {
-            startRecording()
+            startRecording(vehicleId: vehicleId)
         }
         // Push the new state to the Watch immediately. Without this
         // the wrist UI would stay on the prior "idle" / "recording"
@@ -290,9 +293,12 @@ final class MapViewModel: ObservableObject {
         trackManager.reset()
         trackManager.startAnimation()
 
-        // Start Live Activity
+        // Start Live Activity — prefer the recovered trip's own vehicle over
+        // the current global selection (which the user may have changed since
+        // force-quitting mid-trip).
         let settings = SettingsManager.shared
-        let vehicle = settings.vehicles.first { $0.id == selectedVehicleId } ?? settings.vehicles.first
+        let vid = trip.vehicleId ?? selectedVehicleId
+        let vehicle = settings.vehicles.first { $0.id == vid } ?? settings.vehicles.first
         let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
         LiveActivityManager.shared.startActivity(
             tripId: trip.id,
@@ -306,7 +312,7 @@ final class MapViewModel: ObservableObject {
         #endif
     }
 
-    func startRecording() {
+    func startRecording(vehicleId overrideId: UUID? = nil) {
         // Re-entry guard — BT auto-trigger + notification action + manual tap
         // can all reach this method on the same MainActor tick. Without the
         // guard each call would create its own TripEntity, leaving orphans.
@@ -329,13 +335,17 @@ final class MapViewModel: ObservableObject {
         // Rebuild fog before clearing overlays so it's included
         rebuildFog()
 
-        // Start trip in CoreData
-        tripManager.startTrip(vehicleId: selectedVehicleId)
+        // Start trip in CoreData. Prefer an explicit override (passed by the
+        // Shortcuts/automation start path) over the persisted selection, so the
+        // recorded trip is stamped with exactly the chosen vehicle without
+        // depending on a prior persist having already landed.
+        let vid = overrideId ?? selectedVehicleId
+        tripManager.startTrip(vehicleId: vid)
         isRecording = true
 
         // Start Live Activity on Lock Screen / Dynamic Island
         let settings = SettingsManager.shared
-        let vehicle = settings.vehicles.first { $0.id == selectedVehicleId } ?? settings.vehicles.first
+        let vehicle = settings.vehicles.first { $0.id == vid } ?? settings.vehicles.first
         let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
         LiveActivityManager.shared.startActivity(
             tripId: tripManager.activeTrip?.id ?? UUID(),

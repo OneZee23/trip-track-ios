@@ -4,9 +4,21 @@ import MapKit
 struct TrackingView: View {
     @EnvironmentObject var viewModel: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
+    @ObservedObject private var settings = SettingsManager.shared
     @State private var safeAreaTop: CGFloat = 59
     @State private var tabBarHeight: CGFloat = 88
     @State private var isMapReady = false
+
+    /// The car this trip is recording for. Resolved from the trip's OWN
+    /// vehicle (stamped at start, and now also on the force-quit recovery
+    /// path) so the pill matches the car the trip was actually started with —
+    /// even if the user changed the global selection mid/after a recovered
+    /// trip. Falls back to the current selection when the active trip has no
+    /// vehicle (e.g. trips started before this field was populated).
+    private var activeVehicle: Vehicle? {
+        let vid = viewModel.tripManager.activeTrip?.vehicleId ?? settings.selectedVehicleId
+        return settings.vehicles.first { $0.id == vid } ?? settings.vehicles.first
+    }
 
     var body: some View {
         ZStack {
@@ -136,6 +148,8 @@ struct TrackingView: View {
                         icon: "mountain.2"
                     )
                 }
+
+                vehiclePill
             }
             .padding(.horizontal, 16)
             .padding(.top, safeAreaTop + 4)
@@ -219,6 +233,31 @@ struct TrackingView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Shows which car the trip is recording for. Hidden when no vehicle
+    /// exists so single-/no-car users keep the compact panel.
+    @ViewBuilder private var vehiclePill: some View {
+        if let v = activeVehicle {
+            HStack(spacing: 6) {
+                if v.isPixelAvatar {
+                    Image(v.avatarEmoji)
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFit()
+                        .frame(width: 16, height: 16)
+                } else {
+                    Text(v.avatarEmoji).font(.system(size: 14))
+                }
+                Text(v.name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(.white.opacity(0.12)))
+        }
     }
 
     private var speedColor: Color {

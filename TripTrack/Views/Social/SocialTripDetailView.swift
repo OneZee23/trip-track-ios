@@ -18,6 +18,12 @@ struct SocialTripDetailView: View {
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var auth = AuthService.shared
     @State private var signInPrompt: SignInPromptSheet.Action?
+    /// The reaction a guest tapped before signing in, resumed after a
+    /// successful sign-in (mirrors FeedView) so the tap isn't silently dropped.
+    @State private var pendingReactionEmoji: String?
+    /// Set in the prompt's onAuthenticated, consumed in its onDismiss — resume
+    /// only after the sheet has fully dismissed.
+    @State private var resumeAfterAuth = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var socialFeed = SocialFeedStore.shared
@@ -184,8 +190,11 @@ struct SocialTripDetailView: View {
             cachedPreviewCoords = trip.previewCoordinates
         }
         .onDisappear { routePlayback.stop() }
-        .sheet(item: $signInPrompt) { action in
-            SignInPromptSheet(action: action)
+        .sheet(item: $signInPrompt, onDismiss: {
+            if resumeAfterAuth { resumeAfterAuth = false; resumePendingReaction() }
+            else { pendingReactionEmoji = nil }
+        }) { action in
+            SignInPromptSheet(action: action, onAuthenticated: { resumeAfterAuth = true })
                 .environmentObject(lang)
                 .environmentObject(auth)
                 .presentationDetents([.large])
@@ -202,6 +211,17 @@ struct SocialTripDetailView: View {
                     onDismiss: { selectedDetailBadge = nil }
                 )
             }
+        }
+    }
+
+    /// Replays a reaction a guest tapped before signing in. Runs from the
+    /// prompt's onDismiss, so the sheet is already gone.
+    private func resumePendingReaction() {
+        guard let emoji = pendingReactionEmoji else { return }
+        pendingReactionEmoji = nil
+        Task {
+            await socialFeed.toggleReaction(for: trip.id, emoji: emoji)
+            await loadReactions()
         }
     }
 
@@ -580,6 +600,7 @@ struct SocialTripDetailView: View {
         return Button {
             Haptics.selection()
             guard auth.isSignedIn else {
+                pendingReactionEmoji = emoji
                 signInPrompt = .react
                 return
             }

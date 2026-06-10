@@ -415,15 +415,37 @@ final class APIClient {
                 throw APIError.invalidRefreshToken
             }
             apiAuthLog.notice("refresh: posting /auth/refresh")
-            do {
-                // singleAttempt: refresh shares the refreshTask with every
-                // other in-flight authed call; if it loops 3×30s on a flaky
-                // network, the entire app stalls for 90+ seconds. One shot —
-                // if it fails transiently the next authed call retriggers a
-                // fresh refresh anyway.
-                let res: RefreshResponse = try await self.performPost(
+            // Each POST is singleAttempt so it can't loop 3×30s and stall every
+            // other in-flight authed call awaiting refreshTask.
+            func postRefresh() async throws -> RefreshResponse {
+                try await self.performPost(
                     path: APIEndpoint.refresh, body: RefreshRequest(refreshToken: refresh),
                     requiresAuth: false, isRetry: true, singleAttempt: true)
+            }
+            do {
+                let res: RefreshResponse
+                do {
+                    res = try await postRefresh()
+                } catch APIError.network(let lostErr) where lostErr.code == .networkConnectionLost {
+                    // A lost rotation response leaves us holding the *old*
+                    // refresh token. The backend honours it within a short
+                    // rotation grace window (idempotent: the same old token
+                    // re-derives the same successor), so one prompt re-attempt
+                    // recovers the session instead of bricking it.
+                    //
+                    // Scoped to .networkConnectionLost ONLY — a fast-failing
+                    // pooled-stream reset, the typical "response dropped" case.
+                    // We deliberately do NOT re-attempt on .timedOut: that
+                    // already burned the full ~30s timeout, and since refresh is
+                    // single-flight (every other authed call awaits refreshTask),
+                    // a second 30s attempt would stall the whole app ~60s. A
+                    // timeout instead falls through to "keep session" below and
+                    // lets the NEXT authed call refresh again — still within the
+                    // 60s backend grace window for any normal user action.
+                    apiAuthLog.notice("refresh: connection lost — one fast re-attempt within grace window")
+                    try? await Task.sleep(for: .seconds(1))
+                    res = try await postRefresh()
+                }
                 self.tokenStore.set(accessToken: res.accessToken, refreshToken: res.refreshToken)
                 apiAuthLog.notice("refresh: succeeded, new tokens stored")
             } catch APIError.network(let urlErr) {

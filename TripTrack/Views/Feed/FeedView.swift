@@ -44,6 +44,23 @@ struct FeedView: View {
     @State private var shareSheetData: (data: StoryShareData, url: String)?
     @State private var signInPrompt: SignInPromptSheet.Action?
 
+    /// A guest-tapped social action that needs an account. Captured before we
+    /// present the sign-in prompt so the action can be RESUMED on success
+    /// instead of silently dropped (the old behaviour: prompt appeared, login
+    /// worked, nothing happened). Cleared when the prompt is dismissed without
+    /// signing in.
+    private enum PendingSocialAction {
+        case share(SocialFeedTrip)
+        case react(SocialFeedTrip, emoji: String)
+        case reactionPicker(SocialFeedTrip)
+    }
+    @State private var pendingSocialAction: PendingSocialAction?
+    /// Set in the prompt's onAuthenticated; consumed in its onDismiss. We
+    /// resume AFTER the sheet has fully dismissed (not in onAuthenticated,
+    /// which fires before dismiss) so presenting the share sheet can't collide
+    /// with the sign-in sheet still animating away.
+    @State private var resumeAfterAuth = false
+
     init(tripManager: TripManager, selectedTab: Binding<Int>) {
         _feedVM = StateObject(wrappedValue: FeedViewModel(tripManager: tripManager))
         _selectedTab = selectedTab
@@ -110,7 +127,10 @@ struct FeedView: View {
                 case .socialTrip(let t):
                     SocialTripDetailView(
                         initialTrip: t,
-                        onShare: { shareSocialTrip(t) },
+                        onShare: {
+                            if auth.isSignedIn { shareSocialTrip(t) }
+                            else { pendingSocialAction = .share(t); signInPrompt = .share }
+                        },
                         pushPath: $authorPath
                     )
                 }
@@ -265,8 +285,11 @@ struct FeedView: View {
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
-        .sheet(item: $signInPrompt) { action in
-            SignInPromptSheet(action: action)
+        .sheet(item: $signInPrompt, onDismiss: {
+            if resumeAfterAuth { resumeAfterAuth = false; resumePendingSocialAction() }
+            else { pendingSocialAction = nil }
+        }) { action in
+            SignInPromptSheet(action: action, onAuthenticated: { resumeAfterAuth = true })
                 .environmentObject(lang)
                 .environmentObject(auth)
                 .presentationDetents([.large])
@@ -351,7 +374,7 @@ struct FeedView: View {
         let isRu = lang.language == .ru
         return HStack(spacing: 3) {
             modePill(.all, label: isRu ? "Лента" : "Feed", c: c)
-            modePill(.mine, label: isRu ? "Мои" : "Mine", c: c)
+            modePill(.mine, label: isRu ? "Поездки" : "Trips", c: c)
         }
         .padding(3)
         .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 11))
@@ -528,19 +551,20 @@ struct FeedView: View {
                         // surfacing a useless emoji palette.
                         guard !isOwn else { return }
                         if auth.isSignedIn { reactionPickerTrip = trip }
-                        else { signInPrompt = .react }
+                        else { pendingSocialAction = .reactionPicker(trip); signInPrompt = .react }
                     },
                     onReact: { emoji in
                         guard !isOwn else { return }
                         if auth.isSignedIn {
                             Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
                         } else {
+                            pendingSocialAction = .react(trip, emoji: emoji)
                             signInPrompt = .react
                         }
                     },
                     onShare: {
                         if auth.isSignedIn { shareSocialTrip(trip) }
-                        else { signInPrompt = .share }
+                        else { pendingSocialAction = .share(trip); signInPrompt = .share }
                     }
                 )
                 .onAppear {
@@ -775,6 +799,23 @@ struct FeedView: View {
         guard let trip = feedVM.tripManager.tripDetail(id: tripId),
               let vid = trip.vehicleId else { return nil }
         return settings.vehicles.first { $0.id == vid }
+    }
+
+    /// Runs the social action a guest tapped before signing in. Consumes the
+    /// captured action (one-shot) so it can't re-fire on a later login. The
+    /// share path is async (network) so its sheet presents after the sign-in
+    /// sheet has already dismissed — no "present while presenting" collision.
+    private func resumePendingSocialAction() {
+        guard let pending = pendingSocialAction else { return }
+        pendingSocialAction = nil
+        switch pending {
+        case .share(let t):
+            shareSocialTrip(t)
+        case .react(let t, let emoji):
+            Task { await socialFeed.toggleReaction(for: t.id, emoji: emoji) }
+        case .reactionPicker(let t):
+            reactionPickerTrip = t
+        }
     }
 
     private func shareSocialTrip(_ trip: SocialFeedTrip) {

@@ -512,8 +512,27 @@ final class AuthService: ObservableObject {
                     authLog.notice("[auth.signout_trigger] reason=apple_credential_revoked")
                     await self?.signOut()
                 case .notFound:
-                    authLog.notice("[auth.signout_trigger] reason=apple_credential_not_found")
-                    await self?.signOut()
+                    // .notFound is NOT a reliable revocation signal — it can
+                    // surface transiently (Apple ID server unreachable, or right
+                    // after install before the credential propagates). Only sign
+                    // out if we also lack valid tokens; otherwise keep the
+                    // session. Cleanup of a genuinely dead-but-token-present
+                    // session is best-effort and deferred: the next authed
+                    // request that hits a confirmed USER_NOT_AUTH after refresh
+                    // force-signs-out (APIClient). On the common launch path the
+                    // feed's authed load triggers this; in the rare corner where
+                    // no authed call is made (lands on a non-feed tab, no sync,
+                    // notifications off) it simply waits for the next one. This
+                    // removes a spurious cold-launch logout vector while keeping
+                    // .revoked as the authoritative immediate-signout signal.
+                    let hasTokens = TokenStore.shared.accessToken != nil
+                        && TokenStore.shared.refreshToken != nil
+                    if hasTokens {
+                        authLog.notice("[auth.credential_state] state=notFound but tokens present — keeping session")
+                    } else {
+                        authLog.notice("[auth.signout_trigger] reason=apple_credential_not_found_no_tokens")
+                        await self?.signOut()
+                    }
                 default:
                     authLog.notice("[auth.credential_state] state=undef_\(state.rawValue, privacy: .public)")
                     break

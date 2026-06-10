@@ -116,7 +116,7 @@ struct RegionsView: View {
                 onDismiss: { isMapExpanded = false }
             )
         }
-        .navigationTitle(isRu ? "Исследование" : "Exploration")
+        .navigationTitle(isRu ? "Места" : "Places")
         .navigationBarTitleDisplayMode(.large)
         .toolbarBackground(c.bg.opacity(0.95), for: .navigationBar)
         .toolbarBackground(.automatic, for: .navigationBar)
