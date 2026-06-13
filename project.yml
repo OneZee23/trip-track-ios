@@ -155,6 +155,19 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrackTests
         GENERATE_INFOPLIST_FILE: YES
 
+  TripTrackUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: TripTrackUITests
+    dependencies:
+      - target: TripTrack
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrackUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: TripTrack
+
 schemes:
   TripTrack:
     build:
@@ -175,6 +188,7 @@ schemes:
       config: Debug
       targets:
         - TripTrackTests
+        - TripTrackUITests
     profile:
       config: Release
     analyze:
