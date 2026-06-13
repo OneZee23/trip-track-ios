@@ -19,7 +19,14 @@ final class TripManager: ObservableObject {
     /// SyncCoordinator to skip pulls that would clobber live state.
     static private(set) var isAnyRecording = false
 
-    var isPaused: Bool = false
+    var isPaused: Bool = false {
+        didSet {
+            // Drop the pre-pause fix so the first point after resume doesn't add a
+            // cross-pause jump to the distance (a settling/drift fix while parked
+            // could otherwise be measured from the spot where pause began).
+            if isPaused { lastLocation = nil }
+        }
+    }
 
     /// Kalman filter for GPS smoothing and gap prediction
     let kalmanFilter = KalmanLocationFilter()
@@ -273,6 +280,8 @@ final class TripManager: ObservableObject {
 
         guard let orphans = try? context.fetch(request), !orphans.isEmpty else { return }
 
+        // First pass: drop empty/junk orphans, collect the rest with their last point time.
+        var candidates: [(entity: TripEntity, lastTimestamp: Date)] = []
         for entity in orphans {
             let points = (entity.trackPoints?.array as? [TrackPointEntity]) ?? []
 
@@ -295,29 +304,35 @@ final class TripManager: ObservableObject {
                 context.delete(entity)
                 continue
             }
+            candidates.append((entity, lastTimestamp))
+        }
 
-            // Recent orphan — restore as active recording
+        // Restore at most ONE orphan — the most recent — as the active recording.
+        // Every OTHER orphan is closed (endDate set) so it can never linger as a
+        // zombie (endDate == nil) that re-triggers recovery on the next launch.
+        let mostRecent = candidates.max { $0.lastTimestamp < $1.lastTimestamp }
+        for (entity, lastTimestamp) in candidates {
+            let isTheOne = entity === mostRecent?.entity
             let age = Date().timeIntervalSince(lastTimestamp)
-            if age < Self.maxRestorableAge {
-                activeTripEntity = entity
-                guard let tripId = entity.id, let startDate = entity.startDate else { continue }
-                activeTrip = Trip(
-                    id: tripId,
-                    startDate: startDate,
-                    distance: entity.distance,
-                    maxSpeed: entity.maxSpeed,
-                    averageSpeed: entity.averageSpeed,
-                    vehicleId: entity.vehicleId
-                )
-                isRecording = true
-                lastLocation = nil
-                unsavedPointCount = 0
-                lastSaveTime = Date()
-                kalmanFilter.reset()
-                locationManager.startTracking()
-            } else {
-                entity.endDate = lastTimestamp
+            guard isTheOne, age < Self.maxRestorableAge, let tripId = entity.id, let startDate = entity.startDate else {
+                entity.endDate = lastTimestamp // older / too-old / malformed → close it
+                continue
             }
+            activeTripEntity = entity
+            activeTrip = Trip(
+                id: tripId,
+                startDate: startDate,
+                distance: entity.distance,
+                maxSpeed: entity.maxSpeed,
+                averageSpeed: entity.averageSpeed,
+                vehicleId: entity.vehicleId
+            )
+            isRecording = true
+            lastLocation = nil
+            unsavedPointCount = 0
+            lastSaveTime = Date()
+            kalmanFilter.reset()
+            locationManager.startTracking()
         }
 
         persistenceController.save()
@@ -353,25 +368,26 @@ final class TripManager: ObservableObject {
         // Smooth through Kalman filter
         let filtered = kalmanFilter.processGPSUpdate(location)
 
-        // Filter: minimum distance between stored points (on filtered position)
+        // Filter: minimum distance between stored points (on filtered position).
         if let last = lastLocation {
             let delta = filtered.distance(from: last)
-            // Scale the minimum stored-point distance by the RAW reported accuracy
-            // (not the Kalman covariance estimate, which converges far below the raw
-            // value): a 60m-accuracy fix must move ~30m before we trust it as real
-            // movement, so relaxing the accuracy ceiling to 65m doesn't inflate
-            // distance with jitter. Good fixes (≤10m) keep the original 5m floor.
-            let effectiveMinDistance = max(minRecordDistance, location.horizontalAccuracy * 0.5)
-            guard delta >= effectiveMinDistance else { return }
+            // Flat 5m floor. We deliberately do NOT scale this by accuracy: a higher
+            // floor on poor (taiga) fixes silently DROPS real slow-movement segments
+            // AND their incremental distance, under-counting the odometer exactly
+            // where this release is trying to capture more. Jitter is rejected by the
+            // drift filter below, not by inflating the distance floor.
+            guard delta >= minRecordDistance else { return }
 
-            // Filter: GPS drift — device reports near-zero speed but the calculated
-            // distance is high. Apply ONLY to reasonably accurate fixes: on poor
-            // (taiga) fixes the reported speed is unreliable — often clamped to 0 —
-            // so this check would falsely drop real movement as "drift".
+            // Filter: GPS drift — the Kalman velocity says near-stationary but the
+            // point-to-point calculated speed is high (parked-but-jittering). Applied
+            // UNCONDITIONALLY: `filtered.speed` is the Kalman velocity estimate derived
+            // from position (raw GPS speed only refines it when known), so this keeps
+            // genuine movement and drops stationary jitter at any accuracy — including
+            // 35–65m taiga fixes, where leaving it off would let jitter inflate distance.
             let timeDelta = filtered.timestamp.timeIntervalSince(last.timestamp)
             if timeDelta > 0 {
                 let calculatedSpeed = delta / timeDelta
-                if location.horizontalAccuracy < 35 && filtered.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
+                if filtered.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
                     return
                 }
             }
@@ -420,7 +436,8 @@ final class TripManager: ObservableObject {
             distance: entity.distance,
             maxSpeed: entity.maxSpeed,
             averageSpeed: entity.averageSpeed,
-            trackPoints: [] // don't load all points during tracking
+            trackPoints: [], // don't load all points during tracking
+            vehicleId: entity.vehicleId // keep the car; rebuild would otherwise nil it every fix
         )
 
         // Batch saves: persist every N points or every M seconds

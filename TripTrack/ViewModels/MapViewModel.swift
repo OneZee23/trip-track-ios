@@ -256,9 +256,6 @@ final class MapViewModel: ObservableObject {
                 pausedAccumulated += Date().timeIntervalSince(pauseStart)
                 pauseStartDate = nil
             }
-            // A long (e.g. overnight) pause can exceed the ~8h Live Activity cap,
-            // so iOS may have ended the Lock-Screen card. Bring it back on resume.
-            restartLiveActivityIfNeeded()
             durationTimer = Timer.publish(every: 1, on: .main, in: .common)
                 .autoconnect()
                 .sink { [weak self] _ in
@@ -296,6 +293,10 @@ final class MapViewModel: ObservableObject {
         trackManager.reset()
         trackManager.startAnimation()
 
+        // Recovered trips need the same lifetime timers as a fresh start — without
+        // this the duration label froze and there was no GPS-stall watchdog.
+        startRecordingTimers()
+
         // Start Live Activity — prefer the recovered trip's own vehicle over
         // the current global selection (which the user may have changed since
         // force-quitting mid-trip).
@@ -313,25 +314,6 @@ final class MapViewModel: ObservableObject {
         #if DEBUG
         print("Recording restored: trip \(trip.id), started \(trip.startDate)")
         #endif
-    }
-
-    /// Restarts the Lock-Screen Live Activity if it has lapsed while recording
-    /// (e.g. iOS ended it past the ~8h cap during a long pause). Resolves the car
-    /// from the active trip, falling back to the current selection.
-    private func restartLiveActivityIfNeeded() {
-        guard isRecording,
-              !LiveActivityManager.shared.hasActivity,
-              let trip = tripManager.activeTrip else { return }
-        let settings = SettingsManager.shared
-        let vid = trip.vehicleId ?? selectedVehicleId
-        let vehicle = settings.vehicles.first { $0.id == vid } ?? settings.vehicles.first
-        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
-        LiveActivityManager.shared.startActivity(
-            tripId: trip.id,
-            startDate: trip.startDate,
-            vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
-            vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
-        )
     }
 
     func startRecording(vehicleId overrideId: UUID? = nil) {
@@ -379,7 +361,17 @@ final class MapViewModel: ObservableObject {
         // Simple follow mode — no zoom management
         userTrackingMode = .follow
 
-        // Duration timer
+        startRecordingTimers()
+
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+    }
+
+    /// Starts the recording-lifetime timers (1s duration label, GPS-stall watchdog,
+    /// sun-theme). Shared by startRecording AND the force-quit recovery path — without
+    /// this the recovered trip had a frozen duration label and, worse, NO GPS watchdog
+    /// to restart tracking if CoreLocation went quiet on a long drive.
+    private func startRecordingTimers() {
         durationTimer = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
@@ -405,9 +397,6 @@ final class MapViewModel: ObservableObject {
                 guard let self, let loc = self.locationManager.currentLocation else { return }
                 self.updateThemeForSun(coordinate: loc.coordinate)
             }
-
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
     }
 
     func stopRecording(suggestedEndDate: Date? = nil) {
