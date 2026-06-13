@@ -44,6 +44,32 @@ final class APIClient {
         }
     }
 
+    /// Encodes (and gzips large) request bodies OFF the main actor. APIClient is
+    /// `@MainActor`, but JSON-encoding a trip payload runs the custom date
+    /// strategy — a `DateFormatter` call per track point, thousands on a long
+    /// drive — and `gzipped()` runs a byte-wise CRC over the whole body. That is
+    /// pure CPU; on the main actor it froze the UI while the Cloud-Sync queue
+    /// drained every trip back-to-back. A `nonisolated async` method runs on the
+    /// cooperative pool, not the caller's actor (SE-0338), so awaiting it here
+    /// hops the work off the main thread. A fresh `JSONEncoder` is built per call
+    /// — `JSONEncoder` isn't safe to share across the hop.
+    ///
+    /// Gzip rationale (unchanged): Russian ISPs DPI-throttle TLS streams >16KB to
+    /// foreign DC IPs, so trip JSON (which compresses ~80%) is gzipped above 4KB
+    /// to slip under the threshold; backend nginx has `gunzip on;`.
+    nonisolated private func serializeBody<Req: Encodable>(_ body: Req) async throws -> (raw: Data, wire: Data, gzipped: Bool) {
+        let enc = JSONEncoder()
+        enc.dateEncodingStrategy = .custom { date, e in
+            var c = e.singleValueContainer()
+            try c.encode(ISODate.format(date))
+        }
+        let raw = try enc.encode(body)
+        if raw.count >= 4_096, let gz = raw.gzipped() {
+            return (raw, gz, true)
+        }
+        return (raw, raw, false)
+    }
+
     func post<Req: Encodable, Res: Decodable>(_ path: String, body: Req, requiresAuth: Bool = true) async throws -> Res {
         try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: false)
     }
@@ -103,8 +129,16 @@ final class APIClient {
         if requiresAuth {
             apiAuthLog.notice("POST \(path, privacy: .public) hasToken=\(hasToken) isRetry=\(isRetry)")
         }
-        let rawJsonData = try encoder.encode(body)
-        let rawSize = rawJsonData.count
+        // Encode (and gzip large bodies) OFF the main actor — see serializeBody.
+        // This is the hot path the Cloud-Sync drain hammers: JSON-encoding a trip
+        // with thousands of track points (a DateFormatter call per timestamp) plus
+        // the byte-wise gzip CRC is pure CPU that froze the UI when the queue
+        // uploaded every trip back-to-back. Keeping it off @MainActor is the fix.
+        let encoded = try await serializeBody(body)
+        let rawJsonData = encoded.raw
+        let jsonData = encoded.wire
+        let rawSize = encoded.raw.count
+        let bodySize = encoded.wire.count
         // Tiered per-request ceiling. Reads (tiny request bodies — feed,
         // profile, reactions) get 30s so a stalled cold connection on a RU
         // network errors fast and the auto-retry path below has time to
@@ -112,23 +146,9 @@ final class APIClient {
         // keep the original 90s headroom — shaving them aborts perfectly
         // healthy slow-mobile POSTs mid-stream.
         req.timeoutInterval = rawSize >= 4_096 ? 90 : 30
-
-        // Gzip bodies >4KB. Russian ISPs DPI-throttle TLS streams >16KB to
-        // foreign DC IPs (DigitalOcean, Cloudflare) — large uploads stall
-        // permanently with NSURLErrorNetworkConnectionLost cascade. Trip JSON
-        // with hundreds of trackPoints compresses ~80% (repetitive floats),
-        // bringing 50KB payloads under the 16KB DPI threshold. Backend nginx
-        // has `gunzip on;` to transparently decompress before reaching Express.
-        let jsonData: Data
-        let bodySize: Int
-        if rawSize >= 4_096, let gz = rawJsonData.gzipped() {
-            jsonData = gz
-            bodySize = gz.count
+        if encoded.gzipped {
             req.setValue("gzip", forHTTPHeaderField: "Content-Encoding")
-            apiAuthLog.notice("POST \(path, privacy: .public) gzipped \(rawSize)→\(gz.count) bytes")
-        } else {
-            jsonData = rawJsonData
-            bodySize = rawSize
+            apiAuthLog.notice("POST \(path, privacy: .public) gzipped \(rawSize)→\(bodySize) bytes")
         }
         let isLargeBody = bodySize >= 10_000
         if isLargeBody {
@@ -462,7 +482,12 @@ final class APIClient {
                 // server error codes that no one updated this switch for.
                 let isTransient: Bool
                 switch error {
-                case .network, .decoding, .transport:
+                case .network, .decoding, .transport, .unknownServer, .tooManyRequests:
+                    // Server-side hiccup (a DB blip during the refresh tx surfaces as
+                    // UNKNOWN_SERVER_ERROR) and throttling (429 / TOO_MANY_REQUESTS on
+                    // /auth/refresh) are NOT auth failures — keep the session; the next
+                    // authed call retries the refresh. Only a definitive auth rejection
+                    // (INVALID_REFRESH_TOKEN / USER_NOT_AUTH / banned, or a 4xx) signs out.
                     isTransient = true
                 case .invalidHTTPStatus(let code):
                     // 5xx = server hiccup (retry later); 4xx = our auth is

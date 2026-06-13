@@ -240,7 +240,10 @@ final class AutoTripService: ObservableObject {
     /// distance growth instead of speed (the old EMA-on-GPS-speed approach
     /// kept resetting on noisy readings during long stops in city centers).
     func updateMovementForInactivity() {
-        guard let vm = mapViewModel, vm.isRecording,
+        // A MANUALLY PAUSED trip must never be auto-stopped — the user intentionally
+        // paused (e.g. overnight). Treat paused like "no active tracking": reset the
+        // tracker so the inactivity window restarts fresh on resume, and bail.
+        guard let vm = mapViewModel, vm.isRecording, !vm.isPaused,
               let distance = vm.tripManager.activeTrip?.distance else {
             // Tracker is reused across recordings; clear it when none is active.
             movementTracker.reset()
@@ -280,7 +283,7 @@ final class AutoTripService: ObservableObject {
             autoLog.notice("[auto.recover_stale.skip] reason=mode=\(self.settings.autoRecordMode.rawValue, privacy: .public)")
             return
         }
-        guard let vm = mapViewModel, vm.isRecording else { return }
+        guard let vm = mapViewModel, vm.isRecording, !vm.isPaused else { return }
         guard movementTracker.isStale(threshold: AutoTripPolicy.staleTripTimeout) else {
             autoLog.notice("[auto.recover_stale.skip] reason=not_stale")
             return

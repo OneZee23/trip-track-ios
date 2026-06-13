@@ -253,25 +253,49 @@ final class APISyncTransport: SyncTransport {
             return
         }
 
-        guard let originalData = PhotoStorageService.photoData(filename: filename),
-              let sourceImage = UIImage(data: originalData) else {
+        guard let originalData = PhotoStorageService.photoData(filename: filename) else {
             entity.uploadStatus = PhotoUploadStatus.failed.rawValue
             try? ctx.save()
             return
         }
 
+        // Decide which variants we need from entity state (read here on the view
+        // context), capture the metadata, then do ALL image work off the main
+        // actor. UIImage decode + UIGraphicsImageRenderer rasterize + JPEG encode
+        // is among the heaviest CPU/memory work in the app and was running on
+        // @MainActor for every photo as the Cloud-Sync queue drained.
+        let needThumbnail = entity.thumbnailURL == nil
+        let needOriginal = entity.remoteURL == nil && CacheManager.shared.isOnWiFi
+        let caption = entity.caption
+        let timestamp = entity.timestamp ?? Date()
+
+        let variants: (thumbnail: Data?, original: Data?)
+        if needThumbnail || needOriginal {
+            guard let decoded = await Self.encodePhotoVariants(
+                originalData: originalData,
+                makeThumbnail: needThumbnail,
+                makeOriginal: needOriginal) else {
+                // Undecodable file (corrupt) — same as the old combined guard.
+                entity.uploadStatus = PhotoUploadStatus.failed.rawValue
+                try? ctx.save()
+                return
+            }
+            variants = decoded
+        } else {
+            variants = (nil, nil)
+        }
+
         // Thumbnail target ~5-12 KB at 200pt @ scale 1.0. `resized` defaults
         // to screen scale and was 3×-ing thumbnail size on retina devices.
-        if entity.thumbnailURL == nil {
-            guard let thumb = sourceImage.resized(maxDimension: 200, scale: 1.0),
-                  let thumbData = thumb.jpegData(compressionQuality: 0.5) else {
+        if needThumbnail {
+            guard let thumbData = variants.thumbnail else {
                 entity.uploadStatus = PhotoUploadStatus.failed.rawValue
                 try? ctx.save()
                 return
             }
             let r = try await photos.uploadPhotoPart(
                 tripId: tripIdValue, photoId: id, type: .thumbnail,
-                data: thumbData, caption: entity.caption, timestamp: entity.timestamp ?? Date(),
+                data: thumbData, caption: caption, timestamp: timestamp,
                 metadataAlreadyClean: true)
             entity.thumbnailURL = r.url
             // Persist the thumbnail-only state immediately so a subsequent
@@ -290,21 +314,18 @@ final class APISyncTransport: SyncTransport {
         // will retry uploadPhoto until the original lands too; meanwhile the
         // user sees their photo immediately rather than "0 загружено · ждёт
         // Wi-Fi" forever.
-        if entity.remoteURL == nil && CacheManager.shared.isOnWiFi {
-            if let bounded = sourceImage.resized(maxDimension: 1440, scale: 1.0),
-               let boundedData = bounded.jpegData(compressionQuality: 0.7) {
-                let useReEncoded = boundedData.count < originalData.count
-                let payload = useReEncoded ? boundedData : originalData
-                do {
-                    let r = try await photos.uploadPhotoPart(
-                        tripId: tripIdValue, photoId: id, type: .original,
-                        data: payload, caption: entity.caption, timestamp: entity.timestamp ?? Date(),
-                        metadataAlreadyClean: useReEncoded)
-                    entity.remoteURL = r.url
-                } catch {
-                    // Best-effort. Thumbnail is on R2; the photo is viewable
-                    // in feed and detail. Original will retry next sync cycle.
-                }
+        if needOriginal, let boundedData = variants.original {
+            let useReEncoded = boundedData.count < originalData.count
+            let payload = useReEncoded ? boundedData : originalData
+            do {
+                let r = try await photos.uploadPhotoPart(
+                    tripId: tripIdValue, photoId: id, type: .original,
+                    data: payload, caption: caption, timestamp: timestamp,
+                    metadataAlreadyClean: useReEncoded)
+                entity.remoteURL = r.url
+            } catch {
+                // Best-effort. Thumbnail is on R2; the photo is viewable
+                // in feed and detail. Original will retry next sync cycle.
             }
         }
 
@@ -347,6 +368,28 @@ final class APISyncTransport: SyncTransport {
             NotificationCenter.default.post(
                 name: .tripPhotosChanged, object: nil)
         }
+    }
+
+    /// Decode + downscale + JPEG-encode the photo variants OFF the main actor.
+    /// `nonisolated async` runs on the cooperative pool (SE-0338), not the
+    /// caller's `@MainActor`, so the heavy Core Graphics rasterization + JPEG
+    /// encode doesn't jank the UI while the Cloud-Sync queue drains photos.
+    /// `scale: 1.0` is passed so `resized` never reads `UIScreen.main` (a
+    /// main-actor API) off-thread.
+    /// Returns `nil` when the data can't be decoded at all (corrupt file) so the
+    /// caller can mark the photo failed — mirroring the old combined
+    /// `guard let sourceImage = UIImage(data:)` that this refactor split apart.
+    nonisolated private static func encodePhotoVariants(
+        originalData: Data, makeThumbnail: Bool, makeOriginal: Bool
+    ) async -> (thumbnail: Data?, original: Data?)? {
+        guard let sourceImage = UIImage(data: originalData) else { return nil }
+        let thumb = makeThumbnail
+            ? sourceImage.resized(maxDimension: 200, scale: 1.0)?.jpegData(compressionQuality: 0.5)
+            : nil
+        let orig = makeOriginal
+            ? sourceImage.resized(maxDimension: 1440, scale: 1.0)?.jpegData(compressionQuality: 0.7)
+            : nil
+        return (thumb, orig)
     }
 }
 

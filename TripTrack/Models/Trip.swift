@@ -133,14 +133,21 @@ struct Trip: Identifiable, Codable {
             if avgKmh < idleSpeedKmh {
                 stp += dt
             } else {
-                drv += dt
                 // Accumulate distance ONLY over the same <=60s moving segments that
                 // drivingTime counts, so the moving average stays consistent on
                 // sparse-GPS trips (the full trip distance includes long cross-gap
                 // segments that drivingTime excludes — dividing by it would inflate).
                 let a = CLLocation(latitude: trackPoints[i - 1].latitude, longitude: trackPoints[i - 1].longitude)
                 let b = CLLocation(latitude: trackPoints[i].latitude, longitude: trackPoints[i].longitude)
-                movingDist += b.distance(from: a)
+                let segDist = b.distance(from: a)
+                // Reject GPS-teleport segments: a stale/low reported .speed paired
+                // with a huge geometric jump (multipath, dropout snap-back) would
+                // otherwise inflate BOTH drivingTime and movingDist, spiking the
+                // moving average. 83 m/s (~300 km/h) is the same teleport ceiling
+                // used in TripManager/PostTripTrackProcessor stats.
+                if segDist / dt > 83.0 { continue }
+                drv += dt
+                movingDist += segDist
             }
         }
         return (drv, stp, movingDist)

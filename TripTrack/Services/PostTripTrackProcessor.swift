@@ -263,11 +263,15 @@ final class PostTripTrackProcessor {
             let curr = CLLocation(latitude: sorted[i].latitude, longitude: sorted[i].longitude)
             let segmentDist = curr.distance(from: prev)
 
-            guard segmentDist < maxSegmentDistance else { continue }
-
-            if let prevTS = sorted[i-1].timestamp, let currTS = sorted[i].timestamp {
-                let dt = currTS.timeIntervalSince(prevTS)
-                if dt > 0 && segmentDist / dt > 83.0 { continue }
+            // Reject only IMPOSSIBLE-speed segments (GPS teleport jumps); keep long
+            // but legitimate sparse-GPS / dead-zone bridges (the old absolute 1km cap
+            // dropped real distance). Gate on implied speed when timestamps allow,
+            // else fall back to the absolute cap.
+            if let prevTS = sorted[i-1].timestamp, let currTS = sorted[i].timestamp,
+               currTS.timeIntervalSince(prevTS) > 0 {
+                if segmentDist / currTS.timeIntervalSince(prevTS) > 83.0 { continue }
+            } else if segmentDist >= maxSegmentDistance {
+                continue
             }
 
             totalDistance += segmentDist

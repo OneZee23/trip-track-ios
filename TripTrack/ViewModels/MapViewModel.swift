@@ -382,10 +382,20 @@ final class MapViewModel: ObservableObject {
         gpsWatchdogTimer = Timer.publish(every: 30, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                guard let self, self.isRecording else { return }
+                // Skip while paused — a paused trip (e.g. parked overnight) is
+                // *expected* to be quiet; restarting tracking there is pointless
+                // battery churn. On resume the next tick handles a dead signal.
+                guard let self, self.isRecording, !self.isPaused else { return }
                 if Date().timeIntervalSince(self.lastValidLocationTime) > 60 {
                     self.locationManager.stopTracking()
                     self.locationManager.startTracking()
+                    // Give the restarted GPS a fresh 60s window to re-acquire.
+                    // Without this, a genuinely dead signal (taiga, long tunnel)
+                    // makes the watchdog tear down + restart CoreLocation every
+                    // 30s forever — which itself prevents it from ever settling
+                    // and drains the battery on exactly the long drives we care
+                    // about most.
+                    self.lastValidLocationTime = Date()
                 }
             }
 

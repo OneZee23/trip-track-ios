@@ -278,69 +278,78 @@ final class TripManager: ObservableObject {
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = NSPredicate(format: "endDate == nil")
 
-        guard let orphans = try? context.fetch(request), !orphans.isEmpty else { return }
+        // NOTE: orphan absence must NOT short-circuit the Live Activity sweep
+        // below — a trip stopped cleanly (endDate set) leaves zero orphans yet a
+        // lingering Lock-Screen card can still outlive the process. So we fetch
+        // (possibly empty) and only gate the orphan PROCESSING on non-empty.
+        let orphans = (try? context.fetch(request)) ?? []
 
-        // First pass: drop empty/junk orphans, collect the rest with their last point time.
-        var candidates: [(entity: TripEntity, lastTimestamp: Date)] = []
-        for entity in orphans {
-            let points = (entity.trackPoints?.array as? [TrackPointEntity]) ?? []
+        if !orphans.isEmpty {
+            // First pass: drop empty/junk orphans, collect the rest with their last point time.
+            var candidates: [(entity: TripEntity, lastTimestamp: Date)] = []
+            for entity in orphans {
+                let points = (entity.trackPoints?.array as? [TrackPointEntity]) ?? []
 
-            if points.isEmpty {
-                context.delete(entity)
-                continue
+                if points.isEmpty {
+                    context.delete(entity)
+                    continue
+                }
+
+                let lastTimestamp = points.compactMap { $0.timestamp }.max() ?? Date()
+                let actualDuration = max(0, entity.startDate.map { lastTimestamp.timeIntervalSince($0) } ?? 0)
+                // entity.maxSpeed is m/s — convert to km/h for the shared classifier.
+                let maxSpeedKmh = entity.maxSpeed * 3.6
+                let isJunk = TripJunkClassifier.isJunk(
+                    distanceMeters: entity.distance,
+                    durationSeconds: actualDuration,
+                    maxSpeedKmh: maxSpeedKmh
+                )
+
+                if isJunk {
+                    context.delete(entity)
+                    continue
+                }
+                candidates.append((entity, lastTimestamp))
             }
 
-            let lastTimestamp = points.compactMap { $0.timestamp }.max() ?? Date()
-            let actualDuration = max(0, entity.startDate.map { lastTimestamp.timeIntervalSince($0) } ?? 0)
-            // entity.maxSpeed is m/s — convert to km/h for the shared classifier.
-            let maxSpeedKmh = entity.maxSpeed * 3.6
-            let isJunk = TripJunkClassifier.isJunk(
-                distanceMeters: entity.distance,
-                durationSeconds: actualDuration,
-                maxSpeedKmh: maxSpeedKmh
-            )
-
-            if isJunk {
-                context.delete(entity)
-                continue
+            // Restore at most ONE orphan — the most recent — as the active recording.
+            // Every OTHER orphan is closed (endDate set) so it can never linger as a
+            // zombie (endDate == nil) that re-triggers recovery on the next launch.
+            let mostRecent = candidates.max { $0.lastTimestamp < $1.lastTimestamp }
+            for (entity, lastTimestamp) in candidates {
+                let isTheOne = entity === mostRecent?.entity
+                let age = Date().timeIntervalSince(lastTimestamp)
+                guard isTheOne, age < Self.maxRestorableAge, let tripId = entity.id, let startDate = entity.startDate else {
+                    entity.endDate = lastTimestamp // older / too-old / malformed → close it
+                    continue
+                }
+                activeTripEntity = entity
+                activeTrip = Trip(
+                    id: tripId,
+                    startDate: startDate,
+                    distance: entity.distance,
+                    maxSpeed: entity.maxSpeed,
+                    averageSpeed: entity.averageSpeed,
+                    vehicleId: entity.vehicleId
+                )
+                isRecording = true
+                lastLocation = nil
+                unsavedPointCount = 0
+                lastSaveTime = Date()
+                kalmanFilter.reset()
+                locationManager.startTracking()
             }
-            candidates.append((entity, lastTimestamp))
+
+            persistenceController.save()
         }
 
-        // Restore at most ONE orphan — the most recent — as the active recording.
-        // Every OTHER orphan is closed (endDate set) so it can never linger as a
-        // zombie (endDate == nil) that re-triggers recovery on the next launch.
-        let mostRecent = candidates.max { $0.lastTimestamp < $1.lastTimestamp }
-        for (entity, lastTimestamp) in candidates {
-            let isTheOne = entity === mostRecent?.entity
-            let age = Date().timeIntervalSince(lastTimestamp)
-            guard isTheOne, age < Self.maxRestorableAge, let tripId = entity.id, let startDate = entity.startDate else {
-                entity.endDate = lastTimestamp // older / too-old / malformed → close it
-                continue
-            }
-            activeTripEntity = entity
-            activeTrip = Trip(
-                id: tripId,
-                startDate: startDate,
-                distance: entity.distance,
-                maxSpeed: entity.maxSpeed,
-                averageSpeed: entity.averageSpeed,
-                vehicleId: entity.vehicleId
-            )
-            isRecording = true
-            lastLocation = nil
-            unsavedPointCount = 0
-            lastSaveTime = Date()
-            kalmanFilter.reset()
-            locationManager.startTracking()
-        }
-
-        persistenceController.save()
         // Sweep ANY lingering Live Activities on launch when we're not
-        // actively recording — without this a force-quit during recording
-        // leaves the prior banner on Lock Screen / Dynamic Island until
-        // iOS times it out (~8h). `endActivity()` walks
-        // `Activity<TripActivityAttributes>.activities` and ends each one.
+        // actively recording — without this a force-quit leaves the prior
+        // banner on Lock Screen / Dynamic Island until iOS times it out (~8h).
+        // Runs even with zero orphans (the clean-stop case), which the old
+        // early-return skipped. When we DID restore a recording above,
+        // isRecording is true, so the live card is correctly left intact.
+        // `endActivity()` walks `Activity<TripActivityAttributes>.activities`.
         if !isRecording {
             Task { @MainActor in
                 LiveActivityManager.shared.endActivity()
@@ -405,10 +414,16 @@ final class TripManager: ObservableObject {
         point.timestamp = filtered.timestamp
         point.trip = entity
 
-        // Update distance (use filtered position, not raw GPS)
+        // Update distance (use filtered position, not raw GPS). Accept the segment
+        // when the IMPLIED speed is plausible — a sparse-GPS / dead-zone bridge
+        // (minutes apart in the taiga) can exceed 1km yet be real. A genuine GPS
+        // teleport has a tiny dt → impossible implied speed → rejected. Only fall
+        // back to the absolute cap when there's no usable time delta.
         if let last = lastLocation {
             let delta = filtered.distance(from: last)
-            if delta < 1000 { // ignore jumps > 1km
+            let dt = filtered.timestamp.timeIntervalSince(last.timestamp)
+            let plausible = dt > 0 ? (delta / dt) <= maxPlausibleSpeed : delta < maxSegmentDistance
+            if plausible {
                 entity.distance += delta
             }
         }
@@ -450,8 +465,13 @@ final class TripManager: ObservableObject {
         }
     }
 
-    /// Max single-segment distance considered valid (rejects GPS jumps)
-    private let maxSegmentDistance: Double = 1000  // 1km
+    /// Absolute single-segment fallback cap — only used when a segment has no
+    /// usable time delta (missing/equal timestamps). With timestamps we gate on
+    /// implied speed instead, so a long-but-legitimate sparse-GPS / dead-zone
+    /// bridge (minutes between fixes in the taiga) still counts toward distance.
+    private let maxSegmentDistance: Double = 1000  // 1km (no-timestamp fallback)
+    /// Implausible implied speed → a real GPS teleport jump. ~300 km/h.
+    private let maxPlausibleSpeed: Double = 83.0   // m/s
 
     private func updateEntityStats(_ entity: TripEntity) {
         guard let points = entity.trackPoints?.array as? [TrackPointEntity],
@@ -465,13 +485,15 @@ final class TripManager: ObservableObject {
             let curr = CLLocation(latitude: points[i].latitude, longitude: points[i].longitude)
             let segmentDist = curr.distance(from: prev)
 
-            // Skip GPS jumps (same filter as live recording)
-            guard segmentDist < maxSegmentDistance else { continue }
-
-            // Skip segments with implausible speed (> 300 km/h ≈ 83 m/s)
-            if let prevTS = points[i-1].timestamp, let currTS = points[i].timestamp {
-                let dt = currTS.timeIntervalSince(prevTS)
-                if dt > 0 && segmentDist / dt > 83.0 { continue }
+            // Reject only IMPOSSIBLE-speed segments (real GPS teleport jumps), not
+            // long-but-plausible sparse-GPS bridges. The old absolute 1km cap ran
+            // first and silently dropped legitimate dead-zone distance. With usable
+            // timestamps we gate on implied speed; without them, fall back to the cap.
+            if let prevTS = points[i-1].timestamp, let currTS = points[i].timestamp,
+               currTS.timeIntervalSince(prevTS) > 0 {
+                if segmentDist / currTS.timeIntervalSince(prevTS) > maxPlausibleSpeed { continue }
+            } else if segmentDist >= maxSegmentDistance {
+                continue
             }
 
             totalDistance += segmentDist

@@ -48,34 +48,32 @@ final class FeedViewModel: ObservableObject {
     init(tripManager: TripManager) {
         self.tripManager = tripManager
 
-        // Reload when a trip is recorded/auto-stopped in the background —
-        // otherwise the feed stays stale until pull-to-refresh
-        NotificationCenter.default.publisher(for: .tripRecordingEnded)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.loadTrips() }
-            .store(in: &cancellables)
-
-        // Server sync delivered updated data — reload to pick it up
-        NotificationCenter.default.publisher(for: .syncPullCompleted)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.loadTrips() }
-            .store(in: &cancellables)
-
-        // Photo added/removed on a trip from anywhere in the app — refresh
-        // so the card's photo indicator + preview thumb update without the
-        // user having to pull-to-refresh.
-        NotificationCenter.default.publisher(for: .tripPhotosChanged)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.loadTrips() }
-            .store(in: &cancellables)
-
-        // Privacy flipped on a trip (private ↔ public). The "Только Вы" pill
-        // on Mine-tab cards is driven by `trip.isPrivate`, so without this
-        // listener the pill stays stale until pull-to-refresh.
-        NotificationCenter.default.publisher(for: .tripPrivacyChanged)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.loadTrips() }
-            .store(in: &cancellables)
+        // Reload on any event that can change Mine-tab content:
+        //  • .tripRecordingEnded — a trip recorded/auto-stopped in the background
+        //  • .syncPullCompleted  — a server pull delivered updated data
+        //  • .tripPhotosChanged  — a photo added/removed (card indicator/thumb)
+        //  • .tripPrivacyChanged — privacy flip (the "Только Вы" pill)
+        //
+        // These can arrive in BURSTS: when Cloud Sync drains, every uploaded
+        // photo posts .tripPhotosChanged and every pull posts .syncPullCompleted.
+        // The old code ran the SYNCHRONOUS loadTrips() once per event, faulting
+        // the whole library on the main thread each time — the dominant cause of
+        // the sync-time jank. Merge + THROTTLE caps reloads to ≤1 per window
+        // (throttle, not debounce, so a long continuous drain still refreshes
+        // periodically instead of starving until it quiesces), and
+        // loadTripsAsync() runs the fetch on a background context (hopping back
+        // to the main actor for the @Published mutations).
+        Publishers.MergeMany(
+            NotificationCenter.default.publisher(for: .tripRecordingEnded),
+            NotificationCenter.default.publisher(for: .syncPullCompleted),
+            NotificationCenter.default.publisher(for: .tripPhotosChanged),
+            NotificationCenter.default.publisher(for: .tripPrivacyChanged)
+        )
+        .throttle(for: .milliseconds(800), scheduler: DispatchQueue.main, latest: true)
+        .sink { [weak self] _ in
+            Task { [weak self] in await self?.loadTripsAsync() }
+        }
+        .store(in: &cancellables)
     }
 
     deinit {
@@ -124,13 +122,24 @@ final class FeedViewModel: ObservableObject {
     /// animation. Without this, the synchronous viewContext fetch caused a
     /// visible ~200ms freeze on iPhone 12 / 70+ trip libraries.
     func loadTripsAsync() async {
-        var fetched = await tripManager.fetchTripsAsync()
-        if let pendingId = pendingDeleteTrip?.id {
-            fetched.removeAll { $0.id == pendingId }
+        let fetched = await tripManager.fetchTripsAsync()
+        // Hop back to the main actor for EVERY @Published / cache mutation.
+        // FeedViewModel is not @MainActor and fetchTripsAsync() is a nonisolated
+        // async method, so this continuation resumes on the cooperative pool
+        // (SE-0338). Writing allTrips / @Published trips+sections, and mutating
+        // kmByDayCache off-main would trip "Publishing changes from background
+        // threads" and race the main-thread calendar reads (kmByDay) — a crash
+        // risk that the debounced sync-burst reloads would hit far more often
+        // than the rare pull-to-refresh that shared this method before.
+        await MainActor.run {
+            var trips = fetched
+            if let pendingId = pendingDeleteTrip?.id {
+                trips.removeAll { $0.id == pendingId }
+            }
+            allTrips = trips
+            rebuildCalendarCaches()
+            applyFilters()
         }
-        allTrips = fetched
-        rebuildCalendarCaches()
-        applyFilters()
     }
 
     func retryGeocodingIfNeeded() {

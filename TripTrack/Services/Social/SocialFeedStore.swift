@@ -32,6 +32,12 @@ final class SocialFeedStore: ObservableObject {
     private var lastLoadedAt: Date?
     private let staleness: TimeInterval = 15 * 60
     private var cancellables = Set<AnyCancellable>()
+    /// Debounce hub for server-confirmed photo refreshes. When Cloud Sync
+    /// drains, each uploaded photo posts a no-delta `.tripPhotosChanged`;
+    /// calling `refresh()` (a `/social/feed` round-trip) per photo hammered the
+    /// network and republished the whole feed repeatedly. Routing those events
+    /// through this subject collapses a burst into a single trailing refresh.
+    private let serverPhotoRefresh = PassthroughSubject<Void, Never>()
 
     private init() {
         // Photo added/removed/uploaded somewhere in the app. The notification
@@ -53,9 +59,20 @@ final class SocialFeedStore: ObservableObject {
                     // notification (no delta) below triggers the reconcile.
                     self.bumpPhotoCount(tripId: tripId, delta: delta)
                 } else {
-                    // Server-confirmed event — fetch authoritative state.
-                    Task { @MainActor [weak self] in await self?.refresh() }
+                    // Server-confirmed event — fetch authoritative state, but
+                    // debounced (below) so a drain of N photos = one refresh.
+                    self.serverPhotoRefresh.send(())
                 }
+            }
+            .store(in: &cancellables)
+
+        // THROTTLE (not debounce): one /social/feed refresh per window at most,
+        // but a long continuous photo drain still refreshes periodically rather
+        // than withholding every update until the stream finally quiesces.
+        serverPhotoRefresh
+            .throttle(for: .seconds(2), scheduler: DispatchQueue.main, latest: true)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in await self?.refresh() }
             }
             .store(in: &cancellables)
     }

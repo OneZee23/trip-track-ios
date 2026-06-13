@@ -190,7 +190,7 @@ struct FeedTripCardView: View {
                 c: c
             )
             metricBlock(
-                value: String(format: "%.0f", trip.averageSpeedKmh),
+                value: String(format: "%.0f", trip.displayAverageSpeedKmh(SettingsManager.shared.avgSpeedMode)),
                 unit: AppStrings.kmh(lang.language),
                 label: AppStrings.avgSpeed(lang.language),
                 c: c

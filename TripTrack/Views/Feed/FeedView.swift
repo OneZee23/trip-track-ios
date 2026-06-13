@@ -286,8 +286,19 @@ struct FeedView: View {
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(item: $signInPrompt, onDismiss: {
-            if resumeAfterAuth { resumeAfterAuth = false; resumePendingSocialAction() }
-            else { pendingSocialAction = nil }
+            if resumeAfterAuth {
+                resumeAfterAuth = false
+                // Defer until the sign-in sheet has finished dismissing. The
+                // resumed action can itself present a sheet (reaction picker,
+                // share) — doing that synchronously from onDismiss races the
+                // dismissal animation and SwiftUI silently drops the second
+                // presentation, so the user authenticates and then nothing
+                // happens. The short sleep clears the in-flight transition.
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                    resumePendingSocialAction()
+                }
+            } else { pendingSocialAction = nil }
         }) { action in
             SignInPromptSheet(action: action, onAuthenticated: { resumeAfterAuth = true })
                 .environmentObject(lang)

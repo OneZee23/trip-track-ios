@@ -153,6 +153,23 @@ struct PhotoFullScreenView: View {
             .onTapGesture(count: 2) {
                 if index == currentIndex { toggleZoom() }
             }
+            .onTapGesture(count: 1) {
+                guard index == currentIndex else { return }
+                // While zoomed, a single tap resets to fit (not dismiss) — only a
+                // tap at fit scale dismisses, matching standard photo viewers and
+                // the backdrop tap above. (count:2 is declared first so a double
+                // tap is consumed by the zoom toggle, not this.)
+                if scale > 1.0 {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        scale = 1.0
+                        lastScale = 1.0
+                        imageOffset = .zero
+                        lastImageOffset = .zero
+                    }
+                } else {
+                    onDismiss()
+                }
+            }
     }
 
     /// Double-tap toggles between fit and 2.5× (centered). Pinch still allows
