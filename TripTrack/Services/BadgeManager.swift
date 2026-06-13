@@ -28,22 +28,29 @@ enum BadgeManager {
     /// every 5 minutes so a multi-hour window can't be missed; a span ≥24h always
     /// matches. Uses the trip's full [startDate, endDate] so an overnight drive
     /// that starts in the evening still counts toward night / early-morning badges.
-    private static func tripOverlapsHourWindow(_ trip: Trip, _ startHour: Int, _ endHour: Int) -> Bool {
+    /// Hours-of-day [0,23] the trip's wall-clock span touches. A single 5-min walk
+    /// (a span ≥24h returns all hours). Computed once per trip so the night/morning
+    /// window checks share one pass instead of re-walking the span per window.
+    private static func hoursTouched(by trip: Trip) -> Set<Int> {
         let cal = Calendar.current
         let start = trip.startDate
         let end = trip.endDate ?? start
-        func inWindow(_ h: Int) -> Bool {
-            startHour <= endHour ? (h >= startHour && h < endHour) : (h >= startHour || h < endHour)
-        }
-        guard end > start else { return inWindow(cal.component(.hour, from: start)) }
-        if end.timeIntervalSince(start) >= 24 * 3600 { return true }
+        guard end > start else { return [cal.component(.hour, from: start)] }
+        if end.timeIntervalSince(start) >= 24 * 3600 { return Set(0...23) }
+        var hours: Set<Int> = []
         var t = start
         let step: TimeInterval = 300
         while t < end {
-            if inWindow(cal.component(.hour, from: t)) { return true }
+            hours.insert(cal.component(.hour, from: t))
             t = t.addingTimeInterval(step)
         }
-        return inWindow(cal.component(.hour, from: end))
+        hours.insert(cal.component(.hour, from: end))
+        return hours
+    }
+
+    /// True if any touched hour falls in the [startHour, endHour) window (wraps midnight).
+    private static func windowOverlaps(_ hours: Set<Int>, _ startHour: Int, _ endHour: Int) -> Bool {
+        hours.contains { h in startHour <= endHour ? (h >= startHour && h < endHour) : (h >= startHour || h < endHour) }
     }
 
     static func computeStats(from trips: [Trip]) -> BadgeStats {
@@ -89,11 +96,12 @@ enum BadgeManager {
             // Overlap-based: award if ANY part of the trip falls in the window, so
             // an overnight drive that STARTS in the evening (e.g. 20:00→07:00) still
             // earns night badges — the previous start-hour-only check missed these.
-            // Short-circuit once a flag is set so later trips skip the (sampling)
-            // overlap walk — keeps the O(N²) backfill cheap on launch.
-            if !hasNight, Self.tripOverlapsHourWindow(trip, 22, 5) { hasNight = true }
-            if !hasLateNight, Self.tripOverlapsHourWindow(trip, 23, 4) { hasLateNight = true }
-            if !hasEarlyMorning, Self.tripOverlapsHourWindow(trip, 0, 6) { hasEarlyMorning = true }
+            // One span walk per trip; flags short-circuit so later trips skip even that.
+            let needsHourWindows = !hasNight || !hasLateNight || !hasEarlyMorning || !hasAfterMidnight
+            let tripHours = needsHourWindows ? Self.hoursTouched(by: trip) : []
+            if !hasNight, Self.windowOverlaps(tripHours, 22, 5) { hasNight = true }
+            if !hasLateNight, Self.windowOverlaps(tripHours, 23, 4) { hasLateNight = true }
+            if !hasEarlyMorning, Self.windowOverlaps(tripHours, 0, 6) { hasEarlyMorning = true }
 
             let weekday = Calendar.current.component(.weekday, from: trip.startDate)
             if weekday == 1 { hasSunday = true } // Sunday = 1
@@ -110,7 +118,7 @@ enum BadgeManager {
             }
 
             // Secret-badge aggregates
-            if !hasAfterMidnight, Self.tripOverlapsHourWindow(trip, 0, 4) { hasAfterMidnight = true }
+            if !hasAfterMidnight, Self.windowOverlaps(tripHours, 0, 4) { hasAfterMidnight = true }
             let year = Calendar.current.component(.year, from: trip.startDate)
             if year == currentYear { monthsThisYear.insert(month) }
             if let vid = trip.vehicleId { vehicleCounts[vid, default: 0] += 1 }

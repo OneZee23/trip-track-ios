@@ -189,6 +189,18 @@ enum AppStrings {
     static func avgSpeedMoving(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "В движении" : "Moving"
     }
+    static func noVehicle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Без машины" : "No vehicle"
+    }
+    static func tripVehicle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Машина поездки" : "Trip vehicle"
+    }
+    static func statsMoreKm(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "— больше км" : "— more km"
+    }
+    static func statsToday(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "сегодня" : "today"
+    }
     static func tripTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Поездка" : "Trip"
     }

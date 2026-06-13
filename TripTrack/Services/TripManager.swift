@@ -814,6 +814,10 @@ final class TripManager: ObservableObject {
     // MARK: - Demo Trip
 
     private static let demoTripIdKey = "demoTripId"
+    // Shared by createDemoTrip and the one-shot content sweep so the signature
+    // they match on can't drift apart.
+    private static let demoTripTitle = "Demo trip"
+    private static let demoTripRegion = "Demo"
 
     // MARK: - Demo Trip (debug only, not used in production since 0.1.1)
 
@@ -824,8 +828,8 @@ final class TripManager: ObservableObject {
         entity.id = tripId
         entity.startDate = Calendar.current.date(byAdding: .hour, value: -2, to: Date())
         entity.endDate = Calendar.current.date(byAdding: .hour, value: -1, to: Date())
-        entity.title = "Demo trip"
-        entity.region = "Demo"
+        entity.title = Self.demoTripTitle
+        entity.region = Self.demoTripRegion
         entity.distance = 42_500
         entity.maxSpeed = 28.0
         entity.averageSpeed = 12.0
@@ -877,7 +881,7 @@ final class TripManager: ObservableObject {
 
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "title == %@ AND region == %@", "Demo trip", "Demo")
+        request.predicate = NSPredicate(format: "title == %@ AND region == %@", Self.demoTripTitle, Self.demoTripRegion)
         guard let demoTrips = try? context.fetch(request), !demoTrips.isEmpty else { return }
         for entity in demoTrips {
             if let id = entity.id { deleteTrip(id: id) }

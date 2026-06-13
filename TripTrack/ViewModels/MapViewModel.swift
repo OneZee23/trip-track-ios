@@ -297,23 +297,26 @@ final class MapViewModel: ObservableObject {
         // this the duration label froze and there was no GPS-stall watchdog.
         startRecordingTimers()
 
-        // Start Live Activity — prefer the recovered trip's own vehicle over
-        // the current global selection (which the user may have changed since
-        // force-quitting mid-trip).
-        let settings = SettingsManager.shared
-        let vid = trip.vehicleId ?? selectedVehicleId
-        let vehicle = settings.vehicles.first { $0.id == vid } ?? settings.vehicles.first
-        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
-        LiveActivityManager.shared.startActivity(
-            tripId: trip.id,
-            startDate: trip.startDate,
-            vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
-            vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
-        )
+        // Start Live Activity — prefer the recovered trip's own vehicle over the
+        // current global selection (the user may have changed it since force-quitting).
+        startLiveActivity(tripId: trip.id, startDate: trip.startDate, vehicleId: trip.vehicleId ?? selectedVehicleId)
 
         #if DEBUG
         print("Recording restored: trip \(trip.id), started \(trip.startDate)")
         #endif
+    }
+
+    /// Resolves the car (with the shared selection fallback) and starts the
+    /// Lock-Screen Live Activity. Shared by fresh-start and force-quit recovery.
+    private func startLiveActivity(tripId: UUID, startDate: Date, vehicleId: UUID?) {
+        let vehicle = SettingsManager.shared.vehicle(for: vehicleId)
+        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
+        LiveActivityManager.shared.startActivity(
+            tripId: tripId,
+            startDate: startDate,
+            vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
+            vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
+        )
     }
 
     func startRecording(vehicleId overrideId: UUID? = nil) {
@@ -348,14 +351,10 @@ final class MapViewModel: ObservableObject {
         isRecording = true
 
         // Start Live Activity on Lock Screen / Dynamic Island
-        let settings = SettingsManager.shared
-        let vehicle = settings.vehicles.first { $0.id == vid } ?? settings.vehicles.first
-        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
-        LiveActivityManager.shared.startActivity(
+        startLiveActivity(
             tripId: tripManager.activeTrip?.id ?? UUID(),
             startDate: recordingStartDate ?? Date(),
-            vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
-            vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
+            vehicleId: vid
         )
 
         // Simple follow mode — no zoom management

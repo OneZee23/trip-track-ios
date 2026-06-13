@@ -422,7 +422,7 @@ struct TripDetailView: View {
         } label: {
             HStack(spacing: 6) {
                 if let v = tripVehicle {
-                    Text(v.isPixelAvatar ? "🚗" : v.avatarEmoji)
+                    Text(v.displayEmoji)
                         .font(.system(size: 13))
                     Text(v.name)
                         .font(.system(size: 13, weight: .medium))
@@ -431,7 +431,7 @@ struct TripDetailView: View {
                     Image(systemName: "car")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(c.textTertiary)
-                    Text(lang.language == .ru ? "Без машины" : "No vehicle")
+                    Text(AppStrings.noVehicle(lang.language))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                 }
@@ -442,16 +442,16 @@ struct TripDetailView: View {
         }
         .buttonStyle(.plain)
         .confirmationDialog(
-            lang.language == .ru ? "Машина поездки" : "Trip vehicle",
+            AppStrings.tripVehicle(lang.language),
             isPresented: $showVehiclePicker,
             titleVisibility: .visible
         ) {
             ForEach(settings.vehicles) { v in
-                Button("\(v.isPixelAvatar ? "🚗" : v.avatarEmoji) \(v.name)") {
+                Button("\(v.displayEmoji) \(v.name)") {
                     applyVehicleChange(v.id)
                 }
             }
-            Button(lang.language == .ru ? "Без машины" : "No vehicle", role: .destructive) {
+            Button(AppStrings.noVehicle(lang.language), role: .destructive) {
                 applyVehicleChange(nil)
             }
             Button(AppStrings.cancel(lang.language), role: .cancel) {}

@@ -255,6 +255,13 @@ final class SettingsManager: ObservableObject {
         saveSettings()
     }
 
+    /// Resolve a vehicle by id, falling back to the first vehicle (the app's
+    /// implicit-default rule). Centralized so the fallback lives in one place
+    /// instead of being hand-rolled at each call site.
+    func vehicle(for id: UUID?) -> Vehicle? {
+        vehicles.first { $0.id == id } ?? vehicles.first
+    }
+
     // MARK: - Vehicles
 
     private func loadVehicles() {

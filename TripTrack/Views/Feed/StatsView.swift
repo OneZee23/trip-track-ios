@@ -374,14 +374,14 @@ struct StatsView: View {
                             .frame(width: 12, height: 12)
                     }
                 }
-                Text(lang.language == .ru ? "— больше км" : "— more km")
+                Text(AppStrings.statsMoreKm(lang.language))
                     .font(.system(size: 10))
                     .foregroundStyle(c.textTertiary)
                 Spacer()
                 RoundedRectangle(cornerRadius: 3)
                     .stroke(c.text.opacity(0.55), lineWidth: 1.5)
                     .frame(width: 12, height: 12)
-                Text(lang.language == .ru ? "сегодня" : "today")
+                Text(AppStrings.statsToday(lang.language))
                     .font(.system(size: 10))
                     .foregroundStyle(c.textTertiary)
             }

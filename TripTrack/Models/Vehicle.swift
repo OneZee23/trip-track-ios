@@ -52,6 +52,12 @@ struct Vehicle: Identifiable, Codable {
         avatarEmoji.hasPrefix("pixel_car_")
     }
 
+    /// Emoji for inline text display — a car glyph stands in for pixel-car avatars
+    /// (whose `avatarEmoji` holds an asset name, not an emoji).
+    var displayEmoji: String {
+        isPixelAvatar ? "🚗" : avatarEmoji
+    }
+
     var avatarImageName: String? {
         isPixelAvatar ? avatarEmoji : nil
     }
