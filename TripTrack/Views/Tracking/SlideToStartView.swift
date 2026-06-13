@@ -77,7 +77,14 @@ struct SlideToStartView: View {
         let text = AppStrings.slideToStart(lang.language)
         let label = Text(text)
             .font(.system(size: 16, weight: .semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            // Center the hint in the lane to the RIGHT of the thumb + chevron trail.
+            // Centering across the full track made a long localized string
+            // ("Сдвиньте для старта") collide with the thumb/chevrons → cramped look.
             .frame(maxWidth: .infinity)
+            .padding(.leading, thumbSize + 44)
+            .padding(.trailing, 16)
 
         let opacity = max(0, 1 - progress / 0.3)
 
