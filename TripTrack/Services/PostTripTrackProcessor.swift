@@ -17,9 +17,6 @@ final class PostTripTrackProcessor {
     /// Time interval between interpolated points (seconds)
     private let interpolationInterval: TimeInterval = 2.0
 
-    /// Max single-segment distance for stats (rejects GPS jumps)
-    private let maxSegmentDistance: Double = 1000.0
-
     init(persistenceController: PersistenceController = .shared) {
         self.persistenceController = persistenceController
     }
@@ -264,15 +261,13 @@ final class PostTripTrackProcessor {
             let segmentDist = curr.distance(from: prev)
 
             // Reject only IMPOSSIBLE-speed segments (GPS teleport jumps); keep long
-            // but legitimate sparse-GPS / dead-zone bridges (the old absolute 1km cap
-            // dropped real distance). Gate on implied speed when timestamps allow,
-            // else fall back to the absolute cap.
-            if let prevTS = sorted[i-1].timestamp, let currTS = sorted[i].timestamp,
-               currTS.timeIntervalSince(prevTS) > 0 {
-                if segmentDist / currTS.timeIntervalSince(prevTS) > 83.0 { continue }
-            } else if segmentDist >= maxSegmentDistance {
-                continue
+            // but legitimate sparse-GPS / dead-zone bridges. Shared gate
+            // (TripDistanceGate): implied-speed with a usable dt, absolute-cap else.
+            var dt: TimeInterval = 0
+            if let prevTS = sorted[i-1].timestamp, let currTS = sorted[i].timestamp {
+                dt = currTS.timeIntervalSince(prevTS)
             }
+            if !TripDistanceGate.isPlausibleSegment(meters: segmentDist, dt: dt) { continue }
 
             totalDistance += segmentDist
 

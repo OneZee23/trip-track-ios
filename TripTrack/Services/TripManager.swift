@@ -422,8 +422,7 @@ final class TripManager: ObservableObject {
         if let last = lastLocation {
             let delta = filtered.distance(from: last)
             let dt = filtered.timestamp.timeIntervalSince(last.timestamp)
-            let plausible = dt > 0 ? (delta / dt) <= maxPlausibleSpeed : delta < maxSegmentDistance
-            if plausible {
+            if TripDistanceGate.isPlausibleSegment(meters: delta, dt: dt) {
                 entity.distance += delta
             }
         }
@@ -465,14 +464,6 @@ final class TripManager: ObservableObject {
         }
     }
 
-    /// Absolute single-segment fallback cap — only used when a segment has no
-    /// usable time delta (missing/equal timestamps). With timestamps we gate on
-    /// implied speed instead, so a long-but-legitimate sparse-GPS / dead-zone
-    /// bridge (minutes between fixes in the taiga) still counts toward distance.
-    private let maxSegmentDistance: Double = 1000  // 1km (no-timestamp fallback)
-    /// Implausible implied speed → a real GPS teleport jump. ~300 km/h.
-    private let maxPlausibleSpeed: Double = 83.0   // m/s
-
     private func updateEntityStats(_ entity: TripEntity) {
         guard let points = entity.trackPoints?.array as? [TrackPointEntity],
               points.count > 1 else { return }
@@ -486,15 +477,13 @@ final class TripManager: ObservableObject {
             let segmentDist = curr.distance(from: prev)
 
             // Reject only IMPOSSIBLE-speed segments (real GPS teleport jumps), not
-            // long-but-plausible sparse-GPS bridges. The old absolute 1km cap ran
-            // first and silently dropped legitimate dead-zone distance. With usable
-            // timestamps we gate on implied speed; without them, fall back to the cap.
-            if let prevTS = points[i-1].timestamp, let currTS = points[i].timestamp,
-               currTS.timeIntervalSince(prevTS) > 0 {
-                if segmentDist / currTS.timeIntervalSince(prevTS) > maxPlausibleSpeed { continue }
-            } else if segmentDist >= maxSegmentDistance {
-                continue
+            // long-but-plausible sparse-GPS bridges. Shared gate (TripDistanceGate):
+            // implied-speed when we have a usable dt, absolute-cap fallback otherwise.
+            var dt: TimeInterval = 0
+            if let prevTS = points[i-1].timestamp, let currTS = points[i].timestamp {
+                dt = currTS.timeIntervalSince(prevTS)
             }
+            if !TripDistanceGate.isPlausibleSegment(meters: segmentDist, dt: dt) { continue }
 
             totalDistance += segmentDist
             maxSpeed = max(maxSpeed, points[i].speed)

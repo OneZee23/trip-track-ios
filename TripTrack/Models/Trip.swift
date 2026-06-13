@@ -143,9 +143,10 @@ struct Trip: Identifiable, Codable {
                 // Reject GPS-teleport segments: a stale/low reported .speed paired
                 // with a huge geometric jump (multipath, dropout snap-back) would
                 // otherwise inflate BOTH drivingTime and movingDist, spiking the
-                // moving average. 83 m/s (~300 km/h) is the same teleport ceiling
-                // used in TripManager/PostTripTrackProcessor stats.
-                if segDist / dt > 83.0 { continue }
+                // moving average. Shared teleport ceiling (TripDistanceGate) — dt is
+                // already guaranteed > 0 here (guarded above), so this is the
+                // implied-speed gate, identical to the distance-stat paths.
+                if !TripDistanceGate.isPlausibleSegment(meters: segDist, dt: dt) { continue }
                 drv += dt
                 movingDist += segDist
             }
