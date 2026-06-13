@@ -37,6 +37,12 @@ protocol TripRepository {
 
     // MARK: Sync
     func fetchEntity(id: UUID) -> TripEntity?
+    /// Builds a `TripSyncPayload` (track-point decode + movement-split + photo
+    /// metadata) on a BACKGROUND context, off the main actor. `uploadTrip` used
+    /// to do this on the main viewContext, decoding every track point of every
+    /// trip during a sync drain — the residual lag on long (thousands-of-points)
+    /// trips that round 3's off-main encode/gzip didn't cover.
+    func fetchTripSyncPayloadAsync(id: UUID) async -> TripSyncPayload?
     func markSynced(tripId: UUID, conflictVersion: Int, serverCreatedAt: Date)
     func markAllPendingUpload()
     func applyRemoteTrip(_ payload: TripSyncPayload)
@@ -99,6 +105,30 @@ final class CoreDataTripRepository: TripRepository {
                 }
                 let trips = entities.compactMap { self.tripFromEntity($0, includeTrackPoints: false) }
                 cont.resume(returning: trips)
+            }
+        }
+    }
+
+    func fetchTripSyncPayloadAsync(id: UUID) async -> TripSyncPayload? {
+        let bgContext = persistenceController.container.newBackgroundContext()
+        return await withCheckedContinuation { (cont: CheckedContinuation<TripSyncPayload?, Never>) in
+            bgContext.perform {
+                let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+                request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+                request.fetchLimit = 1
+                guard let entity = try? bgContext.fetch(request).first else {
+                    cont.resume(returning: nil)
+                    return
+                }
+                // tripFromEntity (incl. track points) + TripSyncPayload.init
+                // (movement-split + photo meta) run on the bg queue; the result
+                // is a value-type payload — no managed object crosses the hop.
+                guard let trip = self.tripFromEntity(entity) else {
+                    cont.resume(returning: nil)
+                    return
+                }
+                let payload = TripSyncPayload(trip: trip, entity: entity)
+                cont.resume(returning: payload)
             }
         }
     }

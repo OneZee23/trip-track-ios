@@ -202,8 +202,11 @@ final class AuthService: ObservableObject {
         // get pushed.
         if SettingsManager.shared.cloudSyncEnabled {
             let repo: TripRepository = CoreDataTripRepository()
+            // Full mirror (data-loss-safe): re-mark everything pendingUpload and
+            // enqueue. A pendingUpload-only filter would miss private trips /
+            // vehicles edited while Cloud Sync was OFF (they stay .synced). Now
+            // cheap: off-main payload build + server no-op on identical upserts.
             repo.markAllPendingUpload()
-
             for trip in repo.fetchAllTrips() {
                 SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: trip.id, action: .upload))
             }

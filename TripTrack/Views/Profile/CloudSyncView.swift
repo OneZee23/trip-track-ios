@@ -278,6 +278,15 @@ struct CloudSyncView: View {
         firstToggleShown = true
         Task { @MainActor in
             let repo: TripRepository = CoreDataTripRepository()
+            // Full mirror on the explicit user opt-in (the GDPR copy promises
+            // "re-enabling uploads everything"). This re-marks EVERYTHING
+            // pendingUpload and enqueues it — which is data-loss-safe (a private
+            // trip or vehicle edited while Cloud Sync was OFF kept syncStatus
+            // .synced and would be MISSED by a pendingUpload-only filter). It is
+            // no longer heavy: payloads build off the main actor (uploadTrip →
+            // fetchTripSyncPayloadAsync) and the server no-ops identical
+            // re-uploads (TripsService.upsert short-circuit), so re-mirroring
+            // already-synced rows is cheap instead of a destructive rewrite.
             repo.markAllPendingUpload()
             for trip in repo.fetchAllTrips() {
                 SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: trip.id, action: .upload))
@@ -289,9 +298,8 @@ struct CloudSyncView: View {
                 entityType: .settings, entityId: settings.localUserId, action: .upload))
 
             // Photos are gated by their own `uploadStatus` (separate from
-            // `syncStatus`), so `markAllPendingUpload()` doesn't push them
-            // back into the upload queue. Enqueue every photo that isn't
-            // already fully on R2 — `localOnly` (never uploaded), `uploading`
+            // `syncStatus`). Enqueue every photo that isn't already fully on
+            // R2 — `localOnly` (never uploaded), `uploading`
             // (thumb sent, original stuck on cellular), and `failed` (prior
             // attempt errored). `APISyncTransport.uploadPhoto` is idempotent
             // — it skips thumb/original parts that already have a key.

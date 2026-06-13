@@ -75,7 +75,8 @@ final class APISyncTransport: SyncTransport {
     // MARK: Trip
 
     private func uploadTrip(id: UUID) async throws {
-        guard let trip = repo.fetchTripDetail(id: id), let entity = repo.fetchEntity(id: id) else { return }
+        // Light entity read for the privacy re-gate only — no track-point decode.
+        guard let entity = repo.fetchEntity(id: id) else { return }
         // Re-check the privacy gate at execute time. SyncEnqueuer's gate
         // fires at enqueue, but the op can sit in the queue across rapid
         // user toggles. Cloud Sync ON bypasses (full mirror).
@@ -91,7 +92,11 @@ final class APISyncTransport: SyncTransport {
             }
             return
         }
-        let payload = TripSyncPayload(trip: trip, entity: entity)
+        // Build the payload (decode all track points + movement-split + photo
+        // metadata) on a BACKGROUND context — this was the residual main-thread
+        // cost on long trips during a drain. nil = the trip vanished between the
+        // gate and the build (deleted mid-drain) → drop the op.
+        guard let payload = await repo.fetchTripSyncPayloadAsync(id: id) else { return }
         do {
             let res: TripUpsertResponse = try await client.post(APIEndpoint.tripUpsert, body: payload)
             repo.markSynced(tripId: id, conflictVersion: res.conflictVersion, serverCreatedAt: res.serverCreatedAt)
