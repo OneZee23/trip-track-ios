@@ -18,8 +18,10 @@ private final class MockSyncTransport: SyncTransport {
         executedOperations.append(operation)
     }
 
-    func uploadTripsBatch(_ operations: [SyncOperation]) async -> Set<UUID> {
+    @MainActor
+    func uploadTripsBatch(_ operations: [SyncOperation], onChunkSynced: @escaping @MainActor (Int) -> Void) async -> Set<UUID> {
         batchedOps = operations
+        if !batchHandled.isEmpty { onChunkSynced(batchHandled.count) }
         return batchHandled
     }
 }

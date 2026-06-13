@@ -50,12 +50,19 @@ protocol SyncTransport {
     /// those; anything not returned (privacy-skip, chunk failure, unresolved)
     /// stays queued and is drained by the proven per-op `execute()` path. This
     /// makes the batch a pure optimization that can never lose an op.
-    func uploadTripsBatch(_ operations: [SyncOperation]) async -> Set<UUID>
+    ///
+    /// `onChunkSynced` is invoked with the count handled as each chunk lands, so
+    /// the progress UI advances during the batch instead of jumping 0→N at the end.
+    /// `@MainActor` so the callback runs synchronously on the main actor — the
+    /// caller mutates `@Published` progress in it, no fire-and-forget hop needed.
+    @MainActor
+    func uploadTripsBatch(_ operations: [SyncOperation], onChunkSynced: @escaping @MainActor (Int) -> Void) async -> Set<UUID>
 }
 
 extension SyncTransport {
     // Default: batch nothing → everything falls through to per-op execute().
-    func uploadTripsBatch(_ operations: [SyncOperation]) async -> Set<UUID> { [] }
+    @MainActor
+    func uploadTripsBatch(_ operations: [SyncOperation], onChunkSynced: @escaping @MainActor (Int) -> Void) async -> Set<UUID> { [] }
 }
 
 /// Manages a queue of pending sync operations with retry and prioritization.
@@ -171,12 +178,21 @@ final class SyncQueue: ObservableObject {
         // proven way, so the batch can never drop an op. Skip for ≤1 trip.
         let tripUploadOps = queue.filter { $0.entityType == .trip && $0.action == .upload }
         if tripUploadOps.count >= 2 {
-            let handled = await activeTransport.uploadTripsBatch(tripUploadOps)
+            // Advance the progress counter as each chunk lands (the batch is one
+            // long await otherwise, so the UI would sit at 0/N then jump). The
+            // callback is @MainActor + called synchronously, so it mutates the
+            // @Published progress directly — no fire-and-forget Task that could
+            // outlive the drain.
+            let handled = await activeTransport.uploadTripsBatch(tripUploadOps) { [weak self] syncedCount in
+                guard let self else { return }
+                self.batchProcessed += syncedCount
+                self.updatePendingCount()
+                self.republishSnapshots()
+            }
             if !handled.isEmpty {
                 queue.removeAll {
                     $0.entityType == .trip && $0.action == .upload && handled.contains($0.entityId)
                 }
-                batchProcessed += handled.count
                 updatePendingCount()
                 republishSnapshots()
             }
