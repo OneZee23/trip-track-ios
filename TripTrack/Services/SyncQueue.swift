@@ -44,6 +44,18 @@ struct SyncOperation: Identifiable, Equatable {
 /// Transport protocol — implemented by the actual API client when server is ready.
 protocol SyncTransport {
     func execute(_ operation: SyncOperation) async throws
+    /// Batch-uploads trip `.upload` ops via `/sync/push`, collapsing N serial
+    /// per-trip POSTs into a few chunked requests. Returns the entityIds it
+    /// FULLY handled (synced, or conflict-resolved) — the queue removes only
+    /// those; anything not returned (privacy-skip, chunk failure, unresolved)
+    /// stays queued and is drained by the proven per-op `execute()` path. This
+    /// makes the batch a pure optimization that can never lose an op.
+    func uploadTripsBatch(_ operations: [SyncOperation]) async -> Set<UUID>
+}
+
+extension SyncTransport {
+    // Default: batch nothing → everything falls through to per-op execute().
+    func uploadTripsBatch(_ operations: [SyncOperation]) async -> Set<UUID> { [] }
 }
 
 /// Manages a queue of pending sync operations with retry and prioritization.
@@ -149,6 +161,26 @@ final class SyncQueue: ObservableObject {
             return lhsPriority < rhsPriority
         }
         republishSnapshots()
+
+        // Batch fast-path: collapse trip `.upload` ops into a few `/sync/push`
+        // requests instead of N serial per-trip POSTs (the source of the
+        // one-by-one drain + per-op main-thread churn). The transport returns
+        // the entityIds it fully handled; we remove ONLY those. Anything it
+        // didn't ack — privacy-skip, conflict it couldn't resolve, or a failed
+        // chunk — stays in `queue` and the per-op loop below drains it the
+        // proven way, so the batch can never drop an op. Skip for ≤1 trip.
+        let tripUploadOps = queue.filter { $0.entityType == .trip && $0.action == .upload }
+        if tripUploadOps.count >= 2 {
+            let handled = await activeTransport.uploadTripsBatch(tripUploadOps)
+            if !handled.isEmpty {
+                queue.removeAll {
+                    $0.entityType == .trip && $0.action == .upload && handled.contains($0.entityId)
+                }
+                batchProcessed += handled.count
+                updatePendingCount()
+                republishSnapshots()
+            }
+        }
 
         while !queue.isEmpty {
             guard !CacheManager.shared.isOffline else { break }

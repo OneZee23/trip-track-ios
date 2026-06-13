@@ -115,6 +115,101 @@ final class APISyncTransport: SyncTransport {
         }
     }
 
+    /// Batch trip upload via `/sync/push`. Builds payloads off the main actor,
+    /// chunks them under the 25 MB body limit, and POSTs each chunk. Returns the
+    /// entityIds it fully handled (synced or conflict-resolved). Anything not
+    /// returned — a privacy-skip, a chunk that failed, or a trip that vanished —
+    /// is left for `SyncQueue`'s per-op `execute()` to drain, so this can never
+    /// drop an op. Mirrors `uploadTrip`'s privacy gate + markSynced/conflict
+    /// semantics, just amortized across many trips.
+    func uploadTripsBatch(_ operations: [SyncOperation]) async -> Set<UUID> {
+        var handled = Set<UUID>()
+        var payloads: [TripSyncPayload] = []
+
+        for op in operations {
+            let id = op.entityId
+            guard let entity = repo.fetchEntity(id: id) else {
+                // Trip gone (deleted mid-drain) — nothing to upload; drop the op.
+                handled.insert(id)
+                continue
+            }
+            // Privacy re-gate (mirrors uploadTrip). A private trip with Cloud
+            // Sync OFF must NOT go out in a batch — leave it for per-op
+            // execute(), which runs the unpublish / mark-synced edge logic.
+            if !SettingsManager.shared.cloudSyncEnabled && entity.isPrivate {
+                continue
+            }
+            if let payload = await repo.fetchTripSyncPayloadAsync(id: id) {
+                payloads.append(payload)
+            }
+            // payload nil = vanished between gate and build → leave for per-op.
+        }
+        guard !payloads.isEmpty else { return handled }
+
+        for chunk in Self.chunkByTrackPoints(payloads) {
+            do {
+                let res: SyncPushResponse = try await client.post(
+                    APIEndpoint.syncPush, body: SyncPushRequest(trips: chunk))
+                for r in res.trips ?? [] {
+                    switch r.status {
+                    case "created", "updated":
+                        if let serverCreatedAt = r.serverCreatedAt {
+                            repo.markSynced(tripId: r.id, conflictVersion: r.conflictVersion,
+                                            serverCreatedAt: serverCreatedAt)
+                        } else {
+                            repo.markSynced(tripId: r.id, conflictVersion: r.conflictVersion)
+                        }
+                        handled.insert(r.id)
+                    case "conflict":
+                        // Resolve like the per-op path (pull + overwrite local) —
+                        // but only mark handled if the pull SUCCEEDS. If it throws
+                        // (network/5xx), leave the op queued so per-op execute()
+                        // retries it and parks it in failedQueue (with retry + user
+                        // visibility) instead of silently dropping an unresolved
+                        // conflict from the queue.
+                        do {
+                            try await pullAndOverwriteTrip(id: r.id)
+                            handled.insert(r.id)
+                        } catch {
+                            // leave unhandled → per-op fallback
+                        }
+                    default:
+                        break  // unknown status → leave for per-op execute()
+                    }
+                }
+                // Any trip in this chunk the server didn't acknowledge stays
+                // unhandled → per-op fallback.
+            } catch {
+                // Whole chunk failed (network/5xx) — none handled; per-op retries.
+                continue
+            }
+        }
+        return handled
+    }
+
+    /// Splits trip payloads into chunks bounded by trip count AND accumulated
+    /// track-point count, to stay well under the server's 25 MB body limit even
+    /// for GPS-dense multi-hour trips (each payload carries its full track).
+    private static func chunkByTrackPoints(_ payloads: [TripSyncPayload]) -> [[TripSyncPayload]] {
+        let maxTripsPerChunk = 25
+        let maxPointsPerChunk = 80_000
+        var chunks: [[TripSyncPayload]] = []
+        var current: [TripSyncPayload] = []
+        var points = 0
+        for p in payloads {
+            let count = p.trackPoints?.count ?? 0
+            if !current.isEmpty && (current.count >= maxTripsPerChunk || points + count > maxPointsPerChunk) {
+                chunks.append(current)
+                current = []
+                points = 0
+            }
+            current.append(p)
+            points += count
+        }
+        if !current.isEmpty { chunks.append(current) }
+        return chunks
+    }
+
     private func pullAndOverwriteTrip(id: UUID) async throws {
         let req = TripDetailRequest(id: id, includeTrackPoints: true)
         let fresh: TripSyncPayload = try await client.post(APIEndpoint.tripDetail, body: req)
