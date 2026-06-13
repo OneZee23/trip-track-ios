@@ -255,11 +255,16 @@ final class TripManager: ObservableObject {
 
     // MARK: - Orphan Cleanup & Recovery
 
-    /// Max age for a restorable orphan trip (1 hour). Older orphans are closed.
-    private static let maxRestorableAge: TimeInterval = 3600
+    /// Max age for a restorable orphan trip. Raised 1h→6h so a long road trip
+    /// whose app was killed mid-drive (memory pressure / reboot) still resumes as
+    /// ONE track when reopened later the same day, instead of silently splitting.
+    /// During a manual pause, location stays active and keeps the app alive, so an
+    /// overnight pause survives without needing recovery at all. 6h bounds the
+    /// "forgot to stop" case (a far-older orphan is treated as genuinely abandoned).
+    private static let maxRestorableAge: TimeInterval = 6 * 3600
 
     /// Called on init: finds trips with no endDate (app was killed mid-recording).
-    /// Recent orphans (< 1 hour) are restored as active recording.
+    /// Recent orphans (< maxRestorableAge) are restored as active recording.
     /// Old orphans are closed or deleted (junk).
     private func cleanupOrphanedTrips() {
         let context = persistenceController.container.viewContext
@@ -330,7 +335,10 @@ final class TripManager: ObservableObject {
 
     // MARK: - Private
 
-    private let maxRecordAccuracy: Double = 30.0  // reject points with accuracy > 30m
+    // Raised 30→65m so heavy-canopy / remote (taiga) fixes still record instead of
+    // every point being dropped (the "0 km after 8h" bug). Jitter from low-accuracy
+    // fixes is contained by the accuracy-scaled minimum distance in handleNewLocation.
+    private let maxRecordAccuracy: Double = 65.0  // reject points with accuracy > 65m
     private let minRecordDistance: Double = 5.0   // ignore points closer than 5m to last
     private let driftSpeedThreshold: Double = 1.0  // m/s — GPS reports "stationary"
     private let driftCalcSpeedLimit: Double = 5.0  // m/s — but distance says "moving"
@@ -348,13 +356,22 @@ final class TripManager: ObservableObject {
         // Filter: minimum distance between stored points (on filtered position)
         if let last = lastLocation {
             let delta = filtered.distance(from: last)
-            guard delta >= minRecordDistance else { return }
+            // Scale the minimum stored-point distance by the RAW reported accuracy
+            // (not the Kalman covariance estimate, which converges far below the raw
+            // value): a 60m-accuracy fix must move ~30m before we trust it as real
+            // movement, so relaxing the accuracy ceiling to 65m doesn't inflate
+            // distance with jitter. Good fixes (≤10m) keep the original 5m floor.
+            let effectiveMinDistance = max(minRecordDistance, location.horizontalAccuracy * 0.5)
+            guard delta >= effectiveMinDistance else { return }
 
-            // Filter: GPS drift — device reports low speed but calculated distance is high
+            // Filter: GPS drift — device reports near-zero speed but the calculated
+            // distance is high. Apply ONLY to reasonably accurate fixes: on poor
+            // (taiga) fixes the reported speed is unreliable — often clamped to 0 —
+            // so this check would falsely drop real movement as "drift".
             let timeDelta = filtered.timestamp.timeIntervalSince(last.timestamp)
             if timeDelta > 0 {
                 let calculatedSpeed = delta / timeDelta
-                if filtered.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
+                if location.horizontalAccuracy < 35 && filtered.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
                     return
                 }
             }
@@ -826,11 +843,28 @@ final class TripManager: ObservableObject {
     }
 
     func deleteDemoTripIfNeeded() {
-        guard let demoIdString = UserDefaults.standard.string(forKey: Self.demoTripIdKey),
-              let demoId = UUID(uuidString: demoIdString) else { return }
+        // Primary: delete by the stored id (set by createDemoTrip in legacy builds).
+        if let demoIdString = UserDefaults.standard.string(forKey: Self.demoTripIdKey),
+           let demoId = UUID(uuidString: demoIdString) {
+            deleteTrip(id: demoId)
+            UserDefaults.standard.removeObject(forKey: Self.demoTripIdKey)
+        }
 
-        deleteTrip(id: demoId)
-        UserDefaults.standard.removeObject(forKey: Self.demoTripIdKey)
+        // Fallback (one-shot): some older installs lost the `demoTripId` key while
+        // the seeded "Demo trip" row survived and polluted stats (a tester hit this).
+        // Sweep any trip matching the exact createDemoTrip signature — region "Demo"
+        // is never produced by real geocoding, so this can't touch a genuine trip.
+        let sweepKey = "demoTripContentSweepV057Done"
+        guard !UserDefaults.standard.bool(forKey: sweepKey) else { return }
+        UserDefaults.standard.set(true, forKey: sweepKey)
+
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "title == %@ AND region == %@", "Demo trip", "Demo")
+        guard let demoTrips = try? context.fetch(request), !demoTrips.isEmpty else { return }
+        for entity in demoTrips {
+            if let id = entity.id { deleteTrip(id: id) }
+        }
     }
 
     // MARK: - Per-Trip Badges

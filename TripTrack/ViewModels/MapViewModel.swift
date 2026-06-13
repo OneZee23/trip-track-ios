@@ -256,6 +256,9 @@ final class MapViewModel: ObservableObject {
                 pausedAccumulated += Date().timeIntervalSince(pauseStart)
                 pauseStartDate = nil
             }
+            // A long (e.g. overnight) pause can exceed the ~8h Live Activity cap,
+            // so iOS may have ended the Lock-Screen card. Bring it back on resume.
+            restartLiveActivityIfNeeded()
             durationTimer = Timer.publish(every: 1, on: .main, in: .common)
                 .autoconnect()
                 .sink { [weak self] _ in
@@ -310,6 +313,25 @@ final class MapViewModel: ObservableObject {
         #if DEBUG
         print("Recording restored: trip \(trip.id), started \(trip.startDate)")
         #endif
+    }
+
+    /// Restarts the Lock-Screen Live Activity if it has lapsed while recording
+    /// (e.g. iOS ended it past the ~8h cap during a long pause). Resolves the car
+    /// from the active trip, falling back to the current selection.
+    private func restartLiveActivityIfNeeded() {
+        guard isRecording,
+              !LiveActivityManager.shared.hasActivity,
+              let trip = tripManager.activeTrip else { return }
+        let settings = SettingsManager.shared
+        let vid = trip.vehicleId ?? selectedVehicleId
+        let vehicle = settings.vehicles.first { $0.id == vid } ?? settings.vehicles.first
+        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
+        LiveActivityManager.shared.startActivity(
+            tripId: trip.id,
+            startDate: trip.startDate,
+            vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
+            vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
+        )
     }
 
     func startRecording(vehicleId overrideId: UUID? = nil) {

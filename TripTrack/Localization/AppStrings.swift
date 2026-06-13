@@ -180,6 +180,15 @@ enum AppStrings {
     static func avgSpeed(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Ср. скорость" : "Avg speed"
     }
+    static func avgSpeedModeTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Расчёт средней скорости" : "Average speed basis"
+    }
+    static func avgSpeedOverall(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Общая" : "Overall"
+    }
+    static func avgSpeedMoving(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "В движении" : "Moving"
+    }
     static func tripTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Поездка" : "Trip"
     }

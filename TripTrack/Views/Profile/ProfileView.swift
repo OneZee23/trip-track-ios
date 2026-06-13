@@ -155,6 +155,7 @@ struct ProfileView: View {
 
                 themeCard(c, isRu: isRu)
                 languageCard(c, isRu: isRu)
+                avgSpeedCard(c, isRu: isRu)
 
                 aboutCard(c, isRu: isRu)
 
@@ -236,9 +237,16 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showStats) {
             StatsView(tripManager: mapVM.tripManager)
+                // Pin to a single .large detent + grabber so the inner ScrollView
+                // doesn't fight the sheet's drag-to-dismiss (the "chaotic swipe-down"
+                // jitter). Mirrors how FeedView already presents StatsView.
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showBadges) {
             BadgesView(trips: mapVM.tripManager.fetchTrips())
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showGarage) {
             GarageView()
@@ -1002,6 +1010,40 @@ struct ProfileView: View {
             }
         }
         .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    // MARK: - Average Speed Card
+
+    private func avgSpeedCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                Text(AppStrings.avgSpeedModeTitle(lang.language))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textSecondary)
+            } icon: {
+                Image(systemName: "speedometer")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppTheme.blue)
+            }
+
+            HStack(spacing: 8) {
+                themeChip(
+                    label: AppStrings.avgSpeedOverall(lang.language),
+                    icon: "clock",
+                    isActive: settings.avgSpeedMode == .overall,
+                    c: c
+                ) { settings.avgSpeedMode = .overall }
+
+                themeChip(
+                    label: AppStrings.avgSpeedMoving(lang.language),
+                    icon: "car.fill",
+                    isActive: settings.avgSpeedMode == .moving,
+                    c: c
+                ) { settings.avgSpeedMode = .moving }
+            }
+        }
+        .padding(16)
+        .surfaceCard(cornerRadius: 16)
     }
 
     // MARK: - Theme Card

@@ -119,12 +119,13 @@ struct Trip: Identifiable, Codable {
     /// model has ±30% intrinsic error (cold-start, idle rate variance per
     /// engine, acceleration profile). Showing "Driving 1h / Stopped 4h" is
     /// honest data the user calibrates their own intuition against.
-    private var movementSplit: (driving: TimeInterval, stopped: TimeInterval) {
-        guard trackPoints.count >= 2 else { return (0, 0) }
+    private var movementSplit: (driving: TimeInterval, stopped: TimeInterval, movingDistance: Double) {
+        guard trackPoints.count >= 2 else { return (0, 0, 0) }
         let idleSpeedKmh = 5.0
         let maxGap: TimeInterval = 60
         var drv: TimeInterval = 0
         var stp: TimeInterval = 0
+        var movingDist: Double = 0
         for i in 1..<trackPoints.count {
             let dt = trackPoints[i].timestamp.timeIntervalSince(trackPoints[i - 1].timestamp)
             guard dt > 0, dt <= maxGap else { continue }
@@ -133,13 +134,35 @@ struct Trip: Identifiable, Codable {
                 stp += dt
             } else {
                 drv += dt
+                // Accumulate distance ONLY over the same <=60s moving segments that
+                // drivingTime counts, so the moving average stays consistent on
+                // sparse-GPS trips (the full trip distance includes long cross-gap
+                // segments that drivingTime excludes — dividing by it would inflate).
+                let a = CLLocation(latitude: trackPoints[i - 1].latitude, longitude: trackPoints[i - 1].longitude)
+                let b = CLLocation(latitude: trackPoints[i].latitude, longitude: trackPoints[i].longitude)
+                movingDist += b.distance(from: a)
             }
         }
-        return (drv, stp)
+        return (drv, stp, movingDist)
     }
 
     var drivingTime: TimeInterval { movementSplit.driving }
     var stoppedTime: TimeInterval { movementSplit.stopped }
+
+    /// Average speed over moving time only — distance covered WHILE MOVING divided
+    /// by driving time (both exclude idle stretches and >60s gaps). The
+    /// "технической / чистого хода" speed. Falls back to the overall average when
+    /// there are no track points to split (e.g. a trip synced from another device
+    /// with preview-only geometry).
+    var movingAverageSpeedKmh: Double {
+        let split = movementSplit
+        return split.driving > 0 ? (split.movingDistance / split.driving) * 3.6 : averageSpeedKmh
+    }
+
+    /// Average speed for display, honoring the user's chosen mode.
+    func displayAverageSpeedKmh(_ mode: AvgSpeedMode) -> Double {
+        mode == .moving ? movingAverageSpeedKmh : averageSpeedKmh
+    }
 
     var formattedDuration: String {
         let totalSeconds = Int(duration)

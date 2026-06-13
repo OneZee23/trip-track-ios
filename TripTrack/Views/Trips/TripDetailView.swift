@@ -870,7 +870,7 @@ struct TripDetailView: View {
                 )
             }
             DetailStatCard(
-                value: String(format: "%.0f %@", trip.averageSpeedKmh, AppStrings.kmh(l)),
+                value: String(format: "%.0f %@", trip.displayAverageSpeedKmh(settings.avgSpeedMode), AppStrings.kmh(l)),
                 label: AppStrings.avgSpeed(l),
                 color: AppTheme.blue,
                 staggerIndex: 2
@@ -1102,7 +1102,7 @@ struct TripDetailView: View {
         let date = formattedDate(trip.startDate)
         let dist = String(format: "%.1f %@", trip.distanceKm, AppStrings.km(l))
         let time = trip.formattedDurationHuman(l)
-        let speed = String(format: "%.0f %@", trip.averageSpeedKmh, AppStrings.kmh(l))
+        let speed = String(format: "%.0f %@", trip.displayAverageSpeedKmh(settings.avgSpeedMode), AppStrings.kmh(l))
 
         if l == .ru {
             return "\(title)\n\(date)\n\nДистанция: \(dist)\nВремя: \(time)\nСр. скорость: \(speed)\n\n— TripTrack"

@@ -46,43 +46,8 @@ struct PhotoFullScreenView: View {
 
             TabView(selection: $currentIndex) {
                 ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
-                    AsyncFullPhotoView(filename: photo.filename)
-                        .scaledToFit()
-                        .scaleEffect(index == currentIndex ? scale : 1.0)
-                        .offset(index == currentIndex ? imageOffset : .zero)
-                        .gesture(
-                                MagnificationGesture()
-                                    .onChanged { value in
-                                        scale = lastScale * value
-                                    }
-                                    .onEnded { value in
-                                        withAnimation(.easeOut(duration: 0.2)) {
-                                            if scale < 1.0 {
-                                                scale = 1.0
-                                                imageOffset = .zero
-                                                lastImageOffset = .zero
-                                            } else if scale > 4.0 {
-                                                scale = 4.0
-                                            }
-                                        }
-                                        lastScale = scale
-                                    }
-                            )
-                            .simultaneousGesture(
-                                scale > 1.0 ?
-                                DragGesture()
-                                    .onChanged { value in
-                                        imageOffset = CGSize(
-                                            width: lastImageOffset.width + value.translation.width,
-                                            height: lastImageOffset.height + value.translation.height
-                                        )
-                                    }
-                                    .onEnded { _ in
-                                        lastImageOffset = imageOffset
-                                    }
-                                : nil
-                            )
-                            .tag(index)
+                    photoPage(index: index, photo: photo)
+                        .tag(index)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
@@ -141,6 +106,68 @@ struct PhotoFullScreenView: View {
             lastScale = 1.0
             imageOffset = .zero
             lastImageOffset = .zero
+        }
+    }
+
+    /// One swipeable page: the image with pinch-zoom, pan-while-zoomed, and
+    /// double-tap-to-zoom. Extracted from `body` so the type-checker doesn't
+    /// choke on the combined gesture chain.
+    @ViewBuilder
+    private func photoPage(index: Int, photo: TripPhoto) -> some View {
+        AsyncFullPhotoView(filename: photo.filename)
+            .scaledToFit()
+            .scaleEffect(index == currentIndex ? scale : 1.0)
+            .offset(index == currentIndex ? imageOffset : .zero)
+            .gesture(
+                MagnificationGesture()
+                    .onChanged { value in
+                        scale = lastScale * value
+                    }
+                    .onEnded { _ in
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            if scale < 1.0 {
+                                scale = 1.0
+                                imageOffset = .zero
+                                lastImageOffset = .zero
+                            } else if scale > 4.0 {
+                                scale = 4.0
+                            }
+                        }
+                        lastScale = scale
+                    }
+            )
+            .simultaneousGesture(
+                scale > 1.0 ?
+                DragGesture()
+                    .onChanged { value in
+                        imageOffset = CGSize(
+                            width: lastImageOffset.width + value.translation.width,
+                            height: lastImageOffset.height + value.translation.height
+                        )
+                    }
+                    .onEnded { _ in
+                        lastImageOffset = imageOffset
+                    }
+                : nil
+            )
+            .onTapGesture(count: 2) {
+                if index == currentIndex { toggleZoom() }
+            }
+    }
+
+    /// Double-tap toggles between fit and 2.5× (centered). Pinch still allows
+    /// finer zoom up to 4×; panning stays available while zoomed.
+    private func toggleZoom() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            if scale > 1.0 {
+                scale = 1.0
+                lastScale = 1.0
+                imageOffset = .zero
+                lastImageOffset = .zero
+            } else {
+                scale = 2.5
+                lastScale = 2.5
+            }
         }
     }
 }

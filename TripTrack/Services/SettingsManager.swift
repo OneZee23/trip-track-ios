@@ -2,6 +2,14 @@ import Foundation
 import CoreData
 import Combine
 
+/// How a trip's average speed is reported.
+/// - `overall`: distance / total elapsed time (includes stops & pauses).
+/// - `moving`: distance / driving time only (the "чистого хода" speed).
+enum AvgSpeedMode: String, CaseIterable {
+    case overall
+    case moving
+}
+
 final class SettingsManager: ObservableObject {
     static let shared = SettingsManager()
 
@@ -28,6 +36,13 @@ final class SettingsManager: ObservableObject {
     // Profile background identifier (one of ProfileBackground rawValues, "" = default).
     @Published var profileBackground: String = UserDefaults.standard.string(forKey: "com.triptrack.settings.profileBackground") ?? "" {
         didSet { UserDefaults.standard.set(profileBackground, forKey: "com.triptrack.settings.profileBackground") }
+    }
+
+    // How average speed is reported. Default `.overall` = no change for existing
+    // users; `.moving` reports distance / driving time (excludes stops & pauses).
+    @Published var avgSpeedMode: AvgSpeedMode =
+        AvgSpeedMode(rawValue: UserDefaults.standard.string(forKey: "com.triptrack.settings.avgSpeedMode") ?? "") ?? .overall {
+        didSet { UserDefaults.standard.set(avgSpeedMode.rawValue, forKey: "com.triptrack.settings.avgSpeedMode") }
     }
 
     // Gamification

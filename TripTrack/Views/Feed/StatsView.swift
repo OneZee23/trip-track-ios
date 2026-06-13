@@ -350,10 +350,40 @@ struct StatsView: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .fill(km > 0 ? AppTheme.accent.opacity(opacity) : c.cardAlt)
                             )
+                            // Mark today with a ring (not brightness) so it reads as
+                            // "today" regardless of whether it has trips — fixes the
+                            // "why is the 10th brighter than today?" confusion.
+                            .overlay(
+                                calendar.isDateInToday(date)
+                                ? RoundedRectangle(cornerRadius: 8).stroke(c.text.opacity(0.55), lineWidth: 1.5)
+                                : nil
+                            )
                     } else {
                         Color.clear.frame(height: 36)
                     }
                 }
+            }
+
+            // Legend: cell brightness encodes distance driven that day; the ring is
+            // today. Makes the heatmap legible (and signals it's not tappable buttons).
+            HStack(spacing: 8) {
+                HStack(spacing: 3) {
+                    ForEach([0.2, 0.5, 0.9], id: \.self) { op in
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(AppTheme.accent.opacity(op))
+                            .frame(width: 12, height: 12)
+                    }
+                }
+                Text(lang.language == .ru ? "— больше км" : "— more km")
+                    .font(.system(size: 10))
+                    .foregroundStyle(c.textTertiary)
+                Spacer()
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(c.text.opacity(0.55), lineWidth: 1.5)
+                    .frame(width: 12, height: 12)
+                Text(lang.language == .ru ? "сегодня" : "today")
+                    .font(.system(size: 10))
+                    .foregroundStyle(c.textTertiary)
             }
         }
         .padding(16)

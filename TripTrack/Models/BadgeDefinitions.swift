@@ -111,13 +111,13 @@ extension Badge {
               checkUnlocked: { $0.hasNightTrip }),
 
         Badge(id: "night_wolf", titleRu: "Ночной волк", titleEn: "Night Wolf",
-              descriptionRu: "Поездка после 23:00", descriptionEn: "Trip started after 11 PM",
+              descriptionRu: "Поездка в окно 23:00–04:00", descriptionEn: "Drive during the 11 PM–4 AM window",
               icon: "moon.stars.fill", color: Color(red: 60/255, green: 60/255, blue: 140/255),
               category: .special, isHidden: true, isRepeatable: true,
               checkUnlocked: { $0.hasLateNightTrip }),
 
         Badge(id: "early_bird", titleRu: "Ранняя птица", titleEn: "Early Bird",
-              descriptionRu: "Поездка до 6:00", descriptionEn: "Trip started before 6 AM",
+              descriptionRu: "Поездка в окно 00:00–06:00", descriptionEn: "Drive during the midnight–6 AM window",
               icon: "sunrise.fill", color: AppTheme.yellow, category: .special, isHidden: true, isRepeatable: true,
               checkUnlocked: { $0.hasEarlyMorningTrip }),
 

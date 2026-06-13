@@ -106,16 +106,21 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
         // Reject invalid accuracy
         guard location.horizontalAccuracy >= 0 else { return false }
 
-        // Stricter accuracy threshold during recording
-        let accuracyLimit = isRecording ? 50.0 : maxAccuracy
+        // Accuracy ceiling during recording. Raised 50→65m (and the TripManager
+        // gate 30→65m) so remote / heavy-canopy fixes are kept instead of dropping
+        // the whole stretch — both gates must move together or the stricter one wins.
+        let accuracyLimit = isRecording ? 65.0 : maxAccuracy
         guard location.horizontalAccuracy <= accuracyLimit else { return false }
 
         // Reject stale cached positions
         let age = -location.timestamp.timeIntervalSinceNow
         guard age < maxLocationAge else { return false }
 
-        // Reject unknown speed during recording
-        if isRecording && location.speed < 0 { return false }
+        // NOTE: we intentionally do NOT reject fixes with unknown speed (speed < 0).
+        // A position fix is valid even when the device can't compute speed (common in
+        // the taiga); speed is only used by the drift filter, which now ignores
+        // unknown speed. Rejecting these dropped real movement and contributed to the
+        // "track didn't record" reports.
 
         // Reject unrealistic speed
         let speed = max(0, location.speed)

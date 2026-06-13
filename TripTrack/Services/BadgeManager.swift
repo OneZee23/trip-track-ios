@@ -23,6 +23,29 @@ enum BadgeManager {
         return newCount
     }
 
+    /// True if the trip's wall-clock span touches the hour-of-day window
+    /// [startHour, endHour). The window may wrap midnight (e.g. 22→5). Sampled
+    /// every 5 minutes so a multi-hour window can't be missed; a span ≥24h always
+    /// matches. Uses the trip's full [startDate, endDate] so an overnight drive
+    /// that starts in the evening still counts toward night / early-morning badges.
+    private static func tripOverlapsHourWindow(_ trip: Trip, _ startHour: Int, _ endHour: Int) -> Bool {
+        let cal = Calendar.current
+        let start = trip.startDate
+        let end = trip.endDate ?? start
+        func inWindow(_ h: Int) -> Bool {
+            startHour <= endHour ? (h >= startHour && h < endHour) : (h >= startHour || h < endHour)
+        }
+        guard end > start else { return inWindow(cal.component(.hour, from: start)) }
+        if end.timeIntervalSince(start) >= 24 * 3600 { return true }
+        var t = start
+        let step: TimeInterval = 300
+        while t < end {
+            if inWindow(cal.component(.hour, from: t)) { return true }
+            t = t.addingTimeInterval(step)
+        }
+        return inWindow(cal.component(.hour, from: end))
+    }
+
     static func computeStats(from trips: [Trip]) -> BadgeStats {
         var totalDist: Double = 0
         var maxSpeed: Double = 0
@@ -63,10 +86,14 @@ enum BadgeManager {
             if trip.distanceKm >= 42.195 { hasSingleMarathon = true }
             if trip.distanceKm >= 500 { hasSingleIronButt = true }
 
-            let hour = Calendar.current.component(.hour, from: trip.startDate)
-            if hour >= 22 || hour < 5 { hasNight = true }
-            if hour >= 23 || hour < 4 { hasLateNight = true }
-            if hour < 6 { hasEarlyMorning = true }
+            // Overlap-based: award if ANY part of the trip falls in the window, so
+            // an overnight drive that STARTS in the evening (e.g. 20:00→07:00) still
+            // earns night badges — the previous start-hour-only check missed these.
+            // Short-circuit once a flag is set so later trips skip the (sampling)
+            // overlap walk — keeps the O(N²) backfill cheap on launch.
+            if !hasNight, Self.tripOverlapsHourWindow(trip, 22, 5) { hasNight = true }
+            if !hasLateNight, Self.tripOverlapsHourWindow(trip, 23, 4) { hasLateNight = true }
+            if !hasEarlyMorning, Self.tripOverlapsHourWindow(trip, 0, 6) { hasEarlyMorning = true }
 
             let weekday = Calendar.current.component(.weekday, from: trip.startDate)
             if weekday == 1 { hasSunday = true } // Sunday = 1
@@ -83,7 +110,7 @@ enum BadgeManager {
             }
 
             // Secret-badge aggregates
-            if hour < 4 { hasAfterMidnight = true }
+            if !hasAfterMidnight, Self.tripOverlapsHourWindow(trip, 0, 4) { hasAfterMidnight = true }
             let year = Calendar.current.component(.year, from: trip.startDate)
             if year == currentYear { monthsThisYear.insert(month) }
             if let vid = trip.vehicleId { vehicleCounts[vid, default: 0] += 1 }
