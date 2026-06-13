@@ -391,7 +391,13 @@ final class APIClient {
             defer { if attempt > 0 { attemptSession.invalidateAndCancel() } }
             do {
                 return try await perform(attemptSession)
-            } catch let e as URLError where e.code == .networkConnectionLost || e.code == .timedOut {
+            } catch let e as URLError where e.code == .networkConnectionLost || e.code == .timedOut
+                                          || e.code == .cannotConnectToHost || e.code == .notConnectedToInternet {
+                // -1005/-1001: pooled-stream reset / cold-TLS timeout (RU networks).
+                // -1004/-1009: cold connect to a not-yet-warm host (a LAN/localhost
+                // dev backend just launched, or a momentary no-route on app start) —
+                // these heal on a fresh ephemeral session within the attempt budget,
+                // so retry instead of failing the very first request after launch.
                 apiAuthLog.notice("\(label, privacy: .public) attempt \(attempt + 1)/\(maxAttempts) \(e.code.rawValue)")
                 lastError = e
                 continue

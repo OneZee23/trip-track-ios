@@ -38,6 +38,13 @@ final class SocialFeedStore: ObservableObject {
     /// network and republished the whole feed repeatedly. Routing those events
     /// through this subject collapses a burst into a single trailing refresh.
     private let serverPhotoRefresh = PassthroughSubject<Void, Never>()
+    /// Bounded cold-start auto-retry counter. The FIRST feed load after launch
+    /// can fail on a not-yet-warm connection (cold LAN/localhost dev backend,
+    /// momentary no-route on app start, or a flaky RU mobile network exhausting
+    /// APIClient's in-place attempts). Without this the feed dead-ends on the
+    /// empty/error state until a MANUAL pull-to-refresh. Reset on any success.
+    private var coldStartRetries = 0
+    private let maxColdStartRetries = 2
 
     private init() {
         // Photo added/removed/uploaded somewhere in the app. The notification
@@ -181,6 +188,7 @@ final class SocialFeedStore: ObservableObject {
             hasMore = res.nextCursor != nil
             lastError = nil
             lastLoadedAt = Date()
+            coldStartRetries = 0
         } catch is CancellationError {
             // Superseded by a newer refresh — ignore silently.
         } catch let e as APIError {
@@ -190,6 +198,32 @@ final class SocialFeedStore: ObservableObject {
             }
             lastError = e
             socialLog.error("feed fetch failed: \(String(describing: e))")
+
+            // Cold-start self-heal. If the FIRST page load left us with an EMPTY
+            // feed because of a TRANSIENT error (network, 5xx, server hiccup, or
+            // 429), schedule ONE bounded delayed retry — otherwise the feed sits
+            // empty until the user manually pulls (the only other recovery path).
+            // Bounded by maxColdStartRetries + a currentTask/empty re-check so it
+            // can't loop or stomp a refresh the user/system already started.
+            let isTransient: Bool
+            switch e {
+            case .network: isTransient = true            // non-cancelled (handled above)
+            case .invalidHTTPStatus(let code): isTransient = code >= 500
+            case .unknownServer, .tooManyRequests: isTransient = true
+            default: isTransient = false
+            }
+            if replace, trips.isEmpty, isTransient, coldStartRetries < maxColdStartRetries {
+                coldStartRetries += 1
+                let attempt = coldStartRetries
+                let maxAttempts = maxColdStartRetries
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    guard let self else { return }
+                    guard self.currentTask == nil, self.trips.isEmpty else { return }
+                    socialLog.notice("feed cold-start auto-retry \(attempt)/\(maxAttempts)")
+                    await self.refresh()
+                }
+            }
         } catch {
             socialLog.error("feed fetch error: \(error.localizedDescription)")
         }

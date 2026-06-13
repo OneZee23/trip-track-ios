@@ -588,7 +588,13 @@ struct FeedView: View {
                     removal: .opacity.combined(with: .scale(scale: 0.92)).combined(with: .move(edge: .leading))
                 ))
             }
-            .animation(.easeInOut(duration: 0.35), value: socialFeed.trips.map(\.id))
+            // Deliberately NO implicit `.animation(value: trips.map(\.id))` here.
+            // It animated the WHOLE list diff on every trips change — including
+            // infinite-scroll APPENDS — so loading the next page mid-swipe made
+            // ~20 cards animate in while the scroll was moving → chaotic lurching.
+            // Card REMOVAL still animates: the privacy path wraps
+            // `removeOptimistically` in `withAnimation` (see .tripPrivacyChanged),
+            // which drives the card's `.transition` without animating appends.
 
             if socialFeed.isLoadingMore {
                 ProgressView()
