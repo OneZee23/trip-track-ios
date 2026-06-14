@@ -3,6 +3,11 @@ import CoreData
 import Combine
 import CoreLocation
 import UIKit
+import OSLog
+
+/// Shares the `gps` category so recording-progress lines (points + km) sit next
+/// to raw-fix diagnostics and watchdog restarts in the exported log.
+private let gpsLog = Logger(subsystem: "com.triptrack", category: "gps")
 
 final class TripManager: ObservableObject {
     @Published var activeTrip: Trip?
@@ -461,6 +466,10 @@ final class TripManager: ObservableObject {
             unsavedPointCount = 0
             lastSaveTime = Date()
             persistenceController.saveAsync()
+            // Recording progress (throttled to the batch cadence): ties accepted
+            // fixes to actually-recorded output, so a "GPS dropped" export shows
+            // whether distance kept growing or flatlined.
+            gpsLog.notice("recording: dist=\(String(format: "%.2f", entity.distance / 1000))km maxSpeed=\(String(format: "%.0f", entity.maxSpeed * 3.6))km/h")
         }
     }
 

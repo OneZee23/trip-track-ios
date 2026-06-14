@@ -1,6 +1,11 @@
 import SwiftUI
 import MapKit
 import Combine
+import OSLog
+
+/// Shares the `gps` category with RealGPSProvider so watchdog restarts appear
+/// inline with raw-fix diagnostics in the exported log.
+private let gpsLog = Logger(subsystem: "com.triptrack", category: "gps")
 
 @MainActor
 final class MapViewModel: ObservableObject {
@@ -386,7 +391,9 @@ final class MapViewModel: ObservableObject {
                 // *expected* to be quiet; restarting tracking there is pointless
                 // battery churn. On resume the next tick handles a dead signal.
                 guard let self, self.isRecording, !self.isPaused else { return }
-                if Date().timeIntervalSince(self.lastValidLocationTime) > 60 {
+                let silence = Date().timeIntervalSince(self.lastValidLocationTime)
+                if silence > 60 {
+                    gpsLog.notice("watchdog: no valid fix for \(Int(silence))s — restarting CoreLocation")
                     self.locationManager.stopTracking()
                     self.locationManager.startTracking()
                     // Give the restarted GPS a fresh 60s window to re-acquire.
