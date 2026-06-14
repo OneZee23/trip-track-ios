@@ -21,6 +21,8 @@ struct TripDetailView: View {
     @State private var isEditingTitle = false
     @State private var editedTitle: String = ""
     @State private var originalTitle: String = ""
+    @State private var showNotesEditor = false
+    @State private var editedNotes: String = ""
     @State private var cachedCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSpeeds: [Double] = []
     /// Per-trackpoint timestamps for time-driven route playback (the
@@ -168,7 +170,8 @@ struct TripDetailView: View {
             FullscreenMapSheet(
                 coordinates: cachedCoordinates,
                 speeds: cachedSpeeds,
-                fogCutoffDate: trip?.endDate
+                fogCutoffDate: trip?.endDate,
+                language: lang.language
             )
         }
         .confirmationDialog(
@@ -281,6 +284,12 @@ struct TripDetailView: View {
                     .environmentObject(lang)
             }
         }
+        .sheet(isPresented: $showNotesEditor) {
+            NotesEditorView(text: $editedNotes, onSave: { commitNotesEdit() })
+                .environmentObject(lang)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .alert(
             lang.language == .ru ? "Сделать поездку публичной?" : "Make trip public?",
             isPresented: $publishStage1
@@ -374,6 +383,8 @@ struct TripDetailView: View {
             }
 
             statsGrid(trip: trip, c: c)
+
+            notesSection(trip: trip, c: c)
 
             // Reactions surface — Strava-style:
             //   * Public + has reactions → render breakdown.
@@ -536,6 +547,52 @@ struct TripDetailView: View {
         }
         .padding(.bottom, 4)
         .animation(.easeInOut(duration: 0.25), value: isEditingTitle)
+    }
+
+    /// Free-text note for the trip (road conditions, detours, fuel stops) —
+    /// editable by the owner via `NotesEditorView`. Persists through the same
+    /// path as the title (`updateNotes` → repository + sync) and is already
+    /// surfaced to others on the social trip view.
+    @ViewBuilder
+    private func notesSection(trip: Trip, c: AppTheme.Colors) -> some View {
+        let notes = trip.tripDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        Button {
+            Haptics.tap()
+            editedNotes = trip.tripDescription ?? ""
+            showNotesEditor = true
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "note.text")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(AppStrings.notes(lang.language))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                    if notes.isEmpty {
+                        Text(AppStrings.addNotes(lang.language))
+                            .font(.system(size: 14))
+                            .foregroundStyle(c.textTertiary)
+                    } else {
+                        Text(notes)
+                            .font(.system(size: 14))
+                            .foregroundStyle(c.textSecondary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "pencil")
+                    .font(.system(size: 14))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Composite reactions block that picks the right surface for the current
@@ -758,6 +815,18 @@ struct TripDetailView: View {
         isTitleFieldFocused = false
     }
 
+    private func commitNotesEdit() {
+        let trimmed = editedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Dismiss first so a validation toast isn't hidden behind the sheet.
+        showNotesEditor = false
+        if let err = ContentFilter.validate(trimmed, field: .tripNote, language: lang.language) {
+            toastItem = ToastItem(type: .error, message: err)
+            return
+        }
+        mapVM.tripManager.updateNotes(for: tripId, notes: trimmed)
+        trip = viewModel.tripDetail(id: tripId)
+    }
+
     /// Map section with route + playback controls. Extracted so the
     /// surrounding ScrollView's type-check pressure stays manageable —
     /// Swift's inferrer chokes on the deep ZStack/Group/conditional
@@ -807,6 +876,16 @@ struct TripDetailView: View {
                 }
                 .padding(.trailing, 12)
                 .padding(.bottom, 12)
+            }
+        }
+        // Speed-colour legend (top-left) — decodes the red/yellow/green
+        // route so the colours aren't a mystery. Only when the route is
+        // actually speed-coloured (speeds present).
+        .overlay(alignment: .topLeading) {
+            if cachedCoordinates.count > 1, !cachedSpeeds.isEmpty {
+                SpeedLegendView(language: lang.language)
+                    .padding(.leading, 12)
+                    .padding(.top, 12)
             }
         }
     }

@@ -12,6 +12,9 @@ struct FullscreenMapSheet: View {
     /// Social trips pass `true` — their preview polyline is sparsely sampled
     /// and the gap-splitting in RouteMapView would zero out the bounds.
     var treatAsPreview: Bool = false
+    /// Used only for the speed legend's "km/h" header. Default keeps the
+    /// social call site (speeds empty → no legend) unchanged.
+    var language: LanguageManager.Language = .en
 
     @Environment(\.dismiss) private var dismiss
 
@@ -44,6 +47,15 @@ struct FullscreenMapSheet: View {
             }
             .padding(.top, safeAreaTop)
             .padding(.leading, 16)
+
+            // Speed legend, top-right (clear of the top-left close button).
+            // Only when the route is speed-coloured — social previews aren't.
+            if !speeds.isEmpty {
+                SpeedLegendView(language: language)
+                    .padding(.top, safeAreaTop)
+                    .padding(.trailing, 16)
+                    .frame(maxWidth: .infinity, alignment: .topTrailing)
+            }
         }
     }
 }

@@ -214,15 +214,10 @@ struct RouteMapView: UIViewRepresentable {
         return groups
     }
 
-    /// Map speed to zone index for grouping (matches color thresholds in Coordinator).
+    /// Map speed to zone index for grouping. Delegates to `SpeedColorScale`
+    /// so grouping, polyline colour, and the on-map legend never drift apart.
     private static func speedZone(_ speedMS: Double) -> Int {
-        let kmh = speedMS * 3.6
-        switch kmh {
-        case ..<50:  return 0
-        case 50..<90: return 1
-        case 90..<110: return 2
-        default: return 3
-        }
+        SpeedColorScale.zone(forSpeedMS: speedMS)
     }
 
     // MARK: - Simplification with speeds
@@ -389,23 +384,11 @@ struct RouteMapView: UIViewRepresentable {
             return MKOverlayRenderer(overlay: overlay)
         }
 
-        /// Maps speed (m/s) to a color based on km/h thresholds.
-        ///  0-50  km/h = green  (#2EAE50)
-        /// 50-90  km/h = yellow (#F5BE1E)
-        /// 90-110 km/h = orange (#EB571E)
-        ///  110+  km/h = red    (#DC3C32)
+        /// Maps speed (m/s) to a stroke colour. Thresholds + colours live in
+        /// `SpeedColorScale` (shared with the on-map `SpeedLegendView`):
+        ///  0-50 green · 50-90 yellow · 90-110 orange · 110+ red (km/h).
         private static func color(forSpeedMS speed: Double) -> UIColor {
-            let kmh = speed * 3.6
-            switch kmh {
-            case ..<50:
-                return UIColor(red: 0x2E/255, green: 0xAE/255, blue: 0x50/255, alpha: 0.9)
-            case 50..<90:
-                return UIColor(red: 0xF5/255, green: 0xBE/255, blue: 0x1E/255, alpha: 0.9)
-            case 90..<110:
-                return UIColor(red: 0xEB/255, green: 0x57/255, blue: 0x1E/255, alpha: 0.9)
-            default:
-                return UIColor(red: 0xDC/255, green: 0x3C/255, blue: 0x32/255, alpha: 0.9)
-            }
+            SpeedColorScale.uiColor(forSpeedMS: speed)
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
