@@ -6,6 +6,9 @@ import OSLog
 /// Shares the `gps` category with RealGPSProvider so watchdog restarts appear
 /// inline with raw-fix diagnostics in the exported log.
 private let gpsLog = Logger(subsystem: "com.triptrack", category: "gps")
+/// Speed-pipeline diagnostics (raw GPS vs smoothed HUD value). `.debug` so it's
+/// live-Console only — catches "speed stuck / jumps" reports during dev.
+private let speedLog = Logger(subsystem: "com.triptrack", category: "speed")
 
 @MainActor
 final class MapViewModel: ObservableObject {
@@ -82,10 +85,17 @@ final class MapViewModel: ObservableObject {
     private var lastSpeedUpdate: Date = .distantPast
     private var smoothedSpeed: Double = 0
     private static let speedEMAAlpha: Double = 0.3
+    /// Consecutive sub-floor (≈stopped OR unknown-speed) samples. Used to tell a
+    /// genuine stop from a lone unknown-speed fix before snapping the HUD to 0.
+    private var consecutiveZeroSpeed = 0
     private var mainTrackOverlay: MKPolyline?
     private var headOverlay: GlowingHeadOverlay?
     private var fogOverlay: FogOverlay?
     private var lastOverlayUpdate: Date = .distantPast
+    /// Separate throttle for the glowing head segment, which republishes at up to
+    /// 60fps (CADisplayLink). 10Hz is plenty smooth and keeps the overlay churn
+    /// (and the route-blink risk) down — see the surgical overlay diff.
+    private var lastHeadOverlayUpdate: Date = .distantPast
     private var fogBuilt = false
 
     // Fog reveal animation
@@ -161,6 +171,7 @@ final class MapViewModel: ObservableObject {
             .store(in: &cancellables)
 
         Task { @MainActor [tripManager, gamificationManager, territoryManager] in
+            StartupTrace.mark("migrations begin")
             // Mark existing trips as processed (one-time migration)
             tripManager.migrateMarkExistingTripsProcessed()
 
@@ -183,6 +194,7 @@ final class MapViewModel: ObservableObject {
 
             territoryManager.backfillIfNeeded()
             gamificationManager.backfillBadgesIfNeeded(trips: allTrips)
+            StartupTrace.mark("migrations+backfill done")
         }
     }
 
@@ -570,16 +582,36 @@ final class MapViewModel: ObservableObject {
                 let rawSpeed = max(0, update.speed)
                 let speedKmh = rawSpeed < 1.0 ? 0 : rawSpeed * 3.6
 
-                // After a background gap (>3s without updates), reset EMA
-                // so speed immediately shows the real value
                 let gap = Date().timeIntervalSince(self.lastSpeedUpdate)
-                if gap > 3.0 {
-                    self.smoothedSpeed = speedKmh
+                if speedKmh == 0 {
+                    // Sub-floor sample (<1 m/s). This is EITHER a genuine stop OR
+                    // an unknown-speed fix — CLLocation.speed == -1 is clamped to
+                    // 0 upstream and such fixes are deliberately KEPT in degraded
+                    // GPS (tunnel/taiga). So snap the HUD to 0 only after TWO
+                    // consecutive sub-floor samples: a lone unknown-speed fix
+                    // among real speeds must NOT flash the speedometer 60→0→60,
+                    // while a real stop still reads 0 within ~2s (vs the old
+                    // ~7-fix EMA tail that showed "16 km/h at a red light").
+                    self.consecutiveZeroSpeed += 1
+                    if self.consecutiveZeroSpeed >= 2 {
+                        self.smoothedSpeed = 0
+                    } else {
+                        // First sub-floor sample → fall through to the EMA so one
+                        // stray unknown fix is smoothed, not snapped.
+                        self.smoothedSpeed = Self.speedEMAAlpha * 0 + (1 - Self.speedEMAAlpha) * self.smoothedSpeed
+                    }
                 } else {
-                    let alpha = Self.speedEMAAlpha
-                    self.smoothedSpeed = alpha * speedKmh + (1 - alpha) * self.smoothedSpeed
+                    self.consecutiveZeroSpeed = 0
+                    if gap > 3.0 {
+                        // After a background/GPS gap, jump straight to the real value.
+                        self.smoothedSpeed = speedKmh
+                    } else {
+                        let alpha = Self.speedEMAAlpha
+                        self.smoothedSpeed = alpha * speedKmh + (1 - alpha) * self.smoothedSpeed
+                    }
                 }
                 self.speed = self.smoothedSpeed
+                speedLog.debug("speed: raw=\(Int(rawSpeed * 3.6))km/h hud=\(Int(self.smoothedSpeed))km/h gap=\(String(format: "%.1f", gap))s zeros=\(self.consecutiveZeroSpeed)")
                 AutoTripService.shared.updateMovementForInactivity()
 
                 self.lastSpeedUpdate = Date()
@@ -654,11 +686,17 @@ final class MapViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Head segment overlay (animated, glowing)
+        // Head segment overlay (animated, glowing) — throttled to ~10Hz. The
+        // CADisplayLink republishes head points up to 60fps; rebuilding the
+        // overlay every frame floods updateUIView and (pre-fix) blinked the
+        // route line. 0.1s is smooth and keeps overlay churn low.
         trackManager.$headSegmentPoints
             .receive(on: DispatchQueue.main)
             .sink { [weak self] points in
                 guard let self, self.isRecording, points.count >= 2 else { return }
+                let now = Date()
+                guard now.timeIntervalSince(self.lastHeadOverlayUpdate) >= 0.1 else { return }
+                self.lastHeadOverlayUpdate = now
                 self.headOverlay = GlowingHeadOverlay(coordinates: points)
                 self.updateTrackOverlays()
             }

@@ -52,6 +52,14 @@ enum DebugLogExporter {
         lines.append("signed_in:     \(identity.signedIn)")
         lines.append("sync_enabled:  \(identity.syncEnabled)")
         lines.append("")
+        // Startup milestones persist across process death (OSLog does not), so a
+        // launch HANG is diagnosable after the user force-quits and relaunches:
+        // `previous_launch` is the run before this one — if it hung, its trace
+        // ends at the milestone it stalled after.
+        lines.append("--- startup trace ---")
+        lines.append("previous_launch: \(StartupTrace.previousTrace ?? "(none)")")
+        lines.append("current_launch:  \(StartupTrace.currentTrace ?? "(none)")")
+        lines.append("")
         lines.append("--- log entries ---")
 
         let fmt = ISO8601DateFormatter()

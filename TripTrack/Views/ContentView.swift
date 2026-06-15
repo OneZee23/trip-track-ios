@@ -162,6 +162,7 @@ struct ContentView: View {
             mapVM.pendingBadges = []
         }
         .onAppear {
+            StartupTrace.mark("ContentView ready (tab=\(selectedTab))")
             // Clean up demo trip for users who onboarded before 0.1.1
             mapVM.tripManager.deleteDemoTripIfNeeded()
             // Configure auto-trip detection

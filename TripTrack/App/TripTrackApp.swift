@@ -11,6 +11,7 @@ struct TripTrackApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
+        StartupTrace.mark("app init begin")
         // Crash reporting MUST start first — otherwise any panic in the
         // services below would crash silently. No-op when SENTRY_DSN
         // is empty (dev / simulator).
@@ -27,6 +28,7 @@ struct TripTrackApp: App {
         // dates. Output goes to OSLog under subsystem `com.triptrack`,
         // category `iso-date`. Single call per cold launch.
         ISODate.runSelfTest()
+        StartupTrace.mark("app init done (services started)")
     }
 
     var body: some Scene {

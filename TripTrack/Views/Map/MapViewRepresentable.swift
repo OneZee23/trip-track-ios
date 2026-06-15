@@ -1,5 +1,11 @@
 import SwiftUI
 import MapKit
+import OSLog
+
+/// Live-map render diagnostics. A blanket overlay teardown every frame is the
+/// "route line blinks" fingerprint — we log only the pathological full rebuild
+/// (`.notice`, exported), so the field signal is loud but the steady state quiet.
+private let renderLog = Logger(subsystem: "com.triptrack", category: "render")
 
 struct MapViewRepresentable: UIViewRepresentable {
     @Binding var userTrackingMode: MKUserTrackingMode
@@ -14,6 +20,9 @@ struct MapViewRepresentable: UIViewRepresentable {
     var onCameraDistanceChanged: ((Double) -> Void)?
     var onVisibleRectChanged: ((MKMapRect) -> Void)?
     var onFogRendererCreated: ((FogOverlayRenderer) -> Void)?
+    /// Fires once when the map first finishes rendering. Lets the host clear its
+    /// loading spinner from a real signal instead of a fragile timed Task.
+    var onMapReady: (() -> Void)?
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -24,15 +33,21 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         mapView.layoutMargins = UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
 
-        // Initial camera from system cached location
+        // Initial camera. Prefer the system's cached fix (tight zoom). On a
+        // first-ever launch there's no cached fix, so fall back to a country-
+        // level camera instead of leaving the map at the blank grey world
+        // origin (which reads as "still loading"); a live fix recenters via
+        // follow mode once permission is granted.
         if let cachedLocation = CLLocationManager().location {
-            let camera = MKMapCamera(
+            mapView.camera = MKMapCamera(
                 lookingAtCenter: cachedLocation.coordinate,
-                fromDistance: 500,
-                pitch: 0,
-                heading: 0
+                fromDistance: 500, pitch: 0, heading: 0
             )
-            mapView.camera = camera
+        } else {
+            mapView.camera = MKMapCamera(
+                lookingAtCenter: CLLocationCoordinate2D(latitude: 55.75, longitude: 37.62),
+                fromDistance: 1_000_000, pitch: 0, heading: 0
+            )
         }
 
         mapView.preferredConfiguration = MKStandardMapConfiguration(
@@ -144,16 +159,38 @@ struct MapViewRepresentable: UIViewRepresentable {
             DispatchQueue.main.async { self.zoomDelta = 0 }
         }
 
-        // Diff overlays
+        // Diff overlays surgically (mirrors the annotation diff above). The old
+        // code removed ALL overlays and re-added ALL of them whenever the
+        // ObjectIdentifier set differed — and the glowing head segment
+        // republishes at up to 60fps with a fresh identity, so that compare
+        // ALWAYS differed and tore down + re-added the unchanged route polyline
+        // every frame, which MapKit rendered as the orange line blinking. Now we
+        // only touch overlays that actually changed; the route line stays put.
         let existingOverlays = mapView.overlays
-        let oldSet = Set(existingOverlays.map { ObjectIdentifier($0 as AnyObject) })
-        let newSet = Set(overlays.map { ObjectIdentifier($0 as AnyObject) })
-
-        if oldSet != newSet {
-            mapView.removeOverlays(existingOverlays)
-            if !overlays.isEmpty {
-                mapView.addOverlays(overlays, level: .aboveRoads)
+        let toRemoveOverlays = existingOverlays.filter { e in !overlays.contains(where: { $0 === e }) }
+        if !toRemoveOverlays.isEmpty { mapView.removeOverlays(toRemoveOverlays) }
+        for overlay in overlays where !existingOverlays.contains(where: { $0 === overlay }) {
+            // Deterministic z-order via overlay LEVELS so it can't depend on
+            // which layer was re-added last. Fog is pinned to the bottom of
+            // .aboveRoads; the route line sits above it on the same level; the
+            // glowing head goes on the higher .aboveLabels level so it's ALWAYS
+            // on top — even right after the route polyline is rebuilt (every
+            // 0.5s) or while parked (when both publishers go quiet). Without the
+            // level split, a re-added route would cover the head.
+            if overlay is FogOverlay {
+                mapView.insertOverlay(overlay, at: 0, level: .aboveRoads)
+            } else if overlay is GlowingHeadOverlay {
+                mapView.addOverlay(overlay, level: .aboveLabels)
+            } else {
+                mapView.addOverlay(overlay, level: .aboveRoads)
             }
+        }
+        // Regression alarm: a FULL teardown of a multi-overlay set DURING
+        // recording is the blink fingerprint. Gated on isRecording so a normal
+        // trip-stop clear (fog-only swap, recording=false) doesn't cry wolf.
+        if self.isRecording, existingOverlays.count > 1,
+           toRemoveOverlays.count == existingOverlays.count {
+            renderLog.notice("overlays full rebuild: removed=\(toRemoveOverlays.count, privacy: .public) new=\(overlays.count, privacy: .public)")
         }
     }
 
@@ -178,6 +215,8 @@ struct MapViewRepresentable: UIViewRepresentable {
             let rect = mapView.visibleMapRect
             DispatchQueue.main.async {
                 self.parent.onVisibleRectChanged?(rect)
+                // Real "the map is up" signal — clears the host's loading spinner.
+                self.parent.onMapReady?()
             }
         }
 

@@ -455,6 +455,10 @@ enum AppStrings {
     static func addNotes(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Добавить заметку..." : "Add a note..."
     }
+    /// Discoverable empty-state CTA on the owner's own trip detail.
+    static func addNotesCTA(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Добавьте описание поездки" : "Add a trip description"
+    }
     static func addPhotos(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Добавить фото" : "Add photos"
     }

@@ -382,9 +382,13 @@ struct TripDetailView: View {
                 }
             }
 
-            statsGrid(trip: trip, c: c)
-
+            // Notes sit right under the title/identity block (above stats),
+            // mirroring the viewer-facing SocialTripDetailView so the owner —
+            // the only person who CAN add a description — actually sees the
+            // affordance instead of it being buried below the fuel/cost cards.
             notesSection(trip: trip, c: c)
+
+            statsGrid(trip: trip, c: c)
 
             // Reactions surface — Strava-style:
             //   * Public + has reactions → render breakdown.
@@ -561,36 +565,54 @@ struct TripDetailView: View {
             editedNotes = trip.tripDescription ?? ""
             showNotesEditor = true
         } label: {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "note.text")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-                    .frame(width: 18)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(AppStrings.notes(lang.language))
-                        .font(.system(size: 12, weight: .semibold))
+            if notes.isEmpty {
+                // Inviting empty-state CTA: an accent dashed-border button reads
+                // as "tap to add a description", not disabled metadata — so owners
+                // discover the feature.
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(AppStrings.addNotesCTA(lang.language))
+                        .font(.system(size: 14, weight: .medium))
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(AppTheme.accent)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(
+                            AppTheme.accent.opacity(0.35),
+                            style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                        )
+                )
+                .contentShape(Rectangle())
+            } else {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(c.textTertiary)
-                    if notes.isEmpty {
-                        Text(AppStrings.addNotes(lang.language))
-                            .font(.system(size: 14))
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(AppStrings.notes(lang.language))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(c.textTertiary)
-                    } else {
                         Text(notes)
                             .font(.system(size: 14))
                             .foregroundStyle(c.textSecondary)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    Spacer(minLength: 0)
+                    Image(systemName: "pencil")
+                        .font(.system(size: 14))
+                        .foregroundStyle(c.textTertiary)
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "pencil")
-                    .font(.system(size: 14))
-                    .foregroundStyle(c.textTertiary)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(Rectangle())
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -878,14 +900,17 @@ struct TripDetailView: View {
                 .padding(.bottom, 12)
             }
         }
-        // Speed-colour legend (top-left) — decodes the red/yellow/green
-        // route so the colours aren't a mystery. Only when the route is
-        // actually speed-coloured (speeds present).
+        // Speed-colour legend — decodes the red/yellow/green route. Pinned
+        // top-left but offset BELOW the floating back button (which is at
+        // safeAreaTop). Every map corner is otherwise taken: back (top-left),
+        // ••• menu (top-right), Apple Maps attribution (bottom-left — must NOT
+        // be covered), play/expand (bottom-right). Collapsed to a small pill on
+        // this map; tap to expand. Only when the route is speed-coloured.
         .overlay(alignment: .topLeading) {
             if cachedCoordinates.count > 1, !cachedSpeeds.isEmpty {
-                SpeedLegendView(language: lang.language)
+                SpeedLegendView(language: lang.language, initiallyExpanded: false)
                     .padding(.leading, 12)
-                    .padding(.top, 12)
+                    .padding(.top, safeAreaTop + 52)
             }
         }
     }

@@ -8,7 +8,14 @@ import SwiftUI
 /// covers that don't inherit the environment.
 struct SpeedLegendView: View {
     let language: LanguageManager.Language
-    @State private var expanded = true
+    @State private var expanded: Bool
+
+    /// `initiallyExpanded: false` keeps the legend a small pill on the cramped
+    /// inline detail map (tap to expand); the roomy full-screen map defaults open.
+    init(language: LanguageManager.Language, initiallyExpanded: Bool = true) {
+        self.language = language
+        self._expanded = State(initialValue: initiallyExpanded)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {

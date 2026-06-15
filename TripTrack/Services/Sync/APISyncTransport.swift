@@ -1,6 +1,12 @@
 import Foundation
 import UIKit
 import CoreData
+import OSLog
+
+/// Photo-upload lifecycle diagnostics. The original upload used to fail SILENTLY
+/// (swallowed catch) which is exactly why "photos won't upload / only thumb on
+/// server" was undiagnosable. `.notice` so the per-photo trail is exported.
+private let photoLog = Logger(subsystem: "com.triptrack", category: "photo-upload")
 
 struct TripUpsertResponse: Codable {
     let id: UUID
@@ -352,6 +358,7 @@ final class APISyncTransport: SyncTransport {
         }
 
         guard let originalData = PhotoStorageService.photoData(filename: filename) else {
+            photoLog.notice("photo \(id, privacy: .public) FAIL: missing local blob \(filename, privacy: .public)")
             entity.uploadStatus = PhotoUploadStatus.failed.rawValue
             try? ctx.save()
             return
@@ -363,9 +370,16 @@ final class APISyncTransport: SyncTransport {
         // is among the heaviest CPU/memory work in the app and was running on
         // @MainActor for every photo as the Cloud-Sync queue drained.
         let needThumbnail = entity.thumbnailURL == nil
-        let needOriginal = entity.remoteURL == nil && CacheManager.shared.isOnWiFi
+        // Original is uploaded on ANY connection now. It used to be gated behind
+        // `isOnWiFi`, so cellular / VPN / hotspot users got thumb-only on the
+        // server FOREVER — the retry path re-applied the same gate every cycle.
+        // The 1440/q0.7 original is only ~50-120 KB (kept small for RU DPI), so
+        // there's no bandwidth reason to defer it.
+        let needOriginal = entity.remoteURL == nil
         let caption = entity.caption
         let timestamp = entity.timestamp ?? Date()
+        let opStart = Date()
+        photoLog.notice("photo \(id, privacy: .public) begin: origBytes=\(originalData.count, privacy: .public) needThumb=\(needThumbnail, privacy: .public) needOrig=\(needOriginal, privacy: .public) wifi=\(CacheManager.shared.isOnWiFi, privacy: .public)")
 
         let variants: (thumbnail: Data?, original: Data?)
         if needThumbnail || needOriginal {
@@ -374,6 +388,7 @@ final class APISyncTransport: SyncTransport {
                 makeThumbnail: needThumbnail,
                 makeOriginal: needOriginal) else {
                 // Undecodable file (corrupt) — same as the old combined guard.
+                photoLog.notice("photo \(id, privacy: .public) FAIL: undecodable/corrupt image")
                 entity.uploadStatus = PhotoUploadStatus.failed.rawValue
                 try? ctx.save()
                 return
@@ -387,6 +402,7 @@ final class APISyncTransport: SyncTransport {
         // to screen scale and was 3×-ing thumbnail size on retina devices.
         if needThumbnail {
             guard let thumbData = variants.thumbnail else {
+                photoLog.notice("photo \(id, privacy: .public) FAIL: thumbnail encode produced nil")
                 entity.uploadStatus = PhotoUploadStatus.failed.rawValue
                 try? ctx.save()
                 return
@@ -396,6 +412,7 @@ final class APISyncTransport: SyncTransport {
                 data: thumbData, caption: caption, timestamp: timestamp,
                 metadataAlreadyClean: true)
             entity.thumbnailURL = r.url
+            photoLog.notice("photo \(id, privacy: .public) thumb OK: \(thumbData.count, privacy: .public)B")
             // Persist the thumbnail-only state immediately so a subsequent
             // original-upload failure doesn't lose the win we just earned.
             try? ctx.save()
@@ -421,9 +438,13 @@ final class APISyncTransport: SyncTransport {
                     data: payload, caption: caption, timestamp: timestamp,
                     metadataAlreadyClean: useReEncoded)
                 entity.remoteURL = r.url
+                photoLog.notice("photo \(id, privacy: .public) orig OK: \(payload.count, privacy: .public)B reEncoded=\(useReEncoded, privacy: .public)")
             } catch {
-                // Best-effort. Thumbnail is on R2; the photo is viewable
-                // in feed and detail. Original will retry next sync cycle.
+                // Original failed (timeout/5xx). Thumbnail is on R2 so the photo
+                // is viewable; remoteURL stays nil → the queue retries the
+                // original next sync cycle. Previously SILENT — this line is the
+                // single most valuable signal for "photos won't upload" reports.
+                photoLog.notice("photo \(id, privacy: .public) orig FAIL: \(error.localizedDescription, privacy: .public) — will retry")
             }
         }
 
@@ -437,6 +458,7 @@ final class APISyncTransport: SyncTransport {
         entity.lastModifiedAt = Date()
         entity.syncStatus = SyncStatus.synced.rawValue
         try? ctx.save()
+        photoLog.notice("photo \(id, privacy: .public) done: status=\(entity.uploadStatus, privacy: .public) thumb=\(entity.thumbnailURL != nil, privacy: .public) orig=\(entity.remoteURL != nil, privacy: .public) in \(Int(Date().timeIntervalSince(opStart) * 1000), privacy: .public)ms")
 
         // Server now has the photo. Re-broadcast so the social feed re-fetches
         // — `TripRepository.addPhoto` posted the same notification at local

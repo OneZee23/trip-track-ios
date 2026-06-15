@@ -22,27 +22,34 @@ struct TrackingView: View {
 
     var body: some View {
         ZStack {
-            if isMapReady {
-                // Full-screen MKMapView — deferred until loader is shown
-                MapViewRepresentable(
-                    userTrackingMode: $viewModel.userTrackingMode,
-                    overlays: viewModel.trackOverlays,
-                    isDarkMap: viewModel.isDarkMap,
-                    bottomInset: viewModel.isRecording ? 0 : idleHUDInset,
-                    zoomDelta: $viewModel.zoomDelta,
-                    isRecording: viewModel.isRecording,
-                    onCameraDistanceChanged: { viewModel.currentCameraDistance = $0 },
-                    onVisibleRectChanged: { viewModel.handleVisibleRectChange($0) },
-                    onFogRendererCreated: { viewModel.fogRenderer = $0 }
-                )
-                .ignoresSafeArea()
-                .allowsHitTesting(!viewModel.isRecording)
-                .modifier(PixelateModifier(active: viewModel.isRecording, scale: 3.0))
-            }
+            // Map is ALWAYS instantiated so "ready" can never hang on a missed
+            // async hop. The loader overlay sits on top until the map's first
+            // render (onMapReady) or the timeout fallback in `.task` below.
+            MapViewRepresentable(
+                userTrackingMode: $viewModel.userTrackingMode,
+                overlays: viewModel.trackOverlays,
+                isDarkMap: viewModel.isDarkMap,
+                bottomInset: viewModel.isRecording ? 0 : idleHUDInset,
+                zoomDelta: $viewModel.zoomDelta,
+                isRecording: viewModel.isRecording,
+                onCameraDistanceChanged: { viewModel.currentCameraDistance = $0 },
+                onVisibleRectChanged: { viewModel.handleVisibleRectChange($0) },
+                onFogRendererCreated: { viewModel.fogRenderer = $0 },
+                onMapReady: {
+                    if !isMapReady {
+                        withAnimation(.easeOut(duration: 0.4)) { isMapReady = true }
+                    }
+                }
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(!viewModel.isRecording)
+            .modifier(PixelateModifier(active: viewModel.isRecording, scale: 3.0))
 
-            // Loading overlay while map initializes
+            // Loading overlay until the map reports its first render. Never
+            // swallows taps on the slide-to-start control beneath it.
             if !isMapReady {
                 CarLoadingView()
+                    .allowsHitTesting(false)
             }
 
             recordingOverlay
@@ -75,12 +82,16 @@ struct TrackingView: View {
                 safeAreaTop = window.safeAreaInsets.top
                 tabBarHeight = 54 + window.safeAreaInsets.bottom
             }
-            // Show loader first, then create the map
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(100))
-                withAnimation(.easeOut(duration: 0.4)) {
-                    isMapReady = true
-                }
+        }
+        .task {
+            // Hard fallback so the loader can NEVER outlive ~0.6s even if the
+            // map's render callback is delayed (offline tiles, contended cold
+            // start). The old fire-and-forget onAppear Task could be starved on
+            // a busy launch and leave the spinner stuck forever — the reported
+            // "Готов к поездке" infinite-loading hang.
+            try? await Task.sleep(for: .milliseconds(600))
+            if !isMapReady {
+                withAnimation(.easeOut(duration: 0.4)) { isMapReady = true }
             }
         }
         .onDisappear {
