@@ -190,21 +190,24 @@ final class SocialFeedStore: ObservableObject {
             lastLoadedAt = Date()
             coldStartRetries = 0
         } catch is CancellationError {
-            // Superseded by a newer refresh — ignore silently.
+            // Superseded by a newer refresh, OR our in-flight fetch was cancelled
+            // by the cold-start token-refresh race — the reported "feed empty on
+            // cold launch until pull-to-refresh". If we're still empty and nothing
+            // newer is running, self-heal with a bounded retry (the guard inside
+            // prevents stomping a refresh the user/system already started).
+            scheduleColdStartRetry(replace: replace)
         } catch let e as APIError {
-            // URLSession cancellations surface as APIError.network(-999); ignore those too.
+            // URLSession cancellations surface as APIError.network(-999) — same
+            // cold-start race; recover the same way instead of sitting empty.
             if case .network(let urlErr) = e, urlErr.code == .cancelled {
+                scheduleColdStartRetry(replace: replace)
                 return
             }
             lastError = e
             socialLog.error("feed fetch failed: \(String(describing: e))")
 
-            // Cold-start self-heal. If the FIRST page load left us with an EMPTY
-            // feed because of a TRANSIENT error (network, 5xx, server hiccup, or
-            // 429), schedule ONE bounded delayed retry — otherwise the feed sits
-            // empty until the user manually pulls (the only other recovery path).
-            // Bounded by maxColdStartRetries + a currentTask/empty re-check so it
-            // can't loop or stomp a refresh the user/system already started.
+            // Cold-start self-heal for transient errors (network, 5xx, server
+            // hiccup, 429) — otherwise the feed sits empty until a manual pull.
             let isTransient: Bool
             switch e {
             case .network: isTransient = true            // non-cancelled (handled above)
@@ -212,20 +215,31 @@ final class SocialFeedStore: ObservableObject {
             case .unknownServer, .tooManyRequests: isTransient = true
             default: isTransient = false
             }
-            if replace, trips.isEmpty, isTransient, coldStartRetries < maxColdStartRetries {
-                coldStartRetries += 1
-                let attempt = coldStartRetries
-                let maxAttempts = maxColdStartRetries
-                Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
-                    guard let self else { return }
-                    guard self.currentTask == nil, self.trips.isEmpty else { return }
-                    socialLog.notice("feed cold-start auto-retry \(attempt)/\(maxAttempts)")
-                    await self.refresh()
-                }
-            }
+            if isTransient { scheduleColdStartRetry(replace: replace) }
         } catch {
             socialLog.error("feed fetch error: \(error.localizedDescription)")
+        }
+    }
+
+    /// Schedule ONE bounded, delayed retry when the FIRST page load left the feed
+    /// EMPTY — covers transient errors AND cancellations. The cold-start
+    /// token-refresh race cancels the in-flight feed fetch (-999), which used to
+    /// leave the feed empty until the user manually pulled. The `currentTask == nil`
+    /// + `trips.isEmpty` re-check at fire time prevents looping or stomping a
+    /// refresh the user/system already started — so a normal pull-to-refresh on a
+    /// populated feed (which also cancels the prior task) never triggers a spurious
+    /// retry, and a freshly-started refresh wins.
+    private func scheduleColdStartRetry(replace: Bool) {
+        guard replace, trips.isEmpty, coldStartRetries < maxColdStartRetries else { return }
+        coldStartRetries += 1
+        let attempt = coldStartRetries
+        let maxAttempts = maxColdStartRetries
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard let self else { return }
+            guard self.currentTask == nil, self.trips.isEmpty else { return }
+            socialLog.notice("feed cold-start auto-retry \(attempt)/\(maxAttempts)")
+            await self.refresh()
         }
     }
 

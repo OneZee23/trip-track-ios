@@ -50,12 +50,18 @@ targets:
         INFOPLIST_KEY_NSMotionUsageDescription: "TripTrack uses motion data to detect when you're driving and automatically start recording trips."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         MARKETING_VERSION: "0.5.8"
-        CURRENT_PROJECT_VERSION: "48"
+        CURRENT_PROJECT_VERSION: "49"
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.dev
           INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Dev"
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIconDev
+          # Dev builds talk to the local backend via a Bonjour `.local`
+          # hostname (survives Mac IP changes). Resolving `.local` is
+          # local-network access, which iOS 14+ gates behind this permission.
+          # Debug-only — the prod build connects to api.trip-track.app over the
+          # internet and never touches the local network.
+          INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Connects to your local TripTrack development server."
         Release:
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack
           INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
@@ -93,7 +99,7 @@ targets:
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Live"
         MARKETING_VERSION: "0.5.8"
-        CURRENT_PROJECT_VERSION: "48"
+        CURRENT_PROJECT_VERSION: "49"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         APP_INTENTS_DEPLOYMENT_POSTPROCESSING: NO
@@ -129,7 +135,7 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
         INFOPLIST_KEY_WKApplication: YES
         MARKETING_VERSION: "0.5.8"
-        CURRENT_PROJECT_VERSION: "48"
+        CURRENT_PROJECT_VERSION: "49"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "4"
       configs:

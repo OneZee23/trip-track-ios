@@ -14,6 +14,7 @@ struct FeedView: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var scenePhase
     @Binding var selectedTab: Int
     @State private var didLoad = false
     @State private var showStats = false
@@ -222,6 +223,16 @@ struct FeedView: View {
             // feed switches between personalized (followed users) and
             // trending without a manual pull.
             Task { await socialFeed.refresh() }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Re-entering the app from background → refresh the feed so it's
+            // current on entry ("обновлять ленту, когда заходим в приложение").
+            // `loadIfNeeded` is staleness-gated, so a quick app-switch won't
+            // force a full re-fetch — only a stale or empty feed reloads. The
+            // cold-launch empty-feed race is recovered separately in the store.
+            if newPhase == .active {
+                Task { await socialFeed.loadIfNeeded() }
+            }
         }
         .sheet(isPresented: $feedVM.showFilters) {
             FilterSheetView(
