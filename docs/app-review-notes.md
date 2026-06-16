@@ -1,6 +1,26 @@
-# App Store Review Notes — TripTrack v0.6.0
+# App Store Review Notes — TripTrack
 
-Paste the relevant section into App Store Connect → **App Review Information** → **Notes** when submitting the build.
+Paste the relevant section into App Store Connect → **App Review Information** → **Notes** when submitting the build. Use the current-version section for the build you are submitting; the v0.6.0 social section below documents the underlying features.
+
+---
+
+## v0.5.8 — bug-fix update (current submission)
+
+```
+TripTrack 0.5.8 — Reviewer Notes
+
+This is a bug-fix update over 0.5.7. No changes to data collection, account handling, or core flows.
+
+LOCATION: The app uses background location ("Always") to keep recording a trip while the screen is off or the app is backgrounded — core to the product (recording a multi-hour drive). Location is only collected during an active recording.
+
+SIGN IN: Authentication is Sign in with Apple only. No demo account is required — your own Apple ID works. Cloud sync features unlock after signing in.
+
+TESTING WITHOUT DRIVING: The app includes demo trips visible on the feed and map without recording, so the trip detail / photos / map UI can be reviewed without movement. To exercise live recording, move with the device or simulate a location route.
+
+NEW IN 0.5.8 — "Publish trips on the global map" (Profile screen): an OPT-IN toggle, OFF by default. When a user explicitly enables it, only their own trips already marked PUBLIC are shown on a map on our website. Routes are anonymized (start/end points trimmed); private trips are never included; no other users' personal data is exposed. The user can turn it off at any time. This is the user's own content only.
+
+BUG FIXES IN THIS BUILD: map rendering during recording (route line flicker), speedometer reading at a full stop, a launch-screen hang, instant feed loading, full-quality photo upload on any network, and trip-notes discoverability.
+```
 
 ---
 
