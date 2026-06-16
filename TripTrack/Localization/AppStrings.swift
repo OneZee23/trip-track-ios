@@ -189,6 +189,21 @@ enum AppStrings {
     static func avgSpeedMoving(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "В движении" : "Moving"
     }
+    // Website-globe opt-in (per-user)
+    static func publishOnGlobeTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Публикация поездок на глобальной карте" : "Publish trips on the global map"
+    }
+    static func publishOnGlobeSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Только публичные поездки, маршрут анонимизируется (концы обрезаются). Приватные не показываются."
+            : "Public trips only, route is anonymized (endpoints trimmed). Private trips are never shown."
+    }
+    static func optYes(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Да" : "Yes"
+    }
+    static func optNo(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Нет" : "No"
+    }
     static func noVehicle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Без машины" : "No vehicle"
     }

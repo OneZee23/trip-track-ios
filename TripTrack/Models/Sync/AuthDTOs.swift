@@ -17,6 +17,10 @@ struct AccountDTO: Codable {
     let displayName: String?
     let email: String?
     let avatarEmoji: String
+    /// Server's `account.show_on_public_map` (website-globe opt-in). Optional so
+    /// decoding survives an older server that doesn't return it; when present it
+    /// seeds the local toggle on sign-in (cross-device / fresh-install read-back).
+    let showOnPublicMap: Bool?
 }
 
 struct LoginResponse: Codable {

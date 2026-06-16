@@ -140,6 +140,15 @@ final class AuthService: ObservableObject {
             // user without revealing identity (no email, no name).
             SentryService.setAccount(id: response.account.id.uuidString)
 
+            // Read back the account's website-globe opt-in so the toggle
+            // reflects the server on a fresh install / new device. Seed BEFORE
+            // the syncProfileToServer chain below so it echoes the same value
+            // back (no-op) instead of overwriting the server with the local
+            // default. Absent (older server) → leave the local mirror as-is.
+            if let optIn = response.account.showOnPublicMap {
+                SettingsManager.shared.showOnPublicMap = optIn
+            }
+
             // Step 3 of the resolution order — pull the server's stored name
             // when we still don't have one. Without this, signing in on a
             // fresh phone with an Apple ID that already has an account would
@@ -393,6 +402,11 @@ final class AuthService: ObservableObject {
         userEmail = nil
         SentryService.setAccount(id: nil)
         userIdentifier = nil
+        // Reset the website-globe opt-in mirror so account A's toggle doesn't
+        // visually leak onto account B on the same device before B's login
+        // read-back seeds the real value. (Server state is per-account; this is
+        // only the local UI mirror.)
+        SettingsManager.shared.showOnPublicMap = false
         SyncQueue.shared.clearAll()
         // Drop in-app inbox state — the next account on this device should
         // not inherit the previous user's badge or notification list.
@@ -432,7 +446,7 @@ final class AuthService: ObservableObject {
     /// avatar, background, driver level/XP, streaks, and the active-vehicle
     /// selection for the "Your car" card on the public profile.
     /// Fire-and-forget; failure is logged but not surfaced.
-    func syncProfileToServer() async {
+    func syncProfileToServer(refreshFeedAfter: Bool = true) async {
         guard isSignedIn else { return }
         let settings = SettingsManager.shared
         // `displayName` is nil for users who signed in before SIWA returned a
@@ -453,7 +467,8 @@ final class AuthService: ObservableObject {
             currentStreak: settings.currentStreak,
             bestStreak: settings.bestStreak,
             activeVehicleId: settings.selectedVehicleId?.uuidString,
-            language: preferredLanguage
+            language: preferredLanguage,
+            showOnPublicMap: settings.showOnPublicMap
         )
         do {
             let _: EmptyResponse = try await APIClient.shared.post(
@@ -463,7 +478,11 @@ final class AuthService: ObservableObject {
             // refresh after the profile push, an account that just got a
             // backfilled name (or renamed via long-press) keeps showing the
             // old "No name" / placeholder until the next pull-to-refresh.
-            await SocialFeedStore.shared.refresh()
+            // Skipped for pushes that don't touch feed-visible fields (e.g. the
+            // globe opt-in, which only affects the website /public/map).
+            if refreshFeedAfter {
+                await SocialFeedStore.shared.refresh()
+            }
         } catch {
             authLog.error("profile sync failed: \(error.localizedDescription)")
         }

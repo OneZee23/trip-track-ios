@@ -45,6 +45,16 @@ final class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(avgSpeedMode.rawValue, forKey: "com.triptrack.settings.avgSpeedMode") }
     }
 
+    // Opt-IN to showing the user's PUBLIC trips on the website's public globe
+    // (account-level; synced to the server via syncProfileToServer, not the
+    // settings entity). Default FALSE — privacy-first, nobody is on the globe
+    // until they enable it. Local mirror of the server `account.show_on_public_map`;
+    // seeded from the login response and reset on sign-out.
+    @Published var showOnPublicMap: Bool =
+        UserDefaults.standard.object(forKey: "com.triptrack.settings.showOnPublicMap") as? Bool ?? false {
+        didSet { UserDefaults.standard.set(showOnPublicMap, forKey: "com.triptrack.settings.showOnPublicMap") }
+    }
+
     // Gamification
     @Published var profileXP: Int = 0
     @Published var profileLevel: Int = 1

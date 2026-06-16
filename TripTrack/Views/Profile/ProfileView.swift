@@ -157,6 +157,12 @@ struct ProfileView: View {
                 languageCard(c, isRu: isRu)
                 avgSpeedCard(c, isRu: isRu)
 
+                // Website-globe opt-in — only for signed-in accounts (the globe
+                // is per-account; a guest has no account to publish).
+                if auth.isSignedIn {
+                    publishGlobeCard(c, isRu: isRu)
+                }
+
                 aboutCard(c, isRu: isRu)
 
                 // Cloud sync settings (only when signed in)
@@ -1044,6 +1050,55 @@ struct ProfileView: View {
         }
         .padding(16)
         .surfaceCard(cornerRadius: 16)
+    }
+
+    // MARK: - Publish on Globe Card
+
+    private func publishGlobeCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                Text(AppStrings.publishOnGlobeTitle(lang.language))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textSecondary)
+            } icon: {
+                Image(systemName: "globe")
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppTheme.blue)
+            }
+
+            HStack(spacing: 8) {
+                themeChip(
+                    label: AppStrings.optYes(lang.language),
+                    icon: nil,
+                    isActive: settings.showOnPublicMap,
+                    c: c
+                ) { setShowOnPublicMap(true) }
+
+                themeChip(
+                    label: AppStrings.optNo(lang.language),
+                    icon: nil,
+                    isActive: !settings.showOnPublicMap,
+                    c: c
+                ) { setShowOnPublicMap(false) }
+            }
+
+            Text(AppStrings.publishOnGlobeSubtitle(lang.language))
+                .font(.system(size: 11))
+                .foregroundStyle(c.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .surfaceCard(cornerRadius: 16)
+    }
+
+    /// Set the globe opt-in and push it to the account (same mutate-then-sync
+    /// pattern as avatar / profile-background). No-op when unchanged. The chip's
+    /// own Button supplies the haptic (matches the other settings chips), and we
+    /// skip the post-sync feed refresh — the globe opt-in doesn't touch feed cards.
+    private func setShowOnPublicMap(_ value: Bool) {
+        guard settings.showOnPublicMap != value else { return }
+        settings.showOnPublicMap = value
+        Task { await auth.syncProfileToServer(refreshFeedAfter: false) }
     }
 
     // MARK: - Theme Card

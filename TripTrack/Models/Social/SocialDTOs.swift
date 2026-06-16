@@ -267,6 +267,8 @@ struct ProfileUpdateRequest: Encodable {
     /// `"ru"` or `"en"`. Server uses this to localise scheduled push texts
     /// (weekly recap and similar). nil = "don't change".
     let language: String?
+    /// Opt-IN to the public website globe (account-level). nil = "don't change".
+    let showOnPublicMap: Bool?
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -279,12 +281,13 @@ struct ProfileUpdateRequest: Encodable {
         try c.encodeIfPresent(bestStreak, forKey: .bestStreak)
         try c.encodeIfPresent(activeVehicleId, forKey: .activeVehicleId)
         try c.encodeIfPresent(language, forKey: .language)
+        try c.encodeIfPresent(showOnPublicMap, forKey: .showOnPublicMap)
     }
 
     private enum CodingKeys: String, CodingKey {
         case displayName, avatarEmoji, profileBackground
         case profileLevel, profileXp, currentStreak, bestStreak
-        case activeVehicleId, language
+        case activeVehicleId, language, showOnPublicMap
     }
 }
 

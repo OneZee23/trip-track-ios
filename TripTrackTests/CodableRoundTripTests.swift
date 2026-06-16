@@ -132,4 +132,42 @@ final class CodableRoundTripTests: XCTestCase {
         XCTAssertTrue(decoded.trackPoints.isEmpty)
         XCTAssertTrue(decoded.photos.isEmpty)
     }
+
+    // MARK: - ProfileUpdateRequest (account-field push: encodeIfPresent contract)
+
+    /// A nil field MUST be omitted from the JSON (absent != null) so a profile
+    /// push never clobbers unrelated server fields. This is the load-bearing
+    /// contract for the globe opt-in riding /auth/profile-update.
+    func testProfileUpdateOmitsNilFields() throws {
+        let req = ProfileUpdateRequest(
+            displayName: nil, avatarEmoji: nil, profileBackground: nil,
+            profileLevel: nil, profileXp: nil, currentStreak: nil, bestStreak: nil,
+            activeVehicleId: nil, language: nil, showOnPublicMap: nil
+        )
+        let json = try JSONSerialization.jsonObject(with: encoder.encode(req)) as! [String: Any]
+        XCTAssertNil(json["showOnPublicMap"], "nil opt-in must be OMITTED, not null")
+        XCTAssertTrue(json.isEmpty, "all-nil request encodes to {} — nothing clobbered")
+    }
+
+    func testProfileUpdateEncodesGlobeOptIn() throws {
+        for value in [true, false] {
+            let req = ProfileUpdateRequest(
+                displayName: nil, avatarEmoji: nil, profileBackground: nil,
+                profileLevel: nil, profileXp: nil, currentStreak: nil, bestStreak: nil,
+                activeVehicleId: nil, language: nil, showOnPublicMap: value
+            )
+            let json = try JSONSerialization.jsonObject(with: encoder.encode(req)) as! [String: Any]
+            XCTAssertEqual(json["showOnPublicMap"] as? Bool, value)
+            XCTAssertEqual(json.count, 1, "only the set field is present")
+        }
+    }
+
+    /// AccountDTO (login read-back) tolerates an older server that omits the
+    /// flag (optional decode), and reads it when present.
+    func testAccountDTODecodesOptionalGlobeFlag() throws {
+        let without = Data(#"{"id":"\#(UUID().uuidString)","avatarEmoji":"🏎️"}"#.utf8)
+        XCTAssertNil(try decoder.decode(AccountDTO.self, from: without).showOnPublicMap)
+        let with = Data(#"{"id":"\#(UUID().uuidString)","avatarEmoji":"🏎️","showOnPublicMap":true}"#.utf8)
+        XCTAssertEqual(try decoder.decode(AccountDTO.self, from: with).showOnPublicMap, true)
+    }
 }
