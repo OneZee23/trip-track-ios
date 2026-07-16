@@ -58,10 +58,10 @@ extension View {
 struct ContentView: View {
     @StateObject private var mapVM = MapViewModel()
     /// Selected tab is `@AppStorage`-backed so onboarding can hand the
-    /// user directly into the Tracking tab (index 1) — landing on the
-    /// empty feed after a fresh install gives no obvious next step,
-    /// whereas Tracking shows the slide-to-start affordance.
-    @AppStorage("selectedTab") private var selectedTab = 0
+    /// user directly into the Record tab — landing on the empty feed
+    /// after a fresh install gives no obvious next step, whereas Record
+    /// shows the slide-to-start affordance.
+    @AppStorage(AppTab.storageKey) private var selectedTab: AppTab = .home
     @State private var hideTabBar = false
     @Environment(\.colorScheme) private var systemScheme
     @EnvironmentObject private var lang: LanguageManager
@@ -78,25 +78,28 @@ struct ContentView: View {
             c.bg.ignoresSafeArea()
 
             switch selectedTab {
-            case 0:
+            case .home:
                 FeedView(tripManager: mapVM.tripManager, selectedTab: $selectedTab)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case 1:
+            case .maps:
+                RegionsView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .record:
                 TrackingView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.colorScheme, mapVM.isDarkMap ? .dark : systemScheme)
-            case 2:
-                RegionsView()
+            case .groups:
+                GroupsComingSoonView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            default:
-                EmptyView()
+            case .profile:
+                ProfileView(hostedInTab: true)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             // Custom glass tab bar — hidden on Record tab, and also while any
             // descendant trip-detail view declared `.hideAppTabBar()`.
-            if selectedTab != 1 && !hideTabBar {
+            if selectedTab != .record && !hideTabBar {
                 CustomTabBar(selectedTab: $selectedTab)
-                    .environment(\.colorScheme, (selectedTab == 1 && mapVM.isDarkMap) ? .dark : systemScheme)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -130,25 +133,25 @@ struct ContentView: View {
             .environmentObject(lang)
         }
         .onReceive(NotificationCenter.default.publisher(for: .tripSuggestionTapped)) { _ in
-            selectedTab = 1
+            selectedTab = .record
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToFeedWithRegionFilter)) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {
-                selectedTab = 0
+                selectedTab = .home
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToFeedTab)) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {
-                selectedTab = 0
+                selectedTab = .home
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToTrackingTab)) { _ in
-            selectedTab = 1
+            selectedTab = .record
         }
         .onReceive(NotificationCenter.default.publisher(for: .openTripDetail)) { notification in
             if let tripId = notification.object as? UUID {
                 // Switch to feed tab and navigate to trip detail
-                selectedTab = 0
+                selectedTab = .home
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(300))
                     NotificationCenter.default.post(name: .navigateToTrip, object: tripId)
@@ -162,7 +165,7 @@ struct ContentView: View {
             mapVM.pendingBadges = []
         }
         .onAppear {
-            StartupTrace.mark("ContentView ready (tab=\(selectedTab))")
+            StartupTrace.mark("ContentView ready (tab=\(selectedTab.rawValue))")
             // Clean up demo trip for users who onboarded before 0.1.1
             mapVM.tripManager.deleteDemoTripIfNeeded()
             // Configure auto-trip detection

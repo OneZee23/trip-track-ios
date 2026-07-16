@@ -10,6 +10,11 @@ final class TripTrackUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
         app = XCUIApplication()
+        // NSArgumentDomain override — read-only flag, safe to pin. Do NOT pin
+        // selectedTabV2 the same way: the argument domain shadows reads, so
+        // @AppStorage writes from tab taps would be invisible and the app
+        // would appear frozen on the pinned tab.
+        app.launchArguments += ["-hasCompletedOnboarding", "YES"]
         app.launch()
     }
 
@@ -28,11 +33,39 @@ final class TripTrackUITests: XCTestCase {
         return false
     }
 
+    /// Asserting smoke test for the 6.1.0 five-tab navigation: every tab is
+    /// reachable by tapping its (language-independent) accessibility id, the
+    /// bar hides on the Record tab, and the back chevron restores it.
+    func test_tab_navigation_smoke() {
+        let bar = { (id: String) in self.app.buttons.matching(identifier: id).firstMatch }
+        // Normalize: the app restores the last persisted tab. If that was
+        // Record (bar hidden), leave it via the tracking back chevron.
+        if !bar("tab_maps").waitForExistence(timeout: 8) {
+            bar("tracking_back").tap()
+        }
+        XCTAssertTrue(bar("tab_maps").waitForExistence(timeout: 4), "tab bar should be visible after normalization")
+
+        for id in ["tab_maps", "tab_groups", "tab_profile", "tab_home"] {
+            bar(id).tap()
+            usleep(600_000)
+            XCTAssertTrue(bar("tab_record").exists, "tab bar should stay visible after switching to \(id)")
+        }
+
+        // Record is full-screen: the bar must disappear…
+        bar("tab_record").tap()
+        sleep(1)
+        XCTAssertFalse(bar("tab_home").exists, "tab bar should hide on the Record tab")
+        // …and the back chevron returns to Home with the bar restored.
+        XCTAssertTrue(bar("tracking_back").waitForExistence(timeout: 4), "tracking back chevron should exist")
+        bar("tracking_back").tap()
+        XCTAssertTrue(bar("tab_home").waitForExistence(timeout: 4), "tab bar should be restored after leaving Record")
+    }
+
     func test_screenshot_tour() {
         sleep(2); snap("01_feed")
 
-        // Places (#6 Регионы→Места)
-        if tap("Места") { sleep(1); snap("02_places") }
+        // Maps tab (6.1.0: Места → Карта)
+        if tap("Карта") { sleep(1); snap("02_places") }
         // Back to feed, Поездки segment (#7 Мои→Поездки)
         if tap("Лента") { sleep(1) }
         if tap("Поездки") { sleep(1); snap("03_feed_trips") }

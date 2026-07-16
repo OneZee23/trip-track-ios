@@ -49,7 +49,7 @@ targets:
         INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "TripTrack uses Bluetooth to automatically detect when you start and end a drive"
         INFOPLIST_KEY_NSMotionUsageDescription: "TripTrack uses motion data to detect when you're driving and automatically start recording trips."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        MARKETING_VERSION: "0.5.8"
+        MARKETING_VERSION: "6.1.0"
         CURRENT_PROJECT_VERSION: "50"
       configs:
         Debug:
@@ -98,7 +98,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Live"
-        MARKETING_VERSION: "0.5.8"
+        MARKETING_VERSION: "6.1.0"
         CURRENT_PROJECT_VERSION: "50"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
@@ -134,7 +134,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
         INFOPLIST_KEY_WKApplication: YES
-        MARKETING_VERSION: "0.5.8"
+        MARKETING_VERSION: "6.1.0"
         CURRENT_PROJECT_VERSION: "50"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "4"

@@ -286,12 +286,12 @@ struct OnboardingView: View {
                 }
 
                 Button {
-                    // Drop the new user directly onto the Tracking tab — index 1
-        // matches `ContentView.selectedTab`. The default 0 (Feed) is
-        // empty for a fresh install and gives no clear next action;
-        // Tracking shows the slide-to-start affordance immediately.
-        UserDefaults.standard.set(1, forKey: "selectedTab")
-        hasCompletedOnboarding = true
+                    // Drop the new user directly onto the Record tab — the
+                    // default Home feed is empty for a fresh install and gives
+                    // no clear next action; Record shows the slide-to-start
+                    // affordance immediately.
+                    UserDefaults.standard.set(AppTab.record.rawValue, forKey: AppTab.storageKey)
+                    hasCompletedOnboarding = true
                 } label: {
                     Text(AppStrings.onboardingAutoRecordSkip(lang.language))
                         .font(.system(size: 16, weight: .medium))
@@ -390,11 +390,10 @@ struct OnboardingView: View {
         // Enable auto-record by default
         SettingsManager.shared.autoRecordMode = .remind
 
-        // Drop the new user directly onto the Tracking tab — index 1
-        // matches `ContentView.selectedTab`. The default 0 (Feed) is
-        // empty for a fresh install and gives no clear next action;
-        // Tracking shows the slide-to-start affordance immediately.
-        UserDefaults.standard.set(1, forKey: "selectedTab")
+        // Drop the new user directly onto the Record tab — the default Home
+        // feed is empty for a fresh install and gives no clear next action;
+        // Record shows the slide-to-start affordance immediately.
+        UserDefaults.standard.set(AppTab.record.rawValue, forKey: AppTab.storageKey)
         hasCompletedOnboarding = true
     }
 }

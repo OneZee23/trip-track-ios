@@ -290,6 +290,7 @@ struct TrackingView: View {
                 .frame(width: 44, height: 44)
                 .background(.black.opacity(0.4), in: Circle())
         }
+        .accessibilityIdentifier("tracking_back")
     }
 
     // MARK: - Idle Overlay

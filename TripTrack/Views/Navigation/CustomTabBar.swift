@@ -1,199 +1,194 @@
 import SwiftUI
 
-/// Floating glass tab bar. Earlier version had a raised 48pt Record disc in
-/// the center — it looked toy-like next to the calm Feed/Regions tabs and
-/// fought the overall "cozy companion" register of the app. This revision
-/// makes all three tabs equal peers: same icon size, same label, same
-/// vertical baseline. Record's primacy is expressed through color (accent
-/// idle, red while recording) and a shared `matchedGeometryEffect` underline
-/// that slides between active tabs. The raised disc and the specular
-/// white-gradient shine are gone.
+/// Floating glass tab bar — 6.1.0 redesign, 5 tabs: Лента / Карта / Запись /
+/// Группы / Я. Spec is the Figma TabBar masters (page 88:2, section 90:2):
+/// 74pt-tall pill, radius 30, glass background; regular tabs are a 20pt icon
+/// over a 9pt label, active = filled glyph + accent, inactive = tertiary
+/// grey; the center Record item is a 46pt accent disc with a white steering
+/// wheel that stays INSIDE the pill (does not protrude), and its label stays
+/// grey in every state — Record is an action, never an "active tab".
+/// There is deliberately no underline/pill indicator — the active state is
+/// purely the color + fill swap.
 struct CustomTabBar: View {
-    @Binding var selectedTab: Int
+    @Binding var selectedTab: AppTab
     @EnvironmentObject private var lang: LanguageManager
-    @EnvironmentObject var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
-    @Namespace private var underline
-
-    /// Device-dependent safe-area bottom inset. ContentView intentionally
-    /// does `.ignoresSafeArea(edges: .bottom)` so Feed cards can scroll
-    /// under the floating pill, but that means we need to lift the bar
-    /// manually — a hardcoded small bottom padding dropped the pill into
-    /// the home-indicator zone on pre-Dynamic-Island devices (iPhone 12).
-    private var safeAreaBottom: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.safeAreaInsets.bottom ?? 34
-    }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let recording = mapVM.isRecording
 
-        HStack(spacing: 0) {
-            tabItem(
-                index: 0,
-                icon: "flag",
-                iconFilled: "flag.fill",
-                label: AppStrings.feed(lang.language),
-                activeTint: AppTheme.accent,
-                c: c
-            )
+        HStack(spacing: 4) {
+            tabItem(tab: .home, label: AppStrings.feed(lang.language), c: c) { active in
+                FeedTabIcon(filled: active)
+            }
+            tabItem(tab: .maps, label: AppStrings.tabMap(lang.language), c: c) { active in
+                sfIcon(active ? "map.fill" : "map", active: active, size: 16)
+            }
 
-            recordTab(recording: recording, c: c)
+            recordItem(c: c)
 
-            tabItem(
-                index: 2,
-                icon: "map",
-                iconFilled: "map.fill",
-                label: AppStrings.regions(lang.language),
-                activeTint: AppTheme.accent,
-                c: c
-            )
+            tabItem(tab: .groups, label: AppStrings.tabGroups(lang.language), c: c) { active in
+                sfIcon(active ? "person.2.fill" : "person.2", active: active, size: 14)
+            }
+            tabItem(tab: .profile, label: AppStrings.tabMe(lang.language), c: c) { active in
+                sfIcon(active ? "person.fill" : "person", active: active, size: 17)
+            }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
-        .frame(maxWidth: 360)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .frame(maxWidth: 380)
         .background {
             ZStack {
-                RoundedRectangle(cornerRadius: 28)
+                RoundedRectangle(cornerRadius: 30)
                     .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 28)
+                RoundedRectangle(cornerRadius: 30)
                     .stroke(c.glassBorder, lineWidth: 1)
             }
         }
-        .shadow(color: .black.opacity(scheme == .dark ? 0.25 : 0.05), radius: 4, y: 2)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 12)
-        // Continue the pill's glass material all the way to the screen
-        // bottom so the area between the pill and the home indicator
-        // doesn't read as a separate dark "floor". Matches what Apple's
-        // native tab bars do — the pill appears to float, but the
-        // surface behind it is visually continuous.
-        .background(alignment: .bottom) {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .frame(height: safeAreaBottom + 24)
-                .ignoresSafeArea(edges: .bottom)
-                .allowsHitTesting(false)
-        }
+        .shadow(color: .black.opacity(scheme == .dark ? 0.25 : 0.06), radius: 3, y: 3)
+        .padding(.horizontal, 11)
+        // ContentView ignores the bottom safe area, so the pill is lifted
+        // manually. Figma places the pill's bottom edge 14pt above the
+        // physical screen bottom — the home indicator renders in that gap
+        // over the app background.
+        .padding(.bottom, 14)
     }
 
     // MARK: - Tab cells
 
-    /// Standard peer tab — Feed and Regions use this directly. Record also
-    /// routes through the same layout so the three items have identical
-    /// metrics; only the tap behavior and active tint differ.
+    /// Standard peer tab — Лента, Карта, Группы, Я. The icon closure gets
+    /// the active flag so callers can swap outline/filled variants.
     private func tabItem(
-        index: Int,
-        icon: String,
-        iconFilled: String,
+        tab: AppTab,
         label: String,
-        activeTint: Color,
-        c: AppTheme.Colors
+        c: AppTheme.Colors,
+        @ViewBuilder icon: @escaping (Bool) -> some View
     ) -> some View {
-        let isActive = selectedTab == index
+        let isActive = selectedTab == tab
 
         return Button {
-            if isActive && index == 0 {
+            if isActive && tab == .home {
                 NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
             }
             withAnimation(.snappy(duration: 0.22)) {
-                selectedTab = index
+                selectedTab = tab
             }
             Haptics.tap()
         } label: {
-            tabContent(
-                isActive: isActive,
-                iconName: isActive ? iconFilled : icon,
-                label: label,
-                activeTint: activeTint,
-                c: c,
-                indexForUnderline: index
-            )
+            VStack(spacing: 3) {
+                icon(isActive)
+                    .frame(width: 20, height: 20)
+                tabLabel(label, tint: isActive ? AppTheme.accent : c.textTertiary)
+            }
+            .foregroundStyle(isActive ? AppTheme.accent : c.textTertiary)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("tab_\(tab.rawValue)")
     }
 
-    /// Record tab has a dedicated builder because its icon, label, and tint
-    /// swap between idle and recording states. The symbol uses
-    /// `.contentTransition(.symbolEffect(.replace))` so `car.fill` morphs to
-    /// `stop.fill` smoothly instead of a cut.
-    private func recordTab(recording: Bool, c: AppTheme.Colors) -> some View {
-        let isActive = selectedTab == 1
-        let showStop = recording && isActive
-        let tint: Color = showStop ? AppTheme.red : AppTheme.accent
-        let iconName = showStop ? "stop.fill" : "car.fill"
-        let label = showStop
-            ? (lang.language == .ru ? "Стоп" : "Stop")
-            : AppStrings.record(lang.language)
-
-        return Button {
-            if recording && isActive {
-                mapVM.toggleRecording()
-                Haptics.success()
-            } else {
-                withAnimation(.snappy(duration: 0.22)) {
-                    selectedTab = 1
-                }
-                Haptics.tap()
+    /// Center Record item: 46pt accent disc + steering wheel, subtle orange
+    /// glow. Label is ALWAYS tertiary grey (Figma: record is an action, not
+    /// a tab that reads "active"). The bar is hidden on the Record tab
+    /// itself, so no recording/stop state is needed here.
+    private func recordItem(c: AppTheme.Colors) -> some View {
+        Button {
+            withAnimation(.snappy(duration: 0.22)) {
+                selectedTab = .record
             }
+            Haptics.tap()
         } label: {
-            tabContent(
-                isActive: isActive,
-                iconName: iconName,
-                label: label,
-                activeTint: tint,
-                c: c,
-                indexForUnderline: 1
-            )
-            .contentTransition(.symbolEffect(.replace))
+            VStack(spacing: 3) {
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.accent)
+                        .frame(width: 46, height: 46)
+                        .shadow(color: AppTheme.accent.opacity(0.3), radius: 3, y: 1)
+                    SteeringWheelIcon()
+                        .foregroundStyle(.white)
+                }
+                tabLabel(AppStrings.record(lang.language), tint: c.textTertiary)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("tab_record")
     }
 
-    /// Shared icon + label + underline block so all three tabs sit on the
-    /// exact same baseline. `matchedGeometryEffect` animates the 3pt accent
-    /// underline sliding between the active tab's icon across taps.
-    @ViewBuilder
-    private func tabContent(
-        isActive: Bool,
-        iconName: String,
-        label: String,
-        activeTint: Color,
-        c: AppTheme.Colors,
-        indexForUnderline: Int
-    ) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: iconName)
-                .font(.system(size: 22))
-                .foregroundStyle(isActive ? activeTint : c.textTertiary)
-                .symbolEffect(.bounce, value: isActive)
-                .frame(height: 24)
+    /// Glyph sizes are tuned per symbol so every icon's VISIBLE bounds match
+    /// the Figma 20×20 box — SF Symbols pad differently (person.2 renders
+    /// much wider than person at the same point size).
+    private func sfIcon(_ name: String, active: Bool, size: CGFloat) -> some View {
+        Image(systemName: name)
+            .font(.system(size: size, weight: .regular))
+            .symbolEffect(.bounce, value: active)
+    }
 
-            Text(label)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(isActive ? activeTint : c.textTertiary)
-                .lineLimit(1)
-                // Dynamic Type up to AX5 plus 3 tabs × ~110pt slots starves
-                // the label width — without scale-fit the RU "Поездки" gets
-                // ellipsised. 0.7 is the lowest legible step at 10pt.
-                .minimumScaleFactor(0.7)
+    private func tabLabel(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+    }
+}
 
-            ZStack {
-                if isActive {
-                    Capsule()
-                        .fill(activeTint)
-                        .frame(width: 18, height: 3)
-                        .matchedGeometryEffect(id: "tab-underline", in: underline)
-                } else {
-                    Capsule()
-                        .fill(Color.clear)
-                        .frame(width: 18, height: 3)
-                }
+/// The record-disc steering wheel from Figma: thin-stroke outline — rim +
+/// three spokes (left/right/down) + a small filled hub. SF's `steeringwheel`
+/// is a heavy filled automotive glyph and reads too bold at 24pt, so the
+/// Figma geometry is drawn directly (24×24 box, 2.5pt round-cap strokes).
+struct SteeringWheelIcon: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(lineWidth: 2.5)
+            Path { p in
+                let c = CGPoint(x: 12, y: 12)
+                p.move(to: c); p.addLine(to: CGPoint(x: 3.2, y: 12))
+                p.move(to: c); p.addLine(to: CGPoint(x: 20.8, y: 12))
+                p.move(to: c); p.addLine(to: CGPoint(x: 12, y: 20.8))
+            }
+            .stroke(style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            Circle()
+                .frame(width: 5, height: 5)
+        }
+        .frame(width: 24, height: 24)
+    }
+}
+
+/// The Лента glyph from Figma has no SF Symbol equivalent: a rounded card
+/// with a horizontal caption bar. Outline variant = stroked 12.4pt rect +
+/// bar; filled variant = 14pt filled rect with a white bar knocked out.
+/// Drawn in a fixed 20×20 box to match the other tab icons.
+struct FeedTabIcon: View {
+    var filled: Bool
+
+    var body: some View {
+        // Bar offsets from the Figma SVG: bar center sits at ~62% of the
+        // card height — a clear gap above the card's bottom edge, not
+        // merged into it.
+        ZStack {
+            if filled {
+                RoundedRectangle(cornerRadius: 3.5)
+                    .frame(width: 14, height: 14)
+                RoundedRectangle(cornerRadius: 0.9)
+                    .fill(.white)
+                    .frame(width: 10, height: 1.8)
+                    .offset(y: 1.5)
+            } else {
+                RoundedRectangle(cornerRadius: 2.7)
+                    .strokeBorder(lineWidth: 1.6)
+                    .frame(width: 13.5, height: 13.5)
+                RoundedRectangle(cornerRadius: 0.8)
+                    .frame(width: 9.5, height: 1.6)
+                    .offset(y: 1.2)
             }
         }
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
+        .frame(width: 20, height: 20)
     }
 }

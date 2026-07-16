@@ -12,6 +12,9 @@ struct TripTrackApp: App {
 
     init() {
         StartupTrace.mark("app init begin")
+        // Translate the pre-6.1.0 Int tab selection into the new AppTab key
+        // BEFORE any view reads @AppStorage(AppTab.storageKey).
+        AppTab.migrateLegacySelectedTabIfNeeded()
         // Crash reporting MUST start first — otherwise any panic in the
         // services below would crash silently. No-op when SENTRY_DSN
         // is empty (dev / simulator).

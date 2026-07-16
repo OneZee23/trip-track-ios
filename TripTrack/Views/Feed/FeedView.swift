@@ -15,7 +15,7 @@ struct FeedView: View {
     @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.scenePhase) private var scenePhase
-    @Binding var selectedTab: Int
+    @Binding var selectedTab: AppTab
     @State private var didLoad = false
     @State private var showStats = false
     @State private var showBadges = false
@@ -62,7 +62,7 @@ struct FeedView: View {
     /// with the sign-in sheet still animating away.
     @State private var resumeAfterAuth = false
 
-    init(tripManager: TripManager, selectedTab: Binding<Int>) {
+    init(tripManager: TripManager, selectedTab: Binding<AppTab>) {
         _feedVM = StateObject(wrappedValue: FeedViewModel(tripManager: tripManager))
         _selectedTab = selectedTab
     }
@@ -367,7 +367,7 @@ struct FeedView: View {
             RecordingBanner(
                 distance: mapVM.distance,
                 duration: mapVM.duration,
-                onTap: { selectedTab = 1 }
+                onTap: { selectedTab = .record }
             )
             .padding(.bottom, 100)
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -871,7 +871,7 @@ struct FeedView: View {
         if feedVM.trips.isEmpty {
             FeedEmptyStateView(
                 hasFilters: feedVM.filters.isActive,
-                onStartTrip: { selectedTab = 1 },
+                onStartTrip: { selectedTab = .record },
                 onResetFilters: { feedVM.resetFilters() }
             )
         } else {

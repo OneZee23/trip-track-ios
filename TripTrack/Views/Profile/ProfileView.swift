@@ -15,6 +15,14 @@ struct ProfileView: View {
     @ObservedObject private var auth = AuthService.shared
     @ObservedObject private var syncQueue = SyncQueue.shared
 
+    /// True when hosted as the «Я» tab (6.1.0) — the floating tab bar needs
+    /// scroll clearance. False when presented as the legacy Feed sheet.
+    private let hostedInTab: Bool
+
+    init(hostedInTab: Bool = false) {
+        self.hostedInTab = hostedInTab
+    }
+
     // Profile avatar
     @State private var selectedAvatar: String = "😎"
     @State private var isEditingAvatar = false
@@ -207,7 +215,9 @@ struct ProfileView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 16)
-            .padding(.bottom, 40)
+            // As a tab (6.1.0), leave room for the floating tab bar so the
+            // last row can scroll clear of it; as a sheet there is no bar.
+            .padding(.bottom, hostedInTab ? 120 : 40)
         }
         .scrollIndicators(.hidden)
         .background(c.bg)

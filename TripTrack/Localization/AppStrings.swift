@@ -14,6 +14,25 @@ enum AppStrings {
     static func profile(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Профиль" : "Profile"
     }
+    static func tabMap(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Карта" : "Map"
+    }
+    static func tabGroups(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Группы" : "Groups"
+    }
+    static func tabMe(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Я" : "Me"
+    }
+
+    // MARK: - Groups (coming soon)
+    static func groupsComingTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Группы скоро" : "Groups are coming"
+    }
+    static func groupsComingBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Здесь появятся сообщества по интересам: клубы по маркам, региональные компании, совместные покатушки. Находите своих и следите за поездками всей группы."
+            : "Interest-based communities are coming here: brand clubs, regional crews, group drives. Find your people and follow the whole group's trips."
+    }
 
     // MARK: - Feed
     static func trips(_ lang: LanguageManager.Language) -> String {
