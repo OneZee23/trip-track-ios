@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreText
 
 @main
 struct TripTrackApp: App {
@@ -12,6 +13,12 @@ struct TripTrackApp: App {
 
     init() {
         StartupTrace.mark("app init begin")
+        // Press Start 2P (pixel brand font) is registered at runtime instead
+        // of via Info.plist UIAppFonts — Info.plist is skip-worktree-protected
+        // local config in this repo, so the registration must live in code.
+        if let fontURL = Bundle.main.url(forResource: "PressStart2P-Regular", withExtension: "ttf") {
+            CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+        }
         // Translate the pre-6.1.0 Int tab selection into the new AppTab key
         // BEFORE any view reads @AppStorage(AppTab.storageKey).
         AppTab.migrateLegacySelectedTabIfNeeded()

@@ -96,6 +96,12 @@ enum AppStrings {
     static func kmh(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "км/ч" : "km/h"
     }
+    static func unitLPer100(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "л/100" : "l/100"
+    }
+    static func unitMeters(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "м" : "m"
+    }
 
     // MARK: - Regions
     static func regionsExplored(_ lang: LanguageManager.Language) -> String {
@@ -258,41 +264,56 @@ enum AppStrings {
     }
 
     // MARK: - Onboarding
-    static func onboardingWelcome(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Добро пожаловать в TripTrack" : "Welcome to TripTrack"
+    // Two-tone welcome headline (6.1.0): the hook line in text color, the
+    // punch line in accent.
+    static func onboardingWelcomeTitle1(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вы забудете почти каждую поездку." : "You'll forget almost every trip."
+    }
+    static func onboardingWelcomeTitle2(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "TripTrack — нет." : "TripTrack won't."
     }
     static func onboardingWelcomeSub(_ lang: LanguageManager.Language) -> String {
-        // Privacy-first framing — TripTrack's competitive differentiator.
-        // Surfaced on page 1 so the user gets the value prop before any
-        // permission prompt: "this stays on your phone unless you say so."
         if lang == .ru {
-            return "Автодневник Ваших дорог — маршруты, статистика, расход. Хранится на устройстве, в облако ничего не уезжает без Вашего согласия."
+            return "Дневник ваших дорог — маршруты, статистика, расход и гараж. Откройте через год — и вспомните всё."
         }
-        return "Your road diary — routes, stats, fuel costs. Stays on your device. Nothing goes to the cloud unless you opt in."
+        return "A diary of your roads — routes, stats, fuel and garage. Open it a year from now — and remember everything."
     }
     static func onboardingPrivacyPill(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Приватно по умолчанию" : "Private by default"
     }
-    static func onboardingRecord(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Записывайте поездки" : "Record your trips"
+    static func onboardingValueTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вот как выглядит ваша поездка" : "This is what your trip looks like"
     }
-    static func onboardingRecordSub(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Нажмите кнопку — маршрут, скорость и расход запишутся автоматически. Управляйте машинами в гараже" : "Tap the button — route, speed, and fuel cost are recorded. Manage your cars in the garage"
+    static func onboardingValueCaption(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездки записываются сами — маршрут, скорость и расход." : "Trips record themselves — route, speed and fuel."
     }
-    static func onboardingFeed(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Ваша лента поездок" : "Your trip feed"
+    static func onboardingRecordedAuto(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Записано автоматически" : "Recorded automatically"
     }
-    static func onboardingFeedSub(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Все маршруты в одном месте" : "All your routes in one place"
+    static func onboardingMockTripTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездка · 16 мая" : "Trip · May 16"
+    }
+    // Short uppercase stat labels for the mock trip card's 2×3 metrics grid.
+    static func onboardingStatAvg(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Средняя" : "Avg"
+    }
+    static func onboardingStatMax(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Макс" : "Max"
+    }
+    static func onboardingStatFuel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Расход" : "Fuel"
+    }
+    static func onboardingStatAltitude(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Высота" : "Elev"
     }
     static func onboardingLocation(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Разрешите геолокацию" : "Allow location access"
     }
     static func onboardingLocationSub(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Для записи маршрутов нужен доступ к геолокации" : "Location access is needed to record your routes"
+        lang == .ru ? "Для записи маршрутов нужен доступ к геолокации. Данные хранятся на устройстве." : "Location access is needed to record your routes. Your data stays on your device."
     }
-    static func onboardingGo(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Поехали!" : "Let's go!"
+    static func onboardingAllow(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Разрешить" : "Allow"
     }
     static func onboardingAutoRecord(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Автоматическая запись" : "Automatic recording"
