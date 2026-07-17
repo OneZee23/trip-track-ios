@@ -1516,4 +1516,200 @@ enum AppStrings {
     static func blockedSince(_ lang: LanguageManager.Language, _ date: String) -> String {
         lang == .ru ? "Заблокирован \(date)" : "Blocked \(date)"
     }
+
+    // MARK: - Me tab (6.1.0)
+
+    static func meGuestName(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вы" : "You"
+    }
+    static func wrappedKicker(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ИТОГИ ГОДА" : "YEAR IN REVIEW"
+    }
+    static func wrappedHeroTitle(_ lang: LanguageManager.Language, year: Int) -> String {
+        lang == .ru ? "Ваш \(year)\nна дорогах" : "Your \(year)\non the road"
+    }
+    static func wrappedWatch(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Смотреть" : "Watch"
+    }
+    static func momentsSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Моменты" : "Moments"
+    }
+    static func historySection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "История" : "History"
+    }
+    static func momentYearAgo(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Год назад в этот день" : "A year ago today"
+    }
+    static func momentLongest(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Самая длинная поездка" : "Longest trip"
+    }
+    static func momentNewRegion(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Новый регион" : "New region"
+    }
+    static func momentRegionOpened(_ lang: LanguageManager.Language, name: String) -> String {
+        lang == .ru ? "\(name) открыта 🗺" : "\(name) unlocked 🗺"
+    }
+    static func statsKmTotal(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "км всего" : "km total"
+    }
+    static func statsRegions(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "регионов" : "regions"
+    }
+    static func statsHours(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ч в пути" : "h driving"
+    }
+    static func statsKmByMonth(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Километры по месяцам" : "Kilometers by month"
+    }
+    static func statsRecords(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "РЕКОРДЫ" : "RECORDS"
+    }
+    static func recordLongest(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Самая длинная" : "Longest"
+    }
+    static func recordLongestDay(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Дольше всего" : "Longest day"
+    }
+    static func recordPerDay(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "за один день" : "in one day"
+    }
+    static func recordStreak(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Лучшая серия" : "Best streak"
+    }
+    static func recordStreakSub(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "подряд" : "in a row"
+    }
+    /// «N дней» with proper RU plural agreement (день / дня / дней).
+    static func daysCount(_ lang: LanguageManager.Language, n: Int) -> String {
+        if lang == .ru {
+            let mod10 = n % 10, mod100 = n % 100
+            let word: String
+            if mod100 >= 11 && mod100 <= 14 { word = "дней" }
+            else if mod10 == 1 { word = "день" }
+            else if (2...4).contains(mod10) { word = "дня" }
+            else { word = "дней" }
+            return "\(n) \(word)"
+        }
+        return n == 1 ? "1 day" : "\(n) days"
+    }
+    /// «N поездок» with proper RU plural agreement (поездка / поездки / поездок).
+    static func tripsCount(_ lang: LanguageManager.Language, n: Int) -> String {
+        if lang == .ru {
+            let mod10 = n % 10, mod100 = n % 100
+            let word: String
+            if mod100 >= 11 && mod100 <= 14 { word = "поездок" }
+            else if mod10 == 1 { word = "поездка" }
+            else if (2...4).contains(mod10) { word = "поездки" }
+            else { word = "поездок" }
+            return "\(n) \(word)"
+        }
+        return n == 1 ? "1 trip" : "\(n) trips"
+    }
+    static func statsEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пока нет статистики" : "No stats yet"
+    }
+    static func statsEmptyBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Запишите первую поездку — и здесь появятся километры, рекорды и графики по месяцам."
+            : "Record your first trip — kilometers, records and monthly charts will show up here."
+    }
+    static func recordTripCta(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Записать поездку" : "Record a trip"
+    }
+    static func settingsTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Настройки" : "Settings"
+    }
+    /// Globe opt-in row. Deliberately NOT «Публичный профиль» — that exact
+    /// label already names the account-visibility toggle in CloudSyncView
+    /// (auth.isPublic); two same-named toggles with different semantics
+    /// would be a privacy-misleading collision.
+    static func settingsPublicProfile(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездки на глобальной карте" : "Trips on the global map"
+    }
+    static func settingsNotifications(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Уведомления" : "Notifications"
+    }
+    static func settingsInbox(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Входящие" : "Inbox"
+    }
+    static func settingsUnits(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Единицы" : "Units"
+    }
+    static func themeSystem(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Системная" : "System"
+    }
+    static func settingsAvgSpeed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Средняя скорость" : "Average speed"
+    }
+    static func settingsAccountSync(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Аккаунт и синхронизация" : "Account & sync"
+    }
+    static func settingsShareProfile(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поделиться профилем" : "Share profile"
+    }
+    static func settingsSendLogs(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Отправить логи" : "Send debug logs"
+    }
+    static func settingsProfileBackground(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Фон профиля" : "Profile background"
+    }
+    static func rankProgressTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Уровень водителя" : "Driver level"
+    }
+    static func awards(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Награды" : "Awards"
+    }
+    static func nameEditorTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Имя" : "Name"
+    }
+    static func nameHelper(_ lang: LanguageManager.Language, max: Int) -> String {
+        lang == .ru
+            ? "Так Вас увидят в ленте и профиле. До \(max) символов."
+            : "This is how you'll appear in the feed and profile. Up to \(max) characters."
+    }
+    /// «342 подписчика» with RU plural agreement (подписчик / подписчика / подписчиков).
+    static func followersCount(_ lang: LanguageManager.Language, n: Int) -> String {
+        if lang == .ru {
+            let mod10 = n % 10, mod100 = n % 100
+            let word: String
+            if mod100 >= 11 && mod100 <= 14 { word = "подписчиков" }
+            else if mod10 == 1 { word = "подписчик" }
+            else if (2...4).contains(mod10) { word = "подписчика" }
+            else { word = "подписчиков" }
+            return "\(n) \(word)"
+        }
+        return n == 1 ? "1 follower" : "\(n) followers"
+    }
+    /// «128 подписок» with RU plural agreement (подписка / подписки / подписок).
+    static func followingCountLabel(_ lang: LanguageManager.Language, n: Int) -> String {
+        if lang == .ru {
+            let mod10 = n % 10, mod100 = n % 100
+            let word: String
+            if mod100 >= 11 && mod100 <= 14 { word = "подписок" }
+            else if mod10 == 1 { word = "подписка" }
+            else if (2...4).contains(mod10) { word = "подписки" }
+            else { word = "подписок" }
+            return "\(n) \(word)"
+        }
+        return "\(n) following"
+    }
+    static func followDepthNote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Глубина списка ограничена 3 уровнями связей"
+            : "List depth is limited to 3 levels of connections"
+    }
+    static func wrappedKmYear(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "км за год" : "km this year"
+    }
+    static func wrappedBestDay(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "лучший день" : "best day"
+    }
+    static func wrappedTopRegion(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "топ-регион" : "top region"
+    }
+    static func wrappedShareText(_ lang: LanguageManager.Language, year: Int, km: String, trips: Int) -> String {
+        lang == .ru
+            ? "Мой \(year) на дорогах: \(tripsCount(lang, n: trips)), \(km) км — TripTrack"
+            : "My \(year) on the road: \(tripsCount(lang, n: trips)), \(km) km — TripTrack"
+    }
 }

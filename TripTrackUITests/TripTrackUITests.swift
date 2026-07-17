@@ -259,6 +259,41 @@ final class TripTrackUITests: XCTestCase {
         }
     }
 
+    /// Walks the redesigned Me tab (6.1.0 Профиль·Я): hero, settings
+    /// sheet, stats push, wrapped story. Guest-tolerant, guarded.
+    func test_zz_me_shots() {
+        normalizeToHome()
+        let me = app.buttons.matching(identifier: "tab_profile").firstMatch
+        if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
+        snap("140_me_top")
+        win.swipeUp(); usleep(700_000); snap("141_me_lower")
+        win.swipeDown(); usleep(700_000)
+
+        let gear = app.buttons.matching(identifier: "profile_gear").firstMatch
+        if gear.waitForExistence(timeout: 2), gear.isHittable {
+            gear.tap(); sleep(2); snap("142_settings_sheet")
+            win.swipeDown(); sleep(1)
+        }
+
+        let strip = app.descendants(matching: .any)
+            .matching(identifier: "profile_stats_strip").firstMatch
+        if strip.waitForExistence(timeout: 2), strip.isHittable {
+            strip.tap(); sleep(2); snap("143_stats_screen")
+            win.swipeUp(); usleep(700_000); snap("144_stats_lower")
+            let back = app.buttons.matching(identifier: "stats_back").firstMatch
+            if back.waitForExistence(timeout: 2) { back.tap() } else { pt(0.07, 0.07).tap() }
+            sleep(1)
+        }
+
+        let wrapped = app.buttons.matching(identifier: "profile_wrapped_cta").firstMatch
+        if wrapped.waitForExistence(timeout: 2), wrapped.isHittable {
+            wrapped.tap(); sleep(2); snap("145_wrapped_story")
+            let close = app.buttons.matching(identifier: "wrapped_close").firstMatch
+            if close.waitForExistence(timeout: 2) { close.tap() } else { pt(0.93, 0.07).tap() }
+            sleep(1)
+        }
+    }
+
     /// Brings the app to Home from ANY persisted state: adopts a leftover
     /// recovery prompt, stops an active recording (the chevron is replaced
     /// by the REC pill while recording), walks celebration/summary sheets.

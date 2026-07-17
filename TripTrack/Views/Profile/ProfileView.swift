@@ -3,6 +3,11 @@ import OSLog
 
 private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 
+/// «Я» tab — 6.1.0 canon (Figma 150:1244 signed-in / 127:896 guest).
+/// Self-hosts a `NavigationStack` (ContentView mounts the tab bare), pushes
+/// Статистика + trip details (both hide the tab bar via the existing
+/// preference), and re-homes every pre-6.1.0 feature into the settings sheet
+/// (gear) or the rank sheet (LVL pill) — nothing is deleted.
 struct ProfileView: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
@@ -21,23 +26,26 @@ struct ProfileView: View {
         self.hostedInTab = hostedInTab
     }
 
+    /// Typed destinations for the Я stack.
+    private enum MeDest: Hashable {
+        case stats
+        case trip(UUID)
+    }
+
     // Profile avatar
     @State private var selectedAvatar: String = "😎"
     @State private var isEditingAvatar = false
     @State private var avatarBounce = false
 
-    @State private var showStats = false
-    @State private var showBadges = false
+    @State private var mePath: [MeDest] = []
+    @State private var showSettings = false
+    @State private var showRankSheet = false
     @State private var showGarage = false
-    @State private var showVehicleDetail = false
-    @State private var showCloudSync = false
     @State private var showSyncStatus = false
-    @State private var showDebugLogs = false
-    @State private var showNotificationsInbox = false
-    @ObservedObject private var notificationsInbox = NotificationsInboxStore.shared
+    @State private var showNameEditor = false
+    @State private var showWrappedStory = false
     @State private var socialProfile: SocialProfile?
     @State private var followListMode: FollowListMode?
-    @State private var showBackgroundPicker = false
     @State private var previewingOwnProfile = false
     /// Nav path for the preview-sheet NavigationStack. Kept alongside the
     /// sheet's `isPresented` so every deep navigation inside the sheet
@@ -49,9 +57,9 @@ struct ProfileView: View {
     /// path lets us reset depth to 0 when the sheet closes without touching
     /// the preview flow's path.
     @State private var followListPath: [ProfilePreviewDest] = []
-    @State private var signInPrompt: SignInPromptSheet.Action?
-    @State private var showNameEditor = false
-    @State private var editedName: String = ""
+    /// Client-side aggregates feeding the strip regions, YearHero gating,
+    /// Моменты and История (§3 — real numbers only).
+    @State private var agg: MeAggregates?
 
     /// 16-emoji preset grid (4×4) — broadened from the original 8 so
     /// users have a real personality choice instead of "pick a guy".
@@ -68,163 +76,126 @@ struct ProfileView: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
 
-        ScrollView {
-            VStack(spacing: 16) {
-                avatarCard(c)
+        NavigationStack(path: $mePath) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header(c)
 
-                if !auth.isSignedIn {
-                    guestSignInCard(c, isRu: isRu)
-                }
-
-                // First-launch welcome — when the user has yet to record any
-                // trip, the stats row and driver-level card show zeros which
-                // reads as broken/sparse. Replace the stats stack below with
-                // a single inviting CTA that takes them to Tracking. Once
-                // they have ≥1 trip everything reverts to the normal layout.
-                if mapVM.cachedTripCount == 0 {
-                    firstTripWelcomeCard(c, isRu: isRu)
-                }
-
-                // Driver Level + Quick stats hidden until the user has at
-                // least one trip — empty zeros read as broken on a fresh
-                // install. The welcome card above takes their place.
-                if mapVM.cachedTripCount > 0 {
-                    DriverLevelView(
-                        xp: settings.profileXP,
-                        level: settings.profileLevel
-                    )
-
-                    quickStatsRow(c, isRu: isRu)
-                }
-
-                // Social followers/following (signed in only). The hero card
-                // above is itself tappable for "Preview as others see you" —
-                // see `avatarCard` for the gesture wiring.
-                if auth.isSignedIn {
-                    socialCountersRow(c, isRu: isRu)
-                    shareProfileButton(c, isRu: isRu)
-                }
-
-                // Vehicle Card
-                if let vehicle = selectedVehicle {
-                    Button { showVehicleDetail = true } label: {
-                        VehicleCardView(vehicle: vehicle)
+                    if auth.isSignedIn {
+                        syncStatusIndicator(c)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 10)
                     }
-                    .buttonStyle(.plain)
-                }
 
-                // Garage button
-                Button { showGarage = true } label: {
-                    profileNavButton(
-                        icon: "car.2.fill",
-                        iconColor: AppTheme.blue,
-                        label: isRu ? "Гараж" : "Garage",
-                        c: c
-                    )
-                }
-                .buttonStyle(.plain)
+                    if isEditingAvatar {
+                        avatarGrid(c)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                    }
 
-                // Badges & Stats side by side
-                HStack(spacing: 12) {
-                    Button { showBadges = true } label: {
-                        VStack(spacing: 8) {
-                            Image(systemName: "trophy.fill")
-                                .font(.system(size: 22))
-                                .foregroundStyle(AppTheme.yellow)
-                            Text(AppStrings.badges(lang.language))
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(c.text)
+                    if mapVM.cachedTripCount == 0 {
+                        // First-launch welcome — zeros read as broken, so the
+                        // strip/hero/moments/history stay hidden until ≥1 trip.
+                        firstTripWelcomeCard(c)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                        if !auth.isSignedIn {
+                            guestSignInCard(c)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .surfaceCard(cornerRadius: 16)
-                    }
-                    .buttonStyle(.plain)
-
-                    Button { showStats = true } label: {
-                        VStack(spacing: 8) {
-                            Image(systemName: "chart.bar.fill")
-                                .font(.system(size: 22))
-                                .foregroundStyle(AppTheme.accent)
-                            Text(AppStrings.stats(lang.language))
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(c.text)
+                    } else {
+                        ProfileStatsStrip(
+                            trips: mapVM.cachedTripCount,
+                            km: mapVM.cachedTotalKm,
+                            regions: agg?.regionsAllTime ?? 0
+                        ) {
+                            // Idempotent — a fast double-tap must not
+                            // stack two Статистика screens.
+                            if mePath.last != .stats { mePath.append(.stats) }
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .surfaceCard(cornerRadius: 16)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+
+                        if auth.isSignedIn {
+                            // FK-11: canon drops the counters, but this card is
+                            // the only entry to the follow lists — kept.
+                            socialCountersRow(c)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+                        } else {
+                            guestSignInCard(c)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+                        }
+
+                        if auth.isSignedIn, let agg, agg.yearTripCount > 0 {
+                            yearHero(agg, c)
+                                .padding(.horizontal, 14)
+                                .padding(.bottom, 12)
+                        }
+
+                        if auth.isSignedIn, let agg {
+                            momentsSection(agg, c)
+                        }
+
+                        if let agg, !agg.recentTrips.isEmpty {
+                            historySection(agg, c)
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
-
-                themeCard(c, isRu: isRu)
-                languageCard(c, isRu: isRu)
-                avgSpeedCard(c, isRu: isRu)
-
-                // Website-globe opt-in — only for signed-in accounts (the globe
-                // is per-account; a guest has no account to publish).
-                if auth.isSignedIn {
-                    publishGlobeCard(c, isRu: isRu)
-                }
-
-                aboutCard(c, isRu: isRu)
-
-                // Cloud sync settings (only when signed in)
-                if auth.isSignedIn {
-                    Button { showCloudSync = true } label: {
-                        profileNavButton(
-                            icon: settings.cloudSyncEnabled ? "icloud.fill" : "icloud.slash",
-                            iconColor: settings.cloudSyncEnabled ? AppTheme.blue : c.textTertiary,
-                            label: isRu ? "Аккаунт и синхронизация" : "Account & sync",
-                            c: c
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    // Notifications inbox — visible only when signed in,
-                    // since the inbox is per-account. Red dot inside the
-                    // row when there's anything unread; matches the
-                    // pattern Instagram / Strava use.
-                    Button { showNotificationsInbox = true } label: {
-                        profileNavButton(
-                            icon: "bell.fill",
-                            iconColor: AppTheme.accent,
-                            label: isRu ? "Уведомления" : "Notifications",
-                            badge: notificationsInbox.unreadCount,
-                            c: c
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                // Debug logs (always available — useful even for guest mode bug reports)
-                Button { showDebugLogs = true } label: {
-                    profileNavButton(
-                        icon: "ladybug.fill",
-                        iconColor: .gray,
-                        label: isRu ? "Отправить логи" : "Send debug logs",
-                        c: c
-                    )
-                }
-                .buttonStyle(.plain)
-
+                // As a tab (6.1.0), leave room for the floating tab bar so the
+                // last row can scroll clear of it; as a sheet there is no bar.
+                .padding(.bottom, hostedInTab ? 120 : 40)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
-            // As a tab (6.1.0), leave room for the floating tab bar so the
-            // last row can scroll clear of it; as a sheet there is no bar.
-            .padding(.bottom, hostedInTab ? 120 : 40)
+            .scrollIndicators(.hidden)
+            .background(c.bg)
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: MeDest.self) { dest in
+                switch dest {
+                case .stats:
+                    StatsScreenView(tripManager: mapVM.tripManager)
+                case .trip(let id):
+                    // Same construction FeedView uses; TripDetailView manages
+                    // its own chrome and hides the tab bar itself.
+                    // KNOWN LIMITATION: no pushPath is passed, so deep
+                    // chains from here (trip → reactor profile → followers
+                    // → profile, depth ≥4) use TripDetailView's legacy
+                    // isPresented fallback and can show the cosmetic
+                    // nav-bar «Back» flash. A typed mixed-path stack would
+                    // fix it; deferred — История's primary flow is 1 deep.
+                    TripDetailView(
+                        tripId: id,
+                        viewModel: TripsViewModel(tripManager: mapVM.tripManager)
+                    )
+                }
+            }
         }
-        .scrollIndicators(.hidden)
-        .background(c.bg)
         .onAppear {
             selectedAvatar = settings.avatarEmoji
             settings.reloadGamificationState()
         }
         .task {
             await loadOwnSocialProfile()
+        }
+        .task {
+            await loadAggregates()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tripRecordingEnded)) { _ in
+            Task { await loadAggregates() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .syncPullCompleted)) { _ in
+            Task { await loadAggregates() }
+        }
+        // История pushes TripDetailView, where trips get deleted or flip
+        // privacy — without these the popped-back list keeps a ghost row
+        // (tapping it lands on an empty detail with no back affordance).
+        .onReceive(NotificationCenter.default.publisher(for: .tripDeleted)) { _ in
+            Task { await loadAggregates() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .tripPrivacyChanged)) { _ in
+            Task { await loadAggregates() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openGarageReady)) { _ in
             // Second phase of VehiclePickerSheet's «Управлять в Гараже»:
@@ -255,48 +226,6 @@ struct ProfileView: View {
                 .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
-        .sheet(isPresented: $showStats) {
-            StatsView(tripManager: mapVM.tripManager)
-                // Pin to a single .large detent + grabber so the inner ScrollView
-                // doesn't fight the sheet's drag-to-dismiss (the "chaotic swipe-down"
-                // jitter). Mirrors how FeedView already presents StatsView.
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showBadges) {
-            BadgesView(trips: mapVM.tripManager.fetchTrips())
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showGarage) {
-            GarageView()
-        }
-        .sheet(isPresented: $showCloudSync) {
-            CloudSyncView()
-                .environmentObject(lang)
-                .environmentObject(themeManager)
-        }
-        .sheet(isPresented: $showSyncStatus) {
-            SyncStatusSheetView()
-                .environmentObject(lang)
-                .environmentObject(themeManager)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .preferredColorScheme(themeManager.preferredColorScheme)
-        }
-        .sheet(isPresented: $showNotificationsInbox) {
-            NotificationsInboxView()
-                .environmentObject(lang)
-                .environmentObject(themeManager)
-                .preferredColorScheme(themeManager.preferredColorScheme)
-        }
-        .sheet(isPresented: $showBackgroundPicker) {
-            ProfileBackgroundPickerSheet()
-                .environmentObject(lang)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .preferredColorScheme(themeManager.preferredColorScheme)
-        }
         // Was `.sheet`, switched to `.fullScreenCover` to sidestep a
         // SwiftUI bug where the system nav bar flashes during pushes inside
         // a sheet-hosted NavigationStack. Research ref: sheet's animating
@@ -325,17 +254,35 @@ struct ProfileView: View {
                 .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
-        .sheet(isPresented: $showDebugLogs) {
-            DebugLogsView()
+        .fullScreenCover(isPresented: $showWrappedStory) {
+            if let agg {
+                WrappedStoryView(aggregates: agg)
+                    .environmentObject(lang)
+            }
+        }
+        .sheet(isPresented: $showSettings) {
+            ProfileSettingsSheet()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
+                // Sheets are separate presentations — the app-root
+                // preferredColorScheme does not reach them.
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
-        .sheet(item: $signInPrompt) { action in
-            // Dead path since 6.1.0 (guest card signs in inline) — kept one
-            // release in case a future surface needs the sheet from here.
-            SignInPromptSheet(action: action)
+        .sheet(isPresented: $showRankSheet) {
+            RankProgressSheet()
                 .environmentObject(lang)
-                .environmentObject(auth)
+                .environmentObject(mapVM)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .sheet(isPresented: $showGarage) {
+            GarageView()
+        }
+        .sheet(isPresented: $showSyncStatus) {
+            SyncStatusSheetView()
+                .environmentObject(lang)
+                .environmentObject(themeManager)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showNameEditor) {
@@ -348,11 +295,6 @@ struct ProfileView: View {
             )
             .environmentObject(lang)
             .preferredColorScheme(themeManager.preferredColorScheme)
-        }
-        .sheet(isPresented: $showVehicleDetail) {
-            if let vehicle = selectedVehicle {
-                VehicleDetailView(vehicleId: vehicle.id)
-            }
         }
         .alert(AppStrings.signInFailedTitle(lang.language),
                isPresented: Binding(
@@ -369,17 +311,331 @@ struct ProfileView: View {
         }
     }
 
-    private var selectedVehicle: Vehicle? {
-        if let id = settings.selectedVehicleId {
-            return settings.vehicles.first { $0.id == id }
+    // MARK: - Header (Figma 150:1244)
+
+    private func header(_ c: AppTheme.Colors) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            // Avatar/64 — tap opens the inline emoji grid.
+            Button {
+                Haptics.tap()
+                withAnimation(.easeInOut(duration: 0.2)) { isEditingAvatar.toggle() }
+            } label: {
+                Text(selectedAvatar)
+                    .font(.system(size: 33))
+                    .frame(width: 64, height: 64)
+                    .background(Circle().fill(c.cardAlt))
+                    .scaleEffect(avatarBounce ? 1.12 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: avatarBounce)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("profile_avatar")
+
+            VStack(alignment: .leading, spacing: 6) {
+                nameView(c)
+
+                Button {
+                    Haptics.tap()
+                    showRankSheet = true
+                } label: {
+                    LvlPill(
+                        level: settings.profileLevel,
+                        rankTitle: DriverRank.from(level: settings.profileLevel).title(lang.language)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("profile_lvl_pill")
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                Haptics.tap()
+                showSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 17))
+                    .foregroundStyle(c.text)
+                    .frame(width: 34, height: 34)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("profile_gear")
         }
-        return settings.vehicles.first
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        .accessibilityIdentifier("profile_header")
     }
 
-    // MARK: - Social Counters Row (followers / following)
+    @ViewBuilder
+    private func nameView(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        let trimmed = auth.userName?.trimmingCharacters(in: .whitespaces) ?? ""
+        let hasName = !trimmed.isEmpty
+        let displayName: String = auth.isSignedIn
+            ? (hasName ? trimmed : (isRu ? "Добавьте имя" : "Add your name"))
+            : AppStrings.meGuestName(lang.language)
 
-    private func socialCountersRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(spacing: 0) {
+        Text(displayName)
+            .font(.system(size: 20, weight: .heavy))
+            .tracking(-0.2)
+            .foregroundStyle(auth.isSignedIn && !hasName ? c.textTertiary : c.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard auth.isSignedIn, !isEditingAvatar else { return }
+                Haptics.tap()
+                // No name yet (Apple Sign In doesn't redeliver the name
+                // after re-auth) → tap routes to the editor instead of the
+                // public-profile preview, so the user sees "fix your
+                // identity" before "see your public profile". Once a real
+                // name exists, tap opens preview-as-others (FK-1 kept).
+                if headerTapShouldEditName {
+                    presentNameEditor()
+                } else {
+                    previewingOwnProfile = true
+                }
+            }
+            .onLongPressGesture(minimumDuration: 0.4) {
+                guard auth.isSignedIn, !isEditingAvatar else { return }
+                Haptics.action()
+                presentNameEditor()
+            }
+    }
+
+    /// Whether tapping the name should open the editor instead of the
+    /// public-profile preview. Empty / placeholder names route to the editor
+    /// so a fresh-install user is nudged to set their name — but real-name
+    /// users get the preview, the more useful action once identity is set.
+    private var headerTapShouldEditName: Bool {
+        guard auth.isSignedIn else { return false }
+        let trimmed = auth.userName?.trimmingCharacters(in: .whitespaces) ?? ""
+        if trimmed.isEmpty { return true }
+        return RandomDisplayName.isPlaceholder(auth.userName)
+    }
+
+    private func presentNameEditor() {
+        showNameEditor = true
+    }
+
+    // MARK: - Year Hero (Figma 150:1244)
+
+    private func yearHero(_ agg: MeAggregates, _ c: AppTheme.Colors) -> some View {
+        let slideCount = WrappedStoryView.slides(from: agg, lang: lang.language).count
+
+        return ZStack(alignment: .bottomLeading) {
+            LinearGradient(
+                colors: [AppTheme.accent, AppTheme.teal],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            // Subtle white wave texture (vector not exportable from Figma —
+            // sine approximation, α0.12).
+            Canvas { ctx, size in
+                for (midFactor, ampFactor) in [(0.45, 0.16), (0.62, 0.20)] {
+                    var path = Path()
+                    let amp = size.height * ampFactor
+                    let midY = size.height * midFactor
+                    path.move(to: CGPoint(x: 0, y: midY))
+                    var x: CGFloat = 0
+                    while x <= size.width {
+                        let y = midY + sin(x / size.width * .pi * 2 + midFactor * 4) * amp
+                        path.addLine(to: CGPoint(x: x, y: y))
+                        x += 4
+                    }
+                    ctx.stroke(path, with: .color(.white.opacity(0.12)), lineWidth: 14)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(AppStrings.wrappedKicker(lang.language))
+                    .font(.custom("PressStart2P-Regular", size: 9))
+                    .foregroundStyle(.white.opacity(0.85))
+
+                Text(AppStrings.wrappedHeroTitle(lang.language, year: agg.year))
+                    .font(.system(size: 23, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    Haptics.action()
+                    // <2 real slides → the story would be an empty shell;
+                    // route to Статистика instead (§2.5 runtime fallback).
+                    if slideCount >= 2 {
+                        showWrappedStory = true
+                    } else if mePath.last != .stats {
+                        mePath.append(.stats)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 14))
+                        Text(AppStrings.wrappedWatch(lang.language))
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(.white.opacity(0.22)))
+                    .background(.ultraThinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+                .accessibilityIdentifier("profile_wrapped_cta")
+            }
+            .padding(16)
+        }
+        .frame(height: 168)
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(alignment: .topTrailing) {
+            Image("PixelCar")
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(height: 30)
+                .opacity(0.95)
+                .padding(14)
+        }
+        .accessibilityIdentifier("profile_year_hero")
+    }
+
+    // MARK: - Моменты
+
+    private struct Moment {
+        let title: String
+        let subtitle: String
+        let colors: [Color]
+    }
+
+    private func moments(_ agg: MeAggregates) -> [Moment] {
+        let l = lang.language
+        var result: [Moment] = []
+
+        if let t = agg.yearAgoTrip {
+            result.append(Moment(
+                title: AppStrings.momentYearAgo(l),
+                subtitle: "\(momentTripName(t)) · \(GarageFormat.odometer(t.distanceKm)) \(AppStrings.km(l))",
+                colors: [AppTheme.blue, AppTheme.teal]
+            ))
+        }
+        if let t = agg.longestYearTrip {
+            result.append(Moment(
+                title: AppStrings.momentLongest(l),
+                // Plain «X км» — the mock's "за день" is sample copy; this
+                // number is per-trip, don't misclaim.
+                subtitle: "\(momentTripName(t)) · \(GarageFormat.odometer(t.distanceKm)) \(AppStrings.km(l))",
+                colors: [AppTheme.green, AppTheme.teal]
+            ))
+        }
+        if let region = agg.newRegion {
+            result.append(Moment(
+                title: AppStrings.momentNewRegion(l),
+                subtitle: AppStrings.momentRegionOpened(l, name: region),
+                colors: [AppTheme.teal, AppTheme.blue]
+            ))
+        }
+        return result
+    }
+
+    private func momentTripName(_ trip: Trip) -> String {
+        if let t = trip.title, !t.isEmpty { return t }
+        if let r = trip.region, !r.isEmpty { return r }
+        return ProfileDateFormat.dayMonth(trip.startDate, lang: lang.language)
+    }
+
+    @ViewBuilder
+    private func momentsSection(_ agg: MeAggregates, _ c: AppTheme.Colors) -> some View {
+        let cards = moments(agg)
+        if !cards.isEmpty {
+            ProfileSectionLabel(text: AppStrings.momentsSection(lang.language))
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 8)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(cards.enumerated()), id: \.offset) { idx, card in
+                        MomentCard(
+                            title: card.title,
+                            subtitle: card.subtitle,
+                            gradient: LinearGradient(
+                                colors: card.colors,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .accessibilityIdentifier("profile_moment_card_\(idx)")
+                    }
+                }
+                .padding(.horizontal, 14)
+            }
+            .padding(.bottom, 12)
+        }
+    }
+
+    // MARK: - История
+
+    @ViewBuilder
+    private func historySection(_ agg: MeAggregates, _ c: AppTheme.Colors) -> some View {
+        ProfileSectionLabel(text: AppStrings.historySection(lang.language))
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
+
+        ForEach(historyGroups(agg.recentTrips), id: \.key) { group in
+            Text(group.key)
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(c.text)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+
+            ForEach(group.trips) { trip in
+                ProfileTripRow(
+                    trip: trip,
+                    vehicleName: vehicleName(for: trip),
+                    onTap: { mePath.append(.trip(trip.id)) }
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+            }
+        }
+    }
+
+    /// Consecutive month groups over the (already newest-first) trips.
+    /// Months of previous years get a year suffix so «Апрель» is never
+    /// ambiguous across year boundaries.
+    private func historyGroups(_ trips: [Trip]) -> [(key: String, trips: [Trip])] {
+        let cal = Calendar.current
+        let currentYear = cal.component(.year, from: Date())
+        var groups: [(key: String, trips: [Trip])] = []
+        for trip in trips {
+            var key = ProfileDateFormat.monthName(trip.startDate, lang: lang.language)
+            let year = cal.component(.year, from: trip.startDate)
+            if year != currentYear {
+                key += " \(year)"
+            }
+            if groups.last?.key == key {
+                groups[groups.count - 1].trips.append(trip)
+            } else {
+                groups.append((key, [trip]))
+            }
+        }
+        return groups
+    }
+
+    private func vehicleName(for trip: Trip) -> String? {
+        guard let id = trip.vehicleId else { return nil }
+        return settings.vehicles.first { $0.id == id }?.name
+    }
+
+    // MARK: - Social Counters Row (followers / following, FK-11)
+
+    private func socialCountersRow(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return HStack(spacing: 0) {
             Button {
                 Haptics.tap()
                 followListMode = .followers
@@ -389,7 +645,7 @@ struct ProfileView: View {
                         .font(.system(size: 17, weight: .heavy).monospacedDigit())
                         .foregroundStyle(c.text)
                     Text(isRu ? "подписчиков" : "followers")
-                        .font(.system(size: 11))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(c.textTertiary)
                 }
                 .frame(maxWidth: .infinity)
@@ -397,7 +653,7 @@ struct ProfileView: View {
             }
             .buttonStyle(.plain)
 
-            Rectangle().fill(c.border).frame(width: 0.5, height: 32)
+            Rectangle().fill(c.borderBright).frame(width: 1, height: 34)
 
             Button {
                 Haptics.tap()
@@ -408,7 +664,7 @@ struct ProfileView: View {
                         .font(.system(size: 17, weight: .heavy).monospacedDigit())
                         .foregroundStyle(c.text)
                     Text(isRu ? "подписок" : "following")
-                        .font(.system(size: 11))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(c.textTertiary)
                 }
                 .frame(maxWidth: .infinity)
@@ -417,206 +673,15 @@ struct ProfileView: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 12)
-        .surfaceCard(cornerRadius: 14)
-    }
-
-    private func shareProfileButton(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        Button {
-            Haptics.tap()
-            presentShareProfile()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 15))
-                    .foregroundStyle(AppTheme.accent)
-                    .frame(width: 22, alignment: .center)
-                Text(isRu ? "Поделиться профилем" : "Share profile")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-            }
-            .padding(14)
-            .surfaceCard(cornerRadius: 14)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func presentShareProfile() {
-        guard let accountId = TokenStore.shared.accountId else { return }
-        let urlString = "https://trip-track.app/u/\(accountId)"
-        guard let url = URL(string: urlString) else { return }
-        let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        var vc = UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
-            .first
-        while let presented = vc?.presentedViewController {
-            vc = presented
-        }
-        vc?.present(av, animated: true)
-    }
-
-    private func loadOwnSocialProfile() async {
-        guard auth.isSignedIn, let accountId = TokenStore.shared.accountId else { return }
-        do {
-            let p: SocialProfile = try await APIClient.shared.get(
-                APIEndpoint.userProfile(accountId.uuidString))
-            socialProfile = p
-        } catch {
-            // Silent — social counters just won't populate
-        }
-    }
-
-    private func quickStatsRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(spacing: 10) {
-            Button {
-                Haptics.tap()
-                showStats = true
-            } label: {
-                quickStatPill(
-                    icon: "flame.fill",
-                    value: "\(settings.currentStreak)",
-                    label: isRu ? "дней подряд" : "day streak",
-                    color: AppTheme.accent, c: c
-                )
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                Haptics.tap()
-                showStats = true
-            } label: {
-                quickStatPill(
-                    icon: "car.fill",
-                    value: String(format: "%.0f", mapVM.cachedTotalKm),
-                    label: isRu ? "км" : "km",
-                    color: AppTheme.green, c: c
-                )
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                Haptics.tap()
-                showStats = true
-            } label: {
-                quickStatPill(
-                    icon: "flag.fill",
-                    value: "\(mapVM.cachedTripCount)",
-                    label: isRu ? "поездок" : "trips",
-                    color: AppTheme.blue, c: c
-                )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private func quickStatPill(icon: String, value: String, label: String, color: Color, c: AppTheme.Colors) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundStyle(color)
-            // Big totals (10000+ km, 999+ trips) shrink before truncating so all three pills stay equal-width
-            Text(value)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(c.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(c.textTertiary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .surfaceCard(cornerRadius: 12)
-    }
-
-    private func profileNavButton(
-        icon: String,
-        iconColor: Color,
-        label: String,
-        badge: Int = 0,
-        c: AppTheme.Colors,
-    ) -> some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.system(size: 16))
-                .foregroundStyle(iconColor)
-            Text(label)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(c.text)
-            // Capped at 99+ so a noisy account doesn't widen the row.
-            if badge > 0 {
-                Text(badge > 99 ? "99+" : "\(badge)")
-                    .font(.system(size: 11, weight: .bold).monospacedDigit())
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(AppTheme.accent, in: Capsule())
-                    .fixedSize()
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-        }
-        .padding(16)
         .surfaceCard(cornerRadius: 16)
     }
 
-    // MARK: - Avatar Card (hero with banner, avatar overlaps seam)
+    // MARK: - Guest sign-in card (Figma 424:128 — kept byte-identical)
 
-    private static let heroAvatarSize: CGFloat = 108
-    private static let heroBannerHeight: CGFloat = 150
-
-    /// Friendly empty-state replacement for the stats row + driver-level
-    /// stack on first-launch (cachedTripCount == 0). Tap routes to the
-    /// Tracking tab so the user lands directly on the record screen — that's
-    /// the one action that matters before they have any data.
-    private func firstTripWelcomeCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        Button {
-            Haptics.tap()
-            NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
-        } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(AppTheme.accentBg)
-                        .frame(width: 52, height: 52)
-                    Image(systemName: "car.side.fill")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(isRu ? "Запишите первую поездку" : "Record your first trip")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(c.text)
-                    Text(isRu
-                         ? "Здесь будут Ваши километры, серии и бейджи."
-                         : "Your kilometers, streaks and badges will appear here.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(c.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.leading)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-            }
-            .padding(14)
-            .surfaceCard(cornerRadius: 14)
-        }
-        .buttonStyle(.plain)
-    }
-
-    /// Guest sync card (Figma 127:896, node 424:128): explains sync and signs
-    /// in DIRECTLY via the shared Apple button — no sheet hop. The footnote
-    /// is the "можно позже" affordance; the card just stays.
-    private func guestSignInCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    /// Guest sync card: explains sync and signs in DIRECTLY via the shared
+    /// Apple button — no sheet hop. The footnote is the "можно позже"
+    /// affordance; the card just stays.
+    private func guestSignInCard(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "icloud.fill")
@@ -660,242 +725,53 @@ struct ProfileView: View {
         .padding(14)
         .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+        .accessibilityIdentifier("profile_guest_signin")
     }
 
-    private func avatarCard(_ c: AppTheme.Colors) -> some View {
-        let bg = ProfileBackground.from(settings.profileBackground)
-        let avatarSize = Self.heroAvatarSize
-        let bannerHeight = Self.heroBannerHeight
-        // Avatar sits so its center aligns with the banner/content seam.
-        let avatarOverlap = avatarSize / 2
+    // MARK: - First-trip welcome (0 trips)
 
-        return VStack(spacing: 0) {
-            // Banner
-            ZStack(alignment: .topTrailing) {
-                if bg == .none {
-                    c.cardAlt
-                } else {
-                    bg.view()
-                }
-
-                // Banner action row: edit avatar + choose background
-                HStack(spacing: 8) {
-                    bannerIconButton(system: "pencil") {
-                        withAnimation(.easeInOut(duration: 0.2)) { isEditingAvatar.toggle() }
-                    }
-                    bannerIconButton(system: "photo.on.rectangle") {
-                        showBackgroundPicker = true
-                    }
-                }
-                .padding(12)
-            }
-            .frame(height: bannerHeight)
-            .clipShape(UnevenRoundedRectangle(
-                topLeadingRadius: 18, bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0, topTrailingRadius: 18
-            ))
-
-            // Content below banner. Top padding = half the avatar so content starts
-            // below the avatar's bottom edge; avatar itself is an overlay.
-            VStack(spacing: 10) {
-                if auth.isSignedIn {
-                    signedInHeader(c)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            // Edit-avatar mode owns its own grid below — suppress
-                            // the gesture there.
-                            guard !isEditingAvatar else { return }
-                            Haptics.tap()
-                            // No name yet (Apple Sign In doesn't redeliver
-                            // the name after re-auth) → first tap routes to
-                            // the editor instead of preview, so the user
-                            // sees "fix your identity" before "see your
-                            // public profile". Once a name exists, tap
-                            // returns to the preview behaviour.
-                            if headerTapShouldEditName {
-                                presentNameEditor()
-                            } else {
-                                previewingOwnProfile = true
-                            }
-                        }
-                        .onLongPressGesture(minimumDuration: 0.4) {
-                            guard !isEditingAvatar else { return }
-                            Haptics.action()
-                            presentNameEditor()
-                        }
-                } else {
-                    guestHeader(c)
-                }
-
-                if isEditingAvatar {
-                    avatarGrid(c)
-                        .padding(.top, 4)
-                }
-            }
-            .padding(.top, avatarOverlap + 14)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
-        }
-        .background(c.card)
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(c.border, lineWidth: 0.5)
-        )
-        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
-        .overlay(alignment: .top) {
-            // Floating avatar — its vertical center sits on the banner/content seam.
-            ZStack(alignment: .bottomTrailing) {
-                Text(selectedAvatar)
-                    .font(.system(size: avatarSize * 0.58))
-                    .frame(width: avatarSize, height: avatarSize)
-                    .background(Circle().fill(c.card))
-                    .overlay(
-                        Circle().stroke(c.card, lineWidth: 5)
-                    )
-                    .scaleEffect(avatarBounce ? 1.12 : 1.0)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: avatarBounce)
-
-                levelPill
-                    .offset(x: 2, y: 2)
-            }
-            .padding(.top, bannerHeight - avatarOverlap)
-            .contentShape(Circle())
-            .onTapGesture {
-                guard auth.isSignedIn, !isEditingAvatar else { return }
-                Haptics.tap()
-                previewingOwnProfile = true
-            }
-        }
-    }
-
-    private func bannerIconButton(system: String, action: @escaping () -> Void) -> some View {
-        Button {
+    /// Friendly empty-state replacement for the stats stack on first launch
+    /// (cachedTripCount == 0). Tap routes to the Tracking tab — the one
+    /// action that matters before any data exists.
+    private func firstTripWelcomeCard(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return Button {
             Haptics.tap()
-            action()
+            NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
         } label: {
-            Image(systemName: system)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(.black.opacity(0.35), in: Circle())
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.accentBg)
+                        .frame(width: 52, height: 52)
+                    Image(systemName: "car.side.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(isRu ? "Запишите первую поездку" : "Record your first trip")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(c.text)
+                    Text(isRu
+                         ? "Здесь будут Ваши километры, серии и бейджи."
+                         : "Your kilometers, streaks and badges will appear here.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 16)
         }
         .buttonStyle(.plain)
     }
 
-    private var levelPill: some View {
-        Text("LVL \(settings.profileLevel)")
-            .font(.custom("PressStart2P-Regular", size: 9))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(AppTheme.accent)
-                    .shadow(color: AppTheme.accent.opacity(0.3), radius: 4, y: 2)
-            )
-    }
-
-    // MARK: - Guest Header
-
-    @ViewBuilder
-    private func guestHeader(_ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 6) {
-            Text(AppStrings.guest(lang.language))
-                .font(.system(size: 22, weight: .heavy))
-                .tracking(-0.3)
-                .foregroundStyle(c.text)
-            Text(AppStrings.signInToSync(lang.language))
-                .font(.system(size: 13))
-                .foregroundStyle(c.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-
-        // 6.1.0: the header carries no Apple button — the guest sync card
-        // right below (guestSignInCard) is the single sign-in CTA per Figma.
-    }
-
-    // MARK: - Signed In Header
-
-    @ViewBuilder
-    private func signedInHeader(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
-        let trimmed = auth.userName?.trimmingCharacters(in: .whitespaces) ?? ""
-        let hasName = !trimmed.isEmpty
-        let isPlaceholder = RandomDisplayName.isPlaceholder(auth.userName)
-        // "Identity is unsettled" — placeholder names look real but aren't.
-        // The pencil sticks around in both states (always-editable affordance);
-        // placeholders get a stronger accent color + sub-hint, real names get
-        // a subdued treatment so the chrome doesn't shout when nothing is wrong.
-        let needsEditCue = !hasName || isPlaceholder
-        return VStack(spacing: 6) {
-            HStack(spacing: 6) {
-                Text(hasName
-                     ? (auth.userName ?? "")
-                     : (isRu ? "Добавьте имя" : "Add your name"))
-                    .font(.system(size: 22, weight: .heavy))
-                    .tracking(-0.3)
-                    .foregroundStyle(hasName ? c.text : c.textTertiary)
-                    .multilineTextAlignment(.center)
-                    // 30-char names + Dynamic Type otherwise wrap to 3 lines
-                    // and break the avatar overlap math (`avatarOverlap` =
-                    // half avatar size). Cap at 2 lines + scale-fit.
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
-                // The pencil is its own button — tapping it only opens the
-                // editor, never the public-profile preview. Lets the user
-                // rename even when their name is a real / accepted one,
-                // without forcing them to long-press (which is hidden).
-                Button {
-                    Haptics.tap()
-                    presentNameEditor()
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(needsEditCue ? AppTheme.accent : c.textTertiary)
-                        .padding(6)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(isRu ? "Изменить имя" : "Edit name")
-            }
-            if needsEditCue {
-                // Sub-hint sells the affordance — without this, the pencil
-                // is easy to miss and users assume the random name is theirs
-                // forever. Tone matches the "name yourself" framing in the
-                // editor sheet, not "fix something broken".
-                Text(isRu ? "Тапните, чтобы изменить" : "Tap to change")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(c.textTertiary)
-                    .transition(.opacity)
-            } else if let email = auth.userEmail {
-                Text(email)
-                    .font(.system(size: 12))
-                    .foregroundStyle(c.textTertiary)
-            }
-            syncStatusIndicator(c)
-                .padding(.top, 4)
-        }
-        .animation(.easeInOut(duration: 0.2), value: needsEditCue)
-    }
-
-    /// Whether tapping the hero header (outside the pencil button) should
-    /// open the editor instead of the public-profile preview. Pencil is
-    /// always tappable; this only governs the surrounding area. Empty /
-    /// placeholder names still route to the editor on hero-tap so a fresh-
-    /// install user is nudged to set their name — but real-name users get
-    /// the preview, which is the more useful action when identity is set.
-    private var headerTapShouldEditName: Bool {
-        guard auth.isSignedIn else { return false }
-        let trimmed = auth.userName?.trimmingCharacters(in: .whitespaces) ?? ""
-        if trimmed.isEmpty { return true }
-        return RandomDisplayName.isPlaceholder(auth.userName)
-    }
-
-    private func presentNameEditor() {
-        editedName = auth.userName ?? ""
-        showNameEditor = true
-    }
+    // MARK: - Sync pill (FK-6 — kept despite canon absence; load-bearing UX)
 
     @ViewBuilder
     private func syncStatusIndicator(_ c: AppTheme.Colors) -> some View {
@@ -905,8 +781,8 @@ struct ProfileView: View {
         // Always tappable when sync is on — even on "synced" the sheet is
         // useful as a dashboard ("how much of my data is in the cloud?").
         // When sync is disabled there's nothing meaningful to show, so we
-        // leave the pill inert; the user can enable sync via the dedicated
-        // Cloud Sync row below.
+        // leave the pill inert; the user can enable sync via Настройки →
+        // Аккаунт и синхронизация.
         let isTappable = settings.cloudSyncEnabled
 
         HStack(spacing: 6) {
@@ -967,21 +843,7 @@ struct ProfileView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: syncing)
         .animation(.easeInOut(duration: 0.2), value: pending)
-    }
-
-    // MARK: - Edit Avatar Button
-
-    private func editAvatarButton(_ c: AppTheme.Colors) -> some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isEditingAvatar.toggle()
-            }
-        } label: {
-            Image(systemName: isEditingAvatar ? "checkmark" : "pencil")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isEditingAvatar ? AppTheme.accent : c.textTertiary)
-                .frame(width: 28, height: 28)
-        }
+        .accessibilityIdentifier("profile_sync_pill")
     }
 
     // MARK: - Avatar Grid
@@ -1021,271 +883,35 @@ struct ProfileView: View {
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
-    // MARK: - Average Speed Card
+    // MARK: - Data
 
-    private func avgSpeedCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label {
-                Text(AppStrings.avgSpeedModeTitle(lang.language))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textSecondary)
-            } icon: {
-                Image(systemName: "speedometer")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.blue)
-            }
-
-            HStack(spacing: 8) {
-                themeChip(
-                    label: AppStrings.avgSpeedOverall(lang.language),
-                    icon: "clock",
-                    isActive: settings.avgSpeedMode == .overall,
-                    c: c
-                ) { settings.avgSpeedMode = .overall }
-
-                themeChip(
-                    label: AppStrings.avgSpeedMoving(lang.language),
-                    icon: "car.fill",
-                    isActive: settings.avgSpeedMode == .moving,
-                    c: c
-                ) { settings.avgSpeedMode = .moving }
-            }
-        }
-        .padding(16)
-        .surfaceCard(cornerRadius: 16)
-    }
-
-    // MARK: - Publish on Globe Card
-
-    private func publishGlobeCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label {
-                Text(AppStrings.publishOnGlobeTitle(lang.language))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textSecondary)
-            } icon: {
-                Image(systemName: "globe")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.blue)
-            }
-
-            HStack(spacing: 8) {
-                themeChip(
-                    label: AppStrings.optYes(lang.language),
-                    icon: nil,
-                    isActive: settings.showOnPublicMap,
-                    c: c
-                ) { setShowOnPublicMap(true) }
-
-                themeChip(
-                    label: AppStrings.optNo(lang.language),
-                    icon: nil,
-                    isActive: !settings.showOnPublicMap,
-                    c: c
-                ) { setShowOnPublicMap(false) }
-            }
-
-            Text(AppStrings.publishOnGlobeSubtitle(lang.language))
-                .font(.system(size: 11))
-                .foregroundStyle(c.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(16)
-        .surfaceCard(cornerRadius: 16)
-    }
-
-    /// Set the globe opt-in and push it to the account (same mutate-then-sync
-    /// pattern as avatar / profile-background). No-op when unchanged. The chip's
-    /// own Button supplies the haptic (matches the other settings chips), and we
-    /// skip the post-sync feed refresh — the globe opt-in doesn't touch feed cards.
-    private func setShowOnPublicMap(_ value: Bool) {
-        guard settings.showOnPublicMap != value else { return }
-        settings.showOnPublicMap = value
-        Task { await auth.syncProfileToServer(refreshFeedAfter: false) }
-    }
-
-    // MARK: - Theme Card
-
-    private func themeCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label {
-                Text(AppStrings.theme(lang.language))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textSecondary)
-            } icon: {
-                Image(systemName: "sun.max.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.yellow)
-            }
-
-            HStack(spacing: 8) {
-                themeChip(
-                    label: AppStrings.dark(lang.language),
-                    icon: "moon.fill",
-                    isActive: themeManager.mode == .dark || (themeManager.mode == .system && scheme == .dark),
-                    c: c
-                ) { themeManager.mode = .dark }
-
-                themeChip(
-                    label: AppStrings.light(lang.language),
-                    icon: "sun.max.fill",
-                    isActive: themeManager.mode == .light || (themeManager.mode == .system && scheme == .light),
-                    c: c
-                ) { themeManager.mode = .light }
-            }
-        }
-        .padding(16)
-        .surfaceCard(cornerRadius: 16)
-    }
-
-    // MARK: - Language Card
-
-    private func languageCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label {
-                Text(AppStrings.lang(lang.language))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textSecondary)
-            } icon: {
-                Image(systemName: "globe")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppTheme.blue)
-            }
-
-            HStack(spacing: 8) {
-                themeChip(label: "English", icon: nil, isActive: lang.language == .en, c: c) {
-                    lang.language = .en
-                }
-                themeChip(label: "Русский", icon: nil, isActive: lang.language == .ru, c: c) {
-                    lang.language = .ru
-                }
-            }
-        }
-        .padding(16)
-        .surfaceCard(cornerRadius: 16)
-    }
-
-    // MARK: - About Card
-
-    private func aboutCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(spacing: 12) {
-            // Branding
-            VStack(spacing: 4) {
-                Text("TRIP TRACK")
-                    .font(.system(size: 11, weight: .black))
-                    .foregroundStyle(AppTheme.accent)
-                    .tracking(3)
-
-                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.1")")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(c.textSecondary)
-
-                Text("\(AppStrings.developer(lang.language)): OneZee")
-                    .font(.system(size: 12))
-                    .foregroundStyle(c.textTertiary)
-            }
-
-            // Social links — compact grid
-            HStack(spacing: 10) {
-                socialTile(
-                    assetIcon: "TelegramIcon",
-                    iconColor: Color(red: 0.16, green: 0.57, blue: 0.86),
-                    label: "Telegram",
-                    url: "https://t.me/onezee_co",
-                    c: c
-                )
-                socialTile(
-                    assetIcon: "YouTubeIcon",
-                    iconColor: Color(red: 1.0, green: 0.0, blue: 0.0),
-                    label: "YouTube",
-                    url: "https://www.youtube.com/@onezee_dev",
-                    c: c
-                )
-                socialTile(
-                    assetIcon: "GitHubIcon",
-                    iconColor: c.text,
-                    label: "GitHub",
-                    url: "https://github.com/OneZee23/trip-track-ios",
-                    c: c
-                )
-            }
-
-            // Legal links
-            HStack(spacing: 16) {
-                Button {
-                    Haptics.tap()
-                    UIApplication.shared.open(AppConfig.privacyPolicyURL(lang.language))
-                } label: {
-                    Text(AppStrings.privacyPolicy(lang.language))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(c.textTertiary)
-                        .underline()
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    Haptics.tap()
-                    UIApplication.shared.open(AppConfig.termsURL(lang.language))
-                } label: {
-                    Text(AppStrings.termsOfService(lang.language))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(c.textTertiary)
-                        .underline()
-                }
-                .buttonStyle(.plain)
-            }
+    private func loadOwnSocialProfile() async {
+        guard auth.isSignedIn, let accountId = TokenStore.shared.accountId else { return }
+        do {
+            let p: SocialProfile = try await APIClient.shared.get(
+                APIEndpoint.userProfile(accountId.uuidString))
+            socialProfile = p
+        } catch {
+            // Silent — social counters just won't populate
         }
     }
 
-    private func socialTile(assetIcon: String, iconColor: Color, label: String, url: String, c: AppTheme.Colors) -> some View {
-        Button {
-            Haptics.tap()
-            if let u = URL(string: url) {
-                UIApplication.shared.open(u)
-            }
-        } label: {
-            VStack(spacing: 6) {
-                Image(assetIcon)
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 22, height: 22, alignment: .center)
-                    .foregroundStyle(iconColor)
-
-                Text(label)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(c.textSecondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .surfaceCard(cornerRadius: 12)
+    /// Fetch (StatsCache-aware, main) → crunch (detached) → publish (@State).
+    private func loadAggregates() async {
+        let tripManager = mapVM.tripManager
+        let count = tripManager.fetchTripCount()
+        let lastDate = tripManager.fetchLastTripDate()
+        let trips: [Trip]
+        if let cached = StatsCache.tripsIfValid(currentCount: count, currentLastDate: lastDate) {
+            trips = cached
+        } else {
+            trips = tripManager.fetchTrips()
+            StatsCache.update(trips: trips, count: count, lastDate: lastDate)
         }
-        .buttonStyle(PressableCardStyle())
-    }
-
-    // MARK: - Helpers
-
-    private func themeChip(label: String, icon: String?, isActive: Bool, c: AppTheme.Colors, action: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.tap()
-            withAnimation(.easeInOut(duration: 0.2)) { action() }
-        } label: {
-            HStack(spacing: 6) {
-                if let icon = icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 12))
-                }
-                Text(label)
-                    .font(.system(size: 14, weight: .semibold))
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .foregroundStyle(isActive ? .white : c.textSecondary)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isActive ? AppTheme.accent : c.cardAlt)
-            )
-        }
-        .buttonStyle(.plain)
+        let computed = await Task.detached(priority: .userInitiated) {
+            MeAggregates.compute(trips: trips, now: Date(), calendar: Calendar.current)
+        }.value
+        guard !Task.isCancelled else { return }
+        agg = computed
     }
 }

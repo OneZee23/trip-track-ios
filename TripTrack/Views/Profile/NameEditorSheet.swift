@@ -1,13 +1,9 @@
 import SwiftUI
 
-/// Bottom-sheet name editor. Replaces the previous `.alert` so the user
-/// gets a focused TextField with proper styling, inline validation, and a
-/// character counter — not a system-error-styled prompt.
-///
-/// The sheet shows a slightly different headline depending on whether the
-/// user is editing a real name vs replacing a placeholder. That tiny
-/// difference makes the placeholder case feel intentional ("name yourself")
-/// rather than corrective.
+/// Compact bottom-sheet name editor (Figma 126:907): Отмена / Имя / Готово
+/// header, accent-bordered input with a trailing clear-X, helper + counter
+/// row. `maxLength` stays 30 — the server contract; the mock's "До 40" would
+/// silently change validation, so the helper copy interpolates the real cap.
 struct NameEditorSheet: View {
     let initialName: String
     let isPlaceholder: Bool
@@ -30,115 +26,131 @@ struct NameEditorSheet: View {
                       && validationError == nil
                       && trimmed.count <= Self.maxLength
 
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 20) {
-                // Headline + subhead. For placeholder users we lean into
-                // "name yourself" framing; for real edits, "your name".
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(isPlaceholder
-                         ? (isRu ? "Назовите себя" : "Name yourself")
-                         : (isRu ? "Ваше имя" : "Your name"))
-                        .font(.system(size: 24, weight: .heavy))
-                        .foregroundStyle(c.text)
-                    Text(isRu
-                         ? "Это имя увидят те, кто открывает Ваш профиль или Ваши публичные поездки."
-                         : "Visible on your public profile and trips.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(c.textSecondary)
+        VStack(spacing: 0) {
+            // Custom grabber — standardized 40×5 variant.
+            Capsule()
+                .fill(c.textTertiary.opacity(0.5))
+                .frame(width: 40, height: 5)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+
+            // Отмена / Имя / Готово
+            ZStack {
+                Text(AppStrings.nameEditorTitle(lang.language))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(c.text)
+
+                HStack {
+                    Button {
+                        Haptics.tap()
+                        dismiss()
+                    } label: {
+                        Text(AppStrings.cancel(lang.language))
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(c.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+
+                    Button {
+                        Haptics.action()
+                        commit()
+                    } label: {
+                        Text(AppStrings.done(lang.language))
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(AppTheme.accent)
+                            .opacity(canSave ? 1 : 0.4)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canSave)
+                    .accessibilityIdentifier("name_editor_done")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
+
+            // Input — white card, 1.5pt accent border, trailing clear-X.
+            HStack(spacing: 8) {
+                TextField(
+                    isRu ? "Например, Иван" : "e.g., Alex",
+                    text: $text,
+                )
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(c.text)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .focused($isFocused)
+                .onSubmit { if canSave { commit() } }
+                .onChange(of: text) { _, newValue in
+                    // Hard cap — silently truncate paste / over-type so
+                    // users don't have to manually delete excess chars.
+                    if newValue.count > Self.maxLength {
+                        text = String(newValue.prefix(Self.maxLength))
+                    }
+                    validationError = validate(text)
+                }
+                .accessibilityIdentifier("name_editor_field")
+
+                if !text.isEmpty {
+                    Button {
+                        Haptics.tap()
+                        text = ""
+                        validationError = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(c.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(AppTheme.accent, lineWidth: 1.5)
+            )
+            .padding(.horizontal, 12)
+
+            // Helper (or validation error) + counter
+            HStack(alignment: .top, spacing: 8) {
+                if let err = validationError {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .font(.system(size: 11))
+                        Text(err)
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(AppTheme.red)
+                    .transition(.opacity)
+                } else {
+                    Text(AppStrings.nameHelper(lang.language, max: Self.maxLength))
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.top, 12)
-
-                // Big input — focused on appear, with character counter
-                // floating bottom-right when within 8 chars of the limit so
-                // it stays calm in the common case.
-                VStack(alignment: .trailing, spacing: 6) {
-                    TextField(
-                        isRu ? "Например, Иван" : "e.g., Alex",
-                        text: $text,
-                    )
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(c.text)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .submitLabel(.done)
-                    .focused($isFocused)
-                    .onSubmit { if canSave { commit() } }
-                    .onChange(of: text) { _, newValue in
-                        // Hard cap — silently truncate paste / over-type so
-                        // users don't have to manually delete excess chars.
-                        if newValue.count > Self.maxLength {
-                            text = String(newValue.prefix(Self.maxLength))
-                        }
-                        validationError = validate(text)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 14)
-                    .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 14))
-
-                    HStack(spacing: 8) {
-                        if let err = validationError {
-                            HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.circle.fill")
-                                    .font(.system(size: 11))
-                                Text(err)
-                                    .font(.system(size: 12))
-                            }
-                            .foregroundStyle(AppTheme.red)
-                            .transition(.opacity)
-                        }
-                        Spacer(minLength: 0)
-                        if trimmed.count >= Self.maxLength - 8 {
-                            Text("\(trimmed.count)/\(Self.maxLength)")
-                                .font(.system(size: 11, weight: .medium).monospacedDigit())
-                                .foregroundStyle(trimmed.count >= Self.maxLength
-                                                 ? AppTheme.red
-                                                 : c.textTertiary)
-                                .transition(.opacity)
-                        }
-                    }
-                    .animation(.easeInOut(duration: 0.15), value: validationError != nil)
-                    .animation(.easeInOut(duration: 0.15), value: trimmed.count)
-                    .padding(.horizontal, 4)
-                }
-
                 Spacer(minLength: 0)
+                Text("\(trimmed.count)/\(Self.maxLength)")
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(trimmed.count >= Self.maxLength
+                                     ? AppTheme.red
+                                     : c.textTertiary)
+            }
+            .animation(.easeInOut(duration: 0.15), value: validationError != nil)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
 
-                // Save button — full-width primary. Cancel is in the nav bar
-                // so the bottom is anchored on the affirmative action.
-                Button {
-                    Haptics.action()
-                    commit()
-                } label: {
-                    Text(isRu ? "Сохранить" : "Save")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(canSave ? AppTheme.accent : c.textTertiary.opacity(0.4))
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSave)
-                .animation(.easeInOut(duration: 0.15), value: canSave)
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 16)
-            .background(c.bg)
-            .toolbar {
-                // Use the unified close affordance so every sheet across
-                // the app dismisses in the same place. Save button sits
-                // bottom-anchored as the affirmative action; the X is the
-                // exit, matching ProfileBackgroundPickerSheet, BluetoothScanSheet,
-                // CloudSyncView, SyncStatusSheetView, and DebugLogsView.
-                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
-            }
-            .navigationBarTitleDisplayMode(.inline)
+            Spacer(minLength: 0)
         }
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
+        .background(c.bg)
+        .presentationDetents([.height(200)])
+        .presentationDragIndicator(.hidden)
         .onAppear {
             // Pre-fill placeholder users with empty so they don't have to
             // delete the random name first; for real edits, start with their

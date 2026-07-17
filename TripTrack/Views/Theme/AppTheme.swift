@@ -18,6 +18,15 @@ enum AppTheme {
     static let teal = Color(red: 80/255, green: 190/255, blue: 210/255)
     static let orange = accent
 
+    // Gold — Me-tab LVL pill (6.1.0). Bg is adaptive: warm cream in light,
+    // translucent gold in dark.
+    static let gold = Color(red: 206/255, green: 154/255, blue: 46/255)
+    static let goldBg = Color(UIColor { tc in
+        tc.userInterfaceStyle == .dark
+            ? UIColor(red: 206/255, green: 154/255, blue: 46/255, alpha: 0.16)
+            : UIColor(red: 247/255, green: 239/255, blue: 222/255, alpha: 1)
+    })
+
     // Dim accent variants
     static let accentDim = accent.opacity(0.15)
     static let redDim = red.opacity(0.12)
