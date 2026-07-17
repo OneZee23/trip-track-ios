@@ -24,14 +24,29 @@ enum AppStrings {
         lang == .ru ? "Я" : "Me"
     }
 
-    // MARK: - Groups (coming soon)
+    // MARK: - Groups (coming soon, Figma 117:2265)
     static func groupsComingTitle(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Группы скоро" : "Groups are coming"
+        lang == .ru ? "Клубы — скоро" : "Clubs — coming soon"
     }
     static func groupsComingBody(_ lang: LanguageManager.Language) -> String {
         lang == .ru
-            ? "Здесь появятся сообщества по интересам: клубы по маркам, региональные компании, совместные покатушки. Находите своих и следите за поездками всей группы."
-            : "Interest-based communities are coming here: brand clubs, regional crews, group drives. Find your people and follow the whole group's trips."
+            ? "Сообщества по маркам и интересам: Miata, VAG, Dodge, дальнобой, оффроуд. Общие поездки и рейтинги."
+            : "Communities by make and interest: Miata, VAG, Dodge, trucking, off-road. Group drives and leaderboards."
+    }
+    static func groupsNotifyMe(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Уведомить меня" : "Notify me"
+    }
+    static func groupsNotifyDone(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вы в списке" : "You're on the list"
+    }
+    static func groupsWaitlistCount(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Уже ждут 1 240 человек" : "1,240 people already waiting"
+    }
+    static func groupsChipTrucking(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "🛻 Дальнобой" : "🛻 Trucking"
+    }
+    static func groupsChipOffroad(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "🏔 Оффроуд" : "🏔 Off-road"
     }
 
     // MARK: - Feed

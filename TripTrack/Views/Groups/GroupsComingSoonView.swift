@@ -1,38 +1,152 @@
 import SwiftUI
 
-/// Placeholder for the future Groups feature (interest-based driving
-/// communities). Tapping the Groups tab lands here; it explains what's
-/// coming rather than showing an empty screen. The full "coming soon"
-/// showcase (club catalog, notify-me) replaces this in the Groups stage
-/// of the 6.1.0 redesign.
+/// Groups-tab teaser (Figma 117:2265 «09 · Группы · Скоро») — the clubs
+/// feature is frontend-only for 6.1.0: an IdleRing hero, example club
+/// chips and a local-only notify-me CTA. No backend; the waitlist line is
+/// static showcase copy from the frame.
 struct GroupsComingSoonView: View {
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var lang: LanguageManager
+    /// Local-only waitlist intent — flips the CTA to its "done" state.
+    @AppStorage("groupsNotifyRequested") private var notifyRequested = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        return ZStack {
-            c.bg.ignoresSafeArea()
-            VStack(spacing: 18) {
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 52, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
-                    .padding(28)
-                    .background(AppTheme.accent.opacity(0.12), in: Circle())
+        let l = lang.language
 
-                Text(AppStrings.groupsComingTitle(lang.language))
-                    .font(.title2.bold())
+        VStack(spacing: 0) {
+            // Page header (feed-header convention: 28 heavy, tracking −0.56).
+            HStack {
+                Text(AppStrings.tabGroups(l))
+                    .font(.system(size: 28, weight: .heavy))
+                    .tracking(-0.56)
+                    .foregroundStyle(c.text)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 2)
+            .padding(.bottom, 10)
+
+            Spacer(minLength: 0)
+
+            VStack(spacing: 0) {
+                GroupsIdleRing()
+
+                Text(AppStrings.groupsComingTitle(l))
+                    .font(.system(size: 21, weight: .heavy))
                     .foregroundStyle(c.text)
                     .multilineTextAlignment(.center)
+                    .padding(.top, 22)
 
-                Text(AppStrings.groupsComingBody(lang.language))
-                    .font(.subheadline)
+                Text(AppStrings.groupsComingBody(l))
+                    .font(.system(size: 14))
+                    .lineSpacing(6)
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 8)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 8)
+
+                chipRows(c: c)
+                    .padding(.top, 18)
+
+                notifyButton(c: c, l: l)
+                    .padding(.top, 22)
+
+                Text(AppStrings.groupsWaitlistCount(l))
+                    .font(.system(size: 12))
+                    .foregroundStyle(c.textTertiary)
+                    .padding(.top, 10)
             }
-            .padding(.horizontal, 32)
-            .frame(maxWidth: 420)
+            .padding(.horizontal, 36)
+
+            Spacer(minLength: 0)
         }
+        .padding(.bottom, 96)
+        .frame(maxWidth: .infinity)
+        .background(c.bg.ignoresSafeArea())
+        .animation(.easeInOut(duration: 0.2), value: notifyRequested)
+    }
+
+    // MARK: - Chips
+
+    /// Example clubs (Figma order). Two fixed rows so the wrap matches the
+    /// frame on every device width. Miata/VAG names stay untranslated.
+    private func chipRows(c: AppTheme.Colors) -> some View {
+        VStack(spacing: 7) {
+            HStack(spacing: 7) {
+                chip("🏎 Miata Club", c: c)
+                chip("⚙️ VAG", c: c)
+            }
+            HStack(spacing: 7) {
+                chip(AppStrings.groupsChipTrucking(lang.language), c: c)
+                chip(AppStrings.groupsChipOffroad(lang.language), c: c)
+            }
+        }
+    }
+
+    private func chip(_ text: String, c: AppTheme.Colors) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(c.text)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 8)
+            .background(c.card, in: Capsule())
+            .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+    }
+
+    // MARK: - CTA
+
+    private func notifyButton(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        Button {
+            guard !notifyRequested else { return }
+            Haptics.success()
+            notifyRequested = true
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: notifyRequested ? "checkmark" : "bell.fill")
+                    .font(.system(size: 15, weight: .bold))
+                Text(notifyRequested ? AppStrings.groupsNotifyDone(l) : AppStrings.groupsNotifyMe(l))
+                    .font(.system(size: 14, weight: .bold))
+            }
+            .foregroundStyle(notifyRequested ? AppTheme.accent : .white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                notifyRequested ? AnyShapeStyle(AppTheme.accentBg) : AnyShapeStyle(AppTheme.accent),
+                in: RoundedRectangle(cornerRadius: 14)
+            )
+            .shadow(
+                color: notifyRequested ? .clear : AppTheme.accent.opacity(0.3),
+                radius: 1.5, y: 1
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("groups_notify_cta")
+    }
+}
+
+/// Figma IdleRing 114:151 — deliberate local copy of the FeedIdleRing /
+/// SignInIdleRing pattern (the codebase keeps these siblings separate on
+/// purpose; see FeedView's note).
+private struct GroupsIdleRing: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let c = AppTheme.colors(for: scheme)
+        ZStack {
+            Circle()
+                .stroke(c.border, lineWidth: 2)
+                .frame(width: 100, height: 100)
+            ZStack {
+                Circle()
+                    .stroke(AppTheme.accent, lineWidth: 2)
+                Image("PixelCar")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 46, height: 46)
+            }
+            .frame(width: 82, height: 82)
+        }
+        .frame(width: 100, height: 100)
     }
 }

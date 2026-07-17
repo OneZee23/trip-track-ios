@@ -247,6 +247,18 @@ final class TripTrackUITests: XCTestCase {
         win.swipeUp(); usleep(700_000); snap("121_logs_lower")
     }
 
+    /// Groups teaser (6.1.0 Группы): tab → shot → notify CTA → done-state.
+    func test_zz_groups_shots() {
+        normalizeToHome()
+        let groups = app.buttons.matching(identifier: "tab_groups").firstMatch
+        if groups.waitForExistence(timeout: 3) { groups.tap(); sleep(2) }
+        snap("130_groups_teaser")
+        let cta = app.buttons.matching(identifier: "groups_notify_cta").firstMatch
+        if cta.waitForExistence(timeout: 2), cta.isHittable {
+            cta.tap(); sleep(1); snap("131_groups_notified")
+        }
+    }
+
     /// Brings the app to Home from ANY persisted state: adopts a leftover
     /// recovery prompt, stops an active recording (the chevron is replaced
     /// by the REC pill while recording), walks celebration/summary sheets.
