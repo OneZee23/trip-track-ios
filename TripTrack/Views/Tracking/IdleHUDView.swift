@@ -3,9 +3,13 @@ import SwiftUI
 struct IdleHUDView: View {
     let totalKm: Double
     let tripCount: Int
+    /// Geo-denied variant (Figma 475:119): title/subtitle swap and the slider
+    /// opens Settings instead of starting a dead 0-km recording.
+    var locationDenied: Bool = false
     let onStartTrip: () -> Void
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var settings = SettingsManager.shared
+    @State private var showVehiclePicker = false
 
     private var activeVehicle: Vehicle? {
         settings.vehicles.first { $0.id == settings.selectedVehicleId }
@@ -38,68 +42,74 @@ struct IdleHUDView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 46, height: 46)
             }
-            .padding(.top, 32)
-            .padding(.bottom, 20)
+            .padding(.top, 28)
+            .padding(.bottom, 16)
 
-            Text(AppStrings.readyToRide(lang.language))
-                .font(.system(size: 20, weight: .bold))
+            Text(locationDenied ? AppStrings.noGeoTitle(lang.language) : AppStrings.readyToRide(lang.language))
+                .font(.system(size: locationDenied ? 19 : 22, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(.bottom, 6)
 
             // Quick vehicle picker — multi-car users were skipping the
             // start because flipping vehicles meant a trip into Profile →
-            // Garage. Tap-to-switch right here removes that friction; the
-            // chip is hidden when only one vehicle exists.
-            if settings.vehicles.count > 1 {
+            // Garage. The chip opens the 6.1.0 picker sheet (Figma 542:119);
+            // hidden when only one vehicle exists.
+            if !locationDenied && settings.vehicles.count > 1 {
                 vehicleChip
                     .padding(.bottom, 10)
             }
 
-            if totalKm > 0 || tripCount > 0 {
+            if locationDenied {
+                Text(AppStrings.noGeoSubtitle(lang.language))
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .padding(.bottom, 24)
+            } else if totalKm > 0 || tripCount > 0 {
                 Text("\(formatKmWithSeparator(totalKm)) \(AppStrings.totalKm(lang.language)) · \(tripCount) \(AppStrings.trips(lang.language))")
-                    .font(.system(size: 14, weight: .medium).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.4))
-                    .padding(.bottom, 28)
+                    .font(.system(size: 13).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.42))
+                    .padding(.bottom, 24)
             } else {
                 Spacer().frame(height: 20)
             }
 
-            // Slide to start
-            SlideToStartView(onStartTrip: onStartTrip)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+            SlideToStartView(
+                onStartTrip: {
+                    if locationDenied {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    } else {
+                        onStartTrip()
+                    }
+                },
+                labelOverride: locationDenied ? AppStrings.openSettings(lang.language) : nil
+            )
+            .padding(.horizontal, 18)
+            .padding(.bottom, 20)
         }
         .background(
-            RoundedRectangle(cornerRadius: 24)
+            RoundedRectangle(cornerRadius: 22)
                 .fill(.ultraThinMaterial)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(Color(red: 0.08, green: 0.08, blue: 0.09).opacity(0.75))
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(Color(red: 40/255, green: 40/255, blue: 42/255).opacity(0.72))
                 )
+                .shadow(color: .black.opacity(0.35), radius: 24, y: 8)
         )
         .environment(\.colorScheme, .dark)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 16)
+        .sheet(isPresented: $showVehiclePicker) {
+            VehiclePickerSheet()
+                .environmentObject(lang)
+        }
     }
 
     @ViewBuilder
     private var vehicleChip: some View {
-        Menu {
-            ForEach(settings.vehicles) { vehicle in
-                Button {
-                    Haptics.selection()
-                    // Persist the pick — a bare `selectedVehicleId =` would not
-                    // write through to CoreData, so the slide-to-start (which
-                    // re-reads from the settings entity) would record the trip
-                    // against the previously-saved car.
-                    settings.selectVehicle(id: vehicle.id)
-                } label: {
-                    if vehicle.id == settings.selectedVehicleId {
-                        Label(vehicle.name, systemImage: "checkmark")
-                    } else {
-                        Text(vehicle.name)
-                    }
-                }
-            }
+        Button {
+            Haptics.tap()
+            showVehiclePicker = true
         } label: {
             HStack(spacing: 6) {
                 if let v = activeVehicle {
@@ -132,13 +142,16 @@ struct IdleHUDView: View {
             .padding(.vertical, 7)
             .background(Capsule().fill(.white.opacity(0.12)))
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("vehicle_chip")
     }
 
     private static let kmFormatter: NumberFormatter = {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.maximumFractionDigits = 0
-        f.groupingSeparator = ","
+        // Figma «2 430 км всего» — space grouping.
+        f.groupingSeparator = " "
         return f
     }()
 

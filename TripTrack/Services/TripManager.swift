@@ -42,6 +42,34 @@ final class TripManager: ObservableObject {
     private let persistenceController: PersistenceController
     private var cancellables = Set<AnyCancellable>()
     private var activeTripEntity: TripEntity?
+
+    /// A force-quit recording found at launch (6.1.0 recovery prompt).
+    /// Stashed by `cleanupOrphanedTrips`; consumed by `adoptRecoverableOrphan`
+    /// when the user picks Continue or Finish&Save in the prompt.
+    private(set) var recoverableOrphan: Trip?
+    private(set) var recoverableOrphanDuration: TimeInterval = 0
+    private var recoverableOrphanEntity: TripEntity?
+
+    /// Adopts the stashed orphan as the ACTIVE recording (shared by both
+    /// prompt actions — Finish&Save immediately runs the stop pipeline on
+    /// top). Returns nil when there is nothing to recover, or when another
+    /// recording already started meanwhile (adopting would overwrite the
+    /// live activeTripEntity; the orphan stays stashed for the next launch).
+    func adoptRecoverableOrphan() -> Trip? {
+        guard !isRecording else { return nil }
+        guard let entity = recoverableOrphanEntity, let trip = recoverableOrphan else { return nil }
+        activeTripEntity = entity
+        activeTrip = trip
+        isRecording = true
+        lastLocation = nil
+        unsavedPointCount = 0
+        lastSaveTime = Date()
+        kalmanFilter.reset()
+        locationManager.startTracking()
+        recoverableOrphan = nil
+        recoverableOrphanEntity = nil
+        return trip
+    }
     private var lastLocation: CLLocation?
     private var unsavedPointCount = 0
     private var lastSaveTime = Date()
@@ -317,9 +345,12 @@ final class TripManager: ObservableObject {
                 candidates.append((entity, lastTimestamp))
             }
 
-            // Restore at most ONE orphan — the most recent — as the active recording.
-            // Every OTHER orphan is closed (endDate set) so it can never linger as a
-            // zombie (endDate == nil) that re-triggers recovery on the next launch.
+            // Stash at most ONE orphan — the most recent — as RECOVERABLE.
+            // 6.1.0 (Figma 505:119): the app no longer silently resumes the
+            // recording; a launch-time prompt offers «Продолжить запись» /
+            // «Завершить и сохранить» (never discard — non-junk orphans are
+            // always preserved). Every OTHER orphan is closed (endDate set)
+            // so it can never linger as a zombie that re-triggers recovery.
             let mostRecent = candidates.max { $0.lastTimestamp < $1.lastTimestamp }
             for (entity, lastTimestamp) in candidates {
                 let isTheOne = entity === mostRecent?.entity
@@ -328,8 +359,8 @@ final class TripManager: ObservableObject {
                     entity.endDate = lastTimestamp // older / too-old / malformed → close it
                     continue
                 }
-                activeTripEntity = entity
-                activeTrip = Trip(
+                recoverableOrphanEntity = entity
+                recoverableOrphan = Trip(
                     id: tripId,
                     startDate: startDate,
                     distance: entity.distance,
@@ -337,12 +368,7 @@ final class TripManager: ObservableObject {
                     averageSpeed: entity.averageSpeed,
                     vehicleId: entity.vehicleId
                 )
-                isRecording = true
-                lastLocation = nil
-                unsavedPointCount = 0
-                lastSaveTime = Date()
-                kalmanFilter.reset()
-                locationManager.startTracking()
+                recoverableOrphanDuration = lastTimestamp.timeIntervalSince(startDate)
             }
 
             persistenceController.save()

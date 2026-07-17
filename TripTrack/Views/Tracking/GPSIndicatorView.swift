@@ -1,26 +1,65 @@
 import SwiftUI
 
+/// GPS accuracy pill (Figma 428:124): word label + colored dot, four states —
+/// точный (≤10м, green) / средний (10–35м, yellow) / слабый (>35м, red) /
+/// потерян (stale fix, amber). Thresholds mirror the recording pipeline
+/// (`maxRecordAccuracy` 65м drops points beyond). Tap shows the legend.
 struct GPSIndicatorView: View {
-    let accuracy: Double // meters
+    let accuracy: Double // meters; 0 = no fix yet
+    var isStale: Bool = false
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @State private var showTooltip = false
     @State private var autoDismissTask: DispatchWorkItem?
 
-    private var isGood: Bool { accuracy <= 10 }
+    enum Signal {
+        case accurate, medium, weak, lost
+
+        var color: Color {
+            switch self {
+            case .accurate: return Color(red: 0x30/255, green: 0xD1/255, blue: 0x58/255)
+            case .medium:   return Color(red: 0xFF/255, green: 0xD6/255, blue: 0x0A/255)
+            case .weak:     return Color(red: 0xFF/255, green: 0x45/255, blue: 0x3A/255)
+            case .lost:     return Color(red: 0xF5/255, green: 0xA6/255, blue: 0x23/255)
+            }
+        }
+
+        func label(_ lang: LanguageManager.Language) -> String {
+            switch self {
+            case .accurate: return AppStrings.gpsAccurate(lang)
+            case .medium:   return AppStrings.gpsMedium(lang)
+            case .weak:     return AppStrings.gpsWeak(lang)
+            case .lost:     return AppStrings.gpsLost(lang)
+            }
+        }
+    }
+
+    private var signal: Signal {
+        if isStale { return .lost }
+        // accuracy == 0 means "no fix accepted yet" — never show green for it.
+        guard accuracy > 0 else { return .weak }
+        if accuracy <= 10 { return .accurate }
+        if accuracy <= 35 { return .medium }
+        return .weak
+    }
 
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(isGood ? AppTheme.green : AppTheme.accent)
-                .frame(width: 7, height: 7)
-                .modifier(GPSBlinkModifier())
+                .fill(signal.color)
+                .frame(width: 8, height: 8)
 
-            Text("±\(Int(accuracy))\(AppStrings.m(lang.language))")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppTheme.textSecondary)
+            Text(signal.label(lang.language))
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(.white)
         }
-        .glassPill()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(Color(red: 40/255, green: 40/255, blue: 42/255).opacity(0.72))
+        )
+        .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
         .onTapGesture {
             Haptics.tap()
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -38,15 +77,15 @@ struct GPSIndicatorView: View {
         }
     }
 
+    /// Figma 428:124 legend: three signal grades with plain-word explanations.
     private var tooltipCard: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.system(size: 14))
-                    .foregroundStyle(isGood ? AppTheme.green : AppTheme.accent)
+                    .foregroundStyle(signal.color)
                 Text(AppStrings.gpsAccuracyTitle(lang.language))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(c.text)
@@ -62,29 +101,14 @@ struct GPSIndicatorView: View {
                 }
             }
 
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(isGood ? AppTheme.green : AppTheme.accent)
-                    .frame(width: 8, height: 8)
-                Text("±\(Int(accuracy))\(AppStrings.m(lang.language))")
-                    .font(.system(size: 20, weight: .heavy).monospacedDigit())
-                    .foregroundStyle(isGood ? AppTheme.green : AppTheme.accent)
+            VStack(alignment: .leading, spacing: 8) {
+                legendRow(signal: .accurate, detail: AppStrings.gpsLegendAccurate(lang.language))
+                legendRow(signal: .medium, detail: AppStrings.gpsLegendMedium(lang.language))
+                legendRow(signal: .weak, detail: AppStrings.gpsLegendWeak(lang.language))
             }
-
-            VStack(alignment: .leading, spacing: 6) {
-                legendRow(color: AppTheme.green, label: isRu ? "≤10м — отличная" : "≤10m — excellent")
-                legendRow(color: AppTheme.accent, label: isRu ? ">10м — средняя" : ">10m — moderate")
-            }
-
-            Text(isRu
-                 ? "Влияет на точность записи маршрута. На открытой местности точность выше."
-                 : "Affects route recording precision. Open areas provide better accuracy.")
-                .font(.system(size: 12))
-                .foregroundStyle(c.textTertiary)
-                .lineSpacing(2)
         }
         .padding(14)
-        .frame(width: 260)
+        .frame(width: 280)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(c.card)
@@ -96,6 +120,20 @@ struct GPSIndicatorView: View {
         )
     }
 
+    private func legendRow(signal: Signal, detail: String) -> some View {
+        let c = AppTheme.colors(for: scheme)
+        return HStack(spacing: 8) {
+            Circle().fill(signal.color).frame(width: 8, height: 8)
+            Text(signal.label(lang.language))
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(c.text)
+            Spacer(minLength: 6)
+            Text(detail)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(c.textSecondary)
+        }
+    }
+
     private func scheduleAutoDismiss() {
         autoDismissTask?.cancel()
         guard showTooltip else { return }
@@ -104,28 +142,5 @@ struct GPSIndicatorView: View {
         }
         autoDismissTask = task
         DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: task)
-    }
-
-    private func legendRow(color: Color, label: String) -> some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppTheme.colors(for: scheme).textSecondary)
-        }
-    }
-}
-
-private struct GPSBlinkModifier: ViewModifier {
-    @State private var blink = false
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(blink ? 0.4 : 1.0)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) {
-                    blink = true
-                }
-            }
     }
 }

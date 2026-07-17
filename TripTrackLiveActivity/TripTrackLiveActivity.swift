@@ -4,10 +4,12 @@ import WidgetKit
 
 // MARK: - Colors
 
-private let accentOrange = Color(red: 1.0, green: 0.584, blue: 0.0)
+// 6.1.0 (Figma 356:119/365:119): brand accent #EB571E, cream light bg,
+// #19191F dark bg.
+private let accentOrange = Color(red: 235/255, green: 87/255, blue: 30/255)
 private let accentRed = Color(red: 1.0, green: 0.231, blue: 0.188)
-private let lightBg = Color(red: 0.949, green: 0.949, blue: 0.969)
-private let darkBg = Color(red: 0.11, green: 0.11, blue: 0.12)
+private let lightBg = Color(red: 248/255, green: 246/255, blue: 242/255)
+private let darkBg = Color(red: 25/255, green: 25/255, blue: 31/255)
 
 // MARK: - Adaptive colors
 
@@ -129,14 +131,27 @@ struct TripTrackLiveActivity: Widget {
                         .frame(width: 20, height: 20)
                         .clipShape(RoundedRectangle(cornerRadius: 5))
                 } else {
+                    // Figma 03b: red REC dot + speed on the leading side.
                     Label {
                         Text("\(Int(context.state.speedKmh))").font(.caption.bold())
                     } icon: {
-                        Image(systemName: "location.fill").foregroundStyle(accentOrange)
+                        Circle().fill(accentRed).frame(width: 7, height: 7)
                     }
                 }
             } compactTrailing: {
-                Text(fmtDist(context.state.distanceKm) + (context.state.isRu ? " км" : " km")).font(.caption)
+                if context.state.isFinished {
+                    Text(fmtDist(context.state.distanceKm) + (context.state.isRu ? " км" : " km")).font(.caption)
+                } else if context.state.isPaused {
+                    // A live timer would keep counting through the pause.
+                    Image(systemName: "pause.fill").font(.caption2)
+                } else {
+                    // Figma 03b: elapsed time on the trailing side.
+                    let adj = context.attributes.startDate.addingTimeInterval(context.state.pausedDuration)
+                    Text(timerInterval: adj...(.distantFuture), countsDown: false)
+                        .monospacedDigit()
+                        .font(.caption)
+                        .frame(maxWidth: 44)
+                }
             } minimal: {
                 if context.state.isFinished {
                     Image("app_icon")
@@ -144,8 +159,8 @@ struct TripTrackLiveActivity: Widget {
                         .frame(width: 16, height: 16)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                 } else {
-                    Image(systemName: "location.fill")
-                        .foregroundStyle(accentOrange)
+                    // Figma 03b: red dot (static — ActivityKit minimal can't pulse).
+                    Circle().fill(accentRed).frame(width: 8, height: 8)
                 }
             }
             .widgetURL(context.state.isFinished
@@ -257,8 +272,24 @@ private struct LiveLockScreenView: View {
             }
             .padding(.bottom, 8)
 
-            // Row 3: Controls
+            // Row 3: Controls — 6.1.0 safety redesign (Figma 356:119): END is
+            // a de-emphasized grey ghost chip on the far LEFT (users kept
+            // fat-fingering the old bottom-right stop next to the lock-screen
+            // camera), Pause is the wide primary on the right.
             HStack(spacing: 8) {
+                Button(intent: StopTripIntent()) {
+                    Text(context.state.isRu ? "Завершить" : "End")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(c.textSecondary)
+                        .frame(width: 90)
+                        .frame(height: 36)
+                }
+                .buttonStyle(.plain)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(c.textTertiary.opacity(0.5), lineWidth: 1)
+                )
+
                 Button(intent: PauseTripIntent()) {
                     HStack(spacing: 6) {
                         Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
@@ -274,15 +305,6 @@ private struct LiveLockScreenView: View {
                 }
                 .buttonStyle(.plain)
                 .background(c.buttonBg, in: RoundedRectangle(cornerRadius: 12))
-
-                Button(intent: StopTripIntent()) {
-                    Image(systemName: "square.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(accentRed)
-                        .frame(width: 52, height: 36)
-                }
-                .buttonStyle(.plain)
-                .background(accentRed.opacity(context.state.isDarkMode ? 0.2 : 0.08), in: RoundedRectangle(cornerRadius: 12))
             }
         }
         .padding(.horizontal, 16)

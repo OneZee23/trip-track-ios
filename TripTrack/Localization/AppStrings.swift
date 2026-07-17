@@ -88,10 +88,106 @@ enum AppStrings {
         lang == .ru ? "Начать поездку" : "Start trip"
     }
     static func slideToStart(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Сдвиньте для старта" : "Slide to start"
+        lang == .ru ? "Сдвиньте" : "Slide"
     }
     static func readyToRide(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Готов к поездке" : "Ready to ride"
+        lang == .ru ? "В путь?" : "Ready to roll?"
+    }
+
+    // MARK: - Recording states (6.1.0)
+
+    static func gpsAccurate(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "GPS точный" : "GPS strong"
+    }
+    static func gpsMedium(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "GPS средний" : "GPS fair"
+    }
+    static func gpsWeak(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "GPS слабый" : "GPS weak"
+    }
+    static func gpsLost(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "GPS потерян" : "GPS lost"
+    }
+    static func gpsLegendAccurate(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "≤ 10 м · запись идеальна" : "≤ 10 m · perfect recording"
+    }
+    static func gpsLegendMedium(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "10–35 м · возможны неточности" : "10–35 m · minor inaccuracies"
+    }
+    static func gpsLegendWeak(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "> 35 м · трек прерывается" : "> 35 m · track breaks up"
+    }
+    static func weakSignalTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сигнал слабый" : "Weak signal"
+    }
+    static func weakSignalHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "На открытой местности точнее" : "More accurate in open areas"
+    }
+    static func signalLostTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сигнал GPS потерян" : "GPS signal lost"
+    }
+    static func signalLostHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Пишем по последней точке — восстановим, когда сигнал вернётся"
+            : "Holding last point — we'll recover when the signal returns"
+    }
+    static func recordingPausedPill(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Запись на паузе" : "Recording paused"
+    }
+    static func pauseShort(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ПАУЗА" : "PAUSED"
+    }
+    static func stop(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Стоп" : "Stop"
+    }
+    static func noGeoTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Нет доступа к геолокации" : "No location access"
+    }
+    static func noGeoSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Включите доступ в Настройках" : "Enable access in Settings"
+    }
+    static func recoveryTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Запись была прервана" : "Recording was interrupted"
+    }
+    static func recoveryBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Приложение закрылось до того, как Вы завершили поездку. Мы сохранили Ваш маршрут."
+            : "The app closed before you finished the trip. We saved your route."
+    }
+    static func recoveryChip(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Восстановлено" : "Recovered"
+    }
+    static func recoveryContinue(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Продолжить запись" : "Continue recording"
+    }
+    static func recoveryFinish(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Завершить и сохранить" : "Finish and save"
+    }
+    static func vehiclePickerTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Машина для поездки" : "Vehicle for this trip"
+    }
+    static func manageInGarage(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Управлять в Гараже" : "Manage in Garage"
+    }
+    static func publishToFeed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Опубликовать в ленту" : "Publish to feed"
+    }
+    static func publishToFeedSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездка появится в общей ленте" : "Your trip will appear in the shared feed"
+    }
+    static func publishFootnote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Поездки приватны, пока Вы не опубликуете их сами."
+            : "Trips stay private until you publish them yourself."
+    }
+    static func tripFinishedTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездка завершена!" : "Trip finished!"
+    }
+    static func maxShort(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "МАКС" : "MAX"
+    }
+    static func photoShort(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Фото" : "Photo"
     }
     static func kmh(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "км/ч" : "km/h"

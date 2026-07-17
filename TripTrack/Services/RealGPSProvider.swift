@@ -155,6 +155,11 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         gpsLog.notice("authorization → \(self.authString, privacy: .public)")
+        // Surface denial to the UI (Record idle → «Нет доступа к геолокации»).
+        // iOS calls this delegate on CLLocationManager creation too, so the
+        // initial state propagates without extra plumbing.
+        let denied = manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted
+        NotificationCenter.default.post(name: .locationAuthDenied, object: denied)
     }
 
     // MARK: - Validity + diagnostics

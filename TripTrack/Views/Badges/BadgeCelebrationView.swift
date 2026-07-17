@@ -102,6 +102,7 @@ struct BadgeCelebrationView: View {
                         .background(badge.color, in: RoundedRectangle(cornerRadius: 16))
                 }
                 .padding(.horizontal, 32)
+                .accessibilityIdentifier("celebration_continue")
 
                 // Page indicator for multiple badges
                 if badges.count > 1 {

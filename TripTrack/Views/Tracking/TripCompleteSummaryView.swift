@@ -9,13 +9,18 @@ struct TripCompleteSummaryView: View {
     let onDone: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
-    @Environment(\.colorScheme) private var scheme
+    @EnvironmentObject private var mapVM: MapViewModel
     @State private var showXP = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var savedPhotoCount = 0
+    /// Figma 147:1251: OFF by default — trips stay private until the user
+    /// opts in. Applied on «Готово».
+    @State private var publishToFeed = false
 
     var body: some View {
-        let c = AppTheme.colors(for: scheme)
+        // The finish screen is light-themed by design (Figma 147:1190) —
+        // celebration reads better on the warm cream, independent of theme.
+        let c = AppTheme.colors(for: .light)
 
         ScrollView {
         VStack(spacing: 0) {
@@ -25,22 +30,25 @@ struct TripCompleteSummaryView: View {
                 .frame(width: 36, height: 5)
                 .padding(.top, 8)
 
-            // Title
-            Text(lang.language == .ru ? "Поездка завершена!" : "Trip complete!")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(c.text)
-                .padding(.top, 20)
+            confettiHeader
+                .padding(.top, 10)
 
-            // Route preview
+            // Title
+            Text(AppStrings.tripFinishedTitle(lang.language))
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(c.text)
+                .padding(.top, 8)
+
+            // Route preview (speed-gradient polylines via RouteMapView)
             if trip.trackPoints.count > 1 {
                 RouteMapView(
                     coordinates: trip.trackPoints.map(\.coordinate),
                     speeds: trip.trackPoints.map(\.speed)
                 )
-                .frame(height: 160)
+                .frame(height: 139)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .padding(.horizontal, 20)
-                .padding(.top, 16)
+                .padding(.top, 14)
             }
 
             // Stats grid
@@ -59,7 +67,8 @@ struct TripCompleteSummaryView: View {
                     value: trip.formattedDuration,
                     unit: "",
                     label: AppStrings.duration(lang.language),
-                    color: AppTheme.accent,
+                    // Figma 147:1190: time is neutral dark, not accent.
+                    color: c.text,
                     c: c
                 )
                 summaryStatCard(
@@ -72,7 +81,7 @@ struct TripCompleteSummaryView: View {
                 summaryStatCard(
                     value: String(format: "%.0f", trip.maxSpeedKmh),
                     unit: AppStrings.kmh(lang.language),
-                    label: AppStrings.maxSpeed(lang.language),
+                    label: AppStrings.maxShort(lang.language),
                     color: AppTheme.red,
                     c: c
                 )
@@ -85,40 +94,53 @@ struct TripCompleteSummaryView: View {
                 gamificationSection(data: data, c: c)
             }
 
-            // Photo button + motivational hint. Strava's published guidance
-            // (10 ways to get more kudos) calls out photo trips as the single
-            // strongest engagement driver (~3× kudos vs photo-less). Show
-            // the hint only on the first photo prompt — once a photo is
-            // attached it goes away and we just confirm the count.
-            VStack(spacing: 6) {
+            // Publish row (Figma 147:1251): OFF by default; the footnote is
+            // the privacy invariant. Applied on «Готово».
+            publishRow(c)
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+
+            // Photo + Done, side by side (Figma bottom row).
+            HStack(spacing: 12) {
                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                    Label(
-                        savedPhotoCount > 0
-                            ? (lang.language == .ru ? "Фото (\(savedPhotoCount))" : "Photo (\(savedPhotoCount))")
-                            : (lang.language == .ru ? "Добавить фото" : "Add photo"),
-                        systemImage: savedPhotoCount > 0 ? "checkmark.circle.fill" : "camera.fill"
-                    )
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
+                    HStack(spacing: 6) {
+                        Image(systemName: savedPhotoCount > 0 ? "checkmark.circle.fill" : "camera.fill")
+                            .font(.system(size: 15))
+                        Text(savedPhotoCount > 0
+                             ? "\(AppStrings.photoShort(lang.language)) (\(savedPhotoCount))"
+                             : AppStrings.photoShort(lang.language))
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                    .foregroundStyle(c.text)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
-                    .background(AppTheme.accentBg, in: RoundedRectangle(cornerRadius: 12))
+                    .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(c.border, lineWidth: 1))
                 }
-                if savedPhotoCount == 0 {
-                    HStack(spacing: 4) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 10))
-                        Text(lang.language == .ru
-                             ? "Поездки с фото получают в 3 раза больше реакций"
-                             : "Trips with photos get 3× more reactions")
-                            .font(.system(size: 11))
+
+                Button {
+                    if publishToFeed {
+                        mapVM.tripManager.updatePrivacy(for: trip.id, isPrivate: false)
+                        NotificationCenter.default.post(
+                            name: .tripPrivacyChanged,
+                            object: PrivacyChangePayload(tripId: trip.id, isPrivate: false)
+                        )
                     }
-                    .foregroundStyle(c.textTertiary)
-                    .multilineTextAlignment(.center)
+                    onDone()
+                } label: {
+                    Text(AppStrings.done(lang.language))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
+                        .shadow(color: AppTheme.accent.opacity(0.3), radius: 1.5, y: 1)
                 }
+                .accessibilityIdentifier("summary_done")
             }
             .padding(.horizontal, 20)
-            .padding(.top, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
             .onChange(of: selectedPhotoItem) { _, item in
                 guard let item else { return }
                 Task {
@@ -130,40 +152,85 @@ struct TripCompleteSummaryView: View {
                     selectedPhotoItem = nil
                 }
             }
-
-            // Done button
-            Button(action: onDone) {
-                Text(lang.language == .ru ? "Готово" : "Done")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
         }
         }
         .background(c.bg)
+        .environment(\.colorScheme, .light)
+    }
+
+    /// Eight static rotated confetti squares (Figma header decoration).
+    private var confettiHeader: some View {
+        let pieces: [(color: Color, rotation: Double, x: CGFloat, y: CGFloat)] = [
+            (AppTheme.accent, 18, -120, 8), (Color(red: 0xF5/255, green: 0xBE/255, blue: 0x1E/255), -24, -78, -6),
+            (Color(red: 0x2E/255, green: 0xAE/255, blue: 0x50/255), 40, -30, 10), (AppTheme.accent, -12, 12, -8),
+            (Color(red: 0x38/255, green: 0x84/255, blue: 0xE0/255), 28, 48, 6), (AppTheme.red, -35, 88, -4),
+            (Color(red: 0x50/255, green: 0xBE/255, blue: 0xD2/255), 12, 124, 9), (AppTheme.accent, -20, 156, -2),
+        ]
+        return ZStack {
+            ForEach(Array(pieces.enumerated()), id: \.offset) { _, piece in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(piece.color)
+                    .frame(width: 6, height: 6)
+                    .rotationEffect(.degrees(piece.rotation))
+                    .offset(x: piece.x, y: piece.y)
+            }
+        }
+        .frame(height: 24)
+        .allowsHitTesting(false)
+    }
+
+    /// «Опубликовать в ленту» + subtitle + privacy footnote + toggle.
+    private func publishRow(_ c: AppTheme.Colors) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(AppTheme.accent.opacity(0.08))
+                    .frame(width: 38, height: 38)
+                Image(systemName: "globe")
+                    .font(.system(size: 18))
+                    .foregroundStyle(AppTheme.accent)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(AppStrings.publishToFeed(lang.language))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(c.text)
+                Text(AppStrings.publishToFeedSubtitle(lang.language))
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+                Text(AppStrings.publishFootnote(lang.language))
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: $publishToFeed)
+                .labelsHidden()
+                .tint(AppTheme.accent)
+                .accessibilityIdentifier("publish_toggle")
+        }
+        .padding(16)
+        .background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
     }
 
     // MARK: - Gamification Section
 
     private func gamificationSection(data: TripCompletionData, c: AppTheme.Colors) -> some View {
         VStack(spacing: 10) {
-            // XP earned
+            // XP earned (Figma 147:1190: bare «+N XP» ↔ pixel LEVEL UP pill)
             HStack {
-                Image(systemName: "sparkles")
-                    .foregroundStyle(AppTheme.accent)
                 Text("+\(data.xpEarned) XP")
-                    .font(.system(size: 20, weight: .heavy))
+                    .font(.system(size: 24, weight: .heavy))
                     .foregroundStyle(AppTheme.accent)
                 Spacer()
                 if data.didLevelUp {
                     Text("LEVEL UP!")
                         .font(.custom("PressStart2P-Regular", size: 9))
-                        .foregroundStyle(data.newRank.color)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(Color(red: 0.11, green: 0.11, blue: 0.11)))
+                        .overlay(Capsule().strokeBorder(AppTheme.accent, lineWidth: 1.5))
                 }
             }
 
@@ -224,42 +291,49 @@ struct TripCompleteSummaryView: View {
                 }
             }
 
-            // New badges
+            // New badges — Figma: 46pt tinted circle + the badge NAME below
+            // (repeat count folds into the name row when applicable).
             if !data.newBadges.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(AppStrings.badges(lang.language))
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(c.textSecondary)
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(data.newBadges.prefix(4)) { badge in
+                        VStack(spacing: 4) {
+                            ZStack {
+                                Circle()
+                                    .fill(badge.color.opacity(0.15))
+                                    .frame(width: 46, height: 46)
+                                    .shadow(color: badge.color.opacity(0.3), radius: 6)
 
-                    HStack(spacing: 10) {
-                        ForEach(data.newBadges.prefix(5)) { badge in
-                            VStack(spacing: 4) {
-                                ZStack {
-                                    Circle()
-                                        .fill(badge.color.opacity(0.15))
-                                        .frame(width: 40, height: 40)
-                                        .shadow(color: badge.color.opacity(0.3), radius: 6)
-
-                                    Image(systemName: badge.icon)
-                                        .font(.system(size: 18))
-                                        .foregroundStyle(badge.color)
-                                }
-
-                                let count = data.repeatedBadgeCounts[badge.id] ?? 0
-                                if badge.isRepeatable && count > 1 {
-                                    Text("x\(count)")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(badge.color)
-                                }
+                                Image(systemName: badge.icon)
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(badge.color)
                             }
+
+                            let count = data.repeatedBadgeCounts[badge.id] ?? 0
+                            Text(badge.isRepeatable && count > 1
+                                 ? "\(badge.title(lang.language)) ×\(count)"
+                                 : badge.title(lang.language))
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(badge.color)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
                         }
-                        Spacer()
+                        .frame(width: 74)
                     }
+                    Spacer()
                 }
             }
         }
-        .padding(14)
-        .surfaceCard(cornerRadius: 14)
+        .padding(16)
+        // XP card (Figma 147:1190): warm tint + accent border + accent glow.
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(red: 0xFF/255, green: 0xF7/255, blue: 0xF0/255))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(AppTheme.accent.opacity(0.2), lineWidth: 1)
+        )
+        .shadow(color: AppTheme.accent.opacity(0.12), radius: 16, y: 4)
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .onAppear { withAnimation(.easeOut(duration: 0.5)) { showXP = true } }
@@ -302,9 +376,9 @@ struct TripCompleteSummaryView: View {
 
     private func summaryStatCard(value: String, unit: String, label: String, color: Color, c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .lastTextBaseline, spacing: 2) {
+            HStack(alignment: .lastTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 24, weight: .bold).monospacedDigit())
+                    .font(.system(size: 24, weight: .heavy).monospacedDigit())
                     .foregroundStyle(color)
                 if !unit.isEmpty {
                     Text(unit)
@@ -313,12 +387,14 @@ struct TripCompleteSummaryView: View {
                 }
             }
             Text(label)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 10, weight: .bold))
+                .kerning(0.4)
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .surfaceCard(cornerRadius: 14)
+        .background(.white, in: RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
     }
 }

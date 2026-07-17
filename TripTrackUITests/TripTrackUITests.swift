@@ -37,12 +37,8 @@ final class TripTrackUITests: XCTestCase {
     /// reachable by tapping its (language-independent) accessibility id, the
     /// bar hides on the Record tab, and the back chevron restores it.
     func test_tab_navigation_smoke() {
+        normalizeToHome()
         let bar = { (id: String) in self.app.buttons.matching(identifier: id).firstMatch }
-        // Normalize: the app restores the last persisted tab. If that was
-        // Record (bar hidden), leave it via the tracking back chevron.
-        if !bar("tab_maps").waitForExistence(timeout: 8) {
-            bar("tracking_back").tap()
-        }
         XCTAssertTrue(bar("tab_maps").waitForExistence(timeout: 4), "tab bar should be visible after normalization")
 
         for id in ["tab_maps", "tab_groups", "tab_profile", "tab_home"] {
@@ -63,10 +59,12 @@ final class TripTrackUITests: XCTestCase {
 
     /// Utility flow (used when seeding data for page verification): if a
     /// recording is active — stop it; otherwise start one via slide-to-start,
-    /// let (simulated) GPS accumulate, then stop. Locale-independent (ids +
-    /// coordinates only); every step guarded so it passes trivially when the
-    /// record surface is unavailable.
+    /// let (simulated) GPS accumulate, then stop. Handles the 6.1.0 recovery
+    /// prompt if one appears at launch. Locale-independent (ids + coordinates
+    /// only); every step guarded so it passes trivially when the record
+    /// surface is unavailable.
     func test_zz_toggle_recording() {
+        adoptRecoveryIfPrompted()
         let record = app.buttons.matching(identifier: "tab_record").firstMatch
         if record.waitForExistence(timeout: 5), record.isHittable {
             record.tap(); sleep(1)
@@ -74,6 +72,7 @@ final class TripTrackUITests: XCTestCase {
         let stop = app.buttons.matching(identifier: "tracking_stop").firstMatch
         if stop.waitForExistence(timeout: 3), stop.isHittable {
             stop.tap(); sleep(4); snap("99_after_stop")
+            dismissSummaryIfShown()
             return
         }
         // Idle → drag the slide-to-start thumb, record ~45s, then stop.
@@ -81,19 +80,107 @@ final class TripTrackUITests: XCTestCase {
         sleep(45)
         if stop.waitForExistence(timeout: 5), stop.isHittable {
             stop.tap(); sleep(4); snap("99_after_stop")
+            dismissSummaryIfShown()
+        }
+    }
+
+    /// Starts a recording and leaves it RUNNING (the runner's app-termination
+    /// turns it into a force-quit orphan → next launch shows the recovery
+    /// prompt). Used to stage Figma 505:119.
+    func test_zz_start_recording_only() {
+        adoptRecoveryIfPrompted()
+        let record = app.buttons.matching(identifier: "tab_record").firstMatch
+        if record.waitForExistence(timeout: 5), record.isHittable {
+            record.tap(); sleep(1)
+        }
+        let stop = app.buttons.matching(identifier: "tracking_stop").firstMatch
+        guard !(stop.exists && stop.isHittable) else { return } // already recording
+        pt(0.17, 0.935).press(forDuration: 0.15, thenDragTo: pt(0.90, 0.935))
+        // Long enough that the orphan clears the junk filter (>500m).
+        sleep(25)
+        snap("90_recording_started")
+    }
+
+    /// Walks the recording states for screenshots: recording → (host clears
+    /// the location scenario mid-sleep → GPS-lost banner) → pause → resume →
+    /// stop → finish sheet.
+    func test_zz_recording_states() {
+        adoptRecoveryIfPrompted()
+        let record = app.buttons.matching(identifier: "tab_record").firstMatch
+        if record.waitForExistence(timeout: 5), record.isHittable {
+            record.tap(); sleep(1)
+        }
+        snap("91_idle")
+        let stop = app.buttons.matching(identifier: "tracking_stop").firstMatch
+        if !(stop.exists && stop.isHittable) {
+            pt(0.17, 0.935).press(forDuration: 0.15, thenDragTo: pt(0.90, 0.935))
+        }
+        sleep(6); snap("92_recording")
+        // Host-side `simctl location clear` happens around +8s; by +20s the
+        // 10s staleness threshold has fired.
+        sleep(16); snap("93_signal_lost")
+        let pause = app.buttons.matching(identifier: "tracking_pause").firstMatch
+        if pause.exists, pause.isHittable {
+            pause.tap(); sleep(2); snap("94_paused")
+            pause.tap(); sleep(1)
+        }
+        if stop.waitForExistence(timeout: 3), stop.isHittable {
+            stop.tap(); sleep(4); snap("95_finish_sheet")
+            dismissSummaryIfShown()
+        }
+    }
+
+    /// Brings the app to Home from ANY persisted state: adopts a leftover
+    /// recovery prompt, stops an active recording (the chevron is replaced
+    /// by the REC pill while recording), walks celebration/summary sheets.
+    private func normalizeToHome() {
+        adoptRecoveryIfPrompted()
+        let home = app.buttons.matching(identifier: "tab_home").firstMatch
+        if !home.waitForExistence(timeout: 5) {
+            let back = app.buttons.matching(identifier: "tracking_back").firstMatch
+            if back.waitForExistence(timeout: 2), back.isHittable {
+                back.tap(); sleep(1)
+            } else {
+                let stop = app.buttons.matching(identifier: "tracking_stop").firstMatch
+                if stop.waitForExistence(timeout: 2), stop.isHittable {
+                    stop.tap(); sleep(4)
+                    dismissSummaryIfShown()
+                    let back2 = app.buttons.matching(identifier: "tracking_back").firstMatch
+                    if back2.waitForExistence(timeout: 3), back2.isHittable { back2.tap(); sleep(1) }
+                }
+            }
+        }
+        if home.waitForExistence(timeout: 3), home.isHittable { home.tap(); sleep(1) }
+    }
+
+    private func adoptRecoveryIfPrompted() {
+        let cont = app.buttons.matching(identifier: "recovery_continue").firstMatch
+        if cont.waitForExistence(timeout: 3), cont.isHittable {
+            snap("96_recovery_prompt")
+            cont.tap(); sleep(2)
+        }
+    }
+
+    private func dismissSummaryIfShown() {
+        // Badge celebration (fullScreenCover) precedes the summary sheet —
+        // step through every earned badge first.
+        let celebration = app.buttons.matching(identifier: "celebration_continue").firstMatch
+        var hops = 0
+        while celebration.waitForExistence(timeout: 2), celebration.isHittable, hops < 6 {
+            celebration.tap(); sleep(1); hops += 1
+        }
+        let done = app.buttons.matching(identifier: "summary_done").firstMatch
+        if done.waitForExistence(timeout: 6) {
+            snap("95b_finish_summary_top")
+            // The finish sheet scrolls; Done can sit below the fold.
+            win.swipeUp(); usleep(600_000)
+            snap("95c_finish_summary_bottom")
+            if done.isHittable { done.tap(); sleep(1) }
         }
     }
 
     func test_screenshot_tour() {
-        // Normalize: the app restores the last persisted tab; if that was
-        // Record (tab bar hidden), leave via the chevron, then go Home.
-        let home = app.buttons.matching(identifier: "tab_home").firstMatch
-        if !home.waitForExistence(timeout: 5) {
-            let back = app.buttons.matching(identifier: "tracking_back").firstMatch
-            if back.waitForExistence(timeout: 2) { back.tap(); sleep(1) }
-        }
-        if home.waitForExistence(timeout: 3), home.isHittable { home.tap(); sleep(1) }
-
+        normalizeToHome()
         sleep(1); snap("01_feed")
 
         // Sign-in sheet (6.1.0 Вход) — the guest feed banner opens it.

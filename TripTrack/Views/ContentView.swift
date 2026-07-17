@@ -24,6 +24,16 @@ extension Notification.Name {
     /// onset N minutes ago. MapViewModel observes so its `recordingStartDate`
     /// + duration timer match. Object is the new `Date`.
     static let tripStartDateBackdated = Notification.Name("tripStartDateBackdated")
+    /// Location authorization flipped. Object is `Bool` — true when denied or
+    /// restricted. Posted by RealGPSProvider; MapViewModel mirrors it into
+    /// `locationDenied` for the Record screen.
+    static let locationAuthDenied = Notification.Name("locationAuthDenied")
+    /// Open the Garage: switches to the Я tab (ContentView) where ProfileView
+    /// presents the Garage sheet. Posted by VehiclePickerSheet's footer.
+    static let openGarage = Notification.Name("openGarage")
+    /// Second phase of `.openGarage`, re-posted by ContentView after the tab
+    /// switch so a freshly-mounted ProfileView actually receives it.
+    static let openGarageReady = Notification.Name("openGarageReady")
 }
 
 /// Payload for `.tripPrivacyChanged` — lets the feed optimistically remove/add the
@@ -116,6 +126,31 @@ struct ContentView: View {
         .ignoresSafeArea(.keyboard)
         .ignoresSafeArea(edges: .bottom)
         .environmentObject(mapVM)
+        // Force-quit recovery prompt — presented from the root so it fires on
+        // launch regardless of the active tab (Figma 505:119).
+        .sheet(isPresented: $mapVM.showRecoveryPrompt) {
+            RecoveryPromptSheet()
+                .environmentObject(mapVM)
+                .environmentObject(lang)
+        }
+        // Trip summary — root-level for the same reason: «Завершить и
+        // сохранить» in the recovery prompt finishes a trip from ANY tab;
+        // TrackingView only exists while .record is selected.
+        .sheet(item: $mapVM.lastCompletedTrip) { trip in
+            TripCompleteSummaryView(
+                trip: trip,
+                completionData: mapVM.lastCompletionData,
+                onPhotoSaved: { image in
+                    _ = mapVM.tripManager.addPhoto(to: trip.id, image: image)
+                },
+                onDone: { dismissSummary() }
+            )
+            .environmentObject(lang)
+            .environmentObject(mapVM)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+            .interactiveDismissDisabled()
+        }
         .fullScreenCover(isPresented: $mapVM.showBadgeCelebration) {
             BadgeCelebrationView(
                 badges: mapVM.pendingBadges,
@@ -144,6 +179,16 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .switchToTrackingTab)) { _ in
             selectedTab = .record
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openGarage)) { _ in
+            // Two-phase: switch the tab, then re-post once ProfileView has
+            // mounted its listener — a one-shot notification consumed before
+            // the view exists would be lost (same pattern as .openTripDetail).
+            selectedTab = .profile
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                NotificationCenter.default.post(name: .openGarageReady, object: nil)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openTripDetail)) { notification in
             if let tripId = notification.object as? UUID {
                 // Switch to feed tab and navigate to trip detail
@@ -167,6 +212,21 @@ struct ContentView: View {
             // Configure auto-trip detection
             AutoTripService.shared.configure(mapViewModel: mapVM)
             AutoTripService.shared.startIfNeeded()
+        }
+    }
+
+    private func dismissSummary() {
+        mapVM.lastCompletedTrip = nil
+        // Post-completion is the right emotional moment to ask for a
+        // rating — the user just finished a trip, sees their stats,
+        // and dismisses with a sense of accomplishment. Delay so the
+        // sheet dismiss animation lands before the system prompt
+        // pops up (otherwise they overlap on iOS 17+). All guards
+        // (trip count, launch count, cooldown) live inside the
+        // service — this call is a fire-and-forget hint.
+        let tripCount = mapVM.tripManager.fetchTripCount()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            RatingPromptService.requestReviewIfReady(tripCount: tripCount)
         }
     }
 }

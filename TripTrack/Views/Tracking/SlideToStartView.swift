@@ -18,6 +18,9 @@ import SwiftUI
 /// reveal of the recording HUD sells the transition.
 struct SlideToStartView: View {
     let onStartTrip: () -> Void
+    /// Overrides the default «Сдвиньте» hint (e.g. «Открыть Настройки» on the
+    /// geo-denied idle state, Figma 475:119).
+    var labelOverride: String? = nil
     @EnvironmentObject private var lang: LanguageManager
 
     @State private var dragOffset: CGFloat = 0
@@ -27,7 +30,8 @@ struct SlideToStartView: View {
 
     private let thumbSize: CGFloat = 48
     private let trackHeight: CGFloat = 56
-    private let cornerRadius: CGFloat = 16
+    // Figma 144:1163: the track is a full pill (radius 999).
+    private let cornerRadius: CGFloat = 28
     private let horizontalInset: CGFloat = 4
     private let threshold: CGFloat = 0.85
 
@@ -74,17 +78,15 @@ struct SlideToStartView: View {
     /// fades out — their attention has moved on.
     @ViewBuilder
     private func shimmerHint(progress: CGFloat) -> some View {
-        let text = AppStrings.slideToStart(lang.language)
+        let text = labelOverride ?? AppStrings.slideToStart(lang.language)
         let label = Text(text)
             .font(.system(size: 16, weight: .semibold))
             .lineLimit(1)
             .minimumScaleFactor(0.75)
-            // Center the hint in the lane to the RIGHT of the thumb + chevron trail.
-            // Centering across the full track made a long localized string
-            // ("Сдвиньте для старта") collide with the thumb/chevrons → cramped look.
+            // Centered on the FULL pill (Figma) — the 6.1.0 hints are short
+            // («Сдвиньте»/«Slide»), so they no longer collide with the thumb.
             .frame(maxWidth: .infinity)
-            .padding(.leading, thumbSize + 44)
-            .padding(.trailing, 16)
+            .padding(.horizontal, 16)
 
         let opacity = max(0, 1 - progress / 0.3)
 

@@ -23,6 +23,18 @@ final class MapViewModel: ObservableObject {
     @Published var distance: Double = 0     // km
     @Published var duration: String = "00:00"
     @Published var gpsAccuracy: Double = 0  // meters
+    /// No accepted fix for >10s while recording — the GPS pill flips to
+    /// «GPS потерян» and the in-trip banner shows (Figma 494:119).
+    /// Presentation-only; the 60s watchdog handles actual recovery.
+    @Published var gpsSignalStale: Bool = false
+    /// Location permission denied/restricted — Record idle becomes the
+    /// «Нет доступа к геолокации» screen (Figma 475:119).
+    @Published var locationDenied: Bool = false
+    /// Launch-time recovery prompt (Figma 505:119) — a force-quit recording
+    /// was found; the user picks Continue vs Finish&Save (never discard).
+    @Published var showRecoveryPrompt: Bool = false
+    var recoveryDistanceKm: Double = 0
+    var recoveryDuration: String = "0:00"
     @Published var trackOverlays: [MKOverlay] = []
     @Published var pendingBadges: [(badge: Badge, count: Int)] = []
     @Published var showBadgeCelebration: Bool = false
@@ -134,6 +146,15 @@ final class MapViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.territoryManager.rebuildFromTrips()
+            }
+            .store(in: &cancellables)
+
+        // Location permission mirror for the Record screen (Figma 475:119).
+        NotificationCenter.default.publisher(for: .locationAuthDenied)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] note in
+                guard let denied = note.object as? Bool else { return }
+                self?.locationDenied = denied
             }
             .store(in: &cancellables)
 
@@ -289,13 +310,69 @@ final class MapViewModel: ObservableObject {
 
     /// Restore active recording if TripManager recovered an orphaned trip on launch.
     private func restoreActiveRecordingIfNeeded() {
-        guard tripManager.isRecording, let trip = tripManager.activeTrip else { return }
+        // Legacy safety path: an already-adopted active recording (should not
+        // happen since 6.1.0 stashes orphans instead) still restores silently.
+        if tripManager.isRecording, let trip = tripManager.activeTrip {
+            adoptRecoveredTrip(trip, startLiveActivity: true)
+            return
+        }
+        // 6.1.0 (Figma 505:119): a recoverable force-quit orphan raises the
+        // launch prompt instead of silently resuming.
+        if let orphan = tripManager.recoverableOrphan {
+            recoveryDistanceKm = orphan.distance / 1000
+            recoveryDuration = Self.formatRecoveryDuration(tripManager.recoverableOrphanDuration)
+            showRecoveryPrompt = true
+        }
+    }
+
+    /// «Продолжить запись» in the recovery prompt.
+    func continueRecoveredTrip() {
+        guard let trip = tripManager.adoptRecoverableOrphan() else {
+            // Nothing to adopt (e.g. a BT auto-start began a NEW recording
+            // while the prompt was up — the orphan stays stashed for the
+            // next launch rather than corrupting the live trip).
+            showRecoveryPrompt = false
+            return
+        }
+        showRecoveryPrompt = false
+        adoptRecoveredTrip(trip, startLiveActivity: true)
+    }
+
+    /// «Завершить и сохранить» — adopt, then run the normal stop pipeline
+    /// (track processing, XP, summary sheet). No Live Activity is started:
+    /// none is live for a never-resumed recording.
+    func finishRecoveredTrip() {
+        // Capture BEFORE adopt clears the stash: the trip must end at its
+        // last recorded point, not at relaunch time (a 6h-old orphan would
+        // otherwise gain 6h of duration and garbage XP).
+        let orphanDuration = tripManager.recoverableOrphanDuration
+        guard let trip = tripManager.adoptRecoverableOrphan() else {
+            showRecoveryPrompt = false
+            return
+        }
+        showRecoveryPrompt = false
+        adoptRecoveredTrip(trip, startLiveActivity: false)
+        let orphanEndDate = trip.startDate.addingTimeInterval(orphanDuration)
+        // Let the prompt sheet finish dismissing before the stop pipeline
+        // presents the badge celebration / summary — presenting during a
+        // dismissal is silently dropped by SwiftUI.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(450))
+            self.stopRecording(suggestedEndDate: orphanEndDate)
+        }
+    }
+
+    private func adoptRecoveredTrip(_ trip: Trip, startLiveActivity: Bool) {
         isRecording = true
         isPaused = false
         recordingStartDate = trip.startDate
         pausedAccumulated = 0
         pauseStartDate = nil
         smoothedSpeed = 0
+        // Fresh staleness baseline — background starts otherwise compare
+        // against a stale lastSpeedUpdate and flash «GPS потерян».
+        gpsSignalStale = false
+        lastSpeedUpdate = Date()
         trackManager.reset()
         trackManager.startAnimation()
 
@@ -303,13 +380,51 @@ final class MapViewModel: ObservableObject {
         // this the duration label froze and there was no GPS-stall watchdog.
         startRecordingTimers()
 
-        // Start Live Activity — prefer the recovered trip's own vehicle over the
-        // current global selection (the user may have changed it since force-quitting).
-        startLiveActivity(tripId: trip.id, startDate: trip.startDate, vehicleId: trip.vehicleId ?? selectedVehicleId)
+        if startLiveActivity {
+            // Prefer the recovered trip's own vehicle over the current global
+            // selection (the user may have changed it since force-quitting).
+            self.startLiveActivity(tripId: trip.id, startDate: trip.startDate, vehicleId: trip.vehicleId ?? selectedVehicleId)
+        }
 
         #if DEBUG
         print("Recording restored: trip \(trip.id), started \(trip.startDate)")
         #endif
+    }
+
+    /// Speed decay + Kalman prediction + signal-lost detection during GPS
+    /// gaps. Recreated for every recording (stopRecording cancels it).
+    private func startSpeedDecayTimer() {
+        speedDecayTimer?.cancel()
+        speedDecayTimer = Timer.publish(every: 0.5, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self, self.isRecording else { return }
+
+                // Kalman prediction: if GPS gap is active, feed predicted position to display
+                if !self.isPaused, self.tripManager.kalmanFilter.isPredicting,
+                   let predicted = self.tripManager.kalmanFilter.predictedLocation() {
+                    self.trackManager.addPoint(predicted.coordinate)
+                }
+
+                // Signal-lost presentation: no accepted fix for >10s.
+                let sinceLastFix = Date().timeIntervalSince(self.lastSpeedUpdate)
+                let stale = sinceLastFix > 10
+                if stale != self.gpsSignalStale { self.gpsSignalStale = stale }
+
+                // Speed decay: if no GPS update for 2s, gradually reduce speed to 0
+                guard self.speed > 0 else { return }
+                if sinceLastFix > 2.0 {
+                    let decayed = self.speed * 0.4
+                    self.speed = decayed < 1 ? 0 : decayed
+                    self.smoothedSpeed = self.speed
+                }
+            }
+    }
+
+    /// «0:23» — hours:minutes for the recovery chip.
+    private static func formatRecoveryDuration(_ interval: TimeInterval) -> String {
+        let minutes = Int(interval) / 60
+        return "\(minutes / 60):" + String(format: "%02d", minutes % 60)
     }
 
     /// Resolves the car (with the shared selection fallback) and starts the
@@ -330,12 +445,22 @@ final class MapViewModel: ObservableObject {
         // can all reach this method on the same MainActor tick. Without the
         // guard each call would create its own TripEntity, leaving orphans.
         guard !isRecording else { return }
+        // No location permission → no recording. The idle screen shows the
+        // «Нет доступа к геолокации» state with an Open-Settings slider
+        // instead; this guard covers programmatic starts (BT, Shortcuts).
+        guard !locationDenied else { return }
+        // The recovery prompt is on screen — an auto-start (BT reconnect is
+        // the CANONICAL recovery moment) would race the orphan adoption and
+        // corrupt both trips. The user resolves the prompt first.
+        guard !showRecoveryPrompt else { return }
         // Reset state
         isPaused = false
         tripManager.isPaused = false
         recordingStartDate = Date()
         pausedAccumulated = 0
         pauseStartDate = nil
+        gpsSignalStale = false
+        lastSpeedUpdate = Date()
 
         smoothedSpeed = 0
 
@@ -382,6 +507,9 @@ final class MapViewModel: ObservableObject {
             .sink { [weak self] _ in
                 self?.updateDuration()
             }
+
+        // stopRecording cancels the decay timer — recreate per recording.
+        startSpeedDecayTimer()
 
         // GPS watchdog — restart tracking if no valid updates for 60 seconds
         lastValidLocationTime = Date()
@@ -605,6 +733,7 @@ final class MapViewModel: ObservableObject {
                 self.lastSpeedUpdate = Date()
                 self.altitude = update.altitude
                 self.gpsAccuracy = update.horizontalAccuracy
+                if self.gpsSignalStale { self.gpsSignalStale = false }
 
                 if self.isRecording && !self.isPaused {
                     self.trackManager.addPoint(update.coordinate)
@@ -638,27 +767,11 @@ final class MapViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Speed decay + Kalman prediction during GPS gaps
-        speedDecayTimer = Timer.publish(every: 0.5, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                guard let self, self.isRecording else { return }
-
-                // Kalman prediction: if GPS gap is active, feed predicted position to display
-                if !self.isPaused, self.tripManager.kalmanFilter.isPredicting,
-                   let predicted = self.tripManager.kalmanFilter.predictedLocation() {
-                    self.trackManager.addPoint(predicted.coordinate)
-                }
-
-                // Speed decay: if no GPS update for 2s, gradually reduce speed to 0
-                guard self.speed > 0 else { return }
-                let elapsed = Date().timeIntervalSince(self.lastSpeedUpdate)
-                if elapsed > 2.0 {
-                    let decayed = self.speed * 0.4
-                    self.speed = decayed < 1 ? 0 : decayed
-                    self.smoothedSpeed = self.speed
-                }
-            }
+        // Speed decay + Kalman prediction during GPS gaps. Created here for
+        // the first recording AND recreated by startRecordingTimers() —
+        // stopRecording cancels it, so init-only creation left every trip
+        // after the first without decay/Kalman/signal-lost detection.
+        startSpeedDecayTimer()
 
         // Main track overlay (confirmed points — solid line, throttled to max 2x/sec)
         trackManager.$confirmedPoints

@@ -9,17 +9,6 @@ struct TrackingView: View {
     @State private var tabBarHeight: CGFloat = 88
     @State private var isMapReady = false
 
-    /// The car this trip is recording for. Resolved from the trip's OWN
-    /// vehicle (stamped at start, and now also on the force-quit recovery
-    /// path) so the pill matches the car the trip was actually started with —
-    /// even if the user changed the global selection mid/after a recovered
-    /// trip. Falls back to the current selection when the active trip has no
-    /// vehicle (e.g. trips started before this field was populated).
-    private var activeVehicle: Vehicle? {
-        let vid = viewModel.tripManager.activeTrip?.vehicleId ?? settings.selectedVehicleId
-        return settings.vehicles.first { $0.id == vid } ?? settings.vehicles.first
-    }
-
     var body: some View {
         ZStack {
             // Map is ALWAYS instantiated so "ready" can never hang on a missed
@@ -52,25 +41,62 @@ struct TrackingView: View {
                     .allowsHitTesting(false)
             }
 
+            // `accessibilityHidden` keeps the opacity-hidden overlay out of
+            // the a11y tree — VoiceOver (and UI tests) otherwise still see
+            // the invisible controls.
             recordingOverlay
                 .opacity(viewModel.isRecording ? 1 : 0)
                 .allowsHitTesting(viewModel.isRecording)
+                .accessibilityHidden(!viewModel.isRecording)
 
             idleOverlay
                 .opacity(viewModel.isRecording ? 0 : 1)
                 .allowsHitTesting(!viewModel.isRecording)
+                .accessibilityHidden(viewModel.isRecording)
 
-            // Shared top bar — always same position
-            VStack {
+            // Shared top bar — always same position. Left slot: back chevron
+            // while idle (the tab bar is hidden on this tab, the chevron is
+            // the only way out), REC/ПАУЗА status pill while recording
+            // (Figma 146:1178 / 477:119 have no back affordance).
+            VStack(spacing: 10) {
                 HStack {
-                    backButton
+                    if viewModel.isRecording {
+                        recordingStatusPill
+                    } else {
+                        backButton
+                    }
                     Spacer()
-                    GPSIndicatorView(accuracy: viewModel.gpsAccuracy)
+                    if !(viewModel.locationDenied && !viewModel.isRecording) {
+                        GPSIndicatorView(
+                            accuracy: viewModel.gpsAccuracy,
+                            isStale: viewModel.isRecording && viewModel.gpsSignalStale
+                        )
+                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, safeAreaTop + 4)
+
+                if viewModel.isRecording && viewModel.isPaused {
+                    pausedPill
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
+                // Signal-state banners are suppressed while paused — the
+                // paused pill already explains why nothing is moving, and
+                // signal loss is expected in a parking garage.
+                if viewModel.isRecording && !viewModel.isPaused && viewModel.gpsSignalStale {
+                    signalLostBanner
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                } else if viewModel.isRecording && !viewModel.isPaused
+                            && viewModel.gpsAccuracy > 35 {
+                    weakSignalToast
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 Spacer()
             }
+            .padding(.horizontal, 16)
+            .padding(.top, safeAreaTop + 4)
+            .animation(.easeInOut(duration: 0.25), value: viewModel.isPaused)
+            .animation(.easeInOut(duration: 0.25), value: viewModel.gpsSignalStale)
             .ignoresSafeArea(edges: .top)
         }
         .animation(.easeInOut(duration: 0.5), value: viewModel.isRecording)
@@ -99,187 +125,248 @@ struct TrackingView: View {
                 viewModel.stopLocationUpdates()
             }
         }
-        .sheet(item: $viewModel.lastCompletedTrip) { trip in
-            TripCompleteSummaryView(
-                trip: trip,
-                completionData: viewModel.lastCompletionData,
-                onPhotoSaved: { image in
-                    _ = viewModel.tripManager.addPhoto(to: trip.id, image: image)
-                },
-                onDone: { dismissSummary() }
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.hidden)
-            .interactiveDismissDisabled()
-        }
+        // The trip summary sheet is presented from ContentView's root —
+        // «Завершить и сохранить» in the recovery prompt can finish a trip
+        // while ANY tab is active, and this view only exists on .record.
     }
 
-    // MARK: - Recording Overlay
+    // MARK: - Recording Overlay (Figma 146:1178 — everything lives at the bottom)
 
     private var recordingOverlay: some View {
         VStack(spacing: 0) {
-            // Stats panel — compact, fixed height
-            VStack(spacing: 12) {
-                // Space for shared top bar
-                Color.clear.frame(height: 44)
+            Spacer()
 
-                // Speed — large
-                VStack(spacing: 2) {
-                    Text("\(Int(viewModel.speed))")
-                        .font(.system(size: 56, weight: .heavy, design: .rounded))
-                        .foregroundStyle(speedColor)
+            VStack(spacing: 14) {
+                // Speedometer — 92pt fixed accent (grey while paused/lost).
+                VStack(spacing: 0) {
+                    Text(speedText)
+                        .font(.system(size: 92, weight: .heavy))
+                        .kerning(-3.68)
+                        .foregroundStyle(speedDimmed ? AppTheme.textTertiary : AppTheme.accent)
                         .contentTransition(.numericText())
-                        .animation(.easeInOut(duration: 0.2), value: Int(viewModel.speed))
-                    Text(AppStrings.kmh(lang.language))
+                        .animation(.easeInOut(duration: 0.2), value: speedText)
+                    Text(AppStrings.kmh(lang.language).uppercased())
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .kerning(0.78)
+                        .foregroundStyle(.white.opacity(0.55))
                 }
 
-                // Stats row: distance | time | altitude
+                // Metrics glass panel: distance | time | altitude.
                 HStack(spacing: 0) {
                     statItem(
                         value: String(format: "%.1f", viewModel.distance),
-                        unit: "km",
-                        icon: "arrow.right"
+                        unit: AppStrings.km(lang.language),
+                        icon: "point.topleft.down.curvedto.point.bottomright.up"
                     )
-                    Divider()
-                        .frame(height: 28)
-                        .background(.white.opacity(0.2))
+                    Rectangle()
+                        .fill(.white.opacity(0.08))
+                        .frame(width: 1, height: 40)
                     statItem(
                         value: viewModel.duration,
                         unit: nil,
                         icon: "clock"
                     )
-                    Divider()
-                        .frame(height: 28)
-                        .background(.white.opacity(0.2))
+                    Rectangle()
+                        .fill(.white.opacity(0.08))
+                        .frame(width: 1, height: 40)
                     statItem(
                         value: "\(Int(viewModel.altitude))",
-                        unit: "m",
+                        unit: AppStrings.m(lang.language),
                         icon: "mountain.2"
                     )
                 }
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(Color(red: 40/255, green: 40/255, blue: 42/255).opacity(0.72))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22)
+                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                )
 
-                vehiclePill
+                controlsRow
             }
             .padding(.horizontal, 16)
-            .padding(.top, safeAreaTop + 4)
-            .padding(.bottom, 16)
-            .background(Color(red: 0.08, green: 0.08, blue: 0.09).opacity(0.85))
-            .background(.ultraThinMaterial)
+            .padding(.bottom, safeAreaBottom + 12)
 
-            // Mini-map takes remaining space (visible behind via ZStack)
-            Spacer()
-
-            // Controls: stop (center) + pause (left)
-            VStack(spacing: 12) {
-                HStack(alignment: .center, spacing: 20) {
-                    // Pause — small circle
-                    Button {
-                        viewModel.togglePause()
-                    } label: {
-                        Image(systemName: viewModel.isPaused ? "play.fill" : "pause.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(viewModel.isPaused ? .black : .white)
-                            .frame(width: 48, height: 48)
-                            .background(
-                                viewModel.isPaused ? Color.green : Color.white.opacity(0.15),
-                                in: Circle()
-                            )
-                            .overlay(
-                                Circle()
-                                    .stroke(viewModel.isPaused ? Color.green.opacity(0.5) : Color.white.opacity(0.2), lineWidth: 2)
-                            )
-                    }
-
-                    // Stop — large circle with ring (like Start Trip)
-                    Button {
-                        Haptics.success()
-                        viewModel.toggleRecording()
-                    } label: {
-                        ZStack {
-                            // Outer ring
-                            Circle()
-                                .stroke(AppTheme.red.opacity(0.4), lineWidth: 3)
-                                .frame(width: 82, height: 82)
-
-                            // Inner filled circle
-                            Circle()
-                                .fill(AppTheme.red)
-                                .frame(width: 68, height: 68)
-
-                            // Stop icon
-                            Image(systemName: "stop.fill")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                    }
-                    .accessibilityIdentifier("tracking_stop")
-
-                    // Spacer to balance pause button
-                    Color.clear.frame(width: 48, height: 48)
-                }
-            }
-            .padding(.top, 12)
-            .padding(.bottom, safeAreaBottom + 8)
-            .frame(maxWidth: .infinity)
-            .background(Color(red: 0.08, green: 0.08, blue: 0.09).opacity(0.85))
-            .background(.ultraThinMaterial)
         }
         .ignoresSafeArea(edges: [.top, .bottom])
     }
 
-    private func statItem(value: String, unit: String?, icon: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.4))
-            Text(value)
-                .font(.system(size: 16, weight: .semibold, design: .monospaced))
+    /// Pause circle (52pt, white 15%; accent resume while paused) + wide red
+    /// Stop bar (Figma 146:1178 / 477:119).
+    private var controlsRow: some View {
+        HStack(spacing: 12) {
+            Button {
+                viewModel.togglePause()
+            } label: {
+                Image(systemName: viewModel.isPaused ? "playpause.fill" : "pause.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(
+                        viewModel.isPaused ? AppTheme.accent : Color.white.opacity(0.15),
+                        in: Circle()
+                    )
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("tracking_pause")
+
+            Button {
+                Haptics.success()
+                viewModel.toggleRecording()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 19, weight: .bold))
+                    Text(AppStrings.stop(lang.language))
+                        .font(.system(size: 16, weight: .bold))
+                }
                 .foregroundStyle(.white)
-                .contentTransition(.numericText())
-            if let unit {
-                Text(unit)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(AppTheme.red, in: RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("tracking_stop")
+        }
+    }
+
+    // MARK: - Recording status pills / banners (Figma 146:1178, 477:119, 435:119, 494:119)
+
+    /// «REC · 00:34:12» red dot / «ПАУЗА · 00:34:12» amber dot, glass pill.
+    private var recordingStatusPill: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(viewModel.isPaused
+                      ? Color(red: 0xFF/255, green: 0x9F/255, blue: 0x0A/255)
+                      : Color(red: 0xFF/255, green: 0x45/255, blue: 0x3A/255))
+                .frame(width: 8, height: 8)
+            Text("\(viewModel.isPaused ? AppStrings.pauseShort(lang.language) : "REC") · \(viewModel.duration)")
+                .font(.system(size: 12.5, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(Color(red: 40/255, green: 40/255, blue: 42/255).opacity(0.72)))
+        .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+    }
+
+    /// Centered amber «Запись на паузе» pill.
+    private var pausedPill: some View {
+        let amber = Color(red: 0xFF/255, green: 0x9F/255, blue: 0x0A/255)
+        return HStack(spacing: 7) {
+            Image(systemName: "pause.fill")
+                .font(.system(size: 11, weight: .bold))
+            Text(AppStrings.recordingPausedPill(lang.language))
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(amber)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(Capsule().fill(amber.opacity(0.16)))
+    }
+
+    /// Red toast: sustained weak accuracy (>35м) while recording.
+    private var weakSignalToast: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(Color(red: 0xFF/255, green: 0x45/255, blue: 0x3A/255))
+                .frame(width: 22, height: 22)
+                .overlay(
+                    Text("!")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                )
+            VStack(alignment: .leading, spacing: 1) {
+                Text(AppStrings.weakSignalTitle(lang.language))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text(AppStrings.weakSignalHint(lang.language))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Color(red: 0xB8/255, green: 0xB8/255, blue: 0xC2/255))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(red: 41/255, green: 20/255, blue: 18/255).opacity(0.94))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color(red: 0xFF/255, green: 0x45/255, blue: 0x3A/255).opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    /// Amber banner: GPS fix lost mid-trip (Kalman keeps the track alive).
+    private var signalLostBanner: some View {
+        let amber = Color(red: 0xF5/255, green: 0xA6/255, blue: 0x23/255)
+        return HStack(spacing: 10) {
+            Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(amber)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(AppStrings.signalLostTitle(lang.language))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text(AppStrings.signalLostHint(lang.language))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Color(red: 0xC9/255, green: 0xA8/255, blue: 0x78/255))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(red: 42/255, green: 31/255, blue: 18/255))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(amber.opacity(0.4), lineWidth: 1)
+        )
+    }
+
+    /// «0» grey while paused, «–» while the signal is lost, live speed
+    /// otherwise (en-dash: a 92pt em-dash reads as a redacted slab).
+    private var speedText: String {
+        if viewModel.isPaused { return "0" }
+        if viewModel.gpsSignalStale { return "–" }
+        return "\(Int(viewModel.speed))"
+    }
+
+    private var speedDimmed: Bool {
+        viewModel.isPaused || viewModel.gpsSignalStale
+    }
+
+    /// Figma metrics cell: dimmed 13pt icon ABOVE the value row, centered.
+    private func statItem(value: String, unit: String?, icon: String) -> some View {
+        VStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.4))
+            HStack(alignment: .lastTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(.system(size: 18, weight: .heavy).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText())
+                if let unit {
+                    Text(unit.uppercased())
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
             }
         }
         .frame(maxWidth: .infinity)
     }
 
-    /// Shows which car the trip is recording for. Hidden when no vehicle
-    /// exists so single-/no-car users keep the compact panel.
-    @ViewBuilder private var vehiclePill: some View {
-        if let v = activeVehicle {
-            HStack(spacing: 6) {
-                if v.isPixelAvatar {
-                    Image(v.avatarEmoji)
-                        .resizable()
-                        .interpolation(.none)
-                        .scaledToFit()
-                        .frame(width: 16, height: 16)
-                } else {
-                    Text(v.avatarEmoji).font(.system(size: 14))
-                }
-                Text(v.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(.white.opacity(0.12)))
-        }
-    }
-
-    private var speedColor: Color {
-        let s = viewModel.speed
-        if s < 40 { return .green }
-        if s < 80 { return AppTheme.accent }
-        return AppTheme.red
-    }
-
-    // MARK: - Back Button (shared between idle and recording)
+    // MARK: - Back Button (idle only)
 
     private var backButton: some View {
         Button {
@@ -316,6 +403,7 @@ struct TrackingView: View {
             IdleHUDView(
                 totalKm: viewModel.cachedTotalKm,
                 tripCount: viewModel.cachedTripCount,
+                locationDenied: viewModel.locationDenied,
                 onStartTrip: { viewModel.toggleRecording() }
             )
             .padding(.bottom, 8)
@@ -364,21 +452,6 @@ struct TrackingView: View {
     }
 
     // MARK: - Helpers
-
-    private func dismissSummary() {
-        viewModel.lastCompletedTrip = nil
-        // Post-completion is the right emotional moment to ask for a
-        // rating — the user just finished a trip, sees their stats,
-        // and dismisses with a sense of accomplishment. Delay so the
-        // sheet dismiss animation lands before the system prompt
-        // pops up (otherwise they overlap on iOS 17+). All guards
-        // (trip count, launch count, cooldown) live inside the
-        // service — this call is a fire-and-forget hint.
-        let tripCount = viewModel.tripManager.fetchTripCount()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            RatingPromptService.requestReviewIfReady(tripCount: tripCount)
-        }
-    }
 
     private var trackingIcon: String {
         switch viewModel.userTrackingMode {

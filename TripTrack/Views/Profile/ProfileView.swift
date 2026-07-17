@@ -226,6 +226,12 @@ struct ProfileView: View {
         .task {
             await loadOwnSocialProfile()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openGarageReady)) { _ in
+            // Second phase of VehiclePickerSheet's «Управлять в Гараже»:
+            // ContentView switched to the Я tab, waited for this view to
+            // mount, then re-posted.
+            showGarage = true
+        }
         // Pure-SwiftUI navigator rooted at the follow list — replaces the
         // previous sheet-hosted `NavigationStack { FollowListView }` that
         // exhibited the depth-4+ flash when users chained profile↔follower
