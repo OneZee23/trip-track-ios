@@ -136,6 +136,12 @@ struct ContentView: View {
         // Trip summary — root-level for the same reason: «Завершить и
         // сохранить» in the recovery prompt finishes a trip from ANY tab;
         // TrackingView only exists while .record is selected.
+        //
+        // KNOWN LIMITATION: if an auto-stop completes while a per-tab sheet
+        // (garage, settings, discover…) is open, UIKit defers this
+        // presentation until that sheet closes — the summary appears late
+        // but is never lost (`item:` keeps it pending). A presentation
+        // queue would remove the delay; not worth the machinery.
         .sheet(item: $mapVM.lastCompletedTrip) { trip in
             TripCompleteSummaryView(
                 trip: trip,
@@ -191,7 +197,16 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .openTripDetail)) { notification in
             if let tripId = notification.object as? UUID {
-                // Switch to feed tab and navigate to trip detail
+                // Switch to feed tab and navigate to trip detail.
+                //
+                // KNOWN LIMITATION (also for .openGarageReady above): the
+                // 300ms one-shot handoff assumes the target tab root mounts
+                // its .onReceive within the window. On a contended cold
+                // start (deep link + large-library migration holding the
+                // main actor) the post can fire before the listener exists
+                // and the navigation is dropped — the app still lands on
+                // the right tab. A store-and-consume pending slot would
+                // close this; deferred as a rare cold-start-only miss.
                 selectedTab = .home
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(300))

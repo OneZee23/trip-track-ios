@@ -276,6 +276,7 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showGarage) {
             GarageView()
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showSyncStatus) {
             SyncStatusSheetView()

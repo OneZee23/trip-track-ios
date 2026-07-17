@@ -63,7 +63,10 @@ final class MyMapViewModel: ObservableObject {
         // Data changes invalidate the map. When the tab is off-screen the
         // reload happens here directly (the view can't); loadIfNeeded also
         // rechecks `stale` on the next appearance as a belt-and-braces.
-        for name: Notification.Name in [.territoryRebuilt, .tripRecordingEnded, .tripDeleted] {
+        // .syncPullCompleted: restore-on-fresh-device / second-device trips
+        // land via Cloud-Sync pull, which touches neither territory nor
+        // recording — without it the Maps tab stays empty all session.
+        for name: Notification.Name in [.territoryRebuilt, .tripRecordingEnded, .tripDeleted, .syncPullCompleted] {
             NotificationCenter.default.addObserver(
                 forName: name, object: nil, queue: .main
             ) { [weak self] _ in

@@ -260,7 +260,8 @@ struct FollowListView: View {
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    Text(isRu ? "ур. \(user.profileLevel)" : "lvl \(user.profileLevel)")
+                    // App-wide LVL convention (feed cards, garage, profile).
+                    Text("LVL \(user.profileLevel)")
                         .font(.system(size: 11).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }

@@ -45,6 +45,19 @@ final class FeedViewModel: ObservableObject {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US"); f.dateFormat = "LLLL yyyy"; return f
     }()
 
+    /// App-scoped instance. The 5-tab skeleton destroys FeedView on every
+    /// tab switch — a view-owned @StateObject would rebuild from scratch
+    /// and silently drop the user's filters/calendar range each hop (the
+    /// same remount hazard MyMapViewModel.shared solves for the Maps tab).
+    private static var sharedInstance: FeedViewModel?
+
+    static func shared(tripManager: TripManager) -> FeedViewModel {
+        if let s = sharedInstance { return s }
+        let vm = FeedViewModel(tripManager: tripManager)
+        sharedInstance = vm
+        return vm
+    }
+
     init(tripManager: TripManager) {
         self.tripManager = tripManager
 

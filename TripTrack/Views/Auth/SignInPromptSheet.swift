@@ -173,6 +173,9 @@ fileprivate struct SignInIdleRing: View {
                     .stroke(AppTheme.accent, lineWidth: 2.5)
                 Image("PixelCar")
                     .resizable()
+                    .interpolation(.none)
+                    // Non-square sprite — fit, don't squash.
+                    .scaledToFit()
                     .frame(width: 46, height: 46)
             }
             .frame(width: 82, height: 82)

@@ -3,7 +3,9 @@ import SwiftUI
 enum FeedMode: Hashable { case all, mine }
 
 struct FeedView: View {
-    @StateObject private var feedVM: FeedViewModel
+    // Shared, not @StateObject: the tab switch destroys this view and a
+    // view-owned VM would reset filters/calendar/sections every hop.
+    @ObservedObject private var feedVM: FeedViewModel
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
     @ObservedObject private var socialFeed = SocialFeedStore.shared
@@ -23,6 +25,9 @@ struct FeedView: View {
     @State private var showGarage = false
     @State private var tripToDelete: Trip?
     @State private var collapsedSections: Set<String> = []
+    /// Persisted so the chosen segment survives tab switches (the switch
+    /// destroys this view) and relaunches.
+    @AppStorage("feedModeMineV2") private var feedModeIsMine = false
     @State private var feedMode: FeedMode = .all
     /// Cached "does the user have at least one private trip" flag.
     /// Read in `socialEmptyState` to gate the "Publish one of your
@@ -63,7 +68,7 @@ struct FeedView: View {
     @State private var resumeAfterAuth = false
 
     init(tripManager: TripManager, selectedTab: Binding<AppTab>) {
-        _feedVM = StateObject(wrappedValue: FeedViewModel(tripManager: tripManager))
+        feedVM = FeedViewModel.shared(tripManager: tripManager)
         _selectedTab = selectedTab
     }
 
@@ -106,6 +111,7 @@ struct FeedView: View {
                 // bounces by default, which shows the black background on edges.
                 .background(PageViewBounceDisabler())
                 .onChange(of: feedMode) { _, newMode in
+                    feedModeIsMine = newMode == .mine
                     if newMode == .all {
                         // `loadIfNeeded` (not `refresh`) — tab switches
                         // shouldn't cancel an in-flight fetch. Pull-to-
@@ -115,6 +121,11 @@ struct FeedView: View {
                         feedVM.language = lang.language
                         feedVM.loadTrips()
                     }
+                }
+                .onAppear {
+                    // Restore the persisted segment once per mount (@State
+                    // can't seed from @AppStorage in init).
+                    if feedModeIsMine && feedMode == .all { feedMode = .mine }
                 }
             }
             // Single typed destination for every push out of Feed. Mixing a
@@ -1119,6 +1130,7 @@ private struct FeedIdleRing: View {
                     .stroke(AppTheme.accent, lineWidth: 2)
                 Image("PixelCar")
                     .resizable()
+                    .interpolation(.none)
                     // The sprite asset is non-square — without fit it
                     // squeezes into the 46×46 box.
                     .scaledToFit()

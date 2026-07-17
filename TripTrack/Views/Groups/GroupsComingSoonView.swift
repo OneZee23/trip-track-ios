@@ -142,6 +142,7 @@ private struct GroupsIdleRing: View {
                     .stroke(AppTheme.accent, lineWidth: 2)
                 Image("PixelCar")
                     .resizable()
+                    .interpolation(.none)
                     .scaledToFit()
                     .frame(width: 46, height: 46)
             }

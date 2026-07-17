@@ -147,8 +147,13 @@ struct PosterRouteCanvas: View {
         // Pixel-car sprite (30pt). Mid-route rotated 22° when idle (Figma);
         // during playback it rides the head, rotated along the segment.
         if showsCar {
-            let car = context.resolve(Image("PixelCar"))
+            let car = context.resolve(Image("PixelCar").interpolation(.none))
             let carSize: CGFloat = 30
+            // The sprite asset is non-square — drawing into a square rect
+            // squashes it. Fit by the longer side.
+            let aspect = car.size.width > 0 ? car.size.height / car.size.width : 1
+            let carW: CGFloat = aspect <= 1 ? carSize : carSize / aspect
+            let carH: CGFloat = aspect <= 1 ? carSize * aspect : carSize
             let carPoint: CGPoint
             let rotation: Angle
             if let head = headPoint {
@@ -164,7 +169,7 @@ struct PosterRouteCanvas: View {
             var carCtx = context
             carCtx.translateBy(x: carPoint.x, y: carPoint.y)
             carCtx.rotate(by: rotation)
-            carCtx.draw(car, in: CGRect(x: -carSize/2, y: -carSize/2, width: carSize, height: carSize))
+            carCtx.draw(car, in: CGRect(x: -carW/2, y: -carH/2, width: carW, height: carH))
         }
     }
 

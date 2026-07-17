@@ -53,6 +53,24 @@ final class SocialFeedStore: ObservableObject {
         // bump the card's `photoCount` instantly, and again from
         // `APISyncTransport` after the upload lands (no delta) so we can
         // reconcile with the server's authoritative count.
+        // Privacy flips can happen while FeedView (the only view-level
+        // reconciler) is UNMOUNTED — from the record-tab completion summary
+        // or a trip detail pushed on the Я tab. The store must self-heal:
+        // hide → drop the card + invalidate freshness; publish → invalidate
+        // so the next loadIfNeeded actually refetches instead of trusting
+        // the 15-minute window. Idempotent with FeedView's own handler.
+        NotificationCenter.default.publisher(for: .tripPrivacyChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] note in
+                guard let self, let payload = note.object as? PrivacyChangePayload else { return }
+                if payload.isPrivate {
+                    self.removeOptimistically(tripId: payload.tripId)
+                } else {
+                    self.lastLoadedAt = nil
+                }
+            }
+            .store(in: &cancellables)
+
         NotificationCenter.default.publisher(for: .tripPhotosChanged)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] note in
