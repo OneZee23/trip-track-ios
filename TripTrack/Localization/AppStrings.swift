@@ -1187,4 +1187,100 @@ enum AppStrings {
         default:       return action.capitalized
         }
     }
+
+    // MARK: - Garage (v6.1.0 redesign)
+
+    static func vehicleMainLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Основная" : "Main"
+    }
+    static func myVehicle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Мой автомобиль" : "My Vehicle"
+    }
+    static func renameVehicle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Переименовать" : "Rename"
+    }
+    static func deleteVehicle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Удалить авто" : "Delete vehicle"
+    }
+    static func deleteVehicleConfirm(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Удалить это авто? Поездки сохранятся без привязки к нему."
+            : "Delete this vehicle? Trips will keep their data without it."
+    }
+    static func makeMainVehicle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сделать основной" : "Make main"
+    }
+    static func odometerLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Одометр" : "Odometer"
+    }
+    static func avgConsumptionLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ср. расход" : "Avg. consumption"
+    }
+    static func stickersLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Стикеры" : "Stickers"
+    }
+    static func fuelSectionLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Расход топлива" : "Fuel consumption"
+    }
+    static func fuelCityRow(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Расход в городе" : "City consumption"
+    }
+    static func fuelHighwayRow(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Расход на трассе" : "Highway consumption"
+    }
+    static func fuelPriceRow(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Цена топлива" : "Fuel price"
+    }
+    static func addVehicleTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Добавить автомобиль" : "Add vehicle"
+    }
+    static func vehicleNameSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Название" : "Name"
+    }
+    static func vehicleNamePlaceholder(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Например, Honda Civic" : "e.g. Honda Civic"
+    }
+    static func avatarSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Аватар" : "Avatar"
+    }
+    static func fuelCity(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Город" : "City"
+    }
+    static func fuelHighway(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Трасса" : "Highway"
+    }
+    static func mileageSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пробег" : "Mileage"
+    }
+    static func mileageAutoHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Начисляется автоматически по поездкам" : "Accrues automatically from your trips"
+    }
+    static func stereoSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Магнитола" : "Stereo"
+    }
+    static func btOffTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Bluetooth выключен" : "Bluetooth is off"
+    }
+    static func btOffChipBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Включите Bluetooth, чтобы запись стартовала по магнитоле."
+            : "Turn on Bluetooth so recording can start from your stereo."
+    }
+    static func btOffSheetBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Включите Bluetooth в Настройках, чтобы найти магнитолу и привязать её к этому авто."
+            : "Turn on Bluetooth in Settings to find your stereo and link it to this car."
+    }
+    static func settingsButton(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Настройки" : "Settings"
+    }
+    static func maxVehiclesHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Максимум 5 автомобилей" : "Maximum 5 vehicles"
+    }
+    static func unnamedVehicle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Без имени" : "Unnamed"
+    }
+    static func sinceYear(_ lang: LanguageManager.Language, year: Int) -> String {
+        lang == .ru ? "с \(year)" : "since \(year)"
+    }
 }

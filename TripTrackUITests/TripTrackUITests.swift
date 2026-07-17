@@ -170,6 +170,41 @@ final class TripTrackUITests: XCTestCase {
         pt(0.07, 0.05).tap(); sleep(1) // detail back circle
     }
 
+    /// Walks the redesigned Garage: list → add form → vehicle detail →
+    /// auto-record settings. Locale-tolerant, guarded (6.1.0 Гараж).
+    func test_zz_garage_shots() {
+        normalizeToHome()
+        let me = app.buttons.matching(identifier: "tab_profile").firstMatch
+        if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
+        // The garage row sits below the profile fold — scroll until visible.
+        for _ in 0..<4 {
+            if tap("Гараж", timeout: 1) || tap("Garage", timeout: 1) { break }
+            win.swipeUp(); usleep(600_000)
+        }
+        sleep(2); snap("100_garage_list")
+
+        let add = app.buttons.matching(identifier: "garage_add").firstMatch
+        if add.waitForExistence(timeout: 2), add.isHittable {
+            add.tap(); sleep(2); snap("101_add_form")
+            let close = app.buttons.matching(identifier: "vehicle_form_close").firstMatch
+            if close.waitForExistence(timeout: 2) { close.tap() } else { win.swipeDown() }
+            sleep(1)
+        }
+
+        let card = app.buttons.matching(identifier: "garage_card").firstMatch
+        if card.waitForExistence(timeout: 2), card.isHittable {
+            card.tap(); sleep(2); snap("102_vehicle_detail")
+            win.swipeUp(); usleep(700_000); snap("103_detail_lower")
+            win.swipeDown(); usleep(700_000)
+            let ar = app.buttons.matching(identifier: "vehicle_autorecord_row").firstMatch
+            if ar.waitForExistence(timeout: 2) {
+                if !ar.isHittable { win.swipeUp(); usleep(700_000) }
+                ar.tap(); sleep(2); snap("104_autorecord")
+                win.swipeDown(); sleep(1) // close the settings sheet
+            }
+        }
+    }
+
     /// Brings the app to Home from ANY persisted state: adopts a leftover
     /// recovery prompt, stops an active recording (the chevron is replaced
     /// by the REC pill while recording), walks celebration/summary sheets.
