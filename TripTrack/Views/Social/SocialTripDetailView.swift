@@ -3,16 +3,19 @@ import MapKit
 
 /// Read-only detail view for a trip from the social feed.
 /// Unlike the local TripDetailView, it shows a friend's trip — no editing,
-/// no deletion, no photo picker. Just the map, metrics, reactions row, and share.
+/// no deletion, no photo picker. 6.1.0 poster layout: square navy hero with
+/// the author pill + «Смотреть поездку» CTA, then the shared detail-body
+/// sections (stat grid, moving/stops bar, description, photos,
+/// achievements) and a compact interactive reactions card.
 struct SocialTripDetailView: View {
     /// Initial trip snapshot — used as fallback if the store hasn't loaded
     /// this trip (e.g. direct push). Real rendering reads from
     /// `socialFeed.trips` so optimistic reaction updates re-render.
     let initialTrip: SocialFeedTrip
     var onShare: (() -> Void)?
-    /// When present, author-avatar and reactor taps push onto this shared
-    /// path instead of attaching a local `.navigationDestination`. Keeps us
-    /// off the chained isPresented chain that triggers the depth-4 flash.
+    /// When present, author-avatar taps push onto this shared path instead
+    /// of attaching a local `.navigationDestination`. Keeps us off the
+    /// chained isPresented chain that triggers the depth-4 flash.
     var pushPath: Binding<[ProfilePreviewDest]>?
 
     @EnvironmentObject private var lang: LanguageManager
@@ -28,17 +31,24 @@ struct SocialTripDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var socialFeed = SocialFeedStore.shared
     @State private var selectedAuthor: SocialAuthor?
-    @State private var reactionEntries: [SocialReactionEntry] = []
-    @State private var isLoadingReactions = false
     @State private var isMapFullscreen = false
     @State private var photos: [SocialTripPhoto] = []
-    @State private var isLoadingPhotos = false
     @State private var selectedPhotoIndex: Int?
     @State private var selectedDetailBadge: Badge?
-    /// Emojis whose pills are currently playing the "burst" animation.
+    /// Full-emoji picker behind the «+» chip of the compact reactions card.
+    @State private var showReactionPicker = false
+    /// Remote-load failure flags — when the pushed DTO is a stub with no
+    /// route geometry AND both loads fail (offline), there is nothing to
+    /// render and the full-screen error state takes over. Today's feed
+    /// pushes always carry a full trip, so this guards degenerate/deep-link
+    /// paths.
+    @State private var reactionsLoadFailed = false
+    @State private var photosLoadFailed = false
+    /// Comment post/delete failure toast (the owner detail view has its own
+    /// toast host; this mirrors it for the social screen).
+    @State private var toastItem: ToastItem?
+    /// Emojis whose chips are currently playing the "burst" animation.
     /// Set on tap-that-adds (not tap-that-removes), cleared 0.7s later.
-    /// Uses Set so two quick consecutive reactions don't stomp the
-    /// floating sprite for the first one.
     @State private var burstingEmojis: Set<String> = []
     /// Route playback for a friend's trip. previewPolyline is RDP-
     /// simplified (sparser points than a local Trip), so the animation
@@ -46,7 +56,7 @@ struct SocialTripDetailView: View {
     @StateObject private var routePlayback = RoutePlaybackController()
     /// Cached decode of `trip.previewPolyline`. The base64 + polyline
     /// decode happens once per trip-id, not on every body re-render
-    /// (which during 30Hz playback would mean 30 decodes/sec).
+    /// (which during playback would mean display-rate decodes).
     @State private var cachedPreviewCoords: [CLLocationCoordinate2D] = []
 
     /// Always-current view of the trip: prefer store's copy (reflects
@@ -56,10 +66,20 @@ struct SocialTripDetailView: View {
         socialFeed.trips.first(where: { $0.id == initialTrip.id }) ?? initialTrip
     }
 
-    private var mapBaseHeight: CGFloat {
-        (UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.bounds.height ?? 844) * 0.45
+    private var isOwnTrip: Bool {
+        trip.author.id == TokenStore.shared.accountId
+    }
+
+    /// Poster hero: 360pt square canvas below the status bar (Figma
+    /// 360×360), navy extending up under the status bar + scrim.
+    private var posterHeight: CGFloat { safeAreaTop + 360 }
+
+    /// Hero route coordinates — cached decode with a first-render fallback
+    /// (`.task` populates the cache after the first body pass). The
+    /// fallback decode runs at most a couple of times; playback frames
+    /// always hit the cache.
+    private var heroCoords: [CLLocationCoordinate2D] {
+        cachedPreviewCoords.isEmpty ? trip.previewCoordinates : cachedPreviewCoords
     }
 
     private var safeAreaTop: CGFloat {
@@ -68,82 +88,70 @@ struct SocialTripDetailView: View {
             .first?.windows.first?.safeAreaInsets.top ?? 47
     }
 
+    private var showLoadError: Bool {
+        trip.previewPolyline == nil && reactionsLoadFailed && photosLoadFailed
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
 
         ZStack(alignment: .topLeading) {
-            ScrollView {
-                VStack(spacing: 0) {
-                    mapSection(c)
-                        .frame(height: mapBaseHeight)
+            if showLoadError {
+                loadErrorState(c)
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        heroSection
+                            .frame(height: posterHeight)
 
-                    VStack(alignment: .leading, spacing: 16) {
-                        authorRow(c, isRu: isRu)
-                        titleSection(c)
-                        descriptionSection(c)
-                        metricsGrid(c, isRu: isRu)
-                        if !trip.badgeIds.isEmpty {
-                            TripBadgesRow(
-                                badgeIds: trip.badgeIds,
-                                maxVisible: 6,
-                                size: 26,
-                                onTap: { badge in selectedDetailBadge = badge }
-                            )
-                            .padding(.top, 2)
-                        }
-                        // Render a photos strip only when the server actually
-                        // returned any — unlike the owner's detail view which
-                        // keeps the section as an empty-state "add photos"
-                        // prompt, there's nothing a viewer can do about a
-                        // trip without photos, so we just hide it.
-                        if !photos.isEmpty {
-                            photosSection(c, isRu: isRu)
-                        }
-                        reactionsRow(c)
-                        reactionsBreakdown(c)
+                        detailBody(c)
+                            .background(c.bg)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 80)
+                    .background(alignment: .top) {
+                        PosterPalette.navy
+                            .frame(height: posterHeight + 1000)
+                            .offset(y: -1000)
+                    }
                 }
-            }
-            .scrollIndicators(.hidden)
+                .scrollIndicators(.hidden)
 
-            // Sticky floating back button + menu — matches TripDetailView pattern.
-            HStack {
-                Button {
-                    Haptics.tap()
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.black.opacity(0.4), in: Circle())
+                // Sticky floating back + «…» — matches TripDetailView pattern.
+                HStack {
+                    PosterCircleButton(systemImage: "chevron.left") { dismiss() }
+                    Spacer()
+                    Menu {
+                        Button {
+                            Haptics.tap()
+                            onShare?()
+                        } label: {
+                            Label(
+                                AppStrings.share(lang.language),
+                                systemImage: "square.and.arrow.up"
+                            )
+                        }
+                        // Report entry point stays removed pending a
+                        // moderation/admin UI — the server endpoint still
+                        // accepts reports, but there's no triage surface for
+                        // us to act on them yet. Re-add when moderation is
+                        // wired up (ReportSheet.swift lives in this dir).
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(.black.opacity(0.4), in: Circle())
+                    }
                 }
-                Spacer()
-                // Report entry point removed pending a moderation/admin UI —
-                // the server endpoint still accepts reports, but there's no
-                // triage surface for us to act on them yet. Only share is
-                // exposed here. Re-add the Menu when moderation is wired up.
-                Button {
-                    Haptics.tap()
-                    onShare?()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.black.opacity(0.4), in: Circle())
-                }
+                .padding(.top, safeAreaTop + 8)
+                .padding(.horizontal, 16)
             }
-            .padding(.top, safeAreaTop)
-            .padding(.horizontal, 16)
         }
         .background(c.bg)
-        .ignoresSafeArea()
+        // `.container` (not the default all-regions) — the keyboard inset
+        // must survive so the comments composer rises above the keyboard.
+        .ignoresSafeArea(.container)
         .navigationBarHidden(true)
+        .toast(item: $toastItem)
         // NavBarKiller force-enables the interactive pop gesture in
         // viewWillAppear — without it, `.navigationBarHidden(true)` here
         // disabled the swipe-back-to-feed gesture (TripDetailView wires
@@ -170,6 +178,8 @@ struct SocialTripDetailView: View {
                 SocialPhotoFullScreenView(
                     photos: photos,
                     initialIndex: idx,
+                    authorName: trip.author.displayName,
+                    authorEmoji: trip.author.avatarEmoji,
                     onDismiss: { selectedPhotoIndex = nil }
                 )
             }
@@ -184,9 +194,9 @@ struct SocialTripDetailView: View {
         }
         .task(id: trip.id) {
             // Decode the base64+polyline once per trip-id instead of on
-            // every body re-render. Matters during 30Hz route playback —
-            // the computed `previewCoordinates` getter would otherwise
-            // base64-decode 30×/sec.
+            // every body re-render. Matters during route playback — the
+            // computed `previewCoordinates` getter would otherwise
+            // base64-decode at display rate.
             cachedPreviewCoords = trip.previewCoordinates
         }
         .onDisappear { routePlayback.stop() }
@@ -199,6 +209,8 @@ struct SocialTripDetailView: View {
                 .environmentObject(auth)
         }
         .overlay {
+            // TODO(v6.1-defer): BadgeDetailOverlay modal restyle per Figma
+            // 117:1547 (300pt card, tinted 96pt icon circle, share button).
             if let badge = selectedDetailBadge {
                 BadgeDetailOverlay(
                     badge: badge,
@@ -210,105 +222,162 @@ struct SocialTripDetailView: View {
                 )
             }
         }
+        .overlay {
+            if showReactionPicker {
+                ReactionPickerOverlay(
+                    currentReaction: trip.myReaction,
+                    onPick: { emoji in
+                        showReactionPicker = false
+                        handleReactionTap(emoji)
+                    },
+                    onDismiss: { showReactionPicker = false }
+                )
+            }
+        }
     }
+
+    // MARK: - Load error (Figma 519:158)
+
+    private func loadErrorState(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 0) {
+            ZStack {
+                Text(AppStrings.tripTitle(lang.language))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(c.text)
+                HStack {
+                    Button {
+                        Haptics.tap()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(c.text)
+                            .frame(width: 44, height: 44)
+                    }
+                    Spacer()
+                }
+            }
+            .padding(.top, safeAreaTop)
+            .padding(.horizontal, 8)
+
+            TripLoadErrorView(language: lang.language) {
+                reactionsLoadFailed = false
+                photosLoadFailed = false
+                Task {
+                    async let r: Void = loadReactions()
+                    async let p: Void = loadPhotos()
+                    _ = await (r, p)
+                }
+            }
+        }
+    }
+
+    // MARK: - Reactions plumbing
 
     /// Replays a reaction a guest tapped before signing in. Runs from the
     /// prompt's onDismiss, so the sheet is already gone.
     private func resumePendingReaction() {
         guard let emoji = pendingReactionEmoji else { return }
         pendingReactionEmoji = nil
-        Task {
-            await socialFeed.toggleReaction(for: trip.id, emoji: emoji)
-            await loadReactions()
-        }
+        // The store's optimistic toggle already updates count/breakdown/
+        // myReaction — the compact card renders straight from it.
+        Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
     }
 
+    /// Reachability probe: the rendered counts come from SocialFeedStore,
+    /// this call only drives `reactionsLoadFailed` for the stub-trip
+    /// full-screen error state.
     private func loadReactions() async {
-        isLoadingReactions = true
-        defer { isLoadingReactions = false }
         do {
-            let res: SocialReactionsResponse = try await APIClient.shared.post(
+            let _: SocialReactionsResponse = try await APIClient.shared.post(
                 APIEndpoint.socialReactions, body: SocialUnreactRequest(tripId: trip.id),
                 requiresAuth: AuthService.shared.isSignedIn)
-            reactionEntries = res.reactions
+            reactionsLoadFailed = false
         } catch {
-            // Non-fatal — breakdown stays empty
+            // Non-fatal for a normal trip — only flags the stub-trip
+            // full-screen error state.
+            reactionsLoadFailed = true
         }
     }
 
     private func loadPhotos() async {
-        isLoadingPhotos = true
-        defer { isLoadingPhotos = false }
         do {
             let res: SocialTripPhotosResponse = try await APIClient.shared.post(
                 APIEndpoint.socialTripPhotos,
                 body: SocialTripPhotosRequest(tripId: trip.id),
                 requiresAuth: AuthService.shared.isSignedIn)
             photos = res.photos
+            photosLoadFailed = false
         } catch {
             // Non-fatal — photo strip just stays hidden.
+            photosLoadFailed = true
         }
     }
 
-    // MARK: - Sections
-
-    @ViewBuilder
-    private func mapSection(_ c: AppTheme.Colors) -> some View {
-        // Fall back to a fresh decode on the very first render — `.task`
-        // populates `cachedPreviewCoords` after first body, so without
-        // this fallback the map would flash empty for one frame.
-        let coords = cachedPreviewCoords.isEmpty ? trip.previewCoordinates : cachedPreviewCoords
-        if coords.count > 1 {
-            // Interactive RouteMapView matches TripDetailView so the user can
-            // pan/zoom a friend's route the same way as their own. No speed
-            // gradient here — social feed only carries `previewPolyline`, not
-            // per-point speeds. `fogCutoffDate` stays nil because shared trips
-            // aren't part of the viewer's own territory coverage.
-            ZStack(alignment: .bottomTrailing) {
-                RouteMapView(
-                    coordinates: coords,
-                    speeds: [],
-                    isInteractive: true,
-                    fogCutoffDate: nil,
-                    treatAsPreview: true,
-                    playbackCarCoord: routePlayback.currentCoord,
-                    playbackTrailIndex: routePlayback.currentTrailIndex
-                )
-                .frame(maxWidth: .infinity)
-
-                HStack(spacing: 8) {
-                    RoutePlaybackButton(isPlaying: routePlayback.isPlaying) {
-                        routePlayback.toggle(
-                            coords: coords,
-                            timestamps: nil,  // social trips carry no timestamps
-                            distanceMeters: trip.distance
-                        )
-                    }
-                    Button {
-                        Haptics.tap()
-                        isMapFullscreen = true
-                    } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(.black.opacity(0.45), in: Circle())
-                    }
-                }
-                .padding(.trailing, 12)
-                .padding(.bottom, 12)
+    /// Single reaction entry point shared by the compact chips and the
+    /// «+» picker: guest → sign-in prompt with pending-reaction resume,
+    /// owner → no-op (Strava rule), otherwise the store's optimistic
+    /// toggle (it POSTs and updates count/breakdown/myReaction itself).
+    private func handleReactionTap(_ emoji: String) {
+        Haptics.selection()
+        guard auth.isSignedIn else {
+            pendingReactionEmoji = emoji
+            signInPrompt = .react
+            return
+        }
+        guard !isOwnTrip else { return }
+        // Burst-animate only on the add direction. Tapping again to remove
+        // your reaction shouldn't fire the celebratory sprite.
+        if trip.myReaction != emoji {
+            burstingEmojis.insert(emoji)
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(700))
+                burstingEmojis.remove(emoji)
             }
-        } else {
-            c.cardAlt
-                .overlay {
-                    Image(systemName: "map")
-                        .font(.largeTitle)
-                        .foregroundStyle(c.textTertiary)
-                }
+        }
+        Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
+    }
+
+    // MARK: - Poster hero
+
+    private var heroSection: some View {
+        ZStack(alignment: .bottomLeading) {
+            PosterRouteCanvas(
+                // Route from previewPolyline — no per-point speeds in the
+                // social DTO, so the poster renders accent-colored (Figma
+                // shows speed colors; deviation until the backend ships a
+                // speed series).
+                coordinates: heroCoords,
+                speeds: [],
+                playbackCoord: routePlayback.currentCoord,
+                playbackTrailIndex: routePlayback.currentTrailIndex
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard heroCoords.count > 1 else { return }
+                Haptics.tap()
+                isMapFullscreen = true
+            }
+
+            // Others' poster gets the stronger legibility gradient
+            // (Figma: .55 → 0 @28% → 0 @52% → .88).
+            PosterLegibilityOverlay(
+                topOpacity: 0.55, clearFrom: 0.28, clearTo: 0.52, bottomOpacity: 0.88
+            )
+
+            heroTextBlock
+        }
+        .clipped()
+        .overlay(alignment: .top) { PosterTopScrim() }
+        .overlay(alignment: .topLeading) {
+            authorPill
+                .padding(.leading, 16)
+                .padding(.top, safeAreaTop + 52)
         }
     }
 
-    private func authorRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    /// Author identity on the hero — avatar + name + pixel «ур. N».
+    private var authorPill: some View {
         Button {
             Haptics.tap()
             if let pushPath {
@@ -317,192 +386,268 @@ struct SocialTripDetailView: View {
                 selectedAuthor = trip.author
             }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Circle()
-                    .fill(AppTheme.accentBg)
-                    .frame(width: 42, height: 42)
-                    .overlay { Text(trip.author.avatarEmoji ?? "🚗").font(.system(size: 22)) }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(trip.author.displayName ?? (isRu ? "Без имени" : "No name"))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Text(dateLine(isRu: isRu))
-                        .font(.system(size: 12))
-                        .foregroundStyle(c.textTertiary)
-                        .lineLimit(1)
-                    // Vehicle metadata sits on the identity strip, Strava-
-                    // style: the avatar is identity, the vehicle is "what
-                    // they were driving". Server now ships this for every
-                    // trip in the feed, so own + others show identical chrome.
-                    if let v = trip.vehicle {
-                        let n = v.name.trimmingCharacters(in: .whitespaces)
-                        if !n.isEmpty {
-                            HStack(spacing: 4) {
-                                if v.isPixelAvatar {
-                                    Image(v.avatarEmoji)
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 13, height: 13)
-                                } else {
-                                    Text(v.avatarEmoji)
-                                        .font(.system(size: 11))
-                                }
-                                Text(n)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(c.textTertiary)
-                                    .lineLimit(1)
-                            }
-                            .padding(.top, 2)
-                        }
-                    }
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
+                    .fill(Color(red: 0xF4/255, green: 0xF2/255, blue: 0xEE/255))
+                    .frame(width: 28, height: 28)
+                    .overlay { Text(trip.author.avatarEmoji ?? "🚗").font(.system(size: 16)) }
+                Text(trip.author.displayName ?? (lang.language == .ru ? "Без имени" : "No name"))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(AppStrings.levelShort(lang.language, trip.author.profileLevel))
+                    .font(.custom("PressStart2P-Regular", size: 7))
+                    .foregroundStyle(Color(red: 0xD9/255, green: 0xDB/255, blue: 0xE5/255).opacity(0.7))
             }
-            .padding(12)
-            .surfaceCard(cornerRadius: 14)
+            .padding(.leading, 5)
+            .padding(.trailing, 12)
+            .padding(.vertical, 5)
+            .background(.black.opacity(0.42), in: Capsule())
         }
         .buttonStyle(.plain)
     }
 
-    private func titleSection(_ c: AppTheme.Colors) -> some View {
-        Text(trip.title ?? "—")
-            .font(.system(size: 22, weight: .heavy))
-            .tracking(-0.2)
-            .foregroundStyle(c.text)
-            .lineLimit(3)
+    private var heroTextBlock: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(TripDetailFormat.posterDateLine(
+                date: trip.startDate, region: trip.region, lang: lang.language))
+                .font(.custom("PressStart2P-Regular", size: 9))
+                .foregroundStyle(.white.opacity(0.8))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Text(trip.title ?? "—")
+                .font(.system(size: 25, weight: .heavy))
+                .tracking(-0.5)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.7)
+                .multilineTextAlignment(.leading)
+                .padding(.top, 8)
+
+            if heroCoords.count > 1 {
+                Button {
+                    Haptics.tap()
+                    routePlayback.toggle(
+                        coords: heroCoords,
+                        timestamps: nil,  // social trips carry no timestamps
+                        distanceMeters: trip.distance
+                    )
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: routePlayback.isPlaying ? "stop.fill" : "play.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        Text(AppStrings.watchTrip(lang.language))
+                            .font(.system(size: 15, weight: .bold))
+                    }
+                    .foregroundStyle(PosterPalette.ctaText)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 11)
+                    .background(.white, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 14)
+            }
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 16)
+        .padding(.bottom, 20)
+    }
+
+    // MARK: - Detail body
+
+    private func detailBody(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return VStack(alignment: .leading, spacing: 22) {
+            chipsRow(c)
+
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.detailsSection(lang.language))
+                metricsGrid(c, isRu: isRu)
+            }
+
+            if let driving = trip.drivingTime, let stopped = trip.stoppedTime,
+               driving + stopped > 0 {
+                VStack(alignment: .leading, spacing: 10) {
+                    DetailSectionHeader(text: AppStrings.movingAndStops(lang.language))
+                    MovingStopsCard(
+                        movingSeconds: TimeInterval(driving),
+                        stoppedSeconds: TimeInterval(stopped),
+                        language: lang.language
+                    )
+                }
+            }
+
+            descriptionSection(c)
+
+            // Render a photos strip only when the server actually returned
+            // any — unlike the owner's detail view which keeps the section
+            // as an empty-state "add photos" prompt, there's nothing a
+            // viewer can do about a trip without photos, so we just hide it.
+            if !photos.isEmpty {
+                photosSection(c)
+            }
+
+            badgesSection(c)
+
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.reactionsTitleN(lang.language, trip.reactionCount))
+                reactionsCompactCard(c)
+            }
+
+            // «Комментарии · N» (Figma 531:119) — guests read, signed-in
+            // users write; the composer gates guests through the same
+            // sign-in sheet as reactions.
+            TripCommentsSection(
+                tripId: trip.id,
+                isTripOwner: isOwnTrip,
+                initialCount: trip.commentCount,
+                onGuestInputTap: { signInPrompt = .comment },
+                onError: { msg in
+                    toastItem = ToastItem(type: .error, message: msg)
+                }
+            )
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 22)
+        .padding(.bottom, 80)
+    }
+
+    /// Time-range + vehicle chips (no privacy chip on others' trips).
+    private func chipsRow(_ c: AppTheme.Colors) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                DetailChipSurface {
+                    Text(timeRange).monospacedDigit()
+                }
+
+                if let v = trip.vehicle {
+                    let n = v.name.trimmingCharacters(in: .whitespaces)
+                    if !n.isEmpty {
+                        DetailChipSurface {
+                            if v.isPixelAvatar {
+                                Image(v.avatarEmoji)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 13, height: 13)
+                            } else {
+                                Text(v.avatarEmoji)
+                                    .font(.system(size: 11))
+                            }
+                            Text(n).lineLimit(1)
+                        }
+                    }
+                }
+            }
+        }
+        .scrollClipDisabled()
     }
 
     @ViewBuilder
     private func descriptionSection(_ c: AppTheme.Colors) -> some View {
-        // Author's notes — surfaced inline below the title so viewers see the
-        // story behind the trip the same way the owner does. Empty / null is
-        // hidden so the section doesn't take space when there's nothing.
+        // Author's notes — the story behind the trip, same card language as
+        // the owner side. Empty / null is hidden.
         if let raw = trip.description {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
-                Text(trimmed)
-                    .font(.system(size: 14))
-                    .foregroundStyle(c.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 10) {
+                    DetailSectionHeader(text: AppStrings.descriptionSection(lang.language))
+                    DetailDescriptionCard(text: trimmed)
+                }
             }
         }
     }
 
     private func metricsGrid(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        // Mirrors the owner-side `TripDetailView` stat grid: distance,
-        // duration, driving/stopped split, avg/max speed, elevation gain,
-        // max altitude. The only owner-only fields excluded are fuel and
-        // cost — they're personal economic data tied to the viewer's own
-        // vehicle config, not relevant to a friend reading the trip.
+        // Mirrors the owner-side stat grid minus fuel and cost — they're
+        // personal economic data tied to the owner's vehicle config, not
+        // relevant to a friend reading the trip. (Figma: 8 cards.)
+        let l = lang.language
         let hasMaxSpeed = (trip.maxSpeed ?? 0) > 0
         let hasElevation = (trip.elevation ?? 0) > 0.5
         let hasMaxAltitude = (trip.maxAltitude ?? 0) > 0.5
-        let drivingStr = trip.formattedDrivingTimeHuman(lang.language)
-        let stoppedStr = trip.formattedStoppedTimeHuman(lang.language)
-        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            metricCell(
+        return LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 10),
+            GridItem(.flexible(), spacing: 10)
+        ], spacing: 10) {
+            DetailStatCard(
                 value: String(format: "%.1f", trip.distanceKm),
-                unit: AppStrings.km(lang.language),
-                label: AppStrings.distance(lang.language),
-                color: AppTheme.green, c: c
+                unit: AppStrings.km(l),
+                label: AppStrings.distance(l),
+                color: AppTheme.green,
+                staggerIndex: 0
             )
-            metricCell(
-                value: trip.formattedDurationHuman(lang.language),
-                unit: "",
-                label: AppStrings.duration(lang.language),
-                color: AppTheme.accent, c: c
+            DetailStatCard(
+                value: TripDetailFormat.hoursMinutes(TimeInterval(trip.duration)),
+                label: AppStrings.duration(l),
+                color: AppTheme.accent,
+                staggerIndex: 1
             )
-            if let drivingStr {
-                metricCell(
-                    value: drivingStr, unit: "",
-                    label: isRu ? "В движении" : "Driving",
-                    color: AppTheme.blue, c: c
+            if let driving = trip.drivingTime, driving > 0 {
+                DetailStatCard(
+                    value: TripDetailFormat.hoursMinutes(TimeInterval(driving)),
+                    label: AppStrings.statMoving(l),
+                    color: AppTheme.blue,
+                    staggerIndex: 2
                 )
             }
-            if let stoppedStr {
-                metricCell(
-                    value: stoppedStr, unit: "",
-                    label: isRu ? "Стоял" : "Stopped",
-                    color: c.textTertiary, c: c
+            if let stopped = trip.stoppedTime, stopped > 0 {
+                DetailStatCard(
+                    value: TripDetailFormat.hoursMinutes(TimeInterval(stopped)),
+                    label: AppStrings.statStops(l),
+                    color: c.textSecondary,
+                    staggerIndex: 3
                 )
             }
-            metricCell(
+            DetailStatCard(
                 value: String(format: "%.0f", trip.averageSpeedKmh),
-                unit: AppStrings.kmh(lang.language),
-                label: AppStrings.avgSpeed(lang.language),
-                color: AppTheme.blue, c: c
+                unit: AppStrings.kmh(l),
+                label: AppStrings.statAvg(l),
+                color: AppTheme.blue,
+                staggerIndex: 4
             )
             if hasMaxSpeed {
-                metricCell(
+                DetailStatCard(
                     value: String(format: "%.0f", trip.maxSpeedKmh),
-                    unit: AppStrings.kmh(lang.language),
-                    label: AppStrings.maxSpeed(lang.language),
-                    color: AppTheme.red, c: c
+                    unit: AppStrings.kmh(l),
+                    label: AppStrings.statMax(l),
+                    color: AppTheme.red,
+                    staggerIndex: 5
                 )
             }
             if hasElevation {
-                metricCell(
-                    value: String(format: "%.0f", trip.elevation ?? 0),
-                    unit: AppStrings.m(lang.language),
-                    label: AppStrings.elevationGain(lang.language),
-                    color: AppTheme.green, c: c
+                DetailStatCard(
+                    value: String(format: "+%.0f", trip.elevation ?? 0),
+                    unit: AppStrings.m(l),
+                    label: AppStrings.elevationGain(l),
+                    color: AppTheme.green,
+                    staggerIndex: 6
                 )
             }
             if hasMaxAltitude {
-                metricCell(
+                DetailStatCard(
                     value: String(format: "%.0f", trip.maxAltitude ?? 0),
-                    unit: AppStrings.m(lang.language),
-                    label: AppStrings.maxAltitude(lang.language),
-                    color: AppTheme.blue, c: c
+                    unit: AppStrings.m(l),
+                    label: AppStrings.maxAltitude(l),
+                    color: AppTheme.teal,
+                    staggerIndex: 7
                 )
             }
         }
     }
 
-    private func metricCell(value: String, unit: String, label: String, color: Color, c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.system(size: 10, weight: .bold))
-                .tracking(0.5)
-                .foregroundStyle(c.textTertiary)
-                .textCase(.uppercase)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(.system(size: 22, weight: .heavy).monospacedDigit())
-                    .tracking(-0.3)
-                    .foregroundStyle(color)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(c.textSecondary)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .surfaceCard(cornerRadius: 14)
-    }
+    // MARK: - Photos
 
-    private func photosSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func photosSection(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text((isRu ? "Фото" : "Photos").uppercased() + "  \(photos.count)")
-                .font(.system(size: 11, weight: .bold).monospacedDigit())
-                .tracking(0.5)
-                .foregroundStyle(c.textTertiary)
+            DetailSectionHeader(text: "\(AppStrings.photos(lang.language)) · \(photos.count)")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
                         remoteThumbnail(photo, c: c)
-                            .frame(width: 104, height: 104)
+                            .frame(width: 74, height: 74)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .contentShape(Rectangle())
                             .onTapGesture {
@@ -512,7 +657,7 @@ struct SocialTripDetailView: View {
                     }
                 }
             }
-            .frame(height: 104)
+            .frame(height: 74)
         }
     }
 
@@ -553,218 +698,116 @@ struct SocialTripDetailView: View {
         }
     }
 
-    private func reactionsRow(_ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if trip.reactionCount > 0 {
-                // Split into two stacked Texts so `contentTransition` /
-                // `animation` (which return `some View`) don't break the
-                // `Text + Text` concatenation that requires both sides
-                // to stay `Text`-typed.
-                HStack(spacing: 0) {
-                    Text("\(trip.reactionCount)")
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(c.textTertiary)
-                        .tracking(0.5)
-                        .contentTransition(.numericText())
-                        .animation(.snappy, value: trip.reactionCount)
-                    Text((lang.language == .ru ? " реакций" : " reactions").uppercased())
-                        .font(.system(size: 11, weight: .bold))
-                        .tracking(0.5)
-                        .foregroundStyle(c.textTertiary)
-                }
-            }
-            // 8 pills × 40pt + 7 × 2pt spacing = 334pt — fits inside
-            // the surface card on every iPhone width. ScrollView is
-            // kept as a safety net for future emoji additions or
-            // unusually narrow display modes. `.scrollClipDisabled()`
-            // lets the burst sprite float above the row without
-            // getting clipped by the scroll bounds.
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 2) {
-                    ForEach(ReactionEmoji.all, id: \.self) { emoji in
-                        reactionPill(emoji, c: c)
-                    }
-                }
-            }
-            .scrollClipDisabled()
-        }
-        .padding(14)
-        .surfaceCard(cornerRadius: 14)
-    }
-
-    private func reactionPill(_ emoji: String, c: AppTheme.Colors) -> some View {
-        let isMine = trip.myReaction == emoji
-        let isOwnTrip = trip.author.id == TokenStore.shared.accountId
-        return Button {
-            Haptics.selection()
-            guard auth.isSignedIn else {
-                pendingReactionEmoji = emoji
-                signInPrompt = .react
-                return
-            }
-            // Owners can't react to their own trip (Strava rule). The pills
-            // still render so the user sees what reactions ARE possible —
-            // they just don't fire on tap.
-            guard !isOwnTrip else { return }
-            // Burst-animate only on the add direction. Tapping again to
-            // remove your reaction shouldn't fire the celebratory sprite —
-            // that would read as "you added it again" which is wrong.
-            if !isMine {
-                burstingEmojis.insert(emoji)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                    burstingEmojis.remove(emoji)
-                }
-            }
-            // Toggle + re-fetch chained in one task so `/social/reactions`
-            // only fires after the `/social/react` write commits. Firing them
-            // in parallel (prior bug) meant the fetch returned stale data —
-            // the bottom list always showed the *previous* emoji because the
-            // new react hadn't landed on the server yet.
-            Task {
-                await socialFeed.toggleReaction(for: trip.id, emoji: emoji)
-                await loadReactions()
-            }
-        } label: {
-            Text(emoji)
-                .font(.system(size: 22))
-                // Width tightened from 44→40 so all 8 emojis fit comfortably
-                // inside the surface card on iPhone 14 Pro Max — previously
-                // the 8th pill (🤯) got clipped by the card's rounded edge.
-                // 40×40 keeps the tap target reasonable; .contentShape below
-                // expands the hit region back to 44pt for HIG compliance.
-                .frame(width: 40, height: 40)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(isMine ? AppTheme.accentBg : Color.clear)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(isMine ? AppTheme.accent.opacity(0.4) : Color.clear, lineWidth: 1)
-                )
-                .scaleEffect(isMine ? 1.05 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isMine)
-                .overlay(alignment: .top) {
-                    if burstingEmojis.contains(emoji) {
-                        ReactionBurstSprite(emoji: emoji)
-                            .allowsHitTesting(false)
-                    }
-                }
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Reactions breakdown
+    // MARK: - Badges («Достижения поездки»)
 
     @ViewBuilder
-    private func reactionsBreakdown(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
-        let isOwnTrip = trip.author.id == TokenStore.shared.accountId
-        if reactionEntries.isEmpty {
-            // Quiet empty-state line — different copy for own vs others'
-            // matches Strava's "be the first" vs "no kudos yet" split.
-            HStack(spacing: 8) {
-                Image(systemName: "face.dashed")
-                    .font(.system(size: 14))
-                    .foregroundStyle(c.textTertiary)
+    private func badgesSection(_ c: AppTheme.Colors) -> some View {
+        let badges = trip.badgeIds.compactMap { id in Badge.all.first { $0.id == id } }
+        if !badges.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.tripAchievements(lang.language))
+                TripAchievementsGrid(
+                    badges: badges,
+                    language: lang.language,
+                    onTap: { badge in selectedDetailBadge = badge }
+                )
+            }
+        }
+    }
+
+    // MARK: - Compact interactive reactions (Figma 467:246)
+
+    /// One card: my-reaction chip tinted, unselected chips neutral, «+»
+    /// opens the full emoji picker. No reactor list on others' trips.
+    private func reactionsCompactCard(_ c: AppTheme.Colors) -> some View {
+        let breakdown = trip.reactionBreakdown
+            .filter { $0.count > 0 }
+            .sorted { $0.count > $1.count }
+        return HStack(spacing: 8) {
+            if breakdown.isEmpty {
                 Text(isOwnTrip
-                     ? (isRu ? "Пока никто не отреагировал" : "No reactions yet")
-                     : (isRu ? "Будьте первым, кто отреагирует" : "Be the first to react"))
+                     ? AppStrings.noReactionsYet(lang.language)
+                     : AppStrings.beFirstToReact(lang.language))
                     .font(.system(size: 13))
                     .foregroundStyle(c.textTertiary)
-                Spacer()
-            }
-            .padding(.horizontal, 4)
-        } else {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(isRu ? "Реакции" : "Reactions")
-                        .font(.system(size: 11, weight: .bold))
-                        .tracking(0.5)
-                        .foregroundStyle(c.textTertiary)
-                        .textCase(.uppercase)
-                    Text("\(reactionEntries.count)")
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(c.textTertiary)
-                    Spacer()
-                    breakdownSummary(c)
-                }
-
-                ForEach(reactionEntries) { entry in
-                    reactionRow(entry, c: c, isRu: isRu)
-                }
-            }
-            .padding(14)
-            .surfaceCard(cornerRadius: 14)
-        }
-    }
-
-    /// Horizontal stack like "👍 2 · 🔥 1 · ❤️ 3" ranking emojis by count.
-    private func breakdownSummary(_ c: AppTheme.Colors) -> some View {
-        let counts = Dictionary(grouping: reactionEntries, by: { $0.emoji })
-            .mapValues { $0.count }
-            .sorted { $0.value > $1.value }
-        return HStack(spacing: 6) {
-            ForEach(Array(counts.prefix(3)), id: \.key) { emoji, count in
-                HStack(spacing: 2) {
-                    Text(emoji).font(.system(size: 12))
-                    Text("\(count)")
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(c.textSecondary)
-                }
-            }
-        }
-    }
-
-    private func reactionRow(_ entry: SocialReactionEntry, c: AppTheme.Colors, isRu: Bool) -> some View {
-        Button {
-            Haptics.tap()
-            if let pushPath {
-                pushPath.wrappedValue.cappedAppend(.profile(entry.user.id, entry.user))
+                    .lineLimit(1)
             } else {
-                selectedAuthor = entry.user
-            }
-        } label: {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(AppTheme.accentBg)
-                    .frame(width: 32, height: 32)
-                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.system(size: 16)) }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(entry.user.displayName ?? (isRu ? "Пользователь" : "User"))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                    Text(relativeTime(entry.createdAt, isRu: isRu))
-                        .font(.system(size: 11))
-                        .foregroundStyle(c.textTertiary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(breakdown, id: \.emoji) { tally in
+                            reactionChipButton(tally)
+                        }
+                    }
                 }
-                Spacer()
-                Text(entry.emoji)
-                    .font(.system(size: 22))
+                .scrollClipDisabled()
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                Haptics.tap()
+                guard auth.isSignedIn else {
+                    signInPrompt = .react
+                    return
+                }
+                guard !isOwnTrip else { return }
+                showReactionPicker = true
+            } label: {
+                Text("+")
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(c.textSecondary)
+                    .frame(width: 34, height: 28)
+                    .background(
+                        scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05),
+                        in: Capsule()
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(c.card)
+                .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
+        }
+    }
+
+    private func reactionChipButton(_ tally: ReactionTally) -> some View {
+        let isMine = trip.myReaction == tally.emoji
+        return Button {
+            handleReactionTap(tally.emoji)
+        } label: {
+            ReactionCountChip(
+                emoji: tally.emoji,
+                count: tally.count,
+                style: isMine ? .mine : .unselected
+            )
+            .overlay(alignment: .top) {
+                if burstingEmojis.contains(tally.emoji) {
+                    ReactionBurstSprite(emoji: tally.emoji)
+                        .allowsHitTesting(false)
+                }
             }
         }
         .buttonStyle(.plain)
-    }
-
-    private func relativeTime(_ date: Date, isRu: Bool) -> String {
-        // Single source of truth lives in `RelativeTripDate`. The previous
-        // hand-rolled fork existed only to debug the timezone bug (now
-        // fixed by `process.env.TZ='UTC'` server-side + `ISODate.parse`
-        // client-side); the diag log it carried is no longer needed.
-        return RelativeTripDate.string(from: date, language: isRu ? .ru : .en)
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isMine)
     }
 
     // MARK: - Formatters
 
-    private func dateLine(isRu: Bool) -> String {
+    private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: isRu ? "ru_RU" : "en_US")
-        f.dateFormat = "d MMM yyyy, HH:mm"
-        var result = f.string(from: trip.startDate)
-        if let region = trip.region, !region.isEmpty {
-            result += " · \(region)"
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    private var timeRange: String {
+        let start = Self.timeFormatter.string(from: trip.startDate)
+        if let end = trip.endDate {
+            return "\(start) – \(Self.timeFormatter.string(from: end))"
         }
-        return result
+        return start
     }
 }
 
@@ -790,4 +833,3 @@ private struct SocialTripDetailLocalDestination: ViewModifier {
         }
     }
 }
-

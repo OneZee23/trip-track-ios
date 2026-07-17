@@ -82,6 +82,25 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     let reactionBreakdown: [ReactionTally]
     let myReaction: String?
     let badgeIds: [String]
+    /// Raw server comment total. Optional because the comments backend
+    /// isn't deployed yet — old servers omit the key entirely, and the
+    /// synthesized `decodeIfPresent` maps an absent key to nil instead of
+    /// failing the whole feed decode. Read via `commentCount`.
+    let commentCountRaw: Int?
+
+    /// Decode-safe comment total: absent key (pre-comments backend) → 0.
+    var commentCount: Int { commentCountRaw ?? 0 }
+
+    /// Explicit keys only to map `commentCountRaw` ← "commentCount" —
+    /// every other property keys as itself.
+    enum CodingKeys: String, CodingKey {
+        case id, author, title, description, startDate, endDate
+        case distance, duration, maxSpeed, elevation, maxAltitude
+        case drivingTime, stoppedTime, region, previewPolyline
+        case photoCount, firstPhotoThumbnail, vehicle
+        case reactionCount, reactionBreakdown, myReaction, badgeIds
+        case commentCountRaw = "commentCount"
+    }
 
     var distanceKm: Double { distance / 1000.0 }
     var maxSpeedKmh: Double { (maxSpeed ?? 0) * 3.6 }
@@ -377,6 +396,55 @@ struct SocialReactionEntry: Codable, Identifiable, Hashable {
 
 struct SocialReactionsResponse: Codable {
     let reactions: [SocialReactionEntry]
+}
+
+// MARK: - Comments
+
+/// `POST /social/comment` — create a comment on a public trip.
+/// `text` is 1..500, trimmed client-side before sending. JWT required.
+struct SocialCommentCreateRequest: Codable {
+    let tripId: UUID
+    let text: String
+}
+
+/// Server ack for a created comment — the optimistic local row swaps its
+/// temp id/date for these authoritative values.
+struct SocialCommentCreateResponse: Codable {
+    let id: UUID
+    let createdAt: Date
+}
+
+/// `POST /social/comments` — cursor-paged comment list (newest first).
+/// Guest-readable, so callers pass `requiresAuth` per sign-in state.
+struct TripCommentsRequest: Codable {
+    let tripId: UUID
+    let limit: Int?
+    let cursor: String?
+}
+
+struct TripComment: Codable, Identifiable, Hashable {
+    let id: UUID
+    let user: SocialAuthor
+    let text: String
+    let createdAt: Date
+    /// Server-computed "the viewer authored this" — drives the delete
+    /// affordance without the client comparing account ids.
+    let isMine: Bool
+}
+
+struct TripCommentsResponse: Codable {
+    let comments: [TripComment]
+    let nextCursor: String?
+}
+
+/// `POST /social/comment/delete` — allowed for the comment author or the
+/// trip owner.
+struct SocialCommentDeleteRequest: Codable {
+    let commentId: UUID
+}
+
+struct SocialCommentDeleteResponse: Codable {
+    let deleted: Bool
 }
 
 // MARK: - Trip photos (public view)

@@ -130,6 +130,46 @@ final class TripTrackUITests: XCTestCase {
         }
     }
 
+    /// Walks into the first own trip's detail poster + the cinema replay and
+    /// snaps them (6.1.0 Деталка verification). Locale-tolerant, guarded.
+    func test_zz_trip_detail_shots() {
+        normalizeToHome()
+        // Own trips segment («Поездки»/"Trips") sits in the feed's pager pills.
+        if !tap("Поездки", timeout: 2) { _ = tap("Trips", timeout: 2) }
+        sleep(2)
+        let anyCard = app.descendants(matching: .any).matching(identifier: "trip_card").firstMatch
+        print("DETSHOT counts any=\(app.descendants(matching: .any).matching(identifier: "trip_card").count) btn=\(app.buttons.matching(identifier: "trip_card").count) other=\(app.otherElements.matching(identifier: "trip_card").count)")
+        let relivePill = app.buttons.matching(identifier: "detail_relive").firstMatch
+        if anyCard.waitForExistence(timeout: 3) {
+            // Tap near the card's top (title zone) — its geometric center can
+            // sit below the fold for tall cards, where tap() silently no-ops.
+            anyCard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        }
+        if !relivePill.waitForExistence(timeout: 4) {
+            print("DETSHOT card tap did not open detail, trying title text")
+            let title = app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS ',' AND label CONTAINS ':'")
+            ).firstMatch
+            if title.waitForExistence(timeout: 2) { title.tap() }
+            _ = relivePill.waitForExistence(timeout: 4)
+        }
+        sleep(2)
+        snap("80_detail_top")
+        win.swipeUp(); usleep(700_000); snap("81_detail_mid")
+        win.swipeUp(); usleep(700_000); snap("82_detail_lower")
+        win.swipeUp(); usleep(700_000); snap("83_detail_bottom")
+        // Back to top, then into the replay.
+        win.swipeDown(); win.swipeDown(); win.swipeDown(); usleep(700_000)
+        let relive = app.buttons.matching(identifier: "detail_relive").firstMatch
+        if relive.waitForExistence(timeout: 3) {
+            if !relive.isHittable { win.swipeDown(); usleep(700_000) }
+            relive.tap()
+            sleep(3); snap("84_replay")
+            pt(0.07, 0.05).tap(); sleep(1) // close circle top-left
+        }
+        pt(0.07, 0.05).tap(); sleep(1) // detail back circle
+    }
+
     /// Brings the app to Home from ANY persisted state: adopts a leftover
     /// recovery prompt, stops an active recording (the chevron is replaced
     /// by the REC pill while recording), walks celebration/summary sheets.

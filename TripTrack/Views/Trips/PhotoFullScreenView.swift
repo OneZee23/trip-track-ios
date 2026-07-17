@@ -24,6 +24,9 @@ private struct AsyncFullPhotoView: View {
 struct PhotoFullScreenView: View {
     let photos: [TripPhoto]
     let initialIndex: Int
+    /// Trip region for the bottom caption («14 апр, 10:40 · Тверская обл.»).
+    var region: String? = nil
+    var language: LanguageManager.Language = .en
     let onDismiss: () -> Void
 
     @State private var currentIndex: Int = 0
@@ -70,34 +73,44 @@ struct PhotoFullScreenView: View {
                 : nil
             )
 
-            // Close button
+            // Top chrome (Figma 117:1086): dismiss circle left + «2 / 6»
+            // counter centered. (Figma also shows a share circle on the
+            // right — deferred, no share pipeline for a single photo yet.)
             VStack {
-                HStack {
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(.white.opacity(0.2), in: Circle())
+                ZStack {
+                    Text("\(currentIndex + 1) / \(photos.count)")
+                        .font(.system(size: 13, weight: .medium).monospacedDigit())
+                        .foregroundStyle(.white)
+                    HStack {
+                        Button(action: onDismiss) {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 34, height: 34)
+                                .background(.black.opacity(0.4), in: Circle())
+                        }
+                        Spacer()
                     }
-                    .padding(.trailing, 16)
-                    .padding(.top, 8)
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
                 Spacer()
             }
 
-            // Counter
-            VStack {
+            // Bottom chrome: page dots + timestamp/region caption.
+            VStack(spacing: 10) {
                 Spacer()
-                Text("\(currentIndex + 1) / \(photos.count)")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.black.opacity(0.3), in: Capsule())
-                    .padding(.bottom, 20)
+                if photos.count > 1 {
+                    PhotoPageDots(count: photos.count, current: currentIndex)
+                }
+                if let caption = captionLine {
+                    Text(caption)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
             }
+            .padding(.bottom, 24)
+            .allowsHitTesting(false)
         }
         .onAppear { currentIndex = initialIndex }
         .onChange(of: currentIndex) { _ in
@@ -170,6 +183,27 @@ struct PhotoFullScreenView: View {
                     onDismiss()
                 }
             }
+    }
+
+    private static let captionFormatters: (ru: DateFormatter, en: DateFormatter) = {
+        let ru = DateFormatter()
+        ru.locale = Locale(identifier: "ru_RU")
+        ru.dateFormat = "d MMM, HH:mm"
+        let en = DateFormatter()
+        en.locale = Locale(identifier: "en_US")
+        en.dateFormat = "d MMM, HH:mm"
+        return (ru, en)
+    }()
+
+    /// «14 апр, 10:40 · Тверская обл.» — photo timestamp + trip region.
+    private var captionLine: String? {
+        guard photos.indices.contains(currentIndex) else { return nil }
+        let f = language == .ru ? Self.captionFormatters.ru : Self.captionFormatters.en
+        var line = f.string(from: photos[currentIndex].timestamp)
+        if let region, !region.isEmpty {
+            line += " · \(region)"
+        }
+        return line
     }
 
     /// Double-tap toggles between fit and 2.5× (centered). Pinch still allows

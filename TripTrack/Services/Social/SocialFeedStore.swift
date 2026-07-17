@@ -319,7 +319,8 @@ private extension SocialFeedTrip {
             photoCount: photoCount, firstPhotoThumbnail: firstPhotoThumbnail,
             vehicle: vehicle,
             reactionCount: reactionCount, reactionBreakdown: updated,
-            myReaction: myReaction, badgeIds: badgeIds
+            myReaction: myReaction, badgeIds: badgeIds,
+            commentCountRaw: commentCountRaw
         )
     }
 }

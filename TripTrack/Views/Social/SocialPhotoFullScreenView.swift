@@ -8,6 +8,9 @@ import SwiftUI
 struct SocialPhotoFullScreenView: View {
     let photos: [SocialTripPhoto]
     let initialIndex: Int
+    /// Author identity for the top-center pill (Figma 117:1589).
+    var authorName: String? = nil
+    var authorEmoji: String? = nil
     let onDismiss: () -> Void
 
     @State private var currentIndex: Int = 0
@@ -30,7 +33,7 @@ struct SocialPhotoFullScreenView: View {
                         .tag(index)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .automatic))
+            .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
             .offset(y: dragOffset.height)
             .gesture(
@@ -49,36 +52,62 @@ struct SocialPhotoFullScreenView: View {
                     }
             )
 
+            // Top chrome (Figma 117:1589): dismiss circle left + author pill
+            // centered. (Figma also shows a «…» circle on the right —
+            // deferred with the report/moderation entry point.)
             VStack {
-                HStack {
-                    Button {
-                        Haptics.tap()
-                        onDismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(.black.opacity(0.4), in: Circle())
+                ZStack {
+                    if let authorName, !authorName.isEmpty {
+                        HStack(spacing: 7) {
+                            Circle()
+                                .fill(Color(red: 0xF4/255, green: 0xF2/255, blue: 0xEE/255))
+                                .frame(width: 24, height: 24)
+                                .overlay { Text(authorEmoji ?? "🚗").font(.system(size: 13)) }
+                            Text(authorName)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                        }
+                        .padding(.leading, 4)
+                        .padding(.trailing, 12)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.42), in: Capsule())
                     }
-                    Spacer()
+                    HStack {
+                        Button {
+                            Haptics.tap()
+                            onDismiss()
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 34, height: 34)
+                                .background(.black.opacity(0.4), in: Circle())
+                        }
+                        Spacer()
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
 
                 Spacer()
 
-                if let caption = photos[safe: currentIndex]?.caption, !caption.isEmpty {
-                    Text(caption)
-                        .font(.system(size: 14))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 40)
+                // Bottom chrome: page dots + photo caption.
+                VStack(spacing: 10) {
+                    if photos.count > 1 {
+                        PhotoPageDots(count: photos.count, current: currentIndex)
+                    }
+                    if let caption = photos[safe: currentIndex]?.caption, !caption.isEmpty {
+                        Text(caption)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.75))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .padding(.horizontal, 24)
+                    }
                 }
+                .padding(.bottom, 24)
+                .allowsHitTesting(false)
             }
         }
         .onAppear { currentIndex = initialIndex }

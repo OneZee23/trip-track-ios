@@ -1,0 +1,249 @@
+import SwiftUI
+
+/// «Комментарии · N» — shared comments card of the trip-detail poster
+/// redesign (Figma 549:129 own / 531:119 social): white card r16 with
+/// comment rows, a «Показать ещё» pager and the composer row. Used by both
+/// TripDetailView (public own trips) and SocialTripDetailView (always).
+///
+/// Empty state is the composer row alone — no ghost rows, no fake copy.
+struct TripCommentsSection: View {
+    let tripId: UUID
+    /// Viewer owns the trip → may delete ANY comment (server enforces the
+    /// same rule; this only drives the affordance).
+    let isTripOwner: Bool
+    /// Server-known total (feed DTO `commentCount`) shown in the header
+    /// until the first page tells us better. 0 on the own-trip screen —
+    /// the local Trip model carries no comment total.
+    var initialCount: Int = 0
+    /// Social screen only: called when a signed-OUT viewer taps the
+    /// composer — parent presents its SignInPromptSheet. nil on the
+    /// own-trip screen (composing there implies an account already).
+    var onGuestInputTap: (() -> Void)? = nil
+    /// Error surface — parents route the message into their toast host.
+    var onError: (String) -> Void
+
+    @StateObject private var store = TripCommentsStore()
+    @State private var draft = ""
+    @State private var commentToDelete: TripComment?
+    @FocusState private var composerFocused: Bool
+    @EnvironmentObject private var lang: LanguageManager
+    @ObservedObject private var auth = AuthService.shared
+    @ObservedObject private var settings = SettingsManager.shared
+    @Environment(\.colorScheme) private var scheme
+
+    /// Header N: server total while the list hasn't loaded; once loaded,
+    /// the live row count — except when more pages exist, where the server
+    /// total (if known) is the honest figure. A FAILED first page taught us
+    /// nothing — keep trusting the feed-DTO count instead of flipping a
+    /// commented trip to «· 0».
+    private var displayCount: Int {
+        guard store.hasLoadedOnce, !store.loadFailed else {
+            return max(initialCount, store.comments.count)
+        }
+        if store.nextCursor != nil { return max(initialCount, store.comments.count) }
+        return store.comments.count
+    }
+
+    var body: some View {
+        // Backend without the comments module (route 404) — hide the whole
+        // card rather than render a composer that can never succeed.
+        if store.unavailable && store.comments.isEmpty {
+            Color.clear
+                .frame(height: 0)
+                .task(id: tripId) { await store.load(tripId: tripId) }
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
+        let c = AppTheme.colors(for: scheme)
+        return VStack(alignment: .leading, spacing: 10) {
+            DetailSectionHeader(text: AppStrings.commentsTitleN(lang.language, displayCount))
+
+            VStack(spacing: 0) {
+                ForEach(store.comments) { comment in
+                    commentRow(comment, c: c)
+                }
+
+                if store.nextCursor != nil {
+                    showMoreButton
+                }
+
+                composerRow(c)
+            }
+            .background {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(c.card)
+                    .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
+            }
+        }
+        .task(id: tripId) { await store.load(tripId: tripId) }
+        .confirmationDialog(
+            AppStrings.deleteCommentConfirm(lang.language),
+            isPresented: Binding(
+                get: { commentToDelete != nil },
+                set: { if !$0 { commentToDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(AppStrings.delete(lang.language), role: .destructive) {
+                guard let comment = commentToDelete else { return }
+                commentToDelete = nil
+                Haptics.action()
+                Task {
+                    if let err = await store.delete(
+                        commentId: comment.id, language: lang.language) {
+                        onError(err)
+                    }
+                }
+            }
+            Button(AppStrings.cancel(lang.language), role: .cancel) {}
+        }
+    }
+
+    // MARK: - Rows
+
+    private func commentRow(_ comment: TripComment, c: AppTheme.Colors) -> some View {
+        let canDelete = comment.isMine || isTripOwner
+        return HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(c.cardAlt)
+                .frame(width: 34, height: 34)
+                .overlay { Text(comment.user.avatarEmoji ?? "🚗").font(.system(size: 17)) }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(comment.user.displayName
+                         ?? (lang.language == .ru ? "Без имени" : "No name"))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    Text("· \(Self.relativeAge(of: comment.createdAt, lang: lang.language))")
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textTertiary)
+                }
+                Text(comment.text)
+                    .font(.system(size: 14))
+                    .lineSpacing(4.5)
+                    .foregroundStyle(c.text)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        // Long-press delete for own comments (+ everything on own trips).
+        // ScrollView has no swipeActions — context menu is the affordance.
+        .contextMenu {
+            if canDelete {
+                Button(role: .destructive) {
+                    commentToDelete = comment
+                } label: {
+                    Label(AppStrings.delete(lang.language), systemImage: "trash")
+                }
+            }
+        }
+    }
+
+    private var showMoreButton: some View {
+        Button {
+            Haptics.tap()
+            Task { await store.loadMore() }
+        } label: {
+            HStack(spacing: 6) {
+                if store.isLoadingMore {
+                    ProgressView().controlSize(.mini)
+                }
+                Text(AppStrings.showMoreComments(lang.language))
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(AppTheme.accent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(store.isLoadingMore)
+    }
+
+    // MARK: - Composer
+
+    private func composerRow(_ c: AppTheme.Colors) -> some View {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isGuest = onGuestInputTap != nil && !auth.isSignedIn
+        return HStack(spacing: 8) {
+            Circle()
+                .fill(AppTheme.accent.opacity(0.12))
+                .frame(width: 30, height: 30)
+                .overlay { Text(settings.avatarEmoji).font(.system(size: 15)) }
+
+            TextField(AppStrings.commentPlaceholder(lang.language), text: $draft, axis: .vertical)
+                .font(.system(size: 14))
+                .foregroundStyle(c.text)
+                .tint(AppTheme.accent)
+                .lineLimit(1...4)
+                .focused($composerFocused)
+                .onSubmit { sendDraft() }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .frame(minHeight: 38)
+                .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 999))
+
+            Button {
+                sendDraft()
+            } label: {
+                Text(AppStrings.send(lang.language))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(AppTheme.accent)
+                    .opacity(trimmed.isEmpty || store.isPosting ? 0.4 : 1)
+            }
+            .buttonStyle(.plain)
+            .disabled(trimmed.isEmpty || store.isPosting)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        // Guests read comments but can't compose — a tap anywhere on the
+        // row surfaces the sign-in sheet instead of focusing the field.
+        .overlay {
+            if isGuest {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        Haptics.tap()
+                        onGuestInputTap?()
+                    }
+            }
+        }
+    }
+
+    private func sendDraft() {
+        let text = draft
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !store.isPosting else { return }
+        Haptics.action()
+        draft = ""
+        Task {
+            if let err = await store.post(text: text, language: lang.language) {
+                onError(err)
+                // Give the text back so the user can fix/retry instead of
+                // retyping (only if they haven't started something new).
+                if draft.isEmpty { draft = text }
+            }
+        }
+    }
+
+    // MARK: - Relative age
+
+    /// Compact «2 ч» / "2 h" age used by the row header. Days cap the
+    /// scale — comment feeds don't need week/month granularity.
+    static func relativeAge(of date: Date, lang: LanguageManager.Language) -> String {
+        let delta = max(0, Date().timeIntervalSince(date))
+        if delta < 60 { return AppStrings.relTimeNow(lang) }
+        if delta < 3600 { return AppStrings.relTimeMinutes(lang, Int(delta / 60)) }
+        if delta < 86_400 { return AppStrings.relTimeHours(lang, Int(delta / 3600)) }
+        return AppStrings.relTimeDays(lang, Int(delta / 86_400))
+    }
+}

@@ -30,13 +30,34 @@ struct TripDetailView: View {
     /// trip only has a preview polyline — playback falls back to a
     /// uniform-speed crawl in that case.
     @State private var cachedTimestamps: [Date] = []
+    /// Downsampled (≤300 pts) coords/speeds/timestamps for the poster hero
+    /// canvas + playback. The canvas repaints at display-link rate during
+    /// «Прожить заново», so it must never chew through raw 10k-point tracks.
+    @State private var posterCoords: [CLLocationCoordinate2D] = []
+    @State private var posterSpeeds: [Double] = []
+    @State private var posterTimestamps: [Date] = []
+    /// Downsampled (≤200 pts) chart series — empty when the trip carries
+    /// no full trackPoints (sync-pulled preview-only trips) so the chart
+    /// sections hide themselves.
+    @State private var elevationSeries: [DetailChartPoint] = []
+    @State private var speedSeries: [DetailChartPoint] = []
+    /// Movement split + altitude stats cached once per trip load —
+    /// `Trip.drivingTime` walks every trackPoint per call, which the body
+    /// must not do on every playback frame.
+    @State private var cachedDrivingTime: TimeInterval = 0
+    @State private var cachedStoppedTime: TimeInterval = 0
+    @State private var cachedElevationGain: Double = 0
+    @State private var cachedMaxAltitude: Double = 0
     @State private var storyShare: (data: StoryShareData, url: String?)?
     @State private var isGeneratingShare = false
     @State private var showDeleteConfirm = false
-    /// Two-step publish confirmation. The user has to consciously acknowledge
-    /// One alert with destructive "Publish" — single-step is enough to make
-    /// the privacy implication clear without nagging on every toggle.
-    @State private var publishStage1 = false
+    /// Publish confirmation sheet (Figma 533:119) — replaces the old plain
+    /// alert. The user consciously acknowledges the visibility change and
+    /// can attach an optional description in the same step.
+    @State private var showPublishSheet = false
+    /// Drives the «Публикуется…» / publish-error toast overlay after the
+    /// user confirms a publish. Watches SyncQueue for the trip's upload op.
+    @State private var publishWatchActive = false
     /// Going public→private is also gated: once a trip has been seen by
     /// others, demoting it isn't undoable in the social-record sense
     /// (reactions/comments don't survive a republish). One-shot confirm.
@@ -45,10 +66,15 @@ struct TripDetailView: View {
     @State private var selectedReactorAuthor: SocialAuthor?
     @State private var isMapFullscreen = false
     @State private var showVehiclePicker = false
-    /// Drives the "Play" button on the route map. Owned via
+    /// Drives the «Прожить заново» CTA on the poster. Owned via
     /// `@StateObject` so the timer survives view re-renders and is
-    /// stopped cleanly on `.onDisappear`.
+    /// stopped cleanly on `.onDisappear`. Since the fullscreen replay
+    /// (117:533) shipped, this only runs for preview-only trips whose
+    /// track carries no timestamps — the cinema screen needs them.
     @StateObject private var routePlayback = RoutePlaybackController()
+    /// Presents the fullscreen cinema replay (Figma 117:533). Timestamped
+    /// own trips only; preview-only trips fall back to the inline crawl.
+    @State private var showReplay = false
     @ObservedObject private var auth = AuthService.shared
     @FocusState private var isTitleFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -57,11 +83,9 @@ struct TripDetailView: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @ObservedObject private var settings = SettingsManager.shared
 
-    private var mapBaseHeight: CGFloat {
-        (UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.bounds.height ?? 844) * 0.45
-    }
+    /// Poster hero: 380pt of canvas below the status bar (Figma 360×380),
+    /// with the navy canvas extending up under the status bar + scrim.
+    private var posterHeight: CGFloat { safeAreaTop + 380 }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -69,20 +93,17 @@ struct TripDetailView: View {
             if let trip {
                 ScrollView {
                     VStack(spacing: 0) {
-                        // Interactive map + corner "expand" button that
-                        // presents the route in a fullscreen cover. The button
-                        // only appears when we actually have a route — no
-                        // point letting the user expand the blank-map fallback.
-                        mapSection(trip: trip, c: c)
-                            .frame(height: mapBaseHeight)
+                        heroSection(trip: trip)
+                            .frame(height: posterHeight)
 
                         // Bottom info panel
                         infoPanel(trip: trip, c: c)
                             .background(c.bg)
                     }
                     .background(alignment: .top) {
-                        Color(UIColor(white: 0.12, alpha: 1.0))
-                            .frame(height: mapBaseHeight + 1000)
+                        // Over-scroll filler above the poster stays poster-navy.
+                        PosterPalette.navy
+                            .frame(height: posterHeight + 1000)
                             .offset(y: -1000)
                     }
                 }
@@ -90,32 +111,13 @@ struct TripDetailView: View {
                 .scrollIndicators(.hidden)
                 .background(ScrollBounceDisabler())
 
-                // Sticky back button + menu — outside ScrollView, floating over the map
-                HStack {
-                    Button {
-                        Haptics.tap()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(.black.opacity(0.4), in: Circle())
-                    }
+                // Sticky back + (⋯ delete) + share — floating over the poster.
+                HStack(spacing: 8) {
+                    PosterCircleButton(systemImage: "chevron.left") { dismiss() }
 
                     Spacer()
 
                     Menu {
-                        Button {
-                            Haptics.tap()
-                            Task { await openStoryShare(for: trip) }
-                        } label: {
-                            Label(
-                                lang.language == .ru ? "Поделиться" : "Share",
-                                systemImage: "square.and.arrow.up"
-                            )
-                        }
-                        .disabled(isGeneratingShare)
                         Button(role: .destructive) {
                             Haptics.action()
                             showDeleteConfirm = true
@@ -127,19 +129,27 @@ struct TripDetailView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 34, height: 34)
                             .background(.black.opacity(0.4), in: Circle())
                     }
+
+                    PosterCircleButton(
+                        systemImage: "square.and.arrow.up",
+                        accessibilityLabelText: AppStrings.share(lang.language)
+                    ) {
+                        Task { await openStoryShare(for: trip) }
+                    }
+                    .disabled(isGeneratingShare)
                 }
-                .padding(.top, safeAreaTop)
+                .padding(.top, safeAreaTop + 8)
                 .padding(.horizontal, 16)
             } else {
                 // Loading skeleton
                 VStack(spacing: 0) {
-                    c.cardAlt
-                        .frame(height: mapBaseHeight)
+                    PosterPalette.navy
+                        .frame(height: posterHeight)
                         .shimmer()
                         .overlay { CarLoadingView() }
                     VStack(spacing: 12) {
@@ -159,7 +169,9 @@ struct TripDetailView: View {
         }
         .background(c.bg)
         .background(NavBarKiller())
-        .ignoresSafeArea()
+        // `.container` (not the default all-regions) — the keyboard inset
+        // must survive so the comments composer rises above the keyboard.
+        .ignoresSafeArea(.container)
         .navigationBarHidden(true)
         .modifier(TripDetailLocalReactorDestination(
             selectedReactorAuthor: $selectedReactorAuthor,
@@ -173,6 +185,17 @@ struct TripDetailView: View {
                 fogCutoffDate: trip?.endDate,
                 language: lang.language
             )
+        }
+        .fullScreenCover(isPresented: $showReplay) {
+            if let trip {
+                TripReplayView(
+                    trip: trip,
+                    coordinates: posterCoords,
+                    speeds: posterSpeeds,
+                    timestamps: posterTimestamps
+                )
+                .environmentObject(lang)
+            }
         }
         .confirmationDialog(
             AppStrings.deleteTrip(lang.language),
@@ -190,24 +213,7 @@ struct TripDetailView: View {
         .task(id: tripId) {
             if trip == nil {
                 trip = viewModel.tripDetail(id: tripId)
-                if let t = trip {
-                    let points = t.trackPoints.map(\.coordinate)
-                    if points.count > 1 {
-                        cachedCoordinates = points
-                        cachedSpeeds = t.trackPoints.map(\.speed)
-                        cachedTimestamps = t.trackPoints.map(\.timestamp)
-                    } else if let preview = t.previewPolyline {
-                        // Trips synced down via /sync/pull only carry metadata
-                        // + the preview polyline (server doesn't return full
-                        // trackPoints — that response would be megabytes per
-                        // user). Fall back to the simplified polyline so the
-                        // detail map isn't empty for these. Speeds aren't in
-                        // the preview, so we leave the speed array empty —
-                        // RouteMapView renders a flat-color line in that case.
-                        cachedCoordinates = Trip.decodePolyline(preview)
-                        cachedSpeeds = []
-                    }
-                }
+                if let t = trip { buildCaches(for: t) }
                 badgeLastEarnedDates = BadgeManager.lastEarnedDates(for: trip?.earnedBadgeIds ?? [], using: mapVM.tripManager)
             }
             await loadReactions()
@@ -217,6 +223,8 @@ struct TripDetailView: View {
             else { reactionEntries = [] }
         }
         .sheet(isPresented: $showPhotoPicker) {
+            // TODO(v6.1-defer): Figma 117:587 specs a custom photo-picker
+            // grid with orange order badges; the system picker ships v1.
             PhotoPickerView(selectedImages: $pickedImages)
         }
         .onChange(of: pickedImages) { newImages in
@@ -235,11 +243,15 @@ struct TripDetailView: View {
                 PhotoFullScreenView(
                     photos: photos,
                     initialIndex: index,
+                    region: trip?.region,
+                    language: lang.language,
                     onDismiss: { selectedPhotoIndex = nil }
                 )
             }
         }
         .overlay {
+            // TODO(v6.1-defer): BadgeDetailOverlay modal restyle per Figma
+            // 117:1547 (300pt card, tinted 96pt icon circle, share button).
             if let badge = selectedDetailBadge {
                 BadgeDetailOverlay(
                     badge: badge,
@@ -252,6 +264,18 @@ struct TripDetailView: View {
             }
         }
         .toast(item: $toastItem)
+        .overlay(alignment: .top) {
+            PublishStatusOverlay(
+                tripId: tripId,
+                isActive: $publishWatchActive,
+                language: lang.language
+            )
+            .padding(.horizontal, 12)
+            // Below the floating back/⋯/share row (Figma 522:119 puts the
+            // toast at y≈110) — at +8 it covered the buttons and swallowed
+            // their taps for the whole publish window.
+            .padding(.top, safeAreaTop + 56)
+        }
         .confirmationDialog(
             AppStrings.deletePhoto(lang.language),
             isPresented: Binding(
@@ -290,29 +314,21 @@ struct TripDetailView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
-        .alert(
-            lang.language == .ru ? "Сделать поездку публичной?" : "Make trip public?",
-            isPresented: $publishStage1
-        ) {
-            Button(lang.language == .ru ? "Отмена" : "Cancel", role: .cancel) {}
-            Button(
-                lang.language == .ru ? "Опубликовать" : "Publish",
-                role: .destructive
-            ) {
-                applyPrivacyChange(isPrivate: false)
-            }
-        } message: {
-            // Extracted to a helper — inlining the ternary-heavy copy
-            // chain inside the alert closure overwhelmed Swift's type
-            // checker after the view body grew with the playback
-            // controller wiring.
-            Text(publishConfirmMessage)
+        .sheet(isPresented: $showPublishSheet) {
+            PublishTripSheet(
+                language: lang.language,
+                message: publishConfirmMessage,
+                descriptionText: trip?.tripDescription ?? "",
+                onPublish: { desc in handlePublishConfirm(descriptionText: desc) }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
         }
         .alert(
             lang.language == .ru ? "Сделать поездку приватной?" : "Make trip private?",
             isPresented: $unpublishConfirm
         ) {
-            Button(lang.language == .ru ? "Отмена" : "Cancel", role: .cancel) {}
+            Button(AppStrings.cancel(lang.language), role: .cancel) {}
             Button(lang.language == .ru ? "Сделать приватной" : "Make private") {
                 applyPrivacyChange(isPrivate: true)
             }
@@ -320,6 +336,81 @@ struct TripDetailView: View {
             Text(lang.language == .ru
                  ? "Поездка пропадёт из общей ленты и из профилей других пользователей. Её увидите только Вы.\n\nРеакции и комментарии не сохранятся, если Вы потом снова сделаете её публичной."
                  : "This trip will disappear from the social feed and from other users' profiles. Only you will see it.\n\nReactions and comments won't be preserved if you make it public again later.")
+        }
+    }
+
+    // MARK: - Caches
+
+    /// One-pass derivation of everything the body must not recompute per
+    /// frame: full coords for the fullscreen map, downsampled poster/
+    /// playback series, chart series and the movement/altitude stats.
+    private func buildCaches(for t: Trip) {
+        let pts = t.trackPoints
+        if pts.count > 1 {
+            cachedCoordinates = pts.map(\.coordinate)
+            cachedSpeeds = pts.map(\.speed)
+            cachedTimestamps = pts.map(\.timestamp)
+
+            // Poster series (≤300 pts, index-aligned speed/timestamps).
+            let posterStep = max(1, pts.count / 300)
+            var pCoords: [CLLocationCoordinate2D] = []
+            var pSpeeds: [Double] = []
+            var pStamps: [Date] = []
+            for i in stride(from: 0, to: pts.count, by: posterStep) {
+                pCoords.append(pts[i].coordinate)
+                pSpeeds.append(pts[i].speed)
+                pStamps.append(pts[i].timestamp)
+            }
+            if (pts.count - 1) % posterStep != 0, let last = pts.last {
+                pCoords.append(last.coordinate)
+                pSpeeds.append(last.speed)
+                pStamps.append(last.timestamp)
+            }
+            posterCoords = pCoords
+            posterSpeeds = pSpeeds
+            posterTimestamps = pStamps
+
+            // Chart series over cumulative distance (≤200 pts).
+            let chartStep = max(1, pts.count / 200)
+            var elev: [DetailChartPoint] = []
+            var spd: [DetailChartPoint] = []
+            var cumulative = 0.0
+            var lastLoc: CLLocation?
+            for (i, p) in pts.enumerated() {
+                let loc = CLLocation(latitude: p.latitude, longitude: p.longitude)
+                if let prev = lastLoc { cumulative += loc.distance(from: prev) }
+                lastLoc = loc
+                if i % chartStep == 0 || i == pts.count - 1 {
+                    let km = cumulative / 1000
+                    elev.append(DetailChartPoint(id: elev.count, x: km, y: p.altitude))
+                    spd.append(DetailChartPoint(id: spd.count, x: km, y: max(0, p.speed * 3.6)))
+                }
+            }
+            // A dead-flat altitude series (simulator, barometer-less data)
+            // renders as a meaningless line — hide the section instead.
+            let altValues = elev.map(\.y)
+            let flat = (altValues.max() ?? 0) - (altValues.min() ?? 0) <= 0.5
+            elevationSeries = flat ? [] : elev
+            speedSeries = spd
+
+            cachedDrivingTime = t.drivingTime
+            cachedStoppedTime = t.stoppedTime
+            var gain: Double = 0
+            for i in 1..<pts.count {
+                let delta = pts[i].altitude - pts[i - 1].altitude
+                if delta > 0 { gain += delta }
+            }
+            cachedElevationGain = gain
+            cachedMaxAltitude = pts.map(\.altitude).max() ?? 0
+        } else if let preview = t.previewPolyline {
+            // Trips synced down via /sync/pull only carry metadata + the
+            // preview polyline (server doesn't return full trackPoints).
+            // The poster renders the simplified polyline accent-colored;
+            // charts and the moving/stops bar stay hidden (no series).
+            cachedCoordinates = Trip.decodePolyline(preview)
+            cachedSpeeds = []
+            posterCoords = cachedCoordinates
+            posterSpeeds = []
         }
     }
 
@@ -352,46 +443,216 @@ struct TripDetailView: View {
         storyShare = (data, url)
     }
 
+    // MARK: - Poster hero
+
+    @ViewBuilder
+    private func heroSection(trip: Trip) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            PosterRouteCanvas(
+                coordinates: posterCoords,
+                speeds: posterSpeeds,
+                playbackCoord: routePlayback.currentCoord,
+                playbackTrailIndex: routePlayback.currentTrailIndex
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                // The poster is a stylized render — tap through to the real
+                // interactive map, same as the old expand button.
+                guard cachedCoordinates.count > 1 else { return }
+                Haptics.tap()
+                isMapFullscreen = true
+            }
+
+            PosterLegibilityOverlay()
+
+            heroTextBlock(trip: trip)
+        }
+        .clipped()
+        .overlay(alignment: .top) { PosterTopScrim() }
+    }
+
+    private func heroTextBlock(trip: Trip) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(TripDetailFormat.posterDateLine(
+                date: trip.startDate, region: trip.region, lang: lang.language))
+                .font(.custom("PressStart2P-Regular", size: 9))
+                .foregroundStyle(.white.opacity(0.8))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            heroTitle(trip: trip)
+                .padding(.top, 8)
+
+            if posterCoords.count > 1 {
+                Button {
+                    Haptics.tap()
+                    if posterTimestamps.count == posterCoords.count,
+                       !posterTimestamps.isEmpty {
+                        // Timestamped track → fullscreen cinema replay.
+                        showReplay = true
+                    } else {
+                        // Preview-only trips (sync-pulled, no timestamps)
+                        // keep the inline uniform-speed crawl.
+                        routePlayback.toggle(
+                            coords: posterCoords,
+                            timestamps: nil,
+                            distanceMeters: trip.distance
+                        )
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: routePlayback.isPlaying ? "stop.fill" : "play.fill")
+                            .font(.system(size: 14, weight: .bold))
+                        Text(AppStrings.reliveTrip(lang.language))
+                            .font(.system(size: 15, weight: .bold))
+                    }
+                    .foregroundStyle(PosterPalette.ctaText)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 12)
+                    .background(.white, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("detail_relive")
+                .padding(.top, 14)
+            }
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 16)
+        .padding(.bottom, 20)
+        .animation(.easeInOut(duration: 0.25), value: isEditingTitle)
+    }
+
+    /// Hero title with the inline edit flow carried over from the pre-6.1
+    /// identity block — tap the title (or the pencil) to edit in place.
+    @ViewBuilder
+    private func heroTitle(trip: Trip) -> some View {
+        if isEditingTitle {
+            HStack(spacing: 10) {
+                TextField(
+                    AppStrings.tripTitlePlaceholder(lang.language),
+                    text: $editedTitle
+                )
+                .font(.system(size: 26, weight: .heavy))
+                .foregroundStyle(.white)
+                .tint(AppTheme.accent)
+                .focused($isTitleFieldFocused)
+                .onSubmit { commitTitleEdit() }
+
+                Button {
+                    Haptics.tap()
+                    cancelTitleEdit()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                Button {
+                    Haptics.action()
+                    commitTitleEdit()
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(AppTheme.green)
+                }
+            }
+            .transition(.opacity)
+        } else {
+            Button {
+                Haptics.tap()
+                editedTitle = trip.title ?? ""
+                originalTitle = editedTitle
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isEditingTitle = true
+                }
+                isTitleFieldFocused = true
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(trip.title ?? formattedDateFallback(trip.startDate))
+                        .font(.system(size: 26, weight: .heavy))
+                        .tracking(-0.52)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
+                        .multilineTextAlignment(.leading)
+                    // Figma shows no edit affordance on the poster — the
+                    // small pencil keeps the (kept) title-edit flow
+                    // discoverable. Flagged as a deliberate deviation.
+                    Image(systemName: "pencil")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+            }
+            .buttonStyle(.plain)
+            .transition(.opacity)
+        }
+    }
+
     // MARK: - Info Panel
 
     @ViewBuilder
     private func infoPanel(trip: Trip, c: AppTheme.Colors) -> some View {
-        // VStack(spacing: 16) at the panel level replaces a previous mix
-        // of per-section `.padding(.top, 16)` plus inline `.padding(.bottom)`
-        // that produced visibly different gaps when conditional sections
-        // (badges, reactions) appeared/disappeared. Single source of
-        // vertical rhythm here = stable layout regardless of what's shown.
-        VStack(alignment: .leading, spacing: 16) {
-            // Date + title sit closer together as a single identity block
-            // (matches Strava trip-detail header), so we keep them in a
-            // tighter inner stack and let the outer 16pt spacing put the
-            // 16pt gap between them and everything below.
-            VStack(alignment: .leading, spacing: 8) {
-                dateTimeLine(trip: trip, c: c)
-                titleSection(trip: trip, c: c)
-                vehicleRow(trip: trip, c: c)
-                // Privacy toggle is per-trip and works independently of
-                // global Cloud Sync (privacy-first model: publishing one
-                // trip should NOT require turning on full-account mirror).
-                // The transport handles upload (private→public) and
-                // server-delete (public→private) on its own; Cloud Sync OFF
-                // just means everything else stays local.
-                if auth.isSignedIn {
-                    privacyToggle(trip: trip, c: c)
-                        .padding(.top, 2)
+        // Single source of vertical rhythm (22pt per Figma detail-body gap)
+        // so conditional sections (charts, badges, reactions) don't produce
+        // uneven spacing when they appear/disappear.
+        VStack(alignment: .leading, spacing: 22) {
+            chipsRow(trip: trip, c: c)
+
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.detailsSection(lang.language))
+                statsGrid(trip: trip, c: c)
+            }
+
+            if elevationSeries.count > 1 {
+                VStack(alignment: .leading, spacing: 10) {
+                    DetailSectionHeader(text: AppStrings.elevationProfile(lang.language))
+                    ElevationChartCard(
+                        series: elevationSeries,
+                        language: lang.language,
+                        summary: AppStrings.chartMaxElev(
+                            lang.language,
+                            max: "\(Int(cachedMaxAltitude)) \(AppStrings.m(lang.language))",
+                            gain: "\(Int(cachedElevationGain)) \(AppStrings.m(lang.language))"
+                        ),
+                        leftLabel: trip.region ?? "",
+                        rightLabel: "\(Int(trip.distanceKm.rounded())) \(AppStrings.km(lang.language))"
+                    )
                 }
             }
 
-            // Notes sit right under the title/identity block (above stats),
-            // mirroring the viewer-facing SocialTripDetailView so the owner —
-            // the only person who CAN add a description — actually sees the
-            // affordance instead of it being buried below the fuel/cost cards.
+            if speedSeries.count > 1 {
+                VStack(alignment: .leading, spacing: 10) {
+                    DetailSectionHeader(text: AppStrings.speedSection(lang.language))
+                    SpeedChartCard(
+                        series: speedSeries,
+                        language: lang.language,
+                        summary: AppStrings.chartMaxAvg(
+                            lang.language,
+                            max: "\(Int(trip.maxSpeedKmh))",
+                            avg: "\(Int(trip.displayAverageSpeedKmh(settings.avgSpeedMode)))"
+                        )
+                    )
+                }
+            }
+
+            if (cachedDrivingTime + cachedStoppedTime) > 0 {
+                VStack(alignment: .leading, spacing: 10) {
+                    DetailSectionHeader(text: AppStrings.movingAndStops(lang.language))
+                    MovingStopsCard(
+                        movingSeconds: cachedDrivingTime,
+                        stoppedSeconds: cachedStoppedTime,
+                        language: lang.language
+                    )
+                }
+            }
+
             notesSection(trip: trip, c: c)
 
-            statsGrid(trip: trip, c: c)
+            photosSection(c)
+
+            badgesSection(trip: trip, c: c)
 
             // Reactions surface — Strava-style:
-            //   * Public + has reactions → render breakdown.
+            //   * Public + has reactions → «Реакции · N» card.
             //   * Public + 0 reactions → ghost line ("No reactions yet").
             //   * Private (signed-in) → publish nudge card to convert.
             //   * Guest (private fallback) — nothing, no payoff to show.
@@ -399,24 +660,47 @@ struct TripDetailView: View {
                 reactionsArea(trip: trip, c: c)
             }
 
-            badgesSection(trip: trip, c: c)
-
-            photosSection(c)
+            // «Комментарии · N» (Figma 549:129) — PUBLIC trips only.
+            // Comments live server-side against the published trip; a
+            // private trip has no social surface to comment on, so the
+            // section hides entirely (no ghost card).
+            if !trip.isPrivate {
+                TripCommentsSection(
+                    tripId: trip.id,
+                    isTripOwner: true,
+                    onError: { msg in
+                        toastItem = ToastItem(type: .error, message: msg)
+                    }
+                )
+            }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 16)
+        .padding(.top, 22)
         .padding(.bottom, safeAreaBottom + 90)
         .background(c.bg)
     }
 
-    private func dateTimeLine(trip: Trip, c: AppTheme.Colors) -> some View {
-        // Vehicle moved to its own tappable `vehicleRow` below the title so it
-        // can be reassigned; the date line stays date + time only.
-        Text("\(formattedDate(trip.startDate)), \(timeRange(trip))")
-            .font(.system(size: 13))
-            .foregroundStyle(c.textSecondary)
-            .lineLimit(1)
-            .truncationMode(.tail)
+    // MARK: - Chips row
+
+    private func chipsRow(trip: Trip, c: AppTheme.Colors) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                DetailChipSurface {
+                    Text(timeRange(trip))
+                        .monospacedDigit()
+                }
+
+                vehicleChip(trip: trip, c: c)
+
+                // Privacy chip is per-trip and works independently of global
+                // Cloud Sync (privacy-first model: publishing one trip should
+                // NOT require turning on full-account mirror).
+                if auth.isSignedIn {
+                    privacyChip(trip: trip, c: c)
+                }
+            }
+        }
+        .scrollClipDisabled()
     }
 
     private var tripVehicle: Vehicle? {
@@ -426,32 +710,28 @@ struct TripDetailView: View {
         return nil
     }
 
-    /// Tappable vehicle assignment for a saved trip. Presents a picker of the
-    /// garage vehicles plus a "no vehicle" clear option. Reassignment is
-    /// metadata-only (see TripRepository.updateVehicle) — odometer/stats are
-    /// not rebalanced, matching how title/notes edits behave.
-    private func vehicleRow(trip: Trip, c: AppTheme.Colors) -> some View {
+    /// Tappable vehicle chip. Presents a picker of the garage vehicles plus
+    /// a "no vehicle" clear option. Reassignment is metadata-only (see
+    /// TripRepository.updateVehicle) — odometer/stats are not rebalanced,
+    /// matching how title/notes edits behave.
+    private func vehicleChip(trip: Trip, c: AppTheme.Colors) -> some View {
         Button {
             Haptics.selection()
             showVehiclePicker = true
         } label: {
-            HStack(spacing: 6) {
+            DetailChipSurface {
                 if let v = tripVehicle {
                     Text(v.displayEmoji)
-                        .font(.system(size: 13))
+                        .font(.system(size: 12))
                     Text(v.name)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(c.textSecondary)
+                        .lineLimit(1)
                 } else {
                     Image(systemName: "car")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(c.textTertiary)
+                        .font(.system(size: 11, weight: .medium))
                     Text(AppStrings.noVehicle(lang.language))
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(c.textTertiary)
                 }
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
             }
         }
@@ -473,85 +753,41 @@ struct TripDetailView: View {
         }
     }
 
+    @ViewBuilder
+    private func privacyChip(trip: Trip, c: AppTheme.Colors) -> some View {
+        let isPrivate = trip.isPrivate
+        // Plain chip + onTapGesture instead of Button — Button + custom
+        // background inside a ScrollView often loses its hit-region in
+        // SwiftUI 17/18. The tap gesture on a contentShape'd chip is
+        // dependable.
+        DetailChipSurface {
+            Image(systemName: isPrivate ? "lock.fill" : "globe")
+                .font(.system(size: 10, weight: .semibold))
+            Text(isPrivate
+                 ? AppStrings.privacyOnlyMe(lang.language)
+                 : AppStrings.privacyPublic(lang.language))
+        }
+        .contentShape(Capsule())
+        .onTapGesture {
+            Haptics.selection()
+            // Both directions surface a one-shot confirm — going public has
+            // privacy implications (visible to strangers), going private
+            // discards reactions/comments accrued while public.
+            if isPrivate {
+                showPublishSheet = true
+            } else {
+                unpublishConfirm = true
+            }
+        }
+    }
+
     private func applyVehicleChange(_ vehicleId: UUID?) {
         Haptics.selection()
         mapVM.tripManager.updateVehicle(for: tripId, vehicleId: vehicleId)
         trip = viewModel.tripDetail(id: tripId)
     }
 
-    private func titleSection(trip: Trip, c: AppTheme.Colors) -> some View {
-        // Pin both edit/view branches to the same minimum height so toggling
-        // edit mode doesn't snap the title up by ~10pt. `minHeight: 32`
-        // matches the visual height of the 24pt heavy text rendered single-
-        // line; multi-line titles grow naturally above that.
-        HStack(alignment: .top) {
-            if isEditingTitle {
-                TextField(
-                    AppStrings.tripTitlePlaceholder(lang.language),
-                    text: $editedTitle
-                )
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(c.text)
-                .focused($isTitleFieldFocused)
-                .onSubmit { commitTitleEdit() }
-                .frame(minHeight: 32, alignment: .topLeading)
-                .transition(.opacity)
-            } else {
-                Text(trip.title ?? formattedDateFallback(trip.startDate))
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(c.text)
-                    // Long titles ("Поездка к маме на дачу через всю
-                    // Центральную Россию") wrap to 2 lines and shrink-fit
-                    // to fit the third line worth of content into the
-                    // visible area without pushing the stats grid down.
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
-                    .multilineTextAlignment(.leading)
-                    .frame(minHeight: 32, alignment: .topLeading)
-                    .transition(.opacity)
-            }
-
-            Spacer()
-
-            if isEditingTitle {
-                // Cancel button
-                Button {
-                    Haptics.tap()
-                    cancelTitleEdit()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(c.textTertiary)
-                }
-
-                // Save button
-                Button {
-                    Haptics.action()
-                    commitTitleEdit()
-                } label: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(AppTheme.green)
-                }
-            } else {
-                Button {
-                    Haptics.tap()
-                    editedTitle = trip.title ?? ""
-                    originalTitle = editedTitle
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        isEditingTitle = true
-                    }
-                    isTitleFieldFocused = true
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 18))
-                        .foregroundStyle(c.textTertiary)
-                }
-            }
-        }
-        .padding(.bottom, 4)
-        .animation(.easeInOut(duration: 0.25), value: isEditingTitle)
-    }
+    // MARK: - Description («Описание»)
 
     /// Free-text note for the trip (road conditions, detours, fuel stops) —
     /// editable by the owner via `NotesEditorView`. Persists through the same
@@ -560,62 +796,45 @@ struct TripDetailView: View {
     @ViewBuilder
     private func notesSection(trip: Trip, c: AppTheme.Colors) -> some View {
         let notes = trip.tripDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        Button {
-            Haptics.tap()
-            editedNotes = trip.tripDescription ?? ""
-            showNotesEditor = true
-        } label: {
-            if notes.isEmpty {
-                // Inviting empty-state CTA: an accent dashed-border button reads
-                // as "tap to add a description", not disabled metadata — so owners
-                // discover the feature.
-                HStack(spacing: 8) {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 15, weight: .semibold))
-                    Text(AppStrings.addNotesCTA(lang.language))
-                        .font(.system(size: 14, weight: .medium))
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(AppTheme.accent)
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(
-                            AppTheme.accent.opacity(0.35),
-                            style: StrokeStyle(lineWidth: 1, dash: [5, 4])
-                        )
-                )
-                .contentShape(Rectangle())
-            } else {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "note.text")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(c.textTertiary)
-                        .frame(width: 18)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(AppStrings.notes(lang.language))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(c.textTertiary)
-                        Text(notes)
-                            .font(.system(size: 14))
-                            .foregroundStyle(c.textSecondary)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 10) {
+            DetailSectionHeader(text: AppStrings.descriptionSection(lang.language))
+            Button {
+                Haptics.tap()
+                editedNotes = trip.tripDescription ?? ""
+                showNotesEditor = true
+            } label: {
+                if notes.isEmpty {
+                    // Inviting empty-state CTA: an accent dashed-border button
+                    // reads as "tap to add a description", not disabled
+                    // metadata — so owners discover the feature. (Figma has no
+                    // empty state for this section — existing CTA kept.)
+                    HStack(spacing: 8) {
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text(AppStrings.addNotesCTA(lang.language))
+                            .font(.system(size: 14, weight: .medium))
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 0)
-                    Image(systemName: "pencil")
-                        .font(.system(size: 14))
-                        .foregroundStyle(c.textTertiary)
+                    .foregroundStyle(AppTheme.accent)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(
+                                AppTheme.accent.opacity(0.35),
+                                style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                            )
+                    )
+                    .contentShape(Rectangle())
+                } else {
+                    DetailDescriptionCard(text: notes, showsEditHint: true)
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
-                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
+
+    // MARK: - Reactions
 
     /// Composite reactions block that picks the right surface for the current
     /// trip state — breakdown when there are reactions, a publish nudge for
@@ -623,7 +842,10 @@ struct TripDetailView: View {
     @ViewBuilder
     private func reactionsArea(trip: Trip, c: AppTheme.Colors) -> some View {
         if !trip.isPrivate, !reactionEntries.isEmpty {
-            reactionsSection(c)
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.reactionsTitleN(lang.language, reactionEntries.count))
+                reactionsCard(c)
+            }
         } else if trip.isPrivate {
             publishNudgeCard(trip: trip, c: c)
         } else {
@@ -634,7 +856,7 @@ struct TripDetailView: View {
                 Image(systemName: "face.dashed")
                     .font(.system(size: 14))
                     .foregroundStyle(c.textTertiary)
-                Text(lang.language == .ru ? "Пока никто не отреагировал" : "No reactions yet")
+                Text(AppStrings.noReactionsYet(lang.language))
                     .font(.system(size: 13))
                     .foregroundStyle(c.textTertiary)
                 Spacer()
@@ -647,7 +869,7 @@ struct TripDetailView: View {
         let isRu = lang.language == .ru
         return Button {
             Haptics.tap()
-            publishStage1 = true
+            showPublishSheet = true
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "sparkles")
@@ -678,28 +900,36 @@ struct TripDetailView: View {
         .buttonStyle(.plain)
     }
 
-    private func reactionsSection(_ c: AppTheme.Colors) -> some View {
+    /// «Реакции · N» — one card: breakdown chips row, then reactor rows
+    /// (avatar / name / LVL / their emoji / chevron → profile).
+    private func reactionsCard(_ c: AppTheme.Colors) -> some View {
         let isRu = lang.language == .ru
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Text("\(reactionEntries.count)")
-                    .font(.system(size: 18, weight: .heavy).monospacedDigit())
-                    .foregroundStyle(c.text)
-                Text((isRu ? "реакций" : "reactions").uppercased())
-                    .font(.system(size: 10, weight: .bold))
-                    .tracking(0.5)
-                    .foregroundStyle(c.textTertiary)
-                Spacer()
-            }
-            VStack(spacing: 0) {
-                ForEach(Array(reactionEntries.enumerated()), id: \.offset) { idx, entry in
-                    reactionRow(entry, c: c, isRu: isRu)
-                    if idx < reactionEntries.count - 1 {
-                        Divider().padding(.leading, 50)
+        let breakdown = Dictionary(grouping: reactionEntries, by: { $0.emoji })
+            .mapValues { $0.count }
+            .sorted { $0.value > $1.value }
+        return VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(breakdown, id: \.key) { emoji, count in
+                        ReactionCountChip(emoji: emoji, count: count, style: .breakdown)
                     }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
             }
-            .surfaceCard(cornerRadius: 14)
+
+            ForEach(Array(reactionEntries.enumerated()), id: \.offset) { idx, entry in
+                Rectangle()
+                    .fill(c.border)
+                    .frame(height: 1)
+                    .padding(.leading, idx == 0 ? 0 : 14)
+                reactionRow(entry, c: c, isRu: isRu)
+            }
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(c.card)
+                .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
         }
     }
 
@@ -712,29 +942,29 @@ struct TripDetailView: View {
                 selectedReactorAuthor = entry.user
             }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 11) {
                 Circle()
-                    .fill(AppTheme.accentBg)
-                    .frame(width: 34, height: 34)
-                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.system(size: 17)) }
+                    .fill(c.cardAlt)
+                    .frame(width: 36, height: 36)
+                    .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.system(size: 18)) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.user.displayName ?? (isRu ? "Пользователь" : "User"))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text("LVL \(entry.user.profileLevel)")
-                        .font(.system(size: 10, weight: .bold).monospacedDigit())
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
                 Spacer()
-                Text(entry.emoji).font(.system(size: 22))
+                Text(entry.emoji).font(.system(size: 18))
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
             }
             .contentShape(Rectangle())
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.vertical, 11)
         }
         .buttonStyle(.plain)
     }
@@ -750,49 +980,34 @@ struct TripDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private func privacyToggle(trip: Trip, c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
-        let isPrivate = trip.isPrivate
-        // Plain HStack + onTapGesture instead of Button — Button + custom background
-        // inside a ScrollView often loses its hit-region in SwiftUI 17/18. The tap
-        // gesture on a contentShape'd HStack is dependable.
-        HStack(spacing: 6) {
-            Image(systemName: isPrivate ? "lock.fill" : "globe")
-                .font(.system(size: 11, weight: .semibold))
-            Text(isPrivate
-                 ? (isRu ? "Только для меня" : "Only me")
-                 : (isRu ? "Видна всем" : "Public"))
-                .font(.system(size: 12, weight: .semibold))
-            Image(systemName: "arrow.left.arrow.right")
-                .font(.system(size: 9, weight: .semibold))
-                .opacity(0.6)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .foregroundStyle(isPrivate ? c.textSecondary : AppTheme.accent)
-        .background(
-            Capsule().fill(isPrivate ? c.cardAlt : AppTheme.accentBg)
-        )
-        .contentShape(Capsule())
-        .onTapGesture {
-            Haptics.selection()
-            // Both directions surface a one-shot confirm — going public has
-            // privacy implications (visible to strangers), going private
-            // discards reactions/comments accrued while public.
-            if isPrivate {
-                publishStage1 = true
+    // MARK: - Publish flow
+
+    /// Commit point of the publish sheet: optional description first (via
+    /// the same validated notes path as the editor), then the privacy flip,
+    /// then the SyncQueue watch that drives the «Публикуется…» toast.
+    private func handlePublishConfirm(descriptionText: String) {
+        let trimmed = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var descriptionRejected = false
+        if !trimmed.isEmpty, trimmed != (trip?.tripDescription ?? "") {
+            if let err = ContentFilter.validate(trimmed, field: .tripNote, language: lang.language) {
+                // Publish proceeds — only the invalid description is dropped.
+                descriptionRejected = true
+                toastItem = ToastItem(type: .error, message: err)
             } else {
-                unpublishConfirm = true
+                mapVM.tripManager.updateNotes(for: tripId, notes: trimmed)
             }
         }
+        // The toast slot is single — a first-publish congratulation must not
+        // replace the "your description was dropped" error.
+        applyPrivacyChange(isPrivate: false, suppressSuccessToast: descriptionRejected)
+        publishWatchActive = true
     }
 
     /// Performs the actual privacy mutation + side effects. Extracted from
-    /// the privacy toggle and the publish nudge so both code paths share
+    /// the privacy chip and the publish nudge so both code paths share
     /// the same notification + first-publish toast behavior, and so the
-    /// two-step publish-confirmation flow has a single commit point.
-    private func applyPrivacyChange(isPrivate newValue: Bool) {
+    /// publish-confirmation flow has a single commit point.
+    private func applyPrivacyChange(isPrivate newValue: Bool, suppressSuccessToast: Bool = false) {
         let isRu = lang.language == .ru
         mapVM.tripManager.updatePrivacy(for: tripId, isPrivate: newValue)
         self.trip = viewModel.tripDetail(id: tripId)
@@ -802,7 +1017,7 @@ struct TripDetailView: View {
         )
         let wentPublic = newValue == false
         let firstPublishKey = "com.triptrack.firstPublishToastShown"
-        if wentPublic && !UserDefaults.standard.bool(forKey: firstPublishKey) {
+        if wentPublic && !suppressSuccessToast && !UserDefaults.standard.bool(forKey: firstPublishKey) {
             UserDefaults.standard.set(true, forKey: firstPublishKey)
             toastItem = ToastItem(
                 type: .success,
@@ -849,83 +1064,15 @@ struct TripDetailView: View {
         trip = viewModel.tripDetail(id: tripId)
     }
 
-    /// Map section with route + playback controls. Extracted so the
-    /// surrounding ScrollView's type-check pressure stays manageable —
-    /// Swift's inferrer chokes on the deep ZStack/Group/conditional
-    /// nesting when it lives inline.
-    @ViewBuilder
-    private func mapSection(trip: Trip, c: AppTheme.Colors) -> some View {
-        ZStack(alignment: .bottomTrailing) {
-            Group {
-                if cachedCoordinates.count > 1 {
-                    RouteMapView(
-                        coordinates: cachedCoordinates,
-                        speeds: cachedSpeeds,
-                        isInteractive: true,
-                        fogCutoffDate: trip.endDate,
-                        playbackCarCoord: routePlayback.currentCoord,
-                        playbackTrailIndex: routePlayback.currentTrailIndex
-                    )
-                } else {
-                    c.cardAlt
-                        .overlay {
-                            Image(systemName: "map")
-                                .font(.largeTitle)
-                                .foregroundStyle(c.textTertiary)
-                        }
-                }
-            }
-
-            if cachedCoordinates.count > 1 {
-                HStack(spacing: 8) {
-                    RoutePlaybackButton(isPlaying: routePlayback.isPlaying) {
-                        routePlayback.toggle(
-                            coords: cachedCoordinates,
-                            timestamps: cachedTimestamps.isEmpty ? nil : cachedTimestamps,
-                            distanceMeters: trip.distance
-                        )
-                    }
-                    Button {
-                        Haptics.tap()
-                        isMapFullscreen = true
-                    } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(.black.opacity(0.45), in: Circle())
-                    }
-                }
-                .padding(.trailing, 12)
-                .padding(.bottom, 12)
-            }
-        }
-        // Speed-colour legend — decodes the red/yellow/green route. Pinned
-        // top-left but offset BELOW the floating back button (which is at
-        // safeAreaTop). Every map corner is otherwise taken: back (top-left),
-        // ••• menu (top-right), Apple Maps attribution (bottom-left — must NOT
-        // be covered), play/expand (bottom-right). Collapsed to a small pill on
-        // this map; tap to expand. Only when the route is speed-coloured.
-        .overlay(alignment: .topLeading) {
-            if cachedCoordinates.count > 1, !cachedSpeeds.isEmpty {
-                SpeedLegendView(language: lang.language, initiallyExpanded: false)
-                    .padding(.leading, 12)
-                    .padding(.top, safeAreaTop + 52)
-            }
-        }
-    }
-
-    /// Body of the "Make trip public?" confirmation alert. Extracted so
-    /// the alert closure stays type-checker friendly — the inline form
-    /// hit the "compiler is unable to type-check in reasonable time"
-    /// once the rest of the view body grew.
+    /// Body of the "Publish trip?" confirmation sheet. Extracted so the
+    /// sheet closure stays type-checker friendly.
     private var publishConfirmMessage: String {
         let isRu = lang.language == .ru
         let baseCopy: String
         if isRu {
-            baseCopy = "Эта поездка появится в общей ленте TripTrack — её увидят другие пользователи приложения, в том числе незнакомые. Маршрут, дата, регион и фото станут публичными.\n\nВы всегда сможете убрать её обратно в приватные."
+            baseCopy = "Поездка появится в общей ленте — её увидят другие пользователи. Вы всегда сможете вернуть её в приватные."
         } else {
-            baseCopy = "This trip will appear in the public TripTrack feed — other users, including strangers, will be able to see it. Route, date, region, and photos become public.\n\nYou can switch it back to private anytime."
+            baseCopy = "The trip will appear in the public feed — other users will see it. You can switch it back to private anytime."
         }
         if settings.cloudSyncEnabled { return baseCopy }
         let cloudOff: String
@@ -937,20 +1084,23 @@ struct TripDetailView: View {
         return baseCopy + cloudOff
     }
 
+    // MARK: - Stats grid («Детали»)
+
     private func statsGrid(trip: Trip, c: AppTheme.Colors) -> some View {
         let l = lang.language
         return LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 12),
-            GridItem(.flexible(), spacing: 12)
-        ], spacing: 12) {
+            GridItem(.flexible(), spacing: 10),
+            GridItem(.flexible(), spacing: 10)
+        ], spacing: 10) {
             DetailStatCard(
-                value: String(format: "%.1f %@", trip.distanceKm, AppStrings.km(l)),
+                value: String(format: "%.1f", trip.distanceKm),
+                unit: AppStrings.km(l),
                 label: AppStrings.distance(l),
                 color: AppTheme.green,
                 staggerIndex: 0
             )
             DetailStatCard(
-                value: trip.formattedDurationHuman(l),
+                value: TripDetailFormat.hoursMinutes(trip.duration),
                 label: AppStrings.duration(l),
                 color: AppTheme.accent,
                 staggerIndex: 1
@@ -959,58 +1109,64 @@ struct TripDetailView: View {
             // with engine on" — the only honest answer to the recurring
             // "why does my fuel feel off in traffic?" question. Hidden
             // when the trip has no usable track-point data.
-            if (trip.drivingTime + trip.stoppedTime) > 0 {
+            if (cachedDrivingTime + cachedStoppedTime) > 0 {
                 DetailStatCard(
-                    value: Trip.formattedTimeHuman(trip.drivingTime, lang: l),
-                    label: l == .ru ? "В движении" : "Driving",
+                    value: TripDetailFormat.hoursMinutes(cachedDrivingTime),
+                    label: AppStrings.statMoving(l),
                     color: AppTheme.blue,
                     staggerIndex: 2
                 )
                 DetailStatCard(
-                    value: Trip.formattedTimeHuman(trip.stoppedTime, lang: l),
-                    label: l == .ru ? "Стоял" : "Stopped",
-                    color: AppTheme.textTertiary,
+                    value: TripDetailFormat.hoursMinutes(cachedStoppedTime),
+                    label: AppStrings.statStops(l),
+                    color: c.textSecondary,
                     staggerIndex: 3
                 )
             }
             DetailStatCard(
-                value: String(format: "%.0f %@", trip.displayAverageSpeedKmh(settings.avgSpeedMode), AppStrings.kmh(l)),
-                label: AppStrings.avgSpeed(l),
+                value: String(format: "%.0f", trip.displayAverageSpeedKmh(settings.avgSpeedMode)),
+                unit: AppStrings.kmh(l),
+                label: AppStrings.statAvg(l),
                 color: AppTheme.blue,
-                staggerIndex: 2
-            )
-            DetailStatCard(
-                value: String(format: "%.0f %@", trip.maxSpeedKmh, AppStrings.kmh(l)),
-                label: AppStrings.maxSpeed(l),
-                color: AppTheme.red,
-                staggerIndex: 3
-            )
-            DetailStatCard(
-                value: String(format: "%.0f %@", elevationGain(trip), AppStrings.m(l)),
-                label: AppStrings.elevationGain(l),
-                color: AppTheme.green,
                 staggerIndex: 4
             )
             DetailStatCard(
-                value: String(format: "%.0f %@", maxAltitude(trip), AppStrings.m(l)),
-                label: AppStrings.maxAltitude(l),
-                color: AppTheme.blue,
+                value: String(format: "%.0f", trip.maxSpeedKmh),
+                unit: AppStrings.kmh(l),
+                label: AppStrings.statMax(l),
+                color: AppTheme.red,
                 staggerIndex: 5
+            )
+            DetailStatCard(
+                value: String(format: "+%.0f", cachedElevationGain),
+                unit: AppStrings.m(l),
+                label: AppStrings.elevationGain(l),
+                color: AppTheme.green,
+                staggerIndex: 6
+            )
+            DetailStatCard(
+                value: String(format: "%.0f", cachedMaxAltitude),
+                unit: AppStrings.m(l),
+                label: AppStrings.maxAltitude(l),
+                color: AppTheme.teal,
+                staggerIndex: 7
             )
 
             // Fuel consumption (if vehicle configured)
             if let fuel = tripFuelInfo(trip) {
                 DetailStatCard(
-                    value: String(format: "~%.1f %@", fuel.volume, fuel.volUnit),
-                    label: l == .ru ? "Расход" : "Fuel",
+                    value: String(format: "~%.1f", fuel.volume),
+                    unit: fuel.volUnit,
+                    label: AppStrings.statFuel(l),
                     color: AppTheme.yellow,
-                    staggerIndex: 6
+                    staggerIndex: 8
                 )
                 DetailStatCard(
-                    value: String(format: "~%.0f %@", fuel.cost, fuel.currency),
-                    label: l == .ru ? "Стоимость" : "Cost",
+                    value: String(format: "~%.0f", fuel.cost),
+                    unit: fuel.currency,
+                    label: AppStrings.statCost(l),
                     color: AppTheme.accent,
-                    staggerIndex: 7
+                    staggerIndex: 9
                 )
             }
         }
@@ -1040,37 +1196,31 @@ struct TripDetailView: View {
         return (volume, fuel.cost, volShort, currency)
     }
 
-    // MARK: - Badges Section
+    // MARK: - Badges Section («Достижения поездки»)
 
     @ViewBuilder
     private func badgesSection(trip: Trip, c: AppTheme.Colors) -> some View {
         if !trip.earnedBadgeIds.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(AppStrings.badges(lang.language))
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(c.textSecondary)
-
-                TripBadgesRow(
-                    badgeIds: trip.earnedBadgeIds,
-                    maxVisible: 8,
-                    size: 36,
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.tripAchievements(lang.language))
+                TripAchievementsGrid(
+                    badges: trip.earnedBadges,
+                    language: lang.language,
                     onTap: { badge in selectedDetailBadge = badge }
                 )
             }
-            // Outer infoPanel VStack already supplies the 16pt gap; the
-            // inner padding here used to double-up when the section was
-            // visible (badges → 32pt visible gap, no badges → 0).
         }
     }
 
     // MARK: - Photos Section
 
     private func photosSection(_ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let count = trip?.photos.count ?? 0
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(AppStrings.photos(lang.language))
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(c.text)
+                DetailSectionHeader(text: count > 0
+                    ? "\(AppStrings.photos(lang.language)) · \(count)"
+                    : AppStrings.photos(lang.language))
                 Spacer()
                 Button { showPhotoPicker = true } label: {
                     Image(systemName: "plus.circle.fill")
@@ -1084,7 +1234,7 @@ struct TripDetailView: View {
                     HStack(spacing: 8) {
                         ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
                             AsyncThumbnailView(filename: photo.filename)
-                                .frame(width: 100, height: 100)
+                                .frame(width: 74, height: 74)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .onTapGesture {
                                     selectedPhotoIndex = index
@@ -1094,11 +1244,11 @@ struct TripDetailView: View {
                                         photoToDelete = photo
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 18))
+                                            .font(.system(size: 16))
                                             .symbolRenderingMode(.palette)
                                             .foregroundStyle(.white, .black.opacity(0.5))
                                     }
-                                    .padding(4)
+                                    .padding(3)
                                 }
                         }
                     }
@@ -1121,20 +1271,9 @@ struct TripDetailView: View {
                 .onTapGesture { showPhotoPicker = true }
             }
         }
-        // Spacing handled by outer infoPanel VStack(spacing: 16).
     }
 
     // MARK: - Helpers
-
-    private static let dateFormatters: (ru: DateFormatter, en: DateFormatter) = {
-        let ru = DateFormatter()
-        ru.locale = Locale(identifier: "ru_RU")
-        ru.dateFormat = "d MMM yyyy"
-        let en = DateFormatter()
-        en.locale = Locale(identifier: "en_US")
-        en.dateFormat = "d MMM yyyy"
-        return (ru, en)
-    }()
 
     private static let dateTimeFormatters: (ru: DateFormatter, en: DateFormatter) = {
         let ru = DateFormatter()
@@ -1152,32 +1291,9 @@ struct TripDetailView: View {
         return f
     }()
 
-    private func formattedDate(_ date: Date) -> String {
-        let fmts = Self.dateFormatters
-        return (lang.language == .ru ? fmts.ru : fmts.en).string(from: date)
-    }
-
     private func formattedDateFallback(_ date: Date) -> String {
         let fmts = Self.dateTimeFormatters
         return (lang.language == .ru ? fmts.ru : fmts.en).string(from: date)
-    }
-
-    private func formattedTime(_ date: Date) -> String {
-        Self.timeFormatter.string(from: date)
-    }
-
-    private func elevationGain(_ trip: Trip) -> Double {
-        guard trip.trackPoints.count > 1 else { return 0 }
-        var gain: Double = 0
-        for i in 1..<trip.trackPoints.count {
-            let delta = trip.trackPoints[i].altitude - trip.trackPoints[i-1].altitude
-            if delta > 0 { gain += delta }
-        }
-        return gain
-    }
-
-    private func maxAltitude(_ trip: Trip) -> Double {
-        trip.trackPoints.map(\.altitude).max() ?? 0
     }
 
     private func timeRange(_ trip: Trip) -> String {
@@ -1198,63 +1314,6 @@ struct TripDetailView: View {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first?.windows.first?.safeAreaInsets.bottom ?? 34
-    }
-
-    private func shareTripText(_ trip: Trip) -> String {
-        let l = lang.language
-        let title = trip.title ?? formattedDateFallback(trip.startDate)
-        let date = formattedDate(trip.startDate)
-        let dist = String(format: "%.1f %@", trip.distanceKm, AppStrings.km(l))
-        let time = trip.formattedDurationHuman(l)
-        let speed = String(format: "%.0f %@", trip.displayAverageSpeedKmh(settings.avgSpeedMode), AppStrings.kmh(l))
-
-        if l == .ru {
-            return "\(title)\n\(date)\n\nДистанция: \(dist)\nВремя: \(time)\nСр. скорость: \(speed)\n\n— TripTrack"
-        } else {
-            return "\(title)\n\(date)\n\nDistance: \(dist)\nTime: \(time)\nAvg speed: \(speed)\n\n— TripTrack"
-        }
-    }
-}
-
-// MARK: - Detail Stat Card
-
-private struct DetailStatCard: View {
-    let value: String
-    let label: String
-    let color: Color
-    var staggerIndex: Int = 0
-    @Environment(\.colorScheme) private var scheme
-    @State private var appeared = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppTheme.colors(for: scheme).textSecondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
-                // Long localized labels ("ELEVATION GAIN" / "НАБОР ВЫСОТЫ")
-                // need to fit within ~133pt cell on iPhone SE without
-                // wrapping to a second line which would push value down.
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-
-            Text(value)
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .surfaceCard(cornerRadius: 16)
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 10)
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.35).delay(Double(staggerIndex) * 0.05)) {
-                appeared = true
-            }
-        }
     }
 }
 
@@ -1306,4 +1365,3 @@ private struct TripDetailLocalReactorDestination: ViewModifier {
         }
     }
 }
-

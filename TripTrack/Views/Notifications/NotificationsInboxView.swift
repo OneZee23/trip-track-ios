@@ -157,6 +157,20 @@ struct NotificationsInboxView: View {
             )
             .lineLimit(2)
             .multilineTextAlignment(.leading)
+        case .comment:
+            // "Иван прокомментировал(а) Krasnodar" — same anatomy as the
+            // reaction row: actor + verb + trip title.
+            (
+                Text(actorName).font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(c.text)
+                + Text(isRu ? " прокомментировал(а) " : " commented on ")
+                    .font(.system(size: 14))
+                    .foregroundStyle(c.textSecondary)
+                + Text(item.tripTitle ?? "—").font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(c.text)
+            )
+            .lineLimit(2)
+            .multilineTextAlignment(.leading)
         case .follow:
             (
                 Text(actorName).font(.system(size: 14, weight: .semibold))
@@ -188,7 +202,9 @@ struct NotificationsInboxView: View {
         //   follow   → push the follower's profile (so the user can
         //              decide whether to follow back).
         switch item.typedKind {
-        case .reaction:
+        case .reaction, .comment:
+            // Both land on the user's own trip — a comment's payload lives
+            // in the trip's comment thread, not on the actor's profile.
             if let tripId = item.tripId {
                 dismiss()
                 // Small async hop so the sheet finishes dismissing before

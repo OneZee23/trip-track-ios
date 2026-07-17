@@ -7,12 +7,13 @@ import Foundation
 enum NotificationKind: String, Codable {
     case reaction
     case follow
+    case comment
 }
 
 struct NotificationItem: Codable, Identifiable, Hashable {
     let id: UUID
-    /// Use the raw string so unknown kinds (e.g. `comment` once we ship it)
-    /// don't refuse to decode the whole feed page.
+    /// Use the raw string so unknown kinds from a newer server don't
+    /// refuse to decode the whole feed page.
     let kind: String
     let tripId: UUID?
     let tripTitle: String?

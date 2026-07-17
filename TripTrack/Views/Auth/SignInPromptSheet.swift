@@ -10,6 +10,7 @@ import SwiftUI
 struct SignInPromptSheet: View {
     enum Action: String, Identifiable {
         case react
+        case comment
         case follow
         case share
         case sync
@@ -21,6 +22,7 @@ struct SignInPromptSheet: View {
         func headline(_ lang: LanguageManager.Language) -> String {
             switch self {
             case .react:    return AppStrings.signInPromptReact(lang)
+            case .comment:  return AppStrings.signInPromptComment(lang)
             case .follow:   return AppStrings.signInPromptFollow(lang)
             case .share:    return AppStrings.signInPromptShare(lang)
             case .sync:     return AppStrings.signInPromptSync(lang)

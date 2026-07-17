@@ -1,5 +1,8 @@
 import SwiftUI
 
+// TODO(v6.1-defer): Figma 117:1547 restyle — 300pt r24 modal with 96pt
+// tinted icon circle, rarity-colored title, record value line and a
+// full-width orange «Поделиться» button (share hook TBD).
 struct BadgeDetailOverlay: View {
     let badge: Badge
     let isUnlocked: Bool

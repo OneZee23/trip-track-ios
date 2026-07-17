@@ -3,8 +3,12 @@ import MapKit
 
 /// Full-screen, interactive route viewer presented from both TripDetailView
 /// and SocialTripDetailView when the user wants to see the route bigger
-/// than the fixed 45%-of-screen map slot. Carries no business logic — just
+/// than the poster hero render. Carries no business logic — just
 /// RouteMapView pinned to the edges plus a close button over the top-left.
+///
+/// TODO(v6.1-defer): Figma 117:1803 restyle — white close/zoom circles with
+/// shadows + bottom glass legend card (gradient bar «0 км/ч → N км/ч»)
+/// replacing SpeedLegendView. Keep the speeds-empty hiding for social trips.
 struct FullscreenMapSheet: View {
     let coordinates: [CLLocationCoordinate2D]
     var speeds: [Double] = []

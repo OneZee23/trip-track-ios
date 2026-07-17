@@ -41,6 +41,9 @@ enum APIEndpoint {
     static let socialReport     = "/social/report"
     static let socialReactions  = "/social/reactions"
     static let socialTripPhotos = "/social/trip/photos"
+    static let socialComment       = "/social/comment"
+    static let socialComments      = "/social/comments"
+    static let socialCommentDelete = "/social/comment/delete"
 
     static let notificationsFeed        = "/notifications/feed"
     static let notificationsUnreadCount = "/notifications/unread-count"

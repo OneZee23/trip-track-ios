@@ -931,6 +931,9 @@ struct FeedView: View {
             fuelCurrency: trip.fuelCurrency ?? FuelCurrency.current
         )
         .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("trip_card")
+        .accessibilityAddTraits(.isButton)
         .onTapGesture {
             Haptics.tap()
             authorPath.cappedAppend(.trip(trip.id))

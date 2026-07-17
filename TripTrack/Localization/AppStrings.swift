@@ -595,6 +595,175 @@ enum AppStrings {
         lang == .ru ? "Название поездки" : "Trip title"
     }
 
+    // MARK: - Trip Detail poster (6.1.0)
+    static func reliveTrip(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Прожить заново" : "Relive"
+    }
+    static func watchTrip(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Смотреть поездку" : "Watch trip"
+    }
+    static func detailsSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Детали" : "Details"
+    }
+    static func elevationProfile(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Профиль высоты" : "Elevation profile"
+    }
+    static func speedSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Скорость" : "Speed"
+    }
+    static func movingAndStops(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "В движении и стоянки" : "Moving & stops"
+    }
+    static func movingDot(_ lang: LanguageManager.Language, _ value: String) -> String {
+        lang == .ru ? "В движении · \(value)" : "Moving · \(value)"
+    }
+    static func stopsDot(_ lang: LanguageManager.Language, _ value: String) -> String {
+        lang == .ru ? "Стоянки · \(value)" : "Stops · \(value)"
+    }
+    /// Detail-context header for the trip notes ("Описание"). `notes` stays
+    /// for legacy call sites.
+    static func descriptionSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Описание" : "Description"
+    }
+    static func tripAchievements(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Достижения поездки" : "Trip achievements"
+    }
+    static func reactionsTitleN(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        lang == .ru ? "Реакции · \(n)" : "Reactions · \(n)"
+    }
+    // Detail stat-grid short labels. Detail-scoped cases: the onboarding set
+    // maps «Расход»→"Fuel" for the mock card, which would collide with the
+    // fuel-volume vs fuel-cost split the detail grid needs.
+    static func statMoving(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "В движении" : "Moving"
+    }
+    static func statStops(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Стоянки" : "Stops"
+    }
+    static func statAvg(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Средняя" : "Avg"
+    }
+    static func statMax(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Макс" : "Max"
+    }
+    static func statFuel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Топливо" : "Fuel"
+    }
+    static func statCost(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Расход" : "Cost"
+    }
+    static func chartAltitudeLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ВЫСОТА" : "ALTITUDE"
+    }
+    static func chartSpeedLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "КМ/Ч" : "KM/H"
+    }
+    static func chartMaxElev(_ lang: LanguageManager.Language, max: String, gain: String) -> String {
+        lang == .ru ? "макс \(max) · ↑ \(gain)" : "max \(max) · ↑ \(gain)"
+    }
+    static func chartMaxAvg(_ lang: LanguageManager.Language, max: String, avg: String) -> String {
+        lang == .ru ? "макс \(max) · ср \(avg)" : "max \(max) · avg \(avg)"
+    }
+    static func privacyOnlyMe(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Только для меня" : "Only me"
+    }
+    static func privacyPublic(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Видна всем" : "Public"
+    }
+    static func share(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поделиться" : "Share"
+    }
+    static func noReactionsYet(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пока никто не отреагировал" : "No reactions yet"
+    }
+    static func beFirstToReact(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Будьте первым, кто отреагирует" : "Be the first to react"
+    }
+    /// Author-pill level tag, pixel font — «ур. 18» / "lvl 18".
+    static func levelShort(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        lang == .ru ? "ур. \(n)" : "lvl \(n)"
+    }
+
+    // MARK: - Comments (6.1.0)
+    static func commentsTitleN(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        lang == .ru ? "Комментарии · \(n)" : "Comments · \(n)"
+    }
+    static func commentPlaceholder(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Оставьте комментарий…" : "Leave a comment…"
+    }
+    static func send(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Отправить" : "Send"
+    }
+    static func showMoreComments(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Показать ещё" : "Show more"
+    }
+    static func deleteCommentConfirm(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Удалить комментарий?" : "Delete comment?"
+    }
+    static func commentPostFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось отправить комментарий" : "Couldn't post the comment"
+    }
+    static func commentDeleteFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось удалить комментарий" : "Couldn't delete the comment"
+    }
+    static func signInPromptComment(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войдите, чтобы комментировать" : "Sign in to comment"
+    }
+    // Relative comment age — compact «2 ч» / "2 h" style (Figma «· 2 ч»).
+    static func relTimeNow(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "сейчас" : "now"
+    }
+    static func relTimeMinutes(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        lang == .ru ? "\(n) мин" : "\(n) min"
+    }
+    static func relTimeHours(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        lang == .ru ? "\(n) ч" : "\(n) h"
+    }
+    static func relTimeDays(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        lang == .ru ? "\(n) д" : "\(n) d"
+    }
+
+    // MARK: - Publish flow (6.1.0)
+    static func publishTripTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Опубликовать поездку?" : "Publish trip?"
+    }
+    static func publishAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Опубликовать" : "Publish"
+    }
+    static func publishOptionalDescLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ОПИСАНИЕ · НЕОБЯЗАТЕЛЬНО" : "DESCRIPTION · OPTIONAL"
+    }
+    static func publishDescPlaceholder(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Расскажите о поездке: дорога, погода, остановки…"
+            : "Tell about the trip: road, weather, stops…"
+    }
+    static func publishing(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Публикуется…" : "Publishing…"
+    }
+    static func publishFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось опубликовать" : "Couldn't publish"
+    }
+    static func publishFailedBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Нет связи с сервером. Поездка пока видна только Вам — мы повторим автоматически."
+            : "No connection. The trip is only visible to you for now — we'll retry automatically."
+    }
+    static func retry(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Повторить" : "Retry"
+    }
+    static func tripLoadFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось загрузить поездку" : "Couldn't load the trip"
+    }
+    static func tripLoadFailedBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Проверьте подключение к интернету и попробуйте ещё раз"
+            : "Check your internet connection and try again"
+    }
+    static func tryAgain(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Попробовать снова" : "Try again"
+    }
+
     // MARK: - UX Actions
     static func undo(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Отменить" : "Undo"

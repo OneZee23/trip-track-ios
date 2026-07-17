@@ -207,11 +207,14 @@ enum ContentFilter {
         case tripNote
         case displayName
         case vehicleName
+        case comment
 
         var maxLength: Int {
             switch self {
             case .tripTitle: return 200
             case .tripNote: return 2000
+            // Matches the comments backend contract (text 1..500).
+            case .comment: return 500
             // Match the server's `@MaxLength(30)` on `displayName` —
             // previously 64 here would let `ContentFilter.validate` accept
             // 30–64 char names that the server then rejected with a

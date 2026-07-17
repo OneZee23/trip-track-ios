@@ -70,8 +70,12 @@ final class APIClient {
         return (raw, raw, false)
     }
 
-    func post<Req: Encodable, Res: Decodable>(_ path: String, body: Req, requiresAuth: Bool = true) async throws -> Res {
-        try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: false)
+    /// `singleAttempt` opts a call out of the transport-level retry loop.
+    /// Use it for NON-IDEMPOTENT writes (e.g. comment create): -1001/-1005
+    /// can fire after the server already processed the request, and an
+    /// automatic re-send would duplicate the row server-side.
+    func post<Req: Encodable, Res: Decodable>(_ path: String, body: Req, requiresAuth: Bool = true, singleAttempt: Bool = false) async throws -> Res {
+        try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: false, singleAttempt: singleAttempt)
     }
 
     func get<Res: Decodable>(_ path: String, requiresAuth: Bool = true) async throws -> Res {
