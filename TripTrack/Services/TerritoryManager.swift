@@ -72,6 +72,12 @@ final class TerritoryManager: ObservableObject {
         var regionTiles: [String: Set<String>] = [:] // region -> set of hash6
         var cityToRegion: [String: String] = [:]     // city -> region mapping
         var unmatchedTiles = visitedCache
+        // Running coordinate accumulators per place — piggyback on the same
+        // per-point loop so centroid/bounds cost no extra pass. Density-
+        // weighted centroid (per matched point, not per tile) is what the
+        // 6.1.0 My-Map card wants: it lands where the activity actually is.
+        var cityGeo: [String: GeoAccumulator] = [:]
+        var regionGeo: [String: GeoAccumulator] = [:]
 
         for trip in trips {
             guard !trip.trackPoints.isEmpty else { continue }
@@ -99,6 +105,7 @@ final class TerritoryManager: ObservableObject {
                     cityTiles[startCity, default: []].insert(hash6)
                     unmatchedTiles.remove(hash6)
                     if let region { cityToRegion[startCity] = region }
+                    cityGeo[startCity, default: GeoAccumulator()].add(pointCoord)
                 }
 
                 if let endCity = cities.end, endCity != cities.start,
@@ -106,11 +113,13 @@ final class TerritoryManager: ObservableObject {
                     cityTiles[endCity, default: []].insert(hash6)
                     unmatchedTiles.remove(hash6)
                     if let region { cityToRegion[endCity] = region }
+                    cityGeo[endCity, default: GeoAccumulator()].add(pointCoord)
                 }
 
                 if let region {
                     regionTiles[region, default: []].insert(hash6)
                     unmatchedTiles.remove(hash6)
+                    regionGeo[region, default: GeoAccumulator()].add(pointCoord)
                 }
             }
         }
@@ -133,7 +142,9 @@ final class TerritoryManager: ObservableObject {
                 target: cityTarget,
                 percentage: percentage,
                 status: ZoneStatus.from(percentage: percentage),
-                region: cityToRegion[city]
+                region: cityToRegion[city],
+                centroid: cityGeo[city]?.centroid,
+                bounds: cityGeo[city]?.bounds
             ))
         }
 
@@ -147,7 +158,9 @@ final class TerritoryManager: ObservableObject {
                 target: regionTarget,
                 percentage: percentage,
                 status: ZoneStatus.from(percentage: percentage),
-                region: nil
+                region: nil,
+                centroid: regionGeo[region]?.centroid,
+                bounds: regionGeo[region]?.bounds
             ))
         }
 
@@ -316,9 +329,51 @@ struct ExplorationPlace: Identifiable {
     let percentage: Double
     let status: ZoneStatus
     let region: String? // parent region for cities
+    /// Density-weighted center of the place's recorded activity (6.1.0 My Map
+    /// uses it for city dots and camera→region resolution). Nil when the
+    /// place had no attributable points.
+    var centroid: CLLocationCoordinate2D? = nil
+    /// Bounding box of the place's attributed points, for camera hit-testing.
+    var bounds: GeoBounds? = nil
 
     enum PlaceType {
         case city
         case region
+    }
+}
+
+/// MapKit-free lat/lon bounding box (TerritoryManager stays a pure service).
+struct GeoBounds {
+    var minLat: Double
+    var maxLat: Double
+    var minLon: Double
+    var maxLon: Double
+
+    func contains(_ c: CLLocationCoordinate2D) -> Bool {
+        c.latitude >= minLat && c.latitude <= maxLat &&
+        c.longitude >= minLon && c.longitude <= maxLon
+    }
+}
+
+/// Running mean + extremes over coordinates; one instance per place.
+struct GeoAccumulator {
+    private var latSum = 0.0, lonSum = 0.0
+    private var count = 0
+    private var minLat = 90.0, maxLat = -90.0, minLon = 180.0, maxLon = -180.0
+
+    mutating func add(_ c: CLLocationCoordinate2D) {
+        latSum += c.latitude; lonSum += c.longitude; count += 1
+        minLat = min(minLat, c.latitude); maxLat = max(maxLat, c.latitude)
+        minLon = min(minLon, c.longitude); maxLon = max(maxLon, c.longitude)
+    }
+
+    var centroid: CLLocationCoordinate2D? {
+        guard count > 0 else { return nil }
+        return CLLocationCoordinate2D(latitude: latSum / Double(count), longitude: lonSum / Double(count))
+    }
+
+    var bounds: GeoBounds? {
+        guard count > 0 else { return nil }
+        return GeoBounds(minLat: minLat, maxLat: maxLat, minLon: minLon, maxLon: maxLon)
     }
 }

@@ -49,17 +49,6 @@ final class MapViewModel: ObservableObject {
     @Published var cachedTotalKm: Double = 0
     @Published var cachedTripCount: Int = 0
 
-    // MARK: - Cached Regions Data (loaded on first visit, invalidated on trip end)
-    var cachedRegionsPolylines: [MKPolyline]?
-    var cachedRegionsCities: [ExplorationPlace]?
-    var cachedRegionsRegions: [ExplorationPlace]?
-
-    func invalidateRegionsCache() {
-        cachedRegionsPolylines = nil
-        cachedRegionsCities = nil
-        cachedRegionsRegions = nil
-    }
-
     /// Reads selectedVehicleId from settings entity at recording start
     private var selectedVehicleId: UUID? {
         gamificationManager.fetchSettingsEntity()?.selectedVehicleId
@@ -148,11 +137,11 @@ final class MapViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Invalidate regions cache and fog after territory rebuild completes (async)
+        // Clear fog caches after territory rebuild completes (async).
+        // (MyMapViewModel.shared reloads itself on the same notification.)
         NotificationCenter.default.publisher(for: .territoryRebuilt)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.invalidateRegionsCache()
                 FogPolygonBuilder.clearCache()
                 self?.rebuildFog()
             }
@@ -564,7 +553,6 @@ final class MapViewModel: ObservableObject {
         let stats = tripManager.fetchTripStats()
         cachedTotalKm = stats.totalDistance / 1000.0
         cachedTripCount = stats.count
-        invalidateRegionsCache()
     }
 
     private func setupRecordingBindings() {

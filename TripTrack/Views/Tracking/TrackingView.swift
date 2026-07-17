@@ -214,6 +214,7 @@ struct TrackingView: View {
                                 .foregroundStyle(.white)
                         }
                     }
+                    .accessibilityIdentifier("tracking_stop")
 
                     // Spacer to balance pause button
                     Color.clear.frame(width: 48, height: 48)

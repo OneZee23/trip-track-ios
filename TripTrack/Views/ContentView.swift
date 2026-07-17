@@ -1,7 +1,6 @@
 import SwiftUI
 
 extension Notification.Name {
-    static let tripSuggestionTapped = Notification.Name("tripSuggestionTapped")
     static let switchToFeedWithRegionFilter = Notification.Name("switchToFeedWithRegionFilter")
     static let switchToFeedTab = Notification.Name("switchToFeedTab")
     static let feedScrollToTop = Notification.Name("feedScrollToTop")
@@ -82,7 +81,7 @@ struct ContentView: View {
                 FeedView(tripManager: mapVM.tripManager, selectedTab: $selectedTab)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .maps:
-                RegionsView()
+                MyMapView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .record:
                 TrackingView()
@@ -131,9 +130,6 @@ struct ContentView: View {
                 }
             )
             .environmentObject(lang)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .tripSuggestionTapped)) { _ in
-            selectedTab = .record
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToFeedWithRegionFilter)) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {

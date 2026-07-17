@@ -392,6 +392,57 @@ enum AppStrings {
         return "\(count) \(count == 1 ? "Region" : "Regions")"
     }
 
+    // MARK: - My Map (6.1.0)
+
+    static func myMapTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Моя карта" : "My Map"
+    }
+    static func mapModeRoutes(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Маршруты" : "Routes"
+    }
+    static func mapModeTerritory(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Территория" : "Territory"
+    }
+    static func mapModeAll(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Всё" : "All"
+    }
+    static func km2ExploredLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "км² освоено" : "km² explored"
+    }
+    static func km2Short(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "км²" : "km²"
+    }
+    /// Bare genitive plate labels («8 регионов», «24 города» etc.).
+    static func regionsGenitive(_ lang: LanguageManager.Language, count: Int) -> String {
+        guard lang == .ru else { return count == 1 ? "region" : "regions" }
+        let m10 = count % 10, m100 = count % 100
+        if m10 == 1 && m100 != 11 { return "регион" }
+        if (2...4).contains(m10) && !(12...14).contains(m100) { return "региона" }
+        return "регионов"
+    }
+    static func citiesGenitive(_ lang: LanguageManager.Language, count: Int) -> String {
+        guard lang == .ru else { return count == 1 ? "city" : "cities" }
+        let m10 = count % 10, m100 = count % 100
+        if m10 == 1 && m100 != 11 { return "город" }
+        if (2...4).contains(m10) && !(12...14).contains(m100) { return "города" }
+        return "городов"
+    }
+    static func tripsGenitive(_ lang: LanguageManager.Language, count: Int) -> String {
+        guard lang == .ru else { return count == 1 ? "trip" : "trips" }
+        let m10 = count % 10, m100 = count % 100
+        if m10 == 1 && m100 != 11 { return "поездка" }
+        if (2...4).contains(m10) && !(12...14).contains(m100) { return "поездки" }
+        return "поездок"
+    }
+    static func emptyMapTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Карта пока пустая" : "The map is still empty"
+    }
+    static func emptyMapSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Запишите первую поездку — и здесь засветится ваш след"
+            : "Record your first trip — your trail will light up here"
+    }
+
     /// Sign-out warning copy when the user has public trips on the server.
     /// Russian needs full plural agreement: 1 → "публичная поездка", 2-4 →
     /// "публичные поездки", 5+ → "публичных поездок", with the verb form

@@ -61,8 +61,40 @@ final class TripTrackUITests: XCTestCase {
         XCTAssertTrue(bar("tab_home").waitForExistence(timeout: 4), "tab bar should be restored after leaving Record")
     }
 
+    /// Utility flow (used when seeding data for page verification): if a
+    /// recording is active — stop it; otherwise start one via slide-to-start,
+    /// let (simulated) GPS accumulate, then stop. Locale-independent (ids +
+    /// coordinates only); every step guarded so it passes trivially when the
+    /// record surface is unavailable.
+    func test_zz_toggle_recording() {
+        let record = app.buttons.matching(identifier: "tab_record").firstMatch
+        if record.waitForExistence(timeout: 5), record.isHittable {
+            record.tap(); sleep(1)
+        }
+        let stop = app.buttons.matching(identifier: "tracking_stop").firstMatch
+        if stop.waitForExistence(timeout: 3), stop.isHittable {
+            stop.tap(); sleep(4); snap("99_after_stop")
+            return
+        }
+        // Idle → drag the slide-to-start thumb, record ~45s, then stop.
+        pt(0.17, 0.935).press(forDuration: 0.15, thenDragTo: pt(0.90, 0.935))
+        sleep(45)
+        if stop.waitForExistence(timeout: 5), stop.isHittable {
+            stop.tap(); sleep(4); snap("99_after_stop")
+        }
+    }
+
     func test_screenshot_tour() {
-        sleep(2); snap("01_feed")
+        // Normalize: the app restores the last persisted tab; if that was
+        // Record (tab bar hidden), leave via the chevron, then go Home.
+        let home = app.buttons.matching(identifier: "tab_home").firstMatch
+        if !home.waitForExistence(timeout: 5) {
+            let back = app.buttons.matching(identifier: "tracking_back").firstMatch
+            if back.waitForExistence(timeout: 2) { back.tap(); sleep(1) }
+        }
+        if home.waitForExistence(timeout: 3), home.isHittable { home.tap(); sleep(1) }
+
+        sleep(1); snap("01_feed")
 
         // Sign-in sheet (6.1.0 Вход) — the guest feed banner opens it.
         let guestBanner = app.buttons.matching(identifier: "guest_signin_banner").firstMatch
@@ -72,8 +104,23 @@ final class TripTrackUITests: XCTestCase {
             win.swipeDown(); sleep(1)
         }
 
-        // Maps tab (6.1.0: Места → Карта)
-        if tap("Карта") { sleep(1); snap("02_places") }
+        // Maps tab — 6.1.0 «Моя карта» (ids, locale-independent)
+        let mapsTab = app.buttons.matching(identifier: "tab_maps").firstMatch
+        if mapsTab.waitForExistence(timeout: 3), mapsTab.isHittable {
+            mapsTab.tap(); sleep(3); snap("02_mymap_all")
+            let routes = app.buttons.matching(identifier: "map_mode_routes").firstMatch
+            if routes.exists { routes.tap(); sleep(1); snap("02_mymap_routes") }
+            let territory = app.buttons.matching(identifier: "map_mode_territory").firstMatch
+            if territory.exists { territory.tap(); sleep(1); snap("02_mymap_territory") }
+            let all = app.buttons.matching(identifier: "map_mode_all").firstMatch
+            if all.exists { all.tap(); sleep(1) }
+            let expand = app.buttons.matching(identifier: "mymap_expand").firstMatch
+            if expand.exists, expand.isHittable {
+                expand.tap(); sleep(2); snap("02_mymap_fullscreen")
+                let close = app.buttons.matching(identifier: "mymap_fullscreen_close").firstMatch
+                if close.waitForExistence(timeout: 3) { close.tap(); sleep(1) }
+            }
+        }
         // Back to feed, Поездки segment (#7 Мои→Поездки)
         if tap("Лента") { sleep(1) }
         if tap("Поездки") { sleep(1); snap("03_feed_trips") }
