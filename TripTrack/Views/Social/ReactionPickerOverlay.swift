@@ -29,9 +29,10 @@ struct ReactionPickerOverlay: View {
                     dismiss()
                 }
 
-            // Floating capsule. Inner scroll only fires when emoji set
-            // exceeds device width — at 8 × 42pt + spacing/padding the
-            // capsule is ~380pt, fits every iPhone since SE.
+            // Floating capsule (Figma 117:318 — glass chrome). Inner scroll
+            // only fires when emoji set exceeds device width — at 8 × 40pt
+            // + spacing/padding the capsule is ~370pt, fits every iPhone
+            // since SE.
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
                     ForEach(Array(ReactionEmoji.all.enumerated()), id: \.offset) { index, emoji in
@@ -39,17 +40,27 @@ struct ReactionPickerOverlay: View {
                     }
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
             }
             .frame(maxWidth: UIScreen.main.bounds.width - 24)
             .fixedSize(horizontal: false, vertical: true)
-            .background(
+            .background {
                 Capsule()
-                    .fill(scheme == .dark ? Color(white: 0.16) : Color.white)
-                    .shadow(color: Color.black.opacity(0.25), radius: 24, y: 8)
+                    .fill(.ultraThinMaterial)
+                Capsule()
+                    .fill(c.glass)
+            }
+            .overlay(
+                Capsule()
+                    .stroke(
+                        scheme == .dark ? c.glassBorder : Color.white.opacity(0.5),
+                        lineWidth: 1
+                    )
             )
+            .shadow(color: Color.black.opacity(0.18), radius: 24, y: 8)
             .scaleEffect(appeared ? 1.0 : 0.85)
             .opacity(appeared ? 1.0 : 0.0)
+            .accessibilityIdentifier("reaction_picker")
         }
         .onAppear {
             withAnimation(.spring(response: 0.32, dampingFraction: 0.7)) {
@@ -68,16 +79,20 @@ struct ReactionPickerOverlay: View {
                 appeared = false
             }
         } label: {
+            // Selected state: solid peach disc (Figma #FCE4DB — one of the
+            // two allowed literals; adaptive accentDim in dark).
             Text(emoji)
                 .font(.system(size: 26))
-                .frame(width: 42, height: 42)
+                .frame(width: 40, height: 40)
                 .background(
                     Circle()
-                        .fill(isMine ? AppTheme.accentBg : Color.clear)
-                )
-                .overlay(
-                    Circle()
-                        .stroke(isMine ? AppTheme.accent.opacity(0.5) : Color.clear, lineWidth: 1.5)
+                        .fill(
+                            isMine
+                            ? (scheme == .dark
+                               ? AppTheme.accentDim
+                               : Color(red: 0xFC/255, green: 0xE4/255, blue: 0xDB/255))
+                            : Color.clear
+                        )
                 )
                 .scaleEffect(isMine ? 1.08 : 1.0)
         }

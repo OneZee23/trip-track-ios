@@ -19,7 +19,7 @@ struct FeedView: View {
     @State private var didLoad = false
     @State private var showStats = false
     @State private var showBadges = false
-    @State private var showProfile = false
+    @State private var showNotifications = false
     @State private var showGarage = false
     @State private var tripToDelete: Trip?
     @State private var collapsedSections: Set<String> = []
@@ -73,12 +73,22 @@ struct FeedView: View {
         ZStack(alignment: .bottom) {
         NavigationStack(path: $authorPath) {
             VStack(spacing: 0) {
+                // Custom header (Figma 140:945) — replaces the system nav bar.
+                // Rendered unconditionally, once, above the paged TabView so it
+                // stays mounted in both segments (same principle as the old
+                // always-rendered ToolbarItems: conditional chrome forces a nav
+                // rebuild and a visible hop when switching Лента ↔ Мои).
+                feedHeader(c)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 2)
+                    .padding(.bottom, 10)
+                    .background(c.bg)
+
                 // Pinned outside the paged TabView so the pill row stays put while the
                 // content underneath slides horizontally.
                 feedModeSwitcher(c)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-                    .padding(.bottom, 6)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 10)
                     .background(c.bg)
 
                 // Native page-style TabView gives us smooth horizontal slide with
@@ -136,61 +146,11 @@ struct FeedView: View {
                     )
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Button {
-                        NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image("PixelCar")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 22, height: 22)
-                            // Matches the App Store display name "TripTrack"
-                            // (previous two-line "ROAD TRIP / TRACKER" was a
-                            // marketing line that didn't align with branding).
-                            Text("TripTrack")
-                                .font(.system(size: 17, weight: .heavy))
-                                .tracking(-0.2)
-                                .foregroundStyle(c.text)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showProfile = true } label: {
-                        Text(settings.avatarEmoji)
-                            .font(.system(size: 22))
-                            .frame(width: 38, height: 38)
-                            .background(c.cardAlt, in: Circle())
-                    }
-                }
-                // Keep the trailing slot rendered in both tabs even when the user
-                // is signed out — conditionally toggling ToolbarItem presence forces
-                // SwiftUI to rebuild the nav bar and causes a visible hop/strip when
-                // switching Лента ↔ Мои.
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        // Discover (search + suggested) works for guests too —
-                        // the social API endpoints are public-readable. Only
-                        // tapping Follow inside opens the sign-in prompt.
-                        showDiscover = true
-                    } label: {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: 38, height: 38)
-                            .foregroundStyle(c.text)
-                            .background(c.cardAlt, in: Circle())
-                    }
-                }
-            }
-            // Pin the nav bar's background so it stays painted regardless of scroll
-            // position or tab transitions. Without `.visible`, SwiftUI defaults to
-            // "automatic" which fades the background in/out based on scroll — the
-            // re-fade on tab switch is the subtle "drop" users see.
-            .toolbarBackground(c.bg.opacity(0.95), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
+            // Custom header above owns the top chrome — hide the system bar.
+            // Pushed destinations manage their own chrome (TripDetailView /
+            // SocialTripDetailView via NavBarKiller, PublicProfileView /
+            // FollowListView via CustomNavBar + their own hidden-bar flags).
+            .toolbar(.hidden, for: .navigationBar)
         }
         .toast(item: $feedVM.toastItem)
         // Per-page refreshable modifiers live inside allFeedPage / mineFeedPage so
@@ -290,10 +250,12 @@ struct FeedView: View {
             // the cache so the CTA doesn't keep pointing at nothing.
             hasAnyPrivateTrip = feedVM.tripManager.hasAnyPrivateTrip()
         }
-        .sheet(isPresented: $showProfile) {
-            ProfileView()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
+        .sheet(isPresented: $showNotifications) {
+            // Self-contained sheet with its own NavigationStack — same
+            // presentation the Profile tab uses for the inbox.
+            NotificationsInboxView()
+                .environmentObject(lang)
+                .environmentObject(themeManager)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(item: $signInPrompt, onDismiss: {
@@ -388,13 +350,71 @@ struct FeedView: View {
         } // ZStack
     }
 
+    // MARK: - Header (Figma 140:945)
+
+    private func feedHeader(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 6) {
+            // Title doubles as scroll-to-top — preserves the old principal
+            // toolbar button behavior.
+            Button {
+                NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
+            } label: {
+                Text(AppStrings.feed(lang.language))
+                    .font(.system(size: 28, weight: .heavy))
+                    .tracking(-0.56)
+                    .foregroundStyle(c.text)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("feed_title")
+
+            Spacer()
+
+            headerCircleButton(icon: "magnifyingglass", c: c) {
+                // Discover (search + suggested) works for guests too —
+                // the social API endpoints are public-readable. Only
+                // tapping Follow inside opens the sign-in prompt.
+                showDiscover = true
+            }
+            .accessibilityIdentifier("feed_search")
+
+            headerCircleButton(icon: "bell", c: c) {
+                // Inbox is signed-in-only; the bell stays visible for guests
+                // and routes them to the sign-in prompt instead.
+                if auth.isSignedIn {
+                    showNotifications = true
+                } else {
+                    signInPrompt = .generic
+                }
+            }
+            .accessibilityIdentifier("feed_bell")
+        }
+    }
+
+    private func headerCircleButton(
+        icon: String, c: AppTheme.Colors, action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(c.text)
+                .frame(width: 34, height: 34)
+                .background(c.card, in: Circle())
+                .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Feed Mode Switcher
 
     private func feedModeSwitcher(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
-        return HStack(spacing: 3) {
-            modePill(.all, label: isRu ? "Лента" : "Feed", c: c)
-            modePill(.mine, label: isRu ? "Поездки" : "Trips", c: c)
+        HStack(spacing: 3) {
+            modePill(.all, label: AppStrings.all(lang.language), c: c)
+                .accessibilityIdentifier("feed_segment_all")
+            modePill(.mine, label: AppStrings.feedSegmentMine(lang.language), c: c)
+                .accessibilityIdentifier("feed_segment_mine")
         }
         .padding(3)
         .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 11))
@@ -426,7 +446,7 @@ struct FeedView: View {
         } label: {
             Text(label)
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(active ? c.text : c.textTertiary)
+                .foregroundStyle(active ? c.text : c.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
                 .background(
@@ -435,7 +455,7 @@ struct FeedView: View {
                     : Color.clear,
                     in: RoundedRectangle(cornerRadius: 8)
                 )
-                .shadow(color: active ? Color.black.opacity(0.04) : Color.clear, radius: 1, y: 1)
+                .shadow(color: active ? Color.black.opacity(0.03) : Color.clear, radius: 2, y: 1)
         }
         .buttonStyle(.plain)
     }
@@ -446,7 +466,7 @@ struct FeedView: View {
     private func allFeedPage(_ c: AppTheme.Colors) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 6) {
+                LazyVStack(spacing: 12) {
                     Color.clear.frame(height: 0).id("feedTopAll")
                     connectivityBanner(c)
                     if !auth.isSignedIn {
@@ -456,7 +476,7 @@ struct FeedView: View {
                     }
                     socialFeedContent(c).padding(.top, 6)
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
@@ -477,7 +497,7 @@ struct FeedView: View {
     private func mineFeedPage(_ c: AppTheme.Colors) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 6) {
+                LazyVStack(spacing: 12) {
                     Color.clear.frame(height: 0).id("feedTopMine")
                     ContributionCalendarView(
                         dateFrom: Binding(
@@ -504,7 +524,7 @@ struct FeedView: View {
 
                     tripSections(c)
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
@@ -732,13 +752,11 @@ struct FeedView: View {
         .padding(.bottom, 40)
     }
 
-    /// Empty social-feed state. Three jobs in one view:
-    ///   1. Friendly hero so the page never reads as "broken / no data".
-    ///   2. Inline `SuggestedUsersCarousel` — fixes the cold-start
-    ///      problem where the feed is dormant simply because nobody is
-    ///      followed yet. Tap on a user pushes onto the same nav stack
-    ///      the regular feed uses, so the empty state isn't a dead-end.
-    ///   3. First-publish nudge for signed-in users who have private
+    /// Empty social-feed state (Figma 141:1103). Two jobs:
+    ///   1. Friendly hero so the page never reads as "broken / no data",
+    ///      with «Найти людей» routing into Discover (suggestions moved
+    ///      there — no inline carousel; the empty state stays calm).
+    ///   2. First-publish nudge for signed-in users who have private
     ///      trips locally. Without this, the feed only ever fills via
     ///      "follow someone" — but a user who already has trips can
     ///      seed the feed themselves by publishing one.
@@ -750,49 +768,53 @@ struct FeedView: View {
         // AttributeGraph cycle.
         let hasPrivateTrips = hasAnyPrivateTrip
         let signedIn = auth.isSignedIn
-        VStack(spacing: 18) {
-            VStack(spacing: 12) {
-                Image(systemName: "road.lanes")
-                    .font(.system(size: 44, weight: .light))
-                    .foregroundStyle(c.textTertiary)
-                    .padding(.top, 40)
-                Text(isRu ? "Здесь будут поездки людей" : "Here come other people's trips")
-                    .font(.system(size: 18, weight: .heavy))
-                    .foregroundStyle(c.text)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                Text(signedIn
-                     ? (isRu
-                        ? "Подпишитесь на кого-нибудь — и их публичные поездки появятся здесь."
-                        : "Follow a few drivers and their public trips will land here.")
-                     : (isRu
-                        ? "Войдите, чтобы подписываться на других водителей и публиковать свои поездки."
-                        : "Sign in to follow other drivers and publish your own trips."))
-                    .font(.system(size: 13))
-                    .foregroundStyle(c.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
+        VStack(spacing: 14) {
+            FeedIdleRing()
+                .padding(.top, 40)
 
-            // Inline suggestions — the same carousel that lives in
-            // DiscoverView, embedded here so users don't have to leave
-            // the feed to find their first follow.
-            SuggestedUsersCarousel { author in
-                authorPath.cappedAppend(.profile(author.id, author))
+            Text(AppStrings.feedEmptyTitle(lang.language))
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+
+            Text(AppStrings.feedEmptyBody(lang.language))
+                .font(.system(size: 14))
+                .lineSpacing(6)
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(width: 280)
+
+            Button {
+                Haptics.tap()
+                showDiscover = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text(AppStrings.findPeople(lang.language))
+                        .font(.system(size: 14, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+                .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
+                .shadow(color: AppTheme.accent.opacity(0.3), radius: 1.5, y: 1)
             }
-            .environmentObject(lang)
-            .padding(.horizontal, 12)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("feed_empty_find_people")
 
             // Signed-in user with private trips: nudge them to publish.
             // We don't deep-link to a specific trip — sending them to
             // the "Мои" tab lets them pick which one to share. Avoids
-            // a "we picked your most recent" surprise.
+            // a "we picked your most recent" surprise. Kept as a quiet
+            // secondary text button (retains the cold-start seeding fix
+            // — deliberate deviation from the Figma frame).
             if signedIn && hasPrivateTrips {
                 Button {
                     Haptics.tap()
                     feedMode = .mine
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         Image(systemName: "globe")
                             .font(.system(size: 13, weight: .semibold))
                         Text(isRu
@@ -800,15 +822,14 @@ struct FeedView: View {
                              : "Publish one of your trips")
                             .font(.system(size: 14, weight: .semibold))
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(Capsule().fill(AppTheme.accent))
+                    .foregroundStyle(AppTheme.accent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 4)
             }
         }
+        .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
         .padding(.bottom, 40)
     }
@@ -1075,6 +1096,37 @@ struct FeedView: View {
             return fromStr
         }
         return "\(fromStr) – \(formatter.string(from: to))"
+    }
+}
+
+// MARK: - Feed idle ring (Figma 141:1103)
+
+/// Empty-state hero: quiet outer ring + accent inner ring around the
+/// pixel-art car. Sibling of `SignInIdleRing` (SignInPromptSheet) which
+/// uses a translucent accent disc — deliberately separate, not extracted
+/// into a shared component.
+private struct FeedIdleRing: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let c = AppTheme.colors(for: scheme)
+        ZStack {
+            Circle()
+                .stroke(c.border, lineWidth: 2)
+                .frame(width: 100, height: 100)
+            ZStack {
+                Circle()
+                    .stroke(AppTheme.accent, lineWidth: 2)
+                Image("PixelCar")
+                    .resizable()
+                    // The sprite asset is non-square — without fit it
+                    // squeezes into the 46×46 box.
+                    .scaledToFit()
+                    .frame(width: 46, height: 46)
+            }
+            .frame(width: 82, height: 82)
+        }
+        .frame(width: 100, height: 100)
     }
 }
 

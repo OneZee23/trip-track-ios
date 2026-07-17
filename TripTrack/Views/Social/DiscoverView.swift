@@ -42,7 +42,7 @@ struct DiscoverView: View {
                 .padding(.bottom, 32)
             }
             .background(c.bg)
-            .navigationTitle(isRu ? "Найти друзей" : "Find friends")
+            .navigationTitle(AppStrings.findPeople(lang.language))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
@@ -73,16 +73,20 @@ struct DiscoverView: View {
     private func searchField(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15))
+                .font(.system(size: 18))
                 .foregroundStyle(c.textTertiary)
             TextField(
-                isRu ? "Имя пользователя" : "Search by name",
-                text: $query
-            )
+                text: $query,
+                prompt: Text(isRu ? "Имя пользователя" : "Search by name")
+                    .foregroundStyle(c.textTertiary)
+            ) {
+                Text(AppStrings.findPeople(lang.language))
+            }
             .font(.system(size: 15))
             .foregroundStyle(c.text)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
+            .accessibilityIdentifier("discover_search_field")
             .onChange(of: query) { _, newValue in
                 debouncedSearch(newValue)
             }
@@ -110,7 +114,7 @@ struct DiscoverView: View {
     private func suggestedSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(
-                title: isRu ? "Рекомендуем" : "Suggested",
+                title: AppStrings.suggestedByRegions(lang.language),
                 c: c
             )
 
@@ -174,8 +178,8 @@ struct DiscoverView: View {
 
     private func sectionHeader(title: String, c: AppTheme.Colors) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .bold))
-            .tracking(0.5)
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(0.44)
             .foregroundStyle(c.textTertiary)
             .textCase(.uppercase)
     }
@@ -210,16 +214,19 @@ struct DiscoverView: View {
         } label: {
             HStack(spacing: 12) {
                 Circle()
-                    .fill(AppTheme.accentBg)
-                    .frame(width: 42, height: 42)
-                    .overlay { Text(user.avatarEmoji ?? "🚗").font(.system(size: 22)) }
+                    .fill(c.cardAlt)
+                    .frame(width: 36, height: 36)
+                    .overlay { Text(user.avatarEmoji ?? "🚗").font(.system(size: 19)) }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(user.displayName ?? (isRu ? "Пользователь" : "User"))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 13.5, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                    // Context line / mileage only when the DTO carries them —
+                    // the suggestion DTO ships level only, so that's what we
+                    // render (no fabricated data).
                     Text("LVL \(user.profileLevel)")
                         .font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
@@ -232,8 +239,8 @@ struct DiscoverView: View {
 
                 followButton(for: user, c: c, isRu: isRu)
             }
-            .padding(10)
-            .surfaceCard(cornerRadius: 12)
+            .padding(12)
+            .surfaceCard(cornerRadius: 16)
         }
         .buttonStyle(.plain)
     }
@@ -253,16 +260,18 @@ struct DiscoverView: View {
                  : (isRu ? "Подписаться" : "Follow"))
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                // Lock the button's footprint to its widest label —
-                // "Подписаться" (11 chars) vs "Подписан" (8 chars) caused
-                // visible row-content jump on toggle. Pinning width keeps
-                // the row stable between states.
-                .frame(minWidth: 110)
+                .padding(.vertical, 8)
+                // Fixed footprint (Figma: 122pt) — "Подписаться" (11 chars)
+                // vs "Подписан" (8 chars) caused visible row-content jump on
+                // toggle. Pinning width keeps the row stable between states.
+                .frame(width: 122)
                 .background(
                     isFollowed ? c.cardAlt : AppTheme.accent,
-                    in: RoundedRectangle(cornerRadius: 10)
+                    in: RoundedRectangle(cornerRadius: 14)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isFollowed ? c.borderBright : Color.clear, lineWidth: 1.5)
                 )
                 .foregroundStyle(isFollowed ? c.text : .white)
         }

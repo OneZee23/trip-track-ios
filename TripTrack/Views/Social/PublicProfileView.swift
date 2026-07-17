@@ -34,6 +34,9 @@ struct PublicProfileView: View {
     @State private var showBlockConfirm = false
     // Report flow paused until moderation UI exists; state intentionally omitted.
     @State private var selectedBadge: Badge?
+    /// Presentation-only grid ↔ list toggle for the trips section (Figma
+    /// 117:931 draws the 2-col mini-poster grid as default).
+    @State private var tripsAsGrid = true
     /// Gate initial fetch so `.task` — which re-fires on view re-appearance
     /// (e.g. after popping a pushed FollowListView) — doesn't re-run the
     /// sync+fetch cycle every time. Pull-to-refresh remains the explicit
@@ -226,7 +229,7 @@ struct PublicProfileView: View {
 
     private func heroSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         let bg = ProfileBackground.from(profile?.profileBackground)
-        let avatarSize: CGFloat = 100
+        let avatarSize: CGFloat = 84
         let bannerHeight: CGFloat = 140
         let avatarOverlap = avatarSize / 2
         let emoji = profile?.avatarEmoji ?? preloaded?.avatarEmoji ?? "🚗"
@@ -249,26 +252,33 @@ struct PublicProfileView: View {
             VStack(spacing: 10) {
                 VStack(spacing: 6) {
                     Text(resolvedDisplayName)
-                        .font(.system(size: 22, weight: .heavy))
-                        .tracking(-0.2)
+                        .font(.system(size: 21, weight: .heavy))
+                        .tracking(-0.21)
                         .foregroundStyle(c.text)
                         .multilineTextAlignment(.center)
 
                     if let lvl = profile?.profileLevel ?? preloaded?.profileLevel {
+                        // LvlPill (Figma 117:931) — star + rank-colored pixel
+                        // LVL + rank title on a warm pill. `c.cardAlt` stands
+                        // in for Figma #F7EFDE (nearest adaptive token).
+                        let rank = DriverRank.from(level: lvl)
                         HStack(spacing: 6) {
-                            Text(DriverRank.from(level: lvl).title(lang.language))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(c.textSecondary)
-                            Text("·")
-                                .foregroundStyle(c.textTertiary)
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(rank.color)
                             Text("LVL \(lvl)")
                                 .font(.custom("PressStart2P-Regular", size: 9))
                                 .tracking(1)
-                                .foregroundStyle(AppTheme.accent)
+                                .foregroundStyle(rank.color)
+                            Text("·")
+                                .foregroundStyle(c.textTertiary)
+                            Text(rank.title(lang.language))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(c.textSecondary)
                         }
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(AppTheme.accentBg, in: Capsule())
+                        .padding(.vertical, 5)
+                        .background(c.cardAlt, in: Capsule())
                     }
 
                     // Last-trip pill — shows a relative "N days ago"
@@ -389,26 +399,30 @@ struct PublicProfileView: View {
         let regionsValue = privacy ? dots : (stats.map { String($0.regionsCount) } ?? "—")
         let streakDisplay = privacy ? dots : (profile == nil ? "—" : "\(streakValue)")
         return VStack(spacing: 8) {
-            HStack(spacing: 0) {
-                statCell(value: tripsValue, label: isRu ? "поездок" : "trips", c: c)
-                divider(c)
-                statCell(value: kmValue, label: "км", c: c)
-                divider(c)
-                statCell(value: regionsValue, label: isRu ? "регионов" : "regions", c: c)
-                divider(c)
-                statCell(
-                    value: streakDisplay,
-                    // Spelled out "day streak" so the icon+number doesn't look
-                    // like a generic score — it's specifically consecutive days
-                    // of recording trips.
-                    label: isRu ? "дней подряд" : "day streak",
-                    c: c,
-                    accent: !privacy && streakValue > 0 ? AppTheme.accent : nil,
-                    iconSystemName: !privacy && streakValue > 0 ? "flame.fill" : nil
-                )
+            // Two 2-cell rows with 1px column separators (Figma 117:931).
+            VStack(spacing: 16) {
+                HStack(spacing: 0) {
+                    statCell(value: tripsValue, label: isRu ? "поездок" : "trips", c: c)
+                    divider(c)
+                    statCell(value: kmValue, label: "км", c: c)
+                }
+                HStack(spacing: 0) {
+                    statCell(value: regionsValue, label: isRu ? "регионов" : "regions", c: c)
+                    divider(c)
+                    statCell(
+                        value: streakDisplay,
+                        // Spelled out "day streak" so the icon+number doesn't look
+                        // like a generic score — it's specifically consecutive days
+                        // of recording trips.
+                        label: isRu ? "дней подряд" : "day streak",
+                        c: c,
+                        accent: !privacy && streakValue > 0 ? AppTheme.accent : nil,
+                        iconSystemName: !privacy && streakValue > 0 ? "flame.fill" : nil
+                    )
+                }
             }
-            .padding(.vertical, 12)
-            .surfaceCard(cornerRadius: 14)
+            .padding(.vertical, 18)
+            .surfaceCard(cornerRadius: 16)
 
             if privacy {
                 HStack(spacing: 6) {
@@ -458,7 +472,7 @@ struct PublicProfileView: View {
     private func divider(_ c: AppTheme.Colors) -> some View {
         Rectangle()
             .fill(c.border)
-            .frame(width: 0.5, height: 28)
+            .frame(width: 1, height: 28)
     }
 
     // MARK: - Active vehicle
@@ -568,7 +582,7 @@ struct PublicProfileView: View {
             let badges = ids.compactMap { id in Badge.all.first(where: { $0.id == id }) }
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
-                    Text(isRu ? "Ачивки" : "Achievements")
+                    Text(AppStrings.badges(lang.language))
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(c.text)
                     Text("·")
@@ -604,22 +618,25 @@ struct PublicProfileView: View {
             Haptics.tap()
             selectedBadge = badge
         } label: {
+            // 74×74 cell (Figma 117:931): 46pt tinted icon disc + tier-colored
+            // caption.
             VStack(spacing: 6) {
                 ZStack {
                     Circle()
                         .fill(badge.color.opacity(0.15))
-                        .frame(width: 48, height: 48)
+                        .frame(width: 46, height: 46)
                     Image(systemName: badge.icon)
-                        .font(.system(size: 22))
+                        .font(.system(size: 20))
                         .foregroundStyle(badge.color)
                 }
                 Text(badge.title(lang.language))
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(c.textSecondary)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(badge.color)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                    .frame(width: 72)
+                    .frame(width: 74)
             }
+            .frame(width: 74)
         }
         .buttonStyle(.plain)
     }
@@ -689,7 +706,7 @@ struct PublicProfileView: View {
                         .foregroundStyle(c.text)
                     Text("·")
                         .foregroundStyle(c.textTertiary)
-                    Text(isRu ? "Публичные \(publicCount)" : "\(publicCount) public")
+                    Text("\(publicCount)")
                         .font(.system(size: 13, weight: .semibold).monospacedDigit())
                         .foregroundStyle(c.textSecondary)
                     if totalCount > publicCount {
@@ -700,10 +717,22 @@ struct PublicProfileView: View {
                             .foregroundStyle(c.textTertiary)
                     }
                     Spacer()
+                    layoutToggle(c)
                 }
 
-                ForEach(trips) { t in
-                    recentTripRow(t, c: c, isRu: isRu)
+                if tripsAsGrid {
+                    LazyVGrid(
+                        columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
+                        spacing: 8
+                    ) {
+                        ForEach(trips) { t in
+                            tripGridCell(t, c: c, isRu: isRu)
+                        }
+                    }
+                } else {
+                    ForEach(trips) { t in
+                        recentTripRow(t, c: c, isRu: isRu)
+                    }
                 }
             }
         } else if let err = loadError {
@@ -716,6 +745,75 @@ struct PublicProfileView: View {
         } else if isLoading {
             skeleton()
         }
+    }
+
+    /// Grid ↔ list segmented mini-toggle in the trips header.
+    private func layoutToggle(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 2) {
+            layoutToggleButton(icon: "square.grid.2x2", isOn: tripsAsGrid, c: c) {
+                tripsAsGrid = true
+            }
+            layoutToggleButton(icon: "list.bullet", isOn: !tripsAsGrid, c: c) {
+                tripsAsGrid = false
+            }
+        }
+        .padding(2)
+        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func layoutToggleButton(
+        icon: String, isOn: Bool, c: AppTheme.Colors, action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(isOn ? c.text : c.textTertiary)
+                .frame(width: 26, height: 22)
+                .background(isOn ? c.card : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 2-col mini-poster cell (Figma 117:931): cinema route canvas + title
+    /// + distance.
+    private func tripGridCell(_ trip: SocialProfileRecentTrip, c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if trip.previewCoordinates.count > 1 {
+                PosterRouteCanvas(
+                    coordinates: trip.previewCoordinates,
+                    speeds: [],
+                    style: .cinema,
+                    showsCar: false
+                )
+                .frame(height: 72)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(c.cardAlt)
+                    .frame(height: 72)
+                    .frame(maxWidth: .infinity)
+                    .overlay {
+                        Image(systemName: "map")
+                            .font(.system(size: 16))
+                            .foregroundStyle(c.textTertiary)
+                    }
+            }
+
+            Text(trip.title ?? shortDate(trip.startDate, isRu: isRu))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(c.text)
+                .lineLimit(1)
+
+            Text(String(format: isRu ? "%.1f км" : "%.1f km", trip.distanceKm))
+                .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                .foregroundStyle(c.textTertiary)
+        }
+        .padding(10)
+        .surfaceCard(cornerRadius: 14)
     }
 
     private func recentTripRow(_ trip: SocialProfileRecentTrip, c: AppTheme.Colors, isRu: Bool) -> some View {

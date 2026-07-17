@@ -205,6 +205,34 @@ final class TripTrackUITests: XCTestCase {
         }
     }
 
+    /// Walks the redesigned Home feed: both segments, bell (guest prompt),
+    /// search → Discover, long-press card (guest → sign-in). 6.1.0 Лента.
+    func test_zz_feed_shots() {
+        normalizeToHome()
+        sleep(3); snap("110_feed_all")
+        let mine = app.buttons.matching(identifier: "feed_segment_mine").firstMatch
+        if mine.waitForExistence(timeout: 2) { mine.tap(); sleep(2); snap("111_feed_mine") }
+        let allSeg = app.buttons.matching(identifier: "feed_segment_all").firstMatch
+        if allSeg.waitForExistence(timeout: 2) { allSeg.tap(); sleep(2) }
+        let bell = app.buttons.matching(identifier: "feed_bell").firstMatch
+        if bell.waitForExistence(timeout: 2) {
+            bell.tap(); sleep(2); snap("112_bell_guest")
+            win.swipeDown(); sleep(1)
+        }
+        let search = app.buttons.matching(identifier: "feed_search").firstMatch
+        if search.waitForExistence(timeout: 2) {
+            search.tap(); sleep(2); snap("113_discover")
+            win.swipeDown(); sleep(1)
+        }
+        let card = app.descendants(matching: .any)
+            .matching(identifier: "social_trip_card").firstMatch
+        if card.waitForExistence(timeout: 3) {
+            card.press(forDuration: 0.8); sleep(1); snap("114_longpress")
+            win.swipeDown(); sleep(1)
+            pt(0.5, 0.1).tap(); sleep(1)
+        }
+    }
+
     /// Brings the app to Home from ANY persisted state: adopts a leftover
     /// recovery prompt, stops an active recording (the chevron is replaced
     /// by the REC pill while recording), walks celebration/summary sheets.

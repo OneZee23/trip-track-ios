@@ -32,6 +32,10 @@ struct PosterRouteCanvas: View {
     /// Index of the last passed original coordinate during playback.
     var playbackTrailIndex: Int = -1
     var style: Style = .poster
+    /// Draw the pixel-car sprite. Defaults to true so the trip-detail
+    /// poster and replay render exactly as before; feed cards pass false
+    /// (Figma FeedCard 115:38 draws a bare route).
+    var showsCar: Bool = true
 
     /// Poster canvas gradient (Figma: 141.63° #29364F 7% → #161B2C 79%).
     private static let bgGradient = LinearGradient(
@@ -142,24 +146,26 @@ struct PosterRouteCanvas: View {
 
         // Pixel-car sprite (30pt). Mid-route rotated 22° when idle (Figma);
         // during playback it rides the head, rotated along the segment.
-        let car = context.resolve(Image("PixelCar"))
-        let carSize: CGFloat = 30
-        let carPoint: CGPoint
-        let rotation: Angle
-        if let head = headPoint {
-            carPoint = head
-            let refIdx = min(max(playbackTrailIndex, 0), projected.count - 2)
-            let a = projected[refIdx]
-            let b = projected[refIdx + 1]
-            rotation = .radians(atan2(b.y - a.y, b.x - a.x))
-        } else {
-            carPoint = projected[projected.count / 2]
-            rotation = .degrees(22)
+        if showsCar {
+            let car = context.resolve(Image("PixelCar"))
+            let carSize: CGFloat = 30
+            let carPoint: CGPoint
+            let rotation: Angle
+            if let head = headPoint {
+                carPoint = head
+                let refIdx = min(max(playbackTrailIndex, 0), projected.count - 2)
+                let a = projected[refIdx]
+                let b = projected[refIdx + 1]
+                rotation = .radians(atan2(b.y - a.y, b.x - a.x))
+            } else {
+                carPoint = projected[projected.count / 2]
+                rotation = .degrees(22)
+            }
+            var carCtx = context
+            carCtx.translateBy(x: carPoint.x, y: carPoint.y)
+            carCtx.rotate(by: rotation)
+            carCtx.draw(car, in: CGRect(x: -carSize/2, y: -carSize/2, width: carSize, height: carSize))
         }
-        var carCtx = context
-        carCtx.translateBy(x: carPoint.x, y: carPoint.y)
-        carCtx.rotate(by: rotation)
-        carCtx.draw(car, in: CGRect(x: -carSize/2, y: -carSize/2, width: carSize, height: carSize))
     }
 
     // MARK: - Projection

@@ -49,6 +49,10 @@ struct ReportSheet: View {
                         reasonList(c, isRu: isRu)
                         notesField(c, isRu: isRu)
                         submitButton(c, isRu: isRu)
+                        Text(AppStrings.reportAnonymousNote(lang.language))
+                            .font(.system(size: 12))
+                            .foregroundStyle(c.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
                         if let errorMessage {
                             Text(errorMessage)
                                 .font(.system(size: 12))
@@ -80,8 +84,16 @@ struct ReportSheet: View {
     }
 
     private func reasonList(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(spacing: 8) {
-            ForEach(ReportReason.allCases) { reason in
+        // Single menu card (Figma 117:2335): rows p 14, 18pt radio icons,
+        // hairline separators, radius 18.
+        VStack(spacing: 0) {
+            ForEach(Array(ReportReason.allCases.enumerated()), id: \.element) { index, reason in
+                if index > 0 {
+                    Rectangle()
+                        .fill(c.border)
+                        .frame(height: 1)
+                        .padding(.leading, 14)
+                }
                 Button {
                     Haptics.selection()
                     selectedReason = reason
@@ -94,14 +106,15 @@ struct ReportSheet: View {
                         Spacer()
                         Image(systemName: selectedReason == reason ? "circle.inset.filled" : "circle")
                             .font(.system(size: 18))
-                            .foregroundStyle(selectedReason == reason ? AppTheme.accent : c.textTertiary)
+                            .foregroundStyle(selectedReason == reason ? AppTheme.red : c.textTertiary)
                     }
                     .padding(14)
-                    .surfaceCard(cornerRadius: 12)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
         }
+        .surfaceCard(cornerRadius: 18)
     }
 
     private func notesField(_ c: AppTheme.Colors, isRu: Bool) -> some View {
@@ -136,8 +149,9 @@ struct ReportSheet: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(
+                // Destructive action — red per Figma's «Пожаловаться» row.
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(selectedReason == nil ? c.textTertiary.opacity(0.3) : AppTheme.accent)
+                    .fill(selectedReason == nil ? c.textTertiary.opacity(0.3) : AppTheme.red)
             )
         }
         .buttonStyle(.plain)

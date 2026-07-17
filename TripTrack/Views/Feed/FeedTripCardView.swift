@@ -33,22 +33,22 @@ struct FeedTripCardView: View {
 
         VStack(alignment: .leading, spacing: 0) {
             headerRow(c)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 13)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
 
             Text(trip.title ?? formattedDateFallback)
                 .font(.system(size: 17, weight: .heavy))
-                .tracking(-0.1)
+                .tracking(-0.085)
                 .foregroundStyle(c.text)
                 .lineLimit(2)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 13)
+                .padding(.bottom, 10)
 
             mapSection(c)
 
             metricsStrip(c)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 13)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
 
@@ -58,7 +58,7 @@ struct FeedTripCardView: View {
                     maxVisible: 4,
                     size: 22
                 )
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 13)
                 .padding(.bottom, 12)
             }
         }
@@ -75,14 +75,14 @@ struct FeedTripCardView: View {
         }()
         return HStack(spacing: 10) {
             Circle()
-                .fill(AppTheme.accentBg)
-                .frame(width: 34, height: 34)
+                .fill(c.cardAlt)
+                .frame(width: 36, height: 36)
                 .overlay {
                     if let vehicle, vehicle.isPixelAvatar {
                         vehicle.avatarView(size: 28)
                     } else if vehicle != nil {
                         Text(vehicleEmoji)
-                            .font(.system(size: 17))
+                            .font(.system(size: 19))
                     } else {
                         // Fallback for trips with no attached vehicle (typical
                         // for trips synced down from server where the original
@@ -152,24 +152,25 @@ struct FeedTripCardView: View {
         .background((isPrivate ? Color.orange : AppTheme.accent).opacity(0.15), in: Capsule())
     }
 
-    // MARK: - Map Section
+    // MARK: - Track (cinema route canvas — matches SocialFeedCardView)
 
     @ViewBuilder
     private func mapSection(_ c: AppTheme.Colors) -> some View {
-        if trip.previewCoordinates.count > 1 {
-            MapSnapshotPreview(
-                coordinates: trip.previewCoordinates,
-                tripId: trip.id,
-                height: 180
+        // ≤300-point cap — see FeedRouteSampler (PosterRouteCanvas perf
+        // contract; RDP previews of long trips aren't count-bounded).
+        let coords = FeedRouteSampler.capped(trip.previewCoordinates)
+        if coords.count > 1 {
+            // Accent-colored route (speeds empty) — the downsampled preview
+            // polyline carries no per-point speed series.
+            PosterRouteCanvas(
+                coordinates: coords,
+                speeds: [],
+                style: .cinema,
+                showsCar: false
             )
-            .frame(height: 180)
+            .frame(height: 178)
             .frame(maxWidth: .infinity)
-            .clipped()
-            .overlay(
-                Rectangle()
-                    .stroke(c.border, lineWidth: 0.5)
-                    .opacity(0.3)
-            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -202,8 +203,8 @@ struct FeedTripCardView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 18, weight: .heavy).monospacedDigit())
-                    .tracking(-0.2)
+                    .font(.system(size: 19, weight: .heavy).monospacedDigit())
+                    .tracking(-0.19)
                     .foregroundStyle(c.text)
                 if !unit.isEmpty {
                     Text(unit)
@@ -214,8 +215,8 @@ struct FeedTripCardView: View {
             .lineLimit(1)
 
             Text(label)
-                .font(.system(size: 10, weight: .bold))
-                .tracking(0.5)
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.55)
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)
                 .lineLimit(1)

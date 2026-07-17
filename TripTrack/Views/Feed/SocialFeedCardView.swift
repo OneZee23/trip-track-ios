@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 /// Strava-style feed card for social feed items (author's trips).
 /// Visual layout mirrors FeedTripCardView but shows author row instead of vehicle,
@@ -29,7 +30,7 @@ struct SocialFeedCardView: View {
 
         VStack(alignment: .leading, spacing: 0) {
             authorRow(c, isRu: isRu)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 13)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
 
@@ -38,17 +39,17 @@ struct SocialFeedCardView: View {
                 if let title = trip.title, !title.isEmpty {
                     Text(title)
                         .font(.system(size: 17, weight: .heavy))
-                        .tracking(-0.1)
+                        .tracking(-0.085)
                         .foregroundStyle(c.text)
                         .lineLimit(2)
-                        .padding(.horizontal, 14)
-                        .padding(.bottom, 12)
+                        .padding(.horizontal, 13)
+                        .padding(.bottom, 10)
                 }
 
                 mapSection(c)
 
                 metricsStrip(c)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 13)
                     .padding(.top, 12)
                     .padding(.bottom, 10)
             }
@@ -64,20 +65,20 @@ struct SocialFeedCardView: View {
 
             if !trip.badgeIds.isEmpty {
                 TripBadgesRow(badgeIds: trip.badgeIds, maxVisible: 4, size: 22)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 13)
                     .padding(.bottom, 10)
             }
 
+            Rectangle()
+                .fill(c.border)
+                .frame(height: 1)
+
             actionBar(c)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(c.border)
-                        .frame(height: 0.5)
-                }
+                .padding(.horizontal, 13)
+                .padding(.vertical, 12)
         }
         .surfaceCard(cornerRadius: 16)
+        .accessibilityIdentifier("social_trip_card")
     }
 
     // MARK: - Author Row
@@ -92,11 +93,11 @@ struct SocialFeedCardView: View {
         let headerName = rawName.isEmpty ? (isRu ? "Без имени" : "No name") : rawName
         return HStack(spacing: 10) {
             Circle()
-                .fill(AppTheme.accentBg)
-                .frame(width: 34, height: 34)
+                .fill(c.cardAlt)
+                .frame(width: 36, height: 36)
                 .overlay {
                     Text(trip.author.avatarEmoji ?? "🙂")
-                        .font(.system(size: 17))
+                        .font(.system(size: 19))
                 }
                 .onTapGesture {
                     Haptics.tap()
@@ -113,6 +114,15 @@ struct SocialFeedCardView: View {
                         // since a long name + "Вы" pill needs the truncation
                         // to land on the name, not somewhere weird in the pill.
                         .truncationMode(.tail)
+                    // LVL tag (Figma FeedCard 115:38) — rank-colored pixel
+                    // font. PressStart2P substitutes Figma's Handjet (not
+                    // bundled) — the app-wide LVL canon. READ-ONLY use of
+                    // `DriverRank`.
+                    Text("LVL \(trip.author.profileLevel)")
+                        .font(.custom("PressStart2P-Regular", size: 9))
+                        .tracking(1)
+                        .foregroundStyle(DriverRank.from(level: trip.author.profileLevel).color)
+                        .fixedSize()
                     if isOwn {
                         // Subtle "this is you" badge — explicit signal that
                         // the card is yours without breaking the unified
@@ -147,17 +157,6 @@ struct SocialFeedCardView: View {
                 onTapAuthor?()
             }
 
-            if isFreshlyPublished {
-                Text(isRu ? "НОВОЕ" : "NEW")
-                    .font(.system(size: 10, weight: .heavy))
-                    .tracking(0.6)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(AppTheme.accent, in: Capsule())
-                    .fixedSize()
-            }
-
             if trip.photoCount > 0 {
                 HStack(spacing: 4) {
                     Image(systemName: "camera.fill")
@@ -175,28 +174,47 @@ struct SocialFeedCardView: View {
                 // cards in the same scroll list.
                 .fixedSize()
             }
+
+            // «…» menu (Figma FeedCard trailing) — share lives here now;
+            // the footer-right slot became the comment affordance. Report
+            // row deferred until moderation UI exists.
+            Menu {
+                Button {
+                    onShare?()
+                } label: {
+                    Label(AppStrings.share(lang.language), systemImage: "square.and.arrow.up")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(c.textTertiary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityIdentifier("feed_card_menu")
         }
     }
 
-    /// True when the trip ended within the freshness window. Lives in the
-    /// outer HStack of `authorRow` so the pill can never overlap the inline
-    /// "Вы" badge that sits inside the name VStack — they're in different
-    /// stacks so SwiftUI lays them out independently.
-    private var isFreshlyPublished: Bool {
-        let publishedAt = trip.endDate ?? trip.startDate
-        return Date().timeIntervalSince(publishedAt) < 12 * 3600
-    }
-
-    // MARK: - Map
+    // MARK: - Track (Figma FeedCard 115:38 — cinema route canvas)
 
     @ViewBuilder
     private func mapSection(_ c: AppTheme.Colors) -> some View {
-        let coords = trip.previewCoordinates
+        // Honor PosterRouteCanvas's ≤300-point perf contract: preview
+        // polylines are RDP-simplified but NOT capped — long trips can
+        // carry thousands of points and the feed draws many cards.
+        let coords = FeedRouteSampler.capped(trip.previewCoordinates)
         if coords.count > 1 {
-            MapSnapshotPreview(coordinates: coords, tripId: trip.id, height: 180)
-                .frame(height: 180)
-                .frame(maxWidth: .infinity)
-                .clipped()
+            // Accent-colored route (speeds empty) is the documented
+            // deviation — the feed DTO carries no per-point speed series.
+            PosterRouteCanvas(
+                coordinates: coords,
+                speeds: [],
+                style: .cinema,
+                showsCar: false
+            )
+            .frame(height: 178)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -261,8 +279,8 @@ struct SocialFeedCardView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 18, weight: .heavy).monospacedDigit())
-                    .tracking(-0.2)
+                    .font(.system(size: 19, weight: .heavy).monospacedDigit())
+                    .tracking(-0.19)
                     .foregroundStyle(c.text)
                 if !unit.isEmpty {
                     Text(unit)
@@ -273,8 +291,8 @@ struct SocialFeedCardView: View {
             .lineLimit(1)
 
             Text(label)
-                .font(.system(size: 10, weight: .bold))
-                .tracking(0.5)
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.55)
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)
                 .lineLimit(1)
@@ -352,16 +370,26 @@ struct SocialFeedCardView: View {
 
             Spacer(minLength: 6)
 
+            // Comment affordance (Figma FeedCard footer-right) — comments
+            // live in the trip detail, so this routes through `onTapCard`.
+            // Share moved to the card's «…» menu.
             Button {
                 Haptics.tap()
-                onShare?()
+                onTapCard?()
             } label: {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(c.textSecondary)
-                    .frame(width: 28, height: 28)
+                HStack(spacing: 4) {
+                    Image(systemName: "bubble.right")
+                        .font(.system(size: 16, weight: .medium))
+                    Text("\(trip.commentCount)")
+                        .font(.system(size: 12, weight: .bold).monospacedDigit())
+                }
+                .foregroundStyle(c.textSecondary)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(AppStrings.comments(lang.language))
+            .accessibilityIdentifier("feed_card_comments")
         }
     }
 
@@ -383,15 +411,15 @@ struct SocialFeedCardView: View {
                     .font(.system(size: 12, weight: .bold).monospacedDigit())
                     .foregroundStyle(isMine ? AppTheme.accent : c.textSecondary)
             }
-            .padding(.horizontal, 9)
+            .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(
                 Capsule()
-                    .fill(isMine ? AppTheme.accentBg : c.cardAlt.opacity(0.6))
+                    .fill(isMine ? AppTheme.orangeDim : c.cardAlt)
             )
             .overlay(
                 Capsule()
-                    .stroke(isMine ? AppTheme.accent.opacity(0.4) : Color.clear, lineWidth: 1)
+                    .stroke(isMine ? AppTheme.accent : Color.clear, lineWidth: 1.5)
             )
         }
         .buttonStyle(.plain)
@@ -407,5 +435,27 @@ struct SocialFeedCardView: View {
             result += " · \(r)"
         }
         return result
+    }
+}
+
+// MARK: - Route sampler
+
+/// Uniform stride-cap for feed-card route previews. PosterRouteCanvas's
+/// perf contract wants ≤ ~300 points; RDP-simplified preview polylines are
+/// distance-bounded, not count-bounded, so multi-hour trips can exceed it
+/// by an order of magnitude — noticeable when a LazyVStack re-draws many
+/// canvases during fast scrolls. First/last points always survive.
+enum FeedRouteSampler {
+    static func capped(
+        _ coords: [CLLocationCoordinate2D], cap: Int = 300
+    ) -> [CLLocationCoordinate2D] {
+        guard coords.count > cap else { return coords }
+        let step = Double(coords.count - 1) / Double(cap - 1)
+        var out: [CLLocationCoordinate2D] = []
+        out.reserveCapacity(cap)
+        for i in 0..<cap {
+            out.append(coords[Int((Double(i) * step).rounded())])
+        }
+        return out
     }
 }

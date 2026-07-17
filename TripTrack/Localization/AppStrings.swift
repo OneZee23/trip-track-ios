@@ -1283,4 +1283,65 @@ enum AppStrings {
     static func sinceYear(_ lang: LanguageManager.Language, year: Int) -> String {
         lang == .ru ? "с \(year)" : "since \(year)"
     }
+
+    // MARK: - Home feed (6.1.0)
+    static func feedSegmentMine(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Мои" : "Mine"
+    }
+    static func feedEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Здесь появятся маршруты" : "Routes will show up here"
+    }
+    static func feedEmptyBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Опубликуйте первую поездку или найдите тех, за кем интересно следить."
+            : "Publish your first trip or find people worth following."
+    }
+    static func findPeople(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Найти людей" : "Find people"
+    }
+    /// Accessibility label for the feed-card comment affordance.
+    static func comments(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Комментарии" : "Comments"
+    }
+
+    // MARK: - Activity inbox (6.1.0)
+    static func activityTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Активность" : "Activity"
+    }
+    static func chipReactions(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Реакции" : "Reactions"
+    }
+    static func chipFollows(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Подписки" : "Follows"
+    }
+    static func chipComments(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Комменты" : "Comments"
+    }
+    static func today(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сегодня" : "Today"
+    }
+    static func earlier(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ранее" : "Earlier"
+    }
+    static func noFilteredNotifications(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Таких уведомлений пока нет" : "No such notifications yet"
+    }
+    static func followBack(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "В ответ" : "Follow back"
+    }
+
+    // MARK: - Discover (6.1.0)
+    static func suggestedByRegions(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Рекомендуем · по Вашим регионам" : "Suggested · based on your regions"
+    }
+
+    // MARK: - Share sheet / report (6.1.0)
+    static func copyAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Копировать" : "Copy"
+    }
+    static func reportAnonymousNote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Жалобы анонимны — автор не узнает, кто их отправил."
+            : "Reports are anonymous — the author won't know who sent them."
+    }
 }

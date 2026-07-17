@@ -16,6 +16,9 @@ struct StoryShareData {
     let coordinates: [CLLocationCoordinate2D]
     let authorEmoji: String
     let authorName: String
+    /// Carried in the data (not read from the environment) so the poster
+    /// localizes identically on screen and inside ImageRenderer exports.
+    let language: LanguageManager.Language
 }
 
 extension StoryShareData {
@@ -35,7 +38,8 @@ extension StoryShareData {
             region: trip.region,
             coordinates: trip.previewCoordinates,
             authorEmoji: trip.author.avatarEmoji ?? "🚗",
-            authorName: trip.author.displayName ?? (lang == .ru ? "Пользователь" : "User")
+            authorName: trip.author.displayName ?? (lang == .ru ? "Пользователь" : "User"),
+            language: lang
         )
     }
 
@@ -54,7 +58,8 @@ extension StoryShareData {
             region: trip.region,
             coordinates: trip.previewCoordinates,
             authorEmoji: authorEmoji,
-            authorName: authorName
+            authorName: authorName,
+            language: lang
         )
     }
 }
@@ -74,116 +79,123 @@ struct StoryShareSheet: View {
         let c = AppTheme.colors(for: scheme)
         let isRu = lang.language == .ru
 
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Custom header (Figma 117:1739) — «Поделиться» + close. The
+            // system grabber comes from the presenting sheet's
+            // `.presentationDragIndicator(.visible)`.
+            HStack {
+                Text(AppStrings.share(lang.language))
+                    .font(.system(size: 17, weight: .heavy))
+                    .foregroundStyle(c.text)
+                Spacer()
+                Button {
+                    Haptics.tap()
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(c.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+
             ScrollView {
                 VStack(spacing: 16) {
+                    // Poster preview (Figma: 201×290, radius 18). The share
+                    // image itself still renders at full 1080×1920.
                     previewCard
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(9.0/16.0, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
-                        .padding(.horizontal, 32)
+                        .frame(width: 201, height: 290)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
                         .padding(.top, 8)
 
-                    VStack(spacing: 10) {
-                        actionButton(
-                            icon: "square.and.arrow.up",
-                            title: isRu ? "Поделиться" : "Share",
-                            subtitle: shareUrl != nil
-                                ? (isRu ? "Картинка + ссылка" : "Image + link")
-                                : (isRu ? "Картинка" : "Image"),
-                            isPrimary: true,
-                            c: c,
-                            action: shareImage
-                        )
-                        actionButton(
-                            icon: savedToPhotos ? "checkmark.circle.fill" : "photo.on.rectangle",
-                            title: savedToPhotos
-                                ? (isRu ? "Сохранено" : "Saved")
-                                : (isRu ? "Сохранить в Фото" : "Save to Photos"),
-                            subtitle: isRu
-                                ? "Для загрузки в сторис вручную"
-                                : "Upload to your story manually",
-                            isPrimary: false,
-                            c: c,
-                            action: savePhoto
-                        )
-                        if let shareUrl {
-                            actionButton(
-                                icon: linkCopied ? "checkmark.circle.fill" : "link",
-                                title: linkCopied
-                                    ? (isRu ? "Ссылка скопирована" : "Link copied")
-                                    : (isRu ? "Скопировать ссылку" : "Copy link"),
-                                subtitle: shareUrl,
-                                isPrimary: false,
-                                c: c,
-                                action: copyLink
-                            )
+                    // Primary «Поделиться» + secondary «Сохранить».
+                    HStack(spacing: 10) {
+                        Button {
+                            Haptics.tap()
+                            shareImage()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 15, weight: .semibold))
+                                Text(AppStrings.share(lang.language))
+                                    .font(.system(size: 15, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
+                            .shadow(color: AppTheme.accent.opacity(0.3), radius: 1.5, y: 1)
                         }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            Haptics.tap()
+                            savePhoto()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: savedToPhotos ? "checkmark.circle.fill" : "photo.on.rectangle")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(savedToPhotos ? AppTheme.green : AppTheme.accent)
+                                Text(savedToPhotos
+                                     ? (isRu ? "Сохранено" : "Saved")
+                                     : AppStrings.save(lang.language))
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(c.text)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .surfaceCard(cornerRadius: 14)
+                        }
+                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 24)
+
+                    // Link row — public share URL + «Копировать» chip.
+                    if let shareUrl {
+                        HStack(spacing: 10) {
+                            Image(systemName: "link")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(c.textTertiary)
+                            Text(shareUrl)
+                                .font(.system(size: 12))
+                                .foregroundStyle(c.textSecondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button {
+                                Haptics.tap()
+                                copyLink()
+                            } label: {
+                                Text(linkCopied
+                                     ? (isRu ? "Скопировано" : "Copied")
+                                     : AppStrings.copyAction(lang.language))
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(linkCopied ? AppTheme.green : AppTheme.accent)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(AppTheme.accentBg, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(12)
+                        .surfaceCard(cornerRadius: 14)
+                        .padding(.horizontal, 16)
+                    }
                 }
-            }
-            .background(c.bg)
-            .navigationTitle(isRu ? "Поделиться поездкой" : "Share trip")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+                .padding(.bottom, 24)
             }
         }
+        .background(c.bg)
+        .presentationCornerRadius(22)
     }
 
     // MARK: - Preview card (used both in-sheet and for image rendering)
 
     private var previewCard: some View {
         StoryPreviewCard(data: data)
-    }
-
-    // MARK: - Action button
-
-    private func actionButton(
-        icon: String,
-        title: String,
-        subtitle: String,
-        isPrimary: Bool,
-        c: AppTheme.Colors,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            Haptics.tap()
-            action()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isPrimary ? .white : AppTheme.accent)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle()
-                            .fill(isPrimary ? AppTheme.accent : AppTheme.accentBg)
-                    )
-                // Claim leftover row width so the trailing chevron stays pinned right
-                // and long titles can't squeeze the Spacer to zero on narrow phones.
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(c.text)
-                    Text(subtitle)
-                        .font(.system(size: 11))
-                        .foregroundStyle(c.textTertiary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-            }
-            .padding(14)
-            .surfaceCard(cornerRadius: 14)
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Actions
@@ -261,13 +273,15 @@ struct StoryPreviewCard: View {
 
     var body: some View {
         ZStack {
-            // Dark background gradient
+            // Navy poster gradient — same constants as the shipped
+            // trip-detail PosterRouteCanvas (#29364F → #161B2C), one poster
+            // identity across the app (FORK-10).
             LinearGradient(
-                colors: [
-                    Color(red: 12/255, green: 14/255, blue: 18/255),
-                    Color(red: 24/255, green: 20/255, blue: 16/255)
+                stops: [
+                    .init(color: Color(red: 0x29/255, green: 0x36/255, blue: 0x4F/255), location: 0.07),
+                    .init(color: Color(red: 0x16/255, green: 0x1B/255, blue: 0x2C/255), location: 0.79)
                 ],
-                startPoint: .top, endPoint: .bottom
+                startPoint: .topLeading, endPoint: .bottomTrailing
             )
 
             GeometryReader { geo in
@@ -278,14 +292,16 @@ struct StoryPreviewCard: View {
                             .resizable()
                             .scaledToFit()
                             .frame(height: geo.size.height * 0.028)
+                        // Product wordmark (Figma 117:1739) — this poster is
+                        // the one asset users export outside the app, it must
+                        // carry the real product name.
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("ROAD  TRIP")
+                            Text("TRIP")
                                 .font(.custom("PressStart2P-Regular", size: geo.size.height * 0.014))
                                 .foregroundStyle(AppTheme.accent)
-                            Text("TRACKER")
-                                .font(.system(size: geo.size.height * 0.015, weight: .semibold))
-                                .foregroundStyle(Color.white.opacity(0.5))
-                                .tracking(2)
+                            Text("TRACK")
+                                .font(.custom("PressStart2P-Regular", size: geo.size.height * 0.014))
+                                .foregroundStyle(Color.white.opacity(0.6))
                         }
                         Spacer()
                     }
@@ -300,21 +316,14 @@ struct StoryPreviewCard: View {
                             .fill(Color.white.opacity(0.04))
 
                         if data.coordinates.count > 1 {
-                            // Real map tiles (via MKMapSnapshotter) instead of a
-                            // bare Canvas polyline — the line-only preview felt
-                            // empty against the dark card. `data.tripId` is the
-                            // cache key so we don't re-render on every open.
-                            // Pass both width and height so the snapshot
-                            // matches the display slot aspect ratio. Feed
-                            // cards rely on the default 340pt width; the
-                            // share card slot is ~0.77·cardWidth, so the
-                            // hardcoded default aspect-cropped most of the
-                            // horizontal route and blew up the endpoint dots.
-                            MapSnapshotPreview(
+                            // Poster-style route render — deterministic (no
+                            // async tile snapshot), so ImageRenderer always
+                            // captures the full route. Same navy poster
+                            // surface as the trip-detail hero.
+                            PosterRouteCanvas(
                                 coordinates: data.coordinates,
-                                tripId: data.tripId,
-                                height: geo.size.height * 0.48,
-                                width: geo.size.width * 0.77
+                                speeds: [],
+                                style: .poster
                             )
                             .clipShape(RoundedRectangle(cornerRadius: geo.size.width * 0.05))
                             .padding(geo.size.width * 0.04)
@@ -345,17 +354,17 @@ struct StoryPreviewCard: View {
                         HStack(spacing: geo.size.width * 0.05) {
                             metricCell(
                                 value: data.distanceKmText,
-                                unit: "km",
+                                unit: AppStrings.km(data.language),
                                 fontScale: geo.size.height * 0.028
                             )
                             metricCell(
                                 value: data.durationText,
-                                unit: "time",
+                                unit: AppStrings.duration(data.language).lowercased(),
                                 fontScale: geo.size.height * 0.028
                             )
                             metricCell(
                                 value: data.avgSpeedKmhText,
-                                unit: "km/h",
+                                unit: AppStrings.kmh(data.language),
                                 fontScale: geo.size.height * 0.028
                             )
                         }
