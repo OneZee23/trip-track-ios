@@ -9,6 +9,49 @@ enum DebugLogExporter {
     /// Default export window (full retention).
     static let defaultHoursBack: TimeInterval = 48
 
+    /// One journal line for the on-screen log view (DebugLogsView). Kept
+    /// deliberately tiny — date/level/category/message — so the UI never
+    /// grows a dependency on OSLogEntry internals.
+    struct LogEntryRow: Identifiable {
+        let id = UUID()
+        let date: Date
+        let level: OSLogEntryLog.Level
+        let category: String
+        let message: String
+    }
+
+    /// In-app journal feed: the newest `limit` TripTrack log lines from the
+    /// last `hoursBack` hours, oldest-first (newest-last). Same store +
+    /// subsystem predicate as the export path (shared `logEntries` helper);
+    /// `async` because the OSLogStore read is slow — call it off the main
+    /// actor and show a loader meanwhile.
+    static func recentEntries(hoursBack: Double = 2, limit: Int = 100) async throws -> [LogEntryRow] {
+        let window = min(max(hoursBack, 0.25), maxRetentionHours)
+        var rows: [LogEntryRow] = []
+        for entry in try logEntries(hoursBack: window) {
+            guard let log = entry as? OSLogEntryLog else { continue }
+            rows.append(LogEntryRow(
+                date: log.date,
+                level: log.level,
+                category: log.category,
+                message: log.composedMessage
+            ))
+        }
+        if rows.count > limit {
+            rows.removeFirst(rows.count - limit)
+        }
+        return rows
+    }
+
+    /// Shared OSLogStore + TripTrack-subsystem predicate setup used by both
+    /// `exportRecentLogs` and `recentEntries`. Returns entries oldest-first.
+    private static func logEntries(hoursBack: TimeInterval) throws -> AnySequence<OSLogEntry> {
+        let store = try OSLogStore(scope: .currentProcessIdentifier)
+        let since = store.position(date: Date().addingTimeInterval(-hoursBack * 3600))
+        let predicate = NSPredicate(format: "subsystem BEGINSWITH %@", "com.triptrack")
+        return AnySequence(try store.getEntries(at: since, matching: predicate))
+    }
+
     /// Pulls recent log entries from the system log store for the TripTrack subsystem,
     /// writes them to a .txt file in a temp directory, returns the URL.
     /// Caller can then present via ShareLink.
@@ -24,11 +67,7 @@ enum DebugLogExporter {
         // Clean up any prior exports first — we only ever need the latest.
         purgeOldExports()
 
-        let store = try OSLogStore(scope: .currentProcessIdentifier)
-        let since = store.position(date: Date().addingTimeInterval(-window * 3600))
-
-        let predicate = NSPredicate(format: "subsystem BEGINSWITH %@", "com.triptrack")
-        let entries = try store.getEntries(at: since, matching: predicate)
+        let entries = try logEntries(hoursBack: window)
 
         let identity = await MainActor.run { () -> (localUserId: String, accountId: String, signedIn: Bool, syncEnabled: Bool) in
             let local = SettingsManager.shared.localUserId.uuidString

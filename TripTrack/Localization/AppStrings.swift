@@ -1344,4 +1344,161 @@ enum AppStrings {
             ? "Жалобы анонимны — автор не узнает, кто их отправил."
             : "Reports are anonymous — the author won't know who sent them."
     }
+
+    // MARK: - Account & Sync page (6.1.0 Figma frames 1–3)
+    // Category rows of the sync sheet reuse existing keys:
+    // tripsTab («Поездки»), photos («Фото»), profile («Профиль»), garage («Гараж»).
+
+    static func accountSyncTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Аккаунт и синхронизация" : "Account & Sync"
+    }
+    static func accountAppleIdLine(_ lang: LanguageManager.Language, email: String) -> String {
+        "Apple ID · \(email)"
+    }
+    static func accountAppleIdOnly(_ lang: LanguageManager.Language) -> String {
+        "Apple ID"
+    }
+    static func sectionSyncLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Синхронизация" : "Sync"
+    }
+    /// F6: deliberately NOT «iCloud-синхронизация» — sync is the TripTrack EU
+    /// server + R2 (per the shipped GDPR consent copy), "iCloud" would be
+    /// legally misleading.
+    static func cloudSyncTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Облачная синхронизация" : "Cloud sync"
+    }
+    static func syncUpdatedAgo(_ lang: LanguageManager.Language, _ relative: String) -> String {
+        lang == .ru ? "Обновлено \(relative)" : "Updated \(relative)"
+    }
+    /// F13 fallback subtitle when there is no lastSyncedAt for the account.
+    static func syncStateOn(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Включена" : "On"
+    }
+    static func syncStateOff(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Выключена" : "Off"
+    }
+    static func syncPerItemStatus(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Статус по объектам" : "Per-item status"
+    }
+    static func syncAllDone(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Всё синхронизировано" : "All synced"
+    }
+    /// Status-row value: sync globally OFF but the queue still holds ops for
+    /// explicitly-public trips — this state must remain reachable (edge #3).
+    static func syncOffPublishing(_ lang: LanguageManager.Language, count: Int) -> String {
+        lang == .ru ? "Выключено · публикация: \(count)" : "Off · publishing: \(count)"
+    }
+    static func syncOffState(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Выключено" : "Disabled"
+    }
+    static func syncingProgress(_ lang: LanguageManager.Language, done: Int, total: Int) -> String {
+        lang == .ru ? "Синхронизация… \(done)/\(total)" : "Syncing… \(done)/\(total)"
+    }
+    static func syncingNow(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Синхронизация…" : "Syncing…"
+    }
+    static func syncQueuedCount(_ lang: LanguageManager.Language, count: Int) -> String {
+        lang == .ru ? "В очереди: \(count)" : "Pending: \(count)"
+    }
+    static func sectionPrivacyLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Приватность" : "Privacy"
+    }
+    static func publicProfileTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Публичный профиль" : "Public profile"
+    }
+    static func publicProfileSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Новые поездки приватны по умолчанию" : "New trips are private by default"
+    }
+    static func blockedUsersShort(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Заблокированные" : "Blocked"
+    }
+    static func sectionAccountLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Аккаунт" : "Account"
+    }
+    static func signOutSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездки останутся на устройстве" : "Trips stay on this device"
+    }
+    static func clearServerTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Очистить данные на сервере" : "Clear server data"
+    }
+    static func clearServerSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Удалить поездки с сервера, оставить на устройстве"
+            : "Remove trips from the server, keep them on device"
+    }
+    static func clearServerInProgress(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Очищаем…" : "Clearing…"
+    }
+    // Migrated verbatim from the pre-6.1.0 CloudSyncView inline strings —
+    // the GDPR just-in-time consent alert (F12: confirmation flows survive).
+    static func syncEnableConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Включить синхронизацию?" : "Turn on cloud sync?"
+    }
+    static func syncEnableConfirmBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Ваши поездки, фото (с удалёнными метаданными), автомобили и настройки будут загружены на наш сервер в ЕС и доступны на других Ваших устройствах. Вы можете отключить в любой момент. Подробнее — в Политике конфиденциальности."
+            : "Your trips, photos (with metadata stripped), vehicles, and settings will be uploaded to our EU server so you can access them on your other devices. You can turn this off anytime. See our Privacy Policy for details."
+    }
+    static func syncEnableConfirmAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Включить" : "Turn on"
+    }
+    // Migrated verbatim: wipe-server confirmation.
+    static func wipeServerConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Очистить данные с сервера?" : "Clear server data?"
+    }
+    static func wipeServerConfirmBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Все Ваши поездки и фото будут удалены с сервера. Локальные данные сохранятся, Вы останетесь в аккаунте.\n\nСинхронизация будет выключена — Вы сможете включить её снова, когда захотите."
+            : "All your trips and photos will be removed from the server. Local data stays on this device, your account is preserved.\n\nCloud sync will be turned off — you can re-enable it anytime."
+    }
+    static func wipeServerConfirmAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Очистить" : "Clear"
+    }
+    // Migrated verbatim: 3-way public-trips sign-out dialog.
+    static func signOutPublishedTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "У Вас есть публичные поездки" : "You have public trips"
+    }
+    static func signOutHidePublic(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Скрыть публичные и выйти" : "Hide public and sign out"
+    }
+    static func signOutKeepPublic(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Выйти, оставить публичные в ленте" : "Sign out, leave public in feed"
+    }
+    // Sync sheet (frame 2).
+    static func syncSheetTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Синхронизация" : "Sync"
+    }
+    static func syncLastAt(_ lang: LanguageManager.Language, _ relative: String) -> String {
+        lang == .ru ? "Последняя синхронизация: \(relative)" : "Last sync: \(relative)"
+    }
+    static func syncFailedCount(_ lang: LanguageManager.Language, count: Int) -> String {
+        lang == .ru ? "Ошибки: \(count)" : "Failed: \(count)"
+    }
+    // Logs journal (frame 3).
+    static func logsJournalTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Журнал" : "Log"
+    }
+    static func logsSendCTA(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Отправить логи разработчику" : "Send logs to developer"
+    }
+    static func logsShareFile(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поделиться файлом" : "Share file"
+    }
+    /// F7: truthful caption — the export header embeds account_id and log
+    /// lines may contain trip metadata, so no "no personal data" claims.
+    static func logsPrivacyCaption(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Логи помогают чинить баги. Перед отправкой файл можно просмотреть."
+            : "Logs help us fix bugs. You can review the file before sending."
+    }
+    static func logsEmpty(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Записей пока нет" : "No entries yet"
+    }
+    static func logsLoadFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось прочитать журнал" : "Couldn't read the log"
+    }
+    // Blocked list.
+    static func blockedSince(_ lang: LanguageManager.Language, _ date: String) -> String {
+        lang == .ru ? "Заблокирован \(date)" : "Blocked \(date)"
+    }
 }

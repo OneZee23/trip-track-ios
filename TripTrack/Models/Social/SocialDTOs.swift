@@ -288,6 +288,13 @@ struct ProfileUpdateRequest: Encodable {
     let language: String?
     /// Opt-IN to the public website globe (account-level). nil = "don't change".
     let showOnPublicMap: Bool?
+    /// Account-level profile visibility («Публичный профиль» toggle).
+    /// `var` with a nil default so the memberwise init keeps every existing
+    /// call site source-compatible — CRITICAL: `syncProfileToServer` must
+    /// never send this field (a stale client mirror pushed on every profile
+    /// sync would clobber the server flag); only the explicit
+    /// `AuthService.setPublicProfile` builds a payload containing it.
+    var isPublic: Bool? = nil
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -301,12 +308,13 @@ struct ProfileUpdateRequest: Encodable {
         try c.encodeIfPresent(activeVehicleId, forKey: .activeVehicleId)
         try c.encodeIfPresent(language, forKey: .language)
         try c.encodeIfPresent(showOnPublicMap, forKey: .showOnPublicMap)
+        try c.encodeIfPresent(isPublic, forKey: .isPublic)
     }
 
     private enum CodingKeys: String, CodingKey {
         case displayName, avatarEmoji, profileBackground
         case profileLevel, profileXp, currentStreak, bestStreak
-        case activeVehicleId, language, showOnPublicMap
+        case activeVehicleId, language, showOnPublicMap, isPublic
     }
 }
 
@@ -335,8 +343,20 @@ struct SocialBlockResponse: Codable {
     let blocked: Bool
 }
 
+/// Row of `/social/blocked`. Superset of `SocialAuthor` (kept separate — that
+/// type is shared by feed/search and must not grow fields the backend doesn't
+/// send there). `blockedAt` is an ISO8601 string, parsed at display time —
+/// optional so decoding survives deployed master that doesn't send it yet.
+struct BlockedUser: Codable {
+    let id: UUID
+    let displayName: String?
+    let avatarEmoji: String?
+    let profileLevel: Int
+    let blockedAt: String?
+}
+
 struct SocialBlockedListResponse: Codable {
-    let users: [SocialAuthor]
+    let users: [BlockedUser]
 }
 
 enum ReportReason: String, Codable, CaseIterable, Identifiable {

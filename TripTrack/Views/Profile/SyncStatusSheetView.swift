@@ -20,10 +20,12 @@ struct SyncCountSnapshot {
     static let empty = SyncCountSnapshot()
 }
 
-/// Drill-down for the sync status pill on the profile. Always shows a
-/// per-entity counts card so "everything is synced" still has a story to
-/// tell ("28 trips, 45 photos, 1 vehicle on the cloud"). Below it: live
-/// queue/failed sections when there's actually something in flight.
+/// «Синхронизация» per-item status sheet (Figma 6.1.0 frame 2). Presented
+/// from TWO places — the ProfileView sync pill and the CloudSyncView status
+/// row — so it stays standalone-presentable and carries its own presentation
+/// styling (detents / grabber / r22 corners) in addition to the call sites'.
+/// Category card feeds from the real `SyncCountSnapshot`; below it the live
+/// queue/failed sections appear when something is actually in flight.
 struct SyncStatusSheetView: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -33,20 +35,23 @@ struct SyncStatusSheetView: View {
 
     @State private var isRetrying = false
     @State private var snapshot: SyncCountSnapshot = .empty
+    @State private var lastSyncedAt: Date?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let l = lang.language
+        let isRu = l == .ru
         let pending = syncQueue.pending
         let failed = syncQueue.failed
-        let isEmpty = pending.isEmpty && failed.isEmpty && syncQueue.currentOperation == nil
 
-        NavigationStack {
+        VStack(spacing: 0) {
+            header(c, l: l)
+
             ScrollView {
                 VStack(spacing: 14) {
-                    summaryCard(c, isRu: isRu)
+                    categoryCard(c, l: l)
 
-                    countsCard(c, isRu: isRu)
+                    footerRow(c, l: l)
 
                     if let op = syncQueue.currentOperation {
                         nowSection(op, c: c, isRu: isRu)
@@ -54,7 +59,7 @@ struct SyncStatusSheetView: View {
 
                     if !pending.isEmpty {
                         section(
-                            title: AppStrings.syncStatusPendingHeader(lang.language) + "  \(pending.count)",
+                            title: AppStrings.syncStatusPendingHeader(l) + "  \(pending.count)",
                             c: c
                         ) {
                             VStack(spacing: 8) {
@@ -67,7 +72,7 @@ struct SyncStatusSheetView: View {
 
                     if !failed.isEmpty {
                         section(
-                            title: AppStrings.syncStatusFailedHeader(lang.language) + "  \(failed.count)",
+                            title: AppStrings.syncStatusFailedHeader(l) + "  \(failed.count)",
                             c: c
                         ) {
                             VStack(spacing: 8) {
@@ -79,87 +84,238 @@ struct SyncStatusSheetView: View {
 
                         retryButton(c, isRu: isRu)
                     }
-
-                    if isEmpty {
-                        VStack(spacing: 8) {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 28))
-                                .foregroundStyle(.green)
-                            Text(AppStrings.syncStatusEmpty(lang.language))
-                                .font(.system(size: 13))
-                                .foregroundStyle(c.textSecondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 12)
-                    }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 28)
             }
-            .background(c.bg)
-            .navigationTitle(AppStrings.syncStatusTitle(lang.language))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
-            }
-            .task { loadSnapshot() }
-            .onReceive(NotificationCenter.default.publisher(for: .syncPullCompleted)) { _ in
+            .scrollIndicators(.hidden)
+        }
+        .background(c.bg)
+        // Applied here (not only at call sites) so BOTH presenters — the
+        // ProfileView pill and the CloudSyncView status row — get the same
+        // sheet chrome without touching ProfileView.
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(22)
+        .accessibilityIdentifier("sync_status_sheet")
+        .task {
+            loadSnapshot()
+            refreshLastSynced()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .syncPullCompleted)) { _ in
+            loadSnapshot()
+            refreshLastSynced()
+        }
+        .onChange(of: syncQueue.isSyncing) { _, syncing in
+            // Sync just finished — counts may have changed.
+            if !syncing {
                 loadSnapshot()
-            }
-            .onChange(of: syncQueue.isSyncing) { _, syncing in
-                // Sync just finished — counts may have changed.
-                if !syncing { loadSnapshot() }
+                refreshLastSynced()
             }
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Header
 
-    private func summaryCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(spacing: 12) {
-            if !settings.cloudSyncEnabled {
-                Image(systemName: "icloud.slash")
-                    .font(.system(size: 18))
-                    .foregroundStyle(c.textTertiary)
-                if syncQueue.pendingCount > 0 {
-                    // Same as CloudSyncView: with sync OFF the queue can hold
-                    // ops for explicitly-public trips. Don't pretend nothing
-                    // is happening.
-                    Text(isRu
-                         ? "Синхр. выключена · публикация: \(syncQueue.pendingCount)"
-                         : "Sync off · publishing: \(syncQueue.pendingCount)")
-                        .foregroundStyle(c.text)
-                } else {
-                    Text(isRu ? "Синхронизация выключена" : "Sync is off")
-                        .foregroundStyle(c.textSecondary)
-                }
-            } else if syncQueue.isSyncing {
-                ProgressView().scaleEffect(0.75)
-                let total = syncQueue.batchTotal
-                let done = syncQueue.batchProcessed
-                Text(total > 0
-                     ? (isRu ? "Синхронизация… \(done)/\(total)" : "Syncing… \(done)/\(total)")
-                     : (isRu ? "Синхронизация…" : "Syncing…"))
-                    .foregroundStyle(c.text)
-                    .monospacedDigit()
-            } else if syncQueue.pendingCount > 0 {
-                Circle().fill(Color.orange).frame(width: 8, height: 8)
-                Text((isRu ? "Ожидают: " : "Waiting: ") + "\(syncQueue.pendingCount)")
-                    .foregroundStyle(c.text)
-            } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.green)
-                Text(isRu ? "Всё синхронизировано" : "Everything up to date")
-                    .foregroundStyle(c.text)
-            }
+    private func header(_ c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        HStack {
+            Text(AppStrings.syncSheetTitle(l))
+                .font(.system(size: 17, weight: .heavy))
+                .tracking(-0.2)
+                .foregroundStyle(c.text)
             Spacer()
+            SheetCloseButton()
         }
-        .font(.system(size: 14, weight: .medium))
-        .padding(14)
-        .surfaceCard(cornerRadius: 14)
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 10)
     }
+
+    // MARK: - Category card (frame 2)
+
+    private func categoryCard(_ c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        // No «Достижения» row (F4): achievements are not a synced entity —
+        // level/XP ride `profile-update` and there is no per-item sync state
+        // to report. The Figma «12/12» would be fabricated data.
+        VStack(spacing: 0) {
+            categoryRow(
+                icon: "flag",
+                label: AppStrings.tripsTab(l),
+                synced: snapshot.tripsSynced,
+                total: snapshot.tripsSynced + snapshot.tripsPending,
+                failedCount: 0,
+                showsDivider: true,
+                a11yId: "sync_row_trips",
+                c: c, l: l
+            )
+            categoryRow(
+                icon: "camera",
+                label: AppStrings.photos(l),
+                synced: snapshot.photosUploaded,
+                total: snapshot.photosUploaded + snapshot.photosPartial
+                    + snapshot.photosLocal + snapshot.photosFailed,
+                failedCount: snapshot.photosFailed,
+                showsDivider: true,
+                a11yId: "sync_row_photos",
+                c: c, l: l
+            )
+            profileRow(c, l: l)
+            categoryRow(
+                icon: "car",
+                label: AppStrings.garage(l),
+                synced: snapshot.vehiclesSynced,
+                total: snapshot.vehiclesSynced + snapshot.vehiclesPending,
+                failedCount: 0,
+                showsDivider: false,
+                a11yId: "sync_row_garage",
+                c: c, l: l
+            )
+        }
+        .surfaceCard(cornerRadius: 16)
+    }
+
+    private func categoryRow(
+        icon: String,
+        label: String,
+        synced: Int,
+        total: Int,
+        failedCount: Int,
+        showsDivider: Bool,
+        a11yId: String,
+        c: AppTheme.Colors,
+        l: LanguageManager.Language
+    ) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 17))
+                    .foregroundStyle(c.textSecondary)
+                    .frame(width: 24, alignment: .center)
+
+                Text(label)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(c.text)
+
+                Spacer(minLength: 8)
+
+                counterText(synced: synced, total: total, failedCount: failedCount, c: c, l: l)
+
+                if total == 0 || synced >= total {
+                    checkmark
+                } else {
+                    progressCapsule(fraction: total > 0 ? Double(synced) / Double(total) : 0, c: c)
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 52)
+
+            if showsDivider {
+                Rectangle()
+                    .fill(c.border)
+                    .frame(height: 1)
+                    .padding(.leading, 50) // 14 + 24 icon slot + 12 gap
+            }
+        }
+        .accessibilityIdentifier(a11yId)
+    }
+
+    /// «Профиль» — the settings-entity sync state (row named per Figma).
+    /// No counter by design: there is exactly one profile row per user.
+    private func profileRow(_ c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "person")
+                    .font(.system(size: 17))
+                    .foregroundStyle(c.textSecondary)
+                    .frame(width: 24, alignment: .center)
+
+                Text(AppStrings.profile(l))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(c.text)
+
+                Spacer(minLength: 8)
+
+                if !snapshot.settingsExists {
+                    Text("—")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(c.textTertiary)
+                } else if snapshot.settingsSynced {
+                    checkmark
+                } else {
+                    // Pending dot — an upload is queued for the profile.
+                    Circle()
+                        .fill(AppTheme.accent)
+                        .frame(width: 6, height: 6)
+                        .frame(width: 24, height: 24)
+                }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 52)
+
+            Rectangle()
+                .fill(c.border)
+                .frame(height: 1)
+                .padding(.leading, 50)
+        }
+        .accessibilityIdentifier("sync_row_profile")
+    }
+
+    private func counterText(
+        synced: Int, total: Int, failedCount: Int,
+        c: AppTheme.Colors, l: LanguageManager.Language
+    ) -> Text {
+        let base = Text("\(synced) / \(total)")
+            .font(.system(size: 12, weight: .medium).monospacedDigit())
+            .foregroundStyle(c.textTertiary)
+        guard failedCount > 0 else { return base }
+        // F8: failed portion surfaces as a red counter suffix; details live
+        // in the failed-ops list below the card.
+        return base + Text(" · " + AppStrings.syncFailedCount(l, count: failedCount))
+            .font(.system(size: 12, weight: .medium).monospacedDigit())
+            .foregroundStyle(AppTheme.red)
+    }
+
+    private var checkmark: some View {
+        Image(systemName: "checkmark")
+            .font(.system(size: 15, weight: .bold))
+            .foregroundStyle(AppTheme.green)
+            .frame(width: 24, height: 24)
+    }
+
+    private func progressCapsule(fraction: Double, c: AppTheme.Colors) -> some View {
+        ZStack(alignment: .leading) {
+            Capsule()
+                .fill(c.cardAlt)
+                .frame(width: 44, height: 6)
+            Capsule()
+                .fill(AppTheme.accent)
+                .frame(width: max(4, 44 * min(1, max(0, fraction))), height: 6)
+        }
+    }
+
+    // MARK: - Footer (last sync)
+
+    @ViewBuilder
+    private func footerRow(_ c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        if let last = lastSyncedAt {
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .font(.system(size: 13))
+                Text(AppStrings.syncLastAt(l, RelativeTripDate.string(from: last, language: l)))
+                    .font(.system(size: 13))
+            }
+            .foregroundStyle(c.textTertiary)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func refreshLastSynced() {
+        lastSyncedAt = TokenStore.shared.accountId
+            .flatMap { LastSyncedAtStore.get(accountId: $0) }
+    }
+
+    // MARK: - Live queue sections (logic untouched)
 
     private func nowSection(_ op: SyncOperation, c: AppTheme.Colors, isRu: Bool) -> some View {
         section(title: AppStrings.syncStatusNowLabel(lang.language), c: c) {
@@ -197,11 +353,11 @@ struct SyncStatusSheetView: View {
         return HStack(alignment: .top, spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(isFailed ? Color.red.opacity(0.15) : (highlight ? AppTheme.accent.opacity(0.18) : c.cardAlt))
+                    .fill(isFailed ? AppTheme.red.opacity(0.15) : (highlight ? AppTheme.accent.opacity(0.18) : c.cardAlt))
                     .frame(width: 32, height: 32)
                 Image(systemName: iconName(op.entityType))
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(isFailed ? .red : (highlight ? AppTheme.accent : c.textSecondary))
+                    .foregroundStyle(isFailed ? AppTheme.red : (highlight ? AppTheme.accent : c.textSecondary))
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -231,7 +387,7 @@ struct SyncStatusSheetView: View {
                 if let err = op.lastError, !err.isEmpty {
                     Text(err)
                         .font(.system(size: 12))
-                        .foregroundStyle(.red.opacity(0.85))
+                        .foregroundStyle(AppTheme.red.opacity(0.85))
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -279,123 +435,10 @@ struct SyncStatusSheetView: View {
         .buttonStyle(.plain)
         .disabled(isRetrying)
         .padding(.top, 4)
+        .accessibilityIdentifier("sync_retry_button")
     }
 
-    // MARK: - Counts
-
-    private func countsCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(spacing: 0) {
-            countsRow(
-                icon: "flag.fill", iconColor: AppTheme.blue,
-                title: isRu ? "Поездки" : "Trips",
-                summary: tripsSummary(isRu: isRu),
-                c: c, showsDivider: true
-            )
-            countsRow(
-                icon: "car.fill", iconColor: .green,
-                title: isRu ? "Машины" : "Vehicles",
-                summary: vehiclesSummary(isRu: isRu),
-                c: c, showsDivider: true
-            )
-            countsRow(
-                icon: "photo.fill", iconColor: AppTheme.accent,
-                title: isRu ? "Фото" : "Photos",
-                summary: photosSummary(isRu: isRu),
-                c: c, showsDivider: true
-            )
-            countsRow(
-                icon: "gearshape.fill", iconColor: c.textSecondary,
-                title: isRu ? "Настройки" : "Settings",
-                summary: settingsSummary(isRu: isRu),
-                c: c, showsDivider: false
-            )
-        }
-        .surfaceCard(cornerRadius: 14)
-    }
-
-    private func countsRow(
-        icon: String, iconColor: Color,
-        title: String, summary: String,
-        c: AppTheme.Colors, showsDivider: Bool
-    ) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(iconColor)
-                    .frame(width: 22, alignment: .center)
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(c.text)
-                Spacer()
-                // Long summaries ("X в облаке · Y в очереди") wrap to a 2nd line and shrink slightly before clipping
-                Text(summary)
-                    .font(.system(size: 12, weight: .medium).monospacedDigit())
-                    .foregroundStyle(c.textSecondary)
-                    .multilineTextAlignment(.trailing)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            if showsDivider {
-                Divider()
-                    .background(c.cardAlt)
-                    .padding(.leading, 48)
-            }
-        }
-    }
-
-    private func tripsSummary(isRu: Bool) -> String {
-        let s = snapshot
-        if s.tripsPending > 0 {
-            return isRu
-                ? "\(s.tripsSynced) в облаке · \(s.tripsPending) в очереди"
-                : "\(s.tripsSynced) in cloud · \(s.tripsPending) pending"
-        }
-        return isRu ? "\(s.tripsSynced) в облаке" : "\(s.tripsSynced) in cloud"
-    }
-
-    private func vehiclesSummary(isRu: Bool) -> String {
-        let s = snapshot
-        if s.vehiclesPending > 0 {
-            return isRu
-                ? "\(s.vehiclesSynced) в облаке · \(s.vehiclesPending) в очереди"
-                : "\(s.vehiclesSynced) in cloud · \(s.vehiclesPending) pending"
-        }
-        return isRu ? "\(s.vehiclesSynced) в облаке" : "\(s.vehiclesSynced) in cloud"
-    }
-
-    private func photosSummary(isRu: Bool) -> String {
-        let s = snapshot
-        var parts: [String] = []
-        parts.append(isRu ? "\(s.photosUploaded) загружено" : "\(s.photosUploaded) uploaded")
-        if s.photosPartial > 0 {
-            parts.append(isRu
-                ? "\(s.photosPartial) ждут Wi-Fi"
-                : "\(s.photosPartial) awaiting Wi-Fi")
-        }
-        if s.photosLocal > 0 {
-            parts.append(isRu
-                ? "\(s.photosLocal) только локально"
-                : "\(s.photosLocal) local only")
-        }
-        if s.photosFailed > 0 {
-            parts.append(isRu
-                ? "\(s.photosFailed) ошибка"
-                : "\(s.photosFailed) failed")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private func settingsSummary(isRu: Bool) -> String {
-        if !snapshot.settingsExists {
-            return isRu ? "—" : "—"
-        }
-        return snapshot.settingsSynced
-            ? (isRu ? "синхронизировано" : "synced")
-            : (isRu ? "в очереди" : "pending")
-    }
+    // MARK: - Counts (data layer untouched)
 
     private func loadSnapshot() {
         let ctx = PersistenceController.shared.container.viewContext

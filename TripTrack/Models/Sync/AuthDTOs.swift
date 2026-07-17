@@ -39,5 +39,28 @@ struct RefreshResponse: Codable {
     let refreshToken: String
 }
 
+/// `POST /auth/me` payload (`MeResponseDto` on the backend). The account page
+/// needs `email` and `isPublic`; everything else is optional-decoded so the
+/// struct survives older/newer server shapes without breaking the page.
+/// A successful decode of this response is ALSO the capability signal that
+/// the deployed server supports the account-privacy endpoints (F2 gating in
+/// `CloudSyncView` — prod without `/auth/me` would silently fake-accept an
+/// `isPublic` profile-update).
+struct MeResponse: Codable {
+    let id: UUID?
+    let email: String?
+    let displayName: String?
+    let avatarEmoji: String?
+    let profileBackground: String?
+    let profileLevel: Int?
+    let isPublic: Bool
+    let showOnPublicMap: Bool?
+    let notifyReactions: Bool?
+    let notifyFollows: Bool?
+    let notifyComments: Bool?
+    let notifyWeeklyRecap: Bool?
+    let createdAt: String?
+}
+
 struct EmptyRequest: Codable {}
 struct EmptyResponse: Codable {}

@@ -233,6 +233,20 @@ final class TripTrackUITests: XCTestCase {
         }
     }
 
+    /// Walks the guest-reachable Account-page surface: the logs journal
+    /// (Frame 3). CloudSync/SyncStatus need sign-in — device-verify TODO.
+    func test_zz_logs_shots() {
+        normalizeToHome()
+        let me = app.buttons.matching(identifier: "tab_profile").firstMatch
+        if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
+        for _ in 0..<5 {
+            if tap("Отправить логи", timeout: 1) || tap("Send debug logs", timeout: 1) { break }
+            win.swipeUp(); usleep(600_000)
+        }
+        sleep(3); snap("120_logs_journal")
+        win.swipeUp(); usleep(700_000); snap("121_logs_lower")
+    }
+
     /// Brings the app to Home from ANY persisted state: adopts a leftover
     /// recovery prompt, stops an active recording (the chevron is replaced
     /// by the REC pill while recording), walks celebration/summary sheets.

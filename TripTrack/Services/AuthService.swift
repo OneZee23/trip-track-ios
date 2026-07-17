@@ -13,6 +13,12 @@ final class AuthService: ObservableObject {
     @Published private(set) var isSignedIn: Bool = false
     @Published private(set) var userName: String?
     @Published private(set) var userEmail: String?
+    /// Server `account.isPublic` («Публичный профиль»). `nil` = unknown —
+    /// either not fetched yet or the deployed server lacks `/auth/me`
+    /// (capability gate: the privacy toggle in CloudSyncView renders ONLY
+    /// when this is non-nil, because an old server silently ignores unknown
+    /// profile-update fields and the toggle would fake-succeed).
+    @Published private(set) var isPublicProfile: Bool?
     private(set) var userIdentifier: String?
 
     @Published private(set) var isAuthenticating = false
@@ -400,6 +406,10 @@ final class AuthService: ObservableObject {
         isSignedIn = false
         userName = nil
         userEmail = nil
+        // Server-flag mirror back to "unknown" — the next account must not
+        // inherit the previous account's privacy-toggle state, and the gate
+        // re-verifies endpoint availability via refreshMe() after sign-in.
+        isPublicProfile = nil
         SentryService.setAccount(id: nil)
         userIdentifier = nil
         // Reset the website-globe opt-in mirror so account A's toggle doesn't
@@ -485,6 +495,75 @@ final class AuthService: ObservableObject {
             }
         } catch {
             authLog.error("profile sync failed: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Account visibility (/auth/me)
+
+    /// Reads the account snapshot from `POST /auth/me`. Success seeds
+    /// `isPublicProfile` (and backfills the Keychain email when Apple never
+    /// redelivered it). ANY failure — route missing on old prod, network,
+    /// decode — leaves `isPublicProfile` untouched and never throws to the
+    /// UI: the account page simply hides the privacy toggle (F2 gating).
+    /// Bumped by every explicit `setPublicProfile` write. Snapshot reads
+    /// (`refreshMe`) capture it before the request and apply the response
+    /// only if no write happened meanwhile — otherwise a slow /auth/me
+    /// response taken BEFORE the toggle would visibly revert it. Same guard
+    /// serializes two rapid toggle flips (the stale one's success write is
+    /// dropped; the server processed them in send order).
+    private var publicProfileGeneration = 0
+
+    func refreshMe() async {
+        guard isSignedIn else { return }
+        let gen = publicProfileGeneration
+        do {
+            let res: MeResponse = try await APIClient.shared.post(
+                APIEndpoint.authMe, body: EmptyRequest())
+            if gen == publicProfileGeneration {
+                isPublicProfile = res.isPublic
+            }
+            if userEmail == nil, let email = res.email,
+               !email.trimmingCharacters(in: .whitespaces).isEmpty {
+                try? KeychainHelper.saveString(email, for: Keys.userEmail)
+                userEmail = email
+            }
+        } catch {
+            authLog.error("refreshMe failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Explicit toggle push — the ONLY code path that sends `isPublic` to the
+    /// server (see the `ProfileUpdateRequest.isPublic` doc: `syncProfileToServer`
+    /// must never include it). Payload carries nothing but `isPublic`, so a
+    /// concurrent profile sync can't be clobbered either way.
+    /// Returns false on failure so the UI can revert the optimistic toggle.
+    func setPublicProfile(_ isPublic: Bool) async -> Bool {
+        var req = ProfileUpdateRequest(
+            displayName: nil,
+            avatarEmoji: nil,
+            profileBackground: nil,
+            profileLevel: nil,
+            profileXp: nil,
+            currentStreak: nil,
+            bestStreak: nil,
+            activeVehicleId: nil,
+            language: nil,
+            showOnPublicMap: nil
+        )
+        req.isPublic = isPublic
+        publicProfileGeneration += 1
+        let gen = publicProfileGeneration
+        do {
+            let _: EmptyResponse = try await APIClient.shared.post(
+                APIEndpoint.profileUpdate, body: req)
+            if gen == publicProfileGeneration {
+                isPublicProfile = isPublic
+            }
+            authLog.log("public profile set to \(isPublic)")
+            return true
+        } catch {
+            authLog.error("setPublicProfile failed: \(String(describing: error), privacy: .public)")
+            return false
         }
     }
 

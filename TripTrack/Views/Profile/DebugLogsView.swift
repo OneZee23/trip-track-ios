@@ -1,148 +1,217 @@
 import SwiftUI
+import OSLog
 
+/// «Журнал» (Figma 6.1.0 frame 3) — on-screen log journal + export CTA.
+/// Entry point unchanged: the ProfileView «Отправить логи» dev row presents
+/// this as a sheet (the journal is not drawn on the account frame — it stays
+/// a hidden/dev surface).
 struct DebugLogsView: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
+    /// nil = still reading OSLogStore (slow) — show the loader.
+    @State private var entries: [DebugLogExporter.LogEntryRow]?
+    @State private var loadFailed = false
     @State private var exportURL: URL?
     @State private var isExporting = false
-    @State private var showWarning = true
     @State private var errorMessage: String?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let l = lang.language
 
-        NavigationStack {
+        VStack(spacing: 0) {
+            navRow(c: c, l: l)
             ScrollView {
                 VStack(spacing: 16) {
-                    hero(c, isRu: isRu)
+                    journalCard(c: c, l: l)
 
-                    warningCard(c, isRu: isRu)
-
-                    exportCard(c, isRu: isRu)
+                    ctaBlock(c: c, l: l)
 
                     if let err = errorMessage {
                         Text(err)
                             .font(.system(size: 13))
-                            .foregroundStyle(.red)
-                            .padding(.horizontal, 16)
+                            .foregroundStyle(AppTheme.red)
+                            .multilineTextAlignment(.center)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 20)
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+                .padding(.bottom, 96)
             }
-            .background(c.bg)
-            .navigationTitle(isRu ? "Логи" : "Debug logs")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+            .scrollIndicators(.hidden)
+        }
+        .background(c.bg)
+        .toolbar(.hidden, for: .navigationBar)
+        .accessibilityIdentifier("logs_screen")
+        .task {
+            // OSLogStore reads are slow — loaded off the main actor by the
+            // async exporter helper while PixelCarLoader spins.
+            do {
+                // Figma frame 3 draws newest-first; the exporter returns
+                // oldest-first (export-file order).
+                entries = Array(try await DebugLogExporter.recentEntries().reversed())
+            } catch {
+                // A diagnostics screen must not claim "no entries" when the
+                // store READ failed — that misleads the bug-report flow.
+                entries = []
+                loadFailed = true
             }
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Nav row
 
-    private func hero(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(spacing: 12) {
-            Image(systemName: "ladybug.fill")
-                .font(.system(size: 42))
-                .foregroundStyle(.orange)
-            Text(isRu ? "Отправить логи разработчику" : "Send debug logs")
-                .font(.system(size: 20, weight: .bold))
+    private func navRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        HStack {
+            // Sheet root — chevron acts as close (GarageView precedent).
+            GarageCircleNavButton(systemImage: "chevron.left") { dismiss() }
+            Spacer()
+            Text(AppStrings.logsJournalTitle(l))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(c.text)
-                .multilineTextAlignment(.center)
-            Text(isRu
-                 ? "Поможет быстрее разобраться с проблемой"
-                 : "Helps us investigate issues faster")
-                .font(.system(size: 14))
-                .foregroundStyle(c.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-    }
-
-    private func warningCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.yellow)
-                .frame(width: 24, alignment: .center)
-                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(isRu ? "Важно" : "Important")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(c.text)
-                Text(isRu
-                     ? "В логах могут быть Ваши данные: даты поездок, регионы, тип устройства, версия приложения. Делитесь логами с разработчиком или третьими лицами на свой страх и риск."
-                     : "Logs may include your data: trip dates, regions, device type, app version. Share with the developer or third parties at your own risk.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(c.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            GarageCircleNavButton(systemImage: "square.and.arrow.up") {
+                Task { await generate() }
             }
-            Spacer(minLength: 0)
+            .disabled(isExporting)
+            .accessibilityIdentifier("logs_export_nav")
         }
-        .padding(14)
-        .surfaceCard(cornerRadius: 14)
+        .padding(.top, 2)
+        .padding(.bottom, 10)
+        .padding(.horizontal, 14)
     }
 
-    private func exportCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    // MARK: - Journal card
+
+    @ViewBuilder
+    private func journalCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        if let entries {
+            if entries.isEmpty {
+                Text(loadFailed ? AppStrings.logsLoadFailed(l) : AppStrings.logsEmpty(l))
+                    .font(.system(size: 13))
+                    .foregroundStyle(loadFailed ? AppTheme.red : c.textTertiary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 48)
+            } else {
+                // >20 rows (capped at 100) → LazyVStack per project rule.
+                LazyVStack(spacing: 0) {
+                    ForEach(entries) { row in
+                        journalRow(row, c: c)
+                        if row.id != entries.last?.id {
+                            Rectangle()
+                                .fill(c.border)
+                                .frame(height: 1)
+                        }
+                    }
+                }
+                .padding(12)
+                .surfaceCard(cornerRadius: 16)
+            }
+        } else {
+            PixelCarLoader(label: nil, height: 100)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+        }
+    }
+
+    private func journalRow(_ row: DebugLogExporter.LogEntryRow, c: AppTheme.Colors) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(Self.timeFormatter.string(from: row.date))
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .foregroundStyle(c.textTertiary)
+
+            Circle()
+                .fill(severityColor(row.level, c: c))
+                .frame(width: 6, height: 6)
+                .padding(.top, 4)
+
+            Text("\(row.category): \(row.message)")
+                .font(.system(size: 11.5))
+                .foregroundStyle(c.textSecondary)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 6)
+        .accessibilityIdentifier("logs_row")
+    }
+
+    /// F9: Figma draws only green/yellow dots; the mapping keeps the app
+    /// palette — green = debug/info/notice, yellow = error, red = fault
+    /// (invented but palette-consistent).
+    private func severityColor(_ level: OSLogEntryLog.Level, c: AppTheme.Colors) -> Color {
+        switch level {
+        case .debug, .info, .notice: return AppTheme.green
+        case .error:                 return AppTheme.yellow
+        case .fault:                 return AppTheme.red
+        default:                     return c.textTertiary
+        }
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    // MARK: - CTA block
+
+    private func ctaBlock(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(spacing: 10) {
             if let url = exportURL {
+                // File is ready — the CTA becomes the actual share action
+                // (same two-stage flow as before the redesign).
                 ShareLink(item: url) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "square.and.arrow.up")
-                        Text(isRu ? "Поделиться файлом" : "Share file")
-                    }
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(AppTheme.accent))
+                    ctaLabel(text: AppStrings.logsShareFile(l))
                 }
+                .accessibilityIdentifier("logs_send_cta")
 
                 Text(url.lastPathComponent)
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundStyle(c.textTertiary)
-
-                Button {
-                    Task { await generate() }
-                } label: {
-                    Text(isRu ? "Собрать заново" : "Regenerate")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(c.textSecondary)
-                }
             } else {
                 Button {
                     Task { await generate() }
                 } label: {
-                    HStack(spacing: 8) {
-                        if isExporting {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "doc.text.fill")
-                        }
-                        Text(isExporting
-                             ? (isRu ? "Собираю…" : "Collecting…")
-                             : (isRu ? "Собрать логи за 48ч" : "Collect last 48h logs"))
-                    }
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(AppTheme.accent))
+                    ctaLabel(text: AppStrings.logsSendCTA(l), showsProgress: isExporting)
                 }
+                .buttonStyle(.plain)
                 .disabled(isExporting)
+                .accessibilityIdentifier("logs_send_cta")
             }
+
+            // F7: truthful caption — the export header embeds account_id and
+            // entries may contain trip metadata, so no "no personal data"
+            // claims; the user can inspect the file in the share preview.
+            Text(AppStrings.logsPrivacyCaption(l))
+                .font(.system(size: 12))
+                .foregroundStyle(c.textTertiary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(14)
-        .surfaceCard(cornerRadius: 14)
     }
 
-    // MARK: - Export
+    private func ctaLabel(text: String, showsProgress: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            if showsProgress {
+                ProgressView().tint(.white)
+            } else {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            Text(text)
+                .font(.system(size: 14, weight: .bold))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(RoundedRectangle(cornerRadius: 14).fill(AppTheme.accent))
+        .shadow(color: AppTheme.accent.opacity(0.3), radius: 3, y: 1)
+    }
+
+    // MARK: - Export (existing flow kept)
 
     private func generate() async {
         isExporting = true

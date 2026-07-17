@@ -1,6 +1,17 @@
 import SwiftUI
 import CoreData
 
+/// «Аккаунт и синхронизация» (Figma 6.1.0 frame 1, section 157:1390).
+/// Presented as a sheet from the ProfileView «Аккаунт и синхронизация» row —
+/// the filename and type name are kept so that entry point is untouched.
+///
+/// Deliberate omissions vs the Figma frame (documented forks):
+/// - F1: no «Удалить аккаунт» row and no 8px danger separator — user decision
+///   deferred. `AuthService.deleteAccount()` and its AppStrings are preserved
+///   as a code path; only this UI was removed. ⚠️ App Store 5.1.1(v) requires
+///   in-app account deletion — do not ship to the store until resolved.
+/// - F14: the five static explainer info-cards are gone (Figma ground truth);
+///   the legal/privacy copy survives in the GDPR enable-consent alert.
 struct CloudSyncView: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
@@ -14,117 +25,88 @@ struct CloudSyncView: View {
     @State private var showSignOutAlert = false
     @State private var showSignOutPublishedDialog = false
     @State private var publishedAtSignOut = 0
-    @State private var showDeleteAccountAlert = false
-    @State private var isDeletingAccount = false
-    @State private var deleteAccountError: String?
     @State private var showEnableConfirm = false
     @State private var showBlockedList = false
     @State private var showWipeServerConfirm = false
     @State private var isWipingServer = false
+    @State private var showSyncSheet = false
+    /// Count from `/social/blocked`; nil = not fetched / fetch failed —
+    /// the row stays navigable either way, just without the number.
+    @State private var blockedCount: Int?
+    @State private var lastSyncedAt: Date?
+    /// Optimistic value for the public-profile toggle while the
+    /// `setPublicProfile` round-trip is in flight; nil = mirror the server.
+    @State private var publicProfileDraft: Bool?
     @AppStorage("com.triptrack.sync.firstToggleShown") private var firstToggleShown = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let l = lang.language
 
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    // Hero icon + state
-                    heroSection(c, isRu: isRu)
+            VStack(spacing: 0) {
+                navRow(c: c, l: l)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        accountCard(c: c, l: l)
 
-                    // ON/OFF toggle (pill style matching theme/language cards)
-                    toggleCard(c, isRu: isRu)
+                        sectionLabel(AppStrings.sectionSyncLabel(l))
+                        syncCard(c: c, l: l)
 
-                    // Current status card
-                    statusCard(c, isRu: isRu)
+                        if auth.isSignedIn {
+                            sectionLabel(AppStrings.sectionPrivacyLabel(l))
+                            privacyCard(c: c, l: l)
 
-                    // What gets synced
-                    infoCard(
-                        icon: "arrow.up.arrow.down.circle.fill",
-                        iconColor: AppTheme.blue,
-                        title: isRu ? "Что синхронизируется" : "What is synced",
-                        body: isRu
-                            ? "Поездки, транспорт, статистика, настройки и фото."
-                            : "Trips, vehicles, stats, settings, and photos.",
-                        c: c
-                    )
-
-                    infoCard(
-                        icon: "photo.on.rectangle.angled",
-                        iconColor: AppTheme.accent,
-                        title: isRu ? "Фото" : "Photos",
-                        body: isRu
-                            ? "Миниатюры уезжают на сервер сразу. Оригиналы — только по Wi-Fi, чтобы экономить мобильный трафик."
-                            : "Thumbnails upload instantly. Originals upload on Wi-Fi only to save mobile data.",
-                        c: c
-                    )
-
-                    infoCard(
-                        icon: "externaldrive.fill.badge.icloud",
-                        iconColor: AppTheme.blue,
-                        title: isRu ? "Где хранится" : "Where it's stored",
-                        body: isRu
-                            ? "Данные — на сервере TripTrack. Фото — в объектном хранилище Cloudflare R2 с ограниченным доступом."
-                            : "Data on TripTrack server. Photos in Cloudflare R2 object storage with access-limited URLs.",
-                        c: c
-                    )
-
-                    infoCard(
-                        icon: "lock.shield.fill",
-                        iconColor: .green,
-                        title: isRu ? "Приватность" : "Privacy",
-                        body: isRu
-                            ? "Аккаунт привязан к Apple ID. Только Вы видите свои поездки, если не сделаете их публичными."
-                            : "Account tied to your Apple ID. Only you see your trips unless you make them public.",
-                        c: c
-                    )
-
-                    infoCard(
-                        icon: "icloud.slash",
-                        iconColor: c.textTertiary,
-                        title: isRu ? "Если выключить" : "If disabled",
-                        body: isRu
-                            ? "Новые изменения останутся только на этом устройстве. При повторном включении — все накопленные данные уедут на сервер пачкой."
-                            : "New changes stay on this device only. Re-enabling uploads everything accumulated in one batch.",
-                        c: c
-                    )
-
-                    if auth.isSignedIn {
-                        blockedEntry(c, isRu: isRu)
-                        wipeServerEntry(c, isRu: isRu)
-                        accountActions(c, isRu: isRu)
-                            .padding(.top, 8)
+                            sectionLabel(AppStrings.sectionAccountLabel(l))
+                            accountActionsCard(c: c, l: l)
+                        }
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 4)
+                    .padding(.bottom, 96)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 20)
+                .scrollIndicators(.hidden)
             }
+            .background(c.bg)
+            .toolbar(.hidden, for: .navigationBar)
+            .accessibilityIdentifier("account_sync_screen")
             .navigationDestination(isPresented: $showBlockedList) {
                 BlockedListView()
             }
+            .sheet(isPresented: $showSyncSheet, onDismiss: {
+                // A sync may have completed while the sheet was up.
+                refreshLastSynced()
+            }) {
+                SyncStatusSheetView()
+                    .environmentObject(lang)
+                    .environmentObject(themeManager)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+                    .presentationCornerRadius(22)
+                    .preferredColorScheme(themeManager.preferredColorScheme)
+            }
+            // GDPR just-in-time consent — fires on the very first enable only
+            // (F12: flow preserved verbatim from pre-6.1.0 CloudSyncView).
             .alert(
-                isRu ? "Включить синхронизацию?" : "Turn on cloud sync?",
+                AppStrings.syncEnableConfirmTitle(l),
                 isPresented: $showEnableConfirm
             ) {
-                Button(isRu ? "Отмена" : "Cancel", role: .cancel) {}
-                Button(isRu ? "Включить" : "Turn on") {
+                Button(AppStrings.cancel(l), role: .cancel) {}
+                Button(AppStrings.syncEnableConfirmAction(l)) {
                     enableCloudSync()
                 }
             } message: {
-                Text(isRu
-                     ? "Ваши поездки, фото (с удалёнными метаданными), автомобили и настройки будут загружены на наш сервер в ЕС и доступны на других Ваших устройствах. Вы можете отключить в любой момент. Подробнее — в Политике конфиденциальности."
-                     : "Your trips, photos (with metadata stripped), vehicles, and settings will be uploaded to our EU server so you can access them on your other devices. You can turn this off anytime. See our Privacy Policy for details.")
+                Text(AppStrings.syncEnableConfirmBody(l))
             }
             .alert(
-                AppStrings.signOutConfirmTitle(lang.language),
+                AppStrings.signOutConfirmTitle(l),
                 isPresented: $showSignOutAlert
             ) {
-                Button(AppStrings.cancel(lang.language), role: .cancel) {}
-                Button(AppStrings.signOut(lang.language), role: .destructive) {
+                Button(AppStrings.cancel(l), role: .cancel) {}
+                Button(AppStrings.signOut(l), role: .destructive) {
                     // Branch on whether the user has any public trips on the
                     // server. With public trips → show 3-way confirmation
-                    // (delete vs keep). Without → straight sign-out.
+                    // (hide vs keep). Without → straight sign-out.
                     let count = auth.publishedTripCount()
                     if count > 0 {
                         publishedAtSignOut = count
@@ -137,43 +119,36 @@ struct CloudSyncView: View {
                     }
                 }
             } message: {
-                Text(AppStrings.signOutConfirmMessage(lang.language))
+                Text(AppStrings.signOutConfirmMessage(l))
             }
             .confirmationDialog(
-                isRu ? "У Вас есть публичные поездки" : "You have public trips",
+                AppStrings.signOutPublishedTitle(l),
                 isPresented: $showSignOutPublishedDialog,
                 titleVisibility: .visible
             ) {
-                Button(
-                    isRu
-                        ? "Скрыть публичные и выйти"
-                        : "Hide public and sign out",
-                    role: .destructive
-                ) {
+                Button(AppStrings.signOutHidePublic(l), role: .destructive) {
                     Task {
                         await auth.unpublishAllPublicTrips()
                         await auth.signOut()
                         dismiss()
                     }
                 }
-                Button(
-                    isRu ? "Выйти, оставить публичные в ленте" : "Sign out, leave public in feed"
-                ) {
+                Button(AppStrings.signOutKeepPublic(l)) {
                     Task {
                         await auth.signOut()
                         dismiss()
                     }
                 }
-                Button(AppStrings.cancel(lang.language), role: .cancel) {}
+                Button(AppStrings.cancel(l), role: .cancel) {}
             } message: {
-                Text(AppStrings.publishedTripsSignOutMessage(lang.language, count: publishedAtSignOut))
+                Text(AppStrings.publishedTripsSignOutMessage(l, count: publishedAtSignOut))
             }
             .alert(
-                isRu ? "Очистить данные с сервера?" : "Clear server data?",
+                AppStrings.wipeServerConfirmTitle(l),
                 isPresented: $showWipeServerConfirm
             ) {
-                Button(AppStrings.cancel(lang.language), role: .cancel) {}
-                Button(isRu ? "Очистить" : "Clear", role: .destructive) {
+                Button(AppStrings.cancel(l), role: .cancel) {}
+                Button(AppStrings.wipeServerConfirmAction(l), role: .destructive) {
                     Task {
                         isWipingServer = true
                         await auth.wipeServerData()
@@ -181,96 +156,191 @@ struct CloudSyncView: View {
                     }
                 }
             } message: {
-                Text(isRu
-                     ? "Все Ваши поездки и фото будут удалены с сервера. Локальные данные сохранятся, Вы останетесь в аккаунте.\n\nСинхронизация будет выключена — Вы сможете включить её снова, когда захотите."
-                     : "All your trips and photos will be removed from the server. Local data stays on this device, your account is preserved.\n\nCloud sync will be turned off — you can re-enable it anytime.")
+                Text(AppStrings.wipeServerConfirmBody(l))
             }
-            .alert(
-                AppStrings.deleteAccountConfirmTitle(lang.language),
-                isPresented: $showDeleteAccountAlert
-            ) {
-                Button(AppStrings.cancel(lang.language), role: .cancel) {}
-                Button(AppStrings.deleteAccount(lang.language), role: .destructive) {
-                    Task { await performDeleteAccount() }
-                }
-            } message: {
-                Text(AppStrings.deleteAccountConfirmMessage(lang.language))
+            .task {
+                refreshLastSynced()
+                await auth.refreshMe()
             }
-            .alert(
-                AppStrings.deleteAccountFailed(lang.language),
-                isPresented: Binding(
-                    get: { deleteAccountError != nil },
-                    set: { if !$0 { deleteAccountError = nil } })
-            ) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(deleteAccountError ?? "")
+            // `.onAppear` (not `.task`) on purpose: it re-fires on pop-back
+            // from BlockedListView, so the count updates after an unblock.
+            .onAppear {
+                Task { await loadBlockedCount() }
             }
-            .background(c.bg)
-            .navigationTitle(isRu ? "Аккаунт" : "Account")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+            .onReceive(NotificationCenter.default.publisher(for: .syncPullCompleted)) { _ in
+                refreshLastSynced()
             }
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Nav row
 
-    private func heroSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(spacing: 12) {
-            Image(systemName: settings.cloudSyncEnabled ? "icloud.fill" : "icloud.slash")
-                .font(.system(size: 48))
-                .foregroundStyle(settings.cloudSyncEnabled ? AppTheme.blue : c.textTertiary)
-            Text(settings.cloudSyncEnabled
-                 ? (isRu ? "Синхронизация включена" : "Sync is on")
-                 : (isRu ? "Синхронизация выключена" : "Sync is off"))
-                .font(.system(size: 22, weight: .bold))
+    private func navRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        HStack {
+            // Sheet root — the chevron acts as close (GarageView fork precedent).
+            GarageCircleNavButton(systemImage: "chevron.left") { dismiss() }
+                .accessibilityIdentifier("account_back")
+            Spacer()
+            Text(AppStrings.accountSyncTitle(l))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(c.text)
-            Text(settings.cloudSyncEnabled
-                 ? (isRu ? "Данные доступны на всех Ваших устройствах" : "Data available on all your devices")
-                 : (isRu ? "Данные только на этом устройстве" : "Data stays on this device"))
-                .font(.system(size: 14))
-                .foregroundStyle(c.textSecondary)
-                .multilineTextAlignment(.center)
+            Spacer()
+            // Trailing spacer keeps the title optically centered.
+            Color.clear.frame(width: 34, height: 34)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.top, 2)
+        .padding(.bottom, 10)
+        .padding(.horizontal, 14)
     }
 
-    private func toggleCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(spacing: 8) {
-            syncChip(
-                label: isRu ? "Выключить" : "Off",
-                icon: "icloud.slash",
-                isActive: !settings.cloudSyncEnabled,
-                c: c
+    // MARK: - Section label rhythm
+
+    private func sectionLabel(_ text: String) -> some View {
+        AccountSectionLabel(text: text)
+            .padding(.top, 18)
+            .padding(.bottom, 8)
+            .padding(.leading, 4)
+    }
+
+    // MARK: - Account card (117:1412)
+
+    private func accountCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(c.cardAlt)
+                .frame(width: 48, height: 48)
+                .overlay { Text(settings.avatarEmoji).font(.system(size: 24)) }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(auth.userName ?? AppStrings.profile(l))
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(c.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                // F11: masked email; Apple-relay / legacy accounts without a
+                // stored email show just «Apple ID».
+                Text(appleIdSubtitle(l))
+                    .font(.system(size: 12))
+                    .foregroundStyle(c.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surfaceCard(cornerRadius: 16)
+        .accessibilityIdentifier("account_identity_card")
+    }
+
+    private func appleIdSubtitle(_ l: LanguageManager.Language) -> String {
+        guard let email = auth.userEmail,
+              !email.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return AppStrings.accountAppleIdOnly(l)
+        }
+        return AppStrings.accountAppleIdLine(l, email: AccountFormat.maskedEmail(email))
+    }
+
+    // MARK: - СИНХРОНИЗАЦИЯ card
+
+    private func syncCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        VStack(spacing: 0) {
+            AccountSettingsRow(
+                icon: "globe",
+                title: AppStrings.cloudSyncTitle(l),
+                subtitle: cloudSyncSubtitle(l),
+                showsDivider: true
             ) {
-                if settings.cloudSyncEnabled {
-                    settings.cloudSyncEnabled = false
-                    SyncQueue.shared.clearAll()
-                }
+                Toggle("", isOn: cloudSyncBinding)
+                    .labelsHidden()
+                    .tint(AppTheme.accent)
+                    .accessibilityIdentifier("sync_cloud_toggle")
             }
 
-            syncChip(
-                label: isRu ? "Включить" : "On",
-                icon: "icloud.fill",
-                isActive: settings.cloudSyncEnabled,
-                c: c
-            ) {
-                if !settings.cloudSyncEnabled {
-                    // First time: show confirmation sheet (GDPR just-in-time consent pattern).
-                    // Subsequent toggles go through without interruption.
+            Button {
+                Haptics.tap()
+                showSyncSheet = true
+            } label: {
+                AccountSettingsRow(
+                    icon: "point.topleft.down.curvedto.point.bottomright.up",
+                    title: AppStrings.syncPerItemStatus(l)
+                ) {
+                    HStack(spacing: 6) {
+                        Text(aggregateStatusValue(l))
+                            .font(.system(size: 13))
+                            .foregroundStyle(c.textSecondary)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("sync_status_row")
+        }
+        .surfaceCard(cornerRadius: 16)
+        .animation(.easeInOut(duration: 0.2), value: syncQueue.isSyncing)
+        .animation(.easeInOut(duration: 0.2), value: syncQueue.pendingCount)
+        .animation(.easeInOut(duration: 0.2), value: settings.cloudSyncEnabled)
+    }
+
+    /// F13: «Обновлено N назад» from the per-account LastSyncedAtStore; falls
+    /// back to plain on/off state copy when the account never synced (or guest).
+    private func cloudSyncSubtitle(_ l: LanguageManager.Language) -> String {
+        if let last = lastSyncedAt {
+            return AppStrings.syncUpdatedAgo(l, RelativeTripDate.string(from: last, language: l))
+        }
+        return settings.cloudSyncEnabled
+            ? AppStrings.syncStateOn(l)
+            : AppStrings.syncStateOff(l)
+    }
+
+    /// Aggregate state machine — same branches as the pre-6.1.0 statusCard,
+    /// including the off-but-publishing state (queue can hold ops for
+    /// explicitly-public trips while global sync is OFF — edge case #3).
+    private func aggregateStatusValue(_ l: LanguageManager.Language) -> String {
+        if !settings.cloudSyncEnabled {
+            return syncQueue.pendingCount > 0
+                ? AppStrings.syncOffPublishing(l, count: syncQueue.pendingCount)
+                : AppStrings.syncOffState(l)
+        }
+        if syncQueue.isSyncing {
+            return syncQueue.batchTotal > 0
+                ? AppStrings.syncingProgress(l, done: syncQueue.batchProcessed, total: syncQueue.batchTotal)
+                : AppStrings.syncingNow(l)
+        }
+        if syncQueue.pendingCount > 0 {
+            return AppStrings.syncQueuedCount(l, count: syncQueue.pendingCount)
+        }
+        return AppStrings.syncAllDone(l)
+    }
+
+    /// Proxy binding for the native Toggle (F10): ON routes through the
+    /// kept-verbatim first-enable GDPR alert, OFF clears the queue — exact
+    /// semantics of the old chip pair.
+    private var cloudSyncBinding: Binding<Bool> {
+        Binding(
+            get: { settings.cloudSyncEnabled },
+            set: { newValue in
+                Haptics.tap()
+                if newValue {
+                    guard !settings.cloudSyncEnabled else { return }
+                    // First time: confirmation alert (GDPR just-in-time
+                    // consent pattern). Subsequent toggles go straight through.
                     if !firstToggleShown {
                         showEnableConfirm = true
                     } else {
                         enableCloudSync()
                     }
+                } else if settings.cloudSyncEnabled {
+                    settings.cloudSyncEnabled = false
+                    SyncQueue.shared.clearAll()
                 }
             }
-        }
-        .padding(16)
-        .surfaceCard(cornerRadius: 16)
+        )
     }
 
     private func enableCloudSync() {
@@ -320,243 +390,142 @@ struct CloudSyncView: View {
         }
     }
 
-    private func syncChip(label: String, icon: String, isActive: Bool, c: AppTheme.Colors, action: @escaping () -> Void) -> some View {
-        Button {
-            Haptics.tap()
-            withAnimation(.easeInOut(duration: 0.2)) { action() }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12))
-                Text(label)
-                    .font(.system(size: 14, weight: .semibold))
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .foregroundStyle(isActive ? .white : c.textSecondary)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isActive ? AppTheme.accent : c.cardAlt)
-            )
-        }
-        .buttonStyle(.plain)
-    }
+    // MARK: - ПРИВАТНОСТЬ card
 
-    private func statusCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(spacing: 12) {
-            if !settings.cloudSyncEnabled {
-                Image(systemName: "icloud.slash")
-                    .font(.system(size: 18))
-                    .foregroundStyle(c.textTertiary)
-                if syncQueue.pendingCount > 0 {
-                    // Even with global Cloud Sync OFF, the queue can hold ops
-                    // for explicitly-public trips (and their photos). Show
-                    // them so the user sees something is happening.
-                    Text((isRu ? "Выключено · публикация: " : "Off · publishing: ")
-                         + "\(syncQueue.pendingCount)")
-                        .foregroundStyle(c.text)
-                } else {
-                    Text(isRu ? "Выключено" : "Disabled")
-                        .foregroundStyle(c.textSecondary)
+    private func privacyCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        VStack(spacing: 0) {
+            // F2 gating: rendered ONLY after a successful /auth/me — against
+            // deployed prod without the endpoint an ungated toggle would
+            // fake-succeed (old server silently drops unknown DTO fields).
+            // Note: isPublic=false hides the PROFILE (server 404s it); public
+            // trips still appear in the feed — matches current server
+            // semantics, feed filtering is deliberately NOT extended here.
+            if auth.isPublicProfile != nil {
+                AccountSettingsRow(
+                    icon: "lock.fill",
+                    title: AppStrings.publicProfileTitle(l),
+                    subtitle: AppStrings.publicProfileSubtitle(l),
+                    showsDivider: true
+                ) {
+                    Toggle("", isOn: publicProfileBinding)
+                        .labelsHidden()
+                        .tint(AppTheme.accent)
+                        .accessibilityIdentifier("privacy_public_toggle")
                 }
-            } else if syncQueue.isSyncing {
-                ProgressView()
-                    .scaleEffect(0.75)
-                if syncQueue.batchTotal > 0 {
-                    Text((isRu ? "Синхронизация… " : "Syncing… ") + "\(syncQueue.batchProcessed)/\(syncQueue.batchTotal)")
-                        .foregroundStyle(c.text)
-                        .monospacedDigit()
-                } else {
-                    Text(isRu ? "Синхронизация…" : "Syncing…")
-                        .foregroundStyle(c.text)
-                }
-            } else if syncQueue.pendingCount > 0 {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: 8, height: 8)
-                Text((isRu ? "В очереди: " : "Pending: ") + "\(syncQueue.pendingCount)")
-                    .foregroundStyle(c.text)
-            } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.green)
-                Text(isRu ? "Всё синхронизировано" : "Everything up to date")
-                    .foregroundStyle(c.text)
             }
-            Spacer()
-        }
-        .font(.system(size: 14, weight: .medium))
-        .padding(14)
-        .surfaceCard(cornerRadius: 14)
-        .animation(.easeInOut(duration: 0.2), value: syncQueue.isSyncing)
-        .animation(.easeInOut(duration: 0.2), value: syncQueue.pendingCount)
-        .animation(.easeInOut(duration: 0.2), value: settings.cloudSyncEnabled)
-    }
 
-    // MARK: - Blocked users entry
-
-    private func blockedEntry(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        Button {
-            Haptics.tap()
-            showBlockedList = true
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "hand.raised.slash")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(c.textSecondary)
-                    .frame(width: 24, alignment: .center)
-                Text(isRu ? "Заблокированные пользователи" : "Blocked users")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-            }
-            .padding(14)
-            .surfaceCard(cornerRadius: 14)
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Wipe server data (signed-in, account intact)
-
-    private func wipeServerEntry(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        Button {
-            Haptics.tap()
-            showWipeServerConfirm = true
-        } label: {
-            HStack(spacing: 12) {
-                if isWipingServer {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        .tint(c.textSecondary)
-                        .frame(width: 24, alignment: .center)
-                    Text(isRu ? "Очищаем…" : "Clearing…")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(c.textSecondary)
-                        .lineLimit(1)
-                } else {
-                    Image(systemName: "trash.slash")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(c.textSecondary)
-                        .frame(width: 24, alignment: .center)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(isRu ? "Очистить мои данные с сервера" : "Clear my server data")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(c.text)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Text(isRu ? "Локальные останутся, аккаунт не удаляется" : "Local data stays, account preserved")
-                            .font(.system(size: 12))
+            Button {
+                Haptics.tap()
+                showBlockedList = true
+            } label: {
+                AccountSettingsRow(
+                    icon: "nosign",
+                    title: AppStrings.blockedUsersShort(l)
+                ) {
+                    HStack(spacing: 6) {
+                        if let count = blockedCount {
+                            Text("\(count)")
+                                .font(.system(size: 13))
+                                .foregroundStyle(c.textSecondary)
+                                .monospacedDigit()
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(c.textTertiary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
                     }
                 }
-                Spacer()
             }
-            .padding(14)
-            .surfaceCard(cornerRadius: 14)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("privacy_blocked_row")
         }
-        .buttonStyle(.plain)
-        .disabled(isWipingServer)
+        .surfaceCard(cornerRadius: 16)
     }
 
-    // MARK: - Account actions (sign out + delete)
+    /// Optimistic toggle with revert: flips immediately, sends the
+    /// isPublic-only payload, and snaps back (+ error haptic) on failure.
+    private var publicProfileBinding: Binding<Bool> {
+        Binding(
+            get: { publicProfileDraft ?? auth.isPublicProfile ?? true },
+            set: { newValue in
+                Haptics.tap()
+                publicProfileDraft = newValue
+                Task {
+                    let ok = await auth.setPublicProfile(newValue)
+                    if !ok { Haptics.error() }
+                    // Success → auth.isPublicProfile == newValue already;
+                    // failure → dropping the draft reverts the toggle.
+                    publicProfileDraft = nil
+                }
+            }
+        )
+    }
 
-    private func accountActions(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        VStack(spacing: 10) {
+    // MARK: - АККАУНТ card
+
+    private func accountActionsCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        // F1: no «Удалить аккаунт» row and no 8px danger separator here —
+        // the card ends after clear-server with normal r16 corners.
+        VStack(spacing: 0) {
             Button {
                 Haptics.tap()
                 showSignOutAlert = true
             } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(c.textSecondary)
-                        .frame(width: 24, alignment: .center)
-                    Text(AppStrings.signOut(lang.language))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                    Spacer()
+                AccountSettingsRow(
+                    icon: "arrow.down.to.line",  // "saved to device" metaphor
+                    title: AppStrings.signOut(l),
+                    subtitle: AppStrings.signOutSubtitle(l),
+                    showsDivider: true
+                ) {
+                    EmptyView()
                 }
-                .padding(14)
-                .surfaceCard(cornerRadius: 14)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("account_signout_row")
 
             Button {
                 Haptics.tap()
-                showDeleteAccountAlert = true
+                showWipeServerConfirm = true
             } label: {
-                HStack(spacing: 12) {
-                    if isDeletingAccount {
+                AccountSettingsRow(
+                    icon: "exclamationmark.triangle",
+                    iconColor: AppTheme.red,
+                    title: isWipingServer
+                        ? AppStrings.clearServerInProgress(l)
+                        : AppStrings.clearServerTitle(l),
+                    titleColor: AppTheme.red,
+                    subtitle: AppStrings.clearServerSubtitle(l)
+                ) {
+                    if isWipingServer {
                         ProgressView()
                             .scaleEffect(0.7)
-                            .tint(.red)
-                            .frame(width: 24, alignment: .center)
-                        Text(isRu ? "Удаление…" : "Deleting…")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.red)
-                            .lineLimit(1)
-                    } else {
-                        Image(systemName: "trash")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.red)
-                            .frame(width: 24, alignment: .center)
-                        Text(AppStrings.deleteAccount(lang.language))
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.red)
-                            .lineLimit(1)
+                            .tint(AppTheme.red)
                     }
-                    Spacer()
                 }
-                .padding(14)
-                .surfaceCard(cornerRadius: 14)
             }
             .buttonStyle(.plain)
-            .disabled(isDeletingAccount)
+            .disabled(isWipingServer)
+            .accessibilityIdentifier("account_clear_server_row")
         }
+        .surfaceCard(cornerRadius: 16)
     }
 
-    private func performDeleteAccount() async {
-        isDeletingAccount = true
-        defer { isDeletingAccount = false }
+    // MARK: - Data
+
+    private func refreshLastSynced() {
+        // Per-account timestamp; guest / never-synced → nil (no crash when
+        // TokenStore.accountId is nil — subtitle falls back to state copy).
+        lastSyncedAt = TokenStore.shared.accountId
+            .flatMap { LastSyncedAtStore.get(accountId: $0) }
+    }
+
+    private func loadBlockedCount() async {
+        guard auth.isSignedIn else { return }
         do {
-            try await auth.deleteAccount()
-            dismiss()
-        } catch let e as APIError {
-            deleteAccountError = String(describing: e)
+            let res: SocialBlockedListResponse = try await APIClient.shared.post(
+                APIEndpoint.socialBlocked, body: EmptyRequest())
+            blockedCount = res.users.count
         } catch {
-            deleteAccountError = error.localizedDescription
+            // Fetch failure → row stays navigable, count stays hidden.
         }
-    }
-
-    private func infoCard(icon: String, iconColor: Color, title: String, body: String, c: AppTheme.Colors) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(iconColor)
-                .frame(width: 24, alignment: .center)
-                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 4 }
-            // Claim leftover row width so multi-line body wraps within the card edges
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(c.text)
-                Text(body)
-                    .font(.system(size: 13))
-                    .foregroundStyle(c.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .surfaceCard(cornerRadius: 14)
     }
 }
