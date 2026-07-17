@@ -783,39 +783,39 @@ enum AppStrings {
     // MARK: - Sign-in prompt sheet
 
     static func signInPromptReact(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Войдите чтобы реагировать" : "Sign in to react"
+        lang == .ru ? "Войдите, чтобы реагировать" : "Sign in to react"
     }
     static func signInPromptFollow(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Войдите чтобы подписаться" : "Sign in to follow"
+        lang == .ru ? "Войдите, чтобы подписаться" : "Sign in to follow"
     }
     static func signInPromptShare(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Войдите чтобы поделиться" : "Sign in to share"
+        lang == .ru ? "Войдите, чтобы поделиться" : "Sign in to share"
     }
     static func signInPromptSync(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Войдите для синхронизации" : "Sign in to sync"
     }
     static func signInPromptPublish(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Войдите чтобы опубликовать" : "Sign in to publish"
+        lang == .ru ? "Войдите, чтобы опубликовать" : "Sign in to publish"
     }
     static func signInPromptGeneric(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Войдите в TripTrack" : "Sign in to TripTrack"
     }
     static func signInPromptSubtitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru
-            ? "Через Apple ID. Без паролей и регистраций. Ваш автодневник остаётся приватным — Вы сами решаете, что выкладывать."
-            : "Sign in with Apple. No passwords, no email confirmations. Your driving log stays private — you choose what to publish."
+            ? "Реакции, подписки и публикация — после входа. Ваши поездки остаются на устройстве."
+            : "Reactions, follows and publishing — after you sign in. Your trips stay on your device."
     }
-    static func signInPromptBulletSync(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Синхронизация на всех Ваших устройствах" : "Sync across your devices"
+    static func signInLoading(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Входим…" : "Signing in…"
     }
-    static func signInPromptBulletReact(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Реакции и подписки" : "React and follow people"
+    static func signInErrorRetry(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось войти. Попробуйте ещё раз." : "Couldn't sign in. Please try again."
     }
-    static func signInPromptBulletPublish(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Публикация поездок и шеринг" : "Publish your trips and share"
-    }
-    static func signInPromptMaybeLater(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Не сейчас" : "Maybe later"
+    /// Legal footnote with a tappable Markdown link on the last word.
+    static func signInLegalMarkdown(_ lang: LanguageManager.Language, termsURL: String) -> String {
+        lang == .ru
+            ? "Продолжая, Вы соглашаетесь с [условиями](\(termsURL))"
+            : "By continuing, you agree to the [terms](\(termsURL))"
     }
     static func signInPromptAppleFailed(_ lang: LanguageManager.Language) -> String {
         lang == .ru
@@ -833,6 +833,20 @@ enum AppStrings {
 
     static func guestFeedBanner(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Войдите чтобы подписываться и реагировать" : "Sign in to follow and react"
+    }
+    static func syncCardKicker(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "СИНХРОНИЗАЦИЯ" : "SYNC"
+    }
+    static func syncCardTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездки на всех устройствах" : "Your trips on every device"
+    }
+    static func syncCardBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Войдите, чтобы открыть свою историю на других устройствах. Все поездки уже здесь."
+            : "Sign in to see your history on your other devices. All your trips are already here."
+    }
+    static func syncCardLater(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Можно позже — ничего не потеряется" : "You can do it later — nothing gets lost"
     }
     static func signInWithApple(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Войти" : "Sign in"

@@ -1,8 +1,6 @@
 import SwiftUI
-import AuthenticationServices
 import OSLog
 
-private let signInLog = Logger(subsystem: "com.triptrack", category: "signin")
 private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 
 struct ProfileView: View {
@@ -327,11 +325,11 @@ struct ProfileView: View {
                 .environmentObject(themeManager)
         }
         .sheet(item: $signInPrompt) { action in
+            // Dead path since 6.1.0 (guest card signs in inline) — kept one
+            // release in case a future surface needs the sheet from here.
             SignInPromptSheet(action: action)
                 .environmentObject(lang)
                 .environmentObject(auth)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showNameEditor) {
@@ -609,39 +607,53 @@ struct ProfileView: View {
         .buttonStyle(.plain)
     }
 
-    /// Inline Sign-in CTA shown to guests at the top of ProfileView. Tap opens
-    /// the same `SignInPromptSheet` used elsewhere — keeps the sign-in UX
-    /// consistent across reaction/follow/share gates.
+    /// Guest sync card (Figma 127:896, node 424:128): explains sync and signs
+    /// in DIRECTLY via the shared Apple button — no sheet hop. The footnote
+    /// is the "можно позже" affordance; the card just stays.
     private func guestSignInCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        Button {
-            Haptics.tap()
-            signInPrompt = .generic
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: "person.crop.circle.badge.plus")
-                    .font(.system(size: 26))
+        VStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "icloud.fill")
+                    .font(.system(size: 24))
                     .foregroundStyle(AppTheme.accent)
+                    .frame(width: 30, height: 30)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(isRu ? "Войдите в TripTrack" : "Sign in to TripTrack")
-                        .font(.system(size: 15, weight: .semibold))
+                    Text(AppStrings.syncCardKicker(lang.language))
+                        .font(.system(size: 11, weight: .bold))
+                        .kerning(0.22)
+                        .foregroundStyle(c.textTertiary)
+                    Text(AppStrings.syncCardTitle(lang.language))
+                        .font(.system(size: 15, weight: .heavy))
                         .foregroundStyle(c.text)
-                    Text(isRu
-                         ? "Синхронизация, реакции, подписки — через Apple ID."
-                         : "Cloud sync, reactions, follows — with Apple ID.")
-                        .font(.system(size: 12))
+                    Text(AppStrings.syncCardBody(lang.language))
+                        .font(.system(size: 12.5))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
+                Spacer(minLength: 0)
             }
-            .padding(14)
-            .surfaceCard(cornerRadius: 14)
+
+            AppleSignInButton(
+                cornerRadius: 999,
+                height: 43,
+                onError: { _ in
+                    // ProfileView's existing alert (driven by lastAuthError)
+                    // is this card's error surface; make sure ASAuthorization
+                    // failures reach it too (API failures already set it).
+                    if auth.lastAuthError == nil {
+                        auth.lastAuthError = .transport("Apple sign-in failed")
+                    }
+                }
+            )
+
+            Text(AppStrings.syncCardLater(lang.language))
+                .font(.system(size: 11))
+                .foregroundStyle(c.textTertiary)
         }
-        .buttonStyle(.plain)
+        .padding(14)
+        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
     }
 
     private func avatarCard(_ c: AppTheme.Colors) -> some View {
@@ -793,33 +805,8 @@ struct ProfileView: View {
                 .multilineTextAlignment(.center)
         }
 
-        ZStack {
-            SignInWithAppleButton(.signIn) { request in
-                request.requestedScopes = [.fullName, .email]
-                request.nonce = SIWANonce.generate()
-                signInLog.debug("→ request scopes, bundle=\(Bundle.main.bundleIdentifier ?? "?")")
-            } onCompletion: { result in
-                switch result {
-                case .success(let authorization):
-                    signInLog.debug("✅ got credential")
-                    Task { await auth.handleAuthorization(authorization) }
-                case .failure(let error):
-                    let ns = error as NSError
-                    signInLog.debug("❌ domain=\(ns.domain) code=\(ns.code) desc=\(ns.localizedDescription)")
-                    signInLog.debug("  userInfo=\(ns.userInfo)")
-                    auth.lastAuthError = .transport("Apple: \(ns.code) \(ns.localizedDescription)")
-                }
-            }
-            .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
-            .frame(height: 44)
-            .cornerRadius(10)
-            .opacity(auth.isAuthenticating ? 0.5 : 1.0)
-            .disabled(auth.isAuthenticating)
-
-            if auth.isAuthenticating {
-                ProgressView()
-            }
-        }
+        // 6.1.0: the header carries no Apple button — the guest sync card
+        // right below (guestSignInCard) is the single sign-in CTA per Figma.
     }
 
     // MARK: - Signed In Header

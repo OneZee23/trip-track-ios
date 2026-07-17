@@ -64,6 +64,14 @@ final class TripTrackUITests: XCTestCase {
     func test_screenshot_tour() {
         sleep(2); snap("01_feed")
 
+        // Sign-in sheet (6.1.0 Вход) — the guest feed banner opens it.
+        let guestBanner = app.buttons.matching(identifier: "guest_signin_banner").firstMatch
+        if guestBanner.waitForExistence(timeout: 3), guestBanner.isHittable {
+            guestBanner.tap()
+            sleep(1); snap("12_signin_sheet")
+            win.swipeDown(); sleep(1)
+        }
+
         // Maps tab (6.1.0: Места → Карта)
         if tap("Карта") { sleep(1); snap("02_places") }
         // Back to feed, Поездки segment (#7 Мои→Поездки)

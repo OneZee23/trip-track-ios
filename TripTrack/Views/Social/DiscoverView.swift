@@ -65,8 +65,6 @@ struct DiscoverView: View {
             SignInPromptSheet(action: action)
                 .environmentObject(lang)
                 .environmentObject(auth)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
         }
     }
 

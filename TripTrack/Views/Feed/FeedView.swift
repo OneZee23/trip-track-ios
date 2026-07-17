@@ -314,8 +314,6 @@ struct FeedView: View {
             SignInPromptSheet(action: action, onAuthenticated: { resumeAfterAuth = true })
                 .environmentObject(lang)
                 .environmentObject(auth)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showDiscover) {
@@ -693,6 +691,7 @@ struct FeedView: View {
             .surfaceCard(cornerRadius: 14)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("guest_signin_banner")
     }
 
     private func socialErrorState(_ c: AppTheme.Colors, isRu: Bool) -> some View {

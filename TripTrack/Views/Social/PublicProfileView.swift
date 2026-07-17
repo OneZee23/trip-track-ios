@@ -172,8 +172,6 @@ struct PublicProfileView: View {
             SignInPromptSheet(action: action)
                 .environmentObject(lang)
                 .environmentObject(auth)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
         }
         .overlay {
             if let badge = selectedBadge {

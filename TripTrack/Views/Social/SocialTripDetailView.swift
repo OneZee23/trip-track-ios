@@ -197,8 +197,6 @@ struct SocialTripDetailView: View {
             SignInPromptSheet(action: action, onAuthenticated: { resumeAfterAuth = true })
                 .environmentObject(lang)
                 .environmentObject(auth)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
         }
         .overlay {
             if let badge = selectedDetailBadge {
