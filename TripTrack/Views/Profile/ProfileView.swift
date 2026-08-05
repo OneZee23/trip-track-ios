@@ -628,6 +628,7 @@ struct ProfileView: View {
                     vehicleName: vehicleName(for: trip),
                     onTap: { mePath.append(.trip(trip.id)) }
                 )
+                .accessibilityIdentifier("profile_trip_row")
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
             }

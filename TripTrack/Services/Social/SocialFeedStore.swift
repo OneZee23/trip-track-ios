@@ -6,7 +6,21 @@ private let socialLog = Logger(subsystem: "com.triptrack", category: "social")
 
 @MainActor
 final class SocialFeedStore: ObservableObject {
-    static let shared = SocialFeedStore()
+    /// Which server-side feed composition this instance mirrors.
+    enum FeedType: String {
+        case all
+        case following
+    }
+
+    /// Global discovery feed («Все») — the instance every reaction/privacy/
+    /// photo consumer references; its name must stay `shared`.
+    static let shared = SocialFeedStore(type: .all)
+    /// «Подписки» — followed users + own public trips. Separate instance so
+    /// both segments keep independent pages/cursors; all notification-driven
+    /// self-healing (privacy/delete/photo/comment observers) applies to both.
+    static let following = SocialFeedStore(type: .following)
+
+    private let feedType: FeedType
 
     @Published private(set) var trips: [SocialFeedTrip] = []
     @Published private(set) var isLoading = false
@@ -54,7 +68,8 @@ final class SocialFeedStore: ObservableObject {
     /// sign-out via `clear()`.
     private var knownReactions: [UUID: String?] = [:]
 
-    private init() {
+    private init(type: FeedType) {
+        self.feedType = type
         // Photo added/removed/uploaded somewhere in the app. The notification
         // arrives twice for the same change — once optimistically from
         // `TripRepository` with a `delta` (+1 add / -1 delete) so we can
@@ -246,7 +261,11 @@ final class SocialFeedStore: ObservableObject {
     }
 
     private func fetchPage(replace: Bool) async {
-        let req = SocialFeedRequest(limit: 20, cursor: nextCursor)
+        // `type` is sent only for the following feed — old servers ignore
+        // the unknown field, and "all" is their default anyway.
+        let req = SocialFeedRequest(
+            limit: 20, cursor: nextCursor,
+            type: feedType == .following ? FeedType.following.rawValue : nil)
         // Capture the generation BEFORE the request goes out. refresh() only
         // cancels `currentTask` — a loadMore in flight when a refresh fires
         // (pull-to-refresh, the photo-drain reconcile) survives, and landing

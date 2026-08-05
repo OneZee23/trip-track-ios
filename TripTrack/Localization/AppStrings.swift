@@ -1291,8 +1291,24 @@ enum AppStrings {
     }
 
     // MARK: - Home feed (6.1.0)
-    static func feedSegmentMine(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Мои" : "Mine"
+    static func feedSegmentFollowing(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Подписки" : "Following"
+    }
+    static func followingEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пока тихо" : "Quiet for now"
+    }
+    static func followingEmptyBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Подпишитесь на людей, и их поездки появятся здесь."
+            : "Follow people and their trips will show up here."
+    }
+    static func followingGuestTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Лента подписок" : "Your following feed"
+    }
+    static func followingGuestBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Войдите, чтобы подписываться на людей и видеть их поездки здесь."
+            : "Sign in to follow people and see their trips here."
     }
     static func feedEmptyTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Здесь появятся маршруты" : "Routes will show up here"

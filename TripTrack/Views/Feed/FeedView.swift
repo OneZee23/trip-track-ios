@@ -1,6 +1,7 @@
 import SwiftUI
+import OSLog
 
-enum FeedMode: Hashable { case all, mine }
+enum FeedMode: Hashable { case all, following }
 
 struct FeedView: View {
     // Shared, not @StateObject: the tab switch destroys this view and a
@@ -9,6 +10,8 @@ struct FeedView: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
     @ObservedObject private var socialFeed = SocialFeedStore.shared
+    /// «Подписки» — the following-only feed instance (Figma 141:1081).
+    @ObservedObject private var followingFeed = SocialFeedStore.following
     /// Drives the connectivity banner — when ops accumulate in `failed`,
     /// the network is genuinely broken and we surface that to the user.
     @ObservedObject private var syncQueue = SyncQueue.shared
@@ -19,14 +22,13 @@ struct FeedView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Binding var selectedTab: AppTab
     @State private var didLoad = false
-    @State private var showStats = false
     @State private var showBadges = false
     @State private var showNotifications = false
     @State private var showGarage = false
-    @State private var collapsedSections: Set<String> = []
     /// Persisted so the chosen segment survives tab switches (the switch
-    /// destroys this view) and relaunches.
-    @AppStorage("feedModeMineV2") private var feedModeIsMine = false
+    /// destroys this view) and relaunches. Fresh key: the old value tracked
+    /// the retired «Мои» segment.
+    @AppStorage("feedSegmentFollowingV2") private var feedModeIsFollowing = false
     @State private var feedMode: FeedMode = .all
     /// Cached "does the user have at least one private trip" flag.
     /// Read in `socialEmptyState` to gate the "Publish one of your
@@ -103,46 +105,55 @@ struct FeedView: View {
                 // iOS's own physics — much nicer than our cross-fade or manual drag
                 // gesture. The pills above stay fixed, only the content below slides.
                 TabView(selection: $feedMode) {
-                    // .ignoresSafeArea(.bottom) on each PAGE, not the pager:
-                    // iOS 26's UIPageViewController re-insets page content to
-                    // the safe area, so scrolled cards clipped at a hard line
-                    // above the home indicator (dark band below). The lists'
-                    // own bottom padding already clears the tab bar.
                     allFeedPage(c)
                         .ignoresSafeArea(edges: .bottom)
                         .tag(FeedMode.all)
-                    mineFeedPage(c)
+                    followingFeedPage(c)
                         .ignoresSafeArea(edges: .bottom)
-                        .tag(FeedMode.mine)
+                        .tag(FeedMode.following)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                // Theme bg painted to the physical bottom UNDER the pager:
-                // UIPageViewController's own backdrop is black, and on iOS 26
-                // its bottom inset pokes out below the page content — without
-                // this the home-indicator zone reads as a black slab.
+                // THE BLACK-BAND ROOT CAUSE (iOS 26, dark theme): the pager
+                // host (UIKitPagingView) is laid out only down to the SAFE
+                // AREA edge, and the zone below it shows the NavigationStack
+                // HostingView's opaque systemBackground — pure black in dark
+                // mode (in light it's white-on-cream and near-invisible,
+                // which is why iOS 18/light sims never caught it). Extending
+                // the pager itself under the home indicator removes the gap;
+                // the pages' own bottom padding keeps content clear of the
+                // tab bar.
+                .ignoresSafeArea(edges: .bottom)
+                // Belt-and-braces: theme bg painted behind the pager.
                 .background(c.bg.ignoresSafeArea())
                 // Disable the rubber-band bounce when swiping past the first or last
                 // page — the underlying UIPageViewController uses a UIScrollView that
                 // bounces by default, which shows the black background on edges.
                 .background(PageViewBounceDisabler())
                 .onChange(of: feedMode) { _, newMode in
-                    feedModeIsMine = newMode == .mine
+                    feedModeIsFollowing = newMode == .following
                     if newMode == .all {
                         // `loadIfNeeded` (not `refresh`) — tab switches
                         // shouldn't cancel an in-flight fetch. Pull-to-
                         // refresh below stays explicit.
                         Task { await socialFeed.loadIfNeeded() }
-                    } else if newMode == .mine {
-                        feedVM.language = lang.language
-                        feedVM.loadTrips()
+                    } else if newMode == .following, auth.isSignedIn {
+                        // Guests never fetch the following feed — the page
+                        // shows its sign-in CTA instead.
+                        Task { await followingFeed.loadIfNeeded() }
                     }
                 }
                 .onAppear {
                     // Restore the persisted segment once per mount (@State
                     // can't seed from @AppStorage in init).
-                    if feedModeIsMine && feedMode == .all { feedMode = .mine }
+                    if feedModeIsFollowing && feedMode == .all { feedMode = .following }
                 }
             }
+            // Paint the theme bg across the ENTIRE NavigationStack content,
+            // safe areas included. The stack's HostingView is opaque
+            // systemBackground (black in dark mode) and shows through any
+            // region the layout leaves uncovered — this is the second layer
+            // of the home-indicator black-band fix.
+            .background(c.bg.ignoresSafeArea())
             // Single typed destination for every push out of Feed. Mixing a
             // `NavigationStack(path:)` with `.navigationDestination(isPresented:)`
             // made the isPresented-pushed Trip view disappear whenever the typed
@@ -197,17 +208,24 @@ struct FeedView: View {
             // request-storm pattern on slow LAN where every view
             // appear cancelled the previous fetch.
             Task { await socialFeed.loadIfNeeded() }
+            if feedMode == .following, auth.isSignedIn {
+                Task { await followingFeed.loadIfNeeded() }
+            }
             feedVM.retryGeocodingIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .tripRecordingEnded)) { _ in
             // New trip → may flip the "has any private trip" cache.
             hasAnyPrivateTrip = feedVM.tripManager.hasAnyPrivateTrip()
         }
-        .onChange(of: auth.isSignedIn) { _, _ in
+        .onChange(of: auth.isSignedIn) { _, signedIn in
             // Sign-in state flipped (in either direction) — re-fetch so the
             // feed switches between personalized (followed users) and
-            // trending without a manual pull.
-            Task { await socialFeed.refresh() }
+            // trending without a manual pull. The following feed only exists
+            // for signed-in users; sign-out already cleared it in AuthService.
+            Task {
+                await socialFeed.refresh()
+                if signedIn { await followingFeed.refresh() }
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             // Re-entering the app from background → refresh the feed so it's
@@ -217,34 +235,15 @@ struct FeedView: View {
             // cold-launch empty-feed race is recovered separately in the store.
             if newPhase == .active {
                 Task { await socialFeed.loadIfNeeded() }
+                if feedMode == .following, auth.isSignedIn {
+                    Task { await followingFeed.loadIfNeeded() }
+                }
             }
         }
-        .sheet(isPresented: $feedVM.showFilters) {
-            FilterSheetView(
-                filters: $feedVM.filters,
-                regions: feedVM.uniqueRegions,
-                onApply: {
-                    feedVM.applyFilters()
-                    feedVM.showFilters = false
-                },
-                onResetSecondary: {
-                    feedVM.resetSecondaryFilters()
-                    feedVM.showFilters = false
-                }
-            )
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
-            // Sheets are separate presentations — the app-root
-            // preferredColorScheme does not reach them (see ProfileView),
-            // so every sheet re-applies the in-app theme override.
-            .preferredColorScheme(themeManager.preferredColorScheme)
-        }
-        .sheet(isPresented: $showStats) {
-            StatsView(tripManager: feedVM.tripManager)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .preferredColorScheme(themeManager.preferredColorScheme)
-        }
+        // Trip filters + the «Мои» local-trips page removed per design
+        // decisions (2026-08-05): filters looked off-design and
+        // underdelivered; local trips live on the Я tab (История +
+        // Статистика). The second segment is now «Подписки» per Figma.
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTrip)) { notif in
             if let tripId = notif.object as? UUID {
                 authorPath = [.trip(tripId)]
@@ -260,6 +259,7 @@ struct FeedView: View {
             if let payload = notif.object as? PrivacyChangePayload, payload.isPrivate {
                 withAnimation(.easeInOut(duration: 0.35)) {
                     socialFeed.removeOptimistically(tripId: payload.tripId)
+                    followingFeed.removeOptimistically(tripId: payload.tripId)
                 }
             }
             // Flipping a trip private↔public can change "has any private
@@ -268,6 +268,7 @@ struct FeedView: View {
             Task {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 await socialFeed.refresh()
+                await followingFeed.refresh()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tripDeleted)) { _ in
@@ -359,7 +360,7 @@ struct FeedView: View {
             ReactionPickerOverlay(
                 currentReaction: picked.myReaction,
                 onPick: { emoji in
-                    Task { await socialFeed.toggleReaction(for: picked.id, emoji: emoji) }
+                    Task { await owningStore(for: picked.id).toggleReaction(for: picked.id, emoji: emoji) }
                     reactionPickerTrip = nil
                 },
                 onDismiss: { reactionPickerTrip = nil }
@@ -437,8 +438,8 @@ struct FeedView: View {
         HStack(spacing: 3) {
             modePill(.all, label: AppStrings.all(lang.language), c: c)
                 .accessibilityIdentifier("feed_segment_all")
-            modePill(.mine, label: AppStrings.feedSegmentMine(lang.language), c: c)
-                .accessibilityIdentifier("feed_segment_mine")
+            modePill(.following, label: AppStrings.feedSegmentFollowing(lang.language), c: c)
+                .accessibilityIdentifier("feed_segment_following")
         }
         .padding(3)
         .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 11))
@@ -459,13 +460,13 @@ struct FeedView: View {
             // change), so we only fire the refresh on active-tap.
             if !wasActive {
                 NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
-            } else if mode == .all {
+            } else {
                 NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
-                Task { await socialFeed.refresh() }
-            }
-            if mode == .mine {
-                feedVM.language = lang.language
-                feedVM.loadTrips()
+                if mode == .all {
+                    Task { await socialFeed.refresh() }
+                } else if auth.isSignedIn {
+                    Task { await followingFeed.refresh() }
+                }
             }
         } label: {
             Text(label)
@@ -501,7 +502,8 @@ struct FeedView: View {
                             .padding(.horizontal, 0)
                             .padding(.top, 6)
                     }
-                    socialFeedContent(c).padding(.top, 6)
+                    socialFeedContent(c, store: socialFeed, isFollowing: false)
+                        .padding(.top, 6)
                 }
                 .padding(.horizontal, 14)
                 .padding(.bottom, 120)
@@ -520,36 +522,23 @@ struct FeedView: View {
         }
     }
 
+    /// «Подписки» (Figma 141:1081): followed users + own public trips.
+    /// Guests never fetch — the page IS the sign-in pitch.
     @ViewBuilder
-    private func mineFeedPage(_ c: AppTheme.Colors) -> some View {
+    private func followingFeedPage(_ c: AppTheme.Colors) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    Color.clear.frame(height: 0).id("feedTopMine")
-                    ContributionCalendarView(
-                        dateFrom: Binding(
-                            get: { feedVM.filters.dateFrom },
-                            set: { newDate in
-                                feedVM.setDateRange(from: newDate, to: feedVM.filters.dateTo)
-                            }
-                        ),
-                        dateTo: Binding(
-                            get: { feedVM.filters.dateTo },
-                            set: { newDate in
-                                feedVM.setDateRange(from: feedVM.filters.dateFrom, to: newDate)
-                            }
-                        ),
-                        language: lang.language,
-                        maxKmDay: feedVM.maxKmDay,
-                        kmByDay: { feedVM.kmByDay(for: $0) }
-                    )
-
-                    quickStats(c)
-
-                    filterBar(c)
-                        .padding(.top, 2)
-
-                    tripSections(c)
+                    Color.clear.frame(height: 0).id("feedTopFollowing")
+                    connectivityBanner(c)
+                    if auth.isSignedIn {
+                        socialFeedContent(c, store: followingFeed, isFollowing: true)
+                            .padding(.top, 6)
+                    } else {
+                        guestSignInBanner(c)
+                            .padding(.top, 6)
+                        followingGuestState(c)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.bottom, 120)
@@ -557,17 +546,13 @@ struct FeedView: View {
             .scrollIndicators(.hidden)
             .background(c.bg)
             .refreshable {
-                feedVM.language = lang.language
-                // Async variant runs the CoreData fetch on a background
-                // context so the refresh spinner doesn't freeze on iPhone
-                // 12 + sizable trip library.
-                await feedVM.loadTripsAsync()
+                if auth.isSignedIn { await followingFeed.refresh() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .feedScrollToTop)) { _ in
                 if !authorPath.isEmpty { authorPath.removeAll() }
                 else {
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        proxy.scrollTo("feedTopMine", anchor: .top)
+                        proxy.scrollTo("feedTopFollowing", anchor: .top)
                     }
                 }
             }
@@ -577,25 +562,31 @@ struct FeedView: View {
     // MARK: - Social Feed Content
 
     @ViewBuilder
-    private func socialFeedContent(_ c: AppTheme.Colors) -> some View {
+    private func socialFeedContent(
+        _ c: AppTheme.Colors, store: SocialFeedStore, isFollowing: Bool
+    ) -> some View {
         let isRu = lang.language == .ru
 
         // Suggested-users carousel moved out of the feed into DiscoverView
         // (search tab) — keeps the feed focused on activity and avoids
         // empty-state awkwardness when there are no recommendations.
 
-        if socialFeed.isLoading, socialFeed.trips.isEmpty {
+        if store.isLoading, store.trips.isEmpty {
             PixelCarLoader(
                 label: isRu ? "Загружаем ленту…" : "Loading feed…"
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 40)
-        } else if socialFeed.lastError != nil, socialFeed.trips.isEmpty {
-            socialErrorState(c, isRu: isRu)
-        } else if socialFeed.trips.isEmpty {
-            socialEmptyState(c, isRu: isRu)
+        } else if store.lastError != nil, store.trips.isEmpty {
+            socialErrorState(c, isRu: isRu, store: store)
+        } else if store.trips.isEmpty {
+            if isFollowing {
+                followingEmptyState(c)
+            } else {
+                socialEmptyState(c, isRu: isRu)
+            }
         } else {
-            ForEach(socialFeed.trips) { trip in
+            ForEach(store.trips) { trip in
                 let isOwn = isOwnSocialTrip(trip)
                 let ownVehicle = isOwn ? ownVehicleFor(tripId: trip.id) : nil
                 SocialFeedCardView(
@@ -623,7 +614,7 @@ struct FeedView: View {
                     onReact: { emoji in
                         guard !isOwn else { return }
                         if auth.isSignedIn {
-                            Task { await socialFeed.toggleReaction(for: trip.id, emoji: emoji) }
+                            Task { await store.toggleReaction(for: trip.id, emoji: emoji) }
                         } else {
                             pendingSocialAction = .react(trip, emoji: emoji)
                             signInPrompt = .react
@@ -635,7 +626,7 @@ struct FeedView: View {
                     }
                 )
                 .onAppear {
-                    Task { await socialFeed.loadMoreIfNeeded(currentItem: trip) }
+                    Task { await store.loadMoreIfNeeded(currentItem: trip) }
                 }
                 // Smooth fade + collapse when a card is removed (e.g. after the user
                 // flips their own trip back to private).
@@ -652,11 +643,77 @@ struct FeedView: View {
             // `removeOptimistically` in `withAnimation` (see .tripPrivacyChanged),
             // which drives the card's `.transition` without animating appends.
 
-            if socialFeed.isLoadingMore {
+            if store.isLoadingMore {
                 ProgressView()
                     .padding(.vertical, 16)
             }
         }
+    }
+
+    /// Signed-in following feed with zero trips — the state Figma draws
+    /// with the «find people» CTA: nobody followed yet (or the followed
+    /// users have no public trips).
+    private func followingEmptyState(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 0) {
+            FeedIdleRing()
+                .padding(.top, 36)
+            Text(AppStrings.followingEmptyTitle(lang.language))
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+                .padding(.top, 18)
+            Text(AppStrings.followingEmptyBody(lang.language))
+                .font(.system(size: 14))
+                .lineSpacing(6)
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 280)
+                .padding(.top, 8)
+            Button {
+                Haptics.tap()
+                showDiscover = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 16, weight: .bold))
+                    Text(AppStrings.findPeople(lang.language))
+                        .font(.system(size: 14, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+                .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
+                .shadow(color: AppTheme.accent.opacity(0.3), radius: 1.5, y: 1)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("following_empty_find_people")
+            .padding(.top, 22)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+    }
+
+    /// Guest visiting «Подписки» — no fetch happens; the page pitches
+    /// signing in (the banner above provides the actual CTA).
+    private func followingGuestState(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 0) {
+            FeedIdleRing()
+                .padding(.top, 36)
+            Text(AppStrings.followingGuestTitle(lang.language))
+                .font(.system(size: 19, weight: .heavy))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+                .padding(.top, 18)
+            Text(AppStrings.followingGuestBody(lang.language))
+                .font(.system(size: 14))
+                .lineSpacing(6)
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 280)
+                .padding(.top, 8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
     }
 
     /// Surfaced when the SyncQueue has parked one or more ops in `failedQueue`.
@@ -741,7 +798,7 @@ struct FeedView: View {
         .accessibilityIdentifier("guest_signin_banner")
     }
 
-    private func socialErrorState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func socialErrorState(_ c: AppTheme.Colors, isRu: Bool, store: SocialFeedStore) -> some View {
         VStack(spacing: 14) {
             Image(systemName: "wifi.exclamationmark")
                 .font(.system(size: 44, weight: .light))
@@ -759,7 +816,7 @@ struct FeedView: View {
                 .padding(.horizontal, 32)
             Button {
                 Haptics.tap()
-                Task { await socialFeed.refresh() }
+                Task { await store.refresh() }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.clockwise")
@@ -832,14 +889,14 @@ struct FeedView: View {
 
             // Signed-in user with private trips: nudge them to publish.
             // We don't deep-link to a specific trip — sending them to
-            // the "Мои" tab lets them pick which one to share. Avoids
-            // a "we picked your most recent" surprise. Kept as a quiet
-            // secondary text button (retains the cold-start seeding fix
-            // — deliberate deviation from the Figma frame).
+            // the Я tab (История) lets them pick which one to share.
+            // Avoids a "we picked your most recent" surprise. Kept as a
+            // quiet secondary text button (retains the cold-start seeding
+            // fix — deliberate deviation from the Figma frame).
             if signedIn && hasPrivateTrips {
                 Button {
                     Haptics.tap()
-                    feedMode = .mine
+                    selectedTab = .profile
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "globe")
@@ -859,6 +916,18 @@ struct FeedView: View {
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
         .padding(.bottom, 40)
+    }
+
+    /// Reactions must go through the store that owns the trip's card so its
+    /// UI updates optimistically. Toggling on both stores would double-POST
+    /// (toggle semantics → the second call reverts the first). Prefer the
+    /// active page; fall back to whichever store has the trip.
+    private func owningStore(for tripId: UUID) -> SocialFeedStore {
+        let active = feedMode == .following ? followingFeed : socialFeed
+        if active.trips.contains(where: { $0.id == tripId }) { return active }
+        let other = feedMode == .following ? socialFeed : followingFeed
+        if other.trips.contains(where: { $0.id == tripId }) { return other }
+        return active
     }
 
     /// True when a feed card refers to the signed-in user's own trip. Used to route
@@ -895,7 +964,7 @@ struct FeedView: View {
         case .share(let t):
             shareSocialTrip(t)
         case .react(let t, let emoji):
-            Task { await socialFeed.toggleReaction(for: t.id, emoji: emoji) }
+            Task { await owningStore(for: t.id).toggleReaction(for: t.id, emoji: emoji) }
         case .reactionPicker(let t):
             reactionPickerTrip = t
         case .openInbox:
@@ -921,219 +990,6 @@ struct FeedView: View {
         }
     }
 
-    // MARK: - Trip Sections
-
-    @ViewBuilder
-    private func tripSections(_ c: AppTheme.Colors) -> some View {
-        if feedVM.trips.isEmpty {
-            FeedEmptyStateView(
-                hasFilters: feedVM.filters.isActive,
-                onStartTrip: { selectedTab = .record },
-                onResetFilters: { feedVM.resetFilters() }
-            )
-        } else {
-            ForEach(feedVM.sections) { section in
-                sectionHeader(section, c: c)
-
-                if !collapsedSections.contains(section.id) {
-                    ForEach(section.trips) { trip in
-                        tripCard(trip, c: c)
-                    }
-                }
-            }
-        }
-    }
-
-    private func sectionHeader(_ section: TripSection, c: AppTheme.Colors) -> some View {
-        Button {
-            Haptics.selection()
-            withAnimation(.easeInOut(duration: 0.25)) {
-                if collapsedSections.contains(section.id) {
-                    collapsedSections.remove(section.id)
-                } else {
-                    collapsedSections.insert(section.id)
-                }
-            }
-        } label: {
-            HStack {
-                Text(section.title)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(c.textTertiary)
-                    .tracking(0.5)
-                Spacer()
-                Image(systemName: collapsedSections.contains(section.id) ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func vehicleForTrip(_ trip: Trip) -> Vehicle? {
-        if let vid = trip.vehicleId {
-            return settings.vehicles.first { $0.id == vid }
-        }
-        return nil
-    }
-
-    private func tripCard(_ trip: Trip, c: AppTheme.Colors) -> some View {
-        let vehicle = vehicleForTrip(trip)
-        // Swipe-to-delete has been retired — it collided with the horizontal
-        // Feed ↔ Mine page swipe and made accidental deletions too easy. Delete
-        // lives in the trip detail view now (menu with a confirmation step).
-        return FeedTripCardView(
-            trip: trip,
-            vehicleName: vehicle?.name,
-            vehicleEmoji: vehicle?.avatarEmoji ?? settings.avatarEmoji,
-            vehicle: vehicle,
-            fuelCurrency: trip.fuelCurrency ?? FuelCurrency.current
-        )
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("trip_card")
-        .accessibilityAddTraits(.isButton)
-        .onTapGesture {
-            Haptics.tap()
-            authorPath.cappedAppend(.trip(trip.id))
-        }
-        .onAppear {
-            feedVM.loadMoreIfNeeded(currentTrip: trip)
-        }
-    }
-
-    // MARK: - Quick Stats
-
-    private func quickStats(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                Haptics.tap()
-                showStats = true
-            } label: {
-                statPill(
-                    label: AppStrings.trips(lang.language),
-                    value: "\(feedVM.totalTripCount)",
-                    color: AppTheme.accent,
-                    c: c
-                )
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                Haptics.tap()
-                showStats = true
-            } label: {
-                statPill(
-                    label: AppStrings.km(lang.language),
-                    value: String(format: "%.0f", feedVM.totalKm),
-                    color: c.text,
-                    c: c
-                )
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                Haptics.tap()
-                showStats = true
-            } label: {
-                statPill(
-                    label: AppStrings.time(lang.language),
-                    value: feedVM.formattedTotalTime,
-                    color: c.text,
-                    c: c
-                )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private func statPill(label: String, value: String, color: Color, c: AppTheme.Colors) -> some View {
-        VStack(spacing: 2) {
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(c.textTertiary)
-            Text(value)
-                .font(.system(size: 18, weight: .heavy))
-                .foregroundStyle(color)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .surfaceCard(cornerRadius: 12)
-    }
-
-    // MARK: - Filter Bar
-
-    private func filterBar(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 6) {
-            Button {
-                feedVM.showFilters = true
-            } label: {
-                Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: 14))
-                    .glassPill(isActive: feedVM.filters.isActive)
-            }
-            .buttonStyle(.plain)
-
-            if let region = feedVM.filters.region {
-                Button {
-                    feedVM.setRegionFilter(nil)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(region)
-                        Image(systemName: "xmark")
-                            .font(.system(size: 12))
-                    }
-                    .glassPill(isActive: true)
-                }
-                .buttonStyle(.plain)
-            }
-
-            if feedVM.filters.hasDateFilter {
-                Button {
-                    feedVM.setDateRange(from: nil, to: nil)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(dateChipText)
-                        Image(systemName: "xmark")
-                            .font(.system(size: 12))
-                    }
-                    .glassPill(isActive: true)
-                }
-                .buttonStyle(.plain)
-            }
-
-            Spacer()
-        }
-    }
-
-    // MARK: - Empty State (replaced by FeedEmptyStateView)
-
-    // MARK: - Helpers
-
-    private func animationDelay(for trip: Trip) -> Double {
-        guard let index = feedVM.trips.firstIndex(where: { $0.id == trip.id }) else { return 0 }
-        return min(Double(index) * 0.05, 0.5)
-    }
-
-    private static let chipDateFormatters: (ru: DateFormatter, en: DateFormatter) = {
-        let ru = DateFormatter()
-        ru.locale = Locale(identifier: "ru_RU")
-        ru.dateFormat = "d MMM"
-        let en = DateFormatter()
-        en.locale = Locale(identifier: "en_US")
-        en.dateFormat = "d MMM"
-        return (ru, en)
-    }()
-
-    private var dateChipText: String {
-        let formatter = lang.language == .ru ? Self.chipDateFormatters.ru : Self.chipDateFormatters.en
-        guard let from = feedVM.filters.dateFrom else { return "" }
-        let fromStr = formatter.string(from: from)
-        guard let to = feedVM.filters.dateTo else { return fromStr }
-        if Calendar.current.isDate(from, inSameDayAs: to) {
-            return fromStr
-        }
-        return "\(fromStr) – \(formatter.string(from: to))"
-    }
 }
 
 // MARK: - Feed idle ring (Figma 141:1103)
@@ -1179,6 +1035,8 @@ private struct PageViewBounceDisabler: UIViewRepresentable {
 }
 
 private final class PageBounceFinderView: UIView {
+    private static let pagerLog = Logger(subsystem: "com.triptrack", category: "pager")
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
         guard window != nil else { return }
@@ -1200,14 +1058,43 @@ private final class PageBounceFinderView: UIView {
         }
     }
 
-    /// Kills both UIPageViewController artifacts at the source: the edge
-    /// bounce AND the opaque black backdrop of its internal scroll view
-    /// (visible in the bottom safe-area zone on iOS 26, where the pager's
-    /// inset extends past the page content).
+    /// Kills the UIPageViewController artifacts at the source:
+    ///  * edge bounce;
+    ///  * the opaque black backdrops — iOS 26 paints them on SEVERAL views
+    ///    of the pager subtree, not just the queuing scroll view, so clear
+    ///    the whole subtree plus the ancestor chain;
+    ///  * the bottom safe-area inset the iOS 26 pager applies to its pages
+    ///    (contentInsetAdjustment) — it clipped page content at the
+    ///    safe-area line, leaving a black band under the home indicator.
     private func neutralize(_ scroll: UIScrollView) {
         scroll.bounces = false
-        scroll.backgroundColor = .clear
-        scroll.superview?.backgroundColor = .clear
+        scroll.contentInsetAdjustmentBehavior = .never
+        clearBackgrounds(in: scroll)
+        // Ancestors up to (and including) the pager's hosting container.
+        var up: UIView? = scroll.superview
+        var hops = 0
+        while let v = up, hops < 4 {
+            logView(v, label: "ancestor\(hops)")
+            v.backgroundColor = .clear
+            up = v.superview
+            hops += 1
+        }
+    }
+
+    /// Clears backgroundColor on the scroll view and its container subviews
+    /// (page wrappers), logging what was there for diagnostics.
+    private func clearBackgrounds(in root: UIView, depth: Int = 0) {
+        logView(root, label: "subtree\(depth)")
+        root.backgroundColor = .clear
+        guard depth < 3 else { return }
+        for sub in root.subviews {
+            clearBackgrounds(in: sub, depth: depth + 1)
+        }
+    }
+
+    private func logView(_ v: UIView, label: String) {
+        let bg = v.backgroundColor.map { String(describing: $0) } ?? "nil"
+        Self.pagerLog.notice("[pager.\(label, privacy: .public)] \(String(describing: type(of: v)), privacy: .public) bg=\(bg, privacy: .public) frame=\(String(describing: v.frame), privacy: .public) safeInsets=\(String(describing: v.safeAreaInsets), privacy: .public)")
     }
 
     private func findScroll(in view: UIView) -> UIScrollView? {

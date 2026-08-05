@@ -445,6 +445,7 @@ final class AuthService: ObservableObject {
         // follow-personalized feed with stale `myReaction` highlights, and
         // their own trips rendered as strangers' cards.
         SocialFeedStore.shared.clear()
+        SocialFeedStore.following.clear()
         // Wipe the cached APNs device token so it isn't replayed by the
         // next account's `syncTokenToServer`.
         PushNotificationManager.shared.clearCachedToken()

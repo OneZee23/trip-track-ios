@@ -14,7 +14,11 @@ final class TripTrackUITests: XCTestCase {
         // selectedTabV2 the same way: the argument domain shadows reads, so
         // @AppStorage writes from tab taps would be invisible and the app
         // would appear frozen on the pinned tab.
-        app.launchArguments += ["-hasCompletedOnboarding", "YES"]
+        // Value must be the XML-plist form: "YES" stays a String in the
+        // argument domain and @AppStorage(Bool)'s `as? Bool` cast fails
+        // (fresh installs then land on onboarding); "<true/>" parses to a
+        // real Bool.
+        app.launchArguments += ["-hasCompletedOnboarding", "<true/>"]
         app.launch()
     }
 
@@ -134,16 +138,24 @@ final class TripTrackUITests: XCTestCase {
     /// snaps them (6.1.0 Деталка verification). Locale-tolerant, guarded.
     func test_zz_trip_detail_shots() {
         normalizeToHome()
-        // Own trips segment («Поездки»/"Trips") sits in the feed's pager pills.
-        if !tap("Поездки", timeout: 2) { _ = tap("Trips", timeout: 2) }
-        sleep(2)
-        let anyCard = app.descendants(matching: .any).matching(identifier: "trip_card").firstMatch
-        print("DETSHOT counts any=\(app.descendants(matching: .any).matching(identifier: "trip_card").count) btn=\(app.buttons.matching(identifier: "trip_card").count) other=\(app.otherElements.matching(identifier: "trip_card").count)")
+        // Own trips now live on the Я tab (История section) — the feed's
+        // «Мои» segment was retired for «Подписки».
+        let me = app.buttons.matching(identifier: "tab_profile").firstMatch
+        if me.waitForExistence(timeout: 5), me.isHittable { me.tap(); sleep(2) }
+        let anyCard = app.descendants(matching: .any).matching(identifier: "profile_trip_row").firstMatch
+        if !anyCard.waitForExistence(timeout: 3) {
+            // История sits below the hero/moments — scroll until a row shows.
+            for _ in 0..<4 {
+                win.swipeUp(); usleep(600_000)
+                if anyCard.exists { break }
+            }
+        }
+        print("DETSHOT rows=\(app.descendants(matching: .any).matching(identifier: "profile_trip_row").count)")
         let relivePill = app.buttons.matching(identifier: "detail_relive").firstMatch
         if anyCard.waitForExistence(timeout: 3) {
-            // Tap near the card's top (title zone) — its geometric center can
-            // sit below the fold for tall cards, where tap() silently no-ops.
-            anyCard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+            // Tap near the row's top — a partially covered row's geometric
+            // center can sit under the tab pill, where tap() silently no-ops.
+            anyCard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
         }
         if !relivePill.waitForExistence(timeout: 4) {
             print("DETSHOT card tap did not open detail, trying title text")
@@ -210,13 +222,13 @@ final class TripTrackUITests: XCTestCase {
     func test_zz_feed_shots() {
         normalizeToHome()
         sleep(3); snap("110_feed_all")
-        let mine = app.buttons.matching(identifier: "feed_segment_mine").firstMatch
-        if mine.waitForExistence(timeout: 2) { mine.tap(); sleep(2); snap("111_feed_mine") }
         // Scrolled state — cards must flow UNDER the tab bar pill and reach
         // the physical bottom edge (iOS 26 pager used to clip them at the
         // safe-area line, leaving a dark band below).
-        win.swipeUp(); usleep(900_000); snap("111b_feed_mine_scrolled")
+        win.swipeUp(); usleep(900_000); snap("110b_feed_all_scrolled")
         win.swipeDown(); usleep(700_000)
+        let following = app.buttons.matching(identifier: "feed_segment_following").firstMatch
+        if following.waitForExistence(timeout: 2) { following.tap(); sleep(2); snap("111_feed_following") }
         let allSeg = app.buttons.matching(identifier: "feed_segment_all").firstMatch
         if allSeg.waitForExistence(timeout: 2) { allSeg.tap(); sleep(2) }
         let bell = app.buttons.matching(identifier: "feed_bell").firstMatch

@@ -27,6 +27,11 @@ struct SocialFeedVehicle: Codable, Hashable {
 struct SocialFeedRequest: Codable {
     let limit: Int?
     let cursor: String?
+    /// Feed composition: nil/"all" = global discovery feed (default, what
+    /// deployed servers understand); "following" = followed users + own
+    /// public trips only (backend feat/account-page+). encodeIfPresent via
+    /// optional keeps old servers happy — they ignore unknown fields.
+    var type: String? = nil
 }
 
 struct SocialFeedResponse: Codable {
