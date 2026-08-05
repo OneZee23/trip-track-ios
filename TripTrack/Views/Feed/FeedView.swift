@@ -23,7 +23,6 @@ struct FeedView: View {
     @State private var showBadges = false
     @State private var showNotifications = false
     @State private var showGarage = false
-    @State private var tripToDelete: Trip?
     @State private var collapsedSections: Set<String> = []
     /// Persisted so the chosen segment survives tab switches (the switch
     /// destroys this view) and relaunches.
@@ -59,6 +58,10 @@ struct FeedView: View {
         case share(SocialFeedTrip)
         case react(SocialFeedTrip, emoji: String)
         case reactionPicker(SocialFeedTrip)
+        /// Guest tapped the bell — open the notifications inbox after a
+        /// successful sign-in instead of dead-ending ("login worked, nothing
+        /// happened" — the exact failure the resume pattern exists to avoid).
+        case openInbox
     }
     @State private var pendingSocialAction: PendingSocialAction?
     /// Set in the prompt's onAuthenticated; consumed in its onDismiss. We
@@ -100,12 +103,24 @@ struct FeedView: View {
                 // iOS's own physics — much nicer than our cross-fade or manual drag
                 // gesture. The pills above stay fixed, only the content below slides.
                 TabView(selection: $feedMode) {
+                    // .ignoresSafeArea(.bottom) on each PAGE, not the pager:
+                    // iOS 26's UIPageViewController re-insets page content to
+                    // the safe area, so scrolled cards clipped at a hard line
+                    // above the home indicator (dark band below). The lists'
+                    // own bottom padding already clears the tab bar.
                     allFeedPage(c)
+                        .ignoresSafeArea(edges: .bottom)
                         .tag(FeedMode.all)
                     mineFeedPage(c)
+                        .ignoresSafeArea(edges: .bottom)
                         .tag(FeedMode.mine)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                // Theme bg painted to the physical bottom UNDER the pager:
+                // UIPageViewController's own backdrop is black, and on iOS 26
+                // its bottom inset pokes out below the page content — without
+                // this the home-indicator zone reads as a black slab.
+                .background(c.bg.ignoresSafeArea())
                 // Disable the rubber-band bounce when swiping past the first or last
                 // page — the underlying UIPageViewController uses a UIScrollView that
                 // bounces by default, which shows the black background on edges.
@@ -163,7 +178,6 @@ struct FeedView: View {
             // FollowListView via CustomNavBar + their own hidden-bar flags).
             .toolbar(.hidden, for: .navigationBar)
         }
-        .toast(item: $feedVM.toastItem)
         // Per-page refreshable modifiers live inside allFeedPage / mineFeedPage so
         // pull-to-refresh fires in the correct ScrollView (TabView hosts each page
         // in its own scroll container).
@@ -220,20 +234,20 @@ struct FeedView: View {
             )
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
+            // Sheets are separate presentations — the app-root
+            // preferredColorScheme does not reach them (see ProfileView),
+            // so every sheet re-applies the in-app theme override.
+            .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showStats) {
             StatsView(tripManager: feedVM.tripManager)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTrip)) { notif in
             if let tripId = notif.object as? UUID {
                 authorPath = [.trip(tripId)]
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .switchToFeedWithRegionFilter)) { notif in
-            if let region = notif.object as? String {
-                feedVM.setRegionFilter(region)
             }
         }
         // Privacy flipped on a trip the user owns. If it just went private, drop the
@@ -269,8 +283,19 @@ struct FeedView: View {
                 .environmentObject(themeManager)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
+        // Reset the resume flag whenever a NEW sign-in prompt presents. The
+        // login Task outlives the sheet (dismissal doesn't cancel it), so a
+        // dismiss-during-login followed by a late success sets
+        // `resumeAfterAuth = true` AFTER onDismiss already consumed it —
+        // without this reset that stale `true` survives a later sign-out and
+        // replays the next captured action for a guest.
+        .onChange(of: signInPrompt) { _, newValue in
+            if newValue != nil { resumeAfterAuth = false }
+        }
         .sheet(item: $signInPrompt, onDismiss: {
-            if resumeAfterAuth {
+            // `auth.isSignedIn` guard: `resumeAfterAuth` alone isn't proof —
+            // see the onChange above for how it can go stale.
+            if resumeAfterAuth && auth.isSignedIn {
                 resumeAfterAuth = false
                 // Defer until the sign-in sheet has finished dismissing. The
                 // resumed action can itself present a sheet (reaction picker,
@@ -282,7 +307,10 @@ struct FeedView: View {
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     resumePendingSocialAction()
                 }
-            } else { pendingSocialAction = nil }
+            } else {
+                resumeAfterAuth = false
+                pendingSocialAction = nil
+            }
         }) { action in
             SignInPromptSheet(action: action, onAuthenticated: { resumeAfterAuth = true })
                 .environmentObject(lang)
@@ -311,26 +339,7 @@ struct FeedView: View {
             GarageView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-        }
-        .confirmationDialog(
-            AppStrings.deleteTrip(lang.language),
-            isPresented: Binding(
-                get: { tripToDelete != nil },
-                set: { if !$0 { tripToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.delete(lang.language), role: .destructive) {
-                if let trip = tripToDelete {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        feedVM.softDeleteTrip(trip)
-                    }
-                }
-                tripToDelete = nil
-            }
-            Button(AppStrings.cancel(lang.language), role: .cancel) {
-                tripToDelete = nil
-            }
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
 
         // Recording banner overlay
@@ -390,10 +399,14 @@ struct FeedView: View {
 
             headerCircleButton(icon: "bell", c: c) {
                 // Inbox is signed-in-only; the bell stays visible for guests
-                // and routes them to the sign-in prompt instead.
+                // and routes them to the sign-in prompt instead. Capture the
+                // intent so a successful sign-in opens the inbox — same
+                // resume pattern as share/react (without it the guest signs
+                // in and nothing happens).
                 if auth.isSignedIn {
                     showNotifications = true
                 } else {
+                    pendingSocialAction = .openInbox
                     signInPrompt = .generic
                 }
             }
@@ -469,6 +482,9 @@ struct FeedView: View {
                 .shadow(color: active ? Color.black.opacity(0.03) : Color.clear, radius: 2, y: 1)
         }
         .buttonStyle(.plain)
+        // The active segment is only signalled by fill/color — expose it to
+        // VoiceOver too, or both pills read as identical plain buttons.
+        .accessibilityAddTraits(active ? [.isSelected] : [])
     }
 
     // MARK: - Feed Pages (paged TabView content)
@@ -854,9 +870,13 @@ struct FeedView: View {
 
     /// Looks up the local vehicle attached to a trip (by id) so own-trip cards in the
     /// feed render with the same vehicle header as in the "Мои" tab.
+    /// Reads the VM's prebuilt tripId→vehicleId map — this runs inside the
+    /// social ForEach during body, and the previous `tripDetail(id:)` call
+    /// materialized the trip's FULL track-point set synchronously on the main
+    /// thread per visible own-card (scroll hitches on long trips; same hazard
+    /// the `hasAnyPrivateTrip` @State cache documents above).
     private func ownVehicleFor(tripId: UUID) -> Vehicle? {
-        guard let trip = feedVM.tripManager.tripDetail(id: tripId),
-              let vid = trip.vehicleId else { return nil }
+        guard let vid = feedVM.vehicleIdByTripId[tripId] else { return nil }
         return settings.vehicles.first { $0.id == vid }
     }
 
@@ -867,6 +887,10 @@ struct FeedView: View {
     private func resumePendingSocialAction() {
         guard let pending = pendingSocialAction else { return }
         pendingSocialAction = nil
+        // Never replay a captured action for a guest — a stale resume flag
+        // (see the sheet's onChange) or a sign-out between capture and resume
+        // would otherwise run a signed-in-only action that 401s.
+        guard auth.isSignedIn else { return }
         switch pending {
         case .share(let t):
             shareSocialTrip(t)
@@ -874,6 +898,8 @@ struct FeedView: View {
             Task { await socialFeed.toggleReaction(for: t.id, emoji: emoji) }
         case .reactionPicker(let t):
             reactionPickerTrip = t
+        case .openInbox:
+            showNotifications = true
         }
     }
 
@@ -1163,15 +1189,25 @@ private final class PageBounceFinderView: UIView {
         var candidate: UIView? = self
         while let v = candidate {
             if let scroll = v as? UIScrollView {
-                scroll.bounces = false
+                neutralize(scroll)
                 return
             }
             if let found = findScroll(in: v) {
-                found.bounces = false
+                neutralize(found)
                 return
             }
             candidate = v.superview
         }
+    }
+
+    /// Kills both UIPageViewController artifacts at the source: the edge
+    /// bounce AND the opaque black backdrop of its internal scroll view
+    /// (visible in the bottom safe-area zone on iOS 26, where the pager's
+    /// inset extends past the page content).
+    private func neutralize(_ scroll: UIScrollView) {
+        scroll.bounces = false
+        scroll.backgroundColor = .clear
+        scroll.superview?.backgroundColor = .clear
     }
 
     private func findScroll(in view: UIView) -> UIScrollView? {

@@ -183,6 +183,12 @@ struct PosterRouteCanvas: View {
         let midLon: Double
         let cosLat: Double
         let scale: Double
+        /// Route crosses the ±180° antimeridian (raw lon span > 180° means
+        /// the SHORT arc wraps — e.g. Chukotka's Egvekinot–Iultin road).
+        /// Longitudes are then unwrapped onto a continuous 0…360 branch so
+        /// the bbox/scale doesn't collapse and the path doesn't smear a
+        /// straight line across the whole canvas.
+        let wrapsAntimeridian: Bool
 
         init?(coords: [CLLocationCoordinate2D], size: CGSize, padding: CGFloat) {
             guard let first = coords.first else { return nil }
@@ -191,6 +197,15 @@ struct PosterRouteCanvas: View {
             for c in coords {
                 minLat = min(minLat, c.latitude); maxLat = max(maxLat, c.latitude)
                 minLon = min(minLon, c.longitude); maxLon = max(maxLon, c.longitude)
+            }
+            wrapsAntimeridian = (maxLon - minLon) > 180
+            if wrapsAntimeridian {
+                minLon = Self.unwrap(first.longitude)
+                maxLon = minLon
+                for c in coords {
+                    let lon = Self.unwrap(c.longitude)
+                    minLon = min(minLon, lon); maxLon = max(maxLon, lon)
+                }
             }
             midLat = (minLat + maxLat) / 2
             midLon = (minLon + maxLon) / 2
@@ -203,8 +218,14 @@ struct PosterRouteCanvas: View {
             scale = min(drawW / xSpan, drawH / ySpan)
         }
 
+        /// [-180, 0) → [180, 360) — the continuous branch around +180°.
+        private static func unwrap(_ lon: Double) -> Double {
+            lon < 0 ? lon + 360 : lon
+        }
+
         func point(for coord: CLLocationCoordinate2D, in size: CGSize) -> CGPoint {
-            let x = Double(size.width) / 2 + (coord.longitude - midLon) * cosLat * scale
+            let lon = wrapsAntimeridian ? Self.unwrap(coord.longitude) : coord.longitude
+            let x = Double(size.width) / 2 + (lon - midLon) * cosLat * scale
             let y = Double(size.height) / 2 - (coord.latitude - midLat) * scale
             return CGPoint(x: x, y: y)
         }

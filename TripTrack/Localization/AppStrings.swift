@@ -490,18 +490,9 @@ enum AppStrings {
     static func tilesDiscovered(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "УЧАСТКОВ ОТКРЫТО" : "TILES DISCOVERED"
     }
-    static func citiesCount(_ lang: LanguageManager.Language, count: Int) -> String {
-        if lang == .ru {
-            return "\(count) \(count == 1 ? "город" : "города")"
-        }
-        return "\(count) \(count == 1 ? "City" : "Cities")"
-    }
-    static func regionsCountLabel(_ lang: LanguageManager.Language, count: Int) -> String {
-        if lang == .ru {
-            return "\(count) \(count == 1 ? "регион" : "региона")"
-        }
-        return "\(count) \(count == 1 ? "Region" : "Regions")"
-    }
+    // citiesCount / regionsCountLabel deleted — zero callers, and their RU
+    // plural forms were wrong («5 города»). Use proper plural helpers if a
+    // caller ever appears.
 
     // MARK: - My Map (6.1.0)
 
@@ -694,10 +685,8 @@ enum AppStrings {
     static func beFirstToReact(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Будьте первым, кто отреагирует" : "Be the first to react"
     }
-    /// Author-pill level tag, pixel font — «ур. 18» / "lvl 18".
-    static func levelShort(_ lang: LanguageManager.Language, _ n: Int) -> String {
-        lang == .ru ? "ур. \(n)" : "lvl \(n)"
-    }
+    // levelShort deleted — the app-wide LVL convention is the hardcoded
+    // "LVL n" pixel-font tag; the last caller migrated to it.
 
     // MARK: - Comments (6.1.0)
     static func commentsTitleN(_ lang: LanguageManager.Language, _ n: Int) -> String {
@@ -751,7 +740,7 @@ enum AppStrings {
     static func publishDescPlaceholder(_ lang: LanguageManager.Language) -> String {
         lang == .ru
             ? "Расскажите о поездке: дорога, погода, остановки…"
-            : "Tell about the trip: road, weather, stops…"
+            : "What was the trip like? Roads, weather, stops…"
     }
     static func publishing(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Публикуется…" : "Publishing…"
@@ -1163,7 +1152,7 @@ enum AppStrings {
     // MARK: - Guest mode banners / CTAs
 
     static func guestFeedBanner(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Войдите чтобы подписываться и реагировать" : "Sign in to follow and react"
+        lang == .ru ? "Войдите, чтобы подписываться и реагировать" : "Sign in to follow and react"
     }
     static func syncCardKicker(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "СИНХРОНИЗАЦИЯ" : "SYNC"
@@ -1179,8 +1168,10 @@ enum AppStrings {
     static func syncCardLater(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Можно позже — ничего не потеряется" : "You can do it later — nothing gets lost"
     }
+    /// Apple's official SIWA wording (App Review requires it on custom
+    /// HIG-styled buttons — AppleSignInButton renders this).
     static func signInWithApple(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Войти" : "Sign in"
+        lang == .ru ? "Войти через Apple" : "Sign in with Apple"
     }
 
     // MARK: - Entity / action labels (used by sync status sheet)
@@ -1546,8 +1537,10 @@ enum AppStrings {
     static func momentNewRegion(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Новый регион" : "New region"
     }
+    /// Gender-neutral phrasing — region names are any gender («Пермский
+    /// край», «Москва», «Приморье»), a participle can't agree with all.
     static func momentRegionOpened(_ lang: LanguageManager.Language, name: String) -> String {
-        lang == .ru ? "\(name) открыта 🗺" : "\(name) unlocked 🗺"
+        lang == .ru ? "Теперь на карте: \(name) 🗺" : "\(name) unlocked 🗺"
     }
     static func statsKmTotal(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "км всего" : "km total"
@@ -1711,5 +1704,67 @@ enum AppStrings {
         lang == .ru
             ? "Мой \(year) на дорогах: \(tripsCount(lang, n: trips)), \(km) км — TripTrack"
             : "My \(year) on the road: \(tripsCount(lang, n: trips)), \(km) km — TripTrack"
+    }
+
+    // MARK: - Audit-fix additions (6.1.0 post-release pass)
+
+    /// «14 дней подряд» / "14 day streak" — trip-complete streak row.
+    static func streakDaysInARow(_ lang: LanguageManager.Language, n: Int) -> String {
+        lang == .ru ? "\(daysCount(lang, n: n)) подряд" : "\(n) day streak"
+    }
+    static func repeatRouteTimes(_ lang: LanguageManager.Language, n: Int) -> String {
+        if lang == .ru {
+            let m10 = n % 10, m100 = n % 100
+            let word = (11...14).contains(m100) ? "раз" : ((2...4).contains(m10) ? "раза" : "раз")
+            return "Вы проехали этот маршрут уже \(n) \(word)"
+        }
+        return n == 1 ? "You've driven this route once" : "You've driven this route \(n) times"
+    }
+    /// «Без авто» — shorter than noVehicle's «Без машины» (idle-HUD chip).
+    static func noVehicleShort(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Без авто" : "No vehicle"
+    }
+    static func moreActions(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ещё" : "More"
+    }
+    static func openRouteMapA11y(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Открыть карту маршрута" : "Open route map"
+    }
+    /// VoiceOver HINT (verb phrase) for the poster title button.
+    static func editTitleA11y(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Изменяет название поездки" : "Edits the trip title"
+    }
+    static func blockedListLoadFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось загрузить список" : "Couldn't load the list"
+    }
+    /// Caption WITHOUT the number — the counter renders it separately.
+    static func followersCaption(_ lang: LanguageManager.Language, n: Int) -> String {
+        if lang == .ru {
+            let m10 = n % 10, m100 = n % 100
+            if (11...14).contains(m100) { return "подписчиков" }
+            if m10 == 1 { return "подписчик" }
+            if (2...4).contains(m10) { return "подписчика" }
+            return "подписчиков"
+        }
+        return n == 1 ? "follower" : "followers"
+    }
+    static func followingCaption(_ lang: LanguageManager.Language, n: Int) -> String {
+        if lang == .ru {
+            let m10 = n % 10, m100 = n % 100
+            if (11...14).contains(m100) { return "подписок" }
+            if m10 == 1 { return "подписка" }
+            if (2...4).contains(m10) { return "подписки" }
+            return "подписок"
+        }
+        return "following"
+    }
+    static func reportProfileAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пожаловаться" : "Report"
+    }
+    /// Comment-create throttle (10/min server-side).
+    static func commentRateLimited(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Слишком много комментариев — подождите минуту"
+            : "Too many comments — wait a minute"
     }
 }

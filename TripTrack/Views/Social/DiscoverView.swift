@@ -21,6 +21,10 @@ struct DiscoverView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var signInPrompt: SignInPromptSheet.Action?
     @ObservedObject private var auth = AuthService.shared
+    /// Injected by the presenter (FeedView) — needed to re-apply the in-app
+    /// theme override on the nested sign-in sheet (nested sheets are separate
+    /// presentations; the override on the Discover sheet doesn't reach them).
+    @EnvironmentObject private var themeManager: ThemeManager
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -65,6 +69,7 @@ struct DiscoverView: View {
             SignInPromptSheet(action: action)
                 .environmentObject(lang)
                 .environmentObject(auth)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
     }
 
@@ -77,7 +82,9 @@ struct DiscoverView: View {
                 .foregroundStyle(c.textTertiary)
             TextField(
                 text: $query,
-                prompt: Text(isRu ? "Имя пользователя" : "Search by name")
+                // «Поиск по имени» per Figma 117:287 («Имя пользователя» was
+                // both off-canon and wrong — the app has no usernames).
+                prompt: Text(isRu ? "Поиск по имени" : "Search by name")
                     .foregroundStyle(c.textTertiary)
             ) {
                 Text(AppStrings.findPeople(lang.language))

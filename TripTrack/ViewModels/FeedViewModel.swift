@@ -12,7 +12,6 @@ final class FeedViewModel: ObservableObject {
     @Published var sections: [TripSection] = []
     @Published var filters = TripFilters.empty
     @Published var showFilters = false
-    @Published var toastItem: ToastItem?
 
     let tripManager: TripManager
     var language: LanguageManager.Language = .ru
@@ -21,13 +20,19 @@ final class FeedViewModel: ObservableObject {
     private let pageSize = 20
     private var currentPage = 0
     private var hasMorePages = true
-    private var pendingDeleteTrip: Trip?
-    private var deleteTimer: Timer?
 
     // Cached calendar data — invalidated on loadTrips()
     private(set) var cachedMaxKmDay: Double = 1
     private var kmByDayCache: [Date: [Date: Double]] = [:]
     private(set) var cachedUniqueRegions: [String] = []
+    /// tripId → vehicleId lookup rebuilt on every load. FeedView's own-trip
+    /// social cards need the vehicle for a trip id DURING body evaluation —
+    /// hitting `tripManager.tripDetail(id:)` there materialized the FULL
+    /// track-point set synchronously on the main thread per visible row
+    /// (thousands of objects for long trips → scroll hitches). This map is
+    /// built from the already-fetched light `allTrips` (no track points) and
+    /// makes the body read a plain dictionary lookup.
+    private(set) var vehicleIdByTripId: [UUID: UUID] = [:]
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -66,6 +71,12 @@ final class FeedViewModel: ObservableObject {
         //  • .syncPullCompleted  — a server pull delivered updated data
         //  • .tripPhotosChanged  — a photo added/removed (card indicator/thumb)
         //  • .tripPrivacyChanged — privacy flip (the "Только Вы" pill)
+        //  • .tripDeleted        — delete from the trip-detail «…» menu. The
+        //    detail screen dismisses back onto the Mine list, and without a
+        //    reload the deleted trip's card stayed put (tapping it landed on
+        //    the no-back-button skeleton). FeedView's .onAppear does NOT
+        //    re-fire on pop-back (it's attached to the NavigationStack), so
+        //    the reload must come from here.
         //
         // These can arrive in BURSTS: when Cloud Sync drains, every uploaded
         // photo posts .tripPhotosChanged and every pull posts .syncPullCompleted.
@@ -80,17 +91,14 @@ final class FeedViewModel: ObservableObject {
             NotificationCenter.default.publisher(for: .tripRecordingEnded),
             NotificationCenter.default.publisher(for: .syncPullCompleted),
             NotificationCenter.default.publisher(for: .tripPhotosChanged),
-            NotificationCenter.default.publisher(for: .tripPrivacyChanged)
+            NotificationCenter.default.publisher(for: .tripPrivacyChanged),
+            NotificationCenter.default.publisher(for: .tripDeleted)
         )
         .throttle(for: .milliseconds(800), scheduler: DispatchQueue.main, latest: true)
         .sink { [weak self] _ in
             Task { [weak self] in await self?.loadTripsAsync() }
         }
         .store(in: &cancellables)
-    }
-
-    deinit {
-        deleteTimer?.invalidate()
     }
 
     // MARK: - Computed stats (from all filtered trips, not just loaded page)
@@ -119,12 +127,7 @@ final class FeedViewModel: ObservableObject {
     // MARK: - Actions
 
     func loadTrips() {
-        var fetched = tripManager.fetchTrips()
-        // Exclude trip pending soft-delete (not yet committed to CoreData)
-        if let pendingId = pendingDeleteTrip?.id {
-            fetched.removeAll { $0.id == pendingId }
-        }
-        allTrips = fetched
+        allTrips = tripManager.fetchTrips()
         rebuildCalendarCaches()
         applyFilters()
     }
@@ -145,11 +148,7 @@ final class FeedViewModel: ObservableObject {
         // risk that the debounced sync-burst reloads would hit far more often
         // than the rare pull-to-refresh that shared this method before.
         await MainActor.run {
-            var trips = fetched
-            if let pendingId = pendingDeleteTrip?.id {
-                trips.removeAll { $0.id == pendingId }
-            }
-            allTrips = trips
+            allTrips = fetched
             rebuildCalendarCaches()
             applyFilters()
         }
@@ -159,57 +158,12 @@ final class FeedViewModel: ObservableObject {
         tripManager.retryGeocodingForUntitledTrips()
     }
 
-    /// Soft-delete: hides from UI, shows undo toast, commits after delay
-    func softDeleteTrip(_ trip: Trip) {
-        // Cancel any pending delete
-        cancelPendingDelete()
-
-        pendingDeleteTrip = trip
-        // Remove from both lists to prevent reappearing on pull-to-refresh
-        allTrips.removeAll { $0.id == trip.id }
-        trips.removeAll { $0.id == trip.id }
-        rebuildSections()
-
-        toastItem = ToastItem(
-            type: .undo,
-            message: AppStrings.tripDeleted(language),
-            undoLabel: AppStrings.undo(language),
-            undoAction: { [weak self] in
-                self?.undoDelete()
-            }
-        )
-
-        deleteTimer = Timer.scheduledTimer(withTimeInterval: 3.5, repeats: false) { [weak self] _ in
-            self?.commitPendingDelete()
-        }
-    }
-
-    private func undoDelete() {
-        deleteTimer?.invalidate()
-        deleteTimer = nil
-        guard pendingDeleteTrip != nil else { return }
-        pendingDeleteTrip = nil
-        // Reload from CoreData to restore the trip (it was only removed from local arrays)
-        loadTrips()
-    }
-
-    private func commitPendingDelete() {
-        deleteTimer?.invalidate()
-        deleteTimer = nil
-        guard let trip = pendingDeleteTrip else { return }
-        pendingDeleteTrip = nil
-        tripManager.deleteTrip(id: trip.id)
-        tripManager.purgeSoftDeletedTrips()
-        allTrips.removeAll { $0.id == trip.id }
-        rebuildCalendarCaches()
-        NotificationCenter.default.post(name: .tripDeleted, object: nil)
-    }
-
-    func cancelPendingDelete() {
-        if pendingDeleteTrip != nil {
-            commitPendingDelete()
-        }
-    }
+    // NOTE: the soft-delete/undo subsystem (softDeleteTrip / undoDelete /
+    // commitPendingDelete / deleteTimer / pendingDeleteTrip filtering) was
+    // removed as dead code — its only entry point was FeedView's swipe-to-
+    // delete, retired in v0.6. The sole remaining delete flow is the trip
+    // detail «…» menu (immediate, confirm-gated), which posts `.tripDeleted`;
+    // this VM reloads on that notification (see init).
 
     func tripDetail(id: UUID) -> Trip? {
         tripManager.tripDetail(id: id)
@@ -281,6 +235,11 @@ final class FeedViewModel: ObservableObject {
 
         // uniqueRegions
         cachedUniqueRegions = Array(Set(allTrips.compactMap { $0.region })).sorted()
+
+        // tripId → vehicleId (own-trip social cards, see property doc)
+        vehicleIdByTripId = allTrips.reduce(into: [:]) { map, trip in
+            if let vid = trip.vehicleId { map[trip.id] = vid }
+        }
 
         // clear kmByDay cache
         kmByDayCache.removeAll()

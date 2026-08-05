@@ -65,7 +65,7 @@ struct IdleHUDView: View {
                     .foregroundStyle(.white.opacity(0.42))
                     .padding(.bottom, 24)
             } else if totalKm > 0 || tripCount > 0 {
-                Text("\(formatKmWithSeparator(totalKm)) \(AppStrings.totalKm(lang.language)) · \(tripCount) \(AppStrings.trips(lang.language))")
+                Text("\(formatKmWithSeparator(totalKm)) \(AppStrings.totalKm(lang.language)) · \(tripCount) \(AppStrings.tripsGenitive(lang.language, count: tripCount))")
                     .font(.system(size: 13).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.42))
                     .padding(.bottom, 24)
@@ -130,7 +130,7 @@ struct IdleHUDView: View {
                     Image(systemName: "car")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.6))
-                    Text(lang.language == .ru ? "Без авто" : "No vehicle")
+                    Text(AppStrings.noVehicleShort(lang.language))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.6))
                 }
@@ -146,43 +146,29 @@ struct IdleHUDView: View {
         .accessibilityIdentifier("vehicle_chip")
     }
 
-    private static let kmFormatter: NumberFormatter = {
+    // Per-language grouping, consistent with My Map (MyMapView.groupedNumber):
+    // RU «2 430» (Figma «2 430 км всего»), EN "2,430".
+    private static let ruKmFormatter: NumberFormatter = {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.maximumFractionDigits = 0
-        // Figma «2 430 км всего» — space grouping.
         f.groupingSeparator = " "
         return f
     }()
 
+    private static let enKmFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 0
+        f.groupingSeparator = ","
+        return f
+    }()
+
     private func formatKmWithSeparator(_ km: Double) -> String {
-        Self.kmFormatter.string(from: NSNumber(value: km)) ?? "\(Int(km))"
+        let formatter = lang.language == .ru ? Self.ruKmFormatter : Self.enKmFormatter
+        return formatter.string(from: NSNumber(value: km)) ?? "\(Int(km))"
     }
 
-}
-
-// MARK: - Quick Stat Card
-
-private struct QuickStatCard: View {
-    let value: String
-    let label: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.system(size: 22, weight: .bold).monospacedDigit())
-                .foregroundStyle(color)
-            Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(AppTheme.textTertiary)
-                .textCase(.uppercase)
-                .tracking(0.5)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .surfaceCard(cornerRadius: 14)
-    }
 }
 
 // MARK: - Pulse Ring Animation

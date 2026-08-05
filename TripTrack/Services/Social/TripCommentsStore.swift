@@ -124,10 +124,17 @@ final class TripCommentsStore: ObservableObject {
                     id: res.id, user: me, text: cleaned,
                     createdAt: res.createdAt, isMine: true)
             }
+            // Feed cards render the store-side «💬 N» — bump it in place.
+            NotificationCenter.default.post(
+                name: .tripCommentCountChanged, object: nil,
+                userInfo: ["tripId": tripId, "delta": 1])
             return nil
         } catch {
             comments.removeAll { $0.id == tempId }
             commentsLog.error("comment post failed: \(error.localizedDescription)")
+            if case APIError.tooManyRequests = error {
+                return AppStrings.commentRateLimited(language)
+            }
             return AppStrings.commentPostFailed(language)
         }
     }
@@ -141,6 +148,11 @@ final class TripCommentsStore: ObservableObject {
             let _: SocialCommentDeleteResponse = try await APIClient.shared.post(
                 APIEndpoint.socialCommentDelete,
                 body: SocialCommentDeleteRequest(commentId: commentId))
+            if let tripId {
+                NotificationCenter.default.post(
+                    name: .tripCommentCountChanged, object: nil,
+                    userInfo: ["tripId": tripId, "delta": -1])
+            }
             return nil
         } catch {
             // Already gone server-side (moderated away / deleted from

@@ -1,5 +1,9 @@
 import SwiftUI
 import AuthenticationServices
+// UIKit is required here for the ASAuthorizationController presentation
+// anchor (ASPresentationAnchor == UIWindow) — the one API the custom-styled
+// button needs that SwiftUI doesn't expose.
+import UIKit
 import OSLog
 
 private let appleButtonLog = Logger(subsystem: "com.triptrack", category: "signin.button")
@@ -34,16 +38,59 @@ struct AppleSignInButton: View {
         }
     }
 
+    /// Custom-styled equivalent of the system `SignInWithAppleButton`. The
+    /// system control localizes its title from the BUNDLE/system locale, not
+    /// `LanguageManager` — an EN-device user in RU app mode got an English
+    /// "Sign in with Apple" that flipped to «Входим…» mid-flow (and the
+    /// Figma RU copy never rendered, since the bundle declares no ru
+    /// localization). This button keeps Apple's white-button styling (HIG:
+    /// white fill, black logo + official wording) and the EXACT authorization
+    /// flow — scopes, one-shot nonce, completion chain, cancel-1001 filter —
+    /// but sources its title from `AppStrings` like every other control.
     private var signInButton: some View {
-        SignInWithAppleButton(.signIn) { req in
+        Button {
             onRequestBegan?()
-            req.requestedScopes = [.fullName, .email]
-            // Bind the authorization to a one-shot nonce so a leaked
-            // identityToken can't be replayed. Apple embeds this hash into
-            // the JWT `nonce` claim; the backend compares it against the raw
-            // nonce we send alongside the token at login time.
-            req.nonce = SIWANonce.generate()
-        } onCompletion: { result in
+            startAuthorization()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "applelogo")
+                    .font(.system(size: 18, weight: .medium))
+                Text(AppStrings.signInWithApple(lang.language))
+                    .font(.system(size: 17, weight: .semibold))
+            }
+            // Matches the previous `.signInWithAppleButtonStyle(.white)`
+            // rendering: white fill + black content in BOTH schemes, with
+            // our own stroke drawn over the shape (the system `.whiteOutline`
+            // baked its border at the wrong radius — see git history).
+            .foregroundStyle(.black)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: cornerRadius))
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
+        }
+        .buttonStyle(.plain)
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(
+                    scheme == .dark ? Color.white.opacity(0.14) : Color(red: 219/255, green: 219/255, blue: 224/255),
+                    lineWidth: 1.2
+                )
+        )
+    }
+
+    /// Same request + completion chain the `SignInWithAppleButton` closures
+    /// ran, verbatim — only the trigger changed (manual
+    /// `ASAuthorizationController` instead of the system control).
+    private func startAuthorization() {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
+        // Bind the authorization to a one-shot nonce so a leaked
+        // identityToken can't be replayed. Apple embeds this hash into
+        // the JWT `nonce` claim; the backend compares it against the raw
+        // nonce we send alongside the token at login time.
+        request.nonce = SIWANonce.generate()
+
+        AppleAuthorizationRunner.start(request: request) { result in
             switch result {
             case .success(let authorization):
                 appleButtonLog.debug("✅ got credential")
@@ -67,21 +114,6 @@ struct AppleSignInButton: View {
                 }
             }
         }
-        // Borderless white style + our own stroke: the system `.whiteOutline`
-        // bakes its border at the button's OWN corner radius, so re-clipping
-        // to the Figma shape (r14 sheet / pill card) left the border broken
-        // at the corners. Drawing the stroke over the clipped shape keeps it
-        // continuous at any radius.
-        .signInWithAppleButtonStyle(.white)
-        .frame(height: height)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .strokeBorder(
-                    scheme == .dark ? Color.white.opacity(0.14) : Color(red: 219/255, green: 219/255, blue: 224/255),
-                    lineWidth: 1.2
-                )
-        )
     }
 
     /// Figma frame 125:850: black rounded button at 60% opacity with a white
@@ -105,5 +137,64 @@ struct AppleSignInButton: View {
         .frame(maxWidth: .infinity)
         .frame(height: height)
         .background(bg, in: RoundedRectangle(cornerRadius: cornerRadius))
+    }
+}
+
+/// Drives one `ASAuthorizationController` round-trip for the custom-styled
+/// button. The controller holds its delegate WEAKLY, so the runner retains
+/// itself for the duration of the system dialog and releases on completion —
+/// decoupled from the presenting view's lifetime (the sheet can be dismissed
+/// while the login round-trip is still in flight, same as before).
+private final class AppleAuthorizationRunner: NSObject,
+    ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+
+    private var completion: ((Result<ASAuthorization, Error>) -> Void)?
+    private var selfRetain: AppleAuthorizationRunner?
+
+    static func start(
+        request: ASAuthorizationAppleIDRequest,
+        completion: @escaping (Result<ASAuthorization, Error>) -> Void
+    ) {
+        let runner = AppleAuthorizationRunner()
+        runner.completion = completion
+        runner.selfRetain = runner
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = runner
+        controller.presentationContextProvider = runner
+        controller.performRequests()
+    }
+
+    func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithAuthorization authorization: ASAuthorization
+    ) {
+        finish(.success(authorization))
+    }
+
+    func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithError error: Error
+    ) {
+        finish(.failure(error))
+    }
+
+    /// Delegate callbacks aren't contractually main-thread — hop to the main
+    /// actor before running the completion (it mutates SwiftUI state), then
+    /// drop the self-retain.
+    private func finish(_ result: Result<ASAuthorization, Error>) {
+        guard let completion else { return }
+        self.completion = nil
+        selfRetain = nil
+        Task { @MainActor in
+            completion(result)
+        }
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        // Foreground key window — same anchor the system control resolves.
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow) ?? ASPresentationAnchor()
     }
 }

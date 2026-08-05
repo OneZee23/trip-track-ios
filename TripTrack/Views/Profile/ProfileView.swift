@@ -191,11 +191,37 @@ struct ProfileView: View {
         // История pushes TripDetailView, where trips get deleted or flip
         // privacy — without these the popped-back list keeps a ghost row
         // (tapping it lands on an empty detail with no back affordance).
+        // StatsCache MUST be dropped first: its only invalidation keys are
+        // trip count + last startDate, so a privacy flip (neither changes)
+        // would make loadAggregates recompute over the stale cached [Trip]
+        // array and keep the old globe/lock icon.
         .onReceive(NotificationCenter.default.publisher(for: .tripDeleted)) { _ in
+            StatsCache.invalidate()
             Task { await loadAggregates() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .tripPrivacyChanged)) { _ in
+            StatsCache.invalidate()
             Task { await loadAggregates() }
+        }
+        // Pop-back from TripDetailView: title renames post no notification
+        // and change neither StatsCache key — refresh over a dropped cache
+        // so История/Моменты pick up edits made inside the detail screen.
+        .onChange(of: mePath) { oldPath, newPath in
+            guard newPath.count < oldPath.count,
+                  let popped = oldPath.last, case .trip = popped else { return }
+            StatsCache.invalidate()
+            Task { await loadAggregates() }
+        }
+        // The one-shot .task ran while signed out (its guard no-ops), and
+        // the guest card on this very screen signs users in inline — reload
+        // the social profile on the flip or the follower/following counters
+        // stay «0/0» until a tab bounce remounts the view.
+        .onChange(of: auth.isSignedIn) { _, signedIn in
+            if signedIn {
+                Task { await loadOwnSocialProfile() }
+            } else {
+                socialProfile = nil
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openGarageReady)) { _ in
             // Second phase of VehiclePickerSheet's «Управлять в Гараже»:
@@ -272,6 +298,9 @@ struct ProfileView: View {
             RankProgressSheet()
                 .environmentObject(lang)
                 .environmentObject(mapVM)
+                // themeManager is required: the rank sheet re-applies the
+                // scheme override to its own nested presentations (Награды).
+                .environmentObject(themeManager)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showGarage) {
@@ -635,8 +664,10 @@ struct ProfileView: View {
     // MARK: - Social Counters Row (followers / following, FK-11)
 
     private func socialCountersRow(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
-        return HStack(spacing: 0) {
+        // Captions use the AppStrings plural funcs so «1 подписчик /
+        // 2 подписчика / 5 подписчиков» agrees with the number — same
+        // grammar FollowListView renders one tap deeper.
+        HStack(spacing: 0) {
             Button {
                 Haptics.tap()
                 followListMode = .followers
@@ -645,7 +676,7 @@ struct ProfileView: View {
                     Text("\(socialProfile?.followerCount ?? 0)")
                         .font(.system(size: 17, weight: .heavy).monospacedDigit())
                         .foregroundStyle(c.text)
-                    Text(isRu ? "подписчиков" : "followers")
+                    Text(AppStrings.followersCaption(lang.language, n: socialProfile?.followerCount ?? 0))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(c.textTertiary)
                 }
@@ -664,7 +695,7 @@ struct ProfileView: View {
                     Text("\(socialProfile?.followingCount ?? 0)")
                         .font(.system(size: 17, weight: .heavy).monospacedDigit())
                         .foregroundStyle(c.text)
-                    Text(isRu ? "подписок" : "following")
+                    Text(AppStrings.followingCaption(lang.language, n: socialProfile?.followingCount ?? 0))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(c.textTertiary)
                 }
@@ -685,10 +716,17 @@ struct ProfileView: View {
     private func guestSignInCard(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "icloud.fill")
-                    .font(.system(size: 24))
-                    .foregroundStyle(AppTheme.accent)
-                    .frame(width: 30, height: 30)
+                // Figma 424:130 — the cloud sits on a 30×30 pale-peach
+                // rounded-square tile (same treatment as SettingsIconRow),
+                // not as a bare floating glyph.
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(AppTheme.accentBg)
+                    Image(systemName: "icloud.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(AppTheme.accent)
+                }
+                .frame(width: 30, height: 30)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(AppStrings.syncCardKicker(lang.language))
                         .font(.system(size: 11, weight: .bold))

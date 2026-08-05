@@ -189,7 +189,9 @@ final class APIClient {
         logger.log(response: response, data: data, duration: Date().timeIntervalSince(start))
 
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw APIError.invalidHTTPStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            if let throttled = Self.throttleError(status: status, data: data) { throw throttled }
+            throw APIError.invalidHTTPStatus(status)
         }
         let envelope: APIEnvelope<Res>
         do {
@@ -210,7 +212,12 @@ final class APIClient {
             let message = envelope.message ?? ""
             if code == "USER_NOT_AUTH", requiresAuth, !isRetry {
                 try await refreshIfNeeded()
-                return try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: true)
+                // Forward `singleAttempt` — omitting it defaulted the
+                // post-refresh re-send to false, silently re-arming the
+                // 3-attempt transport retry for non-idempotent writes
+                // (comment create could double-post when the first
+                // attempt's response was lost to -1005 mid-re-send).
+                return try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: true, singleAttempt: singleAttempt)
             }
             // Post-refresh USER_NOT_AUTH means our freshly-rotated access
             // token is itself invalid (server-side JWT secret rotation,
@@ -227,10 +234,18 @@ final class APIClient {
             // retrying once at this layer means the upper-layer
             // SyncQueue stops parking ops to `failedQueue` for one-off
             // server hiccups, and the user sees a clean banner.
-            if code == "UNKNOWN_SERVER_ERROR", !isRetry {
+            //
+            // `singleAttempt` calls are EXCLUDED: the caller declared the
+            // request non-idempotent, and this catch-all can race a
+            // committed INSERT (DB timeout after the row landed) — an
+            // auto re-send would duplicate it. It also covers throttling:
+            // a ThrottlerGuard rejection on JSON-RPC routes surfaces as
+            // this same catch-all code, so re-sending would burn another
+            // rate-limiter slot and just delay the failure.
+            if code == "UNKNOWN_SERVER_ERROR", !isRetry, !singleAttempt {
                 apiAuthLog.notice("POST \(path, privacy: .public) UNKNOWN_SERVER_ERROR — retrying once after 1s")
                 try? await Task.sleep(for: .seconds(1))
-                return try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: true)
+                return try await performPost(path: path, body: body, requiresAuth: requiresAuth, isRetry: true, singleAttempt: singleAttempt)
             }
             postBanIfNeeded(code)
             let lastModified = envelope.serverLastModifiedAt.flatMap { ISODate.parse($0) }
@@ -257,7 +272,9 @@ final class APIClient {
         logger.log(response: response, data: data, duration: Date().timeIntervalSince(start))
 
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw APIError.invalidHTTPStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            if let throttled = Self.throttleError(status: status, data: data) { throw throttled }
+            throw APIError.invalidHTTPStatus(status)
         }
         let envelope: APIEnvelope<Res>
         do {
@@ -325,7 +342,9 @@ final class APIClient {
         logger.log(response: response, data: data, duration: Date().timeIntervalSince(start))
 
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw APIError.invalidHTTPStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            if let throttled = Self.throttleError(status: status, data: data) { throw throttled }
+            throw APIError.invalidHTTPStatus(status)
         }
         let envelope = try decoder.decode(APIEnvelope<Res>.self, from: data)
         switch envelope.status {
@@ -363,6 +382,33 @@ final class APIClient {
     private func postBanIfNeeded(_ code: String) {
         guard code == "USER_BANNED" else { return }
         NotificationCenter.default.post(name: .userBanned, object: nil)
+    }
+
+    // MARK: - Throttle (429) detection
+
+    /// Nest's default error body for a `ThrottlerGuard` rejection —
+    /// `{"statusCode":429,"message":"ThrottlerException: Too Many Requests"}`.
+    /// It is NOT an `APIEnvelope`, so without an explicit mapping a throttled
+    /// call surfaced as the opaque `invalidHTTPStatus(429)` →
+    /// `unknownServer`-style generic failure.
+    private struct NestThrottlerBody: Decodable {
+        let statusCode: Int?
+        let message: String?
+    }
+
+    /// Maps a raw (non-envelope) HTTP error response to `.tooManyRequests`
+    /// when it is a rate-limit rejection: either the status line says 429 or
+    /// the body matches Nest's throttler shape (defensive — a proxy may
+    /// rewrite the status). Throttle rejections must NEVER be auto-retried;
+    /// they are not: `retrying()` only re-sends on URLError (an HTTP 429 is
+    /// a completed response), and the envelope-level UNKNOWN_SERVER_ERROR
+    /// retry never runs because we throw before envelope decoding.
+    private static func throttleError(status: Int, data: Data) -> APIError? {
+        if status == 429 { return .tooManyRequests }
+        guard let body = try? JSONDecoder().decode(NestThrottlerBody.self, from: data),
+              body.statusCode == 429 || body.message?.contains("ThrottlerException") == true
+        else { return nil }
+        return .tooManyRequests
     }
 
     // MARK: - HTTP transport helper

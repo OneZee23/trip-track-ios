@@ -7,6 +7,9 @@ import SwiftUI
 struct NotificationsInboxView: View {
     @ObservedObject private var store = NotificationsInboxStore.shared
     @EnvironmentObject private var lang: LanguageManager
+    /// Injected by both presenters (FeedView, ProfileSettingsSheet) — needed
+    /// to re-apply the in-app theme override on the nested prefs sheet.
+    @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
@@ -45,6 +48,11 @@ struct NotificationsInboxView: View {
                         .environmentObject(lang)
                         .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
+                        // Nested sheets are separate presentations — the
+                        // override on the inbox sheet itself doesn't reach
+                        // this one (same rationale as ProfileSettingsSheet's
+                        // prefs presentation).
+                        .preferredColorScheme(themeManager.preferredColorScheme)
                 }
                 .navigationDestination(for: ProfilePreviewDest.self) { dest in
                     switch dest {
@@ -148,6 +156,9 @@ struct NotificationsInboxView: View {
                 .shadow(color: isOn ? .clear : .black.opacity(0.03), radius: 2, y: 1)
         }
         .buttonStyle(.plain)
+        // Active chip is only signalled by fill/stroke — expose the state to
+        // VoiceOver too, or every chip reads as an identical plain button.
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
         .accessibilityIdentifier("notif_chip_\(filter.rawValue)")
     }
 
@@ -319,14 +330,18 @@ struct NotificationsInboxView: View {
             ?? (isRu ? "Кто-то" : "Someone")
         switch item.typedKind {
         case .reaction:
-            // "Иван 🔥 на Krasnodar" — emoji rendered between actor + trip.
-            // Title can be long, so cap to 2 lines. Mixed weights per Figma:
-            // actor bold, verb regular, object semibold.
+            // "Иван отреагировал 🔥 на Krasnodar" — verb per Figma 117:1875
+            // (the verb-less "Иван 🔥 на …" read as a fragment next to the
+            // follow/comment rows, which keep theirs). Title can be long, so
+            // cap to 2 lines. Mixed weights per Figma: actor bold, verb
+            // regular, object semibold.
             (
                 Text(actorName).font(.system(size: 14, weight: .bold))
                     .foregroundStyle(c.text)
+                + Text(isRu ? " отреагировал" : " reacted").font(.system(size: 14))
+                    .foregroundStyle(c.textSecondary)
                 + Text(" \(item.emoji ?? "🔥")")
-                + Text(isRu ? "  на " : "  on ").font(.system(size: 14)).foregroundStyle(c.textSecondary)
+                + Text(isRu ? " на " : " to ").font(.system(size: 14)).foregroundStyle(c.textSecondary)
                 + Text(item.tripTitle ?? "—").font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(c.text)
             )

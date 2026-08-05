@@ -27,6 +27,12 @@ struct NavBackButton: View {
             Image(systemName: "chevron.backward.circle.fill")
                 .font(.system(size: 22))
                 .foregroundStyle(c.textTertiary)
+                // Glyph stays 22pt; the tappable area is widened to 34×34
+                // (was ~22×22 — well under the HIG 44pt minimum, causing
+                // missed back-taps on every CustomNavBar screen). The
+                // contentShape makes the padding around the glyph hit-testable.
+                .frame(width: 34, height: 34)
+                .contentShape(Rectangle())
         }
     }
 }

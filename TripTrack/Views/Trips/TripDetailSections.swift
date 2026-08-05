@@ -93,8 +93,9 @@ struct PosterCircleButton: View {
     var accessibilityLabelText: String? = nil
     let action: () -> Void
 
+    @ViewBuilder
     var body: some View {
-        Button {
+        let button = Button {
             Haptics.tap()
             action()
         } label: {
@@ -104,7 +105,15 @@ struct PosterCircleButton: View {
                 .frame(width: 34, height: 34)
                 .background(.black.opacity(0.4), in: Circle())
         }
-        .accessibilityLabel(accessibilityLabelText ?? systemImage)
+        // Only override when the caller provides a localized label — the
+        // old `?? systemImage` fallback made VoiceOver announce raw SF
+        // names ("chevron.left"). Without an override, SF Symbols supply
+        // their own localized description.
+        if let accessibilityLabelText {
+            button.accessibilityLabel(accessibilityLabelText)
+        } else {
+            button
+        }
     }
 }
 

@@ -22,6 +22,7 @@ struct TripReplayView: View {
 
     @StateObject private var engine = TripReplayEngine()
     @EnvironmentObject private var lang: LanguageManager
+    @EnvironmentObject private var themeManager: ThemeManager
     @ObservedObject private var settings = SettingsManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var storyShare: (data: StoryShareData, url: String?)?
@@ -130,6 +131,7 @@ struct TripReplayView: View {
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
                     .environmentObject(lang)
+                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
     }

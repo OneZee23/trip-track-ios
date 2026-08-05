@@ -10,6 +10,7 @@ struct VehicleDetailView: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var bluetoothDetector = AutoTripService.shared.bluetoothDetector
     @EnvironmentObject private var lang: LanguageManager
+    @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -67,10 +68,12 @@ struct VehicleDetailView: View {
             .sheet(isPresented: $showEditForm) {
                 VehicleEditFormView(mode: .edit(vehicleId))
                     .environmentObject(lang)
+                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
             .sheet(isPresented: $showAutoRecordSettings) {
                 AutoRecordSettingsView(vehicleId: vehicleId)
                     .environmentObject(lang)
+                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
             .confirmationDialog(
                 AppStrings.deleteVehicleConfirm(l),

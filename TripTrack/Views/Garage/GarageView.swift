@@ -2,6 +2,10 @@ import SwiftUI
 
 struct GarageView: View {
     @EnvironmentObject private var lang: LanguageManager
+    /// Sheets are separate presentations — the override applied to the
+    /// Garage sheet itself (ProfileView) does not reach a sheet presented
+    /// from HERE, so the add-vehicle form must re-apply it.
+    @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
@@ -38,6 +42,7 @@ struct GarageView: View {
             .sheet(isPresented: $showAddVehicle) {
                 VehicleEditFormView(mode: .add)
                     .environmentObject(lang)
+                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
             .confirmationDialog(
                 AppStrings.deleteVehicleConfirm(l),

@@ -251,7 +251,7 @@ struct CloudSyncView: View {
                 subtitle: cloudSyncSubtitle(l),
                 showsDivider: true
             ) {
-                Toggle("", isOn: cloudSyncBinding)
+                Toggle(AppStrings.cloudSyncTitle(l), isOn: cloudSyncBinding)
                     .labelsHidden()
                     .tint(AppTheme.accent)
                     .accessibilityIdentifier("sync_cloud_toggle")
@@ -407,7 +407,7 @@ struct CloudSyncView: View {
                     subtitle: AppStrings.publicProfileSubtitle(l),
                     showsDivider: true
                 ) {
-                    Toggle("", isOn: publicProfileBinding)
+                    Toggle(AppStrings.publicProfileTitle(l), isOn: publicProfileBinding)
                         .labelsHidden()
                         .tint(AppTheme.accent)
                         .accessibilityIdentifier("privacy_public_toggle")

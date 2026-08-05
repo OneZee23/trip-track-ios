@@ -6,12 +6,17 @@ private let prefsLog = Logger(subsystem: "com.triptrack", category: "notificatio
 private struct NotificationPrefsResponse: Codable {
     let notifyReactions: Bool
     let notifyFollows: Bool
+    /// Optional: the deployed backend predates feat/trip-comments and does
+    /// not return this key yet — a non-optional Bool would fail the whole
+    /// decode against prod. Missing = server default (true).
+    let notifyComments: Bool?
     let notifyWeeklyRecap: Bool
 }
 
 private struct NotificationPrefsUpdateRequest: Codable {
     let notifyReactions: Bool?
     let notifyFollows: Bool?
+    let notifyComments: Bool?
     let notifyWeeklyRecap: Bool?
 }
 
@@ -20,7 +25,7 @@ private struct NotificationPrefsUpdateRequest: Codable {
 /// follows without nuking system-level notification permission for the
 /// whole app (which would also kill local trip-start prompts).
 ///
-/// Both toggles drive BOTH the in-app inbox row AND the APNs push, so
+/// Each toggle drives BOTH the in-app inbox row AND the APNs push, so
 /// flipping one to off makes that category effectively invisible until
 /// the user re-enables it.
 struct NotificationPreferencesView: View {
@@ -29,6 +34,7 @@ struct NotificationPreferencesView: View {
 
     @State private var notifyReactions = true
     @State private var notifyFollows = true
+    @State private var notifyComments = true
     @State private var notifyWeeklyRecap = true
     @State private var isLoaded = false
     @State private var isSaving = false
@@ -62,6 +68,17 @@ struct NotificationPreferencesView: View {
                                 ? "Когда кто-то подписывается на Ваш профиль"
                                 : "When someone follows your profile",
                             isOn: $notifyFollows,
+                            c: c,
+                        )
+                        Divider().padding(.leading, 56)
+                        toggleRow(
+                            icon: "text.bubble.fill",
+                            iconTint: AppTheme.green,
+                            title: isRu ? "Комментарии" : "Comments",
+                            subtitle: isRu
+                                ? "Когда кто-то комментирует Вашу публичную поездку"
+                                : "When someone comments on your public trip",
+                            isOn: $notifyComments,
                             c: c,
                         )
                         Divider().padding(.leading, 56)
@@ -168,6 +185,7 @@ struct NotificationPreferencesView: View {
                 APIEndpoint.notificationPrefsGet, body: EmptyRequest())
             notifyReactions = res.notifyReactions
             notifyFollows = res.notifyFollows
+            notifyComments = res.notifyComments ?? true
             notifyWeeklyRecap = res.notifyWeeklyRecap
             isLoaded = true
         } catch {
@@ -189,6 +207,10 @@ struct NotificationPreferencesView: View {
                 body: NotificationPrefsUpdateRequest(
                     notifyReactions: notifyReactions,
                     notifyFollows: notifyFollows,
+                    // Ignored (not 400'd) by the pre-comments backend: its
+                    // ValidationPipe runs without forbidNonWhitelisted, so
+                    // sending the key early is safe.
+                    notifyComments: notifyComments,
                     notifyWeeklyRecap: notifyWeeklyRecap,
                 ))
         } catch {

@@ -31,7 +31,19 @@ final class MyMapViewModel: ObservableObject {
         let bounds: GeoBounds?
         let centroid: CLLocationCoordinate2D?
 
-        static func == (lhs: RegionStats, rhs: RegionStats) -> Bool { lhs.name == rhs.name }
+        /// Compare every field the plate renders, not just `name` — a
+        /// name-only identity made same-named-but-updated stats compare
+        /// equal, so `resolveFocusedRegion`/`reload` never replaced a stale
+        /// focused struct after a sync pull changed its counts.
+        /// (bounds/centroid are derived from the same data — km²/counts
+        /// changing is a superset signal, and CLLocationCoordinate2D isn't
+        /// Equatable anyway.)
+        static func == (lhs: RegionStats, rhs: RegionStats) -> Bool {
+            lhs.name == rhs.name
+                && lhs.km2 == rhs.km2
+                && lhs.cityCount == rhs.cityCount
+                && lhs.tripCount == rhs.tripCount
+        }
     }
 
     @Published private(set) var isLoading = true
@@ -93,7 +105,12 @@ final class MyMapViewModel: ObservableObject {
         stale = false
         loadGeneration += 1
         let generation = loadGeneration
-        isLoading = true
+        // Loader only when there is nothing on screen yet (first load /
+        // empty archive). Background refreshes (sync pull, trip deleted
+        // elsewhere) of an already-populated map must not flash the
+        // CarLoadingView over the still-rendered content or hide the stats
+        // plate — the view gates both on `isLoading`.
+        if routeSegments.isEmpty { isLoading = true }
 
         // Main-actor: CoreData fetch + exploration attribution (hits the
         // geocode cache on the view context). The repository's completed-trip
@@ -132,6 +149,17 @@ final class MyMapViewModel: ObservableObject {
                 bounds: place.bounds,
                 centroid: place.centroid
             )
+        }
+        // Re-resolve the focused plate against the fresh stats — a reload
+        // leaves the camera (and this struct) untouched, so without this a
+        // sync pull landing while zoomed into a region kept the stale
+        // counts (or a ghost card for a region whose trips were deleted)
+        // until the user crossed the zoom threshold and back.
+        if let focused = focusedRegion {
+            let fresh = regions.first { $0.name == focused.name }
+            if fresh != focused {
+                withAnimation(.easeInOut(duration: 0.2)) { focusedRegion = fresh }
+            }
         }
         isLoading = false
     }

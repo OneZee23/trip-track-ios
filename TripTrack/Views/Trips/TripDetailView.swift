@@ -76,11 +76,16 @@ struct TripDetailView: View {
     /// own trips only; preview-only trips fall back to the inline crawl.
     @State private var showReplay = false
     @ObservedObject private var auth = AuthService.shared
+    /// Sign-in prompt for the signed-out edge state (e.g. «keep public and
+    /// sign out» leaves own public trips visible): the comments composer
+    /// routes guests here instead of letting them post into USER_NOT_AUTH.
+    @State private var signInPrompt: SignInPromptSheet.Action?
     @FocusState private var isTitleFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
+    @EnvironmentObject private var themeManager: ThemeManager
     @ObservedObject private var settings = SettingsManager.shared
 
     /// Poster hero: 380pt of canvas below the status bar (Figma 360×380),
@@ -113,7 +118,10 @@ struct TripDetailView: View {
 
                 // Sticky back + (⋯ delete) + share — floating over the poster.
                 HStack(spacing: 8) {
-                    PosterCircleButton(systemImage: "chevron.left") { dismiss() }
+                    PosterCircleButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabelText: AppStrings.back(lang.language)
+                    ) { dismiss() }
 
                     Spacer()
 
@@ -134,6 +142,7 @@ struct TripDetailView: View {
                             .frame(width: 34, height: 34)
                             .background(.black.opacity(0.4), in: Circle())
                     }
+                    .accessibilityLabel(AppStrings.moreActions(lang.language))
 
                     PosterCircleButton(
                         systemImage: "square.and.arrow.up",
@@ -306,6 +315,9 @@ struct TripDetailView: View {
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
                     .environmentObject(lang)
+                    // Sheets are separate presentations — the app-root
+                    // preferredColorScheme does not reach them.
+                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
         .sheet(isPresented: $showNotesEditor) {
@@ -313,6 +325,7 @@ struct TripDetailView: View {
                 .environmentObject(lang)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showPublishSheet) {
             PublishTripSheet(
@@ -323,6 +336,13 @@ struct TripDetailView: View {
             )
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
+            .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .sheet(item: $signInPrompt) { action in
+            SignInPromptSheet(action: action)
+                .environmentObject(lang)
+                .environmentObject(auth)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .alert(
             lang.language == .ru ? "Сделать поездку приватной?" : "Make trip private?",
@@ -462,6 +482,15 @@ struct TripDetailView: View {
                 Haptics.tap()
                 isMapFullscreen = true
             }
+            // The Canvas is not an a11y element, so the tap-to-open-map flow
+            // was VoiceOver-unreachable — expose it as a button element.
+            .accessibilityElement()
+            .accessibilityLabel(AppStrings.openRouteMapA11y(lang.language))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                guard cachedCoordinates.count > 1 else { return }
+                isMapFullscreen = true
+            }
 
             PosterLegibilityOverlay()
 
@@ -583,6 +612,10 @@ struct TripDetailView: View {
                 }
             }
             .buttonStyle(.plain)
+            // VoiceOver otherwise reads the title text with no clue that
+            // activating it starts the rename flow.
+            .accessibilityLabel(trip.title ?? formattedDateFallback(trip.startDate))
+            .accessibilityHint(AppStrings.editTitleA11y(lang.language))
             .transition(.opacity)
         }
     }
@@ -668,6 +701,11 @@ struct TripDetailView: View {
                 TripCommentsSection(
                     tripId: trip.id,
                     isTripOwner: true,
+                    // Own public trips ARE reachable signed-out («keep
+                    // public and sign out» / dead session) — without this
+                    // the composer looks active but every send dies with
+                    // USER_NOT_AUTH. Mirrors the social screen's gate.
+                    onGuestInputTap: { signInPrompt = .comment },
                     onError: { msg in
                         toastItem = ToastItem(type: .error, message: msg)
                     }
@@ -881,9 +919,12 @@ struct TripDetailView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(c.text)
                         .multilineTextAlignment(.leading)
+                    // Scope must match the publish sheet: publishing puts
+                    // the trip into the PUBLIC feed (visible to everyone),
+                    // not a followers-only feed.
                     Text(isRu
-                         ? "Поездка увидят те, кто на Вас подписан. Сейчас она только у Вас."
-                         : "Followers will see this trip in their feed. Right now it's just yours.")
+                         ? "Поездку увидят другие пользователи в общей ленте. Сейчас она только у Вас."
+                         : "Other users will see this trip in the public feed. Right now it's just yours.")
                         .font(.system(size: 12))
                         .foregroundStyle(c.textSecondary)
                         .multilineTextAlignment(.leading)
@@ -988,8 +1029,14 @@ struct TripDetailView: View {
     private func handlePublishConfirm(descriptionText: String) {
         let trimmed = descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
         var descriptionRejected = false
-        if !trimmed.isEmpty, trimmed != (trip?.tripDescription ?? "") {
-            if let err = ContentFilter.validate(trimmed, field: .tripNote, language: lang.language) {
+        if trimmed != (trip?.tripDescription ?? "") {
+            if trimmed.isEmpty {
+                // The field is PREFILLED with the stored description, so an
+                // emptied field is an explicit deletion — persist the clear
+                // (same contract as commitNotesEdit), don't silently keep
+                // the old text on the published trip.
+                mapVM.tripManager.updateNotes(for: tripId, notes: "")
+            } else if let err = ContentFilter.validate(trimmed, field: .tripNote, language: lang.language) {
                 // Publish proceeds — only the invalid description is dropped.
                 descriptionRejected = true
                 toastItem = ToastItem(type: .error, message: err)

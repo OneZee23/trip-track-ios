@@ -8,6 +8,7 @@ struct AutoRecordSettingsView: View {
     let vehicleId: UUID
 
     @EnvironmentObject private var lang: LanguageManager
+    @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
@@ -39,6 +40,7 @@ struct AutoRecordSettingsView: View {
         .sheet(isPresented: $showBluetoothScan) {
             BluetoothScanSheet(vehicleId: vehicleId)
                 .environmentObject(lang)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
     }
 
@@ -83,7 +85,7 @@ struct AutoRecordSettingsView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(c.text)
                 Spacer()
-                Toggle("", isOn: Binding(
+                Toggle(AppStrings.autoRecord(l), isOn: Binding(
                     get: { settings.autoRecordMode != .off },
                     set: { newValue in
                         if newValue {

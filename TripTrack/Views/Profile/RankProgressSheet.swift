@@ -8,6 +8,10 @@ import SwiftUI
 struct RankProgressSheet: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
+    /// Needed locally: nested sheets are NEW presentations — the
+    /// `.preferredColorScheme` ProfileView applies to THIS sheet does not
+    /// reach them (see ProfileView's sheet comments), so we re-apply it.
+    @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
@@ -108,6 +112,9 @@ struct RankProgressSheet: View {
             BadgesView(trips: mapVM.tripManager.fetchTrips())
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+                // Without this, app-theme dark + system light opened a
+                // LIGHT badges list over the dark rank sheet.
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
     }
 }

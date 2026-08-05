@@ -482,6 +482,14 @@ private func countEntity<T: NSManagedObject>(
 
 private func countPhoto(ctx: NSManagedObjectContext, status: Int16) -> Int {
     let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
-    req.predicate = NSPredicate(format: "uploadStatus == %d", status)
+    // Mirror the trips rows: soft-deleted (pendingDelete) trips are already
+    // excluded from the «Поездки» counters, so their photos — which survive
+    // until the server confirms the delete and the physical purge cascades —
+    // must not inflate the «Фото» counters either. `trip == nil` keeps any
+    // orphan rows counted, matching the pre-fix behavior for them.
+    req.predicate = NSPredicate(
+        format: "uploadStatus == %d AND (trip == nil OR trip.syncStatus != %d)",
+        status, SyncStatus.pendingDelete.rawValue
+    )
     return (try? ctx.count(for: req)) ?? 0
 }

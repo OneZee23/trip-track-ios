@@ -30,7 +30,10 @@ struct GroupsComingSoonView: View {
             Spacer(minLength: 0)
 
             VStack(spacing: 0) {
-                GroupsIdleRing()
+                // Shared Figma 114:151 hero (accent-tinted outer ring + peach
+                // accentBg disc) — same component instance the frame places
+                // here (117:2280).
+                IdleRing()
 
                 Text(AppStrings.groupsComingTitle(l))
                     .font(.system(size: 21, weight: .heavy))
@@ -122,32 +125,5 @@ struct GroupsComingSoonView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("groups_notify_cta")
-    }
-}
-
-/// Figma IdleRing 114:151 — deliberate local copy of the FeedIdleRing /
-/// SignInIdleRing pattern (the codebase keeps these siblings separate on
-/// purpose; see FeedView's note).
-private struct GroupsIdleRing: View {
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        let c = AppTheme.colors(for: scheme)
-        ZStack {
-            Circle()
-                .stroke(c.border, lineWidth: 2)
-                .frame(width: 100, height: 100)
-            ZStack {
-                Circle()
-                    .stroke(AppTheme.accent, lineWidth: 2)
-                Image("PixelCar")
-                    .resizable()
-                    .interpolation(.none)
-                    .scaledToFit()
-                    .frame(width: 46, height: 46)
-            }
-            .frame(width: 82, height: 82)
-        }
-        .frame(width: 100, height: 100)
     }
 }

@@ -212,6 +212,11 @@ final class TripTrackUITests: XCTestCase {
         sleep(3); snap("110_feed_all")
         let mine = app.buttons.matching(identifier: "feed_segment_mine").firstMatch
         if mine.waitForExistence(timeout: 2) { mine.tap(); sleep(2); snap("111_feed_mine") }
+        // Scrolled state — cards must flow UNDER the tab bar pill and reach
+        // the physical bottom edge (iOS 26 pager used to clip them at the
+        // safe-area line, leaving a dark band below).
+        win.swipeUp(); usleep(900_000); snap("111b_feed_mine_scrolled")
+        win.swipeDown(); usleep(700_000)
         let allSeg = app.buttons.matching(identifier: "feed_segment_all").firstMatch
         if allSeg.waitForExistence(timeout: 2) { allSeg.tap(); sleep(2) }
         let bell = app.buttons.matching(identifier: "feed_bell").firstMatch

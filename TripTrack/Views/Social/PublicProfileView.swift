@@ -47,6 +47,13 @@ struct PublicProfileView: View {
     /// last-completion-wins race between pull-to-refresh and error recovery.
     @State private var loadTask: Task<Void, Never>?
     @State private var signInPrompt: SignInPromptSheet.Action?
+    /// «…» menu → «Пожаловаться» (Figma 117:2335) — presents `ReportSheet`.
+    @State private var showReportSheet = false
+    /// Guest tapped Follow → signed in via the prompt. Mirrors FeedView's
+    /// `pendingSocialAction` one-shot resume: set in `onAuthenticated`,
+    /// consumed in the sheet's `onDismiss` so the follow the guest originally
+    /// tapped isn't silently dropped after a successful sign-in.
+    @State private var resumeFollowAfterAuth = false
 
     /// True when this view is rendering the signed-in user's own profile
     /// (e.g. "preview as others see you"). Hides Follow/Block/Report actions.
@@ -134,16 +141,36 @@ struct PublicProfileView: View {
                             .foregroundStyle(c.textTertiary)
                     }
                 } else if !isOwnProfile && auth.isSignedIn {
-                    // Block requires an account — guests see no button at all
-                    // (the action would just bounce them to the sign-in sheet,
-                    // which is a confusing UX for a moderation control).
-                    Button(role: .destructive) {
-                        Haptics.tap()
-                        showBlockConfirm = true
-                    } label: {
-                        Image(systemName: isBlocked ? "hand.raised.slash" : "hand.raised.fill")
-                            .font(.system(size: 20))
-                            .foregroundStyle(c.textTertiary)
+                    // Moderation controls require an account — guests see no
+                    // buttons at all (the actions would just bounce them to
+                    // the sign-in sheet, which is a confusing UX for
+                    // moderation controls).
+                    HStack(spacing: 2) {
+                        Button(role: .destructive) {
+                            Haptics.tap()
+                            showBlockConfirm = true
+                        } label: {
+                            Image(systemName: isBlocked ? "hand.raised.slash" : "hand.raised.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(c.textTertiary)
+                        }
+
+                        // «…» menu (Figma 117:2335) — hosts «Пожаловаться»,
+                        // wiring the previously dormant `ReportSheet`.
+                        Menu {
+                            Button(role: .destructive) {
+                                showReportSheet = true
+                            } label: {
+                                Label(AppStrings.reportProfileAction(lang.language),
+                                      systemImage: "exclamationmark.bubble")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 20))
+                                .foregroundStyle(c.textTertiary)
+                                .frame(width: 28, height: 28)
+                                .contentShape(Rectangle())
+                        }
                     }
                 }
             }
@@ -171,10 +198,24 @@ struct PublicProfileView: View {
             Task { await refresh() }
         }
         .refreshable { await refresh() }
-        .sheet(item: $signInPrompt) { action in
-            SignInPromptSheet(action: action)
+        .sheet(item: $signInPrompt, onDismiss: {
+            guard resumeFollowAfterAuth else { return }
+            resumeFollowAfterAuth = false
+            // Resume AFTER the sheet has fully dismissed (same rationale as
+            // FeedView's pendingSocialAction consume-in-onDismiss). By now
+            // the auth flip's `.onChange` has nilled `profile` and kicked a
+            // refresh — the resume POSTs directly so it depends on neither.
+            Task { await resumeFollowAfterSignIn() }
+        }) { action in
+            SignInPromptSheet(action: action, onAuthenticated: {
+                if action == .follow { resumeFollowAfterAuth = true }
+            })
                 .environmentObject(lang)
                 .environmentObject(auth)
+        }
+        .sheet(isPresented: $showReportSheet) {
+            ReportSheet(target: .user(accountId))
+                .environmentObject(lang)
         }
         .overlay {
             if let badge = selectedBadge {
@@ -302,7 +343,12 @@ struct PublicProfileView: View {
                     }
                 }
 
-                if !isOwnProfile, profile?.isFollowing != nil {
+                // Guests get the CTA too: the backend omits `isFollowing`
+                // for unauthenticated requesters (it decodes nil), so gating
+                // on non-nil alone hid the primary Figma CTA (117:931) — and
+                // its sign-in funnel — from every signed-out viewer. The
+                // button's own guard routes guests to the sign-in prompt.
+                if !isOwnProfile, !auth.isSignedIn || profile?.isFollowing != nil {
                     followButton(c, isRu: isRu)
                 }
             }
@@ -404,7 +450,7 @@ struct PublicProfileView: View {
                 HStack(spacing: 0) {
                     statCell(value: tripsValue, label: isRu ? "поездок" : "trips", c: c)
                     divider(c)
-                    statCell(value: kmValue, label: "км", c: c)
+                    statCell(value: kmValue, label: AppStrings.km(lang.language), c: c)
                 }
                 HStack(spacing: 0) {
                     statCell(value: regionsValue, label: isRu ? "регионов" : "regions", c: c)
@@ -477,11 +523,11 @@ struct PublicProfileView: View {
 
     // MARK: - Active vehicle
 
-    /// "Your car" card that mirrors the one on the private ProfileView — same
+    /// "Your car" card that mirrors the garage's vehicle chrome — same
     /// hierarchy (avatar, name, level title, odometer progress bar) so the
     /// public view feels consistent with how the user sees their own garage.
-    /// Uses VehicleLevelSystem directly instead of `VehicleCardView` because
-    /// the server returns a leaner DTO without stickers/consumption.
+    /// Uses VehicleLevelSystem directly because the server returns a leaner
+    /// DTO without stickers/consumption.
     @ViewBuilder
     private func activeVehicleCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         if let v = profile?.activeVehicle {
@@ -562,11 +608,12 @@ struct PublicProfileView: View {
         }
     }
 
+    /// «38 420 км» / "38 420 km" — same convention as the private stats
+    /// strip (GarageFormat space grouping + localized unit). Replaces the
+    /// old hardcoded "%.1fK km" which leaked Latin "K km" and a decimal
+    /// point into the otherwise fully-RU card.
     private func formatOdometer(_ km: Double) -> String {
-        if km >= 1000 {
-            return String(format: "%.1fK km", km / 1000)
-        }
-        return String(format: "%.0f km", km)
+        "\(GarageFormat.odometer(km)) \(AppStrings.km(lang.language))"
     }
 
     // MARK: - Badges
@@ -660,7 +707,7 @@ struct PublicProfileView: View {
                     Text("\(profile?.followerCount ?? 0)")
                         .font(.system(size: 17, weight: .heavy).monospacedDigit())
                         .foregroundStyle(c.text)
-                    Text(isRu ? "подписчиков" : "followers")
+                    Text(AppStrings.followersCaption(lang.language, n: profile?.followerCount ?? 0))
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
                 }
@@ -679,7 +726,7 @@ struct PublicProfileView: View {
                     Text("\(profile?.followingCount ?? 0)")
                         .font(.system(size: 17, weight: .heavy).monospacedDigit())
                         .foregroundStyle(c.text)
-                    Text(isRu ? "подписок" : "following")
+                    Text(AppStrings.followingCaption(lang.language, n: profile?.followingCount ?? 0))
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
                 }
@@ -808,7 +855,7 @@ struct PublicProfileView: View {
                 .foregroundStyle(c.text)
                 .lineLimit(1)
 
-            Text(String(format: isRu ? "%.1f км" : "%.1f km", trip.distanceKm))
+            Text("\(GarageFormat.oneDecimal(trip.distanceKm, isRu: isRu)) \(AppStrings.km(lang.language))")
                 .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
                 .foregroundStyle(c.textTertiary)
         }
@@ -843,7 +890,7 @@ struct PublicProfileView: View {
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 HStack(spacing: 6) {
-                    Text(String(format: "%.1f км", trip.distanceKm))
+                    Text("\(GarageFormat.oneDecimal(trip.distanceKm, isRu: isRu)) \(AppStrings.km(lang.language))")
                         .font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(c.textSecondary)
                     if let region = trip.region, !region.isEmpty {
@@ -984,6 +1031,24 @@ struct PublicProfileView: View {
             // commits — avoids last-completion-wins racing.
             await refresh()
         }
+    }
+
+    /// Runs the follow a guest tapped before signing in. POSTs directly
+    /// instead of going through `toggleFollow()`: the auth flip's `.onChange`
+    /// just nilled `profile` and kicked a refresh, so the optimistic-update
+    /// path would no-op on its `guard let current = profile`. The trailing
+    /// `refresh()` reconciles the UI with server truth either way.
+    private func resumeFollowAfterSignIn() async {
+        isTogglingFollow = true
+        defer { isTogglingFollow = false }
+        do {
+            let req = SocialFollowRequest(targetAccountId: accountId)
+            let _: SocialFollowResponse = try await APIClient.shared.post(
+                APIEndpoint.socialFollow, body: req)
+        } catch {
+            profileLog.error("post-auth follow resume failed: \(error.localizedDescription)")
+        }
+        await refresh()
     }
 
     private func shortDate(_ date: Date, isRu: Bool) -> String {

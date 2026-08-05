@@ -468,6 +468,10 @@ struct OnboardingView: View {
 
     // MARK: - Consent Text (Terms + Privacy links)
 
+    /// DOCUMENTED DEVIATION from Figma (nodes 1994:1982 / 195:1224): the
+    /// caption copy here names both documents with tappable links and an
+    /// explicit acceptance verb, unlike the shorter Figma caption. This is a
+    /// deliberate legal improvement — do not revert to the Figma wording.
     private func consentText(_ c: AppTheme.Colors) -> some View {
         let termsURL = AppConfig.termsURL(lang.language).absoluteString
         let privacyURL = AppConfig.privacyPolicyURL(lang.language).absoluteString
@@ -493,10 +497,17 @@ struct OnboardingView: View {
     }
 
     private func enableAutoRecordAndFinish() {
-        // Request Always location (escalates from While Using)
+        // Request Always location (escalates from While Using).
+        // `hasCompletedOnboarding = true` below tears this view down in the
+        // same update cycle — the instant transition is deliberate — which
+        // would discard the @State manager while the system prompt is still
+        // pending, and iOS cancels the prompt when its CLLocationManager
+        // deallocates (invariant documented in AutoRecordSettingsView's
+        // requestAutoRecordPermissions). AlwaysAuthorizationRetainer holds
+        // the manager past the view's life until authorization resolves.
         let manager = locationManager ?? CLLocationManager()
         locationManager = manager
-        manager.requestAlwaysAuthorization()
+        AlwaysAuthorizationRetainer.requestAlwaysAuthorization(retaining: manager)
 
         // Request Motion permission
         MotionDetector.requestAuthorization { _ in }
@@ -521,6 +532,62 @@ struct OnboardingView: View {
         // Record shows the slide-to-start affordance immediately.
         UserDefaults.standard.set(AppTab.record.rawValue, forKey: AppTab.storageKey)
         hasCompletedOnboarding = true
+    }
+}
+
+/// Keeps the CLLocationManager of the final Always-authorization request
+/// alive after OnboardingView is torn down.
+///
+/// `enableAutoRecordAndFinish()` flips `hasCompletedOnboarding` in the same
+/// update cycle as `requestAlwaysAuthorization()`, destroying the view and
+/// its `@State` manager — and iOS cancels a pending authorization prompt
+/// when its CLLocationManager deallocates ("Must retain CLLocationManager
+/// until dialog completes", AutoRecordSettingsView). There the view outlives
+/// the prompt; here it cannot by design, so a static strong reference roots
+/// the manager (plus this delegate) until the flow resolves, then releases
+/// both.
+private final class AlwaysAuthorizationRetainer: NSObject, CLLocationManagerDelegate {
+    /// Strong root that keeps the retainer + manager alive past the view's
+    /// deallocation. Cleared once authorization resolves.
+    private static var active: AlwaysAuthorizationRetainer?
+
+    private let manager: CLLocationManager
+    /// Core Location delivers one initial callback right after the delegate
+    /// is assigned; it reports the CURRENT status, not the user's answer.
+    private var receivedInitialStatusCallback = false
+
+    static func requestAlwaysAuthorization(retaining manager: CLLocationManager) {
+        let retainer = AlwaysAuthorizationRetainer(manager: manager)
+        active = retainer // replaces (and releases) any earlier request
+        manager.delegate = retainer
+        manager.requestAlwaysAuthorization()
+    }
+
+    private init(manager: CLLocationManager) {
+        self.manager = manager
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        defer { receivedInitialStatusCallback = true }
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            // Full prompt pending (user swiped past the Geo page without
+            // granting While-Using) — keep holding.
+            break
+        case .authorizedWhenInUse where !receivedInitialStatusCallback:
+            // Initial status report while the Always-upgrade prompt is
+            // pending — keep holding until the user answers it.
+            break
+        default:
+            // Resolved: .authorizedAlways / .denied / .restricted, or a
+            // post-prompt .authorizedWhenInUse ("Keep Only While Using").
+            release()
+        }
+    }
+
+    private func release() {
+        manager.delegate = nil
+        if Self.active === self { Self.active = nil }
     }
 }
 

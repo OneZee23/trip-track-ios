@@ -369,14 +369,31 @@ final class AuthService: ObservableObject {
         }
     }
 
+    /// Re-entrancy guard for the signout path. Without it a dead session
+    /// self-amplifies: /auth/logout itself fails USER_NOT_AUTH → APIClient
+    /// calls forceSignOut → new signOut → new logout → … a tight network
+    /// loop (observed at ~15 rps against a backend that doesn't know the
+    /// device's tokens, e.g. local dev with prod tokens in Keychain).
+    private var signOutInProgress = false
+
     func signOut() async {
+        guard !signOutInProgress else {
+            authLog.notice("[auth.signout.skip] reason=already_in_progress")
+            return
+        }
+        signOutInProgress = true
+        defer { signOutInProgress = false }
         authLog.notice("[auth.signout.start]")
         // Cancel any in-flight post-signin sync chain BEFORE wiping tokens.
         // If we wipe first, the chain's API calls fail with USER_NOT_AUTH,
         // forceSignOut fires, double-signOut chaos. Cancellation lets each
         // step exit cleanly via `Task.isCancelled` checks.
-        // Best-effort logout — ignore error
-        let _: EmptyResponse? = try? await APIClient.shared.post(APIEndpoint.logout, body: EmptyRequest())
+        // Best-effort logout — ignore error. Skipped entirely when there is
+        // no access token: an unauthenticated logout can only produce
+        // USER_NOT_AUTH and re-trigger the forceSignOut cascade.
+        if TokenStore.shared.accessToken != nil {
+            let _: EmptyResponse? = try? await APIClient.shared.post(APIEndpoint.logout, body: EmptyRequest())
+        }
         clearLocalIdentity()
         authLog.notice("[auth.signout.done]")
     }
@@ -421,6 +438,13 @@ final class AuthService: ObservableObject {
         // Drop in-app inbox state — the next account on this device should
         // not inherit the previous user's badge or notification list.
         NotificationsInboxStore.shared.clear()
+        // Drop the cached social feed too. Sign-out happens on the Me tab
+        // where FeedView is unmounted (its `.onChange(of: auth.isSignedIn)`
+        // never fires), and `loadIfNeeded` no-ops inside the 15-minute
+        // freshness window — without this a signed-out guest kept the
+        // follow-personalized feed with stale `myReaction` highlights, and
+        // their own trips rendered as strangers' cards.
+        SocialFeedStore.shared.clear()
         // Wipe the cached APNs device token so it isn't replayed by the
         // next account's `syncTokenToServer`.
         PushNotificationManager.shared.clearCachedToken()
@@ -587,6 +611,12 @@ final class AuthService: ObservableObject {
     // MARK: - Force Sign Out (sync wrapper for APIClient fallback)
 
     func forceSignOut() {
+        // Once already signed out (or mid-signout) there is nothing to do —
+        // spawning another signOut here is what looped logout requests.
+        guard isSignedIn || TokenStore.shared.accessToken != nil, !signOutInProgress else {
+            authLog.notice("[auth.signout.skip] reason=force_sign_out_noop")
+            return
+        }
         authLog.notice("[auth.signout_trigger] reason=force_sign_out_called_by_api_client")
         Task { await signOut() }
     }

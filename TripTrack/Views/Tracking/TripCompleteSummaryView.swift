@@ -24,14 +24,11 @@ struct TripCompleteSummaryView: View {
 
         ScrollView {
         VStack(spacing: 0) {
-            // Drag indicator
-            Capsule()
-                .fill(c.textTertiary.opacity(0.3))
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-
+            // No drag grabber: the sheet is presented with interactive
+            // dismiss disabled (ContentView), and Figma 147:1190 has none —
+            // showing the affordance would advertise a dead gesture.
             confettiHeader
-                .padding(.top, 10)
+                .padding(.top, 18)
 
             // Title
             Text(AppStrings.tripFinishedTitle(lang.language))
@@ -206,6 +203,7 @@ struct TripCompleteSummaryView: View {
             Toggle("", isOn: $publishToFeed)
                 .labelsHidden()
                 .tint(AppTheme.accent)
+                .accessibilityLabel(AppStrings.publishToFeed(lang.language))
                 .accessibilityIdentifier("publish_toggle")
         }
         .padding(16)
@@ -234,7 +232,8 @@ struct TripCompleteSummaryView: View {
                 }
             }
 
-            // Profile progress
+            // Single rank progress row — vehicle progression lives in the
+            // garage, not on the finish card (Figma 147:1232).
             progressRow(
                 icon: "person.fill",
                 label: data.newRank.title(lang.language),
@@ -245,31 +244,13 @@ struct TripCompleteSummaryView: View {
                 c: c
             )
 
-            // Vehicle progress
-            if data.vehicleOdometerAfter > 0 {
-                progressRow(
-                    icon: "car.fill",
-                    label: String(format: "%.0f km", data.vehicleOdometerAfter),
-                    detail: "LVL \(data.vehicleLevelAfter)",
-                    progress: VehicleLevelSystem.progressToNext(
-                        km: data.vehicleOdometerAfter,
-                        level: data.vehicleLevelAfter
-                    ),
-                    color: AppTheme.blue,
-                    didLevelUp: data.didVehicleLevelUp,
-                    c: c
-                )
-            }
-
-            // Streak
+            // Streak (Figma 147:1241: «14 дней подряд»)
             if data.currentStreak > 1 {
                 HStack(spacing: 6) {
                     Image(systemName: "flame.fill")
                         .font(.system(size: 14))
                         .foregroundStyle(AppTheme.accent)
-                    Text(lang.language == .ru
-                        ? "\(data.currentStreak) дн. подряд"
-                        : "\(data.currentStreak) day streak")
+                    Text(AppStrings.streakDaysInARow(lang.language, n: data.currentStreak))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(c.text)
                     Spacer()
@@ -282,9 +263,7 @@ struct TripCompleteSummaryView: View {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 14))
                         .foregroundStyle(AppTheme.accent)
-                    Text(lang.language == .ru
-                        ? "Вы проехали этот маршрут уже \(road.timesDriven) раз"
-                        : "You've driven this route \(road.timesDriven) times")
+                    Text(AppStrings.repeatRouteTimes(lang.language, n: road.timesDriven))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(c.text)
                     Spacer()
@@ -334,6 +313,9 @@ struct TripCompleteSummaryView: View {
                 .strokeBorder(AppTheme.accent.opacity(0.2), lineWidth: 1)
         )
         .shadow(color: AppTheme.accent.opacity(0.12), radius: 16, y: 4)
+        // Entrance fade-in keyed on showXP, triggered from onAppear below.
+        .opacity(showXP ? 1 : 0)
+        .scaleEffect(showXP ? 1 : 0.97)
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .onAppear { withAnimation(.easeOut(duration: 0.5)) { showXP = true } }

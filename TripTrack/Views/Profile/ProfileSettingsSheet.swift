@@ -79,16 +79,19 @@ struct ProfileSettingsSheet: View {
         }
         .sheet(isPresented: $showGarage) {
             GarageView()
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showCloudSync) {
             CloudSyncView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showDebugLogs) {
             DebugLogsView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showBackgroundPicker) {
             ProfileBackgroundPickerSheet()

@@ -35,6 +35,9 @@ struct PhotoFullScreenView: View {
     @State private var lastScale: CGFloat = 1.0
     @State private var imageOffset: CGSize = .zero
     @State private var lastImageOffset: CGSize = .zero
+    /// Full-res copy of the CURRENT photo backing the top-right ShareLink
+    /// (Figma 117:1086). Reloaded per page; the button hides while nil.
+    @State private var shareImage: UIImage?
 
     private var opacity: Double {
         let progress = min(abs(dragOffset.height) / 300, 1.0)
@@ -74,8 +77,7 @@ struct PhotoFullScreenView: View {
             )
 
             // Top chrome (Figma 117:1086): dismiss circle left + «2 / 6»
-            // counter centered. (Figma also shows a share circle on the
-            // right — deferred, no share pipeline for a single photo yet.)
+            // counter centered + share circle right (symmetric 34pt).
             VStack {
                 ZStack {
                     Text("\(currentIndex + 1) / \(photos.count)")
@@ -90,6 +92,22 @@ struct PhotoFullScreenView: View {
                                 .background(.black.opacity(0.4), in: Circle())
                         }
                         Spacer()
+                        if let shareImage {
+                            ShareLink(
+                                item: Image(uiImage: shareImage),
+                                preview: SharePreview(
+                                    captionLine ?? AppStrings.photos(language),
+                                    image: Image(uiImage: shareImage)
+                                )
+                            ) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 34, height: 34)
+                                    .background(.black.opacity(0.4), in: Circle())
+                            }
+                            .accessibilityLabel(AppStrings.share(language))
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -113,6 +131,18 @@ struct PhotoFullScreenView: View {
             .allowsHitTesting(false)
         }
         .onAppear { currentIndex = initialIndex }
+        .task(id: currentIndex) {
+            // Feed the ShareLink the full-res image of the visible page.
+            // Loads are local-disk; the index re-check keeps a slow stale
+            // load from clobbering the image of a newer page.
+            shareImage = nil
+            let idx = currentIndex
+            guard photos.indices.contains(idx) else { return }
+            let img = await PhotoStorageService.loadPhotoAsync(filename: photos[idx].filename)
+            if !Task.isCancelled, idx == currentIndex {
+                shareImage = img
+            }
+        }
         .onChange(of: currentIndex) { _ in
             // Reset zoom when switching photos
             scale = 1.0

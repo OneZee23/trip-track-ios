@@ -62,6 +62,16 @@ struct ReactionPickerOverlay: View {
             .opacity(appeared ? 1.0 : 0.0)
             .accessibilityIdentifier("reaction_picker")
         }
+        // VoiceOver: the overlay is a plain ZStack layer, not a presentation,
+        // so without `.isModal` VO focus escaped into the (blurred) feed
+        // behind it; and the backdrop tap-to-dismiss is not a VO element, so
+        // a VO user could only leave by POSTING a reaction. `.isModal` fences
+        // focus to the picker; the escape action (two-finger Z) cancels —
+        // sighted tap-outside dismissal is unchanged.
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape) {
+            dismiss()
+        }
         .onAppear {
             withAnimation(.spring(response: 0.32, dampingFraction: 0.7)) {
                 appeared = true

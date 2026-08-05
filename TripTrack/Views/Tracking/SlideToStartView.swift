@@ -52,6 +52,15 @@ struct SlideToStartView: View {
             .animation(.easeOut(duration: 0.25), value: isCompleted)
         }
         .frame(height: trackHeight)
+        // VoiceOver / Switch Control can't perform a drag gesture, and this
+        // control is the ONLY way to start a trip (or open Settings in the
+        // geo-denied state). Represent it as a plain button: activation
+        // (double-tap) runs the same completion path as a full slide.
+        .accessibilityRepresentation {
+            Button(labelOverride ?? AppStrings.slideToStart(lang.language)) {
+                completeSlide()
+            }
+        }
     }
 
     // MARK: - Layers
@@ -195,26 +204,11 @@ struct SlideToStartView: View {
                 guard !isCompleted else { return }
                 let progress = dragOffset / maxOffset
                 if progress >= threshold {
-                    // Commit: snap to end, fire heavy haptic, invoke callback,
-                    // then let the fade-out handle the dismissal. Parent view
-                    // will unmount this when recording starts.
+                    // Commit: snap to end, then run the shared completion path.
                     withAnimation(.spring(response: 0.28, dampingFraction: 0.75)) {
                         dragOffset = maxOffset
                     }
-                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                    isCompleted = true
-                    onStartTrip()
-                    // Reset state in case the control stays mounted (e.g.
-                    // recording failed to start). Delay longer than the fade
-                    // so the user doesn't see the thumb rubber-band back.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                            dragOffset = 0
-                        }
-                        isCompleted = false
-                        halfHapticFired = false
-                        nearHapticFired = false
-                    }
+                    completeSlide()
                 } else {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                         dragOffset = 0
@@ -223,5 +217,25 @@ struct SlideToStartView: View {
                     nearHapticFired = false
                 }
             }
+    }
+
+    /// Shared completion: heavy haptic, fade-out, callback. Reached either by
+    /// a full drag past the threshold or by an accessibility activation.
+    private func completeSlide() {
+        guard !isCompleted else { return }
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        isCompleted = true
+        onStartTrip()
+        // Reset state in case the control stays mounted (e.g. recording
+        // failed to start). Delay longer than the fade so the user doesn't
+        // see the thumb rubber-band back.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                dragOffset = 0
+            }
+            isCompleted = false
+            halfHapticFired = false
+            nearHapticFired = false
+        }
     }
 }

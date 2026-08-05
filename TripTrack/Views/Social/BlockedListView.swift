@@ -14,6 +14,7 @@ struct BlockedListView: View {
 
     @State private var users: [BlockedUser] = []
     @State private var isLoading = false
+    @State private var loadFailed = false
     @State private var pendingUnblockId: UUID?
 
     var body: some View {
@@ -26,6 +27,11 @@ struct BlockedListView: View {
                     PixelCarLoader(label: nil, height: 100)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 40)
+                } else if loadFailed, users.isEmpty {
+                    // Failed ≠ empty: an offline fetch must not positively
+                    // claim «Вы никого не блокировали» (same rule as
+                    // DebugLogsView's loadFailed treatment).
+                    errorState(c, isRu: isRu)
                 } else if users.isEmpty {
                     emptyState(c, isRu: isRu)
                 } else {
@@ -59,6 +65,33 @@ struct BlockedListView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 60)
+    }
+
+    private func errorState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 32))
+                .foregroundStyle(c.textTertiary)
+            Text(AppStrings.blockedListLoadFailed(lang.language))
+                .font(.system(size: 13))
+                .foregroundStyle(c.textTertiary)
+            Button {
+                Haptics.tap()
+                Task { await load() }
+            } label: {
+                Text(AppStrings.retry(lang.language))
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(c.cardAlt, in: Capsule())
+                    .foregroundStyle(c.text)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("blocked_retry_button")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
+        .accessibilityIdentifier("blocked_error_state")
     }
 
     private func userRow(_ user: BlockedUser, c: AppTheme.Colors, isRu: Bool) -> some View {
@@ -150,8 +183,12 @@ struct BlockedListView: View {
             let res: SocialBlockedListResponse = try await APIClient.shared.post(
                 APIEndpoint.socialBlocked, body: EmptyRequest())
             users = res.users
+            loadFailed = false
         } catch {
             blockedLog.error("blocked list load failed: \(error.localizedDescription)")
+            // Keep any already-loaded rows on a refresh failure; the error
+            // state only replaces the *empty* placeholder.
+            loadFailed = true
         }
     }
 

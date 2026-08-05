@@ -117,7 +117,10 @@ struct SocialTripDetailView: View {
 
                 // Sticky floating back + «…» — matches TripDetailView pattern.
                 HStack {
-                    PosterCircleButton(systemImage: "chevron.left") { dismiss() }
+                    PosterCircleButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabelText: AppStrings.back(lang.language)
+                    ) { dismiss() }
                     Spacer()
                     Menu {
                         Button {
@@ -141,6 +144,7 @@ struct SocialTripDetailView: View {
                             .frame(width: 34, height: 34)
                             .background(.black.opacity(0.4), in: Circle())
                     }
+                    .accessibilityLabel(AppStrings.moreActions(lang.language))
                 }
                 .padding(.top, safeAreaTop + 8)
                 .padding(.horizontal, 16)
@@ -358,6 +362,15 @@ struct SocialTripDetailView: View {
                 Haptics.tap()
                 isMapFullscreen = true
             }
+            // The Canvas is not an a11y element — expose the tap-to-open-map
+            // flow to VoiceOver (mirrors the own-trip poster).
+            .accessibilityElement()
+            .accessibilityLabel(AppStrings.openRouteMapA11y(lang.language))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                guard heroCoords.count > 1 else { return }
+                isMapFullscreen = true
+            }
 
             // Others' poster gets the stronger legibility gradient
             // (Figma: .55 → 0 @28% → 0 @52% → .88).
@@ -396,7 +409,10 @@ struct SocialTripDetailView: View {
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Text(AppStrings.levelShort(lang.language, trip.author.profileLevel))
+                // App-wide LVL convention — every other surface (feed card,
+                // follow list, public profile, …) renders uppercase "LVL N"
+                // in both languages; «ур. N» here broke the feed→detail hop.
+                Text("LVL \(trip.author.profileLevel)")
                     .font(.custom("PressStart2P-Regular", size: 7))
                     .foregroundStyle(Color(red: 0xD9/255, green: 0xDB/255, blue: 0xE5/255).opacity(0.7))
             }

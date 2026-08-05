@@ -211,11 +211,12 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         case UNNotificationDefaultActionIdentifier:
             // Tapped the notification body — route by category. Local trip-
             // start prompt opens the recording tab; remote pushes deep-link
-            // into trip detail (REACTION) or open the social tab (FOLLOW).
+            // into trip detail (REACTION / COMMENT — both carry `tripId` in
+            // the payload) or open the social tab (FOLLOW).
             if category == Self.tripStartPromptCategory {
                 NotificationCenter.default.post(name: .autoTripStartRequested, object: nil)
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
-            } else if category == "REACTION" {
+            } else if category == "REACTION" || category == "COMMENT" {
                 if let tripIdString = userInfo["tripId"] as? String,
                    let tripId = UUID(uuidString: tripIdString) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -245,11 +246,12 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         let category = notification.request.content.categoryIdentifier
         // Local trip-start / trip-stop prompts are presented inline via the
         // recording UI itself, so silencing them in foreground avoids a
-        // double surface. Remote social pushes (REACTION / FOLLOW) DO get
-        // a foreground banner — the user is already in the app, so a quiet
-        // announcement is the right interaction (matches Strava, Twitter).
+        // double surface. Remote social pushes (REACTION / FOLLOW / COMMENT)
+        // DO get a foreground banner — the user is already in the app, so a
+        // quiet announcement is the right interaction (matches Strava,
+        // Twitter).
         switch category {
-        case "REACTION", "FOLLOW":
+        case "REACTION", "FOLLOW", "COMMENT":
             // Refresh the inbox synchronously with banner display — this
             // is the canonical "foreground push received" hook (vs
             // `application(_:didReceiveRemoteNotification:)` which only

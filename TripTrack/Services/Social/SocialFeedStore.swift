@@ -45,6 +45,14 @@ final class SocialFeedStore: ObservableObject {
     /// empty/error state until a MANUAL pull-to-refresh. Reset on any success.
     private var coldStartRetries = 0
     private let maxColdStartRetries = 2
+    /// Last-known `myReaction` per trip id, remembered for EVERY trip a feed
+    /// page ever served (not just the trips currently cached). A detail screen
+    /// can outlive its trip's presence in `trips` — refresh() replaces the
+    /// array with a fresh 20-item page-1, evicting deep-scrolled trips — and
+    /// reactions must still toggle correctly there instead of silently
+    /// no-oping. Session-scoped, bounded by feed browsing; cleared on
+    /// sign-out via `clear()`.
+    private var knownReactions: [UUID: String?] = [:]
 
     private init() {
         // Photo added/removed/uploaded somewhere in the app. The notification
@@ -100,6 +108,39 @@ final class SocialFeedStore: ObservableObject {
                 Task { @MainActor [weak self] in await self?.refresh() }
             }
             .store(in: &cancellables)
+
+        // Trip deleted (detail-screen «…» menu — the only delete flow). Like
+        // privacy flips, this can fire while FeedView is unmounted, so the
+        // store must self-heal: drop the card immediately and invalidate
+        // freshness so the next loadIfNeeded refetches authoritative state.
+        // Without this, deleting an own PUBLIC trip left a ghost card in
+        // «Все» for up to the 15-minute staleness window.
+        NotificationCenter.default.publisher(for: .tripDeleted)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] note in
+                guard let self else { return }
+                if let tripId = note.object as? UUID {
+                    self.removeOptimistically(tripId: tripId)
+                } else {
+                    self.lastLoadedAt = nil
+                }
+            }
+            .store(in: &cancellables)
+
+        // Comment posted/deleted by the signed-in user in a detail screen —
+        // bump the card's «💬 N» counter in place. Same optimistic pattern as
+        // `bumpPhotoCount`; without it the card contradicts what the user
+        // just did until a manual pull-to-refresh or the staleness window.
+        // userInfo: ["tripId": UUID, "delta": Int].
+        NotificationCenter.default.publisher(for: .tripCommentCountChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] note in
+                guard let self,
+                      let tripId = note.userInfo?["tripId"] as? UUID,
+                      let delta = note.userInfo?["delta"] as? Int else { return }
+                self.bumpCommentCount(tripId: tripId, delta: delta)
+            }
+            .store(in: &cancellables)
     }
 
     /// Optimistic in-place bump of a feed card's `photoCount` so the user
@@ -114,6 +155,15 @@ final class SocialFeedStore: ObservableObject {
         // half-second until the server-confirming refresh lands.
         if t.photoCount == 0 { t.firstPhotoThumbnail = nil }
         trips[idx] = t
+    }
+
+    /// Optimistic in-place bump of a feed card's comment counter so the «💬 N»
+    /// bubble reflects a just-posted/deleted comment without waiting for a
+    /// `/social/feed` round-trip.
+    private func bumpCommentCount(tripId: UUID, delta: Int) {
+        guard let idx = trips.firstIndex(where: { $0.id == tripId }) else { return }
+        let t = trips[idx]
+        trips[idx] = t.with(commentCount: max(0, t.commentCount + delta))
     }
 
     // MARK: - Load
@@ -147,12 +197,13 @@ final class SocialFeedStore: ObservableObject {
         currentTask?.cancel()
         refreshGeneration &+= 1
         let myGen = refreshGeneration
+        // Set synchronously (we're @MainActor) so there is no frame where
+        // isLoading is false while trips is empty — FeedView renders the
+        // "feed is empty" state on `trips.isEmpty && !isLoading`.
+        isLoading = true
 
         let task = Task { [weak self] in
             guard let self else { return }
-            await MainActor.run { self.isLoading = true }
-            defer { Task { @MainActor in self.isLoading = false } }
-
             await MainActor.run {
                 self.nextCursor = nil
                 self.hasMore = true
@@ -161,10 +212,17 @@ final class SocialFeedStore: ObservableObject {
         }
         currentTask = task
         await task.value
-        // Clear only if a newer refresh hasn't already replaced us.
-        // Without this, `loadIfNeeded()` would silently no-op forever
-        // — `currentTask` would still hold our finished-but-non-nil Task.
-        if refreshGeneration == myGen { currentTask = nil }
+        // Only the LATEST refresh clears shared state. A superseded refresh
+        // (cancelled by a newer one — e.g. the Cloud-Sync photo-drain reconcile
+        // torpedoing the initial cold-start load) must NOT flip isLoading=false
+        // while its successor is still fetching, or the "feed is empty" message
+        // flashes for the ~second the refire takes on slow links (VPN / cold RU
+        // mobile). Guarding by generation keeps the spinner up instead. Also
+        // clears currentTask so loadIfNeeded() doesn't silently no-op forever.
+        if refreshGeneration == myGen {
+            currentTask = nil
+            isLoading = false
+        }
     }
 
     /// Optimistic removal used when the user flips one of their own trips back to
@@ -189,6 +247,12 @@ final class SocialFeedStore: ObservableObject {
 
     private func fetchPage(replace: Bool) async {
         let req = SocialFeedRequest(limit: 20, cursor: nextCursor)
+        // Capture the generation BEFORE the request goes out. refresh() only
+        // cancels `currentTask` — a loadMore in flight when a refresh fires
+        // (pull-to-refresh, the photo-drain reconcile) survives, and landing
+        // its stale page after the refresh replaced `trips` would append
+        // duplicates AND rewind `nextCursor` onto the old cursor chain.
+        let myGen = refreshGeneration
         do {
             // `requiresAuth: false` for guests so APIClient skips the token
             // header and the USER_NOT_AUTH retry. Server returns trending
@@ -197,11 +261,18 @@ final class SocialFeedStore: ObservableObject {
                 APIEndpoint.socialFeed, body: req,
                 requiresAuth: AuthService.shared.isSignedIn)
             try Task.checkCancellation()
+            guard refreshGeneration == myGen else { return }
             if replace {
                 trips = res.trips
             } else {
-                trips.append(contentsOf: res.trips)
+                // Id-dedup on append: the trending feed orders by reaction
+                // count but pages by a startDate cursor, so page 2 can
+                // re-serve high-reaction trips already on page 1. Duplicate
+                // ids double the card AND break ForEach identity in FeedView.
+                let known = Set(trips.map(\.id))
+                trips.append(contentsOf: res.trips.filter { !known.contains($0.id) })
             }
+            for t in res.trips { knownReactions[t.id] = t.myReaction }
             nextCursor = res.nextCursor
             hasMore = res.nextCursor != nil
             lastError = nil
@@ -264,25 +335,41 @@ final class SocialFeedStore: ObservableObject {
     // MARK: - Reactions (optimistic)
 
     func toggleReaction(for tripId: UUID, emoji: String) async {
-        guard let idx = trips.firstIndex(where: { $0.id == tripId }) else { return }
-        let trip = trips[idx]
-        let wasMine = trip.myReaction != nil
-        let wasSameEmoji = trip.myReaction == emoji
-
-        // Optimistic update
-        let newCount: Int
-        let newMine: String?
-        if wasSameEmoji {
-            newCount = max(0, trip.reactionCount - 1)
-            newMine = nil
-        } else if wasMine {
-            newCount = trip.reactionCount
-            newMine = emoji
+        // The trip may have been EVICTED from the cached page-1 while a detail
+        // screen stayed open (every refresh replaces `trips` with a fresh
+        // 20-item first page). The POST must still go out in that case — the
+        // pre-6.1 bug where store-absent trips silently no-oped is exactly
+        // what this fallback fixes. `knownReactions` supplies the last-known
+        // `myReaction` so toggle semantics survive eviction.
+        let idx = trips.firstIndex(where: { $0.id == tripId })
+        let snapshot = idx.map { trips[$0] }
+        // Store copy wins (including its nil); the remembered value only
+        // kicks in for evicted trips. A flattening `??` chain here would
+        // wrongly resurrect a stale remembered reaction when the cached
+        // trip's myReaction is legitimately nil.
+        let current: String?
+        if let snapshot {
+            current = snapshot.myReaction
         } else {
-            newCount = trip.reactionCount + 1
-            newMine = emoji
+            current = knownReactions[tripId] ?? nil
         }
-        trips[idx] = trip.with(reactionCount: newCount, myReaction: newMine)
+        let wasMine = current != nil
+        let wasSameEmoji = current == emoji
+        let newMine: String? = wasSameEmoji ? nil : emoji
+
+        // Optimistic update (only possible while the trip is still cached)
+        if let idx, let trip = snapshot {
+            let newCount: Int
+            if wasSameEmoji {
+                newCount = max(0, trip.reactionCount - 1)
+            } else if wasMine {
+                newCount = trip.reactionCount
+            } else {
+                newCount = trip.reactionCount + 1
+            }
+            trips[idx] = trip.with(reactionCount: newCount, myReaction: newMine)
+        }
+        knownReactions[tripId] = newMine
 
         do {
             if wasSameEmoji {
@@ -293,8 +380,16 @@ final class SocialFeedStore: ObservableObject {
                     APIEndpoint.socialReact, body: SocialReactRequest(tripId: tripId, emoji: emoji))
             }
         } catch {
-            // Revert optimistic change on failure
-            trips[idx] = trip
+            // Revert the optimistic change on failure. Re-find by id — the
+            // captured index can be STALE after the await (`trips` may have
+            // been replaced by a refresh, shrunk by removeOptimistically, or
+            // cleared on sign-out), so `trips[idx]` could trap out-of-range
+            // or stamp the old value over a DIFFERENT trip's slot.
+            if let snapshot,
+               let curIdx = trips.firstIndex(where: { $0.id == tripId }) {
+                trips[curIdx] = snapshot
+            }
+            knownReactions[tripId] = current
             socialLog.error("react toggle failed: \(error.localizedDescription)")
         }
     }
@@ -307,10 +402,39 @@ final class SocialFeedStore: ObservableObject {
         hasMore = true
         lastError = nil
         lastLoadedAt = nil
+        knownReactions = [:]
     }
 }
 
+extension Notification.Name {
+    /// Posted (userInfo: ["tripId": UUID, "delta": Int]) when the signed-in
+    /// user posts (+1) or deletes (−1) a comment, so cached feed cards bump
+    /// their «💬 N» counter without a `/social/feed` round-trip. Poster:
+    /// `TripCommentsStore.post` / `.delete` on server-confirmed success.
+    static let tripCommentCountChanged = Notification.Name("tripCommentCountChanged")
+}
+
 private extension SocialFeedTrip {
+    /// Rebuild with a new comment count — `commentCountRaw` is a `let` on the
+    /// DTO, so optimistic bumps go through the memberwise init like the
+    /// reaction path below.
+    func with(commentCount: Int) -> SocialFeedTrip {
+        SocialFeedTrip(
+            id: id, author: author, title: title, description: description,
+            startDate: startDate, endDate: endDate,
+            distance: distance, duration: duration,
+            maxSpeed: maxSpeed, elevation: elevation,
+            maxAltitude: maxAltitude, drivingTime: drivingTime, stoppedTime: stoppedTime,
+            region: region,
+            previewPolyline: previewPolyline,
+            photoCount: photoCount, firstPhotoThumbnail: firstPhotoThumbnail,
+            vehicle: vehicle,
+            reactionCount: reactionCount, reactionBreakdown: reactionBreakdown,
+            myReaction: myReaction, badgeIds: badgeIds,
+            commentCountRaw: commentCount
+        )
+    }
+
     func with(reactionCount: Int, myReaction: String?) -> SocialFeedTrip {
         // Rebuild breakdown locally to reflect optimistic toggle:
         // decrement previous myReaction bucket, increment new one.

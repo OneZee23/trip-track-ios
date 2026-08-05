@@ -8,9 +8,6 @@ final class SpeedGradientPolyline: MKPolyline {
     var gradientLocations: [CGFloat] = []
 }
 
-/// All trips' segments as ONE overlay — the amber "territory memory" halo.
-final class TerritoryGlowOverlay: MKMultiPolyline {}
-
 /// Figma: route path re-stroked at width 18, #EB571E 22%, Gaussian blur 11.
 /// MapKit can't blur cheaply, so three concentric soft passes approximate it
 /// (precedent: GlowingHeadRenderer). Widths are screen points → divided by

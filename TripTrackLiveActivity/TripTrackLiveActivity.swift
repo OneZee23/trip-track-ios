@@ -79,7 +79,7 @@ struct TripTrackLiveActivity: Widget {
                     } else {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(Int(context.state.speedKmh))").font(.title2.bold())
-                            + Text(" km/h").font(.caption).foregroundColor(.secondary)
+                            + Text(context.state.isRu ? " км/ч" : " km/h").font(.caption).foregroundColor(.secondary)
                         }
                     }
                 }

@@ -1,7 +1,6 @@
 import SwiftUI
 
 extension Notification.Name {
-    static let switchToFeedWithRegionFilter = Notification.Name("switchToFeedWithRegionFilter")
     static let switchToFeedTab = Notification.Name("switchToFeedTab")
     static let feedScrollToTop = Notification.Name("feedScrollToTop")
     static let switchToTrackingTab = Notification.Name("switchToTrackingTab")
@@ -74,6 +73,10 @@ struct ContentView: View {
     @State private var hideTabBar = false
     @Environment(\.colorScheme) private var systemScheme
     @EnvironmentObject private var lang: LanguageManager
+    /// Needed to re-apply the theme override on root-level presentations —
+    /// sheets/covers are separate presentations the app-root
+    /// `preferredColorScheme` does not reach (see ProfileView's note).
+    @EnvironmentObject private var themeManager: ThemeManager
 
     var body: some View {
         let c = AppTheme.colors(for: systemScheme)
@@ -132,6 +135,7 @@ struct ContentView: View {
             RecoveryPromptSheet()
                 .environmentObject(mapVM)
                 .environmentObject(lang)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         // Trip summary — root-level for the same reason: «Завершить и
         // сохранить» in the recovery prompt finishes a trip from ANY tab;
@@ -171,11 +175,7 @@ struct ContentView: View {
                 }
             )
             .environmentObject(lang)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .switchToFeedWithRegionFilter)) { _ in
-            withAnimation(.easeInOut(duration: 0.3)) {
-                selectedTab = .home
-            }
+            .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToFeedTab)) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {

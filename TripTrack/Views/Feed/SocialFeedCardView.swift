@@ -188,7 +188,9 @@ struct SocialFeedCardView: View {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(c.textTertiary)
-                    .frame(width: 28, height: 28)
+                    // ≥34pt hit target (project floor) — at 28×28 a leftward
+                    // near-miss landed on the author-name tap area instead.
+                    .frame(width: 34, height: 34)
                     .contentShape(Rectangle())
             }
             .accessibilityIdentifier("feed_card_menu")
@@ -225,7 +227,7 @@ struct SocialFeedCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
                 metricBlock(
-                    value: String(format: "%.1f", trip.distanceKm),
+                    value: oneDecimal(trip.distanceKm),
                     unit: AppStrings.km(lang.language),
                     label: AppStrings.distance(lang.language),
                     c: c
@@ -362,6 +364,10 @@ struct SocialFeedCardView: View {
                                 .foregroundStyle(c.textSecondary)
                                 .frame(width: 28, height: 28)
                                 .background(Capsule().fill(c.cardAlt.opacity(0.6)))
+                                // Visual capsule stays 28pt; the tappable
+                                // area meets the ≥34pt project floor.
+                                .frame(width: 34, height: 34)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -384,7 +390,9 @@ struct SocialFeedCardView: View {
                         .font(.system(size: 12, weight: .bold).monospacedDigit())
                 }
                 .foregroundStyle(c.textSecondary)
-                .padding(.vertical, 4)
+                // ≥34pt hit target (project floor) — the icon + 4pt padding
+                // alone measured ~24pt and vertical misses were dead taps.
+                .frame(minWidth: 34, minHeight: 34)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -426,6 +434,14 @@ struct SocialFeedCardView: View {
     }
 
     // MARK: - Formatters
+
+    /// RU uses decimal comma (Figma canon; same pattern as
+    /// `GarageComponents.oneDecimal`). `String(format: "%.1f")` is
+    /// locale-blind and always emits a period.
+    private func oneDecimal(_ value: Double) -> String {
+        let s = String(format: "%.1f", value)
+        return lang.language == .ru ? s.replacingOccurrences(of: ".", with: ",") : s
+    }
 
     private func dateRegionText(isRu: Bool) -> String {
         var result = RelativeTripDate.string(

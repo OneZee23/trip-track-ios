@@ -299,6 +299,12 @@ enum ProfileDateFormat {
         let f = DateFormatter()
         f.locale = Locale(identifier: "ru_RU")
         f.dateFormat = "d MMM"
+        // ICU's RU abbreviated months carry a trailing period («апр.») —
+        // the canon (Figma 150:1329) and the Статистика chart labels are
+        // dotless, so strip it from the symbols the "MMM" field reads.
+        f.shortMonthSymbols = f.shortMonthSymbols.map {
+            $0.replacingOccurrences(of: ".", with: "")
+        }
         return f
     }()
     private static let enDayMonth: DateFormatter = {

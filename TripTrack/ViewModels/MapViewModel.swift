@@ -141,11 +141,30 @@ final class MapViewModel: ObservableObject {
         refreshTripStats()
         restoreActiveRecordingIfNeeded()
 
-        // Rebuild territory when a trip is deleted
+        // Rebuild territory when a trip is deleted. Also recompute the
+        // cached trip stats — ProfileView renders cachedTripCount/TotalKm
+        // directly, and without this the Я strip keeps the pre-delete
+        // numbers until the Record tab happens to refresh them.
         NotificationCenter.default.publisher(for: .tripDeleted)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.territoryManager.rebuildFromTrips()
+                self?.refreshTripStats()
+            }
+            .store(in: &cancellables)
+
+        // Cloud-Sync pull can restore a whole library onto a fresh device
+        // without touching stopRecording/TrackingView.onAppear — the only
+        // other writers of the cached trip stats. Without this the Я tab
+        // stays gated in its first-launch zero-trip state (ProfileView
+        // checks cachedTripCount == 0) for the rest of the session while
+        // the restored trips are already visible in the feed.
+        // (MyMapViewModel documents the same restore-on-fresh-device
+        // hazard for its own caches.)
+        NotificationCenter.default.publisher(for: .syncPullCompleted)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshTripStats()
             }
             .store(in: &cancellables)
 

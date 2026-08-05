@@ -4,7 +4,6 @@ import MapKit
 struct TrackingView: View {
     @EnvironmentObject var viewModel: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
-    @ObservedObject private var settings = SettingsManager.shared
     @State private var safeAreaTop: CGFloat = 59
     @State private var tabBarHeight: CGFloat = 88
     @State private var isMapReady = false
