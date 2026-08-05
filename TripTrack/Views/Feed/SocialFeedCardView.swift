@@ -205,7 +205,11 @@ struct SocialFeedCardView: View {
         // polylines are RDP-simplified but NOT capped — long trips can
         // carry thousands of points and the feed draws many cards.
         let coords = FeedRouteSampler.capped(trip.previewCoordinates)
-        if coords.count > 1 {
+        // Degenerate-route guard: legacy demo/seed trips can carry a 2-3
+        // point polyline (or ~0 m distance) that renders as a couple of
+        // bare straight lines — reads as "the map is broken". Hide the
+        // canvas for those; real recordings always clear both bars.
+        if coords.count > 3, trip.distance >= 100 {
             // Accent-colored route (speeds empty) is the documented
             // deviation — the feed DTO carries no per-point speed series.
             PosterRouteCanvas(
