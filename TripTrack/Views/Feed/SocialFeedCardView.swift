@@ -220,7 +220,10 @@ struct SocialFeedCardView: View {
             )
             .frame(height: 178)
             .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            // Figma: the canvas runs card-edge to card-edge with SQUARE
+            // corners (the card's own radius does any clipping). Rounding
+            // here read as an inset "photo" instead of the full-bleed band.
+            .clipped()
         }
     }
 
