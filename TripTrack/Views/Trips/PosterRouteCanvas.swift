@@ -74,6 +74,53 @@ struct PosterRouteCanvas: View {
 
     // MARK: - Drawing
 
+    /// Sparse polylines (server previews are RDP-simplified, so straight
+    /// roads collapse to long chords with sharp corners) read as "broken"
+    /// next to the dense local render — thread a centripetal Catmull-Rom
+    /// spline through them instead. Dense tracks keep straight segments:
+    /// they're already sub-pixel and the spline just wastes path nodes.
+    private static let smoothingPointCap = 200
+
+    private static func routePath(_ pts: [CGPoint]) -> Path {
+        var path = Path()
+        guard let first = pts.first else { return path }
+        path.move(to: first)
+        guard pts.count > 2, pts.count < smoothingPointCap else {
+            for pt in pts.dropFirst() { path.addLine(to: pt) }
+            return path
+        }
+        for i in 0..<(pts.count - 1) {
+            let p0 = pts[max(i - 1, 0)]
+            let p1 = pts[i]
+            let p2 = pts[i + 1]
+            let p3 = pts[min(i + 2, pts.count - 1)]
+
+            // Centripetal parameterization (α = 0.5) — unlike uniform
+            // Catmull-Rom it doesn't loop or overshoot on the uneven chord
+            // lengths RDP output is made of (long straights + corner
+            // clusters).
+            let d1 = pow(hypot(p1.x - p0.x, p1.y - p0.y), 0.5)
+            var d2 = pow(hypot(p2.x - p1.x, p2.y - p1.y), 0.5)
+            let d3 = pow(hypot(p3.x - p2.x, p3.y - p2.y), 0.5)
+            if d2 < 0.1 { path.addLine(to: p2); continue }
+            let dt0 = d1 < 0.1 ? d2 : d1
+            let dt2 = d3 < 0.1 ? d2 : d3
+            d2 = max(d2, 0.1)
+
+            let t1x = ((p1.x - p0.x) / dt0 - (p2.x - p0.x) / (dt0 + d2) + (p2.x - p1.x) / d2) * d2
+            let t1y = ((p1.y - p0.y) / dt0 - (p2.y - p0.y) / (dt0 + d2) + (p2.y - p1.y) / d2) * d2
+            let t2x = ((p2.x - p1.x) / d2 - (p3.x - p1.x) / (d2 + dt2) + (p3.x - p2.x) / dt2) * d2
+            let t2y = ((p2.y - p1.y) / d2 - (p3.y - p1.y) / (d2 + dt2) + (p3.y - p2.y) / dt2) * d2
+
+            path.addCurve(
+                to: p2,
+                control1: CGPoint(x: p1.x + t1x / 3, y: p1.y + t1y / 3),
+                control2: CGPoint(x: p2.x - t2x / 3, y: p2.y - t2y / 3)
+            )
+        }
+        return path
+    }
+
     private func drawRoute(context: inout GraphicsContext, size: CGSize) {
         let projected = Self.project(coordinates, into: size, padding: 36)
         guard projected.count > 1 else { return }
@@ -101,10 +148,7 @@ struct PosterRouteCanvas: View {
                 i = j
             }
         } else {
-            var path = Path()
-            path.move(to: projected[0])
-            for pt in projected.dropFirst() { path.addLine(to: pt) }
-            context.stroke(path, with: .color(AppTheme.accent), style: stroke)
+            context.stroke(Self.routePath(projected), with: .color(AppTheme.accent), style: stroke)
         }
 
         // Playback trail — overlay from start to the head, so «Прожить
