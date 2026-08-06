@@ -846,15 +846,11 @@ final class TripManager: ObservableObject {
         }
     }
 
-    private static let dateFallbackFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM, HH:mm"
-        return f
-    }()
-
+    /// APP-language auto-title («5 авг, 17:41» in RU) — the old formatter
+    /// followed the SYSTEM locale, so an EN-system device stamped English
+    /// titles into a Russian app (and they synced up verbatim).
     private static func dateFallbackTitle(for date: Date?) -> String {
-        guard let date else { return "Trip" }
-        return dateFallbackFormatter.string(from: date)
+        TripAutoTitle.generate(for: date, language: LanguageManager.currentLanguage)
     }
 
     // MARK: - Demo Trip

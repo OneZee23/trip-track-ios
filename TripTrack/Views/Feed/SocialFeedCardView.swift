@@ -37,7 +37,9 @@ struct SocialFeedCardView: View {
 
             // Body is wrapped so we can attach both tap + long-press gestures.
             VStack(alignment: .leading, spacing: 0) {
-                if let title = trip.title, !title.isEmpty {
+                if let title = TripAutoTitle.localized(
+                    trip.title, startDate: trip.startDate, language: lang.language
+                ), !title.isEmpty {
                     Text(title)
                         .font(.system(size: 17, weight: .heavy))
                         .tracking(-0.085)
@@ -123,7 +125,7 @@ struct SocialFeedCardView: View {
                 }
 
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(headerName)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(c.text)
@@ -132,13 +134,14 @@ struct SocialFeedCardView: View {
                         // since a long name + "Вы" pill needs the truncation
                         // to land on the name, not somewhere weird in the pill.
                         .truncationMode(.tail)
-                    // LVL tag (Figma FeedCard 115:38) — rank-colored pixel
-                    // font. PressStart2P substitutes Figma's Handjet (not
-                    // bundled) — the app-wide LVL canon. READ-ONLY use of
-                    // `DriverRank`.
+                    // LVL tag — Handjet is the Figma canon font (bundled +
+                    // runtime-registered since 6.1.0; PressStart2P used to
+                    // stand in and rendered ~2× wider than the design).
+                    // Size 11 ≈ 8pt cap height, baseline-aligned with the
+                    // name per the Figma header. READ-ONLY use of `DriverRank`.
                     Text("LVL \(trip.author.profileLevel)")
-                        .font(.custom("PressStart2P-Regular", size: 8))
-                        .tracking(1)
+                        .font(.custom("Handjet-Medium", size: 11))
+                        .tracking(0.5)
                         .foregroundStyle(DriverRank.from(level: trip.author.profileLevel).color)
                         .fixedSize()
                     if isOwn {
