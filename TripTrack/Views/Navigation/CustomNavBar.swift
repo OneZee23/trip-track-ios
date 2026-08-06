@@ -62,7 +62,12 @@ struct CustomNavBar<Trailing: View>: View {
                 trailing()
             }
         }
-        .padding(.horizontal, 14)
+        // Canon insets the 34pt controls 10pt from the edge, but that was
+        // drawn on a 360pt artboard — on a 440pt phone the same value puts
+        // them on the curved glass, half inside the interactive-pop gesture
+        // strip, which is what made them feel edge-glued and awkward to hit.
+        // 20pt keeps the pair visually centred in the corner instead.
+        .padding(.horizontal, 20)
         // See `topInset` — 8pt on pushed screens (canon), 20pt in sheets.
         .padding(.top, topInset)
         .padding(.bottom, 8)

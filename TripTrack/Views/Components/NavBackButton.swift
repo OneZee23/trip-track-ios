@@ -10,10 +10,8 @@ import SwiftUI
 struct NavBackButton: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.previewPop) private var previewPop
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let c = AppTheme.colors(for: scheme)
         Button {
             Haptics.tap()
             if let previewPop {
@@ -24,15 +22,10 @@ struct NavBackButton: View {
                 dismiss()
             }
         } label: {
-            Image(systemName: "chevron.backward.circle.fill")
-                .font(.system(size: 22))
-                .foregroundStyle(c.textTertiary)
-                // Glyph stays 22pt; the tappable area is widened to 34×34
-                // (was ~22×22 — well under the HIG 44pt minimum, causing
-                // missed back-taps on every CustomNavBar screen). The
-                // contentShape makes the padding around the glyph hit-testable.
-                .frame(width: 34, height: 34)
-                .contentShape(Rectangle())
+            // Canon control (117:944): surface circle + dark chevron, 44pt
+            // hit area. Was a grey `chevron.backward.circle.fill` glyph —
+            // inverted against the design and unpaired with the trailing «…».
+            NavCircleIcon(systemImage: "chevron.backward")
         }
     }
 }

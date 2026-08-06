@@ -136,9 +136,7 @@ struct PublicProfileView: View {
                         Haptics.tap()
                         onClose()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(c.textTertiary)
+                        NavCircleIcon(systemImage: "xmark")
                     }
                 } else if !isOwnProfile && auth.isSignedIn {
                     // Moderation controls require an account — guests see no
@@ -168,14 +166,9 @@ struct PublicProfileView: View {
                             )
                         }
                     } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 20))
-                            .foregroundStyle(c.textTertiary)
-                            // 34×34 matches NavBackButton's target — the old
-                            // 28pt box was under the HIG minimum.
-                            .frame(width: 34, height: 34)
-                            .contentShape(Rectangle())
+                        NavCircleIcon(systemImage: "ellipsis")
                     }
+                    .accessibilityLabel(AppStrings.moreActions(lang.language))
                 }
             }
         }

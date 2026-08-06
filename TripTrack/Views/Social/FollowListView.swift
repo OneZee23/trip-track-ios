@@ -97,9 +97,7 @@ struct FollowListView: View {
                         Haptics.tap()
                         onClose()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(c.textTertiary)
+                        NavCircleIcon(systemImage: "xmark")
                     }
                 }
             }
