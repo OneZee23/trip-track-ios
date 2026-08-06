@@ -30,21 +30,18 @@ struct ReactionPickerOverlay: View {
                     dismiss()
                 }
 
-            // Floating capsule (Figma 117:318 — glass chrome). Inner scroll
-            // only fires when emoji set exceeds device width — at 8 × 40pt
-            // + spacing/padding the capsule is ~370pt, fits every iPhone
-            // since SE.
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(Array(ReactionEmoji.all.enumerated()), id: \.offset) { index, emoji in
-                        pill(emoji: emoji, index: index, c: c)
-                    }
+            // Floating capsule (Figma 117:318 — glass chrome). Hugs its
+            // content: with the canon-6 icons it measures ~300pt and fits
+            // every iPhone since SE, so no scroll and no leftover blank
+            // tail (the old full-width frame was sized for 8 emoji and
+            // left a dead stretch of capsule after the swap to 6).
+            HStack(spacing: 6) {
+                ForEach(Array(ReactionEmoji.all.enumerated()), id: \.offset) { index, emoji in
+                    pill(emoji: emoji, index: index, c: c)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
             }
-            .frame(maxWidth: UIScreen.main.bounds.width - 24)
-            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background {
                 Capsule()
                     .fill(.ultraThinMaterial)

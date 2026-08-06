@@ -449,12 +449,11 @@ struct SocialFeedCardView: View {
 
     // MARK: - Formatters
 
-    /// RU uses decimal comma (Figma canon; same pattern as
-    /// `GarageComponents.oneDecimal`). `String(format: "%.1f")` is
-    /// locale-blind and always emits a period.
+    /// Always a DOT decimal — FeedCard canon 115:61 renders «316.4» and the
+    /// user explicitly confirmed the dot for this card (2026-08-06), so no
+    /// RU-comma localization here.
     private func oneDecimal(_ value: Double) -> String {
-        let s = String(format: "%.1f", value)
-        return lang.language == .ru ? s.replacingOccurrences(of: ".", with: ",") : s
+        String(format: "%.1f", value)
     }
 
     private func dateRegionText(isRu: Bool) -> String {
