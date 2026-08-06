@@ -316,6 +316,11 @@ enum AppStrings {
     static func avgSpeed(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Ср. скорость" : "Avg speed"
     }
+    /// Feed-card metric label (Figma FeedCard 115:72 — «Ср. скор.», the
+    /// full «Ср. скорость» overflows the third metric column at 11pt caps).
+    static func avgSpeedShort(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ср. скор." : "Avg speed"
+    }
     static func avgSpeedModeTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Расчёт средней скорости" : "Average speed basis"
     }

@@ -11,10 +11,6 @@ struct SocialFeedCardView: View {
     /// report menu and "Reaction" pill, and swaps the author row for a vehicle-style
     /// header that matches the look of trips in the "Мои" tab.
     var isOwn: Bool = false
-    /// Local Vehicle struct used to render the header on own-trip cards. If the vehicle
-    /// has a pixel avatar we render the PNG instead of trying to draw the asset name
-    /// as text.
-    var ownVehicle: Vehicle?
     var onTapCard: (() -> Void)?
     var onTapAuthor: (() -> Void)?
     var onLongPress: (() -> Void)?
@@ -64,12 +60,6 @@ struct SocialFeedCardView: View {
             .onLongPressGesture(minimumDuration: 0.4) {
                 Haptics.action()
                 onLongPress?()
-            }
-
-            if !trip.badgeIds.isEmpty {
-                TripBadgesRow(badgeIds: trip.badgeIds, maxVisible: 4, size: 22)
-                    .padding(.horizontal, 13)
-                    .padding(.bottom, 10)
             }
 
             Rectangle()
@@ -240,60 +230,30 @@ struct SocialFeedCardView: View {
 
     // MARK: - Metrics
 
-    @ViewBuilder
     private func metricsStrip(_ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // FeedCard spec 115:58: three equal flex columns, 4pt gap,
-            // leading-aligned; time renders as number(19)+unit(11) runs
-            // («4 ч 58 мин»), not one flat string.
-            HStack(spacing: 4) {
-                metricBlock(
-                    value: oneDecimal(trip.distanceKm),
-                    unit: AppStrings.km(lang.language),
-                    label: AppStrings.distance(lang.language),
-                    c: c
-                )
-                metricBlock(
-                    valueText: durationRuns(c),
-                    label: AppStrings.duration(lang.language),
-                    c: c
-                )
-                metricBlock(
-                    value: String(format: "%.0f", trip.averageSpeedKmh),
-                    unit: AppStrings.kmh(lang.language),
-                    label: AppStrings.avgSpeed(lang.language),
-                    c: c
-                )
-            }
-            // Vehicle metadata sits BELOW the metrics row on every trip —
-            // server now returns it on `SocialFeedTrip.vehicle` for own and
-            // others' alike, so cards stay visually identical regardless of
-            // who recorded the trip. The "what car was this in?" line is
-            // metadata, not identity (the avatar slot handles identity).
-            if let v = trip.vehicle {
-                let trimmedName = v.name.trimmingCharacters(in: .whitespaces)
-                if !trimmedName.isEmpty {
-                    HStack(spacing: 6) {
-                        // Pixel-car asset names are stored as `pixel_car_*`
-                        // in `avatarEmoji`. The PNGs live in the iOS bundle,
-                        // so they render for any author — own or others alike.
-                        // Without this the asset name renders as literal text.
-                        if v.isPixelAvatar {
-                            Image(v.avatarEmoji)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 14, height: 14)
-                        } else {
-                            Text(v.avatarEmoji)
-                                .font(.system(size: 12))
-                        }
-                        Text(trimmedName)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(c.textTertiary)
-                            .lineLimit(1)
-                    }
-                }
-            }
+        // FeedCard spec 115:58: three equal flex columns, 4pt gap,
+        // leading-aligned; time renders as number(19)+unit(11) runs
+        // («4 ч 58 мин»), not one flat string. Nothing below the row —
+        // the spec card carries no vehicle line and no badge strip
+        // (user call 2026-08-06: «нет Your car… нет списка ачивок»).
+        HStack(spacing: 4) {
+            metricBlock(
+                value: oneDecimal(trip.distanceKm),
+                unit: AppStrings.km(lang.language),
+                label: AppStrings.distance(lang.language),
+                c: c
+            )
+            metricBlock(
+                valueText: durationRuns(c),
+                label: AppStrings.duration(lang.language),
+                c: c
+            )
+            metricBlock(
+                value: String(format: "%.0f", trip.averageSpeedKmh),
+                unit: AppStrings.kmh(lang.language),
+                label: AppStrings.avgSpeedShort(lang.language),
+                c: c
+            )
         }
     }
 
@@ -384,9 +344,10 @@ struct SocialFeedCardView: View {
                 // Show only the top-3 most popular reactions in the card — anything
                 // extra lives in the trip detail's full reactions breakdown. Keeps the
                 // action bar compact and removes the confusing horizontal scroll when
-                // there are only a handful of reactions.
-                let top = trip.reactionBreakdown
-                    .sorted { $0.count > $1.count }
+                // there are only a handful of reactions. Legacy prod emoji are
+                // folded into their canonical keys BEFORE the top-3 cut, so a
+                // trip with ❤️×2 + 👍×1 shows one 👍×3 pill, not two lookalikes.
+                let top = ReactionEmoji.mergedTallies(trip.reactionBreakdown)
                     .prefix(3)
                 HStack(spacing: 6) {
                     ForEach(Array(top), id: \.emoji) { tally in
@@ -444,7 +405,10 @@ struct SocialFeedCardView: View {
     }
 
     private func reactionTallyPill(_ tally: ReactionTally, c: AppTheme.Colors) -> some View {
-        let isMine = trip.myReaction == tally.emoji
+        // Tallies arrive canonicalized (mergedTallies); my stored reaction
+        // may still be a legacy emoji, so the ownership check must compare
+        // through the same canonical lens.
+        let isMine = trip.myReaction.map { ReactionEmoji.canonical($0) } == tally.emoji
         return Button {
             // Owner can't toggle their own reaction (Strava rule). Future
             // enhancement: tap should open the list of who reacted; for now
@@ -452,11 +416,19 @@ struct SocialFeedCardView: View {
             // owner side and trigger a 4xx.
             guard !isOwn else { return }
             Haptics.selection()
-            onReact?(tally.emoji)
+            // Removing must send the RAW stored emoji — the store's
+            // same-emoji check is what turns the POST into an unreact.
+            // Sending the canonical key for a legacy reaction would
+            // silently REPLACE ❤️ with 👍 instead of removing it.
+            onReact?(isMine ? (trip.myReaction ?? tally.emoji) : tally.emoji)
         } label: {
             HStack(spacing: 4) {
-                Text(tally.emoji)
-                    .font(.system(size: 14))
+                ReactionIconView(
+                    emoji: tally.emoji,
+                    size: 14,
+                    filled: isMine,
+                    tint: isMine ? AppTheme.accent : c.text
+                )
                 Text("\(tally.count)")
                     .font(.system(size: 12, weight: .bold).monospacedDigit())
                     .foregroundStyle(isMine ? AppTheme.accent : c.textSecondary)

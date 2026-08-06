@@ -589,11 +589,9 @@ struct FeedView: View {
         } else {
             ForEach(store.trips) { trip in
                 let isOwn = isOwnSocialTrip(trip)
-                let ownVehicle = isOwn ? ownVehicleFor(tripId: trip.id) : nil
                 SocialFeedCardView(
                     trip: trip,
                     isOwn: isOwn,
-                    ownVehicle: ownVehicle,
                     onTapCard: {
                         // Own trips open the regular TripDetailView (vehicle-based header,
                         // edit pencil, privacy toggle) — same experience as from "Мои".
@@ -935,18 +933,6 @@ struct FeedView: View {
     /// of the read-only SocialTripDetailView.
     private func isOwnSocialTrip(_ trip: SocialFeedTrip) -> Bool {
         TokenStore.shared.accountId == trip.author.id
-    }
-
-    /// Looks up the local vehicle attached to a trip (by id) so own-trip cards in the
-    /// feed render with the same vehicle header as in the "Мои" tab.
-    /// Reads the VM's prebuilt tripId→vehicleId map — this runs inside the
-    /// social ForEach during body, and the previous `tripDetail(id:)` call
-    /// materialized the trip's FULL track-point set synchronously on the main
-    /// thread per visible own-card (scroll hitches on long trips; same hazard
-    /// the `hasAnyPrivateTrip` @State cache documents above).
-    private func ownVehicleFor(tripId: UUID) -> Vehicle? {
-        guard let vid = feedVM.vehicleIdByTripId[tripId] else { return nil }
-        return settings.vehicles.first { $0.id == vid }
     }
 
     /// Runs the social action a guest tapped before signing in. Consumes the
