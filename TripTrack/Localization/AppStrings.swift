@@ -1360,6 +1360,28 @@ enum AppStrings {
     static func noFilteredNotifications(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Таких уведомлений пока нет" : "No such notifications yet"
     }
+    // MARK: - Activity rows (6.1.0)
+
+    /// Second line of a reaction row: what happened, to what. The reaction
+    /// itself is drawn as a badge on the avatar, so it is not repeated here.
+    static func activityReactedTo(_ lang: LanguageManager.Language, _ trip: String) -> String {
+        lang == .ru ? "отреагировал на «\(trip)»" : "reacted to “\(trip)”"
+    }
+    static func activityFollowedYou(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "подписался на Вас" : "started following you"
+    }
+    /// With the comment text when the server sent it, otherwise the trip.
+    static func activityCommented(_ lang: LanguageManager.Language, text: String?, trip: String) -> String {
+        if let text, !text.isEmpty {
+            return lang == .ru ? "прокомментировал: «\(text)»" : "commented: “\(text)”"
+        }
+        return lang == .ru ? "прокомментировал «\(trip)»" : "commented on “\(trip)”"
+    }
+    /// Fallback object when a trip has no title of its own.
+    static func activityYourTrip(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вашу поездку" : "your trip"
+    }
+
     static func followBack(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "В ответ" : "Follow back"
     }

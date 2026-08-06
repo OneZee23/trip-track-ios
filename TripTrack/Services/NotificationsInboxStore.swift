@@ -156,6 +156,53 @@ final class NotificationsInboxStore: ObservableObject {
         }
     }
 
+    /// Ids seen on screen but not yet reported to the server.
+    private var pendingSeen: Set<UUID> = []
+    private var seenFlushTask: Task<Void, Never>?
+
+    /// Read-on-sight: a row that has actually been displayed counts as read,
+    /// which is what users expect from an activity feed (and what Instagram
+    /// / Telegram do). Batched — rows stream in as you scroll, and one
+    /// request per row would be a storm. Because it keys off display, not
+    /// off the loaded page, rows that only become visible under a chip
+    /// filter are covered too.
+    func noteSeen(_ item: NotificationItem) {
+        guard !item.isRead else { return }
+        pendingSeen.insert(item.id)
+        seenFlushTask?.cancel()
+        seenFlushTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.flushSeen()
+        }
+    }
+
+    /// Flush whatever has accumulated. Called on the debounce and when the
+    /// inbox goes away, so a quick peek-and-close still reports.
+    func flushSeen() async {
+        let ids = pendingSeen
+        pendingSeen = []
+        guard !ids.isEmpty else { return }
+        var flipped = 0
+        items = items.map { item in
+            guard ids.contains(item.id), !item.isRead else { return item }
+            flipped += 1
+            return makeRead(item)
+        }
+        guard flipped > 0 else { return }
+        unreadCount = max(0, unreadCount - flipped)
+        do {
+            let _: EmptyResponse = try await APIClient.shared.post(
+                APIEndpoint.notificationsMarkRead,
+                body: NotificationsMarkReadRequest(ids: Array(ids)))
+        } catch {
+            // Left optimistic on purpose: the next `refreshUnreadOnly` pulls
+            // the authoritative count, and re-showing rows the user already
+            // read is worse than a badge that self-corrects a moment later.
+            inboxLog.error("mark-seen failed: \(error.localizedDescription)")
+        }
+    }
+
     /// Marks every unread row in the loaded page read locally + on the
     /// server (server-side it marks ALL unread for the account, not just
     /// the loaded page — that's intentional so the badge clears even if
@@ -186,6 +233,7 @@ final class NotificationsInboxStore: ObservableObject {
         return NotificationItem(
             id: item.id, kind: item.kind, tripId: item.tripId,
             tripTitle: item.tripTitle, emoji: item.emoji,
+            commentId: item.commentId, commentText: item.commentText,
             isRead: true, createdAt: item.createdAt, actor: item.actor,
         )
     }

@@ -47,9 +47,20 @@ struct FeedView: View {
     /// that let depth compound unbounded through nested pushes.
     @State private var authorPath: [ProfilePreviewDest] = []
     @State private var reactionPickerTrip: SocialFeedTrip?
+    /// Long-pressed a tally pill — «кто отреагировал» sheet, opened on the
+    /// emoji that was pressed.
+    @State private var reactorsPeek: ReactorsPeek?
     @State private var showDiscover = false
     @State private var shareSheetData: (data: StoryShareData, url: String)?
     @State private var signInPrompt: SignInPromptSheet.Action?
+
+    /// Long-press peek payload — the trip whose reactor list to show and
+    /// which emoji chip to land on.
+    private struct ReactorsPeek: Identifiable {
+        let trip: SocialFeedTrip
+        let emoji: String
+        var id: String { "\(trip.id.uuidString)-\(emoji)" }
+    }
 
     /// A guest-tapped social action that needs an account. Captured before we
     /// present the sign-in prompt so the action can be RESUMED on success
@@ -166,20 +177,22 @@ struct FeedView: View {
                     PublicProfileView(accountId: id, preloaded: author, pushPath: $authorPath)
                 case .followList(let id, let mode):
                     FollowListView(accountId: id, mode: mode, pushPath: $authorPath)
-                case .trip(let id):
+                case .trip(let id, let focusComments):
                     TripDetailView(
                         tripId: id,
                         viewModel: TripsViewModel(tripManager: feedVM.tripManager),
-                        pushPath: $authorPath
+                        pushPath: $authorPath,
+                        focusComments: focusComments
                     )
-                case .socialTrip(let t):
+                case .socialTrip(let t, let focusComments):
                     SocialTripDetailView(
                         initialTrip: t,
                         onShare: {
                             if auth.isSignedIn { shareSocialTrip(t) }
                             else { pendingSocialAction = .share(t); signInPrompt = .share }
                         },
-                        pushPath: $authorPath
+                        pushPath: $authorPath,
+                        focusComments: focusComments
                     )
                 }
             }
@@ -318,6 +331,25 @@ struct FeedView: View {
                 .environmentObject(lang)
                 .environmentObject(auth)
                 .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .sheet(item: $reactorsPeek) { peek in
+            ReactionsListSheet(
+                tripId: peek.trip.id,
+                initialEmoji: peek.emoji,
+                onSelectUser: { author in
+                    reactorsPeek = nil
+                    // Push in the feed's own stack once the sheet is gone —
+                    // presenting and pushing in the same runloop drops one.
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 260_000_000)
+                        authorPath.cappedAppend(.profile(author.id, author))
+                    }
+                }
+            )
+            .environmentObject(lang)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showDiscover) {
             DiscoverView()
@@ -603,7 +635,20 @@ struct FeedView: View {
                             authorPath.cappedAppend(.socialTrip(trip))
                         }
                     },
+                    onTapComments: {
+                        // Same routing as a card tap, but the detail screen
+                        // lands on the discussion — tapping a comment count
+                        // and getting the poster made you scroll for it.
+                        if isOwn {
+                            authorPath.cappedAppend(.trip(trip.id, focusComments: true))
+                        } else {
+                            authorPath.cappedAppend(.socialTrip(trip, focusComments: true))
+                        }
+                    },
                     onTapAuthor: { authorPath.cappedAppend(.profile(trip.author.id, trip.author)) },
+                    onPeekReactors: { emoji in
+                        reactorsPeek = ReactorsPeek(trip: trip, emoji: emoji)
+                    },
                     onLongPress: {
                         // Owners can't react to their own trip (Strava rule)
                         // — long-press becomes a no-op there instead of

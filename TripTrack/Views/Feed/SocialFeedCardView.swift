@@ -12,7 +12,13 @@ struct SocialFeedCardView: View {
     /// header that matches the look of trips in the "Мои" tab.
     var isOwn: Bool = false
     var onTapCard: (() -> Void)?
+    /// Comment bubble — opens the trip scrolled to the discussion. Falls
+    /// back to a plain open when the host doesn't wire it.
+    var onTapComments: (() -> Void)?
     var onTapAuthor: (() -> Void)?
+    /// Long-press on a tally pill — host opens the "who reacted" list
+    /// filtered to that emoji.
+    var onPeekReactors: ((String) -> Void)?
     var onLongPress: (() -> Void)?
     var onReact: ((String) -> Void)?
     var onShare: (() -> Void)?
@@ -351,11 +357,11 @@ struct SocialFeedCardView: View {
             Spacer(minLength: 6)
 
             // Comment affordance (Figma FeedCard footer-right) — comments
-            // live in the trip detail, so this routes through `onTapCard`.
-            // Share moved to the card's «…» menu.
+            // live in the trip detail, so this opens it already scrolled to
+            // the discussion. Share moved to the card's «…» menu.
             Button {
                 Haptics.tap()
-                onTapCard?()
+                (onTapComments ?? onTapCard)?()
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "bubble.right")
@@ -468,14 +474,15 @@ struct SocialFeedCardView: View {
             emoji: tally.emoji,
             count: tally.count,
             isMine: isMine,
-            isEnabled: !isOwn
-        ) {
+            isEnabled: !isOwn,
+            onLongPress: onPeekReactors,
+            onTap: {
             // Removing must send the RAW stored emoji — the store's
             // same-emoji check is what turns the POST into an unreact.
             // Sending the canonical key for a legacy reaction would
             // silently REPLACE ❤️ with 👍 instead of removing it.
             onReact?(isMine ? (trip.myReaction ?? tally.emoji) : tally.emoji)
-        }
+        })
     }
 
     // MARK: - Formatters

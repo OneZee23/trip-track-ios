@@ -99,8 +99,8 @@ struct DriverLevelView: View {
                     xpInfoRow(icon: "map", text: isRu ? "+50 XP за новый регион" : "+50 XP for a new region", c: c)
                     xpInfoRow(icon: "arrow.right", text: isRu ? "×2 за поездки 200+ км" : "×2 for trips 200+ km", c: c)
 
-                    Text(isRu ? "Ранги: Новичок → Водитель → Путешественник → Исследователь → Штурман → Дальнобойщик → Легенда"
-                         : "Ranks: Beginner → Driver → Traveler → Explorer → Navigator → Trucker → Legend")
+                    Text(isRu ? "14 рангов до 110 уровня: Новичок → Водитель → Путешественник → Исследователь → Штурман → Дальнобойщик → Легенда дорог → Первопроходец → Кочевник → Покоритель дорог → Хранитель карт → Одиссей → Дух странствий → Вечный странник"
+                         : "14 ranks up to level 110: Beginner → Driver → Traveler → Explorer → Navigator → Trucker → Road Legend → Trailblazer → Nomad → Road Conqueror → Cartographer → Odysseus → Spirit of Journeys → Eternal Wanderer")
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
                         .padding(.top, 2)

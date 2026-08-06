@@ -17,6 +17,9 @@ struct SocialTripDetailView: View {
     /// of attaching a local `.navigationDestination`. Keeps us off the
     /// chained isPresented chain that triggers the depth-4 flash.
     var pushPath: Binding<[ProfilePreviewDest]>?
+    /// Opened from a card's comment affordance — scroll to the discussion
+    /// once the body has laid out instead of landing on the poster.
+    var focusComments: Bool = false
 
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var auth = AuthService.shared
@@ -92,6 +95,21 @@ struct SocialTripDetailView: View {
         trip.previewPolyline == nil && reactionsLoadFailed && photosLoadFailed
     }
 
+    /// Scroll target for the «Комментарии» block.
+    private static let commentsAnchor = "comments"
+
+    /// Deep-link landing: tapping the comment bubble on a card should put the
+    /// discussion on screen, not the poster. Waits a beat so the poster, map
+    /// and reaction rows have taken their final heights — scrolling before
+    /// that lands short of the section.
+    private func scrollToCommentsIfRequested(_ proxy: ScrollViewProxy) async {
+        guard focusComments else { return }
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        withAnimation(.easeOut(duration: 0.45)) {
+            proxy.scrollTo(Self.commentsAnchor, anchor: .top)
+        }
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
 
@@ -99,21 +117,24 @@ struct SocialTripDetailView: View {
             if showLoadError {
                 loadErrorState(c)
             } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        heroSection
-                            .frame(height: posterHeight)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            heroSection
+                                .frame(height: posterHeight)
 
-                        detailBody(c)
-                            .background(c.bg)
+                            detailBody(c)
+                                .background(c.bg)
+                        }
+                        .background(alignment: .top) {
+                            PosterPalette.navy
+                                .frame(height: posterHeight + 1000)
+                                .offset(y: -1000)
+                        }
                     }
-                    .background(alignment: .top) {
-                        PosterPalette.navy
-                            .frame(height: posterHeight + 1000)
-                            .offset(y: -1000)
-                    }
+                    .scrollIndicators(.hidden)
+                    .task { await scrollToCommentsIfRequested(proxy) }
                 }
-                .scrollIndicators(.hidden)
 
                 // Sticky floating back + «…» — matches TripDetailView pattern.
                 HStack {
@@ -527,6 +548,7 @@ struct SocialTripDetailView: View {
                     toastItem = ToastItem(type: .error, message: msg)
                 }
             )
+            .id(Self.commentsAnchor)
         }
         .padding(.horizontal, 16)
         .padding(.top, 22)

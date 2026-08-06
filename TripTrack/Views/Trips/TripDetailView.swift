@@ -10,6 +10,8 @@ struct TripDetailView: View {
     /// the SwiftUI NavigationStack flash at depth 4+ that the chained
     /// isPresented approach was triggering from Feed → Trip → Profile → …
     var pushPath: Binding<[ProfilePreviewDest]>?
+    /// See `SocialTripDetailView.focusComments`.
+    var focusComments: Bool = false
     @State private var trip: Trip?
     @State private var showPhotoPicker = false
     @State private var pickedImages: [UIImage] = []
@@ -93,10 +95,23 @@ struct TripDetailView: View {
             .first?.windows.first?.bounds.height ?? 844) * 0.45
     }
 
+    /// Scroll target for the «Комментарии» block.
+    private static let commentsAnchor = "comments"
+
+    /// See `SocialTripDetailView.scrollToCommentsIfRequested`.
+    private func scrollToCommentsIfRequested(_ proxy: ScrollViewProxy) async {
+        guard focusComments else { return }
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        withAnimation(.easeOut(duration: 0.45)) {
+            proxy.scrollTo(Self.commentsAnchor, anchor: .top)
+        }
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         ZStack(alignment: .topLeading) {
             if let trip {
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 0) {
                         heroSection(trip: trip)
@@ -116,6 +131,8 @@ struct TripDetailView: View {
                 .coordinateSpace(name: "detailScroll")
                 .scrollIndicators(.hidden)
                 .background(ScrollBounceDisabler())
+                .task { await scrollToCommentsIfRequested(proxy) }
+                }
 
                 // Sticky back + (⋯ delete) + share — floating over the poster.
                 HStack(spacing: 8) {
@@ -678,6 +695,7 @@ struct TripDetailView: View {
                         toastItem = ToastItem(type: .error, message: msg)
                     }
                 )
+                .id(Self.commentsAnchor)
             }
         }
         .padding(.horizontal, 16)

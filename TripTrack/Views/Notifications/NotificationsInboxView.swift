@@ -18,6 +18,8 @@ struct NotificationsInboxView: View {
     /// on Discover before. Same pattern as DiscoverView / FeedView.
     @State private var path: [ProfilePreviewDest] = []
     @State private var showPreferences = false
+    /// Gear popover («Настройки уведомлений» / «Отметить все прочитанными»).
+    @State private var showActions = false
     /// Client-side chip filter over already-loaded items. Pure in-memory —
     /// store, pagination and markAllRead are untouched. Unknown-kind rows
     /// stay visible under «Все».
@@ -46,7 +48,9 @@ struct NotificationsInboxView: View {
                 .sheet(isPresented: $showPreferences) {
                     NotificationPreferencesView()
                         .environmentObject(lang)
-                        .presentationDetents([.medium, .large])
+                        // .medium cut the footer note off below the fold with
+                        // nothing hinting there was more to scroll to.
+                        .presentationDetents([.fraction(0.88), .large])
                         .presentationDragIndicator(.visible)
                         // Nested sheets are separate presentations — the
                         // override on the inbox sheet itself doesn't reach
@@ -70,6 +74,9 @@ struct NotificationsInboxView: View {
                 }
         }
         .task { await store.refresh() }
+        // Peek-and-close: report whatever was on screen before the debounce
+        // had a chance to fire.
+        .onDisappear { Task { await store.flushSeen() } }
     }
 
     // MARK: - Header (Figma 117:1841)
@@ -90,20 +97,15 @@ struct NotificationsInboxView: View {
 
             Spacer(minLength: 8)
 
-            if store.unreadCount > 0 {
-                Button {
-                    Haptics.tap()
-                    Task { await store.markAllRead() }
-                } label: {
-                    Text(isRu ? "Прочитать все" : "Read all")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
+            // «Прочитать все» used to sit here as loose orange text wedged
+            // between the title and the circles. It now lives in the gear's
+            // popover: rows mark themselves read as you actually see them
+            // (see `noteSeen`), so the bulk action is the rare escape hatch
+            // for a long unread tail, not a primary control.
+            navCircleButton(icon: "gearshape") { showActions = true }
+                .popover(isPresented: $showActions, arrowEdge: .top) {
+                    ActionPopoverList(items: actionItems(isRu: isRu))
                 }
-                .buttonStyle(.plain)
-                .padding(.trailing, 2)
-            }
-
-            navCircleButton(icon: "gearshape") { showPreferences = true }
             navCircleButton(icon: "xmark") { dismiss() }
         }
         .padding(.horizontal, 20)
@@ -126,6 +128,35 @@ struct NotificationsInboxView: View {
         .buttonStyle(.plain)
     }
 
+    /// Gear popover contents. «Отметить все прочитанными» only appears
+    /// when there is actually something unread past what you've seen.
+    private func actionItems(isRu: Bool) -> [ActionPopoverList.Item] {
+        var items: [ActionPopoverList.Item] = [
+            .init(
+                title: isRu ? "Настройки уведомлений" : "Notification settings",
+                systemImage: "gearshape"
+            ) {
+                showActions = false
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 260_000_000)
+                    showPreferences = true
+                }
+            },
+        ]
+        if store.unreadCount > 0 {
+            items.append(
+                .init(
+                    title: isRu ? "Отметить все прочитанными" : "Mark all as read",
+                    systemImage: "checkmark.circle"
+                ) {
+                    showActions = false
+                    Task { await store.markAllRead() }
+                }
+            )
+        }
+        return items
+    }
+
     // MARK: - Filter chips
 
     private func chipsRow(c: AppTheme.Colors) -> some View {
@@ -146,17 +177,22 @@ struct NotificationsInboxView: View {
             Haptics.selection()
             chipFilter = filter
         } label: {
+            // Canon (Figma notifications screen): the active chip keeps the
+            // same white pill as the others and is marked by an accent ring
+            // + accent label. The peach fill we had made the selected chip
+            // read as a warning badge next to the plain ones.
             Text(filter.title(lang.language))
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.system(size: 12.5, weight: isOn ? .bold : .semibold))
                 .foregroundStyle(isOn ? AppTheme.accent : c.textSecondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(isOn ? AppTheme.orangeDim : c.card, in: Capsule())
+                .background(c.card, in: Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(isOn ? AppTheme.accent : Color.clear, lineWidth: 1)
+                        .stroke(isOn ? AppTheme.accent : Color.clear, lineWidth: 1.5)
                 )
-                .shadow(color: isOn ? .clear : .black.opacity(0.03), radius: 2, y: 1)
+                .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+                .animation(.easeOut(duration: 0.18), value: isOn)
         }
         .buttonStyle(.plain)
         // Active chip is only signalled by fill/stroke — expose the state to
@@ -215,6 +251,7 @@ struct NotificationsInboxView: View {
                     ForEach(today) { item in
                         row(item, c: c, isRu: isRu)
                             .onAppear {
+                                store.noteSeen(item)
                                 Task { await store.loadMoreIfNeeded(currentItem: pagingTrigger(for: item, in: items)) }
                             }
                     }
@@ -224,6 +261,7 @@ struct NotificationsInboxView: View {
                     ForEach(earlier) { item in
                         row(item, c: c, isRu: isRu)
                             .onAppear {
+                                store.noteSeen(item)
                                 Task { await store.loadMoreIfNeeded(currentItem: pagingTrigger(for: item, in: items)) }
                             }
                     }
@@ -239,13 +277,43 @@ struct NotificationsInboxView: View {
     /// Same endpoint/optimistic pattern as DiscoverView.toggleFollow, in
     /// the follow direction only. Reverts the local mark on failure so the
     /// button reappears.
-    private func followBack(_ userId: UUID) async {
+    private func followToggle(for userId: UUID, c: AppTheme.Colors, isRu: Bool) -> some View {
+        let isFollowed = followedBack.contains(userId)
+        return Button {
+            Haptics.selection()
+            if isFollowed { followedBack.remove(userId) } else { followedBack.insert(userId) }
+            Task { await setFollow(userId, follow: !isFollowed) }
+        } label: {
+            Text(isFollowed
+                 ? (isRu ? "Подписан" : "Following")
+                 : AppStrings.followBack(lang.language))
+                .font(.system(size: 12, weight: .bold))
+                .lineLimit(1)
+                .foregroundStyle(isFollowed ? c.text : .white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                // Pinned width: the two labels differ in length and the row
+                // content jumped on every toggle without it (same fix as the
+                // Discover row button).
+                .frame(minWidth: 92)
+                .background(isFollowed ? c.cardAlt : AppTheme.accent, in: Capsule())
+                .overlay(
+                    Capsule().stroke(isFollowed ? c.borderBright : .clear, lineWidth: 1.5)
+                )
+                .animation(.easeOut(duration: 0.2), value: isFollowed)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Follow / unfollow, optimistic. Reverts the local mark on failure so
+    /// the button can't lie about the server state.
+    private func setFollow(_ userId: UUID, follow: Bool) async {
         do {
             let req = SocialFollowRequest(targetAccountId: userId)
             let _: SocialFollowResponse = try await APIClient.shared.post(
-                APIEndpoint.socialFollow, body: req)
+                follow ? APIEndpoint.socialFollow : APIEndpoint.socialUnfollow, body: req)
         } catch {
-            followedBack.remove(userId)
+            if follow { followedBack.remove(userId) } else { followedBack.insert(userId) }
         }
     }
 
@@ -266,49 +334,59 @@ struct NotificationsInboxView: View {
             Haptics.tap()
             handleTap(item)
         } label: {
-            HStack(alignment: .top, spacing: 12) {
+            // Three fixed zones instead of one run-on sentence: marker rail,
+            // identity (avatar + kind badge), then a stacked text block —
+            // WHO on line one, WHAT on line two, WHEN on line three. The old
+            // row concatenated all of it into a single wrapping paragraph, so
+            // the verb landed in a different place on every card and the eye
+            // had nothing to anchor on. Instagram / Strava / GitHub all use
+            // this same name-then-action-then-time stack.
+            HStack(alignment: .center, spacing: 11) {
+                // Unread marker on the leading edge (Mail-style), centred on
+                // the row. On the right it sat next to the follow-back
+                // button, where two round accent shapes fought each other.
+                Circle()
+                    .fill(item.isRead ? Color.clear : AppTheme.accent)
+                    .frame(width: 7, height: 7)
+                    .animation(.easeOut(duration: 0.25), value: item.isRead)
+
                 avatar(item, c: c)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    titleLine(item, c: c, isRu: isRu)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(actorName(item, isRu: isRu))
+                        .font(.inter(14, weight: .bold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+
+                    Text(actionLine(item, isRu: isRu))
+                        .font(.inter(13))
+                        .foregroundStyle(c.textSecondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
                     Text(RelativeTripDate.string(from: item.createdAt, language: lang.language))
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(c.textTertiary)
+                        .padding(.top, 1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Follow rows get a one-tap follow-back (Figma 117:1841).
-                // SocialAuthor carries no isFollowing flag, so the button
-                // shows until tapped this session; already-following users
-                // just get idempotent server success.
-                if item.typedKind == .follow, let actor = item.actor,
-                   !followedBack.contains(actor.id) {
-                    Button {
-                        Haptics.tap()
-                        followedBack.insert(actor.id)
-                        Task { await followBack(actor.id) }
-                    } label: {
-                        Text(AppStrings.followBack(lang.language))
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(AppTheme.accent, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if !item.isRead {
-                    // Strava-style unread dot — a tiny accent disc on the
-                    // right edge so the user can tell at a glance which
-                    // rows are new without reading every line.
-                    Circle()
-                        .fill(AppTheme.accent)
-                        .frame(width: 8, height: 8)
-                        .padding(.top, 6)
+                // Follow rows get a one-tap follow-back that then STAYS as
+                // a «Подписан» toggle (canon). It used to just fade away,
+                // which read as "did that even work?" and left no way back.
+                if item.typedKind == .follow, let actor = item.actor {
+                    followToggle(for: actor.id, c: c, isRu: isRu)
                 }
             }
             .padding(11)
+            .background(
+                // Unread rows sit on a whisper of accent so a glance down
+                // the list separates new from seen even after the dot has
+                // been cleared by the read-on-sight pass.
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(item.isRead ? Color.clear : AppTheme.accent.opacity(0.05))
+            )
             .surfaceCard(cornerRadius: 16)
             .contentShape(Rectangle())
         }
@@ -317,70 +395,82 @@ struct NotificationsInboxView: View {
 
     private func avatar(_ item: NotificationItem, c: AppTheme.Colors) -> some View {
         // Actor rows: warm cardAlt disc. System rows (no actor): tinted
-        // accent disc + the payload emoji.
+        // accent disc + the payload emoji. The kind rides as a badge on the
+        // corner (Instagram/Strava pattern) so the row type is readable from
+        // the left rail alone — that's what lets the sentence lose the inline
+        // emoji that used to shove the text around.
         Circle()
             .fill(item.actor == nil ? AppTheme.accent.opacity(0.15) : c.cardAlt)
-            .frame(width: 36, height: 36)
+            .frame(width: 40, height: 40)
             .overlay {
                 Text(item.actor?.avatarEmoji ?? item.emoji ?? "🚗")
-                    .font(.system(size: 19))
+                    .font(.system(size: 20))
+            }
+            .overlay(alignment: .bottomTrailing) {
+                kindBadge(item, c: c)
+                    .offset(x: 3, y: 3)
             }
     }
 
     @ViewBuilder
-    private func titleLine(_ item: NotificationItem, c: AppTheme.Colors, isRu: Bool) -> some View {
-        let actorName = item.actor?.displayName?.trimmingCharacters(in: .whitespaces).nilIfEmpty
-            ?? (isRu ? "Кто-то" : "Someone")
+    private func kindBadge(_ item: NotificationItem, c: AppTheme.Colors) -> some View {
+        let size: CGFloat = 18
         switch item.typedKind {
         case .reaction:
-            // "Иван отреагировал 🔥 на Krasnodar" — verb per Figma 117:1875
-            // (the verb-less "Иван 🔥 на …" read as a fragment next to the
-            // follow/comment rows, which keep theirs). Title can be long, so
-            // cap to 2 lines. Mixed weights per Figma: actor bold, verb
-            // regular, object semibold.
-            (
-                Text(actorName).font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(c.text)
-                + Text(isRu ? " отреагировал" : " reacted").font(.system(size: 14))
-                    .foregroundStyle(c.textSecondary)
-                + Text(" \(item.emoji ?? "🔥")")
-                + Text(isRu ? " на " : " to ").font(.system(size: 14)).foregroundStyle(c.textSecondary)
-                + Text(item.tripTitle ?? "—").font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(c.text)
-            )
-            .lineLimit(2)
-            .multilineTextAlignment(.leading)
-        case .comment:
-            // "Иван прокомментировал(а) Krasnodar" — same anatomy as the
-            // reaction row: actor + verb + trip title.
-            (
-                Text(actorName).font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(c.text)
-                + Text(isRu ? " прокомментировал(а) " : " commented on ")
-                    .font(.system(size: 14))
-                    .foregroundStyle(c.textSecondary)
-                + Text(item.tripTitle ?? "—").font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(c.text)
-            )
-            .lineLimit(2)
-            .multilineTextAlignment(.leading)
+            Circle()
+                .fill(c.card)
+                .frame(width: size, height: size)
+                .overlay {
+                    ReactionIconView(
+                        emoji: ReactionEmoji.canonical(item.emoji ?? "🔥"),
+                        size: 11,
+                        filled: true,
+                        tint: AppTheme.accent
+                    )
+                }
+                .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
         case .follow:
-            (
-                Text(actorName).font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(c.text)
-                + Text(isRu ? " подписался на Вас" : " is now following you")
-                    .font(.system(size: 14))
-                    .foregroundStyle(c.textSecondary)
-            )
-            .lineLimit(2)
-            .multilineTextAlignment(.leading)
+            badgeCircle("person.fill.badge.plus", tint: AppTheme.accent, c: c, size: size)
+        case .comment:
+            badgeCircle("bubble.right.fill", tint: AppTheme.accent, c: c, size: size)
         case .none:
-            // Forward-compat — server rolls out a new kind we don't
-            // recognise, render a neutral fallback so the row still has
-            // SOME meaning.
-            Text(actorName)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(c.text)
+            EmptyView()
+        }
+    }
+
+    private func badgeCircle(
+        _ systemImage: String, tint: Color, c: AppTheme.Colors, size: CGFloat
+    ) -> some View {
+        Circle()
+            .fill(c.card)
+            .frame(width: size, height: size)
+            .overlay {
+                Image(systemName: systemImage)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(tint)
+            }
+            .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+    }
+
+    private func actorName(_ item: NotificationItem, isRu: Bool) -> String {
+        item.actor?.displayName?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+            ?? (isRu ? "Кто-то" : "Someone")
+    }
+
+    /// Line two — the action, written as a plain phrase with the object in
+    /// quotes so the eye can find it without parsing the whole row.
+    private func actionLine(_ item: NotificationItem, isRu: Bool) -> String {
+        let trip = item.tripTitle?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+            ?? AppStrings.activityYourTrip(lang.language)
+        switch item.typedKind {
+        case .reaction:
+            return AppStrings.activityReactedTo(lang.language, trip)
+        case .follow:
+            return AppStrings.activityFollowedYou(lang.language)
+        case .comment:
+            return AppStrings.activityCommented(lang.language, text: item.commentText, trip: trip)
+        case .none:
+            return trip
         }
     }
 

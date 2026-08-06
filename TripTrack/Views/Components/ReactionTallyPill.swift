@@ -17,6 +17,10 @@ struct ReactionTallyPill: View {
     /// Owners can't react to their own trip (Strava rule) — the pill still
     /// renders, it just doesn't respond or fire feedback.
     var isEnabled: Bool = true
+    /// Telegram-style peek at who reacted. Fires on long-press with this
+    /// pill's emoji so the list can open filtered to it. Unwired = no
+    /// gesture attached, so the pill keeps its plain tap behaviour.
+    var onLongPress: ((String) -> Void)?
     var onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -60,6 +64,27 @@ struct ReactionTallyPill: View {
                 SpringKeyframe(isMine ? 1.16 : 0.88, duration: 0.13, spring: .snappy)
                 SpringKeyframe(1.0, duration: 0.3, spring: .bouncy)
             }
+        }
+        // Attached only when the host wants it: an always-on long-press
+        // would swallow the card's own long-press (reaction picker) on the
+        // screens that don't show a reactor list.
+        .modifier(ReactionPillLongPress(emoji: emoji, action: onLongPress))
+    }
+}
+
+/// Long-press-to-peek, conditional on the host wiring `onLongPress`.
+private struct ReactionPillLongPress: ViewModifier {
+    let emoji: String
+    let action: ((String) -> Void)?
+
+    func body(content: Content) -> some View {
+        if let action {
+            content.onLongPressGesture(minimumDuration: 0.35) {
+                Haptics.action()
+                action(emoji)
+            }
+        } else {
+            content
         }
     }
 }

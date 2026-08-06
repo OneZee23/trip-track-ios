@@ -18,6 +18,10 @@ struct NotificationItem: Codable, Identifiable, Hashable {
     let tripId: UUID?
     let tripTitle: String?
     let emoji: String?
+    /// Comment rows only (server 6.1+): which comment, and a short excerpt
+    /// of it. Optional so older servers keep decoding.
+    let commentId: UUID?
+    let commentText: String?
     let isRead: Bool
     let createdAt: Date
     let actor: SocialAuthor?

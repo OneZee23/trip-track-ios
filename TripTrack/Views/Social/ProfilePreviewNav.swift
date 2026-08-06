@@ -15,8 +15,18 @@ private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 enum ProfilePreviewDest: Hashable {
     case profile(UUID, SocialAuthor?)
     case followList(UUID, FollowListMode)
-    case trip(UUID)
-    case socialTrip(SocialFeedTrip)
+    /// `focusComments` = opened from a card's comment affordance, so the
+    /// detail screen scrolls straight down to the discussion instead of
+    /// landing on the poster and making the user hunt for it.
+    case trip(UUID, focusComments: Bool)
+    case socialTrip(SocialFeedTrip, focusComments: Bool)
+
+    /// Plain-open shorthands — every existing `.trip(id)` / `.socialTrip(t)`
+    /// call site keeps working and means "open at the top".
+    static func trip(_ id: UUID) -> Self { .trip(id, focusComments: false) }
+    static func socialTrip(_ trip: SocialFeedTrip) -> Self {
+        .socialTrip(trip, focusComments: false)
+    }
 }
 
 extension Array where Element == ProfilePreviewDest {
