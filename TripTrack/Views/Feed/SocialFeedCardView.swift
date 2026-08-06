@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import OSLog
 
 /// Strava-style feed card for social feed items (author's trips).
 /// Visual layout mirrors FeedTripCardView but shows author row instead of vehicle,
@@ -79,6 +80,23 @@ struct SocialFeedCardView: View {
         }
         .surfaceCard(cornerRadius: 16)
         .accessibilityIdentifier("social_trip_card")
+        .onAppear { logMapDiagnostics() }
+    }
+
+    // MARK: - Diagnostics
+
+    /// Lands in the on-device journal (Я → журнал логов, com.triptrack
+    /// subsystem) so «карта не отображается» reports come with data instead
+    /// of guesswork: exactly what the canvas guard saw for each card.
+    private static let mapLog = Logger(subsystem: "com.triptrack", category: "feedcard")
+    private static var loggedTripIds = Set<UUID>()
+
+    private func logMapDiagnostics() {
+        guard !Self.loggedTripIds.contains(trip.id) else { return }
+        Self.loggedTripIds.insert(trip.id)
+        let coords = FeedRouteSampler.capped(trip.previewCoordinates)
+        let shown = coords.count > 3 && trip.distance >= 100
+        Self.mapLog.info("card map \(trip.id.uuidString.prefix(8), privacy: .public) '\(trip.title ?? "—", privacy: .public)': polyB64=\(trip.previewPolyline?.count ?? -1) coords=\(coords.count) dist=\(Int(trip.distance)) canvas=\(shown ? "SHOWN" : "HIDDEN", privacy: .public)")
     }
 
     // MARK: - Author Row
