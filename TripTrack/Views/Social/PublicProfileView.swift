@@ -145,32 +145,36 @@ struct PublicProfileView: View {
                     // buttons at all (the actions would just bounce them to
                     // the sign-in sheet, which is a confusing UX for
                     // moderation controls).
-                    HStack(spacing: 2) {
-                        Button(role: .destructive) {
-                            Haptics.tap()
-                            showBlockConfirm = true
+                    // Single «…» entry point (Figma 117:2335) — hosts both
+                    // «Пожаловаться» (wires the previously dormant
+                    // `ReportSheet`) and block/unblock. The block hand used
+                    // to sit as its own icon right next to «…»: two tiny
+                    // targets 2pt apart in the same corner, one of them a
+                    // one-tap path into a destructive confirm.
+                    Menu {
+                        Button {
+                            showReportSheet = true
                         } label: {
-                            Image(systemName: isBlocked ? "hand.raised.slash" : "hand.raised.fill")
-                                .font(.system(size: 20))
-                                .foregroundStyle(c.textTertiary)
+                            Label(AppStrings.reportProfileAction(lang.language),
+                                  systemImage: "exclamationmark.bubble")
                         }
 
-                        // «…» menu (Figma 117:2335) — hosts «Пожаловаться»,
-                        // wiring the previously dormant `ReportSheet`.
-                        Menu {
-                            Button(role: .destructive) {
-                                showReportSheet = true
-                            } label: {
-                                Label(AppStrings.reportProfileAction(lang.language),
-                                      systemImage: "exclamationmark.bubble")
-                            }
+                        Button(role: isBlocked ? nil : .destructive) {
+                            showBlockConfirm = true
                         } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 20))
-                                .foregroundStyle(c.textTertiary)
-                                .frame(width: 28, height: 28)
-                                .contentShape(Rectangle())
+                            Label(
+                                AppStrings.blockProfileAction(lang.language, isBlocked: isBlocked),
+                                systemImage: isBlocked ? "hand.raised.slash" : "hand.raised.fill"
+                            )
                         }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 20))
+                            .foregroundStyle(c.textTertiary)
+                            // 34×34 matches NavBackButton's target — the old
+                            // 28pt box was under the HIG minimum.
+                            .frame(width: 34, height: 34)
+                            .contentShape(Rectangle())
                     }
                 }
             }

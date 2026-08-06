@@ -1789,6 +1789,13 @@ enum AppStrings {
     static func reportProfileAction(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Пожаловаться" : "Report"
     }
+    /// «…» menu entry on a public profile — toggles with the block state.
+    static func blockProfileAction(
+        _ lang: LanguageManager.Language, isBlocked: Bool
+    ) -> String {
+        if isBlocked { return lang == .ru ? "Разблокировать" : "Unblock" }
+        return lang == .ru ? "Заблокировать" : "Block"
+    }
     /// Comment-create throttle (10/min server-side).
     static func commentRateLimited(_ lang: LanguageManager.Language) -> String {
         lang == .ru
