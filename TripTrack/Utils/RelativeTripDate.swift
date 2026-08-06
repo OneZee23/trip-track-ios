@@ -4,8 +4,8 @@ import Foundation
 ///
 ///   < 1 min                       Just now / Только что
 ///   < 1 hour, same day            5 min ago / 5 мин назад
-///   same calendar day             Today, 14:30 / Сегодня, 14:30
-///   previous calendar day         Yesterday, 14:30 / Вчера, 14:30
+///   same calendar day             Today at 14:30 / Сегодня в 14:30
+///   previous calendar day         Yesterday at 14:30 / Вчера в 14:30
 ///   2–6 days ago                  3 days ago / 3 дня назад
 ///   ≥ 7 days, same year           12 Apr / 12 апр.
 ///   different year                12 Apr 2025 / 12 апр. 2025
@@ -45,15 +45,15 @@ enum RelativeTripDate {
                     : (m == 1 ? "1 min ago" : "\(m) min ago")
             }
             return language == .ru
-                ? "Сегодня, \(timeString(date, language: language))"
-                : "Today, \(timeString(date, language: language))"
+                ? "Сегодня в \(timeString(date, language: language))"
+                : "Today at \(timeString(date, language: language))"
         }
 
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
            calendar.isDate(date, inSameDayAs: yesterday) {
             return language == .ru
-                ? "Вчера, \(timeString(date, language: language))"
-                : "Yesterday, \(timeString(date, language: language))"
+                ? "Вчера в \(timeString(date, language: language))"
+                : "Yesterday at \(timeString(date, language: language))"
         }
 
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date),
@@ -107,7 +107,10 @@ enum RelativeTripDate {
         case (.en, true):  f = enDateNoYear
         case (.en, false): f = enDateFull
         }
-        return f.string(from: date)
+        let s = f.string(from: date)
+        // ru_RU "MMM" renders «апр.» — the Figma meta canon is dotless
+        // («12 апр · Карелия»).
+        return language == .ru ? s.replacingOccurrences(of: ".", with: "") : s
     }
 
     // MARK: - Cached formatters

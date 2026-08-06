@@ -70,16 +70,16 @@ final class RelativeTripDateTests: XCTestCase {
 
     func testOneHourAgoStartsTodayBucket() {
         // anchor is today at noon. anchor - 1h = today at 11:00. Same calendar
-        // day → "Today, 11:00".
+        // day → "Today at 11:00".
         let date = anchor.addingTimeInterval(-3600)
         let result = RelativeTripDate.string(from: date, now: anchor, language: .en)
-        XCTAssertTrue(result.hasPrefix("Today,"), "Expected Today prefix, got: \(result)")
+        XCTAssertTrue(result.hasPrefix("Today at"), "Expected Today prefix, got: \(result)")
     }
 
     func testTodayBucketRussianPrefix() {
         let date = anchor.addingTimeInterval(-3600)
         let result = RelativeTripDate.string(from: date, now: anchor, language: .ru)
-        XCTAssertTrue(result.hasPrefix("Сегодня,"), "Expected Сегодня prefix, got: \(result)")
+        XCTAssertTrue(result.hasPrefix("Сегодня в"), "Expected Сегодня prefix, got: \(result)")
     }
 
     // MARK: - yesterday bucket
@@ -90,7 +90,7 @@ final class RelativeTripDateTests: XCTestCase {
             return XCTFail("Calendar arithmetic failed")
         }
         let result = RelativeTripDate.string(from: yesterday, now: anchor, language: .en)
-        XCTAssertTrue(result.hasPrefix("Yesterday,"), "Expected Yesterday prefix, got: \(result)")
+        XCTAssertTrue(result.hasPrefix("Yesterday at"), "Expected Yesterday prefix, got: \(result)")
     }
 
     func testYesterdayBucketRussianPrefix() {
@@ -99,7 +99,7 @@ final class RelativeTripDateTests: XCTestCase {
             return XCTFail("Calendar arithmetic failed")
         }
         let result = RelativeTripDate.string(from: yesterday, now: anchor, language: .ru)
-        XCTAssertTrue(result.hasPrefix("Вчера,"), "Expected Вчера prefix, got: \(result)")
+        XCTAssertTrue(result.hasPrefix("Вчера в"), "Expected Вчера prefix, got: \(result)")
     }
 
     // MARK: - days-ago bucket (2-6)
