@@ -167,8 +167,11 @@ struct NotificationsInboxView: View {
                 }
             }
             .padding(.horizontal, 14)
+            // Breathing room inside the scroll clip so neither the ring nor
+            // the card shadow gets shaved.
+            .padding(.vertical, 3)
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
     }
 
     private func chip(_ filter: InboxChipFilter, c: AppTheme.Colors) -> some View {
@@ -187,9 +190,13 @@ struct NotificationsInboxView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 .background(c.card, in: Capsule())
+                // `strokeBorder`, not `stroke`: a centred stroke puts half
+                // its width outside the shape, and the enclosing horizontal
+                // ScrollView clipped exactly that half off the top and
+                // bottom of the ring.
                 .overlay(
                     Capsule()
-                        .stroke(isOn ? AppTheme.accent : Color.clear, lineWidth: 1.5)
+                        .strokeBorder(isOn ? AppTheme.accent : Color.clear, lineWidth: 1.5)
                 )
                 .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
                 .animation(.easeOut(duration: 0.18), value: isOn)
@@ -342,14 +349,6 @@ struct NotificationsInboxView: View {
             // had nothing to anchor on. Instagram / Strava / GitHub all use
             // this same name-then-action-then-time stack.
             HStack(alignment: .center, spacing: 11) {
-                // Unread marker on the leading edge (Mail-style), centred on
-                // the row. On the right it sat next to the follow-back
-                // button, where two round accent shapes fought each other.
-                Circle()
-                    .fill(item.isRead ? Color.clear : AppTheme.accent)
-                    .frame(width: 7, height: 7)
-                    .animation(.easeOut(duration: 0.25), value: item.isRead)
-
                 avatar(item, c: c)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -382,12 +381,21 @@ struct NotificationsInboxView: View {
             .padding(11)
             .background(
                 // Unread rows sit on a whisper of accent so a glance down
-                // the list separates new from seen even after the dot has
-                // been cleared by the read-on-sight pass.
+                // the list separates new from seen.
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(item.isRead ? Color.clear : AppTheme.accent.opacity(0.05))
             )
             .surfaceCard(cornerRadius: 16)
+            // Unread stripe ON the card edge rather than a dot in its own
+            // column: a dedicated marker rail left a dead gap in front of
+            // every read row, which is most of them.
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(item.isRead ? Color.clear : AppTheme.accent)
+                    .frame(width: 3.5)
+                    .padding(.vertical, 14)
+                    .animation(.easeOut(duration: 0.25), value: item.isRead)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
