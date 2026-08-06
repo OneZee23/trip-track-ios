@@ -32,7 +32,14 @@ struct CustomNavBar<Trailing: View>: View {
             }
         }
         .padding(.horizontal, 14)
-        .frame(minHeight: 44)
+        // Figma canon for every pushed screen that uses this bar (profile
+        // 117:943, Discover 117:275, Activity 117:1853): a 50pt bar whose
+        // 34pt control row is inset 8pt from the top, i.e. the controls
+        // clear the status bar by 8pt. We rendered a 44pt bar with the row
+        // centred (~5pt) — 6pt shorter and 3pt higher than the design, which
+        // is what made the row read as glued to the top edge.
+        .padding(.vertical, 8)
+        .frame(minHeight: 50)
         .frame(maxWidth: .infinity)
         .background(c.bg)
         // Per-destination NavBarKiller in addition to any root-level one.
