@@ -37,6 +37,12 @@ struct NavCircleIcon: View {
             )
             .padding(5)
             .contentShape(Circle())
+            // Separate kind, separate shape: UIKit builds the preview plate
+            // it flashes behind a `Menu` label on dismissal from the CONTEXT
+            // MENU shape, not the interaction shape. Left at its default the
+            // plate is the view's bounds — a white rounded square whose
+            // corners poke out past our circle over the warm background.
+            .contentShape(.contextMenuPreview, Circle())
             .padding(-5)
     }
 }

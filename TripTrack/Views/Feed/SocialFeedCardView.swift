@@ -211,6 +211,9 @@ struct SocialFeedCardView: View {
                     .frame(width: 34, height: 34)
                     .padding(5)
                     .contentShape(Circle())
+                    // Plate shape for the menu-dismiss animation — see
+                    // `NavCircleIcon` for why this kind is separate.
+                    .contentShape(.contextMenuPreview, Circle())
                     .padding(-5)
             }
             .accessibilityIdentifier("feed_card_menu")
