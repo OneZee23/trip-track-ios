@@ -37,7 +37,7 @@ struct SocialFeedCardView: View {
                     trip.title, startDate: trip.startDate, language: lang.language
                 ), !title.isEmpty {
                     Text(title)
-                        .font(.system(size: 17, weight: .heavy))
+                        .font(.inter(17, weight: .heavy))
                         .tracking(-0.085)
                         .foregroundStyle(c.text)
                         .lineLimit(2)
@@ -117,7 +117,7 @@ struct SocialFeedCardView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(headerName)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.inter(14, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         // `truncationMode: .tail` is the default but be explicit
@@ -129,7 +129,10 @@ struct SocialFeedCardView: View {
                     // spec's gold varies per level, which is what the rank
                     // color already does. READ-ONLY use of `DriverRank`.
                     Text("LVL \(trip.author.profileLevel)")
-                        .font(.custom("Handjet-Black", size: 13))
+                        // fixedSize — Dynamic Type must not rescale the tag
+                        // (custom fonts scale with the text-size setting,
+                        // the SF chrome around them doesn't).
+                        .font(.custom("Handjet-Black", fixedSize: 13))
                         .foregroundStyle(DriverRank.from(level: trip.author.profileLevel).color)
                         .fixedSize()
                     if isOwn {
@@ -139,7 +142,7 @@ struct SocialFeedCardView: View {
                         // stops the pill from being squeezed by a long name —
                         // the name truncates first, the pill stays full size.
                         Text(isRu ? "Вы" : "You")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.inter(10, weight: .bold))
                             .foregroundStyle(AppTheme.accent)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -148,7 +151,7 @@ struct SocialFeedCardView: View {
                     }
                 }
                 Text(dateRegionText(isRu: isRu))
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
                     .lineLimit(1)
             }
@@ -172,7 +175,7 @@ struct SocialFeedCardView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
                     Text("+\(trip.photoCount)")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.inter(12, weight: .bold))
                         .foregroundStyle(c.textTertiary)
                 }
                 .padding(.horizontal, 8)
@@ -260,7 +263,7 @@ struct SocialFeedCardView: View {
     /// Big metric digits render in Inter ExtraBold — the design's actual
     /// typeface (115:61); SF Heavy is nominally the same 800 weight but
     /// visibly thinner, which the user flagged against the Figma render.
-    private static let metricValueFont = Font.custom("Inter-ExtraBold", size: 19).monospacedDigit()
+    private static let metricValueFont = Font.inter(19, weight: .heavy).monospacedDigit()
 
     private func metricBlock(value: String, unit: String, label: String, c: AppTheme.Colors) -> some View {
         metricBlock(
@@ -269,7 +272,7 @@ struct SocialFeedCardView: View {
                 .tracking(-0.19)
                 .foregroundColor(c.text)
                 + Text(unit.isEmpty ? "" : " \(unit)")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.inter(11, weight: .semibold))
                 .foregroundColor(c.textSecondary),
             label: label,
             c: c
@@ -283,7 +286,7 @@ struct SocialFeedCardView: View {
                 .lineLimit(1)
 
             Text(label)
-                .font(.system(size: 11, weight: .bold))
+                .font(.inter(11, weight: .bold))
                 .tracking(0.55)
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)
@@ -297,7 +300,7 @@ struct SocialFeedCardView: View {
     /// flat string.
     private func durationRuns(_ c: AppTheme.Colors) -> Text {
         let big = Self.metricValueFont
-        let small = Font.system(size: 11, weight: .semibold)
+        let small = Font.inter(11, weight: .semibold)
         let h = trip.duration / 3600
         let m = (trip.duration % 3600) / 60
         let minutes = Text("\(m)").font(big).foregroundColor(c.text)
@@ -323,7 +326,7 @@ struct SocialFeedCardView: View {
                         Image(systemName: "face.dashed")
                             .font(.system(size: 13, weight: .medium))
                         Text(lang.language == .ru ? "Пока нет реакций" : "No reactions yet")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.inter(12, weight: .semibold))
                     }
                     .foregroundStyle(c.textTertiary)
                     .padding(.horizontal, 10)
@@ -337,7 +340,7 @@ struct SocialFeedCardView: View {
                             Image(systemName: "face.smiling")
                                 .font(.system(size: 13, weight: .medium))
                             Text(lang.language == .ru ? "Реакция" : "React")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.inter(12, weight: .semibold))
                         }
                         .foregroundStyle(c.textSecondary)
                         .padding(.horizontal, 10)
@@ -396,7 +399,7 @@ struct SocialFeedCardView: View {
                     Image(systemName: "bubble.right")
                         .font(.system(size: 16, weight: .medium))
                     Text("\(trip.commentCount)")
-                        .font(.system(size: 12, weight: .bold).monospacedDigit())
+                        .font(.inter(12, weight: .bold).monospacedDigit())
                 }
                 .foregroundStyle(c.textSecondary)
                 // ≥34pt hit target (project floor) — the icon + 4pt padding
@@ -436,7 +439,7 @@ struct SocialFeedCardView: View {
                     tint: isMine ? AppTheme.accent : c.text
                 )
                 Text("\(tally.count)")
-                    .font(.system(size: 12, weight: .bold).monospacedDigit())
+                    .font(.inter(12, weight: .bold).monospacedDigit())
                     .foregroundStyle(isMine ? AppTheme.accent : c.textSecondary)
             }
             .padding(.horizontal, 10)

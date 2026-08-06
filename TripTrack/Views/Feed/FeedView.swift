@@ -381,7 +381,7 @@ struct FeedView: View {
                 NotificationCenter.default.post(name: .feedScrollToTop, object: nil)
             } label: {
                 Text(AppStrings.feed(lang.language))
-                    .font(.system(size: 28, weight: .heavy))
+                    .font(.inter(28, weight: .heavy))
                     .tracking(-0.56)
                     .foregroundStyle(c.text)
             }
@@ -470,7 +470,7 @@ struct FeedView: View {
             }
         } label: {
             Text(label)
-                .font(.system(size: 13, weight: .bold))
+                .font(.inter(13, weight: .bold))
                 .foregroundStyle(active ? c.text : c.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -657,12 +657,12 @@ struct FeedView: View {
             FeedIdleRing()
                 .padding(.top, 36)
             Text(AppStrings.followingEmptyTitle(lang.language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.top, 18)
             Text(AppStrings.followingEmptyBody(lang.language))
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .lineSpacing(6)
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
@@ -676,7 +676,7 @@ struct FeedView: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 16, weight: .bold))
                     Text(AppStrings.findPeople(lang.language))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.inter(14, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 18)
@@ -699,12 +699,12 @@ struct FeedView: View {
             FeedIdleRing()
                 .padding(.top, 36)
             Text(AppStrings.followingGuestTitle(lang.language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.top, 18)
             Text(AppStrings.followingGuestBody(lang.language))
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .lineSpacing(6)
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
@@ -733,10 +733,10 @@ struct FeedView: View {
                     .foregroundStyle(.orange)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(bannerTitle(isNetworkDown: isNetworkDown))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                         .foregroundStyle(c.text)
                     Text(bannerSubtitle(isNetworkDown: isNetworkDown))
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -780,7 +780,7 @@ struct FeedView: View {
                     .foregroundStyle(AppTheme.accent)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AppStrings.guestFeedBanner(lang.language))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                         .foregroundStyle(c.text)
                         .multilineTextAlignment(.leading)
                 }
@@ -803,12 +803,12 @@ struct FeedView: View {
                 .foregroundStyle(.red.opacity(0.8))
                 .padding(.top, 60)
             Text(isRu ? "Не удалось загрузить ленту" : "Couldn't load feed")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.inter(16, weight: .semibold))
                 .foregroundStyle(c.text)
             Text(isRu
                  ? "Проверьте соединение с интернетом и попробуйте снова."
                  : "Check your connection and try again.")
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -820,7 +820,7 @@ struct FeedView: View {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 12, weight: .semibold))
                     Text(isRu ? "Попробовать снова" : "Try again")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
@@ -855,12 +855,12 @@ struct FeedView: View {
                 .padding(.top, 40)
 
             Text(AppStrings.feedEmptyTitle(lang.language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(19, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
 
             Text(AppStrings.feedEmptyBody(lang.language))
-                .font(.system(size: 14))
+                .font(.inter(14))
                 .lineSpacing(6)
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
@@ -874,7 +874,7 @@ struct FeedView: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 16, weight: .semibold))
                     Text(AppStrings.findPeople(lang.language))
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.inter(14, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 18)
@@ -902,7 +902,7 @@ struct FeedView: View {
                         Text(isRu
                              ? "Опубликовать свою поездку"
                              : "Publish one of your trips")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.inter(14, weight: .semibold))
                     }
                     .foregroundStyle(AppTheme.accent)
                     .padding(.horizontal, 12)

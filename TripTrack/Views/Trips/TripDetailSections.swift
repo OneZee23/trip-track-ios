@@ -507,7 +507,7 @@ struct ReactionCountChip: View {
                 tint: style == .mine ? AppTheme.accent : c.text
             )
             Text("\(count)")
-                .font(.system(size: 12, weight: .bold).monospacedDigit())
+                .font(.inter(12, weight: .bold).monospacedDigit())
                 .foregroundStyle(countColor)
         }
         .padding(.horizontal, 10)

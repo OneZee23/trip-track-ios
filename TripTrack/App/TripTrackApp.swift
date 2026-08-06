@@ -13,23 +13,16 @@ struct TripTrackApp: App {
 
     init() {
         StartupTrace.mark("app init begin")
-        // Press Start 2P (pixel brand font) is registered at runtime instead
-        // of via Info.plist UIAppFonts — Info.plist is skip-worktree-protected
-        // local config in this repo, so the registration must live in code.
-        if let fontURL = Bundle.main.url(forResource: "PressStart2P-Regular", withExtension: "ttf") {
-            CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
-        }
-        // Handjet Black (Figma's LVL-tag font per the Components specs —
-        // tall/condensed, weight 900; PressStart2P used to stand in and
-        // rendered twice as wide as the canon).
-        if let fontURL = Bundle.main.url(forResource: "Handjet-Black", withExtension: "ttf") {
-            CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
-        }
-        // Inter ExtraBold — the Figma design's actual typeface for the big
-        // metric digits (FeedCard 115:61). SF Heavy is the same nominal 800
-        // but reads visibly thinner; the user asked for the Figma chunkiness.
-        if let fontURL = Bundle.main.url(forResource: "Inter-ExtraBold", withExtension: "ttf") {
-            CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+        // Bundled fonts are registered at runtime instead of via Info.plist
+        // UIAppFonts — Info.plist is skip-worktree-protected local config in
+        // this repo, so the registration must live in code. PressStart2P =
+        // pixel brand font; Handjet Black = LVL tag (Components spec);
+        // Inter (5 weights) = the design's actual typeface (see AppFont).
+        for font in ["PressStart2P-Regular", "Handjet-Black", "Inter-Regular",
+                     "Inter-Medium", "Inter-SemiBold", "Inter-Bold", "Inter-ExtraBold"] {
+            if let fontURL = Bundle.main.url(forResource: font, withExtension: "ttf") {
+                CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+            }
         }
         // Translate the pre-6.1.0 Int tab selection into the new AppTab key
         // BEFORE any view reads @AppStorage(AppTab.storageKey).
