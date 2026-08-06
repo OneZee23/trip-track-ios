@@ -94,9 +94,9 @@ struct SocialFeedCardView: View {
     private func logMapDiagnostics() {
         guard !Self.loggedTripIds.contains(trip.id) else { return }
         Self.loggedTripIds.insert(trip.id)
-        let coords = FeedRouteSampler.capped(trip.previewCoordinates)
-        let shown = coords.count > 3 && trip.distance >= 100
-        Self.mapLog.info("card map \(trip.id.uuidString.prefix(8), privacy: .public) '\(trip.title ?? "—", privacy: .public)': polyB64=\(trip.previewPolyline?.count ?? -1) coords=\(coords.count) dist=\(Int(trip.distance)) canvas=\(shown ? "SHOWN" : "HIDDEN", privacy: .public)")
+        let coords = trip.previewCoordinates
+        let shown = coords.count > 1
+        Self.mapLog.info("card map \(trip.id.uuidString.prefix(8), privacy: .public) '\(trip.title ?? "—", privacy: .public)': polyB64=\(trip.previewPolyline?.count ?? -1) coords=\(coords.count) dist=\(Int(trip.distance)) map=\(shown ? "SHOWN" : "HIDDEN", privacy: .public)")
     }
 
     // MARK: - Author Row
@@ -215,33 +215,22 @@ struct SocialFeedCardView: View {
         }
     }
 
-    // MARK: - Track (Figma FeedCard 115:38 — cinema route canvas)
+    // MARK: - Map
 
     @ViewBuilder
     private func mapSection(_ c: AppTheme.Colors) -> some View {
-        // Honor PosterRouteCanvas's ≤300-point perf contract: preview
-        // polylines are RDP-simplified but NOT capped — long trips can
-        // carry thousands of points and the feed draws many cards.
-        let coords = FeedRouteSampler.capped(trip.previewCoordinates)
-        // Degenerate-route guard: legacy demo/seed trips can carry a 2-3
-        // point polyline (or ~0 m distance) that renders as a couple of
-        // bare straight lines — reads as "the map is broken". Hide the
-        // canvas for those; real recordings always clear both bars.
-        if coords.count > 3, trip.distance >= 100 {
-            // Accent-colored route (speeds empty) is the documented
-            // deviation — the feed DTO carries no per-point speed series.
-            PosterRouteCanvas(
-                coordinates: coords,
-                speeds: [],
-                style: .cinema,
-                showsCar: false
-            )
-            .frame(height: 178)
-            .frame(maxWidth: .infinity)
-            // Figma: the canvas runs card-edge to card-edge with SQUARE
-            // corners (the card's own radius does any clipping). Rounding
-            // here read as an inset "photo" instead of the full-bleed band.
-            .clipped()
+        // Real street-map snapshot with the route on top — the release-app
+        // look, restored by explicit user decision (2026-08-06): «надо
+        // сделать так, как было до этого… мне реально надо показывать
+        // настоящий маршрут своих поездок». The Figma beige cinema canvas
+        // kept reading as a map that failed to load. MapSnapshotPreview
+        // caches rendered tiles per trip+theme, so the feed stays cheap.
+        let coords = trip.previewCoordinates
+        if coords.count > 1 {
+            MapSnapshotPreview(coordinates: coords, tripId: trip.id, height: 178)
+                .frame(height: 178)
+                .frame(maxWidth: .infinity)
+                .clipped()
         }
     }
 
@@ -479,24 +468,3 @@ struct SocialFeedCardView: View {
     }
 }
 
-// MARK: - Route sampler
-
-/// Uniform stride-cap for feed-card route previews. PosterRouteCanvas's
-/// perf contract wants ≤ ~300 points; RDP-simplified preview polylines are
-/// distance-bounded, not count-bounded, so multi-hour trips can exceed it
-/// by an order of magnitude — noticeable when a LazyVStack re-draws many
-/// canvases during fast scrolls. First/last points always survive.
-enum FeedRouteSampler {
-    static func capped(
-        _ coords: [CLLocationCoordinate2D], cap: Int = 300
-    ) -> [CLLocationCoordinate2D] {
-        guard coords.count > cap else { return coords }
-        let step = Double(coords.count - 1) / Double(cap - 1)
-        var out: [CLLocationCoordinate2D] = []
-        out.reserveCapacity(cap)
-        for i in 0..<cap {
-            out.append(coords[Int((Double(i) * step).rounded())])
-        }
-        return out
-    }
-}
