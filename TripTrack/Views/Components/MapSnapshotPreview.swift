@@ -16,6 +16,12 @@ struct MapSnapshotPreview: View {
 
     @Environment(\.colorScheme) private var scheme
     @State private var snapshot: UIImage?
+    /// First render attempt came back empty — stop the shimmer and show the
+    /// static route placeholder instead. Demo/seed trips (and any trip whose
+    /// region the snapshotter can't serve) used to shimmer FOREVER, reading
+    /// as an endless load; the static state says "no map for this one" while
+    /// the remaining retries still run quietly and swap tiles in on success.
+    @State private var failed = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -28,13 +34,26 @@ struct MapSnapshotPreview: View {
             // the old polyline-only placeholder as the "super-zoomed, blurry"
             // flash the user was seeing right before tiles landed.
             if snapshot == nil {
-                ZStack {
-                    Rectangle().fill(c.cardAlt)
-                    LightRoutePreview(coordinates: coordinates)
-                        .opacity(0.6)
+                if failed {
+                    ZStack(alignment: .bottomTrailing) {
+                        Rectangle().fill(c.cardAlt)
+                        LightRoutePreview(coordinates: coordinates)
+                            .opacity(0.6)
+                        Image(systemName: "map.slash")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(c.textTertiary)
+                            .padding(8)
+                    }
+                    .transition(.opacity)
+                } else {
+                    ZStack {
+                        Rectangle().fill(c.cardAlt)
+                        LightRoutePreview(coordinates: coordinates)
+                            .opacity(0.6)
+                    }
+                    .shimmer()
+                    .transition(.opacity)
                 }
-                .shimmer()
-                .transition(.opacity)
             }
 
             if let snapshot {
@@ -52,6 +71,7 @@ struct MapSnapshotPreview: View {
             // at a different width), which is what caused the brief "wrong
             // resolution" flash.
             snapshot = nil
+            failed = false
             await loadSnapshot(colors: c)
         }
     }
@@ -89,7 +109,7 @@ struct MapSnapshotPreview: View {
         // instead of having to manually pull.
         let backoffs: [UInt64] = [0, 1_500_000_000, 4_000_000_000] // ns: 0s, 1.5s, 4s
         var image: UIImage?
-        for delay in backoffs {
+        for (attempt, delay) in backoffs.enumerated() {
             if delay > 0 {
                 try? await Task.sleep(nanoseconds: delay)
                 if Task.isCancelled { return }
@@ -104,6 +124,12 @@ struct MapSnapshotPreview: View {
                 )
             }.value
             if image != nil { break }
+            // First miss → drop the shimmer NOW ("no map for this trip"),
+            // don't make the user watch a fake load for the full backoff
+            // ladder. Later attempts still run and swap tiles in if one lands.
+            if attempt == 0 {
+                withAnimation(.easeOut(duration: 0.25)) { failed = true }
+            }
         }
 
         guard let image else { return }
