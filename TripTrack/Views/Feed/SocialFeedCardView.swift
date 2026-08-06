@@ -257,10 +257,15 @@ struct SocialFeedCardView: View {
         }
     }
 
+    /// Big metric digits render in Inter ExtraBold — the design's actual
+    /// typeface (115:61); SF Heavy is nominally the same 800 weight but
+    /// visibly thinner, which the user flagged against the Figma render.
+    private static let metricValueFont = Font.custom("Inter-ExtraBold", size: 19).monospacedDigit()
+
     private func metricBlock(value: String, unit: String, label: String, c: AppTheme.Colors) -> some View {
         metricBlock(
             valueText: Text(value)
-                .font(.system(size: 19, weight: .heavy).monospacedDigit())
+                .font(Self.metricValueFont)
                 .tracking(-0.19)
                 .foregroundColor(c.text)
                 + Text(unit.isEmpty ? "" : " \(unit)")
@@ -287,10 +292,11 @@ struct SocialFeedCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// «4 ч 58 мин» / "4 h 58 min" — numbers big (19 heavy), units small
-    /// (11), matching the Figma metric canon instead of one flat string.
+    /// «4 ч 58 мин» / "4 h 58 min" — numbers big (19 Inter ExtraBold),
+    /// units small (11), matching the Figma metric canon instead of one
+    /// flat string.
     private func durationRuns(_ c: AppTheme.Colors) -> Text {
-        let big = Font.system(size: 19, weight: .heavy).monospacedDigit()
+        let big = Self.metricValueFont
         let small = Font.system(size: 11, weight: .semibold)
         let h = trip.duration / 3600
         let m = (trip.duration % 3600) / 60

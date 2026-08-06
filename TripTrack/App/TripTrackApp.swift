@@ -25,6 +25,12 @@ struct TripTrackApp: App {
         if let fontURL = Bundle.main.url(forResource: "Handjet-Black", withExtension: "ttf") {
             CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
         }
+        // Inter ExtraBold — the Figma design's actual typeface for the big
+        // metric digits (FeedCard 115:61). SF Heavy is the same nominal 800
+        // but reads visibly thinner; the user asked for the Figma chunkiness.
+        if let fontURL = Bundle.main.url(forResource: "Inter-ExtraBold", withExtension: "ttf") {
+            CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
+        }
         // Translate the pre-6.1.0 Int tab selection into the new AppTab key
         // BEFORE any view reads @AppStorage(AppTab.storageKey).
         AppTab.migrateLegacySelectedTabIfNeeded()
