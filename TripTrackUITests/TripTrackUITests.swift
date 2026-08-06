@@ -151,32 +151,30 @@ final class TripTrackUITests: XCTestCase {
             }
         }
         print("DETSHOT rows=\(app.descendants(matching: .any).matching(identifier: "profile_trip_row").count)")
-        let relivePill = app.buttons.matching(identifier: "detail_relive").firstMatch
+        let mapExpand = app.buttons.matching(identifier: "detail_map_expand").firstMatch
         if anyCard.waitForExistence(timeout: 3) {
             // Tap near the row's top — a partially covered row's geometric
             // center can sit under the tab pill, where tap() silently no-ops.
             anyCard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
         }
-        if !relivePill.waitForExistence(timeout: 4) {
+        if !mapExpand.waitForExistence(timeout: 4) {
             print("DETSHOT card tap did not open detail, trying title text")
             let title = app.staticTexts.matching(
                 NSPredicate(format: "label CONTAINS ',' AND label CONTAINS ':'")
             ).firstMatch
             if title.waitForExistence(timeout: 2) { title.tap() }
-            _ = relivePill.waitForExistence(timeout: 4)
+            _ = mapExpand.waitForExistence(timeout: 4)
         }
         sleep(2)
         snap("80_detail_top")
         win.swipeUp(); usleep(700_000); snap("81_detail_mid")
         win.swipeUp(); usleep(700_000); snap("82_detail_lower")
         win.swipeUp(); usleep(700_000); snap("83_detail_bottom")
-        // Back to top, then into the replay.
+        // Back to top, then into the fullscreen map.
         win.swipeDown(); win.swipeDown(); win.swipeDown(); usleep(700_000)
-        let relive = app.buttons.matching(identifier: "detail_relive").firstMatch
-        if relive.waitForExistence(timeout: 3) {
-            if !relive.isHittable { win.swipeDown(); usleep(700_000) }
-            relive.tap()
-            sleep(3); snap("84_replay")
+        if mapExpand.waitForExistence(timeout: 3), mapExpand.isHittable {
+            mapExpand.tap()
+            sleep(3); snap("84_fullscreen_map")
             pt(0.07, 0.05).tap(); sleep(1) // close circle top-left
         }
         pt(0.07, 0.05).tap(); sleep(1) // detail back circle

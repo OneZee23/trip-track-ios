@@ -33,9 +33,6 @@ struct TripDetailView: View {
     /// Downsampled (≤300 pts) coords/speeds/timestamps for the poster hero
     /// canvas + playback. The canvas repaints at display-link rate during
     /// «Прожить заново», so it must never chew through raw 10k-point tracks.
-    @State private var posterCoords: [CLLocationCoordinate2D] = []
-    @State private var posterSpeeds: [Double] = []
-    @State private var posterTimestamps: [Date] = []
     /// Downsampled (≤200 pts) chart series — empty when the trip carries
     /// no full trackPoints (sync-pulled preview-only trips) so the chart
     /// sections hide themselves.
@@ -74,7 +71,6 @@ struct TripDetailView: View {
     @StateObject private var routePlayback = RoutePlaybackController()
     /// Presents the fullscreen cinema replay (Figma 117:533). Timestamped
     /// own trips only; preview-only trips fall back to the inline crawl.
-    @State private var showReplay = false
     @ObservedObject private var auth = AuthService.shared
     /// Sign-in prompt for the signed-out edge state (e.g. «keep public and
     /// sign out» leaves own public trips visible): the comments composer
@@ -90,7 +86,12 @@ struct TripDetailView: View {
 
     /// Poster hero: 380pt of canvas below the status bar (Figma 360×380),
     /// with the navy canvas extending up under the status bar + scrim.
-    private var posterHeight: CGFloat { safeAreaTop + 380 }
+    /// Release map-hero height: ~45% of the screen (same as pre-6.1).
+    private var posterHeight: CGFloat {
+        (UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.windows.first?.bounds.height ?? 844) * 0.45
+    }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -106,8 +107,8 @@ struct TripDetailView: View {
                             .background(c.bg)
                     }
                     .background(alignment: .top) {
-                        // Over-scroll filler above the poster stays poster-navy.
-                        PosterPalette.navy
+                        // Over-scroll filler above the map (release value).
+                        Color(UIColor(white: 0.12, alpha: 1.0))
                             .frame(height: posterHeight + 1000)
                             .offset(y: -1000)
                     }
@@ -157,7 +158,7 @@ struct TripDetailView: View {
             } else {
                 // Loading skeleton
                 VStack(spacing: 0) {
-                    PosterPalette.navy
+                    c.cardAlt
                         .frame(height: posterHeight)
                         .shimmer()
                         .overlay { CarLoadingView() }
@@ -194,17 +195,6 @@ struct TripDetailView: View {
                 fogCutoffDate: trip?.endDate,
                 language: lang.language
             )
-        }
-        .fullScreenCover(isPresented: $showReplay) {
-            if let trip {
-                TripReplayView(
-                    trip: trip,
-                    coordinates: posterCoords,
-                    speeds: posterSpeeds,
-                    timestamps: posterTimestamps
-                )
-                .environmentObject(lang)
-            }
         }
         .confirmationDialog(
             AppStrings.deleteTrip(lang.language),
@@ -371,25 +361,6 @@ struct TripDetailView: View {
             cachedSpeeds = pts.map(\.speed)
             cachedTimestamps = pts.map(\.timestamp)
 
-            // Poster series (≤300 pts, index-aligned speed/timestamps).
-            let posterStep = max(1, pts.count / 300)
-            var pCoords: [CLLocationCoordinate2D] = []
-            var pSpeeds: [Double] = []
-            var pStamps: [Date] = []
-            for i in stride(from: 0, to: pts.count, by: posterStep) {
-                pCoords.append(pts[i].coordinate)
-                pSpeeds.append(pts[i].speed)
-                pStamps.append(pts[i].timestamp)
-            }
-            if (pts.count - 1) % posterStep != 0, let last = pts.last {
-                pCoords.append(last.coordinate)
-                pSpeeds.append(last.speed)
-                pStamps.append(last.timestamp)
-            }
-            posterCoords = pCoords
-            posterSpeeds = pSpeeds
-            posterTimestamps = pStamps
-
             // Chart series over cumulative distance (≤200 pts).
             let chartStep = max(1, pts.count / 200)
             var elev: [DetailChartPoint] = []
@@ -429,8 +400,6 @@ struct TripDetailView: View {
             // charts and the moving/stops bar stay hidden (no series).
             cachedCoordinates = Trip.decodePolyline(preview)
             cachedSpeeds = []
-            posterCoords = cachedCoordinates
-            posterSpeeds = []
         }
     }
 
@@ -463,98 +432,96 @@ struct TripDetailView: View {
         storyShare = (data, url)
     }
 
-    // MARK: - Poster hero
+    // MARK: - Map hero
+    // Release-style hero restored by explicit user decision (2026-08-06):
+    // real interactive street map with the speed-colored route, inline
+    // playback + fullscreen expand — NOT the Figma navy poster with the
+    // pixel car («что за машинка по маршруту? Надо как в релизной версии»).
+    // The Figma poster/cinema treatment stays only in TripReplayView.
 
     @ViewBuilder
     private func heroSection(trip: Trip) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            PosterRouteCanvas(
-                coordinates: posterCoords,
-                speeds: posterSpeeds,
-                playbackCoord: routePlayback.currentCoord,
-                playbackTrailIndex: routePlayback.currentTrailIndex
-            )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                // The poster is a stylized render — tap through to the real
-                // interactive map, same as the old expand button.
-                guard cachedCoordinates.count > 1 else { return }
-                Haptics.tap()
-                isMapFullscreen = true
-            }
-            // The Canvas is not an a11y element, so the tap-to-open-map flow
-            // was VoiceOver-unreachable — expose it as a button element.
-            .accessibilityElement()
-            .accessibilityLabel(AppStrings.openRouteMapA11y(lang.language))
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction {
-                guard cachedCoordinates.count > 1 else { return }
-                isMapFullscreen = true
+        let c = AppTheme.colors(for: scheme)
+        ZStack(alignment: .bottomTrailing) {
+            Group {
+                if cachedCoordinates.count > 1 {
+                    RouteMapView(
+                        coordinates: cachedCoordinates,
+                        speeds: cachedSpeeds,
+                        isInteractive: true,
+                        fogCutoffDate: trip.endDate,
+                        playbackCarCoord: routePlayback.currentCoord,
+                        playbackTrailIndex: routePlayback.currentTrailIndex
+                    )
+                } else {
+                    c.cardAlt
+                        .overlay {
+                            Image(systemName: "map")
+                                .font(.largeTitle)
+                                .foregroundStyle(c.textTertiary)
+                        }
+                }
             }
 
-            PosterLegibilityOverlay()
-
-            heroTextBlock(trip: trip)
-        }
-        .clipped()
-        .overlay(alignment: .top) { PosterTopScrim() }
-    }
-
-    private func heroTextBlock(trip: Trip) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(TripDetailFormat.posterDateLine(
-                date: trip.startDate, region: trip.region, lang: lang.language))
-                .font(.custom("PressStart2P-Regular", size: 9))
-                .foregroundStyle(.white.opacity(0.8))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-
-            heroTitle(trip: trip)
-                .padding(.top, 8)
-
-            if posterCoords.count > 1 {
-                Button {
-                    Haptics.tap()
-                    if posterTimestamps.count == posterCoords.count,
-                       !posterTimestamps.isEmpty {
-                        // Timestamped track → fullscreen cinema replay.
-                        showReplay = true
-                    } else {
-                        // Preview-only trips (sync-pulled, no timestamps)
-                        // keep the inline uniform-speed crawl.
+            if cachedCoordinates.count > 1 {
+                HStack(spacing: 8) {
+                    RoutePlaybackButton(isPlaying: routePlayback.isPlaying) {
                         routePlayback.toggle(
-                            coords: posterCoords,
-                            timestamps: nil,
+                            coords: cachedCoordinates,
+                            timestamps: cachedTimestamps.isEmpty ? nil : cachedTimestamps,
                             distanceMeters: trip.distance
                         )
                     }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: routePlayback.isPlaying ? "stop.fill" : "play.fill")
-                            .font(.system(size: 14, weight: .bold))
-                        Text(AppStrings.reliveTrip(lang.language))
-                            .font(.system(size: 15, weight: .bold))
+                    Button {
+                        Haptics.tap()
+                        isMapFullscreen = true
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.45), in: Circle())
                     }
-                    .foregroundStyle(PosterPalette.ctaText)
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 12)
-                    .background(.white, in: Capsule())
+                    .accessibilityIdentifier("detail_map_expand")
+                    .accessibilityLabel(AppStrings.openRouteMapA11y(lang.language))
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("detail_relive")
-                .padding(.top, 14)
+                .padding(.trailing, 12)
+                .padding(.bottom, 12)
             }
         }
-        .padding(.leading, 18)
-        .padding(.trailing, 16)
-        .padding(.bottom, 20)
+        // Speed-colour legend — collapsed pill below the floating back
+        // button; only when the route is speed-coloured. Corners are
+        // otherwise taken: back (top-left), ⋯/share (top-right), Apple
+        // attribution (bottom-left), play/expand (bottom-right).
+        .overlay(alignment: .topLeading) {
+            if cachedCoordinates.count > 1, !cachedSpeeds.isEmpty {
+                SpeedLegendView(language: lang.language, initiallyExpanded: false)
+                    .padding(.leading, 12)
+                    .padding(.top, safeAreaTop + 56)
+            }
+        }
+    }
+
+    /// Date-region line + editable title, on the theme background below the
+    /// map (the release layout). Replaces the poster text block.
+    private func titleBlock(trip: Trip, c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(TripDetailFormat.posterDateLine(
+                date: trip.startDate, region: trip.region, lang: lang.language))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(c.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            heroTitle(trip: trip, c: c)
+        }
         .animation(.easeInOut(duration: 0.25), value: isEditingTitle)
     }
 
     /// Hero title with the inline edit flow carried over from the pre-6.1
     /// identity block — tap the title (or the pencil) to edit in place.
     @ViewBuilder
-    private func heroTitle(trip: Trip) -> some View {
+    private func heroTitle(trip: Trip, c: AppTheme.Colors) -> some View {
         if isEditingTitle {
             HStack(spacing: 10) {
                 TextField(
@@ -562,7 +529,7 @@ struct TripDetailView: View {
                     text: $editedTitle
                 )
                 .font(.system(size: 26, weight: .heavy))
-                .foregroundStyle(.white)
+                .foregroundStyle(c.text)
                 .tint(AppTheme.accent)
                 .focused($isTitleFieldFocused)
                 .onSubmit { commitTitleEdit() }
@@ -573,7 +540,7 @@ struct TripDetailView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 20))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(c.textTertiary)
                 }
                 Button {
                     Haptics.action()
@@ -599,16 +566,15 @@ struct TripDetailView: View {
                     Text(trip.title ?? formattedDateFallback(trip.startDate))
                         .font(.system(size: 26, weight: .heavy))
                         .tracking(-0.52)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(c.text)
                         .lineLimit(2)
                         .minimumScaleFactor(0.7)
                         .multilineTextAlignment(.leading)
-                    // Figma shows no edit affordance on the poster — the
-                    // small pencil keeps the (kept) title-edit flow
-                    // discoverable. Flagged as a deliberate deviation.
+                    // The small pencil keeps the title-edit flow
+                    // discoverable.
                     Image(systemName: "pencil")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(c.textTertiary)
                 }
             }
             .buttonStyle(.plain)
@@ -628,6 +594,8 @@ struct TripDetailView: View {
         // so conditional sections (charts, badges, reactions) don't produce
         // uneven spacing when they appear/disappear.
         VStack(alignment: .leading, spacing: 22) {
+            titleBlock(trip: trip, c: c)
+
             chipsRow(trip: trip, c: c)
 
             VStack(alignment: .leading, spacing: 10) {
