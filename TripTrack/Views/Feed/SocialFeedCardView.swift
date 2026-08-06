@@ -20,6 +20,8 @@ struct SocialFeedCardView: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     // Report flow paused until moderation UI exists; state intentionally omitted.
+    /// «…» popover. Not a `Menu` — see `ActionPopoverList`.
+    @State private var showActions = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -190,15 +192,14 @@ struct SocialFeedCardView: View {
                 .fixedSize()
             }
 
-            // «…» menu (Figma FeedCard trailing) — share lives here now;
-            // the footer-right slot became the comment affordance. Report
-            // row deferred until moderation UI exists.
-            Menu {
-                Button {
-                    onShare?()
-                } label: {
-                    Label(AppStrings.share(lang.language), systemImage: "square.and.arrow.up")
-                }
+            // «…» (Figma FeedCard trailing) — share lives here now; the
+            // footer-right slot became the comment affordance. Report row
+            // deferred until moderation UI exists. Anchored popover rather
+            // than a `Menu` — see `ActionPopoverList` for the plate artifact
+            // a Menu leaves behind when it closes.
+            Button {
+                Haptics.tap()
+                showActions = true
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 20, weight: .medium))
@@ -211,7 +212,23 @@ struct SocialFeedCardView: View {
                     .contentShape(Circle())
                     .padding(-5)
             }
+            .buttonStyle(.plain)
             .accessibilityIdentifier("feed_card_menu")
+            .accessibilityLabel(AppStrings.moreActions(lang.language))
+            .popover(isPresented: $showActions, arrowEdge: .top) {
+                ActionPopoverList(items: [
+                    .init(
+                        title: AppStrings.share(lang.language),
+                        systemImage: "square.and.arrow.up"
+                    ) {
+                        showActions = false
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 260_000_000)
+                            onShare?()
+                        }
+                    },
+                ])
+            }
         }
     }
 

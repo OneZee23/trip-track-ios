@@ -75,6 +75,18 @@ struct PublicProfileView: View {
         }
     }
 
+    /// Close the «…» popover, then run its action. The gap matters: an alert
+    /// or sheet raised in the same runloop as the dismissal races the
+    /// transition and SwiftUI silently drops the second presentation — the
+    /// same one-shot-resume problem FeedView hits after sign-in.
+    private func runProfileAction(_ action: @escaping () -> Void) {
+        showProfileActions = false
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 260_000_000)
+            action()
+        }
+    }
+
     /// Fallback chain: server profile → preloaded summary → own Apple name
     /// → localized "Driver". The Apple-name step covers users whose server
     /// `displayName` is null because SIWA only returned a name on their
@@ -153,16 +165,8 @@ struct PublicProfileView: View {
                     // targets 2pt apart in the same corner, one of them a
                     // one-tap path into a destructive confirm.
                     //
-                    // Action sheet, NOT a `Menu`: a Menu is a UIKit context
-                    // menu, and on dismissal UIKit animates a snapshot of the
-                    // source view back down over ~0.9s on top of a rounded-
-                    // SQUARE plate plus its shadow. Against the warm bar that
-                    // plate's corners read as a translucent square frame
-                    // around our round button. It is not shapeable from
-                    // SwiftUI — neither `contentShape(_:)` nor
-                    // `contentShape(.contextMenuPreview, _:)` touches it
-                    // (both measured frame-by-frame off a screen recording).
-                    // A confirmation dialog has no preview machinery at all.
+                    // Anchored popover, NOT a `Menu` — see `ActionPopoverList`
+                    // for the plate artifact a Menu leaves behind on close.
                     Button {
                         Haptics.tap()
                         showProfileActions = true
@@ -171,6 +175,25 @@ struct PublicProfileView: View {
                     }
                     .accessibilityLabel(AppStrings.moreActions(lang.language))
                     .accessibilityIdentifier("profile_more")
+                    .popover(isPresented: $showProfileActions, arrowEdge: .top) {
+                        ActionPopoverList(items: [
+                            .init(
+                                title: AppStrings.reportProfileAction(lang.language),
+                                systemImage: "exclamationmark.bubble"
+                            ) {
+                                runProfileAction { showReportSheet = true }
+                            },
+                            .init(
+                                title: AppStrings.blockProfileAction(
+                                    lang.language, isBlocked: isBlocked
+                                ),
+                                systemImage: isBlocked ? "hand.raised.slash" : "hand.raised.fill",
+                                isDestructive: !isBlocked
+                            ) {
+                                runProfileAction { showBlockConfirm = true }
+                            },
+                        ])
+                    }
                 }
             }
         }
@@ -235,22 +258,6 @@ struct PublicProfileView: View {
             followListMode: $followListMode,
             enabled: pushPath == nil
         ))
-        .confirmationDialog(
-            resolvedDisplayName,
-            isPresented: $showProfileActions,
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.reportProfileAction(lang.language)) {
-                showReportSheet = true
-            }
-            Button(
-                AppStrings.blockProfileAction(lang.language, isBlocked: isBlocked),
-                role: isBlocked ? nil : .destructive
-            ) {
-                showBlockConfirm = true
-            }
-            Button(AppStrings.cancel(lang.language), role: .cancel) {}
-        }
         .alert(
             isBlocked
                 ? (lang.language == .ru ? "Разблокировать пользователя?" : "Unblock this user?")
