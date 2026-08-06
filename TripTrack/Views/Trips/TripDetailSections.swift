@@ -509,6 +509,10 @@ struct ReactionCountChip: View {
             Text("\(count)")
                 .font(.inter(12, weight: .bold).monospacedDigit())
                 .foregroundStyle(countColor)
+                // Rolls up as the reaction lands, down as it's taken back —
+                // mirrors `ReactionTallyPill` in the feed.
+                .contentTransition(.numericText(countsDown: style != .mine))
+                .animation(.snappy(duration: 0.26), value: count)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
@@ -517,6 +521,15 @@ struct ReactionCountChip: View {
             Capsule()
                 .stroke(style == .mine ? AppTheme.accent : Color.clear, lineWidth: 1.5)
         )
+        .animation(.easeOut(duration: 0.22), value: style)
+        .keyframeAnimator(initialValue: CGFloat(1), trigger: style == .mine) { view, scale in
+            view.scaleEffect(scale)
+        } keyframes: { _ in
+            KeyframeTrack {
+                SpringKeyframe(style == .mine ? 1.16 : 0.88, duration: 0.13, spring: .snappy)
+                SpringKeyframe(1.0, duration: 0.3, spring: .bouncy)
+            }
+        }
     }
 }
 

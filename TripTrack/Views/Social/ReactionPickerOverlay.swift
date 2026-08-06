@@ -82,7 +82,9 @@ struct ReactionPickerOverlay: View {
         // it highlights its canonical replacement in the palette.
         let isMine = currentReaction.map { ReactionEmoji.canonical($0) } == emoji
         return Button {
-            Haptics.success()
+            // Same directional feel as the tally pills: picking is a crisp
+            // click, un-picking the one already set is the muted variant.
+            if isMine { Haptics.reactionOff() } else { Haptics.reactionOn() }
             // Tapping my own (possibly legacy) reaction again must pass the
             // RAW stored emoji so the store's same-emoji check unreacts
             // instead of replacing ❤️ with 👍.

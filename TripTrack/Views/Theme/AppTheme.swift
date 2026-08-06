@@ -234,6 +234,8 @@ struct ShimmerModifier: ViewModifier {
 enum Haptics {
     private static let light = UIImpactFeedbackGenerator(style: .light)
     private static let medium = UIImpactFeedbackGenerator(style: .medium)
+    private static let rigid = UIImpactFeedbackGenerator(style: .rigid)
+    private static let soft = UIImpactFeedbackGenerator(style: .soft)
     private static let notification = UINotificationFeedbackGenerator()
     private static let selectionGen = UISelectionFeedbackGenerator()
 
@@ -242,6 +244,12 @@ enum Haptics {
     static func success() { notification.notificationOccurred(.success) }
     static func error() { notification.notificationOccurred(.error) }
     static func selection() { selectionGen.selectionChanged() }
+
+    /// Reaction lands — a crisp, sharp click (rigid reads as "snapped on").
+    static func reactionOn() { rigid.impactOccurred(intensity: 0.95) }
+    /// Reaction taken back — a duller, quieter thud at lower intensity, so
+    /// undoing never feels like casting another vote.
+    static func reactionOff() { soft.impactOccurred(intensity: 0.65) }
 }
 
 // MARK: - View Extensions

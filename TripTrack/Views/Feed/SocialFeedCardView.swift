@@ -168,6 +168,9 @@ struct SocialFeedCardView: View {
                 Haptics.tap()
                 onTapAuthor?()
             }
+            // UI tests reach the author row by id — tapping it by geometry
+            // lands on the card body (→ trip detail) on wider devices.
+            .accessibilityIdentifier("feed_card_author")
 
             if trip.photoCount > 0 {
                 HStack(spacing: 4) {
@@ -317,6 +320,44 @@ struct SocialFeedCardView: View {
 
     private func actionBar(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 6) {
+            reactionArea(c)
+                // Scoped to the breakdown so the row re-flows (pills sliding
+                // over, the empty-state copy fading back in when the last
+                // reaction goes) without animating unrelated card churn like
+                // map snapshots landing.
+                .animation(.spring(response: 0.34, dampingFraction: 0.78),
+                           value: trip.reactionBreakdown)
+
+            Spacer(minLength: 6)
+
+            // Comment affordance (Figma FeedCard footer-right) — comments
+            // live in the trip detail, so this routes through `onTapCard`.
+            // Share moved to the card's «…» menu.
+            Button {
+                Haptics.tap()
+                onTapCard?()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "bubble.right")
+                        .font(.system(size: 16, weight: .medium))
+                    Text("\(trip.commentCount)")
+                        .font(.inter(12, weight: .bold).monospacedDigit())
+                }
+                .foregroundStyle(c.textSecondary)
+                // ≥34pt hit target (project floor) — the icon + 4pt padding
+                // alone measured ~24pt and vertical misses were dead taps.
+                .frame(minWidth: 34, minHeight: 34)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(AppStrings.comments(lang.language))
+            .accessibilityIdentifier("feed_card_comments")
+        }
+    }
+
+    @ViewBuilder
+    private func reactionArea(_ c: AppTheme.Colors) -> some View {
+        Group {
             if trip.reactionBreakdown.isEmpty {
                 if isOwn {
                     // Own trips can't be self-reacted (Strava rule). Replace
@@ -361,6 +402,13 @@ struct SocialFeedCardView: View {
                 HStack(spacing: 6) {
                     ForEach(Array(top), id: \.emoji) { tally in
                         reactionTallyPill(tally, c: c)
+                            // A pill that reaches zero leaves by shrinking
+                            // into the gap the neighbours close, instead of
+                            // blinking out mid-row.
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.55).combined(with: .opacity),
+                                removal: .scale(scale: 0.7).combined(with: .opacity)
+                            ))
                     }
                     // "+" pill that opens the reaction palette is meaningless
                     // for owners — they can't react to their own trip. Hide it
@@ -385,31 +433,6 @@ struct SocialFeedCardView: View {
                     }
                 }
             }
-
-            Spacer(minLength: 6)
-
-            // Comment affordance (Figma FeedCard footer-right) — comments
-            // live in the trip detail, so this routes through `onTapCard`.
-            // Share moved to the card's «…» menu.
-            Button {
-                Haptics.tap()
-                onTapCard?()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "bubble.right")
-                        .font(.system(size: 16, weight: .medium))
-                    Text("\(trip.commentCount)")
-                        .font(.inter(12, weight: .bold).monospacedDigit())
-                }
-                .foregroundStyle(c.textSecondary)
-                // ≥34pt hit target (project floor) — the icon + 4pt padding
-                // alone measured ~24pt and vertical misses were dead taps.
-                .frame(minWidth: 34, minHeight: 34)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(AppStrings.comments(lang.language))
-            .accessibilityIdentifier("feed_card_comments")
         }
     }
 
@@ -418,42 +441,21 @@ struct SocialFeedCardView: View {
         // may still be a legacy emoji, so the ownership check must compare
         // through the same canonical lens.
         let isMine = trip.myReaction.map { ReactionEmoji.canonical($0) } == tally.emoji
-        return Button {
-            // Owner can't toggle their own reaction (Strava rule). Future
-            // enhancement: tap should open the list of who reacted; for now
-            // it's a no-op so we don't accidentally fire `onReact` from the
-            // owner side and trigger a 4xx.
-            guard !isOwn else { return }
-            Haptics.selection()
+        // Owner can't toggle their own reaction (Strava rule) — the pill
+        // renders but stays inert instead of firing `onReact` and taking
+        // a 4xx.
+        return ReactionTallyPill(
+            emoji: tally.emoji,
+            count: tally.count,
+            isMine: isMine,
+            isEnabled: !isOwn
+        ) {
             // Removing must send the RAW stored emoji — the store's
             // same-emoji check is what turns the POST into an unreact.
             // Sending the canonical key for a legacy reaction would
             // silently REPLACE ❤️ with 👍 instead of removing it.
             onReact?(isMine ? (trip.myReaction ?? tally.emoji) : tally.emoji)
-        } label: {
-            HStack(spacing: 4) {
-                ReactionIconView(
-                    emoji: tally.emoji,
-                    size: 14,
-                    filled: isMine,
-                    tint: isMine ? AppTheme.accent : c.text
-                )
-                Text("\(tally.count)")
-                    .font(.inter(12, weight: .bold).monospacedDigit())
-                    .foregroundStyle(isMine ? AppTheme.accent : c.textSecondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(isMine ? AppTheme.orangeDim : c.cardAlt)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(isMine ? AppTheme.accent : Color.clear, lineWidth: 1.5)
-            )
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Formatters

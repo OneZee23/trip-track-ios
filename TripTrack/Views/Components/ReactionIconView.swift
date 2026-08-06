@@ -26,14 +26,26 @@ struct ReactionIconView: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         if let base = Self.assetBases[ReactionEmoji.canonical(emoji)] {
-            Image("reaction_\(base)_\(filled ? "fill" : "outline")")
-                .resizable()
-                .scaledToFit()
-                .frame(width: size, height: size)
-                .foregroundStyle(tint ?? (filled ? AppTheme.accent : c.text))
+            // Both variants stay mounted and cross-fade: swapping one
+            // `Image` for another is a hard cut, and the outline↔filled
+            // morph is the main visual signal that a reaction went on or
+            // came off.
+            ZStack {
+                variant(base, state: "outline").opacity(filled ? 0 : 1)
+                variant(base, state: "fill").opacity(filled ? 1 : 0)
+            }
+            .frame(width: size, height: size)
+            .foregroundStyle(tint ?? (filled ? AppTheme.accent : c.text))
+            .animation(.easeOut(duration: 0.22), value: filled)
         } else {
             Text(emoji)
                 .font(.system(size: size))
         }
+    }
+
+    private func variant(_ base: String, state: String) -> some View {
+        Image("reaction_\(base)_\(state)")
+            .resizable()
+            .scaledToFit()
     }
 }

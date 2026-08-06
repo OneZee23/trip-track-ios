@@ -323,13 +323,16 @@ struct SocialTripDetailView: View {
     /// owner → no-op (Strava rule), otherwise the store's optimistic
     /// toggle (it POSTs and updates count/breakdown/myReaction itself).
     private func handleReactionTap(_ emoji: String) {
-        Haptics.selection()
         guard auth.isSignedIn else {
+            Haptics.tap()
             pendingReactionEmoji = emoji
             signInPrompt = .react
             return
         }
         guard !isOwnTrip else { return }
+        // Directional feedback: a crisp click when the reaction lands, a
+        // muted one when it's taken back (see Haptics.reactionOn/Off).
+        if trip.myReaction == emoji { Haptics.reactionOff() } else { Haptics.reactionOn() }
         // Burst-animate only on the add direction. Tapping again to remove
         // your reaction shouldn't fire the celebratory sprite.
         if trip.myReaction != emoji {
