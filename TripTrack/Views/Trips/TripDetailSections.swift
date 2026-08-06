@@ -466,9 +466,11 @@ struct TripAchievementsGrid: View {
 
 // MARK: - Reaction chips
 
-/// Emoji + count pill used by the reactions cards. `.breakdown` is the
-/// owner-side read-only chip; `.unselected` / `.mine` are the interactive
-/// social-side variants.
+/// Drawn-icon + count pill used by the reactions cards (Figma
+/// ReactionPills 114:141: capsule 10×5, icon 14, count Bold 12; active =
+/// accent-tinted fill icon on 12% accent + 1.5 accent border). `.breakdown`
+/// is the owner-side read-only chip; `.unselected` / `.mine` are the
+/// interactive social-side variants.
 struct ReactionCountChip: View {
     enum Style {
         case breakdown
@@ -493,20 +495,28 @@ struct ReactionCountChip: View {
             bg = scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
             countColor = c.textSecondary
         case .mine:
-            bg = AppTheme.accent.opacity(0.12)
+            bg = AppTheme.orangeDim
             countColor = AppTheme.accent
         }
 
         return HStack(spacing: 4) {
-            Text(emoji).font(.system(size: 14))
+            ReactionIconView(
+                emoji: emoji,
+                size: 14,
+                filled: style == .mine,
+                tint: style == .mine ? AppTheme.accent : c.text
+            )
             Text("\(count)")
-                .font(.system(size: 13, weight: .bold).monospacedDigit())
+                .font(.system(size: 12, weight: .bold).monospacedDigit())
                 .foregroundStyle(countColor)
         }
-        .padding(.leading, 9)
-        .padding(.trailing, 10)
+        .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(bg, in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(style == .mine ? AppTheme.accent : Color.clear, lineWidth: 1.5)
+        )
     }
 }
 

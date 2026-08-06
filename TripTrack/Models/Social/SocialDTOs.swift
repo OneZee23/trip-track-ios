@@ -326,16 +326,53 @@ struct ProfileUpdateRequest: Encodable {
 // MARK: - Allowed reaction emoji (matches backend whitelist)
 
 enum ReactionEmoji {
-    /// Reactions ordered for the horizontal pill row in
-    /// `SocialTripDetailView` and `ReactionPickerOverlay`. Order kept
-    /// stable across releases — adding a new emoji at the end avoids
-    /// reshuffling the muscle memory of repeat reactors.
-    /// MUST mirror `ALLOWED_EMOJI` in `react.dto.ts` on the backend
-    /// (validated server-side via `@IsIn`).
-    /// 🔥 — awesome, ❤️ — love, 🏁 — reached destination,
-    /// 🏎️ — fast/impressive, 🛣️ — nice road, 🗺️ — new places explored,
-    /// 🌅 — beautiful view, 🤯 — wild.
-    static let all: [String] = ["🔥", "❤️", "🏁", "🏎️", "🛣️", "🗺️", "🌅", "🤯"]
+    /// The Figma-canon palette (Components → ReactionIcon, 6 drawn icons),
+    /// in the component order: Огонь, Вау, Финиш, Перевал, Кадр, Класс.
+    /// The server still stores emoji strings — the emoji IS the wire key,
+    /// the drawn icon is only how it renders (`ReactionIconView`).
+    /// Backend `ALLOWED_EMOJI` in `react.dto.ts` must accept every key
+    /// here PLUS the legacy ones below (old app builds still send them).
+    /// 🔥 — awesome, 🤯 — wild, 🏁 — reached destination,
+    /// 🛣️ — nice road, 🌅 — beautiful view, 👍 — like.
+    static let all: [String] = ["🔥", "🤯", "🏁", "🛣️", "🌅", "👍"]
+
+    /// Pre-6.1 palette keys already stored on prod trips. They are never
+    /// offered in the picker again, but existing reactions must survive:
+    /// each legacy key renders as (and merges into) its canonical
+    /// replacement, so no data is lost and no duplicate-looking pills
+    /// appear. ❤️ love → 👍 like, 🏎️ fast → 🏁 finish, 🗺️ places → 🛣️ road.
+    static let legacyToCanonical: [String: String] = [
+        "❤️": "👍", "🏎️": "🏁", "🗺️": "🛣️",
+    ]
+
+    /// Canonical display key for any stored emoji. Robust to the
+    /// U+FE0F emoji-variation-selector: 🏎️/🗺️ can round-trip through
+    /// the server with or without it depending on the client build.
+    static func canonical(_ emoji: String) -> String {
+        if let mapped = legacyToCanonical[emoji] { return mapped }
+        let stripped = emoji.replacingOccurrences(of: "\u{FE0F}", with: "")
+        for (legacy, canon) in legacyToCanonical
+        where legacy.replacingOccurrences(of: "\u{FE0F}", with: "") == stripped {
+            return canon
+        }
+        return emoji
+    }
+
+    /// Server breakdown → display tallies: legacy keys folded into their
+    /// canonical replacement (counts summed), sorted by popularity.
+    /// Ties break on the canon palette order so the pill row is stable
+    /// across refreshes instead of hopping with dictionary order.
+    static func mergedTallies(_ breakdown: [ReactionTally]) -> [ReactionTally] {
+        let grouped = Dictionary(grouping: breakdown, by: { canonical($0.emoji) })
+        return grouped
+            .map { ReactionTally(emoji: $0.key, count: $0.value.reduce(0) { $0 + $1.count }) }
+            .sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                let li = all.firstIndex(of: $0.emoji) ?? .max
+                let ri = all.firstIndex(of: $1.emoji) ?? .max
+                return li < ri
+            }
+    }
 }
 
 // MARK: - Block / Report

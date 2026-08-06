@@ -913,7 +913,10 @@ struct TripDetailView: View {
     /// (avatar / name / LVL / their emoji / chevron → profile).
     private func reactionsCard(_ c: AppTheme.Colors) -> some View {
         let isRu = lang.language == .ru
-        let breakdown = Dictionary(grouping: reactionEntries, by: { $0.emoji })
+        // Group by CANONICAL key so legacy prod reactions (❤️ 🏎️ 🗺️) fold
+        // into the drawn icon that replaced them instead of spawning a
+        // twin chip next to it.
+        let breakdown = Dictionary(grouping: reactionEntries, by: { ReactionEmoji.canonical($0.emoji) })
             .mapValues { $0.count }
             .sorted { $0.value > $1.value }
         return VStack(spacing: 0) {
@@ -966,7 +969,7 @@ struct TripDetailView: View {
                         .foregroundStyle(c.textTertiary)
                 }
                 Spacer()
-                Text(entry.emoji).font(.system(size: 18))
+                ReactionIconView(emoji: entry.emoji, size: 18)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(c.textTertiary)

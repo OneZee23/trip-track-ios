@@ -1,13 +1,14 @@
 import SwiftUI
 
 /// iMessage/Telegram-style reaction picker: blurred backdrop + floating
-/// capsule with the available emoji. Presented as a full-screen overlay
-/// when the user long-presses a trip card.
+/// capsule with the drawn reaction icons (Figma canon-6; the old 8-emoji
+/// palette 263:2 is retired). Presented as a full-screen overlay when
+/// the user long-presses a trip card.
 ///
 /// Layout: the capsule wraps an `HStack` in a horizontal `ScrollView` so
-/// growing the emoji set in the future (currently 8) doesn't blow past
-/// the device width. On phones where everything fits, the scroll never
-/// fires — `.fixedSize` collapses the capsule to content width.
+/// growing the icon set in the future doesn't blow past the device
+/// width. On phones where everything fits, the scroll never fires —
+/// `.fixedSize` collapses the capsule to content width.
 struct ReactionPickerOverlay: View {
     let currentReaction: String?
     var onPick: (String) -> Void
@@ -80,19 +81,24 @@ struct ReactionPickerOverlay: View {
     }
 
     private func pill(emoji: String, index: Int, c: AppTheme.Colors) -> some View {
-        let isMine = currentReaction == emoji
+        // My stored reaction can be a legacy prod emoji (❤️ 🏎️ 🗺️) —
+        // it highlights its canonical replacement in the palette.
+        let isMine = currentReaction.map { ReactionEmoji.canonical($0) } == emoji
         return Button {
             Haptics.success()
-            onPick(emoji)
+            // Tapping my own (possibly legacy) reaction again must pass the
+            // RAW stored emoji so the store's same-emoji check unreacts
+            // instead of replacing ❤️ with 👍.
+            onPick(isMine ? (currentReaction ?? emoji) : emoji)
             // Parent closes overlay — we just fade out.
             withAnimation(.easeOut(duration: 0.18)) {
                 appeared = false
             }
         } label: {
             // Selected state: solid peach disc (Figma #FCE4DB — one of the
-            // two allowed literals; adaptive accentDim in dark).
-            Text(emoji)
-                .font(.system(size: 26))
+            // two allowed literals; adaptive accentDim in dark) + the fill
+            // icon variant in accent; unselected shows the outline variant.
+            ReactionIconView(emoji: emoji, size: 24, filled: isMine)
                 .frame(width: 40, height: 40)
                 .background(
                     Circle()

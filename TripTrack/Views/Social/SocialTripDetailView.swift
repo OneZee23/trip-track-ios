@@ -736,9 +736,10 @@ struct SocialTripDetailView: View {
     /// One card: my-reaction chip tinted, unselected chips neutral, «+»
     /// opens the full emoji picker. No reactor list on others' trips.
     private func reactionsCompactCard(_ c: AppTheme.Colors) -> some View {
-        let breakdown = trip.reactionBreakdown
+        // Legacy prod emoji fold into their canonical keys (❤️→👍 etc.) so
+        // the row shows one drawn-icon chip per distinct reaction meaning.
+        let breakdown = ReactionEmoji.mergedTallies(trip.reactionBreakdown)
             .filter { $0.count > 0 }
-            .sorted { $0.count > $1.count }
         return HStack(spacing: 8) {
             if breakdown.isEmpty {
                 Text(isOwnTrip
@@ -790,9 +791,12 @@ struct SocialTripDetailView: View {
     }
 
     private func reactionChipButton(_ tally: ReactionTally) -> some View {
-        let isMine = trip.myReaction == tally.emoji
+        // Tally is canonical (mergedTallies); my stored reaction may still
+        // be legacy — compare through the canonical lens, and pass the RAW
+        // emoji on removal so the store unreacts instead of replacing.
+        let isMine = trip.myReaction.map { ReactionEmoji.canonical($0) } == tally.emoji
         return Button {
-            handleReactionTap(tally.emoji)
+            handleReactionTap(isMine ? (trip.myReaction ?? tally.emoji) : tally.emoji)
         } label: {
             ReactionCountChip(
                 emoji: tally.emoji,
