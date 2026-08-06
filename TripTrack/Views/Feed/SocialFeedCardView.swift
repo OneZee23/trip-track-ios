@@ -123,7 +123,7 @@ struct SocialFeedCardView: View {
                 }
 
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     Text(headerName)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(c.text)
@@ -137,7 +137,7 @@ struct SocialFeedCardView: View {
                     // bundled) — the app-wide LVL canon. READ-ONLY use of
                     // `DriverRank`.
                     Text("LVL \(trip.author.profileLevel)")
-                        .font(.custom("PressStart2P-Regular", size: 9))
+                        .font(.custom("PressStart2P-Regular", size: 8))
                         .tracking(1)
                         .foregroundStyle(DriverRank.from(level: trip.author.profileLevel).color)
                         .fixedSize()
@@ -230,7 +230,10 @@ struct SocialFeedCardView: View {
             MapSnapshotPreview(coordinates: coords, tripId: trip.id, height: 178)
                 .frame(height: 178)
                 .frame(maxWidth: .infinity)
-                .clipped()
+                // Figma: the canvas is full-card-width with 12pt rounded
+                // corners (measured off the FeedCard render), not a hard
+                // rectangle.
+                .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -239,7 +242,10 @@ struct SocialFeedCardView: View {
     @ViewBuilder
     private func metricsStrip(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 4) {
+            // Figma 0:46: three EQUAL thirds starting at the card's 13pt
+            // margin, leading-aligned; time renders as number(19)+unit(11)
+            // runs («4 ч 58 мин»), not one flat string.
+            HStack(spacing: 0) {
                 metricBlock(
                     value: oneDecimal(trip.distanceKm),
                     unit: AppStrings.km(lang.language),
@@ -247,8 +253,7 @@ struct SocialFeedCardView: View {
                     c: c
                 )
                 metricBlock(
-                    value: trip.formattedDurationCompact(lang.language),
-                    unit: "",
+                    valueText: durationRuns(c),
                     label: AppStrings.duration(lang.language),
                     c: c
                 )
@@ -292,19 +297,24 @@ struct SocialFeedCardView: View {
     }
 
     private func metricBlock(value: String, unit: String, label: String, c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(.system(size: 19, weight: .heavy).monospacedDigit())
-                    .tracking(-0.19)
-                    .foregroundStyle(c.text)
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(c.textSecondary)
-                }
-            }
-            .lineLimit(1)
+        metricBlock(
+            valueText: Text(value)
+                .font(.system(size: 19, weight: .heavy).monospacedDigit())
+                .tracking(-0.19)
+                .foregroundColor(c.text)
+                + Text(unit.isEmpty ? "" : " \(unit)")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(c.textSecondary),
+            label: label,
+            c: c
+        )
+    }
+
+    /// Figma metric column: value runs, then 5pt, then the caps label.
+    private func metricBlock(valueText: Text, label: String, c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            valueText
+                .lineLimit(1)
 
             Text(label)
                 .font(.system(size: 11, weight: .bold))
@@ -314,6 +324,23 @@ struct SocialFeedCardView: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// «4 ч 58 мин» / "4 h 58 min" — numbers big (19 heavy), units small
+    /// (11), matching the Figma metric canon instead of one flat string.
+    private func durationRuns(_ c: AppTheme.Colors) -> Text {
+        let big = Font.system(size: 19, weight: .heavy).monospacedDigit()
+        let small = Font.system(size: 11, weight: .semibold)
+        let h = trip.duration / 3600
+        let m = (trip.duration % 3600) / 60
+        let minutes = Text("\(m)").font(big).foregroundColor(c.text)
+            + Text(" \(AppStrings.minutesUnitShort(lang.language))")
+                .font(small).foregroundColor(c.textSecondary)
+        guard h > 0 else { return minutes }
+        return Text("\(h)").font(big).foregroundColor(c.text)
+            + Text(" \(AppStrings.hoursUnitShort(lang.language)) ")
+                .font(small).foregroundColor(c.textSecondary)
+            + minutes
     }
 
     // MARK: - Action Bar (Telegram-style: one pill per used emoji)

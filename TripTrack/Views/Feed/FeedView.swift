@@ -494,17 +494,19 @@ struct FeedView: View {
     private func allFeedPage(_ c: AppTheme.Colors) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
+                // Figma 140:933 rhythm: switcher(38) → 10 → first card. The
+                // switcher's own bottom padding carries the 10, so the page
+                // content adds ZERO on top — the old zero-height scroll
+                // anchor + top paddings stacked ~18pt of extra gap that made
+                // «Лента»→switcher and switcher→cards visibly uneven.
                 LazyVStack(spacing: 12) {
-                    Color.clear.frame(height: 0).id("feedTopAll")
                     connectivityBanner(c)
                     if !auth.isSignedIn {
                         guestSignInBanner(c)
-                            .padding(.horizontal, 0)
-                            .padding(.top, 6)
                     }
                     socialFeedContent(c, store: socialFeed, isFollowing: false)
-                        .padding(.top, 6)
                 }
+                .id("feedTopAll")
                 .padding(.horizontal, 14)
                 .padding(.bottom, 120)
             }
@@ -528,18 +530,17 @@ struct FeedView: View {
     private func followingFeedPage(_ c: AppTheme.Colors) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
+                // Same zero-top rhythm as the All page (Figma 140:933).
                 LazyVStack(spacing: 12) {
-                    Color.clear.frame(height: 0).id("feedTopFollowing")
                     connectivityBanner(c)
                     if auth.isSignedIn {
                         socialFeedContent(c, store: followingFeed, isFollowing: true)
-                            .padding(.top, 6)
                     } else {
                         guestSignInBanner(c)
-                            .padding(.top, 6)
                         followingGuestState(c)
                     }
                 }
+                .id("feedTopFollowing")
                 .padding(.horizontal, 14)
                 .padding(.bottom, 120)
             }
@@ -745,7 +746,6 @@ struct FeedView: View {
             }
             .padding(14)
             .surfaceCard(cornerRadius: 14)
-            .padding(.top, 6)
         }
     }
 

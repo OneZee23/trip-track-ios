@@ -1321,6 +1321,13 @@ enum AppStrings {
     static func findPeople(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Найти людей" : "Find people"
     }
+    /// Short time units for the feed-card metric runs («4 ч 58 мин»).
+    static func hoursUnitShort(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ч" : "h"
+    }
+    static func minutesUnitShort(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "мин" : "min"
+    }
     /// Accessibility label for the feed-card comment affordance.
     static func comments(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Комментарии" : "Comments"
