@@ -488,10 +488,9 @@ struct SocialFeedCardView: View {
     }
 
     private func dateRegionText(isRu: Bool) -> String {
-        var result = RelativeTripDate.string(
-            from: trip.startDate,
-            language: isRu ? .ru : .en)
-        if let r = trip.region, !r.isEmpty {
+        let lang: LanguageManager.Language = isRu ? .ru : .en
+        var result = RelativeTripDate.string(from: trip.startDate, language: lang)
+        if let r = RegionDisplay.localized(trip.region, language: lang), !r.isEmpty {
             result += " · \(r)"
         }
         return result

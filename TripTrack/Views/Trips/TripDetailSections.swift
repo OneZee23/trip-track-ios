@@ -34,7 +34,9 @@ enum TripDetailFormat {
     static func posterDateLine(date: Date, region: String?, lang: LanguageManager.Language) -> String {
         let f = lang == .ru ? posterDateFormatters.ru : posterDateFormatters.en
         var line = f.string(from: date).uppercased()
-        if let region, !region.isEmpty {
+        // Region follows the APP language (stored raw geocoder string may
+        // be in either) — same rule as the feed card meta line.
+        if let region = RegionDisplay.localized(region, language: lang), !region.isEmpty {
             line += " · \(region.uppercased())"
         }
         return line
