@@ -6,11 +6,12 @@ struct SheetCloseButton: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let c = AppTheme.colors(for: scheme)
         Button { dismiss() } label: {
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 22))
-                .foregroundStyle(c.textTertiary)
+            // Canon circle, same as every other close/back control in the
+            // app — the old grey `xmark.circle.fill` glyph was the odd one
+            // out on any screen that also showed a `NavCircleIcon`.
+            NavCircleIcon(systemImage: "xmark")
         }
+        .buttonStyle(.plain)
     }
 }

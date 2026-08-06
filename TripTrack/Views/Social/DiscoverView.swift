@@ -46,10 +46,24 @@ struct DiscoverView: View {
                 .padding(.bottom, 32)
             }
             .background(c.bg)
-            .navigationTitle(AppStrings.findPeople(lang.language))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+            // Same bar as every other social screen (canon 117:275) instead
+            // of the system one: matching height, matching circle buttons,
+            // title on the same baseline as the close button. The system bar
+            // put a differently-styled close glyph above the title line.
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                CustomNavBar(
+                    title: AppStrings.findPeople(lang.language),
+                    showsBack: false
+                ) {
+                    Button {
+                        Haptics.tap()
+                        dismiss()
+                    } label: {
+                        NavCircleIcon(systemImage: "xmark")
+                    }
+                    .accessibilityLabel(AppStrings.closeSheet(lang.language))
+                }
             }
             .navigationDestination(for: ProfilePreviewDest.self) { dest in
                 switch dest {

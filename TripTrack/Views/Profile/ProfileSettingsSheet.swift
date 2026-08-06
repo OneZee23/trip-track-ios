@@ -66,6 +66,7 @@ struct ProfileSettingsSheet: View {
         }
         .sheet(isPresented: $showNotificationsInbox) {
             NotificationsInboxView()
+                .environment(\.navBarInSheet, true)
                 .environmentObject(lang)
                 .environmentObject(themeManager)
                 .preferredColorScheme(themeManager.preferredColorScheme)

@@ -281,6 +281,7 @@ struct FeedView: View {
             // presentation the Profile tab uses for the inbox.
             NotificationsInboxView()
                 .environmentObject(lang)
+                .environment(\.navBarInSheet, true)
                 .environmentObject(themeManager)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
@@ -321,6 +322,7 @@ struct FeedView: View {
         .sheet(isPresented: $showDiscover) {
             DiscoverView()
                 .presentationDetents([.large])
+                .environment(\.navBarInSheet, true)
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }

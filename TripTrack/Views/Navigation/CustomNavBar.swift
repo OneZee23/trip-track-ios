@@ -5,16 +5,20 @@ import SwiftUI
 /// briefly reverts it to default state ("← Back") during deep pop animations
 /// inside sheet-hosted NavigationStacks, no matter how many hidden-flags we
 /// set. Pair with `.toolbar(.hidden, for: .navigationBar)` on the host view.
-/// Explicit override for `CustomNavBar`'s automatic sheet detection.
-/// `nil` (default) = decide from `\.isPresented`. `PreviewNavigator` sets
-/// `false` because it runs inside a `fullScreenCover` — presented, but with
-/// a real status bar above it and no grabber, so it wants the canon inset.
+/// Set to `true` by the few sheets that host `CustomNavBar` screens, so the
+/// bar can clear the grabber (see `CustomNavBar.topInset`).
+///
+/// It has to be explicit. The obvious shortcut — `@Environment(\.isPresented)`
+/// — is wrong: SwiftUI models a NavigationStack push as a presentation too
+/// (that's why `\.dismiss` pops), so every pushed screen reported `true` and
+/// got 12pt of sheet clearance it should not have. Measured: the profile
+/// pushed from the feed sat at 82pt instead of the canon 70pt.
 private struct NavBarInSheetKey: EnvironmentKey {
-    static let defaultValue: Bool? = nil
+    static let defaultValue: Bool = false
 }
 
 extension EnvironmentValues {
-    var navBarInSheet: Bool? {
+    var navBarInSheet: Bool {
         get { self[NavBarInSheetKey.self] }
         set { self[NavBarInSheetKey.self] = newValue }
     }
@@ -22,15 +26,14 @@ extension EnvironmentValues {
 
 struct CustomNavBar<Trailing: View>: View {
     let title: String
+    /// Sheet roots (Discover) have nothing to pop — they close from the
+    /// trailing side, so they hide the back button rather than show a
+    /// chevron that would really mean "dismiss".
+    var showsBack: Bool = true
     @ViewBuilder var trailing: () -> Trailing
 
     @Environment(\.colorScheme) private var scheme
-    /// True for anything inside a sheet / fullScreenCover; propagates down
-    /// through the presented NavigationStack to pushed destinations.
-    @Environment(\.isPresented) private var isPresented
-    @Environment(\.navBarInSheet) private var inSheetOverride
-
-    private var isInSheet: Bool { inSheetOverride ?? isPresented }
+    @Environment(\.navBarInSheet) private var isInSheet
 
     /// Figma canon for every pushed screen that uses this bar (profile
     /// 117:943, Discover 117:275, Activity 117:1853): the 34pt control row
@@ -57,7 +60,9 @@ struct CustomNavBar<Trailing: View>: View {
                 .padding(.horizontal, 64)
 
             HStack {
-                NavBackButton()
+                if showsBack {
+                    NavBackButton()
+                }
                 Spacer()
                 trailing()
             }
@@ -84,8 +89,9 @@ struct CustomNavBar<Trailing: View>: View {
 }
 
 extension CustomNavBar where Trailing == EmptyView {
-    init(title: String) {
+    init(title: String, showsBack: Bool = true) {
         self.title = title
+        self.showsBack = showsBack
         self.trailing = { EmptyView() }
     }
 }

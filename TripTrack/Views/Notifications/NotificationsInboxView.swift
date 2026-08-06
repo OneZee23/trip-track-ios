@@ -75,17 +75,20 @@ struct NotificationsInboxView: View {
     // MARK: - Header (Figma 117:1841)
 
     private func header(c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(spacing: 6) {
-            navCircleButton(icon: "xmark", c: c) { dismiss() }
-
+        // Close sits on the RIGHT here like on every other sheet in the app
+        // (Discover, settings): it used to be the only screen with the X on
+        // the left, which read as a different kind of screen. Settings keeps
+        // its slot immediately to its left. Canon 117:1853 draws this as a
+        // pushed screen (back chevron + bell); as a sheet the same geometry
+        // becomes title-left, controls-right.
+        HStack(spacing: 8) {
             Text(AppStrings.activityTitle(lang.language))
                 .font(.system(size: 22, weight: .heavy))
                 .tracking(-0.22)
                 .foregroundStyle(c.text)
                 .lineLimit(1)
-                .padding(.leading, 4)
 
-            Spacer()
+            Spacer(minLength: 8)
 
             if store.unreadCount > 0 {
                 Button {
@@ -97,28 +100,28 @@ struct NotificationsInboxView: View {
                         .foregroundStyle(AppTheme.accent)
                 }
                 .buttonStyle(.plain)
+                .padding(.trailing, 2)
             }
 
-            navCircleButton(icon: "gearshape", c: c) { showPreferences = true }
+            navCircleButton(icon: "gearshape") { showPreferences = true }
+            navCircleButton(icon: "xmark") { dismiss() }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 12)
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
         .padding(.bottom, 10)
     }
 
+    /// Shared canon control (see `NavCircleIcon`) — this screen used to draw
+    /// its own near-copy, which is why its buttons didn't quite match the
+    /// ones on the other social screens.
     private func navCircleButton(
-        icon: String, c: AppTheme.Colors, action: @escaping () -> Void
+        icon: String, action: @escaping () -> Void
     ) -> some View {
         Button {
             Haptics.tap()
             action()
         } label: {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(c.text)
-                .frame(width: 34, height: 34)
-                .background(c.card, in: Circle())
-                .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+            NavCircleIcon(systemImage: icon)
         }
         .buttonStyle(.plain)
     }

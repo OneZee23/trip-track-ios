@@ -289,6 +289,7 @@ struct ProfileView: View {
         .sheet(isPresented: $showSettings) {
             ProfileSettingsSheet()
                 .environmentObject(lang)
+                .environment(\.navBarInSheet, true)
                 .environmentObject(themeManager)
                 // Sheets are separate presentations — the app-root
                 // preferredColorScheme does not reach them.

@@ -1786,6 +1786,10 @@ enum AppStrings {
         }
         return "following"
     }
+    /// VoiceOver label for the circular close button on sheet headers.
+    static func closeSheet(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Закрыть" : "Close"
+    }
     static func reportProfileAction(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Пожаловаться" : "Report"
     }
