@@ -66,6 +66,10 @@ struct PreviewNavigator: View {
             }
         }
         .environment(\.previewPop, popAction)
+        // We're a fullScreenCover: `\.isPresented` is true, but there's a
+        // real status bar above us and no grabber, so the nav bars here
+        // keep the canon 8pt inset instead of the sheet clearance.
+        .environment(\.navBarInSheet, false)
     }
 
     private var isSelfPreview: Bool {
