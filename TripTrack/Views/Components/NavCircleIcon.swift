@@ -12,10 +12,13 @@ import SwiftUI
 /// `padding` + `contentShape`, then taken back out of layout with negative
 /// padding so nothing shifts.
 ///
-/// The circular content shape does double duty: UIKit derives the highlight
-/// platter it flashes behind a `Menu` label from that shape, so the default
-/// rectangle is what made a grey square outline blink around the dots when
-/// the menu closed. A circle there matches the button and reads as a press.
+/// Do NOT hang a `Menu` off this button. A Menu is a UIKit context menu, and
+/// on dismissal UIKit spends ~0.9s animating a snapshot of the source view
+/// back down on top of a rounded-SQUARE plate with its own shadow — against
+/// the warm bar the plate's corners read as a translucent square frame around
+/// the circle. Neither `contentShape(_:)` nor `contentShape(.contextMenuPreview, _:)`
+/// reshapes it; both were measured frame-by-frame off a screen recording and
+/// changed nothing. Use a `confirmationDialog` instead (see PublicProfileView).
 struct NavCircleIcon: View {
     let systemImage: String
     /// Glyph point size — canon draws a 17pt box, which 16pt semibold fills.
@@ -37,12 +40,6 @@ struct NavCircleIcon: View {
             )
             .padding(5)
             .contentShape(Circle())
-            // Separate kind, separate shape: UIKit builds the preview plate
-            // it flashes behind a `Menu` label on dismissal from the CONTEXT
-            // MENU shape, not the interaction shape. Left at its default the
-            // plate is the view's bounds — a white rounded square whose
-            // corners poke out past our circle over the warm background.
-            .contentShape(.contextMenuPreview, Circle())
             .padding(-5)
     }
 }

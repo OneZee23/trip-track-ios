@@ -205,15 +205,10 @@ struct SocialFeedCardView: View {
                     .foregroundStyle(c.textTertiary)
                     // ≥34pt hit target (project floor) — at 28×28 a leftward
                     // near-miss landed on the author-name tap area instead.
-                    // Grown to the 44pt HIG circle without moving layout; the
-                    // circular shape also fixes the grey square platter UIKit
-                    // flashed behind the dots when the menu closed.
+                    // Grown to the 44pt HIG circle without moving layout.
                     .frame(width: 34, height: 34)
                     .padding(5)
                     .contentShape(Circle())
-                    // Plate shape for the menu-dismiss animation — see
-                    // `NavCircleIcon` for why this kind is separate.
-                    .contentShape(.contextMenuPreview, Circle())
                     .padding(-5)
             }
             .accessibilityIdentifier("feed_card_menu")

@@ -49,6 +49,9 @@ struct PublicProfileView: View {
     @State private var signInPrompt: SignInPromptSheet.Action?
     /// «…» menu → «Пожаловаться» (Figma 117:2335) — presents `ReportSheet`.
     @State private var showReportSheet = false
+    /// «…» action sheet (report / block). See the button for why this is a
+    /// confirmation dialog rather than a `Menu`.
+    @State private var showProfileActions = false
     /// Guest tapped Follow → signed in via the prompt. Mirrors FeedView's
     /// `pendingSocialAction` one-shot resume: set in `onAuthenticated`,
     /// consumed in the sheet's `onDismiss` so the follow the guest originally
@@ -149,26 +152,25 @@ struct PublicProfileView: View {
                     // to sit as its own icon right next to «…»: two tiny
                     // targets 2pt apart in the same corner, one of them a
                     // one-tap path into a destructive confirm.
-                    Menu {
-                        Button {
-                            showReportSheet = true
-                        } label: {
-                            Label(AppStrings.reportProfileAction(lang.language),
-                                  systemImage: "exclamationmark.bubble")
-                        }
-
-                        Button(role: isBlocked ? nil : .destructive) {
-                            showBlockConfirm = true
-                        } label: {
-                            Label(
-                                AppStrings.blockProfileAction(lang.language, isBlocked: isBlocked),
-                                systemImage: isBlocked ? "hand.raised.slash" : "hand.raised.fill"
-                            )
-                        }
+                    //
+                    // Action sheet, NOT a `Menu`: a Menu is a UIKit context
+                    // menu, and on dismissal UIKit animates a snapshot of the
+                    // source view back down over ~0.9s on top of a rounded-
+                    // SQUARE plate plus its shadow. Against the warm bar that
+                    // plate's corners read as a translucent square frame
+                    // around our round button. It is not shapeable from
+                    // SwiftUI — neither `contentShape(_:)` nor
+                    // `contentShape(.contextMenuPreview, _:)` touches it
+                    // (both measured frame-by-frame off a screen recording).
+                    // A confirmation dialog has no preview machinery at all.
+                    Button {
+                        Haptics.tap()
+                        showProfileActions = true
                     } label: {
                         NavCircleIcon(systemImage: "ellipsis")
                     }
                     .accessibilityLabel(AppStrings.moreActions(lang.language))
+                    .accessibilityIdentifier("profile_more")
                 }
             }
         }
@@ -233,6 +235,22 @@ struct PublicProfileView: View {
             followListMode: $followListMode,
             enabled: pushPath == nil
         ))
+        .confirmationDialog(
+            resolvedDisplayName,
+            isPresented: $showProfileActions,
+            titleVisibility: .visible
+        ) {
+            Button(AppStrings.reportProfileAction(lang.language)) {
+                showReportSheet = true
+            }
+            Button(
+                AppStrings.blockProfileAction(lang.language, isBlocked: isBlocked),
+                role: isBlocked ? nil : .destructive
+            ) {
+                showBlockConfirm = true
+            }
+            Button(AppStrings.cancel(lang.language), role: .cancel) {}
+        }
         .alert(
             isBlocked
                 ? (lang.language == .ru ? "Разблокировать пользователя?" : "Unblock this user?")
