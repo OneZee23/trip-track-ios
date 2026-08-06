@@ -19,9 +19,10 @@ struct TripTrackApp: App {
         if let fontURL = Bundle.main.url(forResource: "PressStart2P-Regular", withExtension: "ttf") {
             CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
         }
-        // Handjet (Figma's LVL-tag font — tall/condensed; PressStart2P was
-        // standing in for it and rendered twice as wide as the canon).
-        if let fontURL = Bundle.main.url(forResource: "Handjet-Medium", withExtension: "ttf") {
+        // Handjet Black (Figma's LVL-tag font per the Components specs —
+        // tall/condensed, weight 900; PressStart2P used to stand in and
+        // rendered twice as wide as the canon).
+        if let fontURL = Bundle.main.url(forResource: "Handjet-Black", withExtension: "ttf") {
             CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
         }
         // Translate the pre-6.1.0 Int tab selection into the new AppTab key

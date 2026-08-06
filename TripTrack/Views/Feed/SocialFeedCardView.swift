@@ -134,14 +134,12 @@ struct SocialFeedCardView: View {
                         // since a long name + "Вы" pill needs the truncation
                         // to land on the name, not somewhere weird in the pill.
                         .truncationMode(.tail)
-                    // LVL tag — Handjet is the Figma canon font (bundled +
-                    // runtime-registered since 6.1.0; PressStart2P used to
-                    // stand in and rendered ~2× wider than the design).
-                    // Size 11 ≈ 8pt cap height, baseline-aligned with the
-                    // name per the Figma header. READ-ONLY use of `DriverRank`.
+                    // LVL tag — Handjet Black 13, baseline-aligned with the
+                    // name: exact FeedCard spec (Components 115:45). The
+                    // spec's gold varies per level, which is what the rank
+                    // color already does. READ-ONLY use of `DriverRank`.
                     Text("LVL \(trip.author.profileLevel)")
-                        .font(.custom("Handjet-Medium", size: 11))
-                        .tracking(0.5)
+                        .font(.custom("Handjet-Black", size: 13))
                         .foregroundStyle(DriverRank.from(level: trip.author.profileLevel).color)
                         .fixedSize()
                     if isOwn {
@@ -245,10 +243,10 @@ struct SocialFeedCardView: View {
     @ViewBuilder
     private func metricsStrip(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Figma 0:46: three EQUAL thirds starting at the card's 13pt
-            // margin, leading-aligned; time renders as number(19)+unit(11)
-            // runs («4 ч 58 мин»), not one flat string.
-            HStack(spacing: 0) {
+            // FeedCard spec 115:58: three equal flex columns, 4pt gap,
+            // leading-aligned; time renders as number(19)+unit(11) runs
+            // («4 ч 58 мин»), not one flat string.
+            HStack(spacing: 4) {
                 metricBlock(
                     value: oneDecimal(trip.distanceKm),
                     unit: AppStrings.km(lang.language),
