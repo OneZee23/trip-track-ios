@@ -51,8 +51,12 @@ struct NotificationsInboxView: View {
                     NotificationPreferencesView()
                         .environmentObject(lang)
                         // .medium cut the footer note off below the fold with
-                        // nothing hinting there was more to scroll to.
-                        .presentationDetents([.fraction(0.88), .large])
+                        // nothing hinting there was more to scroll to. ONE
+                        // detent, not two: with a second option the sheet
+                        // re-resolves its height whenever the content
+                        // re-renders (i.e. on every toggle) and visibly
+                        // nudges itself.
+                        .presentationDetents([.fraction(0.88)])
                         .presentationDragIndicator(.visible)
                         // Nested sheets are separate presentations — the
                         // override on the inbox sheet itself doesn't reach

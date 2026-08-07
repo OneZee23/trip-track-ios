@@ -62,6 +62,9 @@ struct ProfileSettingsSheet: View {
             NotificationPreferencesView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
+                // Same single detent as the inbox route — tall enough for
+                // the footer note, and it can't re-resolve on re-render.
+                .presentationDetents([.fraction(0.88)])
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showNotificationsInbox) {

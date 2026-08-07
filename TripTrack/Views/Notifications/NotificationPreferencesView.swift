@@ -37,7 +37,9 @@ struct NotificationPreferencesView: View {
     @State private var notifyComments = true
     @State private var notifyWeeklyRecap = true
     @State private var isLoaded = false
-    @State private var isSaving = false
+    /// Debounced save. Flipping several switches in a row (or one switch
+    /// twice) collapses into a single POST carrying the final state.
+    @State private var saveTask: Task<Void, Never>?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -155,14 +157,24 @@ struct NotificationPreferencesView: View {
             Toggle("", isOn: isOn)
                 .labelsHidden()
                 .tint(AppTheme.accent)
-                .disabled(!isLoaded || isSaving)
+                // Only the initial load gates interaction. It used to also
+                // disable on `isSaving`, which flipped every switch into
+                // and out of the disabled style around each POST — a full
+                // re-render of the card on every tap, which is what made
+                // the sheet twitch.
+                .disabled(!isLoaded)
                 .onChange(of: isOn.wrappedValue) { _, _ in
                     // Gate on `isLoaded` — without this, the assignment
                     // inside `load()` itself fires `.onChange` and
                     // schedules a redundant POST with values that just
                     // came back from the server.
                     guard isLoaded else { return }
-                    Task { await save() }
+                    saveTask?.cancel()
+                    saveTask = Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 400_000_000)
+                        guard !Task.isCancelled else { return }
+                        await save()
+                    }
                 }
         }
         .padding(14)
@@ -199,8 +211,6 @@ struct NotificationPreferencesView: View {
 
     private func save() async {
         guard isLoaded else { return }
-        isSaving = true
-        defer { isSaving = false }
         do {
             let _: NotificationPrefsResponse = try await APIClient.shared.post(
                 APIEndpoint.notificationPrefsUpdate,
