@@ -19,6 +19,12 @@ struct SocialFeedCardView: View {
     /// Long-press on a tally pill — host opens the "who reacted" list
     /// filtered to that emoji.
     var onPeekReactors: ((String) -> Void)?
+    /// Owner-only «…» entries (canon: Редактировать / Поделиться / Сделать
+    /// приватной / Удалить). Unwired on someone else's card, where the menu
+    /// stays share-only.
+    var onEdit: (() -> Void)?
+    var onMakePrivate: (() -> Void)?
+    var onDelete: (() -> Void)?
     var onLongPress: (() -> Void)?
     var onReact: ((String) -> Void)?
     var onShare: (() -> Void)?
@@ -222,20 +228,43 @@ struct SocialFeedCardView: View {
             .accessibilityIdentifier("feed_card_menu")
             .accessibilityLabel(AppStrings.moreActions(lang.language))
             .popover(isPresented: $showActions, arrowEdge: .top) {
-                ActionPopoverList(items: [
-                    .init(
-                        title: AppStrings.share(lang.language),
-                        systemImage: "square.and.arrow.up"
-                    ) {
-                        showActions = false
-                        Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 260_000_000)
-                            onShare?()
-                        }
-                    },
-                ])
+                ActionPopoverList(items: menuItems)
             }
         }
+    }
+
+    /// Every entry closes the popover first and acts a beat later —
+    /// presenting a sheet or an alert while the popover is still dismissing
+    /// drops one of the two.
+    private var menuItems: [ActionPopoverList.Item] {
+        func run(_ action: (() -> Void)?) {
+            guard let action else { return }
+            showActions = false
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 260_000_000)
+                action()
+            }
+        }
+        var items: [ActionPopoverList.Item] = []
+        if isOwn, onEdit != nil {
+            items.append(.init(title: AppStrings.edit(lang.language), systemImage: "pencil") {
+                run(onEdit)
+            })
+        }
+        items.append(.init(
+            title: AppStrings.share(lang.language), systemImage: "square.and.arrow.up"
+        ) { run(onShare) })
+        if isOwn, onMakePrivate != nil {
+            items.append(.init(
+                title: AppStrings.makePrivateAction(lang.language), systemImage: "lock"
+            ) { run(onMakePrivate) })
+        }
+        if isOwn, onDelete != nil {
+            items.append(.init(
+                title: AppStrings.delete(lang.language), systemImage: "trash", isDestructive: true
+            ) { run(onDelete) })
+        }
+        return items
     }
 
     // MARK: - Map

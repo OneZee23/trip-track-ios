@@ -53,6 +53,8 @@ struct FeedView: View {
     /// Long-pressed a tally pill — «кто отреагировал» sheet, opened on the
     /// emoji that was pressed.
     @State private var reactorsPeek: ReactorsPeek?
+    /// Own trip awaiting delete confirmation from the card's «…».
+    @State private var tripPendingDelete: SocialFeedTrip?
     @State private var showDiscover = false
     @State private var shareSheetData: (data: StoryShareData, url: String)?
     @State private var signInPrompt: SignInPromptSheet.Action?
@@ -346,6 +348,20 @@ struct FeedView: View {
                 .environmentObject(lang)
                 .environmentObject(auth)
                 .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .confirmationDialog(
+            AppStrings.deleteTrip(lang.language),
+            isPresented: Binding(
+                get: { tripPendingDelete != nil },
+                set: { if !$0 { tripPendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(AppStrings.delete(lang.language), role: .destructive) {
+                if let trip = tripPendingDelete { deleteOwnTrip(trip) }
+                tripPendingDelete = nil
+            }
+            Button(AppStrings.cancel(lang.language), role: .cancel) { tripPendingDelete = nil }
         }
         .sheet(item: $reactorsPeek) { peek in
             ReactionsListSheet(
@@ -673,6 +689,13 @@ struct FeedView: View {
                     onPeekReactors: { emoji in
                         reactorsPeek = ReactorsPeek(trip: trip, emoji: emoji)
                     },
+                    onEdit: isOwn ? {
+                        // Editing lives on the trip's own detail screen —
+                        // one editor, not a second one inlined in the feed.
+                        authorPath.cappedAppend(.trip(trip.id))
+                    } : nil,
+                    onMakePrivate: isOwn ? { makeTripPrivate(trip) } : nil,
+                    onDelete: isOwn ? { tripPendingDelete = trip } : nil,
                     onLongPress: {
                         // Owners can't react to their own trip (Strava rule)
                         // — long-press becomes a no-op there instead of
@@ -1074,6 +1097,28 @@ struct FeedView: View {
         case .openInbox:
             showNotifications = true
         }
+    }
+
+    /// Flip an own trip back to private straight from the card. Mirrors the
+    /// detail screen's privacy chip: local write, then the same notification
+    /// the rest of the app listens to (feed removal, store invalidation).
+    private func makeTripPrivate(_ trip: SocialFeedTrip) {
+        Haptics.action()
+        feedVM.tripManager.updatePrivacy(for: trip.id, isPrivate: true)
+        NotificationCenter.default.post(
+            name: .tripPrivacyChanged,
+            object: PrivacyChangePayload(tripId: trip.id, isPrivate: true)
+        )
+    }
+
+    private func deleteOwnTrip(_ trip: SocialFeedTrip) {
+        Haptics.action()
+        feedVM.tripManager.deleteTrip(id: trip.id)
+        withAnimation(.easeInOut(duration: 0.3)) {
+            socialFeed.removeOptimistically(tripId: trip.id)
+            followingFeed.removeOptimistically(tripId: trip.id)
+        }
+        NotificationCenter.default.post(name: .tripDeleted, object: trip.id)
     }
 
     private func shareSocialTrip(_ trip: SocialFeedTrip) {

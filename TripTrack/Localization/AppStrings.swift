@@ -1812,6 +1812,14 @@ enum AppStrings {
 
     // MARK: - Comment replies (6.1.0)
 
+    /// Owner «…» entries on a feed card (canon).
+    static func edit(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Редактировать" : "Edit"
+    }
+    static func makePrivateAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сделать приватной" : "Make private"
+    }
+
     /// Header link on the detail preview → full thread.
     static func commentsSeeAll(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Все" : "All"
