@@ -44,6 +44,8 @@ struct SocialTripDetailView: View {
     @State private var showTripActions = false
     /// Long-pressed a reaction chip — «кто отреагировал», opened on it.
     @State private var reactorsPeekEmoji: String?
+    /// Guards the tap that follows a chip long-press (see the pill).
+    @State private var chipLongPressed = false
     /// Remote-load failure flags — when the pushed DTO is a stub with no
     /// route geometry AND both loads fail (offline), there is nothing to
     /// render and the full-screen error state takes over. Today's feed
@@ -857,27 +859,36 @@ struct SocialTripDetailView: View {
         // be legacy — compare through the canonical lens, and pass the RAW
         // emoji on removal so the store unreacts instead of replacing.
         let isMine = trip.myReaction.map { ReactionEmoji.canonical($0) } == tally.emoji
-        return Button {
-            handleReactionTap(isMine ? (trip.myReaction ?? tally.emoji) : tally.emoji)
-        } label: {
-            ReactionCountChip(
-                emoji: tally.emoji,
-                count: tally.count,
-                style: isMine ? .mine : .unselected
-            )
-            .overlay(alignment: .top) {
-                if burstingEmojis.contains(tally.emoji) {
-                    ReactionBurstSprite(emoji: tally.emoji)
-                        .allowsHitTesting(false)
-                }
+        // Gestures rather than a Button, for the same reason as
+        // `ReactionTallyPill`: a Button eats the long press.
+        return ReactionCountChip(
+            emoji: tally.emoji,
+            count: tally.count,
+            style: isMine ? .mine : .unselected
+        )
+        .overlay(alignment: .top) {
+            if burstingEmojis.contains(tally.emoji) {
+                ReactionBurstSprite(emoji: tally.emoji)
+                    .allowsHitTesting(false)
             }
         }
-        .buttonStyle(.plain)
-        // Same peek as the feed pills: hold a chip to see who left it.
+        .contentShape(Capsule())
         .onLongPressGesture(minimumDuration: 0.35) {
+            chipLongPressed = true
             Haptics.action()
             reactorsPeekEmoji = tally.emoji
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                chipLongPressed = false
+            }
         }
+        .onTapGesture {
+            if chipLongPressed { chipLongPressed = false; return }
+            handleReactionTap(isMine ? (trip.myReaction ?? tally.emoji) : tally.emoji)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("reaction_pill")
+        .accessibilityAddTraits(.isButton)
         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isMine)
     }
 

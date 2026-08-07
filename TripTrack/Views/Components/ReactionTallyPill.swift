@@ -24,36 +24,55 @@ struct ReactionTallyPill: View {
     var onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    /// Set by the long press so the touch-up that follows doesn't ALSO
+    /// count as a tap and toggle the reaction. Cleared shortly after.
+    @State private var didLongPress = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        Button {
+        // Plain view + gestures, NOT a `Button`: a Button's own gesture wins
+        // the recognition race and a long press on it never fires — which is
+        // why holding a pill did nothing. The card body uses the same
+        // tap+long-press pair for its reaction picker.
+        HStack(spacing: 4) {
+            ReactionIconView(
+                emoji: emoji,
+                size: 14,
+                filled: isMine,
+                tint: isMine ? AppTheme.accent : c.text
+            )
+            Text("\(count)")
+                .font(.inter(12, weight: .bold).monospacedDigit())
+                .foregroundStyle(isMine ? AppTheme.accent : c.textSecondary)
+                // Digits roll in the direction of the change: up as the
+                // reaction lands, down as it's taken back.
+                .contentTransition(.numericText(countsDown: !isMine))
+                .animation(.snappy(duration: 0.26), value: count)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(isMine ? AppTheme.orangeDim : c.cardAlt))
+        .overlay(Capsule().stroke(isMine ? AppTheme.accent : .clear, lineWidth: 1.5))
+        .animation(.easeOut(duration: 0.22), value: isMine)
+        .contentShape(Capsule())
+        .onLongPressGesture(minimumDuration: 0.35) {
+            guard let onLongPress else { return }
+            didLongPress = true
+            Haptics.action()
+            onLongPress(emoji)
+            // Self-clearing: if no tap follows the lift, the flag must not
+            // swallow the NEXT real tap.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                didLongPress = false
+            }
+        }
+        .onTapGesture {
+            if didLongPress { didLongPress = false; return }
             guard isEnabled else { return }
             if isMine { Haptics.reactionOff() } else { Haptics.reactionOn() }
             onTap()
-        } label: {
-            HStack(spacing: 4) {
-                ReactionIconView(
-                    emoji: emoji,
-                    size: 14,
-                    filled: isMine,
-                    tint: isMine ? AppTheme.accent : c.text
-                )
-                Text("\(count)")
-                    .font(.inter(12, weight: .bold).monospacedDigit())
-                    .foregroundStyle(isMine ? AppTheme.accent : c.textSecondary)
-                    // Digits roll in the direction of the change: up as the
-                    // reaction lands, down as it's taken back.
-                    .contentTransition(.numericText(countsDown: !isMine))
-                    .animation(.snappy(duration: 0.26), value: count)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(isMine ? AppTheme.orangeDim : c.cardAlt))
-            .overlay(Capsule().stroke(isMine ? AppTheme.accent : .clear, lineWidth: 1.5))
-            .animation(.easeOut(duration: 0.22), value: isMine)
         }
-        .buttonStyle(.plain)
         // Keyframes rather than a plain spring: the overshoot/dip has to
         // resolve back to 1.0 on its own, and the branch is evaluated when
         // the trigger fires, so each direction gets its own curve.
@@ -65,26 +84,8 @@ struct ReactionTallyPill: View {
                 SpringKeyframe(1.0, duration: 0.3, spring: .bouncy)
             }
         }
-        // Attached only when the host wants it: an always-on long-press
-        // would swallow the card's own long-press (reaction picker) on the
-        // screens that don't show a reactor list.
-        .modifier(ReactionPillLongPress(emoji: emoji, action: onLongPress))
-    }
-}
-
-/// Long-press-to-peek, conditional on the host wiring `onLongPress`.
-private struct ReactionPillLongPress: ViewModifier {
-    let emoji: String
-    let action: ((String) -> Void)?
-
-    func body(content: Content) -> some View {
-        if let action {
-            content.onLongPressGesture(minimumDuration: 0.35) {
-                Haptics.action()
-                action(emoji)
-            }
-        } else {
-            content
-        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("reaction_pill")
+        .accessibilityAddTraits(.isButton)
     }
 }

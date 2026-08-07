@@ -41,6 +41,7 @@ struct ReactionsListSheet: View {
             content(c, isRu: isRu)
         }
         .background(c.bg)
+        .accessibilityIdentifier("reactions_list_sheet")
         .task {
             selectedEmoji = initialEmoji.map { ReactionEmoji.canonical($0) }
             await load()
