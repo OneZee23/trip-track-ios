@@ -202,9 +202,9 @@ struct SocialTripDetailView: View {
             }
         }
         .background(c.bg)
-        // Tap anywhere off a control to put the keyboard away; sending a
-        // comment deliberately does NOT — that call stays the user's.
-        .dismissesKeyboardOnBackgroundTap()
+        // Tap anywhere to put the keyboard away; sending a comment
+        // deliberately does NOT — that call stays the user's.
+        .dismissesKeyboardOnTapAnywhere()
         .sheet(isPresented: Binding(
             get: { reactorsPeekEmoji != nil },
             set: { if !$0 { reactorsPeekEmoji = nil } }
