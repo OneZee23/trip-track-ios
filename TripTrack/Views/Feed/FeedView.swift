@@ -55,6 +55,10 @@ struct FeedView: View {
     @State private var reactorsPeek: ReactorsPeek?
     /// Own trip awaiting delete confirmation from the card's «…».
     @State private var tripPendingDelete: SocialFeedTrip?
+    /// Own trip awaiting «сделать приватной» confirmation. Unpublishing is
+    /// destructive to everything attached to the trip socially, so it asks
+    /// first like the delete does.
+    @State private var tripPendingPrivate: SocialFeedTrip?
     @State private var showDiscover = false
     @State private var shareSheetData: (data: StoryShareData, url: String)?
     @State private var signInPrompt: SignInPromptSheet.Action?
@@ -348,6 +352,22 @@ struct FeedView: View {
                 .environmentObject(lang)
                 .environmentObject(auth)
                 .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .confirmationDialog(
+            AppStrings.makePrivateConfirmTitle(lang.language),
+            isPresented: Binding(
+                get: { tripPendingPrivate != nil },
+                set: { if !$0 { tripPendingPrivate = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(AppStrings.makePrivateAction(lang.language), role: .destructive) {
+                if let trip = tripPendingPrivate { makeTripPrivate(trip) }
+                tripPendingPrivate = nil
+            }
+            Button(AppStrings.cancel(lang.language), role: .cancel) { tripPendingPrivate = nil }
+        } message: {
+            Text(AppStrings.makePrivateConfirmBody(lang.language))
         }
         .confirmationDialog(
             AppStrings.deleteTrip(lang.language),
@@ -694,7 +714,7 @@ struct FeedView: View {
                         // one editor, not a second one inlined in the feed.
                         authorPath.cappedAppend(.trip(trip.id))
                     } : nil,
-                    onMakePrivate: isOwn ? { makeTripPrivate(trip) } : nil,
+                    onMakePrivate: isOwn ? { tripPendingPrivate = trip } : nil,
                     onDelete: isOwn ? { tripPendingDelete = trip } : nil,
                     onLongPress: {
                         // Owners can't react to their own trip (Strava rule)

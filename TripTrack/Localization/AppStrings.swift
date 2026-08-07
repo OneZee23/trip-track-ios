@@ -1820,6 +1820,15 @@ enum AppStrings {
         lang == .ru ? "Сделать приватной" : "Make private"
     }
 
+    static func makePrivateConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сделать поездку приватной?" : "Make this trip private?"
+    }
+    static func makePrivateConfirmBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Она исчезнет из общей ленты, а реакции и комментарии к ней больше никто не увидит. Вернуть публичной можно в любой момент."
+            : "It leaves the public feed, and its reactions and comments go with it. You can publish it again any time."
+    }
+
     /// Header link on the detail preview → full thread.
     static func commentsSeeAll(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Все" : "All"
