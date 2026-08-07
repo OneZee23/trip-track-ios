@@ -568,11 +568,12 @@ struct OnboardingView: View {
                 }
 
                 Button {
-                    // Drop the new user directly onto the Record tab — the
-                    // default Home feed is empty for a fresh install and gives
-                    // no clear next action; Record shows the slide-to-start
-                    // affordance immediately.
-                    UserDefaults.standard.set(AppTab.record.rawValue, forKey: AppTab.storageKey)
+                    // Land on the feed: it is the app's home screen. The
+                    // earlier "drop them on Record" shortcut assumed an empty
+                    // feed with nothing to do, but the feed shows other
+                    // people's trips from the first launch, and recording
+                    // starts by itself anyway.
+                    UserDefaults.standard.set(AppTab.home.rawValue, forKey: AppTab.storageKey)
                     hasCompletedOnboarding = true
                 } label: {
                     Text(AppStrings.onboardingAutoRecordSkip(lang.language))
@@ -666,10 +667,8 @@ struct OnboardingView: View {
         // Enable auto-record by default
         SettingsManager.shared.autoRecordMode = .remind
 
-        // Drop the new user directly onto the Record tab — the default Home
-        // feed is empty for a fresh install and gives no clear next action;
-        // Record shows the slide-to-start affordance immediately.
-        UserDefaults.standard.set(AppTab.record.rawValue, forKey: AppTab.storageKey)
+        // Feed is home — see the note on the skip path above.
+        UserDefaults.standard.set(AppTab.home.rawValue, forKey: AppTab.storageKey)
         hasCompletedOnboarding = true
     }
 }
