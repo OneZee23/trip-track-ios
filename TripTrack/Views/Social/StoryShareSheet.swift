@@ -134,7 +134,7 @@ struct StoryShareSheet: View {
                             savePhoto()
                         } label: {
                             HStack(spacing: 8) {
-                                Image(systemName: savedToPhotos ? "checkmark.circle.fill" : "photo.on.rectangle")
+                                Image(systemName: savedToPhotos ? "checkmark.circle.fill" : "arrow.down.to.line")
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundStyle(savedToPhotos ? AppTheme.green : AppTheme.accent)
                                 Text(savedToPhotos
@@ -262,152 +262,201 @@ struct StoryShareSheet: View {
     }
 }
 
-// MARK: - StoryPreviewCard (the actual 9:16 design)
+// MARK: - StoryPreviewCard (canon 117:1739 — «02 · Лента · Шеринг (A постер)»)
 
+/// The exported poster. Canon is a full-bleed route on navy: the track runs
+/// corner to corner with a speed-style gradient (green at the start, red at
+/// the finish), the wordmark rides the top-left, and the trip's name and
+/// numbers sit in the bottom-left over the artwork.
+///
+/// It used to draw the route inside a small rounded inset with a pixel car on
+/// it, plus a date line and an author footer — the route ended up a thumbnail
+/// in the middle of a form, which is the opposite of what a shareable card is
+/// for.
+///
+/// Everything scales off the rendered width (canon is drawn at 201pt wide), so
+/// the same view is exact both as the 201×290 in-sheet preview and as the
+/// 1080×1920 export.
 struct StoryPreviewCard: View {
     let data: StoryShareData
 
     @EnvironmentObject private var lang: LanguageManager
 
+    /// Canon poster width — every size below is expressed as a ratio of it.
+    private static let canonWidth: CGFloat = 201
+
     var body: some View {
-        ZStack {
-            // Navy poster gradient — same constants as the shipped
-            // trip-detail PosterRouteCanvas (#29364F → #161B2C), one poster
-            // identity across the app (FORK-10).
-            LinearGradient(
-                stops: [
-                    .init(color: Color(red: 0x29/255, green: 0x36/255, blue: 0x4F/255), location: 0.07),
-                    .init(color: Color(red: 0x16/255, green: 0x1B/255, blue: 0x2C/255), location: 0.79)
-                ],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
+        GeometryReader { geo in
+            let s = geo.size.width / Self.canonWidth
+            ZStack(alignment: .topLeading) {
+                // Navy poster gradient — same constants as the trip-detail
+                // hero, one poster identity across the app (FORK-10).
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(red: 0x29/255, green: 0x36/255, blue: 0x4F/255), location: 0.07),
+                        .init(color: Color(red: 0x16/255, green: 0x1B/255, blue: 0x2C/255), location: 0.79)
+                    ],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
 
-            GeometryReader { geo in
-                VStack(spacing: 0) {
-                    // Brand header
-                    HStack(spacing: 8) {
-                        Image("PixelCar")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(height: geo.size.height * 0.028)
-                        // Product wordmark (Figma 117:1739) — this poster is
-                        // the one asset users export outside the app, it must
-                        // carry the real product name.
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("TRIP")
-                                .font(.custom("PressStart2P-Regular", size: geo.size.height * 0.014))
-                                .foregroundStyle(AppTheme.accent)
-                            Text("TRACK")
-                                .font(.custom("PressStart2P-Regular", size: geo.size.height * 0.014))
-                                .foregroundStyle(Color.white.opacity(0.6))
-                        }
-                        Spacer()
+                if data.coordinates.count > 1 {
+                    SharePosterRoute(coordinates: data.coordinates, lineWidth: 7 * s)
+                        .padding(.horizontal, 18 * s)
+                        .padding(.top, 30 * s)
+                        // Clear of the title block at the bottom.
+                        .padding(.bottom, 86 * s)
+                }
+
+                // Wordmark (canon 117:1770): car + «TRIP TRACK» on one line.
+                HStack(spacing: 8 * s) {
+                    Image("PixelCar")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22 * s, height: 22 * s)
+                    Text("TRIP TRACK")
+                        .font(.custom("PressStart2P-Regular", fixedSize: 7 * s))
+                        .tracking(1.2 * s)
+                        .foregroundStyle(.white)
+                }
+                .padding(.leading, 14 * s)
+                .padding(.top, 14 * s)
+
+                // Title + metrics (canon 117:1773), bottom-left over the art.
+                VStack(alignment: .leading, spacing: 8 * s) {
+                    Text(data.title)
+                        .font(.system(size: 19 * s, weight: .heavy))
+                        .tracking(-0.4 * s)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .shadow(color: .black.opacity(0.35), radius: 6 * s, y: 1 * s)
+
+                    HStack(alignment: .firstTextBaseline, spacing: 10 * s) {
+                        metric(data.distanceKmText, unit: AppStrings.km(data.language), s: s)
+                        metric(data.durationText, unit: nil, s: s)
+                        metric(data.avgSpeedKmhText, unit: AppStrings.kmh(data.language), s: s)
                     }
-                    .padding(.horizontal, geo.size.width * 0.06)
-                    .padding(.top, geo.size.height * 0.05)
+                }
+                .padding(.leading, 16 * s)
+                .padding(.trailing, 14 * s)
+                .padding(.bottom, 20 * s)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            }
+        }
+    }
 
-                    Spacer(minLength: 0)
+    /// Value in white bold with a small grey unit riding its baseline —
+    /// «158.2 км  2:14  72 км/ч» reads as one line of numbers, not as a
+    /// three-column table with shouty orange captions.
+    private func metric(_ value: String, unit: String?, s: CGFloat) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 2 * s) {
+            Text(value)
+                .font(.system(size: 17 * s, weight: .heavy).monospacedDigit())
+                .tracking(-0.3 * s)
+                .foregroundStyle(.white)
+            if let unit {
+                Text(unit)
+                    .font(.system(size: 9 * s, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+        }
+        .shadow(color: .black.opacity(0.35), radius: 6 * s, y: 1 * s)
+    }
+}
 
-                    // Map center, ~55% of height
-                    ZStack {
-                        RoundedRectangle(cornerRadius: geo.size.width * 0.05)
-                            .fill(Color.white.opacity(0.04))
+/// The route itself: one stroked path across the whole card, coloured start →
+/// finish, with a green dot where the drive began and a white one where it
+/// ended. Deterministic vector drawing (no async map snapshot) so
+/// `ImageRenderer` always captures a complete route in the export.
+private struct SharePosterRoute: View {
+    let coordinates: [CLLocationCoordinate2D]
+    let lineWidth: CGFloat
 
-                        if data.coordinates.count > 1 {
-                            // Poster-style route render — deterministic (no
-                            // async tile snapshot), so ImageRenderer always
-                            // captures the full route. Same navy poster
-                            // surface as the trip-detail hero.
-                            PosterRouteCanvas(
-                                coordinates: data.coordinates,
-                                speeds: [],
-                                style: .poster
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: geo.size.width * 0.05))
-                            .padding(geo.size.width * 0.04)
-                        } else {
-                            Image(systemName: "map")
-                                .font(.system(size: 72, weight: .light))
-                                .foregroundStyle(Color.white.opacity(0.2))
-                        }
-                    }
-                    .frame(width: geo.size.width * 0.85,
-                           height: geo.size.height * 0.48)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: geo.size.width * 0.05)
-                            .stroke(AppTheme.accent.opacity(0.15), lineWidth: 1)
-                    )
+    var body: some View {
+        GeometryReader { geo in
+            let pts = projected(in: geo.size)
+            if pts.count > 1 {
+                ZStack {
+                    routePath(pts)
+                        .stroke(
+                            gradient(from: pts[0], to: pts[pts.count - 1], in: geo.size),
+                            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+                        )
+                        .shadow(color: .black.opacity(0.35), radius: lineWidth * 0.8, y: lineWidth * 0.2)
 
-                    Spacer(minLength: 0)
-
-                    // Bottom info
-                    VStack(alignment: .leading, spacing: geo.size.height * 0.018) {
-                        Text(data.title)
-                            .font(.system(size: geo.size.height * 0.033, weight: .heavy))
-                            .tracking(-0.3)
-                            .foregroundStyle(Color.white)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-
-                        HStack(spacing: geo.size.width * 0.05) {
-                            metricCell(
-                                value: data.distanceKmText,
-                                unit: AppStrings.km(data.language),
-                                fontScale: geo.size.height * 0.028
-                            )
-                            metricCell(
-                                value: data.durationText,
-                                unit: AppStrings.duration(data.language).lowercased(),
-                                fontScale: geo.size.height * 0.028
-                            )
-                            metricCell(
-                                value: data.avgSpeedKmhText,
-                                unit: AppStrings.kmh(data.language),
-                                fontScale: geo.size.height * 0.028
-                            )
-                        }
-                        .padding(.top, geo.size.height * 0.012)
-
-                        // Author footer
-                        HStack(spacing: 8) {
-                            Text(data.authorEmoji)
-                                .font(.system(size: geo.size.height * 0.024))
-                                .frame(width: geo.size.height * 0.04,
-                                       height: geo.size.height * 0.04)
-                                .background(Circle().fill(AppTheme.accentBg))
-                            Text(data.authorName)
-                                .font(.system(size: geo.size.height * 0.017, weight: .semibold))
-                                .foregroundStyle(Color.white.opacity(0.75))
-                            if let region = data.region, !region.isEmpty {
-                                Text("·")
-                                    .foregroundStyle(Color.white.opacity(0.3))
-                                Text(region)
-                                    .font(.system(size: geo.size.height * 0.015))
-                                    .foregroundStyle(Color.white.opacity(0.55))
-                                    .lineLimit(1)
-                            }
-                            Spacer()
-                        }
-                        .padding(.top, geo.size.height * 0.02)
-                    }
-                    .padding(.horizontal, geo.size.width * 0.07)
-                    .padding(.bottom, geo.size.height * 0.07)
+                    endDot(at: pts[0], fill: Color(red: 0x5A/255, green: 0xC8/255, blue: 0x3C/255))
+                    endDot(at: pts[pts.count - 1], fill: .white)
                 }
             }
         }
     }
 
-    private func metricCell(value: String, unit: String, fontScale: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(value)
-                .font(.system(size: fontScale, weight: .heavy).monospacedDigit())
-                .tracking(-0.4)
-                .foregroundStyle(Color.white)
-            Text(unit)
-                .font(.system(size: fontScale * 0.38, weight: .bold))
-                .tracking(1.5)
-                .foregroundStyle(AppTheme.accent)
-                .textCase(.uppercase)
+    private func routePath(_ pts: [CGPoint]) -> Path {
+        var path = Path()
+        path.move(to: pts[0])
+        // Quadratic smoothing through midpoints — a polyline of GPS samples
+        // reads as a jagged scribble at poster scale.
+        for i in 1..<pts.count - 1 {
+            let mid = CGPoint(x: (pts[i].x + pts[i + 1].x) / 2,
+                              y: (pts[i].y + pts[i + 1].y) / 2)
+            path.addQuadCurve(to: mid, control: pts[i])
+        }
+        path.addLine(to: pts[pts.count - 1])
+        return path
+    }
+
+    /// Start-to-finish gradient, aligned to the actual travel direction so
+    /// the green end is always where the drive began.
+    private func gradient(from: CGPoint, to: CGPoint, in size: CGSize) -> LinearGradient {
+        // UnitPoint is fractional — feeding it raw pixel coordinates would
+        // put both ends far off-canvas and flatten the gradient to one colour.
+        let start = UnitPoint(x: from.x / max(size.width, 1), y: from.y / max(size.height, 1))
+        let end = UnitPoint(x: to.x / max(size.width, 1), y: to.y / max(size.height, 1))
+        return LinearGradient(
+            stops: [
+                .init(color: Color(red: 0x7A/255, green: 0xC8/255, blue: 0x28/255), location: 0.0),
+                .init(color: Color(red: 0xE8/255, green: 0xC4/255, blue: 0x1E/255), location: 0.45),
+                .init(color: Color(red: 0xF0/255, green: 0x7B/255, blue: 0x1E/255), location: 0.75),
+                .init(color: Color(red: 0xE0/255, green: 0x3B/255, blue: 0x2C/255), location: 1.0),
+            ],
+            startPoint: start, endPoint: end
+        )
+    }
+
+    private func endDot(at p: CGPoint, fill: Color) -> some View {
+        Circle()
+            .fill(fill)
+            .frame(width: lineWidth * 1.45, height: lineWidth * 1.45)
+            .overlay(Circle().stroke(.black.opacity(0.25), lineWidth: lineWidth * 0.18))
+            .position(p)
+    }
+
+    /// Equirectangular projection into the given rect, aspect-preserved and
+    /// centred, with the latitude axis flipped so north is up.
+    private func projected(in size: CGSize) -> [CGPoint] {
+        guard coordinates.count > 1, size.width > 0, size.height > 0 else { return [] }
+        let lats = coordinates.map(\.latitude)
+        let lons = coordinates.map(\.longitude)
+        guard let minLat = lats.min(), let maxLat = lats.max(),
+              let minLon = lons.min(), let maxLon = lons.max() else { return [] }
+        // Longitude degrees shrink with latitude — without this correction a
+        // north-south drive renders squashed sideways.
+        let latMid = (minLat + maxLat) / 2
+        let lonScale = max(0.15, cos(latMid * .pi / 180))
+        let spanX = max((maxLon - minLon) * lonScale, 1e-6)
+        let spanY = max(maxLat - minLat, 1e-6)
+        let inset = lineWidth
+        let usable = CGSize(width: max(size.width - inset * 2, 1),
+                            height: max(size.height - inset * 2, 1))
+        let scale = min(usable.width / spanX, usable.height / spanY)
+        let drawn = CGSize(width: spanX * scale, height: spanY * scale)
+        let originX = inset + (usable.width - drawn.width) / 2
+        let originY = inset + (usable.height - drawn.height) / 2
+        return coordinates.map { c in
+            CGPoint(
+                x: originX + (c.longitude - minLon) * lonScale * scale,
+                y: originY + (maxLat - c.latitude) * scale
+            )
         }
     }
 }
