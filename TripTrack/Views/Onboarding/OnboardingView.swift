@@ -41,9 +41,13 @@ struct OnboardingView: View {
                 locationPage
                     .tag(2)
 
-                // Auto-record page (Always location + Motion)
+                // Background location («Всегда») + motion
                 autoRecordPage
                     .tag(3)
+
+                // Notifications — its own ask (canon), and the last page
+                notificationsPage
+                    .tag(4)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             // Re-read authorization on every page change and when the app
@@ -69,7 +73,7 @@ struct OnboardingView: View {
 
     private var paginationDots: some View {
         HStack(spacing: 7) {
-            ForEach(0..<4, id: \.self) { page in
+            ForEach(0..<5, id: \.self) { page in
                 Capsule()
                     .fill(page == currentPage ? AppTheme.accent : Color(red: 155/255, green: 155/255, blue: 165/255).opacity(0.4))
                     .frame(width: page == currentPage ? 18 : 7, height: 7)
@@ -537,17 +541,16 @@ struct OnboardingView: View {
                     .font(.system(size: 42, weight: .regular))
             }
 
-            Text(AppStrings.onboardingAutoRecord(lang.language))
+            Text(AppStrings.onboardingBackgroundTitle(lang.language))
                 .font(.system(size: 24, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
                 .padding(.top, 49)
 
-            // Copy deliberately keeps the background-location + motion
-            // disclosure (user decision) — it primes the Always prompt;
-            // the Figma frame carries the shortened version.
-            bodyText(AppStrings.onboardingAutoRecordSub(lang.language), c)
+            // Canon copy: says exactly what breaks with «While Using», which
+            // is the only argument that makes «Always» reasonable to grant.
+            bodyText(AppStrings.onboardingBackgroundSub(lang.language), c)
                 .padding(.top, 12)
 
             Spacer()
@@ -562,21 +565,60 @@ struct OnboardingView: View {
                 primaryButton(
                     hasAlwaysPermission
                         ? AppStrings.onboardingContinue(lang.language)
-                        : AppStrings.onboardingAutoRecordEnable(lang.language)
+                        : AppStrings.onboardingBackgroundAllow(lang.language)
                 ) {
-                    enableAutoRecordAndFinish()
+                    requestAlwaysAndAdvance()
                 }
 
                 Button {
-                    // Land on the feed: it is the app's home screen. The
-                    // earlier "drop them on Record" shortcut assumed an empty
-                    // feed with nothing to do, but the feed shows other
-                    // people's trips from the first launch, and recording
-                    // starts by itself anyway.
-                    UserDefaults.standard.set(AppTab.home.rawValue, forKey: AppTab.storageKey)
-                    hasCompletedOnboarding = true
+                    Haptics.tap()
+                    withAnimation { currentPage = 4 }
                 } label: {
-                    Text(AppStrings.onboardingAutoRecordSkip(lang.language))
+                    Text(AppStrings.onboardingSkipForNow(lang.language))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(c.textSecondary)
+                }
+
+                consentText(c)
+                    .padding(.top, 6)
+            }
+            .padding(.horizontal, 32)
+            .padding(.bottom, 56)
+        }
+    }
+
+    // MARK: - Notifications Page (canon «Уведомления»)
+
+    private var notificationsPage: some View {
+        let c = AppTheme.colors(for: scheme)
+        return VStack(spacing: 0) {
+            heroBadge {
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 38, weight: .regular))
+            }
+
+            Text(AppStrings.onboardingNotificationsTitle(lang.language))
+                .font(.system(size: 24, weight: .heavy))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                .padding(.top, 49)
+
+            bodyText(AppStrings.onboardingNotificationsSub(lang.language), c)
+                .padding(.top, 12)
+
+            Spacer()
+
+            VStack(spacing: 10) {
+                primaryButton(AppStrings.onboardingNotificationsEnable(lang.language)) {
+                    requestNotificationsAndFinish()
+                }
+
+                Button {
+                    Haptics.tap()
+                    finishOnboarding()
+                } label: {
+                    Text(AppStrings.onboardingNotNow(lang.language))
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                 }
@@ -636,38 +678,35 @@ struct OnboardingView: View {
         withAnimation { currentPage = 3 }
     }
 
-    private func enableAutoRecordAndFinish() {
-        // Request Always location (escalates from While Using).
-        // `hasCompletedOnboarding = true` below tears this view down in the
-        // same update cycle — the instant transition is deliberate — which
-        // would discard the @State manager while the system prompt is still
-        // pending, and iOS cancels the prompt when its CLLocationManager
-        // deallocates (invariant documented in AutoRecordSettingsView's
-        // requestAutoRecordPermissions). AlwaysAuthorizationRetainer holds
-        // the manager past the view's life until authorization resolves.
+    /// «Всегда» + motion, then on to the notifications page. Motion rides
+    /// along here because auto-start needs both — asking for it on a screen
+    /// of its own would be a permission prompt with nothing to explain.
+    private func requestAlwaysAndAdvance() {
+        // The system prompt outlives this view's state, and iOS cancels a
+        // pending prompt when its CLLocationManager deallocates — the
+        // retainer holds it until authorization resolves. (Same invariant
+        // documented in AutoRecordSettingsView.)
         let manager = locationManager ?? CLLocationManager()
         locationManager = manager
         AlwaysAuthorizationRetainer.requestAlwaysAuthorization(retaining: manager)
-
-        // Request Motion permission
         MotionDetector.requestAuthorization { _ in }
+        withAnimation { currentPage = 4 }
+    }
 
-        // Request Notification permission. If granted, also kick off APNs
-        // registration so we can receive remote pushes (reactions, follows)
-        // once the user signs in. Token sync to server is gated on sign-in
-        // inside `PushNotificationManager`.
+    private func requestNotificationsAndFinish() {
         NotificationManager.shared.requestAuthorization { granted in
             if granted {
                 Task { @MainActor in
                     PushNotificationManager.shared.registerForRemoteNotifications()
                 }
             }
+            Task { @MainActor in finishOnboarding() }
         }
+    }
 
-        // Enable auto-record by default
-        SettingsManager.shared.autoRecordMode = .remind
-
-        // Feed is home — see the note on the skip path above.
+    private func finishOnboarding() {
+        // Feed is home: it has other people's trips from the very first
+        // launch, and recording starts by itself anyway.
         UserDefaults.standard.set(AppTab.home.rawValue, forKey: AppTab.storageKey)
         hasCompletedOnboarding = true
     }

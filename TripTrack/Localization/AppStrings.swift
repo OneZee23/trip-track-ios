@@ -431,6 +431,34 @@ enum AppStrings {
     /// Shown instead of «Разрешить» when the system permission is already
     /// granted — asking again would do nothing (iOS shows the prompt once),
     /// so the button has to say what it will actually do: move on.
+    // Canon onboarding screens «Гео "Всегда"» and «Уведомления» — one ask
+    // per screen, each explaining what breaks without it.
+    static func onboardingBackgroundTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Запись в фоне" : "Recording in the background"
+    }
+    static func onboardingBackgroundSub(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Чтобы поездки писались, когда телефон в кармане, нужен доступ к геолокации «Всегда». С «При использовании» запись прервётся в фоне."
+            : "For trips to keep recording with the phone in your pocket, location access must be «Always». With «While Using» recording stops in the background."
+    }
+    static func onboardingBackgroundAllow(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Разрешить «Всегда»" : "Allow «Always»"
+    }
+    static func onboardingNotificationsTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Будьте в курсе" : "Stay in the loop"
+    }
+    static func onboardingNotificationsSub(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Уведомления о реакциях, подписках и комментариях к вашим поездкам. Включите — и не пропустите отклик."
+            : "Notifications about reactions, follows and comments on your trips. Turn them on so you don't miss the response."
+    }
+    static func onboardingNotificationsEnable(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Включить уведомления" : "Turn on notifications"
+    }
+    static func onboardingNotNow(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не сейчас" : "Not now"
+    }
+
     static func onboardingAlreadyGranted(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Доступ уже есть" : "Access already granted"
     }
