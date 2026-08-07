@@ -9,6 +9,14 @@ import CoreMotion
 struct OnboardingView: View {
     @Binding var hasCompletedOnboarding: Bool
     @EnvironmentObject private var lang: LanguageManager
+    /// Newest recorded trip, when there is one. The demo card then shows a
+    /// REAL drive instead of a drawn squiggle — on a re-run of the
+    /// onboarding, or for anyone who recorded before signing in, seeing
+    /// their own route here is the whole promise made concrete.
+    @State private var realTrip: Trip?
+    /// Live authorization state, re-read whenever a page appears so a
+    /// permission granted in the system prompt updates this screen.
+    @State private var permissionStatus: CLAuthorizationStatus = CLLocationManager().authorizationStatus
     @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     // Initial page can be pinned via launch argument (-onboardingStartPage N)
@@ -38,6 +46,13 @@ struct OnboardingView: View {
                     .tag(3)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
+            // Re-read authorization on every page change and when the app
+            // comes back from the system prompt: a permission granted in
+            // that alert must be reflected here without a relaunch.
+            .onChange(of: currentPage) { _, _ in refreshPermissionStatus() }
+            .onReceive(NotificationCenter.default.publisher(
+                for: UIApplication.didBecomeActiveNotification
+            )) { _ in refreshPermissionStatus() }
 
             // Custom pagination dots (Figma): inactive 7pt grey circles,
             // active 18×7 accent capsule. Overlaid so every page's own
@@ -194,6 +209,7 @@ struct OnboardingView: View {
                 mockTripCard(c)
                     .padding(.horizontal, 28)
                     .padding(.top, 20)
+                    .task { loadRealTrip() }
 
                 bodyText(AppStrings.onboardingValueCaption(lang.language), c, size: 14)
                     .padding(.top, 16)
@@ -206,6 +222,18 @@ struct OnboardingView: View {
     /// Static "what your recorded trip looks like" card. Pure SwiftUI —
     /// no map tiles, no live data. Deliberately theme-independent (it is a
     /// "screenshot" of the app's light map style).
+    /// Pulls the newest trip that actually has a route to draw.
+    ///
+    /// Goes straight to the repository rather than through `TripManager`:
+    /// onboarding runs BEFORE `ContentView`, so there is no MapViewModel (and
+    /// therefore no TripManager) in this environment, and spinning one up
+    /// here would start the location plumbing for a card.
+    private func loadRealTrip() {
+        let repo = CoreDataTripRepository(persistenceController: .shared)
+        let candidates = repo.fetchTrips(limit: 10, offset: 0)
+        realTrip = candidates.first { $0.previewCoordinates.count > 1 }
+    }
+
     private func mockTripCard(_ c: AppTheme.Colors) -> some View {
         let isRu = lang.language == .ru
         return VStack(spacing: 0) {
@@ -239,38 +267,58 @@ struct OnboardingView: View {
                 }
                 .stroke(Color(red: 214/255, green: 205/255, blue: 186/255), lineWidth: 3)
 
-                // Speed-gradient route per Figma canon: line runs green →
-                // yellow → red from the bottom-left start to the top-right
-                // end (endpoint DOTS carry the opposite colors for contrast).
-                Path { p in
-                    p.move(to: CGPoint(x: w * 0.11, y: h * 0.83))
-                    p.addCurve(to: CGPoint(x: w * 0.72, y: h * 0.11),
-                               control1: CGPoint(x: w * 0.38, y: h * 0.95),
-                               control2: CGPoint(x: w * 0.45, y: h * 0.18))
+                if let realTrip, realTrip.previewCoordinates.count > 1 {
+                    // The user's own most recent drive, drawn with the same
+                    // projection + gradient the share poster uses.
+                    let pts = SharePosterView.project(
+                        realTrip.previewCoordinates,
+                        in: CGSize(width: w, height: h),
+                        inset: 18
+                    )
+                    SharePosterRoute(points: pts, lineWidth: 4)
+                    if pts.count > 1 {
+                        let mid = pts[pts.count / 2]
+                        Image("PixelCar")
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                            .frame(width: 36, height: 36)
+                            .position(mid)
+                    }
+                } else {
+                    // Speed-gradient route per Figma canon: line runs green →
+                    // yellow → red from the bottom-left start to the top-right
+                    // end (endpoint DOTS carry the opposite colors for contrast).
+                    Path { p in
+                        p.move(to: CGPoint(x: w * 0.11, y: h * 0.83))
+                        p.addCurve(to: CGPoint(x: w * 0.72, y: h * 0.11),
+                                   control1: CGPoint(x: w * 0.38, y: h * 0.95),
+                                   control2: CGPoint(x: w * 0.45, y: h * 0.18))
+                    }
+                    .stroke(
+                        LinearGradient(
+                            colors: [AppTheme.green, AppTheme.yellow, AppTheme.red],
+                            startPoint: .bottomLeading, endPoint: .topTrailing
+                        ),
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                    )
+
+                    // Endpoint dots: red start (bottom-left), green finish
+                    // (top-right), both with white rings.
+                    mockEndpointDot(AppTheme.red)
+                        .position(x: w * 0.11, y: h * 0.83)
+                    mockEndpointDot(AppTheme.green)
+                        .position(x: w * 0.72, y: h * 0.11)
+
+                    // Pixel car riding the route
+                    Image("PixelCar")
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFit()
+                        .frame(width: 36, height: 36)
+                        .rotationEffect(.degrees(-24))
+                        .position(x: w * 0.5, y: h * 0.3)
                 }
-                .stroke(
-                    LinearGradient(
-                        colors: [AppTheme.green, AppTheme.yellow, AppTheme.red],
-                        startPoint: .bottomLeading, endPoint: .topTrailing
-                    ),
-                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                )
-
-                // Endpoint dots: red start (bottom-left), green finish
-                // (top-right), both with white rings.
-                mockEndpointDot(AppTheme.red)
-                    .position(x: w * 0.11, y: h * 0.83)
-                mockEndpointDot(AppTheme.green)
-                    .position(x: w * 0.72, y: h * 0.11)
-
-                // Pixel car riding the route
-                Image("PixelCar")
-                    .resizable()
-                    .interpolation(.none)
-                    .scaledToFit()
-                    .frame(width: 36, height: 36)
-                    .rotationEffect(.degrees(-24))
-                    .position(x: w * 0.5, y: h * 0.3)
             }
 
             VStack {
@@ -298,6 +346,23 @@ struct OnboardingView: View {
         .frame(height: 150)
     }
 
+    /// «Поездка · 16 мая» with the real date when a real trip backs the card.
+    private var realTripTitle: String? {
+        guard let realTrip else { return nil }
+        let df = DateFormatter()
+        df.locale = Locale(identifier: lang.language == .ru ? "ru_RU" : "en_US")
+        df.setLocalizedDateFormatFromTemplate("d MMMM")
+        let prefix = lang.language == .ru ? "Поездка" : "Trip"
+        return "\(prefix) · \(df.string(from: realTrip.startDate))"
+    }
+
+    /// RU writes decimals with a comma; the canned values already did, so the
+    /// real ones must too or the card changes typography mid-flow.
+    private static func number(_ value: Double, decimals: Int, isRu: Bool) -> String {
+        let s = String(format: "%.\(decimals)f", value)
+        return isRu ? s.replacingOccurrences(of: ".", with: ",") : s
+    }
+
     private func mockEndpointDot(_ color: Color) -> some View {
         Circle()
             .fill(color)
@@ -309,7 +374,27 @@ struct OnboardingView: View {
     /// dividers. Values are static mock data (RU uses decimal comma).
     private func mockStatsArea(isRu: Bool) -> some View {
         let l = lang.language
-        let metrics: [(icon: String, value: String, unit: String, color: Color, label: String)] = [
+        // Real numbers whenever there's a real trip behind the card; the
+        // canned set only fills in for a first-ever launch, where there is
+        // genuinely nothing to show.
+        let metrics: [(icon: String, value: String, unit: String, color: Color, label: String)] =
+            realTrip.map { trip in
+                let fuel = trip.distanceKm > 0 ? trip.fuelUsed / trip.distanceKm * 100 : 0
+                return [
+                    ("point.topleft.down.curvedto.point.bottomright.up",
+                     Self.number(trip.distanceKm, decimals: trip.distanceKm < 100 ? 1 : 0, isRu: isRu),
+                     AppStrings.km(l), AppTheme.green, AppStrings.distance(l)),
+                    ("clock", trip.formattedDuration, "", AppTheme.accent, AppStrings.duration(l)),
+                    ("gauge", Self.number(trip.averageSpeedKmh, decimals: 0, isRu: isRu),
+                     AppStrings.kmh(l), AppTheme.blue, AppStrings.onboardingStatAvg(l)),
+                    ("bolt.fill", Self.number(trip.maxSpeedKmh, decimals: 0, isRu: isRu),
+                     AppStrings.kmh(l), AppTheme.red, AppStrings.onboardingStatMax(l)),
+                    ("drop", Self.number(fuel, decimals: 1, isRu: isRu),
+                     AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
+                    ("mountain.2", Self.number(trip.elevation, decimals: 0, isRu: isRu),
+                     AppStrings.unitMeters(l), AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
+                ]
+            } ?? [
             ("point.topleft.down.curvedto.point.bottomright.up", "246", AppStrings.km(l), AppTheme.green, AppStrings.distance(l)),
             ("clock", "2:59", "", AppTheme.accent, AppStrings.duration(l)),
             ("gauge", "82", AppStrings.kmh(l), AppTheme.blue, AppStrings.onboardingStatAvg(l)),
@@ -320,7 +405,7 @@ struct OnboardingView: View {
         let hairline = Color.black.opacity(0.05)
 
         return VStack(alignment: .leading, spacing: 8) {
-            Text(AppStrings.onboardingMockTripTitle(lang.language))
+            Text(realTripTitle ?? AppStrings.onboardingMockTripTitle(lang.language))
                 .font(.system(size: 13.5, weight: .bold))
                 .foregroundStyle(Color(red: 30/255, green: 30/255, blue: 35/255))
                 .padding(.horizontal, 16)
@@ -397,8 +482,35 @@ struct OnboardingView: View {
             Spacer()
 
             VStack(spacing: 12) {
-                primaryButton(AppStrings.onboardingAllow(lang.language)) {
-                    requestLocationAndAdvance()
+                if hasLocationPermission {
+                    // Already granted (re-run of onboarding, or the user
+                    // allowed it from a system prompt earlier): asking again
+                    // is a no-op in iOS, so the screen states the fact and
+                    // the button just moves forward.
+                    Text(AppStrings.onboardingAlreadyGranted(lang.language))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppTheme.green)
+
+                    primaryButton(AppStrings.onboardingContinue(lang.language)) {
+                        withAnimation { currentPage = 3 }
+                    }
+                } else {
+                    primaryButton(AppStrings.onboardingAllow(lang.language)) {
+                        requestLocationAndAdvance()
+                    }
+
+                    // Nothing has to be granted here. Recording asks for what
+                    // it needs at the moment it needs it, and forcing the
+                    // decision before the app has shown anything is the
+                    // fastest way to get a "Don't Allow" you can never undo.
+                    Button {
+                        Haptics.tap()
+                        withAnimation { currentPage = 3 }
+                    } label: {
+                        Text(AppStrings.onboardingSkipForNow(lang.language))
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(c.textSecondary)
+                    }
                 }
 
                 // Consent stays on this screen too (product decision): the
@@ -441,7 +553,17 @@ struct OnboardingView: View {
             Spacer()
 
             VStack(spacing: 10) {
-                primaryButton(AppStrings.onboardingAutoRecordEnable(lang.language)) {
+                if hasAlwaysPermission {
+                    Text(AppStrings.onboardingAlreadyGranted(lang.language))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppTheme.green)
+                }
+
+                primaryButton(
+                    hasAlwaysPermission
+                        ? AppStrings.onboardingContinue(lang.language)
+                        : AppStrings.onboardingAutoRecordEnable(lang.language)
+                ) {
                     enableAutoRecordAndFinish()
                 }
 
@@ -486,6 +608,23 @@ struct OnboardingView: View {
             .tint(AppTheme.accent)
             .multilineTextAlignment(.center)
     }
+
+    private func refreshPermissionStatus() {
+        permissionStatus = (locationManager ?? CLLocationManager()).authorizationStatus
+    }
+
+    // MARK: - Permission state
+
+    /// Location is granted at any level (While Using or Always).
+    private var hasLocationPermission: Bool {
+        switch permissionStatus {
+        case .authorizedWhenInUse, .authorizedAlways: return true
+        default: return false
+        }
+    }
+
+    /// Background recording specifically — «Always» is what auto-record needs.
+    private var hasAlwaysPermission: Bool { permissionStatus == .authorizedAlways }
 
     // MARK: - Actions
 

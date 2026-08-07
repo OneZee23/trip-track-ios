@@ -428,6 +428,19 @@ enum AppStrings {
     static func onboardingLocationSub(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Для записи маршрутов нужен доступ к геолокации. Данные хранятся на устройстве." : "Location access is needed to record your routes. Your data stays on your device."
     }
+    /// Shown instead of «Разрешить» when the system permission is already
+    /// granted — asking again would do nothing (iOS shows the prompt once),
+    /// so the button has to say what it will actually do: move on.
+    static func onboardingAlreadyGranted(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Доступ уже есть" : "Access already granted"
+    }
+    static func onboardingContinue(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Дальше" : "Continue"
+    }
+    static func onboardingSkipForNow(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Позже" : "Not now"
+    }
+
     static func onboardingAllow(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Разрешить" : "Allow"
     }
