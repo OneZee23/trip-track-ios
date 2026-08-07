@@ -277,6 +277,10 @@ struct TripCommentsSection: View {
               !store.isPosting else { return }
         Haptics.action()
         draft = ""
+        // Send is the end of the interaction — leaving the keyboard up hid
+        // the comment the user just wrote behind it, with no obvious way
+        // down.
+        composerFocused = false
         Task {
             if let err = await store.post(text: text, language: lang.language) {
                 onError(err)

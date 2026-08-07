@@ -124,6 +124,43 @@ struct SocialTripDetailView: View {
         return nil
     }
 
+    /// Back + «…» over the poster.
+    private var posterChrome: some View {
+        HStack {
+            PosterCircleButton(
+                systemImage: "chevron.left",
+                accessibilityLabelText: AppStrings.back(lang.language)
+            ) { dismiss() }
+            Spacer()
+            // Popover, not a `Menu` — see `ActionPopoverList`.
+            // Report entry point stays removed pending a
+            // moderation/admin UI — the server endpoint still
+            // accepts reports, but there's no triage surface for
+            // us to act on them yet. Re-add when moderation is
+            // wired up (ReportSheet.swift lives in this dir).
+            PosterCircleButton(
+                systemImage: "ellipsis",
+                accessibilityLabelText: AppStrings.moreActions(lang.language)
+            ) { showTripActions = true }
+            .popover(isPresented: $showTripActions, arrowEdge: .top) {
+                ActionPopoverList(items: [
+                    .init(
+                        title: AppStrings.share(lang.language),
+                        systemImage: "square.and.arrow.up"
+                    ) {
+                        showTripActions = false
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 260_000_000)
+                            onShare?()
+                        }
+                    },
+                ])
+            }
+        }
+        .padding(.top, safeAreaTop + 8)
+        .padding(.horizontal, 16)
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
 
@@ -136,6 +173,15 @@ struct SocialTripDetailView: View {
                         VStack(spacing: 0) {
                             heroSection
                                 .frame(height: posterHeight)
+                                // Chrome rides the poster instead of floating
+                                // over everything: scrolling into the stats
+                                // used to drag the two buttons down the page
+                                // with it. Now they sit where the layout puts
+                                // them and leave with the poster; swipe-back
+                                // still works everywhere below.
+                                .overlay(alignment: .top) {
+                                    posterChrome
+                                }
 
                             detailBody(c)
                                 .background(c.bg)
@@ -148,42 +194,11 @@ struct SocialTripDetailView: View {
                     }
                     .scrollIndicators(.hidden)
                     .task { await scrollToCommentsIfRequested(proxy) }
+                    // Drag the list down to put the keyboard away — the
+                    // comment composer had no other exit.
+                    .scrollDismissesKeyboard(.interactively)
                 }
 
-                // Sticky floating back + «…» — matches TripDetailView pattern.
-                HStack {
-                    PosterCircleButton(
-                        systemImage: "chevron.left",
-                        accessibilityLabelText: AppStrings.back(lang.language)
-                    ) { dismiss() }
-                    Spacer()
-                    // Popover, not a `Menu` — see `ActionPopoverList`.
-                    // Report entry point stays removed pending a
-                    // moderation/admin UI — the server endpoint still
-                    // accepts reports, but there's no triage surface for
-                    // us to act on them yet. Re-add when moderation is
-                    // wired up (ReportSheet.swift lives in this dir).
-                    PosterCircleButton(
-                        systemImage: "ellipsis",
-                        accessibilityLabelText: AppStrings.moreActions(lang.language)
-                    ) { showTripActions = true }
-                    .popover(isPresented: $showTripActions, arrowEdge: .top) {
-                        ActionPopoverList(items: [
-                            .init(
-                                title: AppStrings.share(lang.language),
-                                systemImage: "square.and.arrow.up"
-                            ) {
-                                showTripActions = false
-                                Task { @MainActor in
-                                    try? await Task.sleep(nanoseconds: 260_000_000)
-                                    onShare?()
-                                }
-                            },
-                        ])
-                    }
-                }
-                .padding(.top, safeAreaTop + 8)
-                .padding(.horizontal, 16)
             }
         }
         .background(c.bg)

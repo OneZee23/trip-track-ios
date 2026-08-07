@@ -118,6 +118,56 @@ struct TripDetailView: View {
         return nil
     }
 
+    /// Back + «…» + share over the poster.
+    @ViewBuilder
+    private func posterChrome(trip: Trip) -> some View {
+        HStack(spacing: 8) {
+            PosterCircleButton(
+                systemImage: "chevron.left",
+                accessibilityLabelText: AppStrings.back(lang.language)
+            ) { dismiss() }
+
+            Spacer()
+
+            // Popover, not a `Menu` — see `ActionPopoverList`. Here
+            // the artifact was at its worst: the button floats in an
+            // overlay above a ScrollView, so UIKit's dismissal
+            // animation put the source snapshot back against stale
+            // geometry and the «…» visibly slid away across the
+            // screen.
+            PosterCircleButton(
+                systemImage: "ellipsis",
+                accessibilityLabelText: AppStrings.moreActions(lang.language)
+            ) { showTripActions = true }
+            .popover(isPresented: $showTripActions, arrowEdge: .top) {
+                ActionPopoverList(items: [
+                    .init(
+                        title: AppStrings.delete(lang.language),
+                        systemImage: "trash",
+                        isDestructive: true
+                    ) {
+                        showTripActions = false
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 260_000_000)
+                            Haptics.action()
+                            showDeleteConfirm = true
+                        }
+                    },
+                ])
+            }
+
+            PosterCircleButton(
+                systemImage: "square.and.arrow.up",
+                accessibilityLabelText: AppStrings.share(lang.language)
+            ) {
+                Task { await openStoryShare(for: trip) }
+            }
+            .disabled(isGeneratingShare)
+        }
+        .padding(.top, safeAreaTop + 8)
+        .padding(.horizontal, 16)
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         ZStack(alignment: .topLeading) {
@@ -127,6 +177,9 @@ struct TripDetailView: View {
                     VStack(spacing: 0) {
                         heroSection(trip: trip)
                             .frame(height: posterHeight)
+                            // Chrome rides the poster instead of floating over
+                            // the whole screen — see SocialTripDetailView.
+                            .overlay(alignment: .top) { posterChrome(trip: trip) }
 
                         // Bottom info panel
                         infoPanel(trip: trip, c: c)
@@ -141,56 +194,11 @@ struct TripDetailView: View {
                 }
                 .coordinateSpace(name: "detailScroll")
                 .scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
                 .background(ScrollBounceDisabler())
                 .task { await scrollToCommentsIfRequested(proxy) }
                 }
 
-                // Sticky back + (⋯ delete) + share — floating over the poster.
-                HStack(spacing: 8) {
-                    PosterCircleButton(
-                        systemImage: "chevron.left",
-                        accessibilityLabelText: AppStrings.back(lang.language)
-                    ) { dismiss() }
-
-                    Spacer()
-
-                    // Popover, not a `Menu` — see `ActionPopoverList`. Here
-                    // the artifact was at its worst: the button floats in an
-                    // overlay above a ScrollView, so UIKit's dismissal
-                    // animation put the source snapshot back against stale
-                    // geometry and the «…» visibly slid away across the
-                    // screen.
-                    PosterCircleButton(
-                        systemImage: "ellipsis",
-                        accessibilityLabelText: AppStrings.moreActions(lang.language)
-                    ) { showTripActions = true }
-                    .popover(isPresented: $showTripActions, arrowEdge: .top) {
-                        ActionPopoverList(items: [
-                            .init(
-                                title: AppStrings.delete(lang.language),
-                                systemImage: "trash",
-                                isDestructive: true
-                            ) {
-                                showTripActions = false
-                                Task { @MainActor in
-                                    try? await Task.sleep(nanoseconds: 260_000_000)
-                                    Haptics.action()
-                                    showDeleteConfirm = true
-                                }
-                            },
-                        ])
-                    }
-
-                    PosterCircleButton(
-                        systemImage: "square.and.arrow.up",
-                        accessibilityLabelText: AppStrings.share(lang.language)
-                    ) {
-                        Task { await openStoryShare(for: trip) }
-                    }
-                    .disabled(isGeneratingShare)
-                }
-                .padding(.top, safeAreaTop + 8)
-                .padding(.horizontal, 16)
             } else {
                 // Loading skeleton
                 VStack(spacing: 0) {
