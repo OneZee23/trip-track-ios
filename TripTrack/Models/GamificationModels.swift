@@ -73,71 +73,115 @@ enum FuelCurrency: String, CaseIterable {
 // MARK: - Driver Profile
 
 enum DriverRank: String, CaseIterable {
-    case novice      // 1-4
-    case driver      // 5-9
-    case traveler    // 10-14
-    case explorer    // 15-19
-    case navigator   // 20-24
-    case trucker     // 25-29
-    case legend      // 30
+    case novice        // 1-4
+    case driver        // 5-9
+    case traveler      // 10-14
+    case explorer      // 15-19
+    case navigator     // 20-24
+    case trucker       // 25-29
+    case legend        // 30-39
+    case pioneer       // 40-49
+    case nomad         // 50-59
+    case conqueror     // 60-69
+    case cartographer  // 70-79
+    case odysseus      // 80-89
+    case roadSpirit    // 90-99
+    case eternal       // 100-110
 
     var levelRange: ClosedRange<Int> {
         switch self {
-        case .novice:    return 1...4
-        case .driver:    return 5...9
-        case .traveler:  return 10...14
-        case .explorer:  return 15...19
-        case .navigator: return 20...24
-        case .trucker:   return 25...29
-        case .legend:    return 30...30
+        case .novice:       return 1...4
+        case .driver:       return 5...9
+        case .traveler:     return 10...14
+        case .explorer:     return 15...19
+        case .navigator:    return 20...24
+        case .trucker:      return 25...29
+        case .legend:       return 30...39
+        case .pioneer:      return 40...49
+        case .nomad:        return 50...59
+        case .conqueror:    return 60...69
+        case .cartographer: return 70...79
+        case .odysseus:     return 80...89
+        case .roadSpirit:   return 90...99
+        case .eternal:      return 100...110
         }
     }
 
     var icon: String {
         switch self {
-        case .novice:    return "car.fill"
-        case .driver:    return "steeringwheel"
-        case .traveler:  return "compass.drawing"
-        case .explorer:  return "map.fill"
-        case .navigator: return "helm"
-        case .trucker:   return "star.fill"
-        case .legend:    return "flame.fill"
+        case .novice:       return "car.fill"
+        case .driver:       return "steeringwheel"
+        case .traveler:     return "compass.drawing"
+        case .explorer:     return "map.fill"
+        case .navigator:    return "helm"
+        case .trucker:      return "star.fill"
+        case .legend:       return "flame.fill"
+        case .pioneer:      return "signpost.right.fill"
+        case .nomad:        return "tent.fill"
+        case .conqueror:    return "flag.2.crossed.fill"
+        case .cartographer: return "map.circle.fill"
+        case .odysseus:     return "sailboat.fill"
+        case .roadSpirit:   return "sparkles"
+        case .eternal:      return "infinity"
         }
     }
 
+    /// Warm "heat ramp" — cool-grey at the start deepening to oxblood at the top,
+    /// so a higher rank always reads as hotter/deeper. Matches the Figma v0.6 spec.
     var color: Color {
         switch self {
-        case .novice:    return .gray
-        case .driver:    return Color(red: 205/255, green: 127/255, blue: 50/255)  // bronze
-        case .traveler:  return Color(red: 192/255, green: 192/255, blue: 192/255) // silver
-        case .explorer:  return Color(red: 255/255, green: 215/255, blue: 0/255)   // gold
-        case .navigator: return Color(red: 180/255, green: 210/255, blue: 230/255) // platinum
-        case .trucker:   return Color(red: 185/255, green: 242/255, blue: 255/255) // diamond
-        case .legend:    return AppTheme.accent
+        case .novice:       return Color(red: 0.486, green: 0.510, blue: 0.557)
+        case .driver:       return Color(red: 0.690, green: 0.475, blue: 0.235)
+        case .traveler:     return Color(red: 0.808, green: 0.604, blue: 0.180)
+        case .explorer:     return Color(red: 0.882, green: 0.627, blue: 0.090)
+        case .navigator:    return Color(red: 0.933, green: 0.506, blue: 0.129)
+        case .trucker:      return Color(red: 0.922, green: 0.353, blue: 0.118)
+        case .legend:       return Color(red: 0.847, green: 0.243, blue: 0.082)
+        case .pioneer:      return Color(red: 0.784, green: 0.180, blue: 0.106)
+        case .nomad:        return Color(red: 0.706, green: 0.129, blue: 0.129)
+        case .conqueror:    return Color(red: 0.612, green: 0.106, blue: 0.157)
+        case .cartographer: return Color(red: 0.518, green: 0.102, blue: 0.196)
+        case .odysseus:     return Color(red: 0.435, green: 0.086, blue: 0.184)
+        case .roadSpirit:   return Color(red: 0.345, green: 0.075, blue: 0.157)
+        case .eternal:      return Color(red: 0.259, green: 0.063, blue: 0.129)
         }
     }
 
     func titleRu() -> String {
         switch self {
-        case .novice:    return "Новичок"
-        case .driver:    return "Водитель"
-        case .traveler:  return "Путешественник"
-        case .explorer:  return "Исследователь"
-        case .navigator: return "Штурман"
-        case .trucker:   return "Дальнобойщик"
-        case .legend:    return "Легенда дорог"
+        case .novice:       return "Новичок"
+        case .driver:       return "Водитель"
+        case .traveler:     return "Путешественник"
+        case .explorer:     return "Исследователь"
+        case .navigator:    return "Штурман"
+        case .trucker:      return "Дальнобойщик"
+        case .legend:       return "Легенда дорог"
+        case .pioneer:      return "Первопроходец"
+        case .nomad:        return "Кочевник"
+        case .conqueror:    return "Покоритель дорог"
+        case .cartographer: return "Хранитель карт"
+        case .odysseus:     return "Одиссей"
+        case .roadSpirit:   return "Дух странствий"
+        case .eternal:      return "Вечный странник"
         }
     }
 
     func titleEn() -> String {
         switch self {
-        case .novice:    return "Beginner"
-        case .driver:    return "Driver"
-        case .traveler:  return "Traveler"
-        case .explorer:  return "Explorer"
-        case .navigator: return "Navigator"
-        case .trucker:   return "Trucker"
-        case .legend:    return "Road Legend"
+        case .novice:       return "Beginner"
+        case .driver:       return "Driver"
+        case .traveler:     return "Traveler"
+        case .explorer:     return "Explorer"
+        case .navigator:    return "Navigator"
+        case .trucker:      return "Trucker"
+        case .legend:       return "Road Legend"
+        case .pioneer:      return "Trailblazer"
+        case .nomad:        return "Nomad"
+        case .conqueror:    return "Road Conqueror"
+        case .cartographer: return "Cartographer"
+        case .odysseus:     return "Odysseus"
+        case .roadSpirit:   return "Spirit of Journeys"
+        case .eternal:      return "Eternal Wanderer"
         }
     }
 
@@ -150,65 +194,44 @@ enum DriverRank: String, CaseIterable {
     }
 }
 
-// MARK: - Level Thresholds (30 levels)
+// MARK: - Level Thresholds (110 levels)
 
 enum LevelSystem {
-    /// XP required to reach each level (index 0 = level 1, etc.)
-    static let thresholds: [Int] = [
-        0,       // Level 1:  0 XP
-        50,      // Level 2:  50 XP
-        150,     // Level 3:  150 XP
-        300,     // Level 4:  300 XP
-        500,     // Level 5:  500 XP
-        800,     // Level 6:  800 XP
-        1_200,   // Level 7:  1,200 XP
-        1_700,   // Level 8:  1,700 XP
-        2_300,   // Level 9:  2,300 XP
-        3_000,   // Level 10: 3,000 XP
-        4_000,   // Level 11: 4,000 XP
-        5_200,   // Level 12: 5,200 XP
-        6_600,   // Level 13: 6,600 XP
-        8_200,   // Level 14: 8,200 XP
-        10_000,  // Level 15: 10,000 XP
-        12_000,  // Level 16: 12,000 XP
-        14_500,  // Level 17: 14,500 XP
-        17_000,  // Level 18: 17,000 XP
-        19_500,  // Level 19: 19,500 XP
-        22_000,  // Level 20: 22,000 XP
-        25_000,  // Level 21: 25,000 XP
-        28_500,  // Level 22: 28,500 XP
-        32_000,  // Level 23: 32,000 XP
-        35_500,  // Level 24: 35,500 XP
-        39_000,  // Level 25: 39,000 XP
-        43_000,  // Level 26: 43,000 XP
-        48_000,  // Level 27: 48,000 XP
-        53_000,  // Level 28: 53,000 XP
-        58_000,  // Level 29: 58,000 XP
-        63_000,  // Level 30: 63,000 XP
+    static let maxLevel = 110
+
+    /// XP to reach levels 1–30 — FROZEN. These match the original 30-level system
+    /// so existing players (whose level is recomputed from stored XP) never drop.
+    private static let baseThresholds: [Int] = [
+        0, 50, 150, 300, 500, 800, 1_200, 1_700, 2_300, 3_000,
+        4_000, 5_200, 6_600, 8_200, 10_000, 12_000, 14_500, 17_000, 19_500, 22_000,
+        25_000, 28_500, 32_000, 35_500, 39_000, 43_000, 48_000, 53_000, 58_000, 63_000,
     ]
 
-    static let maxLevel = 30
+    /// XP needed to reach `level`. L1–30 use the frozen table above; L31–110 follow a
+    /// steepening curve — the per-level increment grows by 600 XP each level, continuing
+    /// smoothly from L30 (L31 +5 600 … L110 +52 400). Closed form, n = level − 30:
+    /// threshold = 63 000 + 5 000·n + 300·n·(n + 1).
+    /// Anchors: L40 ≈ 146k · L50 ≈ 289k · L70 ≈ 755k · L100 ≈ 1.90M · L110 ≈ 2.41M XP.
+    static func xpForLevel(_ level: Int) -> Int {
+        guard level >= 1 else { return 0 }
+        if level <= 30 { return baseThresholds[level - 1] }
+        let n = min(level, maxLevel) - 30
+        return 63_000 + 5_000 * n + 300 * n * (n + 1)
+    }
 
     static func level(for xp: Int) -> Int {
         var lvl = 1
-        for i in 1..<thresholds.count {
-            if xp >= thresholds[i] {
-                lvl = i + 1
-            } else {
-                break
-            }
+        var l = 2
+        while l <= maxLevel {
+            if xp >= xpForLevel(l) { lvl = l } else { break }
+            l += 1
         }
-        return min(lvl, maxLevel)
-    }
-
-    static func xpForLevel(_ level: Int) -> Int {
-        guard level >= 1, level <= maxLevel else { return 0 }
-        return thresholds[level - 1]
+        return lvl
     }
 
     static func xpForNextLevel(_ level: Int) -> Int {
-        guard level < maxLevel else { return thresholds[maxLevel - 1] }
-        return thresholds[level]
+        guard level < maxLevel else { return xpForLevel(maxLevel) }
+        return xpForLevel(level + 1)
     }
 
     static func progressToNextLevel(xp: Int, level: Int) -> Double {

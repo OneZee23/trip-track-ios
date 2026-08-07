@@ -31,6 +31,9 @@ struct TripCommentsSection: View {
     /// flash so the row settles back to normal.
     @State private var spotlightId: UUID?
     @State private var draft = ""
+    /// Comment being replied to. Drives the composer chip and is passed to
+    /// the store so the server can thread it.
+    @State private var replyTarget: TripComment?
     @State private var commentToDelete: TripComment?
     @FocusState private var composerFocused: Bool
     @EnvironmentObject private var lang: LanguageManager
@@ -142,6 +145,7 @@ struct TripCommentsSection: View {
     private func commentRow(_ comment: TripComment, c: AppTheme.Colors) -> some View {
         let canDelete = comment.isMine || isTripOwner
         let isSpotlit = spotlightId == comment.id
+        let isReply = comment.parentId != nil
         return HStack(alignment: .top, spacing: 10) {
             Circle()
                 .fill(c.cardAlt)
@@ -159,15 +163,41 @@ struct TripCommentsSection: View {
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
                 }
+                if isReply, let name = comment.replyToName {
+                    // Named, not just indented: a reply can be paged in
+                    // without its parent, and indentation alone then says
+                    // nothing about WHO it answers.
+                    Text(AppStrings.commentReplyingTo(lang.language, name))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+                        .lineLimit(1)
+                }
                 Text(comment.text)
                     .font(.system(size: 14))
                     .lineSpacing(4.5)
                     .foregroundStyle(c.text)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if !isGuestComposer {
+                    Button {
+                        Haptics.tap()
+                        replyTarget = comment
+                        composerFocused = true
+                    } label: {
+                        Text(AppStrings.commentReply(lang.language))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+                }
             }
             Spacer(minLength: 0)
         }
+        // One step of indentation for replies — deeper nesting is what makes
+        // phone threads unreadable, so the server keeps them all at depth 1.
+        .padding(.leading, isReply ? 28 : 0)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         // Spotlight: arriving from «X прокомментировал» tints the row and
@@ -226,7 +256,11 @@ struct TripCommentsSection: View {
     private func composerRow(_ c: AppTheme.Colors) -> some View {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let isGuest = onGuestInputTap != nil && !auth.isSignedIn
-        return HStack(spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
+            if let target = replyTarget {
+                replyChip(target, c: c)
+            }
+            HStack(spacing: 8) {
             Circle()
                 .fill(AppTheme.accent.opacity(0.12))
                 .frame(width: 30, height: 30)
@@ -254,6 +288,7 @@ struct TripCommentsSection: View {
             }
             .buttonStyle(.plain)
             .disabled(trimmed.isEmpty || store.isPosting)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -271,14 +306,56 @@ struct TripCommentsSection: View {
         }
     }
 
+    /// «В ответ N» above the field, with a way out. Without the cancel the
+    /// only escape from reply mode is to send something.
+    private func replyChip(_ target: TripComment, c: AppTheme.Colors) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrowshape.turn.up.left.fill")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(AppTheme.accent)
+            Text(AppStrings.commentReplyingTo(
+                lang.language,
+                target.user.displayName ?? (lang.language == .ru ? "Пользователь" : "User")
+            ))
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(c.textSecondary)
+            .lineLimit(1)
+            Spacer(minLength: 0)
+            Button {
+                Haptics.tap()
+                replyTarget = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(c.textTertiary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 2)
+        .padding(.vertical, 4)
+        .background(AppTheme.accentBg, in: Capsule())
+        .padding(.leading, 38)
+    }
+
+    /// Guests read but can't compose — also hides the per-row «Ответить».
+    private var isGuestComposer: Bool {
+        onGuestInputTap != nil && !auth.isSignedIn
+    }
+
     private func sendDraft() {
         let text = draft
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !store.isPosting else { return }
         Haptics.action()
         draft = ""
+        let target = replyTarget
+        replyTarget = nil
         Task {
-            if let err = await store.post(text: text, language: lang.language) {
+            if let err = await store.post(
+                text: text, replyTo: target, language: lang.language) {
                 onError(err)
                 // Give the text back so the user can fix/retry instead of
                 // retyping (only if they haven't started something new).

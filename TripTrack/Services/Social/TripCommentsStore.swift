@@ -83,7 +83,11 @@ final class TripCommentsStore: ObservableObject {
     /// localized error message (validation or network) for the caller's
     /// toast. Empty-after-trim text is a silent no-op (button should be
     /// disabled anyway).
-    func post(text: String, language: LanguageManager.Language) async -> String? {
+    func post(
+        text: String,
+        replyTo parent: TripComment? = nil,
+        language: LanguageManager.Language
+    ) async -> String? {
         guard let tripId, !isPosting else { return nil }
         // Same as the notes path: VALIDATE via ContentFilter (which
         // sanitizes internally for its checks) but STORE the edge-trimmed
@@ -103,8 +107,13 @@ final class TripCommentsStore: ObservableObject {
             avatarEmoji: SettingsManager.shared.avatarEmoji,
             profileLevel: SettingsManager.shared.profileLevel
         )
+        // Replies attach to the thread ROOT, matching what the server will
+        // do, so the optimistic row lands in the same place the reload puts
+        // it. Newest-first list, so it goes on top either way.
+        let rootId = parent.map { $0.parentId ?? $0.id }
         let temp = TripComment(
-            id: tempId, user: me, text: cleaned, createdAt: Date(), isMine: true)
+            id: tempId, user: me, text: cleaned, createdAt: Date(), isMine: true,
+            parentId: rootId, replyToName: parent?.user.displayName)
         comments.insert(temp, at: 0)
         isPosting = true
         defer { isPosting = false }
@@ -116,13 +125,15 @@ final class TripCommentsStore: ObservableObject {
             // user retries manually from the visible error toast.
             let res: SocialCommentCreateResponse = try await APIClient.shared.post(
                 APIEndpoint.socialComment,
-                body: SocialCommentCreateRequest(tripId: tripId, text: cleaned),
+                body: SocialCommentCreateRequest(
+                    tripId: tripId, text: cleaned, parentId: rootId),
                 singleAttempt: true)
             // Swap temp id/date for the server's authoritative values.
             if let idx = comments.firstIndex(where: { $0.id == tempId }) {
                 comments[idx] = TripComment(
                     id: res.id, user: me, text: cleaned,
-                    createdAt: res.createdAt, isMine: true)
+                    createdAt: res.createdAt, isMine: true,
+                    parentId: rootId, replyToName: parent?.user.displayName)
             }
             // Feed cards render the store-side «💬 N» — bump it in place.
             NotificationCenter.default.post(

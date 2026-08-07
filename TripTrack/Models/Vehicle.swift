@@ -45,7 +45,8 @@ struct Vehicle: Identifiable, Codable {
     // Pixel car assets — exclusive to default "Телега" vehicle, not selectable by user
     static let pixelCarAssets = [
         "pixel_car_orange", "pixel_car_green", "pixel_car_black",
-        "pixel_car_gray", "pixel_car_blue", "pixel_car_red"
+        "pixel_car_gray", "pixel_car_blue", "pixel_car_red",
+        "pixel_car_white", "pixel_car_silver"
     ]
 
     var isPixelAvatar: Bool {

@@ -1810,6 +1810,15 @@ enum AppStrings {
     }
     // MARK: - Share sheet (6.1.0)
 
+    // MARK: - Comment replies (6.1.0)
+
+    static func commentReply(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ответить" : "Reply"
+    }
+    static func commentReplyingTo(_ lang: LanguageManager.Language, _ name: String) -> String {
+        lang == .ru ? "В ответ \(name)" : "Replying to \(name)"
+    }
+
     /// Short sign-in label for chrome (feed header pill, guest states).
     static func signInShort(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Войти" : "Sign in"

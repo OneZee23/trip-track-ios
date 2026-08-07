@@ -467,6 +467,7 @@ struct SocialReactionsResponse: Codable {
 struct SocialCommentCreateRequest: Codable {
     let tripId: UUID
     let text: String
+    var parentId: UUID?
 }
 
 /// Server ack for a created comment — the optimistic local row swaps its
@@ -492,6 +493,14 @@ struct TripComment: Codable, Identifiable, Hashable {
     /// Server-computed "the viewer authored this" — drives the delete
     /// affordance without the client comparing account ids.
     let isMine: Bool
+    /// Thread root this is a reply to; nil for a top-level comment.
+    /// Threads are one level deep — the server re-points a reply-to-a-reply
+    /// at the same root.
+    let parentId: UUID?
+    /// Display name of the person being replied to, so a reply still reads
+    /// as one when its parent sits on an earlier page. Optional so older
+    /// servers keep decoding.
+    let replyToName: String?
 }
 
 struct TripCommentsResponse: Codable {
