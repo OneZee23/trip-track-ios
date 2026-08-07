@@ -3,9 +3,12 @@ import CoreLocation
 import UserNotifications
 import CoreMotion
 
-/// 6.1.0 onboarding — 4 pages per the Figma spec (§01 · ОНБОРДИНГ):
-/// Welcome (IdleRing hook) → Ценность (mock trip card) → Гео (permission)
-/// → Автозапись (Always + Motion + finish). Custom pagination dots replace
+/// 6.1.0 onboarding — 5 pages per the Figma spec (§01 · ОНБОРДИНГ):
+/// Welcome (IdleRing hook) → Ценность (trip card, real trip when there is
+/// one) → Гео «При использовании» → Гео «Всегда» + motion → Уведомления.
+/// One permission per screen, each with a way past it: asking for three at
+/// once (what the old bundled page did) trades a permanent "Don't Allow" for
+/// a moment of convenience. Custom pagination dots replace
 /// the system page indicator; hero badges are 96pt accent-tinted circles.
 struct OnboardingView: View {
     @Binding var hasCompletedOnboarding: Bool
