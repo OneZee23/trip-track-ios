@@ -161,11 +161,13 @@ struct SharePosterView: View {
         // string with a space in it renders a huge gap in PressStart2P,
         // whose space glyph is a full em wide.
         HStack(spacing: 7 * s) {
+            // `poster_car` is the sprite with its pixel-art ground shadow
+            // flood-filled away and then upscaled 4× with nearest — so the
+            // renderer's own downscale averages whole source pixels instead
+            // of dropping them unevenly, which is what made the car look
+            // chipped and half-smashed at export size.
             Image("poster_car")
                 .resizable()
-                // Pixel art: smooth scaling turns the sprite to mush.
-                .interpolation(.none)
-                .antialiased(false)
                 .scaledToFit()
                 .frame(height: 18 * s)
             HStack(spacing: 5 * s) {
