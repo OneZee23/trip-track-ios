@@ -51,6 +51,8 @@ struct TripDetailView: View {
     @State private var storyShare: (data: StoryShareData, url: String?)?
     @State private var isGeneratingShare = false
     @State private var showDeleteConfirm = false
+    /// «…» popover on the poster header.
+    @State private var showTripActions = false
     /// Publish confirmation sheet (Figma 533:119) — replaces the old plain
     /// alert. The user consciously acknowledges the visibility change and
     /// can attach an optional description in the same step.
@@ -152,24 +154,32 @@ struct TripDetailView: View {
 
                     Spacer()
 
-                    Menu {
-                        Button(role: .destructive) {
-                            Haptics.action()
-                            showDeleteConfirm = true
-                        } label: {
-                            Label(
-                                AppStrings.delete(lang.language),
-                                systemImage: "trash"
-                            )
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background(.black.opacity(0.4), in: Circle())
+                    // Popover, not a `Menu` — see `ActionPopoverList`. Here
+                    // the artifact was at its worst: the button floats in an
+                    // overlay above a ScrollView, so UIKit's dismissal
+                    // animation put the source snapshot back against stale
+                    // geometry and the «…» visibly slid away across the
+                    // screen.
+                    PosterCircleButton(
+                        systemImage: "ellipsis",
+                        accessibilityLabelText: AppStrings.moreActions(lang.language)
+                    ) { showTripActions = true }
+                    .popover(isPresented: $showTripActions, arrowEdge: .top) {
+                        ActionPopoverList(items: [
+                            .init(
+                                title: AppStrings.delete(lang.language),
+                                systemImage: "trash",
+                                isDestructive: true
+                            ) {
+                                showTripActions = false
+                                Task { @MainActor in
+                                    try? await Task.sleep(nanoseconds: 260_000_000)
+                                    Haptics.action()
+                                    showDeleteConfirm = true
+                                }
+                            },
+                        ])
                     }
-                    .accessibilityLabel(AppStrings.moreActions(lang.language))
 
                     PosterCircleButton(
                         systemImage: "square.and.arrow.up",

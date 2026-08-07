@@ -40,6 +40,8 @@ struct SocialTripDetailView: View {
     @State private var selectedDetailBadge: Badge?
     /// Full-emoji picker behind the «+» chip of the compact reactions card.
     @State private var showReactionPicker = false
+    /// «…» popover on the poster header.
+    @State private var showTripActions = false
     /// Remote-load failure flags — when the pushed DTO is a stub with no
     /// route geometry AND both loads fail (offline), there is nothing to
     /// render and the full-screen error state takes over. Today's feed
@@ -151,29 +153,30 @@ struct SocialTripDetailView: View {
                         accessibilityLabelText: AppStrings.back(lang.language)
                     ) { dismiss() }
                     Spacer()
-                    Menu {
-                        Button {
-                            Haptics.tap()
-                            onShare?()
-                        } label: {
-                            Label(
-                                AppStrings.share(lang.language),
+                    // Popover, not a `Menu` — see `ActionPopoverList`.
+                    // Report entry point stays removed pending a
+                    // moderation/admin UI — the server endpoint still
+                    // accepts reports, but there's no triage surface for
+                    // us to act on them yet. Re-add when moderation is
+                    // wired up (ReportSheet.swift lives in this dir).
+                    PosterCircleButton(
+                        systemImage: "ellipsis",
+                        accessibilityLabelText: AppStrings.moreActions(lang.language)
+                    ) { showTripActions = true }
+                    .popover(isPresented: $showTripActions, arrowEdge: .top) {
+                        ActionPopoverList(items: [
+                            .init(
+                                title: AppStrings.share(lang.language),
                                 systemImage: "square.and.arrow.up"
-                            )
-                        }
-                        // Report entry point stays removed pending a
-                        // moderation/admin UI — the server endpoint still
-                        // accepts reports, but there's no triage surface for
-                        // us to act on them yet. Re-add when moderation is
-                        // wired up (ReportSheet.swift lives in this dir).
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background(.black.opacity(0.4), in: Circle())
+                            ) {
+                                showTripActions = false
+                                Task { @MainActor in
+                                    try? await Task.sleep(nanoseconds: 260_000_000)
+                                    onShare?()
+                                }
+                            },
+                        ])
                     }
-                    .accessibilityLabel(AppStrings.moreActions(lang.language))
                 }
                 .padding(.top, safeAreaTop + 8)
                 .padding(.horizontal, 16)
