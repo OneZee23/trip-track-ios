@@ -47,6 +47,9 @@ struct ProfileSettingsSheet: View {
                     preferencesGroup(c, l)
                     actionsGroup(c, l)
                     aboutGroup(c, l)
+                    #if DEBUG
+                    devGroup(c, l)
+                    #endif
                     footer(c, l)
                 }
                 .padding(.horizontal, 14)
@@ -493,6 +496,50 @@ struct ProfileSettingsSheet: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 12)
     }
+
+    #if DEBUG
+    // MARK: - Dev (debug builds only)
+
+    /// TEMPORARY. Replays first-run flows without deleting the app: flipping
+    /// `hasCompletedOnboarding` is what the app root watches, so the
+    /// onboarding takes over immediately.
+    ///
+    /// Wrapped in `#if DEBUG` so it cannot ship — a release build doesn't
+    /// compile this group at all. Delete the whole block when the onboarding
+    /// pass is done.
+    private func devGroup(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AccountSectionLabel(text: "DEV · только debug-сборка")
+                .padding(.leading, 2)
+                .padding(.top, 6)
+
+            VStack(spacing: 0) {
+                SettingsIconRow(
+                    icon: "arrow.counterclockwise",
+                    iconColor: AppTheme.accent,
+                    iconBg: AppTheme.accentBg,
+                    title: "Пройти онбординг заново",
+                    action: { restartOnboarding() }
+                ) {
+                    SettingsRowChevron()
+                }
+            }
+            .surfaceCard(cornerRadius: 16)
+        }
+    }
+
+    private func restartOnboarding() {
+        Haptics.action()
+        // Close settings first: the root swaps its whole content for the
+        // onboarding, and doing that under a presented sheet leaves the
+        // sheet floating over it.
+        dismiss()
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+        }
+    }
+    #endif
 
     // MARK: - Handlers
 

@@ -110,14 +110,15 @@ struct SharedTripLinkSheet: View {
 
     private static let space = "linkShareContent"
 
-    /// Content bottom + the home-indicator strip. The first pass uses a
-    /// close-enough default so the sheet doesn't resize visibly as it opens.
+    /// Exactly the content, plus a hair of breathing room.
+    ///
+    /// No home-indicator inset added on purpose: iOS floats a short sheet as
+    /// a card above the indicator, so reserving that strip inside it just
+    /// left dead space under the buttons and made the card look like it had
+    /// lost its bottom half.
     private var sheetHeight: CGFloat {
-        let bottomInset = UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.bottom }
-            .first ?? 0
-        guard contentBottom > 0 else { return 250 + bottomInset }
-        return contentBottom + bottomInset
+        guard contentBottom > 0 else { return 250 }
+        return contentBottom + 8
     }
 
     private func tripRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
