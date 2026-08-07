@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import UserNotifications
 import CoreMotion
 
 /// 6.1.0 onboarding — 4 pages per the Figma spec (§01 · ОНБОРДИНГ):
@@ -17,6 +18,11 @@ struct OnboardingView: View {
     /// Live authorization state, re-read whenever a page appears so a
     /// permission granted in the system prompt updates this screen.
     @State private var permissionStatus: CLAuthorizationStatus = CLLocationManager().authorizationStatus
+    /// Notifications already allowed (re-run of onboarding, or granted from
+    /// a system prompt earlier). Same reasoning as the location pages: iOS
+    /// only ever shows its prompt once, so a button that "asks" again would
+    /// silently do nothing.
+    @State private var notificationsGranted = false
     @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     // Initial page can be pinned via launch argument (-onboardingStartPage N)
@@ -610,17 +616,27 @@ struct OnboardingView: View {
             Spacer()
 
             VStack(spacing: 10) {
-                primaryButton(AppStrings.onboardingNotificationsEnable(lang.language)) {
-                    requestNotificationsAndFinish()
-                }
+                if notificationsGranted {
+                    Text(AppStrings.onboardingAlreadyGranted(lang.language))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppTheme.green)
 
-                Button {
-                    Haptics.tap()
-                    finishOnboarding()
-                } label: {
-                    Text(AppStrings.onboardingNotNow(lang.language))
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(c.textSecondary)
+                    primaryButton(AppStrings.onboardingContinue(lang.language)) {
+                        finishOnboarding()
+                    }
+                } else {
+                    primaryButton(AppStrings.onboardingNotificationsEnable(lang.language)) {
+                        requestNotificationsAndFinish()
+                    }
+
+                    Button {
+                        Haptics.tap()
+                        finishOnboarding()
+                    } label: {
+                        Text(AppStrings.onboardingNotNow(lang.language))
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(c.textSecondary)
+                    }
                 }
 
                 consentText(c)
@@ -654,6 +670,14 @@ struct OnboardingView: View {
 
     private func refreshPermissionStatus() {
         permissionStatus = (locationManager ?? CLLocationManager()).authorizationStatus
+        // Notification status is async-only; ask the system rather than
+        // trusting a cached flag, since it can change in Settings while the
+        // onboarding is on screen.
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let granted = settings.authorizationStatus == .authorized
+                || settings.authorizationStatus == .provisional
+            Task { @MainActor in notificationsGranted = granted }
+        }
     }
 
     // MARK: - Permission state
