@@ -25,6 +25,11 @@ struct TripCommentsSection: View {
     /// scroll to it, then flash it so the user can see WHICH sentence the
     /// notification meant.
     var highlightCommentId: UUID? = nil
+    /// Detail screens embed the PREVIEW (canon 549:129 shows three rows
+    /// under a «Комментарии · 5» header — the block is a teaser, not the
+    /// thread). The full-thread sheet renders the same view with this off,
+    /// which is where replying lives.
+    var isPreview: Bool = true
 
     @StateObject private var store = TripCommentsStore()
     /// Currently spotlighted comment — set on arrival, cleared after the
@@ -34,6 +39,8 @@ struct TripCommentsSection: View {
     /// Comment being replied to. Drives the composer chip and is passed to
     /// the store so the server can thread it.
     @State private var replyTarget: TripComment?
+    /// Full-thread sheet, opened from «Все ›» or by tapping a row.
+    @State private var showAllComments = false
     @State private var commentToDelete: TripComment?
     @FocusState private var composerFocused: Bool
     @EnvironmentObject private var lang: LanguageManager
@@ -46,6 +53,14 @@ struct TripCommentsSection: View {
     /// total (if known) is the honest figure. A FAILED first page taught us
     /// nothing — keep trusting the feed-DTO count instead of flipping a
     /// commented trip to «· 0».
+    /// Canon shows three rows under a five-comment header.
+    private static let previewLimit = 3
+
+    /// Newest-first list; the preview keeps the freshest few.
+    private var visibleComments: [TripComment] {
+        isPreview ? Array(store.comments.prefix(Self.previewLimit)) : store.comments
+    }
+
     private var displayCount: Int {
         guard store.hasLoadedOnce, !store.loadFailed else {
             return max(initialCount, store.comments.count)
@@ -69,15 +84,35 @@ struct TripCommentsSection: View {
     private var content: some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(alignment: .leading, spacing: 10) {
-            DetailSectionHeader(text: AppStrings.commentsTitleN(lang.language, displayCount))
+            HStack(alignment: .firstTextBaseline) {
+                DetailSectionHeader(text: AppStrings.commentsTitleN(lang.language, displayCount))
+                Spacer(minLength: 8)
+                // «Все ›» only when the preview is actually hiding something.
+                if isPreview, displayCount > Self.previewLimit {
+                    Button {
+                        Haptics.tap()
+                        showAllComments = true
+                    } label: {
+                        HStack(spacing: 2) {
+                            Text(AppStrings.commentsSeeAll(lang.language))
+                                .font(.system(size: 13, weight: .semibold))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundStyle(AppTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
 
             VStack(spacing: 0) {
-                ForEach(store.comments) { comment in
+                ForEach(visibleComments) { comment in
                     commentRow(comment, c: c)
                         .id(comment.id)
                 }
 
-                if store.nextCursor != nil {
+                // The preview never paginates — «Все ›» is the way deeper.
+                if !isPreview, store.nextCursor != nil {
                     showMoreButton
                 }
 
@@ -92,6 +127,15 @@ struct TripCommentsSection: View {
         .task(id: tripId) {
             await store.load(tripId: tripId)
             await spotlightIfRequested()
+        }
+        .sheet(isPresented: $showAllComments) {
+            TripCommentsScreen(
+                tripId: tripId,
+                isTripOwner: isTripOwner,
+                initialCount: displayCount,
+                onError: onError
+            )
+            .environmentObject(lang)
         }
         .confirmationDialog(
             AppStrings.deleteCommentConfirm(lang.language),
@@ -179,7 +223,10 @@ struct TripCommentsSection: View {
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if !isGuestComposer {
+                // Reply lives in the full thread only: canon's preview is
+                // three clean rows, and a «Ответить» under each one turned
+                // the teaser into a wall of links.
+                if !isPreview, !isGuestComposer {
                     Button {
                         Haptics.tap()
                         replyTarget = comment

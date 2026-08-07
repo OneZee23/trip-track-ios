@@ -1812,6 +1812,10 @@ enum AppStrings {
 
     // MARK: - Comment replies (6.1.0)
 
+    /// Header link on the detail preview → full thread.
+    static func commentsSeeAll(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Все" : "All"
+    }
     static func commentReply(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Ответить" : "Reply"
     }
