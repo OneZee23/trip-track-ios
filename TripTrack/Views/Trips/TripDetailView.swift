@@ -222,6 +222,9 @@ struct TripDetailView: View {
             }
         }
         .background(c.bg)
+        // Tap anywhere off a control to put the keyboard away; sending a
+        // comment deliberately does NOT — that call stays the user's.
+        .dismissesKeyboardOnBackgroundTap()
         .background(NavBarKiller())
         // `.container` (not the default all-regions) — the keyboard inset
         // must survive so the comments composer rises above the keyboard.
