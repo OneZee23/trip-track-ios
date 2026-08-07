@@ -52,7 +52,9 @@ struct ReactionTallyPill: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(Capsule().fill(isMine ? AppTheme.orangeDim : c.cardAlt))
-        .overlay(Capsule().stroke(isMine ? AppTheme.accent : .clear, lineWidth: 1.5))
+        // `strokeBorder` keeps the whole ring inside the pill — a centred
+        // stroke gets shaved by the enclosing scroll clip.
+        .overlay(Capsule().strokeBorder(isMine ? AppTheme.accent : .clear, lineWidth: 1.5))
         .animation(.easeOut(duration: 0.22), value: isMine)
         .contentShape(Capsule())
         .onLongPressGesture(minimumDuration: 0.35) {

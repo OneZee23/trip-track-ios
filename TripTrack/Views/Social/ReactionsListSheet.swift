@@ -116,8 +116,10 @@ struct ReactionsListSheet: View {
                 }
             }
             .padding(.horizontal, 20)
+            // Breathing room inside the scroll clip so the ring survives.
+            .padding(.vertical, 3)
         }
-        .padding(.bottom, 10)
+        .padding(.bottom, 8)
     }
 
     private func chip<Label: View>(
@@ -139,8 +141,13 @@ struct ReactionsListSheet: View {
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
-            .background(Capsule().fill(isSelected ? AppTheme.orangeDim : c.cardAlt))
-            .overlay(Capsule().stroke(isSelected ? AppTheme.accent : .clear, lineWidth: 1.5))
+            .background(Capsule().fill(c.cardAlt))
+            // `strokeBorder`, not `stroke`: a centred stroke hangs half its
+            // width outside the shape and the horizontal ScrollView shaves
+            // exactly that off the top and bottom of the ring. Same fix as
+            // the Activity chips.
+            .overlay(Capsule().strokeBorder(isSelected ? AppTheme.accent : .clear, lineWidth: 1.5))
+            .animation(.easeOut(duration: 0.18), value: isSelected)
         }
         .buttonStyle(.plain)
     }

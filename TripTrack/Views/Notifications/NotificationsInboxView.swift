@@ -286,7 +286,7 @@ struct NotificationsInboxView: View {
                 .frame(minWidth: 92)
                 .background(isFollowed ? c.cardAlt : AppTheme.accent, in: Capsule())
                 .overlay(
-                    Capsule().stroke(isFollowed ? c.borderBright : .clear, lineWidth: 1.5)
+                    Capsule().strokeBorder(isFollowed ? c.borderBright : .clear, lineWidth: 1.5)
                 )
                 .animation(.easeOut(duration: 0.2), value: isFollowed)
         }

@@ -519,7 +519,7 @@ struct ReactionCountChip: View {
         .background(bg, in: Capsule())
         .overlay(
             Capsule()
-                .stroke(style == .mine ? AppTheme.accent : Color.clear, lineWidth: 1.5)
+                .strokeBorder(style == .mine ? AppTheme.accent : Color.clear, lineWidth: 1.5)
         )
         .animation(.easeOut(duration: 0.22), value: style)
         .keyframeAnimator(initialValue: CGFloat(1), trigger: style == .mine) { view, scale in
