@@ -28,7 +28,11 @@ enum SharePosterRenderer {
         // Render at export resolution: the preview is the same image scaled
         // down, so the card the user approves is pixel-for-pixel the card
         // that gets shared.
-        let size = format.exportSize
+        // Points + 2× scale rather than points at 1×: MapKit rasterises its
+        // labels and road casings for the trait's scale, and the 1× pass was
+        // visibly softer at the same output resolution.
+        let size = format.renderPointSize
+        let scale = SharePosterFormat.renderScale
         // Cold tile fetches come back empty often enough that a single
         // attempt regularly yields a blank grid (same failure the feed-card
         // snapshots hit). Retry with a short ladder before giving up to the
@@ -37,7 +41,7 @@ enum SharePosterRenderer {
             let options = MKMapSnapshotter.Options()
             options.region = region(for: coordinates)
             options.size = size
-            options.scale = 1
+            options.scale = scale
             options.pointOfInterestFilter = .excludingAll
             let config = MKStandardMapConfiguration(elevationStyle: .flat)
             config.pointOfInterestFilter = .excludingAll

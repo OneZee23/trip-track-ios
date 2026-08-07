@@ -41,6 +41,18 @@ enum SharePosterFormat: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Everything is laid out at half the export size and rasterised at 2×.
+    /// Same pixel count, but text, the sprite and the map tiles all render
+    /// through their retina path instead of the 1× one, which is what made
+    /// the saved cards look soft.
+    static let renderScale: CGFloat = 2
+
+    /// Point size to lay the card out at before the 2× rasterisation.
+    var renderPointSize: CGSize {
+        CGSize(width: exportSize.width / Self.renderScale,
+               height: exportSize.height / Self.renderScale)
+    }
+
     /// Sticker exports keep their alpha; the cards are flattened.
     var isTransparent: Bool { self == .sticker }
 
@@ -151,6 +163,9 @@ struct SharePosterView: View {
         HStack(spacing: 7 * s) {
             Image("poster_car")
                 .resizable()
+                // Pixel art: smooth scaling turns the sprite to mush.
+                .interpolation(.none)
+                .antialiased(false)
                 .scaledToFit()
                 .frame(height: 18 * s)
             HStack(spacing: 5 * s) {

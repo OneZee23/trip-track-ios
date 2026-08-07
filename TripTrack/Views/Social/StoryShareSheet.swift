@@ -329,14 +329,17 @@ struct StoryShareSheet: View {
 
     @MainActor
     private func renderImage() -> UIImage? {
-        let size = format.exportSize
+        // Lay out at half size, rasterise at 2× — identical geometry, but
+        // every glyph and image goes through its retina path (see
+        // `SharePosterFormat.renderScale`).
+        let size = format.renderPointSize
         let renderer = ImageRenderer(content:
             SharePosterView(data: data, format: format, map: posterMap)
                 .frame(width: size.width, height: size.height)
                 .environmentObject(lang)
                 .environment(\.colorScheme, .dark)
         )
-        renderer.scale = 1.0
+        renderer.scale = SharePosterFormat.renderScale
         // Stickers keep their alpha; cards flatten onto their own artwork.
         renderer.isOpaque = !format.isTransparent
         return renderer.uiImage
