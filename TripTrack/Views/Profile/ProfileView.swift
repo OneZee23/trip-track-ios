@@ -142,6 +142,12 @@ struct ProfileView: View {
 
                         if let agg, !agg.recentTrips.isEmpty {
                             historySection(agg, c)
+                        } else if agg != nil {
+                            // No trips at all: canon empty card. Before this
+                            // the section simply wasn't rendered, so a fresh
+                            // user saw the Я tab end after the stat grid with
+                            // nothing telling them what happens next.
+                            noTripsCard(c)
                         }
                     }
                 }
@@ -605,6 +611,57 @@ struct ProfileView: View {
             }
             .padding(.bottom, 12)
         }
+    }
+
+    /// «Здесь появятся ваши поездки» (canon). The point of the copy is the
+    /// second line: recording is automatic and needs no account — that's the
+    /// product's whole pitch, and the empty state is where it lands.
+    private func noTripsCard(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return VStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(c.cardAlt)
+                .frame(width: 56, height: 56)
+                .overlay {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
+
+            Text(isRu ? "Здесь появятся ваши поездки" : "Your trips will show up here")
+                .font(.inter(17, weight: .heavy))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+
+            Text(isRu
+                 ? "Запись начнётся автоматически, когда вы поедете. Аккаунт не нужен."
+                 : "Recording starts by itself once you drive. No account needed.")
+                .font(.inter(14))
+                .lineSpacing(4)
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 260)
+
+            Button {
+                Haptics.tap()
+                NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
+            } label: {
+                Text(AppStrings.recordTripCta(lang.language))
+                    .font(.inter(15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 15)
+                    .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .shadow(color: AppTheme.accent.opacity(0.3), radius: 1.5, y: 1)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 26)
+        .padding(.horizontal, 20)
+        .surfaceCard(cornerRadius: 18)
+        .padding(.horizontal, 16)
     }
 
     // MARK: - История
