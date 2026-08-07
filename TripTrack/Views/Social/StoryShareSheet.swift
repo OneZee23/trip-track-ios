@@ -79,6 +79,10 @@ struct StoryShareSheet: View {
     @State private var isLoadingMap = false
     @State private var savedToPhotos = false
     @State private var linkCopied = false
+    /// Summed height of the chrome + the card block. Drives a detent sized
+    /// to the content: at a fixed fraction the sheet always ended with a
+    /// slab of empty background under the link row.
+    @State private var measuredHeight: CGFloat = 0
 
     /// Preview height is fixed; the width follows the chosen aspect so the
     /// chips visibly change the SHAPE of the card, not just its contents.
@@ -89,8 +93,11 @@ struct StoryShareSheet: View {
         let isRu = lang.language == .ru
 
         VStack(spacing: 0) {
-            header(c)
-            formatChips(c)
+            VStack(spacing: 0) {
+                header(c)
+                formatChips(c)
+            }
+            .measureSheetHeight()
 
             ScrollView {
                 VStack(spacing: 14) {
@@ -110,12 +117,28 @@ struct StoryShareSheet: View {
                 }
                 .padding(.top, 12)
                 .padding(.bottom, 20)
+                .measureSheetHeight()
             }
             .scrollBounceBehavior(.basedOnSize)
         }
         .background(c.bg)
         .presentationCornerRadius(22)
+        .presentationDetents([.height(sheetHeight)])
+        .onPreferenceChange(SharePosterSheetHeightKey.self) { measuredHeight = $0 }
         .task(id: format) { await loadMap() }
+    }
+
+    /// Content height plus the home-indicator strip, clamped so a small
+    /// phone still gets a scrollable sheet instead of one taller than the
+    /// screen. The pre-measurement default is close to the real value, so
+    /// the sheet doesn't visibly resize on open.
+    private var sheetHeight: CGFloat {
+        let bottomInset = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.bottom }
+            .first ?? 0
+        let screen = UIScreen.main.bounds.height
+        guard measuredHeight > 0 else { return min(600, screen * 0.92) }
+        return min(measuredHeight + bottomInset, screen * 0.92)
     }
 
     // MARK: - Header + chips
@@ -381,5 +404,24 @@ private struct TransparencyChecker: View {
                 row += 1
             }
         }
+    }
+}
+
+/// Sums the heights of the blocks it's attached to — the share sheet uses it
+/// to size its own detent.
+private struct SharePosterSheetHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value += nextValue()
+    }
+}
+
+private extension View {
+    func measureSheetHeight() -> some View {
+        background(
+            GeometryReader { geo in
+                Color.clear.preference(key: SharePosterSheetHeightKey.self, value: geo.size.height)
+            }
+        )
     }
 }

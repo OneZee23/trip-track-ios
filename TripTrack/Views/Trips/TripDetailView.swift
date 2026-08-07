@@ -337,10 +337,8 @@ struct TripDetailView: View {
             set: { if !$0 { storyShare = nil } }
         )) {
             if let share = storyShare {
+                // The sheet sizes its own detent from its measured content.
                 StoryShareSheet(data: share.data, shareUrl: share.url)
-                    // Sized to the card, not to the screen: at `.large` the
-                    // sheet was mostly empty space under the link row.
-                    .presentationDetents([.fraction(0.78)])
                     .presentationDragIndicator(.visible)
                     .environmentObject(lang)
                     // Sheets are separate presentations — the app-root
