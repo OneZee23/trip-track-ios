@@ -25,6 +25,9 @@ struct SocialFeedCardView: View {
     var onEdit: (() -> Void)?
     var onMakePrivate: (() -> Void)?
     var onDelete: (() -> Void)?
+    /// Someone else's card: «Пожаловаться» (canon «02 · Лента · ··· чужой
+    /// поездки»). Host presents the report sheet.
+    var onReport: (() -> Void)?
     var onLongPress: (() -> Void)?
     var onReact: ((String) -> Void)?
     var onShare: (() -> Void)?
@@ -263,6 +266,12 @@ struct SocialFeedCardView: View {
             items.append(.init(
                 title: AppStrings.delete(lang.language), systemImage: "trash", isDestructive: true
             ) { run(onDelete) })
+        }
+        if !isOwn, onReport != nil {
+            items.append(.init(
+                title: AppStrings.reportProfileAction(lang.language),
+                systemImage: "exclamationmark.bubble"
+            ) { run(onReport) })
         }
         return items
     }

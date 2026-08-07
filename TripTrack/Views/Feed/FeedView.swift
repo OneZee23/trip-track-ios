@@ -59,6 +59,8 @@ struct FeedView: View {
     /// destructive to everything attached to the trip socially, so it asks
     /// first like the delete does.
     @State private var tripPendingPrivate: SocialFeedTrip?
+    /// Someone else's trip being reported from its card «…».
+    @State private var tripPendingReport: SocialFeedTrip?
     @State private var showDiscover = false
     @State private var shareSheetData: (data: StoryShareData, url: String)?
     @State private var signInPrompt: SignInPromptSheet.Action?
@@ -382,6 +384,16 @@ struct FeedView: View {
                 tripPendingDelete = nil
             }
             Button(AppStrings.cancel(lang.language), role: .cancel) { tripPendingDelete = nil }
+        }
+        .sheet(isPresented: Binding(
+            get: { tripPendingReport != nil },
+            set: { if !$0 { tripPendingReport = nil } }
+        )) {
+            if let trip = tripPendingReport {
+                ReportSheet(target: .trip(trip.id))
+                    .environmentObject(lang)
+                    .preferredColorScheme(themeManager.preferredColorScheme)
+            }
         }
         .sheet(item: $reactorsPeek) { peek in
             ReactionsListSheet(
@@ -716,6 +728,13 @@ struct FeedView: View {
                     } : nil,
                     onMakePrivate: isOwn ? { tripPendingPrivate = trip } : nil,
                     onDelete: isOwn ? { tripPendingDelete = trip } : nil,
+                    onReport: isOwn ? nil : {
+                        // Guests can't report — the endpoint needs an
+                        // account, so send them through sign-in first
+                        // instead of opening a form that will 401.
+                        if auth.isSignedIn { tripPendingReport = trip }
+                        else { signInPrompt = .generic }
+                    },
                     onLongPress: {
                         // Owners can't react to their own trip (Strava rule)
                         // — long-press becomes a no-op there instead of
