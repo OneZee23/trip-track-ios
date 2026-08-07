@@ -38,6 +38,11 @@ final class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(profileBackground, forKey: "com.triptrack.settings.profileBackground") }
     }
 
+    // Badge id pinned to the profile ("" = none) — shown prominently on the «Я» screen.
+    @Published var pinnedBadgeId: String = UserDefaults.standard.string(forKey: "com.triptrack.settings.pinnedBadgeId") ?? "" {
+        didSet { UserDefaults.standard.set(pinnedBadgeId, forKey: "com.triptrack.settings.pinnedBadgeId") }
+    }
+
     // How average speed is reported. Default `.overall` = no change for existing
     // users; `.moving` reports distance / driving time (excludes stops & pauses).
     @Published var avgSpeedMode: AvgSpeedMode =

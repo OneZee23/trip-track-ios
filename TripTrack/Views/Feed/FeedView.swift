@@ -15,6 +15,9 @@ struct FeedView: View {
     /// Drives the connectivity banner — when ops accumulate in `failed`,
     /// the network is genuinely broken and we surface that to the user.
     @ObservedObject private var syncQueue = SyncQueue.shared
+    /// Drives the offline strip + the "you're offline" flavour of the error
+    /// state. Shared instance — CacheManager owns the only monitor.
+    @ObservedObject private var network = CacheManager.shared.networkMonitor
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
@@ -104,6 +107,16 @@ struct FeedView: View {
                     .padding(.top, 2)
                     .padding(.bottom, 10)
                     .background(c.bg)
+
+                // Offline strip (Figma «Лента · Офлайн»): sits between the
+                // title and the segment, above BOTH pages, because it's a
+                // statement about the app, not about one feed.
+                if network.isOffline {
+                    offlineStrip(c)
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 10)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
                 // Pinned outside the paged TabView so the pill row stays put while the
                 // content underneath slides horizontally.
@@ -845,38 +858,70 @@ struct FeedView: View {
         .accessibilityIdentifier("guest_signin_banner")
     }
 
+    /// «Нет сети · поездки сохраняются локально» (Figma «Лента · Офлайн»).
+    private func offlineStrip(_ c: AppTheme.Colors) -> some View {
+        let isRu = lang.language == .ru
+        return HStack(spacing: 8) {
+            Image(systemName: "airplane")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(AppTheme.accent)
+            Text(isRu ? "Нет сети · поездки сохраняются локально"
+                      : "Offline · trips are saved on your phone")
+                .font(.inter(12, weight: .semibold))
+                .foregroundStyle(c.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            Capsule().fill(AppTheme.accentBg)
+        )
+        .overlay(Capsule().strokeBorder(AppTheme.accent.opacity(0.35), lineWidth: 1))
+        .accessibilityIdentifier("feed_offline_strip")
+    }
+
+    /// Canon «Лента · Ошибка сети»: the same ring the empty state uses, in a
+    /// neutral tint, then title / explanation / retry. It used to be a bare
+    /// red glyph, which read as a crash rather than as "no signal".
     private func socialErrorState(_ c: AppTheme.Colors, isRu: Bool, store: SocialFeedStore) -> some View {
         VStack(spacing: 14) {
-            Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 44, weight: .light))
-                .foregroundStyle(.red.opacity(0.8))
-                .padding(.top, 60)
+            FeedStateRing(systemImage: "wifi.slash")
+                .padding(.top, 40)
+
             Text(isRu ? "Не удалось загрузить ленту" : "Couldn't load feed")
-                .font(.inter(16, weight: .semibold))
+                .font(.inter(19, weight: .heavy))
                 .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+
             Text(isRu
-                 ? "Проверьте соединение с интернетом и попробуйте снова."
-                 : "Check your connection and try again.")
-                .font(.inter(13))
+                 ? "Проверьте подключение к интернету и попробуйте ещё раз."
+                 : "Check your internet connection and try again.")
+                .font(.inter(14))
+                .lineSpacing(6)
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .frame(width: 280)
+
             Button {
                 Haptics.tap()
                 Task { await store.refresh() }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                     Text(isRu ? "Попробовать снова" : "Try again")
-                        .font(.inter(14, weight: .semibold))
+                        .font(.inter(14, weight: .bold))
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(AppTheme.accent, in: Capsule())
                 .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+                .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
+                .shadow(color: AppTheme.accent.opacity(0.3), radius: 1.5, y: 1)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("feed_error_retry")
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
@@ -1033,6 +1078,30 @@ struct FeedView: View {
 /// pixel-art car. Sibling of `SignInIdleRing` (SignInPromptSheet) which
 /// uses a translucent accent disc — deliberately separate, not extracted
 /// into a shared component.
+/// Neutral sibling of `FeedIdleRing` for non-empty states (network error):
+/// same double ring, no accent, an SF glyph instead of the car.
+private struct FeedStateRing: View {
+    let systemImage: String
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let c = AppTheme.colors(for: scheme)
+        ZStack {
+            Circle()
+                .stroke(c.border, lineWidth: 2)
+                .frame(width: 100, height: 100)
+            ZStack {
+                Circle().stroke(c.borderBright, lineWidth: 2)
+                Image(systemName: systemImage)
+                    .font(.system(size: 30, weight: .light))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .frame(width: 82, height: 82)
+        }
+        .frame(width: 100, height: 100)
+    }
+}
+
 private struct FeedIdleRing: View {
     @Environment(\.colorScheme) private var scheme
 

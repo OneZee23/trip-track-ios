@@ -70,6 +70,18 @@ final class SocialFeedStore: ObservableObject {
 
     private init(type: FeedType) {
         self.feedType = type
+        // Network came back: reload if we're sitting on an offline error, so
+        // the user doesn't have to notice and pull down themselves.
+        CacheManager.shared.networkRestored
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                guard let self, self.trips.isEmpty, self.lastError != nil else { return }
+                Task { @MainActor in
+                    self.coldStartRetries = 0
+                    await self.refresh()
+                }
+            }
+            .store(in: &cancellables)
         // Photo added/removed/uploaded somewhere in the app. The notification
         // arrives twice for the same change — once optimistically from
         // `TripRepository` with a `delta` (+1 add / -1 delete) so we can
@@ -206,6 +218,17 @@ final class SocialFeedStore: ObservableObject {
     }
 
     func refresh() async {
+        // Offline: fail immediately instead of handing the request to
+        // URLSession and then sitting on its timeout ladder plus our own
+        // cold-start retries. In airplane mode that combination showed
+        // «Загружаем ленту…» for minutes and never reached the error state.
+        if CacheManager.shared.isOffline {
+            currentTask?.cancel()
+            currentTask = nil
+            isLoading = false
+            if trips.isEmpty { lastError = .network(URLError(.notConnectedToInternet)) }
+            return
+        }
         // Cancel any in-flight refresh so pull-to-refresh always triggers a fresh
         // fetch. The previous URLSession task gets cancelled via Task cooperative
         // cancellation — its -999 error is swallowed by fetchPage()'s catch.
@@ -338,6 +361,9 @@ final class SocialFeedStore: ObservableObject {
     /// populated feed (which also cancels the prior task) never triggers a spurious
     /// retry, and a freshly-started refresh wins.
     private func scheduleColdStartRetry(replace: Bool) {
+        // Retrying into a dead radio just re-runs the timeout ladder; the
+        // network-restored subscription below is what recovers us.
+        guard !CacheManager.shared.isOffline else { return }
         guard replace, trips.isEmpty, coldStartRetries < maxColdStartRetries else { return }
         coldStartRetries += 1
         let attempt = coldStartRetries
