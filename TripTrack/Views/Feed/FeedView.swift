@@ -447,20 +447,31 @@ struct FeedView: View {
             }
             .accessibilityIdentifier("feed_search")
 
-            headerCircleButton(icon: "bell", c: c) {
-                // Inbox is signed-in-only; the bell stays visible for guests
-                // and routes them to the sign-in prompt instead. Capture the
-                // intent so a successful sign-in opens the inbox — same
-                // resume pattern as share/react (without it the guest signs
-                // in and nothing happens).
-                if auth.isSignedIn {
+            if auth.isSignedIn {
+                headerCircleButton(icon: "bell", c: c) {
                     showNotifications = true
-                } else {
-                    pendingSocialAction = .openInbox
-                    signInPrompt = .generic
                 }
+                .accessibilityIdentifier("feed_bell")
+            } else {
+                // Canon «Лента · Гость»: a guest gets one clear call to
+                // action in the corner instead of a bell that can only bounce
+                // them into a sign-in prompt. Search stays — Discover is
+                // genuinely usable signed-out, so removing it would cost the
+                // guest the one thing they CAN do here.
+                Button {
+                    Haptics.tap()
+                    signInPrompt = .generic
+                } label: {
+                    Text(AppStrings.signInShort(lang.language))
+                        .font(.inter(14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .background(AppTheme.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("feed_sign_in")
             }
-            .accessibilityIdentifier("feed_bell")
         }
     }
 
@@ -550,9 +561,6 @@ struct FeedView: View {
                 // «Лента»→switcher and switcher→cards visibly uneven.
                 LazyVStack(spacing: 12) {
                     connectivityBanner(c)
-                    if !auth.isSignedIn {
-                        guestSignInBanner(c)
-                    }
                     socialFeedContent(c, store: socialFeed, isFollowing: false)
                 }
                 .id("feedTopAll")
@@ -585,7 +593,8 @@ struct FeedView: View {
                     if auth.isSignedIn {
                         socialFeedContent(c, store: followingFeed, isFollowing: true)
                     } else {
-                        guestSignInBanner(c)
+                        // One CTA, not two: the banner repeated what the
+                        // header button and this empty state already say.
                         followingGuestState(c)
                     }
                 }
@@ -772,6 +781,21 @@ struct FeedView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 280)
                 .padding(.top, 8)
+
+            Button {
+                Haptics.tap()
+                signInPrompt = .generic
+            } label: {
+                Text(AppStrings.signInShort(lang.language))
+                    .font(.inter(14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 16)
+                    .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
+                    .shadow(color: AppTheme.accent.opacity(0.3), radius: 1.5, y: 1)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 18)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)

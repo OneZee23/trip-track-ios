@@ -1810,6 +1810,11 @@ enum AppStrings {
     }
     // MARK: - Share sheet (6.1.0)
 
+    /// Short sign-in label for chrome (feed header pill, guest states).
+    static func signInShort(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войти" : "Sign in"
+    }
+
     static func shareTripTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Поделиться поездкой" : "Share trip"
     }
