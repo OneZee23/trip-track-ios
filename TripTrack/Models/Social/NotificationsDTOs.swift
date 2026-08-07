@@ -22,6 +22,10 @@ struct NotificationItem: Codable, Identifiable, Hashable {
     /// of it. Optional so older servers keep decoding.
     let commentId: UUID?
     let commentText: String?
+    /// Follow rows: does the RECIPIENT already follow this actor? Server
+    /// 6.1+; nil on older servers, where the button falls back to its
+    /// session-local guess.
+    let isFollowing: Bool?
     let isRead: Bool
     let createdAt: Date
     let actor: SocialAuthor?

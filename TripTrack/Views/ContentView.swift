@@ -196,7 +196,11 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openTripDetail)) { notification in
-            if let tripId = notification.object as? UUID {
+            // Either a bare trip id (push handlers) or a TripDeepLink that
+            // also says where inside the trip to land (inbox comment rows).
+            let link: TripDeepLink? = (notification.object as? TripDeepLink)
+                ?? (notification.object as? UUID).map { TripDeepLink(tripId: $0) }
+            if let link {
                 // Switch to feed tab and navigate to trip detail.
                 //
                 // KNOWN LIMITATION (also for .openGarageReady above): the
@@ -210,7 +214,7 @@ struct ContentView: View {
                 selectedTab = .home
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(300))
-                    NotificationCenter.default.post(name: .navigateToTrip, object: tripId)
+                    NotificationCenter.default.post(name: .navigateToTrip, object: link)
                 }
             }
         }

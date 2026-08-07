@@ -17,9 +17,9 @@ struct SocialTripDetailView: View {
     /// of attaching a local `.navigationDestination`. Keeps us off the
     /// chained isPresented chain that triggers the depth-4 flash.
     var pushPath: Binding<[ProfilePreviewDest]>?
-    /// Opened from a card's comment affordance — scroll to the discussion
-    /// once the body has laid out instead of landing on the poster.
-    var focusComments: Bool = false
+    /// Where to land: top (default), the discussion, or one specific
+    /// comment that also gets highlighted on arrival.
+    var focus: TripFocus = .top
 
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var auth = AuthService.shared
@@ -103,11 +103,19 @@ struct SocialTripDetailView: View {
     /// and reaction rows have taken their final heights — scrolling before
     /// that lands short of the section.
     private func scrollToCommentsIfRequested(_ proxy: ScrollViewProxy) async {
-        guard focusComments else { return }
+        // `.comment` lands on the section too — the comments block then
+        // homes in on the exact row once it has found it in a page.
+        guard focus != .top else { return }
         try? await Task.sleep(nanoseconds: 400_000_000)
         withAnimation(.easeOut(duration: 0.45)) {
             proxy.scrollTo(Self.commentsAnchor, anchor: .top)
         }
+    }
+
+    /// Comment id to spotlight, when we were opened from its notification.
+    private var highlightedCommentId: UUID? {
+        if case .comment(let id) = focus { return id }
+        return nil
     }
 
     var body: some View {
@@ -546,7 +554,8 @@ struct SocialTripDetailView: View {
                 onGuestInputTap: { signInPrompt = .comment },
                 onError: { msg in
                     toastItem = ToastItem(type: .error, message: msg)
-                }
+                },
+                highlightCommentId: highlightedCommentId
             )
             .id(Self.commentsAnchor)
         }

@@ -10,8 +10,9 @@ struct TripDetailView: View {
     /// the SwiftUI NavigationStack flash at depth 4+ that the chained
     /// isPresented approach was triggering from Feed → Trip → Profile → …
     var pushPath: Binding<[ProfilePreviewDest]>?
-    /// See `SocialTripDetailView.focusComments`.
-    var focusComments: Bool = false
+    /// Where to land: top (default), the discussion, or one specific
+    /// comment that also gets highlighted on arrival.
+    var focus: TripFocus = .top
     @State private var trip: Trip?
     @State private var showPhotoPicker = false
     @State private var pickedImages: [UIImage] = []
@@ -100,11 +101,19 @@ struct TripDetailView: View {
 
     /// See `SocialTripDetailView.scrollToCommentsIfRequested`.
     private func scrollToCommentsIfRequested(_ proxy: ScrollViewProxy) async {
-        guard focusComments else { return }
+        // `.comment` lands on the section too — the comments block then
+        // homes in on the exact row once it has found it in a page.
+        guard focus != .top else { return }
         try? await Task.sleep(nanoseconds: 400_000_000)
         withAnimation(.easeOut(duration: 0.45)) {
             proxy.scrollTo(Self.commentsAnchor, anchor: .top)
         }
+    }
+
+    /// Comment id to spotlight, when we were opened from its notification.
+    private var highlightedCommentId: UUID? {
+        if case .comment(let id) = focus { return id }
+        return nil
     }
 
     var body: some View {
@@ -693,7 +702,8 @@ struct TripDetailView: View {
                     onGuestInputTap: { signInPrompt = .comment },
                     onError: { msg in
                         toastItem = ToastItem(type: .error, message: msg)
-                    }
+                    },
+                    highlightCommentId: highlightedCommentId
                 )
                 .id(Self.commentsAnchor)
             }

@@ -12,20 +12,36 @@ private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 /// (mixing `.navigationDestination(isPresented:)` with a typed
 /// `NavigationStack(path:)` made isPresented-pushed views evaporate when
 /// the typed path mutated).
+/// Where a trip detail should land when it opens.
+enum TripFocus: Hashable {
+    /// Top of the screen — the poster. Default for a plain card tap.
+    case top
+    /// The discussion block, for taps on a comment affordance.
+    case comments
+    /// One specific comment, which also gets highlighted on arrival — the
+    /// inbox uses this so "X commented …" lands you on the actual sentence.
+    case comment(UUID)
+}
+
+/// Payload for the `.openTripDetail` → `.navigateToTrip` handoff when the
+/// deep link targets something INSIDE the trip. Senders that only know a
+/// trip id still post a bare `UUID`; both observers accept either.
+struct TripDeepLink {
+    let tripId: UUID
+    var focus: TripFocus = .top
+}
+
 enum ProfilePreviewDest: Hashable {
     case profile(UUID, SocialAuthor?)
     case followList(UUID, FollowListMode)
-    /// `focusComments` = opened from a card's comment affordance, so the
-    /// detail screen scrolls straight down to the discussion instead of
-    /// landing on the poster and making the user hunt for it.
-    case trip(UUID, focusComments: Bool)
-    case socialTrip(SocialFeedTrip, focusComments: Bool)
+    case trip(UUID, focus: TripFocus)
+    case socialTrip(SocialFeedTrip, focus: TripFocus)
 
     /// Plain-open shorthands — every existing `.trip(id)` / `.socialTrip(t)`
     /// call site keeps working and means "open at the top".
-    static func trip(_ id: UUID) -> Self { .trip(id, focusComments: false) }
+    static func trip(_ id: UUID) -> Self { .trip(id, focus: .top) }
     static func socialTrip(_ trip: SocialFeedTrip) -> Self {
-        .socialTrip(trip, focusComments: false)
+        .socialTrip(trip, focus: .top)
     }
 }
 

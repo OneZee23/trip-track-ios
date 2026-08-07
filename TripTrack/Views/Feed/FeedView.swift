@@ -177,14 +177,14 @@ struct FeedView: View {
                     PublicProfileView(accountId: id, preloaded: author, pushPath: $authorPath)
                 case .followList(let id, let mode):
                     FollowListView(accountId: id, mode: mode, pushPath: $authorPath)
-                case .trip(let id, let focusComments):
+                case .trip(let id, let focus):
                     TripDetailView(
                         tripId: id,
                         viewModel: TripsViewModel(tripManager: feedVM.tripManager),
                         pushPath: $authorPath,
-                        focusComments: focusComments
+                        focus: focus
                     )
-                case .socialTrip(let t, let focusComments):
+                case .socialTrip(let t, let focus):
                     SocialTripDetailView(
                         initialTrip: t,
                         onShare: {
@@ -192,7 +192,7 @@ struct FeedView: View {
                             else { pendingSocialAction = .share(t); signInPrompt = .share }
                         },
                         pushPath: $authorPath,
-                        focusComments: focusComments
+                        focus: focus
                     )
                 }
             }
@@ -258,7 +258,9 @@ struct FeedView: View {
         // underdelivered; local trips live on the Я tab (История +
         // Статистика). The second segment is now «Подписки» per Figma.
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTrip)) { notif in
-            if let tripId = notif.object as? UUID {
+            if let link = notif.object as? TripDeepLink {
+                authorPath = [.trip(link.tripId, focus: link.focus)]
+            } else if let tripId = notif.object as? UUID {
                 authorPath = [.trip(tripId)]
             }
         }
@@ -640,9 +642,9 @@ struct FeedView: View {
                         // lands on the discussion — tapping a comment count
                         // and getting the poster made you scroll for it.
                         if isOwn {
-                            authorPath.cappedAppend(.trip(trip.id, focusComments: true))
+                            authorPath.cappedAppend(.trip(trip.id, focus: .comments))
                         } else {
-                            authorPath.cappedAppend(.socialTrip(trip, focusComments: true))
+                            authorPath.cappedAppend(.socialTrip(trip, focus: .comments))
                         }
                     },
                     onTapAuthor: { authorPath.cappedAppend(.profile(trip.author.id, trip.author)) },

@@ -18,13 +18,15 @@ struct NotificationsInboxView: View {
     /// on Discover before. Same pattern as DiscoverView / FeedView.
     @State private var path: [ProfilePreviewDest] = []
     @State private var showPreferences = false
-    /// Gear popover («Настройки уведомлений» / «Отметить все прочитанными»).
-    @State private var showActions = false
     /// Client-side chip filter over already-loaded items. Pure in-memory —
     /// store, pagination and markAllRead are untouched. Unknown-kind rows
     /// stay visible under «Все».
     @State private var chipFilter: InboxChipFilter = .all
-    /// Actors followed back from this screen this session (optimistic).
+    /// Ids the recipient follows: seeded from the server flag on load, then
+    /// kept in sync by the toggle. Session-local state alone showed «В
+    /// ответ» to people you already followed, and the tap then died on the
+    /// server's AlreadyFollowing.
+
     @State private var followedBack: Set<UUID> = []
 
     var body: some View {
@@ -74,6 +76,13 @@ struct NotificationsInboxView: View {
                 }
         }
         .task { await store.refresh() }
+        .onChange(of: store.items) { _, items in
+            // Server knows the truth; merge rather than replace so a toggle
+            // made in this session isn't undone by a refresh in flight.
+            for item in items where item.isFollowing == true {
+                if let id = item.actor?.id { followedBack.insert(id) }
+            }
+        }
         // Peek-and-close: report whatever was on screen before the debounce
         // had a chance to fire.
         .onDisappear { Task { await store.flushSeen() } }
@@ -97,15 +106,12 @@ struct NotificationsInboxView: View {
 
             Spacer(minLength: 8)
 
-            // «Прочитать все» used to sit here as loose orange text wedged
-            // between the title and the circles. It now lives in the gear's
-            // popover: rows mark themselves read as you actually see them
-            // (see `noteSeen`), so the bulk action is the rare escape hatch
-            // for a long unread tail, not a primary control.
-            navCircleButton(icon: "gearshape") { showActions = true }
-                .popover(isPresented: $showActions, arrowEdge: .top) {
-                    ActionPopoverList(items: actionItems(isRu: isRu))
-                }
+            // Gear opens settings, full stop. It briefly hosted a popover
+            // that also held «Отметить все прочитанными», but with rows
+            // marking themselves read on sight (see `noteSeen`) that action
+            // had nothing left to do, and a menu offering a single choice is
+            // just a slower button.
+            navCircleButton(icon: "gearshape") { showPreferences = true }
             navCircleButton(icon: "xmark") { dismiss() }
         }
         .padding(.horizontal, 20)
@@ -126,35 +132,6 @@ struct NotificationsInboxView: View {
             NavCircleIcon(systemImage: icon)
         }
         .buttonStyle(.plain)
-    }
-
-    /// Gear popover contents. «Отметить все прочитанными» only appears
-    /// when there is actually something unread past what you've seen.
-    private func actionItems(isRu: Bool) -> [ActionPopoverList.Item] {
-        var items: [ActionPopoverList.Item] = [
-            .init(
-                title: isRu ? "Настройки уведомлений" : "Notification settings",
-                systemImage: "gearshape"
-            ) {
-                showActions = false
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 260_000_000)
-                    showPreferences = true
-                }
-            },
-        ]
-        if store.unreadCount > 0 {
-            items.append(
-                .init(
-                    title: isRu ? "Отметить все прочитанными" : "Mark all as read",
-                    systemImage: "checkmark.circle"
-                ) {
-                    showActions = false
-                    Task { await store.markAllRead() }
-                }
-            )
-        }
-        return items
     }
 
     // MARK: - Filter chips
@@ -319,6 +296,11 @@ struct NotificationsInboxView: View {
             let req = SocialFollowRequest(targetAccountId: userId)
             let _: SocialFollowResponse = try await APIClient.shared.post(
                 follow ? APIEndpoint.socialFollow : APIEndpoint.socialUnfollow, body: req)
+        } catch APIError.unknownServer(let code, _)
+            where code == "ALREADY_FOLLOWING" || code == "NOT_FOLLOWING" {
+            // The server and the button already agree — the request was a
+            // no-op, not a failure. Reverting here is what made the row snap
+            // back to «В ответ» and look like the tap did nothing.
         } catch {
             if follow { followedBack.remove(userId) } else { followedBack.insert(userId) }
         }
@@ -498,11 +480,20 @@ struct NotificationsInboxView: View {
             // in the trip's comment thread, not on the actor's profile.
             if let tripId = item.tripId {
                 dismiss()
+                // A comment row lands on ITS comment (highlighted); a
+                // reaction row lands at the top of the trip.
+                let focus: TripFocus = {
+                    guard item.typedKind == .comment else { return .top }
+                    if let commentId = item.commentId { return .comment(commentId) }
+                    return .comments
+                }()
+                let link = TripDeepLink(tripId: tripId, focus: focus)
                 // Small async hop so the sheet finishes dismissing before
                 // the receiving feed acts on the route — same pattern
                 // `triptrack://trip/{uuid}` deep links use.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    NotificationCenter.default.post(name: .openTripDetail, object: tripId)
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    NotificationCenter.default.post(name: .openTripDetail, object: link)
                 }
             } else if let actor = item.actor {
                 path.cappedAppend(.profile(actor.id, actor))

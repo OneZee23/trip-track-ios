@@ -234,6 +234,7 @@ final class NotificationsInboxStore: ObservableObject {
             id: item.id, kind: item.kind, tripId: item.tripId,
             tripTitle: item.tripTitle, emoji: item.emoji,
             commentId: item.commentId, commentText: item.commentText,
+            isFollowing: item.isFollowing,
             isRead: true, createdAt: item.createdAt, actor: item.actor,
         )
     }

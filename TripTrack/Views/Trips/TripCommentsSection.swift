@@ -21,8 +21,15 @@ struct TripCommentsSection: View {
     var onGuestInputTap: (() -> Void)? = nil
     /// Error surface — parents route the message into their toast host.
     var onError: (String) -> Void
+    /// Opened from that comment's notification: page until it's loaded,
+    /// scroll to it, then flash it so the user can see WHICH sentence the
+    /// notification meant.
+    var highlightCommentId: UUID? = nil
 
     @StateObject private var store = TripCommentsStore()
+    /// Currently spotlighted comment — set on arrival, cleared after the
+    /// flash so the row settles back to normal.
+    @State private var spotlightId: UUID?
     @State private var draft = ""
     @State private var commentToDelete: TripComment?
     @FocusState private var composerFocused: Bool
@@ -64,6 +71,7 @@ struct TripCommentsSection: View {
             VStack(spacing: 0) {
                 ForEach(store.comments) { comment in
                     commentRow(comment, c: c)
+                        .id(comment.id)
                 }
 
                 if store.nextCursor != nil {
@@ -78,7 +86,10 @@ struct TripCommentsSection: View {
                     .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
             }
         }
-        .task(id: tripId) { await store.load(tripId: tripId) }
+        .task(id: tripId) {
+            await store.load(tripId: tripId)
+            await spotlightIfRequested()
+        }
         .confirmationDialog(
             AppStrings.deleteCommentConfirm(lang.language),
             isPresented: Binding(
@@ -102,10 +113,35 @@ struct TripCommentsSection: View {
         }
     }
 
+    // MARK: - Spotlight
+
+    /// Page forward until the target comment is loaded (bounded), then let
+    /// the enclosing ScrollViewReader put it on screen and flash it.
+    /// Bounded at 5 pages: past that the thread is huge and jumping the user
+    /// hundreds of comments deep is worse than landing on the section.
+    private func spotlightIfRequested() async {
+        guard let target = highlightCommentId else { return }
+        var pagesLoaded = 0
+        while !store.comments.contains(where: { $0.id == target }),
+              store.nextCursor != nil,
+              pagesLoaded < 5 {
+            await store.loadMore()
+            pagesLoaded += 1
+        }
+        guard store.comments.contains(where: { $0.id == target }) else { return }
+        // Let the rows lay out before scrolling, then hold the highlight
+        // long enough to read the comment (2.4s) and fade it out.
+        try? await Task.sleep(nanoseconds: 550_000_000)
+        withAnimation(.easeOut(duration: 0.4)) { spotlightId = target }
+        try? await Task.sleep(nanoseconds: 2_400_000_000)
+        withAnimation(.easeInOut(duration: 0.7)) { spotlightId = nil }
+    }
+
     // MARK: - Rows
 
     private func commentRow(_ comment: TripComment, c: AppTheme.Colors) -> some View {
         let canDelete = comment.isMine || isTripOwner
+        let isSpotlit = spotlightId == comment.id
         return HStack(alignment: .top, spacing: 10) {
             Circle()
                 .fill(c.cardAlt)
@@ -134,6 +170,22 @@ struct TripCommentsSection: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+        // Spotlight: arriving from «X прокомментировал» tints the row and
+        // rides an accent rail down its leading edge for a couple of
+        // seconds, so the sentence the notification meant is unmistakable
+        // in a thread of similar-looking rows.
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isSpotlit ? AppTheme.accent.opacity(0.10) : Color.clear)
+                .padding(.horizontal, 6)
+        )
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(isSpotlit ? AppTheme.accent : Color.clear)
+                .frame(width: 3)
+                .padding(.vertical, 8)
+                .padding(.leading, 6)
+        }
         .contentShape(Rectangle())
         // Long-press delete for own comments (+ everything on own trips).
         // ScrollView has no swipeActions — context menu is the affordance.
