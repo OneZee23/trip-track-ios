@@ -16,6 +16,10 @@ struct SharedTripLinkSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var linkCopied = false
+    /// Bottom edge of the content in the sheet's own space — the detent is
+    /// sized from it, so there's no slab of empty background under the
+    /// buttons and no guessed constant to drift.
+    @State private var contentBottom: CGFloat = 0
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -37,8 +41,8 @@ struct SharedTripLinkSheet: View {
                 .accessibilityLabel(AppStrings.closeSheet(lang.language))
             }
             .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 14)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
 
             tripRow(c, isRu: isRu)
                 .padding(.horizontal, 16)
@@ -85,22 +89,35 @@ struct SharedTripLinkSheet: View {
                 .opacity(shareUrl == nil ? 0.5 : 1)
             }
             .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: LinkSheetHeightKey.self,
+                        value: geo.frame(in: .named(Self.space)).maxY
+                    )
+                }
+            )
         }
+        .coordinateSpace(name: Self.space)
         .background(c.bg)
         .presentationCornerRadius(22)
         .presentationDetents([.height(sheetHeight)])
         .presentationDragIndicator(.visible)
+        .onPreferenceChange(LinkSheetHeightKey.self) { contentBottom = $0 }
     }
 
-    /// Header + card + buttons + the home-indicator strip. Fixed geometry,
-    /// so no measurement dance is needed here.
+    private static let space = "linkShareContent"
+
+    /// Content bottom + the home-indicator strip. The first pass uses a
+    /// close-enough default so the sheet doesn't resize visibly as it opens.
     private var sheetHeight: CGFloat {
         let bottomInset = UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.bottom }
             .first ?? 0
-        return 300 + bottomInset
+        guard contentBottom > 0 else { return 250 + bottomInset }
+        return contentBottom + bottomInset
     }
 
     private func tripRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
@@ -185,5 +202,13 @@ struct SharedTripLinkSheet: View {
             vc = presented
         }
         return vc
+    }
+}
+
+/// Bottom edge of the link sheet's content, in the sheet's own space.
+private struct LinkSheetHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

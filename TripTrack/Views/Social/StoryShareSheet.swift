@@ -347,7 +347,28 @@ struct StoryShareSheet: View {
 
     private func shareImage() {
         guard let image = renderImage() else { return }
-        var items: [Any] = [image]
+        // A real .png FILE, not a bare UIImage: the system sheet then names
+        // the item after the trip and reports «Изображение PNG» (canon), and
+        // Telegram/WhatsApp send it as a photo rather than re-encoding a
+        // pasteboard blob. Sticker exports keep their alpha this way too —
+        // a UIImage handed to the activity controller loses it in JPEG
+        // conversion on some targets.
+        var items: [Any] = []
+        if let png = image.pngData() {
+            let name = data.title
+                .replacingOccurrences(of: "/", with: "-")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let file = FileManager.default.temporaryDirectory
+                .appendingPathComponent(name.isEmpty ? "TripTrack" : name)
+                .appendingPathExtension("png")
+            if (try? png.write(to: file, options: .atomic)) != nil {
+                items.append(file)
+            } else {
+                items.append(image)
+            }
+        } else {
+            items.append(image)
+        }
         if let shareUrl, let url = URL(string: shareUrl) {
             items.append(url)
         }

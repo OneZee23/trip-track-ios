@@ -63,6 +63,10 @@ struct FeedView: View {
     @State private var tripPendingReport: SocialFeedTrip?
     /// Compact link-share sheet for someone else's trip.
     @State private var linkShareData: LinkShare?
+    /// Undo window after «Да» in the hide/delete alert. The mutation is
+    /// DEFERRED into `onCommit` — canon: nothing happens on the server until
+    /// the ten seconds are up.
+    @State private var undoToast: UndoToast?
     @State private var showDiscover = false
     /// Poster studio payload. `url` is optional: a failed share-link call
     /// shouldn't block exporting the card itself.
@@ -459,6 +463,18 @@ struct FeedView: View {
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
 
+        // Undo toast sits above the floating tab bar (canon).
+        if let toast = undoToast {
+            UndoToastView(
+                toast: toast,
+                undoLabel: AppStrings.undoAction(lang.language),
+                onClose: { undoToast = nil }
+            )
+            .padding(.bottom, 96)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .zIndex(200)
+        }
+
         // Recording banner overlay
         if mapVM.isRecording {
             RecordingBanner(
@@ -485,6 +501,7 @@ struct FeedView: View {
             .zIndex(100)
         }
         } // ZStack
+        .animation(.spring(response: 0.36, dampingFraction: 0.82), value: undoToast?.id)
     }
 
     // MARK: - Header (Figma 140:945)
@@ -1160,23 +1177,42 @@ struct FeedView: View {
     /// Flip an own trip back to private straight from the card. Mirrors the
     /// detail screen's privacy chip: local write, then the same notification
     /// the rest of the app listens to (feed removal, store invalidation).
+    /// Card leaves the feed immediately; the actual privacy flip waits for
+    /// the undo window to close (canon toast rules).
     private func makeTripPrivate(_ trip: SocialFeedTrip) {
         Haptics.action()
-        feedVM.tripManager.updatePrivacy(for: trip.id, isPrivate: true)
-        NotificationCenter.default.post(
-            name: .tripPrivacyChanged,
-            object: PrivacyChangePayload(tripId: trip.id, isPrivate: true)
+        withAnimation(.easeInOut(duration: 0.3)) {
+            socialFeed.removeOptimistically(tripId: trip.id)
+            followingFeed.removeOptimistically(tripId: trip.id)
+        }
+        undoToast = UndoToast(
+            message: AppStrings.tripHiddenToast(lang.language),
+            onCommit: {
+                feedVM.tripManager.updatePrivacy(for: trip.id, isPrivate: true)
+                NotificationCenter.default.post(
+                    name: .tripPrivacyChanged,
+                    object: PrivacyChangePayload(tripId: trip.id, isPrivate: true)
+                )
+            },
+            onUndo: { Task { await socialFeed.refresh() } }
         )
     }
 
     private func deleteOwnTrip(_ trip: SocialFeedTrip) {
         Haptics.action()
-        feedVM.tripManager.deleteTrip(id: trip.id)
         withAnimation(.easeInOut(duration: 0.3)) {
             socialFeed.removeOptimistically(tripId: trip.id)
             followingFeed.removeOptimistically(tripId: trip.id)
         }
-        NotificationCenter.default.post(name: .tripDeleted, object: trip.id)
+        undoToast = UndoToast(
+            message: AppStrings.tripDeletedToast(lang.language),
+            onCommit: {
+                feedVM.tripManager.deleteTrip(id: trip.id)
+                NotificationCenter.default.post(name: .tripDeleted, object: trip.id)
+            },
+            // Nothing was destroyed yet — a refresh brings the card back.
+            onUndo: { Task { await socialFeed.refresh() } }
+        )
     }
 
     /// Own trip → the poster studio (your card, your numbers, your formats).

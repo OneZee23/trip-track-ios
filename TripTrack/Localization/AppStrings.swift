@@ -1822,6 +1822,17 @@ enum AppStrings {
 
     // Canon alert copy (Figma «Лента · Алерт · точно приватной? / точно
     // удалить?»): plain question, one line of consequence, «Нет» / «Да, …».
+    // Undo toasts after the alert (canon «после "Да" в алерте»).
+    static func tripHiddenToast(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездка скрыта из ленты" : "Trip hidden from the feed"
+    }
+    static func tripDeletedToast(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездка удалена" : "Trip deleted"
+    }
+    static func undoAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Отменить" : "Undo"
+    }
+
     static func hideFromFeedAlertTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Точно скрыть из ленты?" : "Hide from the feed?"
     }
