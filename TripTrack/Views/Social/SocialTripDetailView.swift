@@ -42,6 +42,8 @@ struct SocialTripDetailView: View {
     @State private var showReactionPicker = false
     /// «…» popover on the poster header.
     @State private var showTripActions = false
+    /// Long-pressed a reaction chip — «кто отреагировал», opened on it.
+    @State private var reactorsPeekEmoji: String?
     /// Remote-load failure flags — when the pushed DTO is a stub with no
     /// route geometry AND both loads fail (offline), there is nothing to
     /// render and the full-screen error state takes over. Today's feed
@@ -183,6 +185,29 @@ struct SocialTripDetailView: View {
             }
         }
         .background(c.bg)
+        .sheet(isPresented: Binding(
+            get: { reactorsPeekEmoji != nil },
+            set: { if !$0 { reactorsPeekEmoji = nil } }
+        )) {
+            ReactionsListSheet(
+                tripId: trip.id,
+                initialEmoji: reactorsPeekEmoji,
+                onSelectUser: { author in
+                    reactorsPeekEmoji = nil
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 260_000_000)
+                        if let pushPath {
+                            pushPath.wrappedValue.cappedAppend(.profile(author.id, author))
+                        } else {
+                            selectedAuthor = author
+                        }
+                    }
+                }
+            )
+            .environmentObject(lang)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         // `.container` (not the default all-regions) — the keyboard inset
         // must survive so the comments composer rises above the keyboard.
         .ignoresSafeArea(.container)
@@ -848,6 +873,11 @@ struct SocialTripDetailView: View {
             }
         }
         .buttonStyle(.plain)
+        // Same peek as the feed pills: hold a chip to see who left it.
+        .onLongPressGesture(minimumDuration: 0.35) {
+            Haptics.action()
+            reactorsPeekEmoji = tally.emoji
+        }
         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isMine)
     }
 

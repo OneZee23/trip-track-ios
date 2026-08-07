@@ -110,11 +110,7 @@ struct VehicleEditFormView: View {
                     Haptics.tap()
                     dismiss()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(c.textTertiary)
-                        .frame(width: 34, height: 34)
-                        .contentShape(Rectangle())
+                    NavCircleIcon(systemImage: "xmark")
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("vehicle_form_close")

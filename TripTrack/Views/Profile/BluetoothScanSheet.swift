@@ -48,11 +48,7 @@ struct BluetoothScanSheet: View {
                     Haptics.tap()
                     dismiss()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(c.textTertiary)
-                        .frame(width: 30, height: 30)
-                        .contentShape(Rectangle())
+                    NavCircleIcon(systemImage: "xmark")
                 }
                 .buttonStyle(.plain)
             }

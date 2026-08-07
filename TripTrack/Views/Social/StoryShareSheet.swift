@@ -92,9 +92,7 @@ struct StoryShareSheet: View {
                     Haptics.tap()
                     dismiss()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(c.textTertiary)
+                    NavCircleIcon(systemImage: "xmark")
                 }
                 .buttonStyle(.plain)
             }

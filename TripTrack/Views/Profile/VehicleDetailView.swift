@@ -16,6 +16,8 @@ struct VehicleDetailView: View {
     @Environment(\.openURL) private var openURL
 
     @State private var showEditForm = false
+    /// «…» popover on the vehicle header.
+    @State private var showVehicleActions = false
     @State private var showAutoRecordSettings = false
     @State private var showDeleteConfirm = false
 
@@ -32,6 +34,37 @@ struct VehicleDetailView: View {
     }
 
     @ViewBuilder
+    /// Popover rows. Each closes first, then acts — presenting a sheet or
+    /// an alert in the same runloop as the dismissal races it and SwiftUI
+    /// drops one of the two.
+    private func vehicleActionItems(_ l: LanguageManager.Language) -> [ActionPopoverList.Item] {
+        func run(_ action: @escaping () -> Void) {
+            showVehicleActions = false
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 260_000_000)
+                action()
+            }
+        }
+        var items: [ActionPopoverList.Item] = [
+            .init(title: AppStrings.renameVehicle(l), systemImage: "pencil") {
+                run { showEditForm = true }
+            },
+        ]
+        if !isMain {
+            items.append(
+                .init(title: AppStrings.makeMainVehicle(l), systemImage: "star") {
+                    run { settings.selectVehicle(id: vehicleId) }
+                }
+            )
+        }
+        items.append(
+            .init(title: AppStrings.deleteVehicle(l), systemImage: "trash", isDestructive: true) {
+                run { showDeleteConfirm = true }
+            }
+        )
+        return items
+    }
+
     var body: some View {
         // `@ViewBuilder` lets us early-return without `AnyView` when the
         // vehicle was deleted out from under the view.
@@ -112,30 +145,24 @@ struct VehicleDetailView: View {
 
             Spacer()
 
-            Menu {
-                Button {
-                    showEditForm = true
-                } label: {
-                    Label(AppStrings.renameVehicle(l), systemImage: "pencil")
-                }
-                if !isMain {
-                    Button {
-                        settings.selectVehicle(id: vehicleId)
-                    } label: {
-                        Label(AppStrings.makeMainVehicle(l), systemImage: "star")
-                    }
-                }
-                Button(role: .destructive) {
-                    showDeleteConfirm = true
-                } label: {
-                    Label(AppStrings.deleteVehicle(l), systemImage: "trash")
-                }
+            // Popover, not a `Menu` — see `ActionPopoverList` for the plate
+            // artifact a Menu leaves behind when it closes.
+            Button {
+                Haptics.tap()
+                showVehicleActions = true
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(c.text)
                     .frame(width: 34, height: 34)
-                    .contentShape(Rectangle())
+                    .padding(5)
+                    .contentShape(Circle())
+                    .padding(-5)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(AppStrings.moreActions(l))
+            .popover(isPresented: $showVehicleActions, arrowEdge: .top) {
+                ActionPopoverList(items: vehicleActionItems(l))
             }
         }
         .padding(.top, 4)
