@@ -97,7 +97,6 @@ struct StoryShareSheet: View {
                 header(c)
                 formatChips(c)
             }
-            .measureSheetHeight()
 
             ScrollView {
                 VStack(spacing: 14) {
@@ -117,10 +116,21 @@ struct StoryShareSheet: View {
                 }
                 .padding(.top, 12)
                 .padding(.bottom, 20)
-                .measureSheetHeight()
+                // Where the content actually ENDS in the sheet's own space.
+                // Summing block heights over-counted by the sheet's chrome
+                // and left a slab of dead background under the link row.
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: SharePosterSheetHeightKey.self,
+                            value: geo.frame(in: .named(Self.space)).maxY
+                        )
+                    }
+                )
             }
             .scrollBounceBehavior(.basedOnSize)
         }
+        .coordinateSpace(name: Self.space)
         .background(c.bg)
         .presentationCornerRadius(22)
         .presentationDetents([.height(sheetHeight)])
@@ -128,10 +138,12 @@ struct StoryShareSheet: View {
         .task(id: format) { await loadMap() }
     }
 
-    /// Content height plus the home-indicator strip, clamped so a small
-    /// phone still gets a scrollable sheet instead of one taller than the
-    /// screen. The pre-measurement default is close to the real value, so
-    /// the sheet doesn't visibly resize on open.
+    private static let space = "shareSheetContent"
+
+    /// Content bottom plus the home-indicator strip, clamped so a small phone
+    /// gets a scrollable sheet rather than one taller than the screen. The
+    /// pre-measurement default is close to the real value, so the sheet
+    /// doesn't visibly resize as it opens.
     private var sheetHeight: CGFloat {
         let bottomInset = UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.bottom }
@@ -407,21 +419,11 @@ private struct TransparencyChecker: View {
     }
 }
 
-/// Sums the heights of the blocks it's attached to — the share sheet uses it
-/// to size its own detent.
+/// Bottom edge of the sheet's content, in the sheet's own coordinate space.
 private struct SharePosterSheetHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value += nextValue()
+        value = max(value, nextValue())
     }
 }
 
-private extension View {
-    func measureSheetHeight() -> some View {
-        background(
-            GeometryReader { geo in
-                Color.clear.preference(key: SharePosterSheetHeightKey.self, value: geo.size.height)
-            }
-        )
-    }
-}

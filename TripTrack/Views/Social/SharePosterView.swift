@@ -143,15 +143,23 @@ struct SharePosterView: View {
     }
 
     private func wordmark(s: CGFloat) -> some View {
-        HStack(spacing: 8 * s) {
-            Image("PixelCar")
+        // `poster_car`, not `PixelCar`: the sprite ships with a pixel-art
+        // ground shadow, which on a dark poster read as a white pedestal
+        // under the car. The wordmark is also two separate Texts — one
+        // string with a space in it renders a huge gap in PressStart2P,
+        // whose space glyph is a full em wide.
+        HStack(spacing: 7 * s) {
+            Image("poster_car")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 22 * s, height: 22 * s)
-            Text("TRIP TRACK")
-                .font(.custom("PressStart2P-Regular", fixedSize: 7 * s))
-                .tracking(1.2 * s)
-                .foregroundStyle(.white)
+                .frame(height: 18 * s)
+            HStack(spacing: 5 * s) {
+                Text("TRIP")
+                Text("TRACK")
+            }
+            .font(.custom("PressStart2P-Regular", fixedSize: 7 * s))
+            .tracking(0.8 * s)
+            .foregroundStyle(.white)
         }
         .shadow(color: .black.opacity(0.5), radius: 4 * s, y: 1 * s)
         .padding(.leading, 14 * s)
@@ -167,11 +175,15 @@ struct SharePosterView: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
 
+            // One line, always: at preview scale the row used to wrap and
+            // drop «68.0» onto two lines as «68.» + «0».
             HStack(alignment: .firstTextBaseline, spacing: 10 * s) {
                 metric(data.distanceKmText, unit: AppStrings.km(data.language), s: s)
                 metric(data.durationText, unit: nil, s: s)
                 metric(data.avgSpeedKmhText, unit: AppStrings.kmh(data.language), s: s)
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
         }
         .shadow(color: .black.opacity(0.55), radius: 6 * s, y: 1 * s)
         // A sticker lands on someone else's photo, where white-on-nothing is
@@ -195,10 +207,12 @@ struct SharePosterView: View {
                 .font(.system(size: 17 * s, weight: .heavy).monospacedDigit())
                 .tracking(-0.3 * s)
                 .foregroundStyle(.white)
+                .fixedSize(horizontal: true, vertical: false)
             if let unit {
                 Text(unit)
                     .font(.system(size: 9 * s, weight: .bold))
                     .foregroundStyle(.white.opacity(0.7))
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
     }
