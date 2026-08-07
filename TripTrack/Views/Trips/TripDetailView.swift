@@ -338,7 +338,9 @@ struct TripDetailView: View {
         )) {
             if let share = storyShare {
                 StoryShareSheet(data: share.data, shareUrl: share.url)
-                    .presentationDetents([.large])
+                    // Sized to the card, not to the screen: at `.large` the
+                    // sheet was mostly empty space under the link row.
+                    .presentationDetents([.fraction(0.78)])
                     .presentationDragIndicator(.visible)
                     .environmentObject(lang)
                     // Sheets are separate presentations — the app-root

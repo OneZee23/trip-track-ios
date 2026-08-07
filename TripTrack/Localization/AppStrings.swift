@@ -1808,6 +1808,22 @@ enum AppStrings {
         }
         return "following"
     }
+    // MARK: - Share sheet (6.1.0)
+
+    static func shareTripTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поделиться поездкой" : "Share trip"
+    }
+    /// Sits under the preview: says what the card is FOR, so the formats
+    /// above it read as choices rather than settings.
+    static func shareCardCaption(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Готовая карточка — в чат, пост или сторис"
+            : "Ready-made card — for a chat, a post or a story"
+    }
+    static func shareCopyLink(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Копировать" : "Copy"
+    }
+
     /// VoiceOver label for the circular close button on sheet headers.
     static func closeSheet(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Закрыть" : "Close"
