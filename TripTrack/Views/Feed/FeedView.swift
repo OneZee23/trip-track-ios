@@ -63,10 +63,10 @@ struct FeedView: View {
     @State private var tripPendingReport: SocialFeedTrip?
     /// Compact link-share sheet for someone else's trip.
     @State private var linkShareData: LinkShare?
-    /// Undo window after «Да» in the hide/delete alert. The mutation is
-    /// DEFERRED into `onCommit` — canon: nothing happens on the server until
-    /// the ten seconds are up.
-    @State private var undoToast: UndoToast?
+    /// Undo window after «Да» in the hide/delete alert. Owned by
+    /// `UndoActionCenter` so the deferred write survives this view being torn
+    /// down (tab switch, push) — see that type for the bug this fixes.
+    @ObservedObject private var undo = UndoActionCenter.shared
     @State private var showDiscover = false
     /// Poster studio payload. `url` is optional: a failed share-link call
     /// shouldn't block exporting the card itself.
@@ -464,11 +464,10 @@ struct FeedView: View {
         }
 
         // Undo toast sits above the floating tab bar (canon).
-        if let toast = undoToast {
+        if let pending = undo.pending {
             UndoToastView(
-                toast: toast,
-                undoLabel: AppStrings.undoAction(lang.language),
-                onClose: { undoToast = nil }
+                pending: pending,
+                undoLabel: AppStrings.undoAction(lang.language)
             )
             .padding(.bottom, 96)
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -501,7 +500,7 @@ struct FeedView: View {
             .zIndex(100)
         }
         } // ZStack
-        .animation(.spring(response: 0.36, dampingFraction: 0.82), value: undoToast?.id)
+        .animation(.spring(response: 0.36, dampingFraction: 0.82), value: undo.pending?.id)
     }
 
     // MARK: - Header (Figma 140:945)
@@ -1185,16 +1184,17 @@ struct FeedView: View {
             socialFeed.removeOptimistically(tripId: trip.id)
             followingFeed.removeOptimistically(tripId: trip.id)
         }
-        undoToast = UndoToast(
+        let manager = feedVM.tripManager
+        UndoActionCenter.shared.schedule(
             message: AppStrings.tripHiddenToast(lang.language),
-            onCommit: {
-                feedVM.tripManager.updatePrivacy(for: trip.id, isPrivate: true)
+            commit: {
+                manager.updatePrivacy(for: trip.id, isPrivate: true)
                 NotificationCenter.default.post(
                     name: .tripPrivacyChanged,
                     object: PrivacyChangePayload(tripId: trip.id, isPrivate: true)
                 )
             },
-            onUndo: { Task { await socialFeed.refresh() } }
+            undo: { Task { await SocialFeedStore.shared.refresh() } }
         )
     }
 
@@ -1204,14 +1204,15 @@ struct FeedView: View {
             socialFeed.removeOptimistically(tripId: trip.id)
             followingFeed.removeOptimistically(tripId: trip.id)
         }
-        undoToast = UndoToast(
+        let manager = feedVM.tripManager
+        UndoActionCenter.shared.schedule(
             message: AppStrings.tripDeletedToast(lang.language),
-            onCommit: {
-                feedVM.tripManager.deleteTrip(id: trip.id)
+            commit: {
+                manager.deleteTrip(id: trip.id)
                 NotificationCenter.default.post(name: .tripDeleted, object: trip.id)
             },
             // Nothing was destroyed yet — a refresh brings the card back.
-            onUndo: { Task { await socialFeed.refresh() } }
+            undo: { Task { await SocialFeedStore.shared.refresh() } }
         )
     }
 
