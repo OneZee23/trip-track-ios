@@ -61,9 +61,20 @@ struct FeedView: View {
     @State private var tripPendingPrivate: SocialFeedTrip?
     /// Someone else's trip being reported from its card «…».
     @State private var tripPendingReport: SocialFeedTrip?
+    /// Compact link-share sheet for someone else's trip.
+    @State private var linkShareData: LinkShare?
     @State private var showDiscover = false
-    @State private var shareSheetData: (data: StoryShareData, url: String)?
+    /// Poster studio payload. `url` is optional: a failed share-link call
+    /// shouldn't block exporting the card itself.
+    @State private var shareSheetData: (data: StoryShareData, url: String?)?
     @State private var signInPrompt: SignInPromptSheet.Action?
+
+    /// Payload for the compact «поделиться чужой» sheet.
+    private struct LinkShare: Identifiable {
+        let trip: SocialFeedTrip
+        let url: String?
+        var id: UUID { trip.id }
+    }
 
     /// Long-press peek payload — the trip whose reactor list to show and
     /// which emoji chip to land on.
@@ -355,35 +366,38 @@ struct FeedView: View {
                 .environmentObject(auth)
                 .preferredColorScheme(themeManager.preferredColorScheme)
         }
-        .confirmationDialog(
-            AppStrings.makePrivateConfirmTitle(lang.language),
+        // Canon uses centred ALERTS for both irreversible-ish actions, with a
+        // «Нет» / «Да, …» pair rather than a generic Отмена/Удалить — the
+        // second word tells you what «Да» will do.
+        .alert(
+            AppStrings.hideFromFeedAlertTitle(lang.language),
             isPresented: Binding(
                 get: { tripPendingPrivate != nil },
                 set: { if !$0 { tripPendingPrivate = nil } }
-            ),
-            titleVisibility: .visible
+            )
         ) {
-            Button(AppStrings.makePrivateAction(lang.language), role: .destructive) {
+            Button(AppStrings.no(lang.language), role: .cancel) { tripPendingPrivate = nil }
+            Button(AppStrings.hideFromFeedAlertConfirm(lang.language), role: .destructive) {
                 if let trip = tripPendingPrivate { makeTripPrivate(trip) }
                 tripPendingPrivate = nil
             }
-            Button(AppStrings.cancel(lang.language), role: .cancel) { tripPendingPrivate = nil }
         } message: {
-            Text(AppStrings.makePrivateConfirmBody(lang.language))
+            Text(AppStrings.hideFromFeedAlertBody(lang.language))
         }
-        .confirmationDialog(
-            AppStrings.deleteTrip(lang.language),
+        .alert(
+            AppStrings.deleteTripAlertTitle(lang.language),
             isPresented: Binding(
                 get: { tripPendingDelete != nil },
                 set: { if !$0 { tripPendingDelete = nil } }
-            ),
-            titleVisibility: .visible
+            )
         ) {
-            Button(AppStrings.delete(lang.language), role: .destructive) {
+            Button(AppStrings.no(lang.language), role: .cancel) { tripPendingDelete = nil }
+            Button(AppStrings.deleteTripAlertConfirm(lang.language), role: .destructive) {
                 if let trip = tripPendingDelete { deleteOwnTrip(trip) }
                 tripPendingDelete = nil
             }
-            Button(AppStrings.cancel(lang.language), role: .cancel) { tripPendingDelete = nil }
+        } message: {
+            Text(AppStrings.deleteTripAlertBody(lang.language))
         }
         .sheet(isPresented: Binding(
             get: { tripPendingReport != nil },
@@ -394,6 +408,11 @@ struct FeedView: View {
                     .environmentObject(lang)
                     .preferredColorScheme(themeManager.preferredColorScheme)
             }
+        }
+        .sheet(item: $linkShareData) { share in
+            SharedTripLinkSheet(trip: share.trip, shareUrl: share.url)
+                .environmentObject(lang)
+                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(item: $reactorsPeek) { peek in
             ReactionsListSheet(
@@ -1160,20 +1179,29 @@ struct FeedView: View {
         NotificationCenter.default.post(name: .tripDeleted, object: trip.id)
     }
 
+    /// Own trip → the poster studio (your card, your numbers, your formats).
+    /// Someone else's → the compact link sheet (canon): passing a trip on is
+    /// about the link, not about exporting a card that isn't yours.
     private func shareSocialTrip(_ trip: SocialFeedTrip) {
+        let isOwn = isOwnSocialTrip(trip)
         Task {
+            var url: String?
             do {
                 let req = SocialShareRequest(tripId: trip.id, expiresInDays: nil)
                 let res: SocialShareResponse = try await APIClient.shared.post(
                     APIEndpoint.socialShare, body: req)
-                await MainActor.run {
-                    shareSheetData = (
-                        StoryShareData.from(trip, lang: lang.language),
-                        res.shareUrl
-                    )
-                }
+                url = res.shareUrl
             } catch {
-                // Ignore errors silently for MVP
+                // No link (offline / server hiccup): the studio still works
+                // without one, the compact sheet degrades to share-less copy.
+            }
+            let link = url
+            await MainActor.run {
+                if isOwn {
+                    shareSheetData = (StoryShareData.from(trip, lang: lang.language), link)
+                } else {
+                    linkShareData = LinkShare(trip: trip, url: link)
+                }
             }
         }
     }

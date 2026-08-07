@@ -1820,6 +1820,34 @@ enum AppStrings {
         lang == .ru ? "Сделать приватной" : "Make private"
     }
 
+    // Canon alert copy (Figma «Лента · Алерт · точно приватной? / точно
+    // удалить?»): plain question, one line of consequence, «Нет» / «Да, …».
+    static func hideFromFeedAlertTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Точно скрыть из ленты?" : "Hide from the feed?"
+    }
+    static func hideFromFeedAlertBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Поездка останется только в вашем дневнике."
+            : "The trip stays in your own diary only."
+    }
+    static func hideFromFeedAlertConfirm(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Да, скрыть" : "Yes, hide"
+    }
+    static func deleteTripAlertTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Точно удалить поездку?" : "Delete this trip?"
+    }
+    static func deleteTripAlertBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Маршрут, фото и статистика исчезнут из вашего дневника."
+            : "Its route, photos and stats disappear from your diary."
+    }
+    static func deleteTripAlertConfirm(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Да, удалить" : "Yes, delete"
+    }
+    static func no(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Нет" : "No"
+    }
+
     static func makePrivateConfirmTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Сделать поездку приватной?" : "Make this trip private?"
     }
