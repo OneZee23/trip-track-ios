@@ -11,6 +11,10 @@ private struct NotificationPrefsResponse: Codable {
     /// decode against prod. Missing = server default (true).
     let notifyComments: Bool?
     let notifyWeeklyRecap: Bool
+    /// Fix 6: same optional-for-backward-compat treatment as
+    /// `notifyComments` above — the deployed backend predates
+    /// feat/trip-companions on some environments.
+    let notifyCompanions: Bool?
 }
 
 private struct NotificationPrefsUpdateRequest: Codable {
@@ -18,6 +22,7 @@ private struct NotificationPrefsUpdateRequest: Codable {
     let notifyFollows: Bool?
     let notifyComments: Bool?
     let notifyWeeklyRecap: Bool?
+    let notifyCompanions: Bool?
 }
 
 /// Account-level toggles for each notification category. Lives behind a
@@ -36,6 +41,10 @@ struct NotificationPreferencesView: View {
     @State private var notifyFollows = true
     @State private var notifyComments = true
     @State private var notifyWeeklyRecap = true
+    /// Fix 6: the server has had `notifyCompanions` since the
+    /// trip-companions rollout, but this screen never offered a switch for
+    /// it — every other category has one.
+    @State private var notifyCompanions = true
     @State private var isLoaded = false
     /// Debounced save. Flipping several switches in a row (or one switch
     /// twice) collapses into a single POST carrying the final state.
@@ -92,6 +101,15 @@ struct NotificationPreferencesView: View {
                                 ? "Каждый понедельник — сколько Вы проехали за прошлую неделю"
                                 : "Every Monday — how much you drove last week",
                             isOn: $notifyWeeklyRecap,
+                            c: c,
+                        )
+                        Divider().padding(.leading, 56)
+                        toggleRow(
+                            icon: "person.2.fill",
+                            iconTint: AppTheme.purple,
+                            title: AppStrings.notifyCompanionsTitle(lang.language),
+                            subtitle: AppStrings.notifyCompanionsSubtitle(lang.language),
+                            isOn: $notifyCompanions,
                             c: c,
                         )
                     }
@@ -199,6 +217,7 @@ struct NotificationPreferencesView: View {
             notifyFollows = res.notifyFollows
             notifyComments = res.notifyComments ?? true
             notifyWeeklyRecap = res.notifyWeeklyRecap
+            notifyCompanions = res.notifyCompanions ?? true
             isLoaded = true
         } catch {
             prefsLog.error("load failed: \(error.localizedDescription)")
@@ -222,6 +241,7 @@ struct NotificationPreferencesView: View {
                     // sending the key early is safe.
                     notifyComments: notifyComments,
                     notifyWeeklyRecap: notifyWeeklyRecap,
+                    notifyCompanions: notifyCompanions,
                 ))
         } catch {
             prefsLog.error("save failed: \(error.localizedDescription)")

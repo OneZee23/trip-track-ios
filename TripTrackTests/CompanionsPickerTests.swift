@@ -111,4 +111,39 @@ final class CompanionsPickerTests: XCTestCase {
     func testCurrentLoadTokenIsCurrent() {
         XCTAssertTrue(CompanionsPickerModel.isCurrent(token: 2, latest: 2))
     }
+
+    // MARK: - `clampedQuery` (Fix 10)
+
+    /// THE bug this fix closes: the server rejects `query` over 60 chars
+    /// (`companions.dto.ts`'s `@MaxLength(60)`) with a validation error,
+    /// which surfaced as the picker's outright error state for ordinary —
+    /// if enthusiastic — typing. Fails if `clampedQuery` stops truncating
+    /// (e.g. is loosened to `prefix(200)`, or drops the `prefix` call
+    /// entirely).
+    func testClampedQuery_TruncatesLongStringTo60Chars() {
+        let long = String(repeating: "a", count: 200)
+        let clamped = CompanionsPickerModel.clampedQuery(long)
+        XCTAssertEqual(clamped?.count, 60)
+        XCTAssertEqual(clamped, String(long.prefix(60)))
+    }
+
+    /// An ordinary short query passes through untouched (no over-eager
+    /// truncation of normal-length input).
+    func testClampedQuery_ShortStringPassesThroughUnchanged() {
+        XCTAssertEqual(CompanionsPickerModel.clampedQuery("Аня"), "Аня")
+    }
+
+    /// Empty (or whitespace-only, after trimming) reads as `nil` — "omit
+    /// the filter", matching `CompanionsCandidatesRequest.query`'s
+    /// contract, not an empty-string query.
+    func testClampedQuery_EmptyAfterTrimmingIsNil() {
+        XCTAssertNil(CompanionsPickerModel.clampedQuery("   "))
+        XCTAssertNil(CompanionsPickerModel.clampedQuery(""))
+    }
+
+    /// Leading/trailing whitespace around an otherwise-short query is
+    /// trimmed, matching the picker's prior inline behavior.
+    func testClampedQuery_TrimsSurroundingWhitespace() {
+        XCTAssertEqual(CompanionsPickerModel.clampedQuery("  Аня  "), "Аня")
+    }
 }

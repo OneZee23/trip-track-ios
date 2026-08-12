@@ -235,7 +235,12 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             if category == Self.tripStartPromptCategory {
                 NotificationCenter.default.post(name: .autoTripStartRequested, object: nil)
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
-            } else if category == "REACTION" || category == "COMMENT" {
+            } else if category == "REACTION" || category == "COMMENT" || category == "COMPANION_ACCEPTED" {
+                // `COMPANION_ACCEPTED` only ever notifies the trip's OWNER
+                // (`dispatchAcceptedSideEffects` on the backend) — the
+                // `tripId` in its payload is a trip this device already
+                // owns/can open, exactly like a reaction or comment push,
+                // so it follows the identical deep-link shape.
                 if let tripIdString = userInfo["tripId"] as? String,
                    let tripId = UUID(uuidString: tripIdString) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -245,7 +250,15 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
                 Task { @MainActor in
                     await NotificationsInboxStore.shared.refresh()
                 }
-            } else if category == "FOLLOW" {
+            } else if category == "FOLLOW" || category == "COMPANION_INVITE" {
+                // `COMPANION_INVITE`'s `tripId` points to a trip the
+                // recipient cannot view yet (a still-pending invite has no
+                // view access — see `resolveTripAccess`), so unlike
+                // `COMPANION_ACCEPTED` above it can't deep-link into trip
+                // detail. Follows `FOLLOW`'s existing shape instead: land
+                // on the feed tab (where the notifications bell — and now
+                // the invite's decision card — is one tap away) rather than
+                // a route that could only ever 403.
                 NotificationCenter.default.post(name: .switchToFeedTab, object: nil)
                 Task { @MainActor in
                     await NotificationsInboxStore.shared.refresh()
@@ -270,7 +283,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         // quiet announcement is the right interaction (matches Strava,
         // Twitter).
         switch category {
-        case "REACTION", "FOLLOW", "COMMENT":
+        case "REACTION", "FOLLOW", "COMMENT", "COMPANION_INVITE", "COMPANION_ACCEPTED":
             // Refresh the inbox synchronously with banner display — this
             // is the canonical "foreground push received" hook (vs
             // `application(_:didReceiveRemoteNotification:)` which only

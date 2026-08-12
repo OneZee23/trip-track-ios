@@ -102,6 +102,24 @@ final class CompanionsStore: ObservableObject {
     /// `UUID` nor a `Dictionary` keyed by it round-trips through
     /// `UserDefaults`'s property-list storage directly.
     private static let respondedTripIdsDefaultsKey = "com.triptrack.companions.respondedTripIds"
+    /// Fix 1: which notification (`NotificationItem.id`) produced each
+    /// trip's entry in `respondedTripIds`. `respondedTripIds` alone is
+    /// keyed by TRIP — so once an invite is declined and the owner deletes
+    /// that `trip_companion` row and invites the same person again, the
+    /// NEW invitation (a genuinely different server row, surfaced as a
+    /// NEW notification with a NEW id) inherited the OLD, permanent
+    /// trip-keyed verdict: its decision card rendered as already-answered
+    /// and its buttons could never work, because the persisted answer
+    /// outlived the invitation it described. `respondedStatus(for:
+    /// notificationId:)` below is the fix — it only returns a verdict when
+    /// THIS SPECIFIC notification is the one that was answered, so a
+    /// fresh invitation (a different id) always reads as unanswered again
+    /// even though `respondedTripIds[tripId]` still (correctly) remembers
+    /// what happened to the OLD one. Nothing else needs that memory
+    /// erased, so `respondedTripIds`/`respondedStatus(for:)` above are
+    /// untouched — this is purely additive.
+    private var respondedInvitationIds: [UUID: UUID] = [:]
+    private static let respondedInvitationIdsDefaultsKey = "com.triptrack.companions.respondedInvitationIds"
 
     private var candidatesCursor: String?
     private var candidatesHasMore = true
@@ -140,6 +158,7 @@ final class CompanionsStore: ObservableObject {
         self.client = client
         self.repository = repository
         respondedTripIds = Self.loadRespondedTripIds()
+        respondedInvitationIds = Self.loadRespondedInvitationIds()
     }
 
     /// Reads `respondedTripIdsDefaultsKey` back into `[UUID: CompanionStatus]`.
@@ -165,6 +184,27 @@ final class CompanionsStore: ObservableObject {
         UserDefaults.standard.set(raw, forKey: Self.respondedTripIdsDefaultsKey)
     }
 
+    /// Mirrors `loadRespondedTripIds` for `respondedInvitationIds` — same
+    /// drop-the-bad-entry-not-the-whole-restore behavior.
+    private static func loadRespondedInvitationIds() -> [UUID: UUID] {
+        guard let raw = UserDefaults.standard.dictionary(forKey: respondedInvitationIdsDefaultsKey)
+            as? [String: String] else { return [:] }
+        var result: [UUID: UUID] = [:]
+        for (key, value) in raw {
+            guard let tripId = UUID(uuidString: key), let notificationId = UUID(uuidString: value) else {
+                continue
+            }
+            result[tripId] = notificationId
+        }
+        return result
+    }
+
+    private func persistRespondedInvitationIds() {
+        let raw = Dictionary(
+            uniqueKeysWithValues: respondedInvitationIds.map { ($0.key.uuidString, $0.value.uuidString) })
+        UserDefaults.standard.set(raw, forKey: Self.respondedInvitationIdsDefaultsKey)
+    }
+
     /// `.idle` for a trip `list(tripId:)` has never been called for yet —
     /// distinct from every other state, none of which the dictionary can
     /// represent with a missing key.
@@ -179,6 +219,15 @@ final class CompanionsStore: ObservableObject {
     /// those apart client-side without re-hitting `invitePreview`).
     func respondedStatus(for tripId: UUID) -> CompanionStatus? {
         respondedTripIds[tripId]
+    }
+
+    /// Fix 1: whether THIS SPECIFIC invitation — identified by its own
+    /// notification id, not merely its trip — has already been answered.
+    /// See `respondedInvitationIds`'s doc comment for why the trip-only
+    /// lookup above isn't enough to make a re-invitation answerable again.
+    func respondedStatus(for tripId: UUID, notificationId: UUID) -> CompanionStatus? {
+        guard respondedInvitationIds[tripId] == notificationId else { return nil }
+        return respondedTripIds[tripId]
     }
 
     // MARK: - Roster (list)
@@ -262,6 +311,19 @@ final class CompanionsStore: ObservableObject {
             candidatesGeneration &+= 1
             candidatesCursor = nil
             candidatesHasMore = true
+            // Fix 9: clear NOW, not only inside `performCandidates` on
+            // success. A `reset: true` call always means a genuinely fresh
+            // session — the picker just opened, possibly for a DIFFERENT
+            // trip, or a brand new search — but `performCandidates` only
+            // ever overwrites `candidates` when the fetch actually
+            // succeeds. Without this, a fetch that FAILS leaves `candidates`
+            // holding whatever the PREVIOUS session last successfully
+            // loaded (another trip's rows entirely), and
+            // `CompanionsPickerSheet` mirrors that straight into
+            // `displayedCandidates` — showing stale, wrong rows sitting
+            // next to an error banner instead of the picker's proper empty/
+            // error state.
+            candidates = []
         } else {
             guard candidatesHasMore else { return }
             if let inflight = candidatesTask {
@@ -417,14 +479,27 @@ final class CompanionsStore: ObservableObject {
         }
     }
 
-    /// Accepts or declines an invite for the SIGNED-IN user on `tripId`. If
-    /// that user's own row happens to be cached in `companionsByTrip[tripId]`
+    /// Accepts or declines an invite for the SIGNED-IN user on `tripId`,
+    /// answering the SPECIFIC invitation identified by `notificationId`
+    /// (Fix 1 — see `respondedInvitationIds`'s doc comment). If that
+    /// user's own row happens to be cached in `companionsByTrip[tripId]`
     /// (they've viewed the roster before, or after an earlier accept), flips
     /// its status optimistically; harmless no-op otherwise. Rolls back the
     /// cache entry and rethrows on failure.
-    func respond(tripId: UUID, accept: Bool) async throws {
+    ///
+    /// Fix 4: a successful ACCEPT also invalidates `myTrips` (a full
+    /// `loadMyTrips(reset: true)`, awaited rather than fired-and-forgotten
+    /// so this method's completion is a reliable signal the profile's
+    /// «Со мной» section is current) — without this, the freshly-accepted
+    /// trip was missing from that section until the user left the profile
+    /// tab and came back, because nothing else ever re-fetches `myTrips`
+    /// on its own. `loadMyTrips` already swallows its own network error
+    /// (see its doc comment), so a failure here never surfaces as a
+    /// `respond` failure — the accept itself already succeeded.
+    func respond(tripId: UUID, notificationId: UUID, accept: Bool) async throws {
         let previousRoster = companionsByTrip[tripId]
         let previousResponded = respondedTripIds[tripId]
+        let previousInvitationId = respondedInvitationIds[tripId]
         if let myId = TokenStore.shared.accountId,
            var roster = companionsByTrip[tripId],
            let idx = roster.firstIndex(where: { $0.accountId == myId }) {
@@ -434,15 +509,22 @@ final class CompanionsStore: ObservableObject {
             companionsByTrip[tripId] = roster
         }
         respondedTripIds[tripId] = accept ? .accepted : .declined
+        respondedInvitationIds[tripId] = notificationId
         persistRespondedTripIds()
+        persistRespondedInvitationIds()
 
         do {
             let _: CompanionsRespondResponse = try await client.post(
                 APIEndpoint.companionsRespond, body: CompanionsRespondRequest(tripId: tripId, accept: accept))
+            if accept {
+                await loadMyTrips(reset: true)
+            }
         } catch {
             companionsByTrip[tripId] = previousRoster
             respondedTripIds[tripId] = previousResponded
+            respondedInvitationIds[tripId] = previousInvitationId
             persistRespondedTripIds()
+            persistRespondedInvitationIds()
             companionsLog.error("respond failed: \(error.localizedDescription)")
             throw error
         }
@@ -451,15 +533,30 @@ final class CompanionsStore: ObservableObject {
     /// Removes `accountId` from `tripId`'s roster (owner removing anyone, or
     /// a companion removing themselves). Optimistically drops the row;
     /// restores it and rethrows on failure.
+    ///
+    /// Fix 3: when the SIGNED-IN user is removing THEMSELVES — a companion
+    /// leaving a trip via `TripDetailView`'s «Покинуть поездку» — this also
+    /// optimistically prunes that trip out of `myTrips`. Without this the
+    /// left trip would keep showing in «Со мной» until the next full
+    /// `loadMyTrips` reset, since nothing else re-derives that list from
+    /// roster membership. Restored alongside the roster on failure.
     func remove(tripId: UUID, accountId: UUID) async throws {
         let previousRoster = companionsByTrip[tripId]
+        let previousMyTrips = myTrips
+        let isSelfLeaving = accountId == TokenStore.shared.accountId
         companionsByTrip[tripId]?.removeAll { $0.accountId == accountId }
+        if isSelfLeaving {
+            myTrips.removeAll { $0.id == tripId }
+        }
 
         do {
             let _: CompanionsRemoveResponse = try await client.post(
                 APIEndpoint.companionsRemove, body: CompanionsRemoveRequest(tripId: tripId, accountId: accountId))
         } catch {
             companionsByTrip[tripId] = previousRoster
+            if isSelfLeaving {
+                myTrips = previousMyTrips
+            }
             companionsLog.error("remove failed: \(error.localizedDescription)")
             throw error
         }
@@ -467,7 +564,22 @@ final class CompanionsStore: ObservableObject {
 
     // MARK: - Clear (on sign out)
 
+    /// Fix 7: `.cancel()` an in-flight `candidatesTask`/`myTripsTask` AND
+    /// bump BOTH generation counters, in that order, before touching any
+    /// published state. `.cancel()` alone is only cooperative — it doesn't
+    /// stop a response already in transit from resolving — so the
+    /// generation bump is the actual guarantee: `performCandidates`/
+    /// `performLoadMyTrips` both re-check `generation == candidates
+    /// Generation`/`myTripsGeneration` before writing anything, and a
+    /// bumped counter makes that check fail for whatever request was in
+    /// flight when `clear()` ran. Without this, a response belonging to
+    /// account A landing AFTER sign-out would repopulate the store with
+    /// account A's data for account B, who is now signed in.
     func clear() {
+        candidatesTask?.cancel()
+        myTripsTask?.cancel()
+        candidatesGeneration &+= 1
+        myTripsGeneration &+= 1
         companionsByTrip = [:]
         loadStateByTrip = [:]
         candidates = []
@@ -477,7 +589,9 @@ final class CompanionsStore: ObservableObject {
         hasMoreMyTrips = true
         myTripsLoadState = .idle
         respondedTripIds = [:]
+        respondedInvitationIds = [:]
         UserDefaults.standard.removeObject(forKey: Self.respondedTripIdsDefaultsKey)
+        UserDefaults.standard.removeObject(forKey: Self.respondedInvitationIdsDefaultsKey)
         candidatesCursor = nil
         candidatesHasMore = true
         candidatesTask = nil

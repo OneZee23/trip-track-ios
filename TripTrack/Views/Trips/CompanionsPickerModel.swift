@@ -103,4 +103,20 @@ enum CompanionsPickerModel {
     static func isCurrent(token: Int, latest: Int) -> Bool {
         token == latest
     }
+
+    /// Fix 10: the server rejects `query` longer than 60 characters
+    /// (`companions.dto.ts`'s `@MaxLength(60)` on `CompanionsCandidatesRequest
+    /// .query`) with a validation error — which surfaced client-side as the
+    /// picker's outright error state for something as mundane as typing a
+    /// long name or pasting text into the search field. Clamping here means
+    /// ordinary (if enthusiastic) typing can never produce a request the
+    /// server was always going to reject. `nil` for an empty-after-trimming
+    /// string, matching `CompanionsCandidatesRequest.query`'s "omit the
+    /// filter" contract (same as `CompanionsPickerSheet.load`'s prior inline
+    /// `trimmed.isEmpty ? nil : trimmed`).
+    static func clampedQuery(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(60))
+    }
 }

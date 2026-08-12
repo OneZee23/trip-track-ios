@@ -1790,6 +1790,19 @@ enum AppStrings {
         lang == .ru ? "В ответ" : "Follow back"
     }
 
+    // MARK: - Notification preferences — companions toggle (Fix 6)
+
+    /// `NotificationPreferencesView`'s companions row — title/subtitle,
+    /// same shape as its reactions/follows/comments/weekly-recap siblings.
+    static func notifyCompanionsTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Попутчики" : "Companions"
+    }
+    static func notifyCompanionsSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Когда вас позовут в поездку или кто-то присоединится к вашей"
+            : "When you're invited on a trip or someone joins yours"
+    }
+
     // MARK: - Companion invite rows (6.1.0)
 
     /// Chip filter label for `companion_invite` / `companion_accepted` rows.
@@ -1830,6 +1843,15 @@ enum AppStrings {
     /// companion trips cache (see `NotificationsInboxView.openAcceptedInviteTrip`).
     static func companionTripUnavailable(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Поездка пока недоступна" : "Trip isn't available yet"
+    }
+    /// Fix 2: an invite whose `/companions/invite-preview` fetch confirms
+    /// there is no longer a live PENDING row to answer — most commonly
+    /// because it was already accepted or declined on ANOTHER device.
+    /// Deliberately neutral about which way it went (the client has no
+    /// local record of the actual outcome in this case), unlike
+    /// `companionInviteAcceptedNote`/`companionInviteDeclinedNote` above.
+    static func companionInviteUnavailableNote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Приглашение больше не активно" : "This invite is no longer active"
     }
 
     // MARK: - Discover (6.1.0)
@@ -2458,6 +2480,19 @@ enum AppStrings {
     /// already says «Убрать».
     static func companionsRemove(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Убрать" : "Remove"
+    }
+    /// Fix 3: a companion's own affordance for leaving someone else's
+    /// trip — the «…» popover item, the confirmation dialog's title (used
+    /// as a question, mirroring `deleteTrip`'s reuse pattern for its own
+    /// confirmation) and its destructive button.
+    static func companionsLeaveTrip(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Покинуть поездку" : "Leave trip"
+    }
+    static func companionsLeaveConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Покинуть эту поездку?" : "Leave this trip?"
+    }
+    static func companionsLeaveFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось покинуть поездку" : "Couldn't leave the trip"
     }
 
     // MARK: - Companions picker (Task 3)

@@ -122,6 +122,103 @@ final class NotificationsInviteRowTests: XCTestCase {
             .info)
     }
 
+    // MARK: - Rule 5 (Fix 2): a preview confirming the invite is gone yields an info row
+
+    /// THE bug this fix closes: an invite answered on ANOTHER device has no
+    /// local `LocalResponse` recorded on THIS device, so before this rule
+    /// `presentation` kept routing it to `.decision` — rendering dead
+    /// Accept/Decline buttons the server can only refuse
+    /// (`COMPANION_INVITE_NOT_FOUND`). `preview == .unavailable` alone
+    /// (even with `localResponse == nil`) must be enough to fall back to
+    /// `.info`. Fails if `presentation` stops checking `preview` and only
+    /// gates on `localResponse`.
+    func testUnavailablePreviewYieldsInfoRowEvenWithoutLocalResponse() {
+        let item = makeItem(kind: NotificationKind.companionInvite.rawValue)
+        let result = NotificationInviteRowModel.presentation(
+            for: item, localResponse: nil, preview: .unavailable)
+        XCTAssertEqual(result, .info)
+    }
+
+    // MARK: - `previewStateAfterFailure` (Fix 8 + Fix 2)
+
+    /// Fix 8: a CANCELLED fetch (the row scrolled off screen mid-request)
+    /// must not be cached as `.failed` — it resets to "never fetched"
+    /// (`nil`) so the next time the row appears it retries automatically
+    /// instead of showing a permanent, spurious failure. Fails if
+    /// cancellation stops taking priority (e.g. the function starts
+    /// returning `.failed` regardless of `wasCancelled`).
+    func testPreviewStateAfterFailure_CancelledIsNilNotFailed() {
+        XCTAssertNil(NotificationInviteRowModel.previewStateAfterFailure(wasCancelled: true, isInviteGone: false))
+    }
+
+    /// Cancellation wins even if the SAME failure would otherwise have
+    /// looked like "the invite is gone" — a cancelled request never
+    /// actually got a trustworthy server answer either way.
+    func testPreviewStateAfterFailure_CancelledWinsOverInviteGone() {
+        XCTAssertNil(NotificationInviteRowModel.previewStateAfterFailure(wasCancelled: true, isInviteGone: true))
+    }
+
+    /// Fix 2: a genuine, non-cancelled "invite is gone" signal maps to
+    /// `.unavailable`, not the generic retryable `.failed`. Fails if the
+    /// function stops distinguishing the two and collapses everything
+    /// non-cancelled to `.failed`.
+    func testPreviewStateAfterFailure_InviteGoneIsUnavailable() {
+        XCTAssertEqual(
+            NotificationInviteRowModel.previewStateAfterFailure(wasCancelled: false, isInviteGone: true),
+            .unavailable)
+    }
+
+    /// Baseline: an ordinary, non-cancelled, non-"invite gone" failure
+    /// (a network blip) still maps to the retryable `.failed` — proves the
+    /// two special cases above didn't swallow the plain failure path.
+    func testPreviewStateAfterFailure_OrdinaryFailureIsFailed() {
+        XCTAssertEqual(
+            NotificationInviteRowModel.previewStateAfterFailure(wasCancelled: false, isInviteGone: false),
+            .failed)
+    }
+
+    // MARK: - `shouldContinuePagingForTrip` (Fix 11)
+
+    /// THE bug this fix closes: `performLoadMyTrips` leaves `hasMoreMyTrips`
+    /// and its cursor UNTOUCHED when a page fails — so without this guard,
+    /// `openAcceptedInviteTrip`'s paging loop would call `loadMyTrips(reset:
+    /// false)` again with the EXACT SAME cursor, silently re-requesting the
+    /// page that just failed. Fails if the function stops checking
+    /// `loadState != .failed` (e.g. loosened to ignore load state entirely).
+    func testShouldContinuePagingForTrip_StopsOnFailedPage() {
+        XCTAssertFalse(NotificationInviteRowModel.shouldContinuePagingForTrip(
+            found: false, loadState: .failed, hasMore: true, pagesLoaded: 1, maxPages: 5))
+    }
+
+    /// The trip was found — must stop regardless of everything else (no
+    /// reason to keep paging once the target is in hand).
+    func testShouldContinuePagingForTrip_StopsWhenFound() {
+        XCTAssertFalse(NotificationInviteRowModel.shouldContinuePagingForTrip(
+            found: true, loadState: .loaded, hasMore: true, pagesLoaded: 1, maxPages: 5))
+    }
+
+    /// The server says there's no next page — must stop even though
+    /// nothing failed and the page cap hasn't been hit.
+    func testShouldContinuePagingForTrip_StopsWhenNoMorePages() {
+        XCTAssertFalse(NotificationInviteRowModel.shouldContinuePagingForTrip(
+            found: false, loadState: .loaded, hasMore: false, pagesLoaded: 1, maxPages: 5))
+    }
+
+    /// The page cap has been reached — must stop even with more pages
+    /// genuinely available server-side (bounds the request count on a
+    /// single tap).
+    func testShouldContinuePagingForTrip_StopsAtPageCap() {
+        XCTAssertFalse(NotificationInviteRowModel.shouldContinuePagingForTrip(
+            found: false, loadState: .loaded, hasMore: true, pagesLoaded: 5, maxPages: 5))
+    }
+
+    /// The happy path: not found yet, the last page succeeded, more pages
+    /// are available, and the cap hasn't been hit — must continue.
+    func testShouldContinuePagingForTrip_ContinuesWhenEligible() {
+        XCTAssertTrue(NotificationInviteRowModel.shouldContinuePagingForTrip(
+            found: false, loadState: .loaded, hasMore: true, pagesLoaded: 1, maxPages: 5))
+    }
+
     // MARK: - Rule 4: a nil duration omits the duration line, not a zero
 
     /// `CompanionInvitePreview.duration` is nil when the server never

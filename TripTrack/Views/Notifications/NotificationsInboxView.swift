@@ -46,6 +46,11 @@ struct NotificationsInboxView: View {
     /// .myTrips` lazily on tap (see `openAcceptedInviteTrip`) and cached
     /// so a second tap doesn't re-fetch.
     @State private var acceptedInviteTrips: [UUID: SocialFeedTrip] = [:]
+    /// Fix 11: trip ids `openAcceptedInviteTrip` is currently paging
+    /// through `/companions/my-trips` to resolve, so `infoRow` can show a
+    /// spinner instead of leaving a tap that fires up to five requests
+    /// with no on-screen sign anything is happening.
+    @State private var resolvingAcceptedTripIds: Set<UUID> = []
     @State private var toastItem: ToastItem?
 
     var body: some View {
@@ -400,6 +405,18 @@ struct NotificationsInboxView: View {
                 if item.typedKind == .follow, let actor = item.actor {
                     followToggle(for: actor.id, c: c, isRu: isRu)
                 }
+
+                // Fix 11: an accepted invite's tap can page through up to
+                // five `/companions/my-trips` requests before it resolves
+                // (see `openAcceptedInviteTrip`) — this is the only visible
+                // sign that's happening, replacing what used to be a tap
+                // that silently did nothing for however long the sweep took.
+                if item.typedKind == .companionInvite, let tripId = item.tripId,
+                   resolvingAcceptedTripIds.contains(tripId) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityIdentifier("companion_invite_trip_loading")
+                }
             }
             .padding(11)
             .background(
@@ -503,7 +520,12 @@ struct NotificationsInboxView: View {
         case .loading:
             HStack { Spacer(); ProgressView(); Spacer() }
                 .padding(.vertical, 4)
-        case .failed:
+        // Unreachable by construction — `NotificationInviteRowModel
+        // .presentation` routes `.unavailable` straight to `.info` before
+        // `decisionRow` (the only caller of this method) is ever drawn.
+        // Handled anyway so this switch stays exhaustive; falls back to
+        // the same retry banner `.failed` shows.
+        case .failed, .unavailable:
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.system(size: 13))
@@ -544,9 +566,13 @@ struct NotificationsInboxView: View {
 
     // MARK: - Companion invite state + networking
 
+    /// Fix 1: notification-id-aware — see `CompanionsStore.respondedStatus
+    /// (for:notificationId:)`'s doc comment for why the plain trip-keyed
+    /// lookup isn't enough to make a re-invitation for the same trip
+    /// answerable again.
     private func respondedStatus(for item: NotificationItem) -> CompanionStatus? {
         guard let tripId = item.tripId else { return nil }
-        return companionsStore.respondedStatus(for: tripId)
+        return companionsStore.respondedStatus(for: tripId, notificationId: item.id)
     }
 
     private func localResponse(for item: NotificationItem) -> NotificationInviteRowModel.LocalResponse? {
@@ -580,7 +606,20 @@ struct NotificationsInboxView: View {
             let preview = try await companionsStore.invitePreview(tripId: tripId)
             invitePreviews[item.id] = .loaded(preview)
         } catch {
-            invitePreviews[item.id] = .failed
+            // Fix 8: a cancellation (the row scrolled off screen — SwiftUI
+            // cancelled the backing `.task`) is not a failure and must not
+            // be cached as one, or the card stays permanently broken (or
+            // permanently spinning) when it scrolls back into view. Fix 2:
+            // the server's specific "no longer a live pending invite"
+            // signal (most commonly: answered on another device) routes to
+            // `.unavailable` instead of a retryable `.failed` — see
+            // `previewStateAfterFailure`'s doc comment.
+            var isInviteGone = false
+            if case APIError.unknownServer(let code, _) = error {
+                isInviteGone = code == "COMPANION_INVITE_NOT_FOUND"
+            }
+            invitePreviews[item.id] = NotificationInviteRowModel.previewStateAfterFailure(
+                wasCancelled: Task.isCancelled, isInviteGone: isInviteGone)
         }
     }
 
@@ -594,7 +633,9 @@ struct NotificationsInboxView: View {
         Haptics.action()
         Task {
             do {
-                try await companionsStore.respond(tripId: tripId, accept: accept)
+                // Fix 1: identifies THIS specific invitation, not just its
+                // trip — see `CompanionsStore.respondedInvitationIds`.
+                try await companionsStore.respond(tripId: tripId, notificationId: item.id, accept: accept)
             } catch {
                 toastItem = ToastItem(
                     type: .error, message: AppStrings.companionRespondFailed(lang.language))
@@ -625,7 +666,12 @@ struct NotificationsInboxView: View {
             navigateToTrip(tripId: tripId, social: cached)
             return
         }
+        // Fix 11: a double-tap while a sweep is already running for this
+        // trip must not fire a second, overlapping one.
+        guard !resolvingAcceptedTripIds.contains(tripId) else { return }
+        resolvingAcceptedTripIds.insert(tripId)
         Task {
+            defer { resolvingAcceptedTripIds.remove(tripId) }
             if let found = companionsStore.myTrips.first(where: { $0.id == tripId }) {
                 acceptedInviteTrips[tripId] = found
                 navigateToTrip(tripId: tripId, social: found)
@@ -633,9 +679,16 @@ struct NotificationsInboxView: View {
             }
             await companionsStore.loadMyTrips(reset: true)
             var pagesLoaded = 1
-            while companionsStore.myTrips.first(where: { $0.id == tripId }) == nil,
-                  companionsStore.hasMoreMyTrips,
-                  pagesLoaded < Self.maxMyTripsPagesForTripLookup {
+            // Fix 11: `shouldContinuePagingForTrip` stops the sweep the
+            // instant a page fails (`loadState == .failed`) instead of
+            // re-requesting the exact same cursor `performLoadMyTrips`
+            // leaves untouched on failure — see its doc comment.
+            while NotificationInviteRowModel.shouldContinuePagingForTrip(
+                found: companionsStore.myTrips.contains(where: { $0.id == tripId }),
+                loadState: companionsStore.myTripsLoadState,
+                hasMore: companionsStore.hasMoreMyTrips,
+                pagesLoaded: pagesLoaded, maxPages: Self.maxMyTripsPagesForTripLookup
+            ) {
                 await companionsStore.loadMyTrips(reset: false)
                 pagesLoaded += 1
             }
@@ -752,9 +805,16 @@ struct NotificationsInboxView: View {
         case .companionAccepted:
             return AppStrings.companionAcceptedAction(lang.language)
         case .companionInvite:
-            // Reached only once answered (the decision card never calls
-            // this) — say which way it went instead of re-issuing the
-            // invite verb.
+            // Reached only once answered locally, OR (Fix 2) once the
+            // server confirms the invite is no longer live at all — the
+            // decision card itself never calls this.
+            if invitePreviews[item.id] == .unavailable {
+                // Answered on ANOTHER device: this device has no local
+                // record of which way it went, so — unlike the two cases
+                // below — the phrasing stays deliberately neutral rather
+                // than guessing "accepted".
+                return AppStrings.companionInviteUnavailableNote(lang.language)
+            }
             return respondedStatus(for: item) == .declined
                 ? AppStrings.companionInviteDeclinedNote(lang.language)
                 : AppStrings.companionInviteAcceptedNote(lang.language)

@@ -366,10 +366,12 @@ struct CompanionsPickerSheet: View {
     /// unrelated data into `displayedCandidates` (see
     /// `CompanionsPickerModel.isCurrent`'s doc comment).
     private func load(reset: Bool) async {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        // Fix 10: clamp to the server's 60-char limit client-side so
+        // ordinary typing can never turn into a validation-error response.
+        let clampedQuery = CompanionsPickerModel.clampedQuery(query)
         if reset { loadGeneration &+= 1 }
         let token = loadGeneration
-        await store.candidates(tripId: tripId, query: trimmed.isEmpty ? nil : trimmed, reset: reset)
+        await store.candidates(tripId: tripId, query: clampedQuery, reset: reset)
         guard CompanionsPickerModel.isCurrent(token: token, latest: loadGeneration) else { return }
         if reset {
             displayedCandidates = store.candidates

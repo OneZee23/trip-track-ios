@@ -35,4 +35,46 @@ final class TripDetailSharePrivacyTests: XCTestCase {
     func testShareNotOfferedForNonOwnersPrivateTrip() {
         XCTAssertFalse(TripDetailView.canOfferShare(isOwn: false, isPrivate: true))
     }
+
+    // MARK: - `TripDetailView.companionCanLeave` — Fix 3 (companions review, second wave)
+
+    /// THE case the whole affordance exists for: an accepted companion on
+    /// someone else's trip earns the «…» → «Покинуть поездку» option.
+    func testLeaveOfferedForAcceptedCompanionOnForeignTrip() {
+        let myId = UUID()
+        let companions = [CompanionItem(accountId: myId, displayName: nil, avatarEmoji: nil, status: .accepted)]
+        XCTAssertTrue(TripDetailView.companionCanLeave(isOwn: false, myAccountId: myId, companions: companions))
+    }
+
+    /// The owner of the trip is never offered "leave" — they aren't a
+    /// companion of their own trip regardless of what the roster contains.
+    func testLeaveNotOfferedForOwnTrip() {
+        let myId = UUID()
+        let companions = [CompanionItem(accountId: myId, displayName: nil, avatarEmoji: nil, status: .accepted)]
+        XCTAssertFalse(TripDetailView.companionCanLeave(isOwn: true, myAccountId: myId, companions: companions))
+    }
+
+    /// A signed-out viewer (no account id to match against the roster)
+    /// must never be offered the affordance.
+    func testLeaveNotOfferedWhenSignedOut() {
+        let companions = [CompanionItem(accountId: UUID(), displayName: nil, avatarEmoji: nil, status: .accepted)]
+        XCTAssertFalse(TripDetailView.companionCanLeave(isOwn: false, myAccountId: nil, companions: companions))
+    }
+
+    /// A still-PENDING invite (not yet accepted) must not offer "leave" —
+    /// there is nothing to leave yet, and the server's own `/companions/
+    /// remove` self-branch is for an existing companion relationship.
+    func testLeaveNotOfferedForPendingInvite() {
+        let myId = UUID()
+        let companions = [CompanionItem(accountId: myId, displayName: nil, avatarEmoji: nil, status: .pending)]
+        XCTAssertFalse(TripDetailView.companionCanLeave(isOwn: false, myAccountId: myId, companions: companions))
+    }
+
+    /// A stranger viewing a foreign trip (their id isn't in the roster at
+    /// all) must not be offered "leave".
+    func testLeaveNotOfferedForStranger() {
+        let myId = UUID()
+        let companions = [CompanionItem(accountId: UUID(), displayName: nil, avatarEmoji: nil, status: .accepted)]
+        XCTAssertFalse(TripDetailView.companionCanLeave(isOwn: false, myAccountId: myId, companions: companions))
+    }
 }

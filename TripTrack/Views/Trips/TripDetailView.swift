@@ -79,6 +79,11 @@ struct TripDetailView: View {
     @State private var showDeleteConfirm = false
     /// «…» popover on the poster header.
     @State private var showTripActions = false
+    /// Fix 3: confirmation for a companion leaving someone else's trip.
+    @State private var showLeaveConfirm = false
+    /// Fix 3: guards `leaveTrip()` against a double-tap firing two
+    /// concurrent `/companions/remove` calls.
+    @State private var isLeavingTrip = false
     /// «Редактировать поездку» — name, description, car, access in one sheet.
     @State private var showEditSheet = false
     /// Task 3's candidate picker, opened from `TripCompanionsSection`'s
@@ -203,6 +208,19 @@ struct TripDetailView: View {
                 .popover(isPresented: $showTripActions, arrowEdge: .top) {
                     ActionPopoverList(items: ownerActions(trip: trip))
                 }
+            } else if isAcceptedCompanion {
+                // Fix 3: the design gives a companion the right to remove
+                // themselves from a trip they don't own — this is the only
+                // action available here, so it gets the same «…» affordance
+                // rather than a standalone always-visible button.
+                PosterCircleButton(
+                    systemImage: "ellipsis",
+                    accessibilityLabelText: AppStrings.moreActions(lang.language)
+                ) { showTripActions = true }
+                .accessibilityIdentifier("detail_actions")
+                .popover(isPresented: $showTripActions, arrowEdge: .top) {
+                    ActionPopoverList(items: companionActions())
+                }
             }
 
             // Sharing your own trip, or someone else's PUBLIC trip, works —
@@ -310,6 +328,71 @@ struct TripDetailView: View {
                 present { showDeleteConfirm = true }
             },
         ]
+    }
+
+    /// Fix 3: whether `myAccountId` is an ACCEPTED companion on a trip it
+    /// doesn't own — the only case that earns the «…» leave affordance.
+    /// Pulled out as a pure, testable `static func`
+    /// (`TripTrackTests/TripDetailSharePrivacyTests.swift`) same reasoning
+    /// as `canOfferShare` above: a visibility rule worth pinning with a
+    /// test shouldn't only live inside a SwiftUI body. An own trip never
+    /// qualifies (an owner isn't a companion of their own trip), and a
+    /// signed-out viewer (`myAccountId == nil`) can't be matched against
+    /// any roster row.
+    static func companionCanLeave(isOwn: Bool, myAccountId: UUID?, companions: [CompanionItem]) -> Bool {
+        guard !isOwn, let myAccountId else { return false }
+        return companions.contains { $0.accountId == myAccountId && $0.status == .accepted }
+    }
+
+    /// Whether the SIGNED-IN viewer is an accepted companion on THIS trip.
+    /// Reads the same roster `TripCompanionsSection` already fetches
+    /// (`companionsStore.companionsByTrip[tripId]`) rather than issuing a
+    /// separate call.
+    private var isAcceptedCompanion: Bool {
+        TripDetailView.companionCanLeave(
+            isOwn: isOwn, myAccountId: TokenStore.shared.accountId,
+            companions: companionsStore.companionsByTrip[tripId] ?? [])
+    }
+
+    /// Fix 3: the only action a companion has on someone else's trip —
+    /// removing themselves (design doc §2.4: "убрать себя из поездки").
+    /// Same popover-then-sleep-then-present shape as `ownerActions`, so the
+    /// confirmation dialog it triggers isn't dropped by UIKit while the
+    /// popover is still dismissing.
+    private func companionActions() -> [ActionPopoverList.Item] {
+        [
+            .init(
+                title: AppStrings.companionsLeaveTrip(lang.language),
+                systemImage: "rectangle.portrait.and.arrow.right",
+                isDestructive: true
+            ) {
+                showTripActions = false
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 260_000_000)
+                    showLeaveConfirm = true
+                }
+            },
+        ]
+    }
+
+    /// Fix 3: a companion removing themselves from someone else's trip —
+    /// `/companions/remove` with the viewer's own account id, which the
+    /// server already permits (`CompanionsService.remove`'s `isSelf`
+    /// branch). Dismisses the screen on success: the viewer just lost
+    /// access to a trip that, if it's private, they can no longer reload.
+    private func leaveTrip() {
+        guard let myId = TokenStore.shared.accountId, !isLeavingTrip else { return }
+        isLeavingTrip = true
+        Haptics.action()
+        Task {
+            do {
+                try await companionsStore.remove(tripId: tripId, accountId: myId)
+                dismiss()
+            } catch {
+                isLeavingTrip = false
+                toastItem = ToastItem(type: .error, message: AppStrings.companionsLeaveFailed(lang.language))
+            }
+        }
     }
 
     /// Someone else's trip whose data never arrived: no route to draw, and
@@ -485,6 +568,15 @@ struct TripDetailView: View {
                 NotificationCenter.default.post(name: .tripDeleted, object: tripId)
                 dismiss()
             }
+            Button(AppStrings.cancel(lang.language), role: .cancel) {}
+        }
+        // Fix 3: a companion leaving someone else's trip.
+        .confirmationDialog(
+            AppStrings.companionsLeaveConfirmTitle(lang.language),
+            isPresented: $showLeaveConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(AppStrings.companionsLeaveTrip(lang.language), role: .destructive) { leaveTrip() }
             Button(AppStrings.cancel(lang.language), role: .cancel) {}
         }
         .onDisappear { routePlayback.stop() }
