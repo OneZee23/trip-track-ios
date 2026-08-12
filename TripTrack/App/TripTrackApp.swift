@@ -27,6 +27,16 @@ struct TripTrackApp: App {
         // Translate the pre-6.1.0 Int tab selection into the new AppTab key
         // BEFORE any view reads @AppStorage(AppTab.storageKey).
         AppTab.migrateLegacySelectedTabIfNeeded()
+        #if DEBUG
+        // Simulator-only: `-seed-map-demo` fills an empty store with drives so
+        // «Моя карта» has regions, clusters and cards to show. Compiled out of
+        // release builds; does nothing unless the argument is passed.
+        if DebugMapSeed.isRequested {
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+            UserDefaults.standard.set(AppTab.maps.rawValue, forKey: AppTab.storageKey)
+            DebugMapSeed.run(territory: TerritoryManager())
+        }
+        #endif
         // Crash reporting MUST start first — otherwise any panic in the
         // services below would crash silently. No-op when SENTRY_DSN
         // is empty (dev / simulator).

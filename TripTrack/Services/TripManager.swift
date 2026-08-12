@@ -48,6 +48,19 @@ final class TripManager: ObservableObject {
     /// when the user picks Continue or Finish&Save in the prompt.
     private(set) var recoverableOrphan: Trip?
     private(set) var recoverableOrphanDuration: TimeInterval = 0
+    /// True when the recording stopped only moments ago — the app died while
+    /// the person was still driving. See `silentResumeWindow`.
+    private(set) var recoverableOrphanIsFresh = false
+
+    /// How stale a recording has to be before we ask about it at all.
+    ///
+    /// The canon calls this a hybrid, and both extremes are wrong. Always
+    /// resuming silently (pre-6.1.0) meant a trip you abandoned three hours
+    /// ago quietly kept recording. Always asking (6.1.0 as shipped) meant a
+    /// crash at a traffic light put a modal in front of a person who is still
+    /// driving — the worst possible moment for a decision. Under fifteen
+    /// minutes the answer is obvious enough to not ask for it.
+    static let silentResumeWindow: TimeInterval = 15 * 60
     private var recoverableOrphanEntity: TripEntity?
 
     /// Adopts the stashed orphan as the ACTIVE recording (shared by both
@@ -168,7 +181,13 @@ final class TripManager: ObservableObject {
         // contain zero new points, leaving `trimmedEndDate` unable to detect
         // it. Without the hint, an auto-stop fired 15 min after the user
         // really parked would record a 65-min trip for a 50-min drive.
-        entity.endDate = trimmedEndDate(for: entity) ?? suggestedEndDate ?? Date()
+        // Clamped to the start: `suggestedEndDate` comes from the auto-stop's
+        // last-movement timestamp, and a stale tracker could hand back a moment
+        // from BEFORE this trip began — which persisted a negative duration and
+        // a negative average speed, and drew a trip that ended before it
+        // started everywhere those two numbers are shown.
+        let proposedEnd = trimmedEndDate(for: entity) ?? suggestedEndDate ?? Date()
+        entity.endDate = max(proposedEnd, entity.startDate ?? proposedEnd)
         entity.lastModifiedAt = Date()
         updateEntityStats(entity)
         generatePreviewPolyline(for: entity)
@@ -249,8 +268,8 @@ final class TripManager: ObservableObject {
         repository.fetchTripsModifiedSince(date)
     }
 
-    func fetchTripsWithTrackPoints() -> [Trip] {
-        repository.fetchTripsWithTrackPoints()
+    func fetchTripsForMap() -> [Trip] {
+        repository.fetchTripsForMap()
     }
 
     func fetchTripCount() -> Int {
@@ -369,6 +388,7 @@ final class TripManager: ObservableObject {
                     vehicleId: entity.vehicleId
                 )
                 recoverableOrphanDuration = lastTimestamp.timeIntervalSince(startDate)
+                recoverableOrphanIsFresh = age < Self.silentResumeWindow
             }
 
             persistenceController.save()
@@ -1017,6 +1037,11 @@ final class TripManager: ObservableObject {
         Task { @MainActor in
             SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
         }
+    }
+
+    /// Local-only, so no sync enqueue — see `updateCompanions` in the repo.
+    func updateCompanions(for tripId: UUID, companions: [TripCompanion]) {
+        repository.updateCompanions(for: tripId, companions: companions)
     }
 
     func updatePrivacy(for tripId: UUID, isPrivate: Bool) {

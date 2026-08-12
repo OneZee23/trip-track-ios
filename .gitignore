@@ -54,5 +54,6 @@ Package.resolved
 
 # Design prototypes / handoff (not part of iOS build)
 design/
+design_handoff_triptrack_v0.6/
 
 crashes/

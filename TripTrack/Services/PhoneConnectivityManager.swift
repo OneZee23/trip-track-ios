@@ -87,9 +87,9 @@ final class PhoneConnectivityManager: NSObject, WCSessionDelegate {
         case "stop":
             if vm.isRecording { vm.toggleRecording() }
         case "pause":
-            if vm.isRecording, !vm.isPaused { vm.togglePause() }
+            if vm.isRecording, !vm.isPaused { vm.togglePause(source: .watch) }
         case "resume":
-            if vm.isRecording, vm.isPaused { vm.togglePause() }
+            if vm.isRecording, vm.isPaused { vm.togglePause(source: .watch) }
         default:
             break
         }

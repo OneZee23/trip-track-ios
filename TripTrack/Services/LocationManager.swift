@@ -35,10 +35,17 @@ class LocationManager: ObservableObject {
         }
     }
     
+    /// `-no-gps-fix` withholds every fix, so the app stays in the «Ищем
+    /// спутники» state indefinitely. The simulator always hands out a location
+    /// (the scheme simulates one), and that state is where the start control
+    /// misbehaves, so the UI suite needs a way to sit in it.
+    static let withholdsFixes = ProcessInfo.processInfo.arguments.contains("-no-gps-fix")
+
     init() {
         // Всегда слушаем реальный GPS для получения начальной позиции
         realGPS.locationPublisher
             .sink { [weak self] update in
+                guard !Self.withholdsFixes else { return }
                 // Обновляем только если не в режиме симуляции
                 if self?.mode == .real {
                     self?.currentLocation = update
@@ -97,10 +104,14 @@ class LocationManager: ObservableObject {
         // Ensure GPS is actually running (may not be started yet in background auto-trip)
         realGPS.start()
 
-        activeProviderCancellable = realGPS.locationPublisher
-            .sink { [weak self] update in
-                self?.currentLocation = update
-            }
+        // No second subscription here: the one made in `init` already forwards
+        // every real fix while `mode == .real`, which is exactly this state.
+        // Subscribing again published each fix TWICE, so every consumer —
+        // distance, speed smoothing, the zero-speed guard that needs two
+        // consecutive samples, the Live Activity push — ran twice per fix and
+        // the guard that was meant to span two samples was satisfied by one.
+        // The simulated path still needs its own, and sets it below.
+        activeProviderCancellable = nil
     }
     
     private func startSimulatedTracking() {

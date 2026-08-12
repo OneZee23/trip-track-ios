@@ -59,6 +59,16 @@ extension WidgetConfiguration {
 // MARK: - Widget
 
 struct TripTrackLiveActivity: Widget {
+    /// Both island buttons share a height and a radius so the row reads as one
+    /// control strip rather than two controls that happened to land together.
+    ///
+    /// The expanded island has a hard height budget and clips whatever exceeds
+    /// it — at 34pt clock plus 38pt buttons the control strip was sliced in
+    /// half by the island's bottom edge. These are sized against the tallest
+    /// arrangement that was observed to fit whole.
+    private static let islandButtonHeight: CGFloat = 32
+    private static let islandButtonRadius: CGFloat = 12
+
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: TripActivityAttributes.self) { context in
             if context.state.isFinished {
@@ -70,6 +80,14 @@ struct TripTrackLiveActivity: Widget {
             }
         } dynamicIsland: { context in
             DynamicIsland {
+                // Figma «Расширенный (удержание)»: labelled speed on the left of
+                // the camera, distance on its right, the running clock big and
+                // centred underneath, then the controls.
+                //
+                // The stats used to be built as `Text(…) + Text(…)` string
+                // concatenation across two fonts, and both regions came out
+                // empty on device — a black band where the numbers should be.
+                // Plain stacks render.
                 DynamicIslandExpandedRegion(.leading) {
                     if context.state.isFinished {
                         Image("app_icon")
@@ -77,52 +95,128 @@ struct TripTrackLiveActivity: Widget {
                             .frame(width: 28, height: 28)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                     } else {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(Int(context.state.speedKmh))").font(.title2.bold())
-                            + Text(context.state.isRu ? " км/ч" : " km/h").font(.caption).foregroundColor(.secondary)
-                        }
+                        statBlock(
+                            caption: context.state.isRu ? "СКОРОСТЬ" : "SPEED",
+                            value: "\(Int(context.state.speedKmh))",
+                            unit: context.state.isRu ? "км/ч" : "km/h",
+                            alignment: .leading
+                        )
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(fmtDist(context.state.distanceKm)).font(.title2.bold())
-                        + Text(context.state.isRu ? " км" : " km").font(.caption).foregroundColor(.secondary)
-                    }
-                }
-                DynamicIslandExpandedRegion(.center) {
-                    if context.state.isFinished {
-                        Text(context.state.finalDuration ?? "").font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                    } else {
-                        timerText(context: context).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                DynamicIslandExpandedRegion(.bottom) {
                     if !context.state.isFinished {
-                        HStack(spacing: 12) {
-                            Button(intent: PauseTripIntent()) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
-                                        .font(.system(size: 13, weight: .bold))
-                                    Text(context.state.isPaused
-                                         ? (context.state.isRu ? "Продолжить" : "Resume")
-                                         : (context.state.isRu ? "Пауза" : "Pause"))
-                                        .font(.system(size: 12, weight: .semibold))
-                                }
-                                .frame(maxWidth: .infinity).padding(.vertical, 7)
+                        statBlock(
+                            caption: context.state.isRu ? "ПРОЙДЕНО" : "DISTANCE",
+                            value: fmtDist(context.state.distanceKm),
+                            unit: context.state.isRu ? "км" : "km",
+                            alignment: .trailing
+                        )
+                    }
+                }
+                // The clock belongs in `.bottom`, not `.center`.
+                //
+                // The three top regions share one row, so a centre region that
+                // asks for `maxWidth: .infinity` takes the whole width and
+                // squeezes the flanks to nothing — «СКОРОСТЬ 59 км/ч» came out
+                // as a column of single letters pressed against the island's
+                // edges. `.bottom` spans the full width on its own line, which
+                // is where the mock puts the clock anyway.
+                DynamicIslandExpandedRegion(.bottom) {
+                    // One grid for the whole block: three rows on a single
+                    // 10pt rhythm, every one of them the full width of the
+                    // region. No per-element horizontal padding — that is what
+                    // left the gradient rule inset further than the buttons
+                    // under it and made the stack look hand-nudged.
+                    VStack(spacing: 8) {
+                        // `Text(timerInterval:)` reserves the width of the
+                        // widest time it could ever show and sits at the
+                        // leading edge of it, so the clock hung off to the left
+                        // instead of under the camera.
+                        Group {
+                            if context.state.isFinished {
+                                Text(context.state.finalDuration ?? "")
+                                    .monospacedDigit()
+                            } else {
+                                timerText(context: context)
+                                    .foregroundStyle(context.state.isPaused ? accentOrange : .white)
                             }
-                            .buttonStyle(.plain)
-                            .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        .font(.system(size: 28, weight: .heavy))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, alignment: .center)
 
-                            Button(intent: StopTripIntent()) {
-                                Image(systemName: "square.fill")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundStyle(accentRed)
-                                    .frame(width: 48).padding(.vertical, 7)
+                        // The speed scale from the app's route colouring — the
+                        // one line in the mock that says this is a driving app
+                        // and not a stopwatch.
+                        Capsule()
+                            .fill(LinearGradient(
+                                colors: [
+                                    Color(red: 0.30, green: 0.85, blue: 0.39),
+                                    Color(red: 1.00, green: 0.84, blue: 0.04),
+                                    Color(red: 0.98, green: 0.27, blue: 0.23),
+                                ],
+                                startPoint: .leading, endPoint: .trailing))
+                            .frame(height: 3)
+                            .opacity(context.state.isPaused ? 0.35 : 1)
+
+                        if !context.state.isFinished {
+                            HStack(spacing: 10) {
+                                // Pause takes the room, because pausing is what
+                                // you do dozens of times and finishing is what
+                                // you do once — same rule as the phone's HUD.
+                                Button(intent: PauseTripIntent()) {
+                                    HStack(spacing: 7) {
+                                        Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
+                                            .font(.system(size: 13, weight: .bold))
+                                        Text(context.state.isPaused
+                                             ? (context.state.isRu ? "Продолжить" : "Resume")
+                                             : (context.state.isRu ? "Пауза" : "Pause"))
+                                            .font(.system(size: 13, weight: .bold))
+                                            .lineLimit(1)
+                                    }
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: Self.islandButtonHeight)
+                                }
+                                .buttonStyle(.plain)
+                                // Same rule as the Lock Screen: paused has to
+                                // look different from running, not just say so.
+                                .background(
+                                    context.state.isPaused ? accentOrange : Color.white.opacity(0.14),
+                                    in: RoundedRectangle(cornerRadius: Self.islandButtonRadius)
+                                )
+
+                                // Figma draws this one outlined. Outlined and
+                                // grey is what it looked like on the Lock
+                                // Screen too, where it read as disabled — so it
+                                // takes the same warm red it took there: the
+                                // word plus a colour that says what it does.
+                                Button(intent: StopTripIntent()) {
+                                    Text(context.state.isRu ? "Завершить" : "Finish")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(accentRed)
+                                        .lineLimit(1)
+                                        .padding(.horizontal, 16)
+                                        .frame(height: Self.islandButtonHeight)
+                                }
+                                .buttonStyle(.plain)
+                                .background(accentRed.opacity(0.16),
+                                            in: RoundedRectangle(cornerRadius: Self.islandButtonRadius))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Self.islandButtonRadius)
+                                        .strokeBorder(accentRed.opacity(0.5), lineWidth: 1)
+                                )
                             }
-                            .buttonStyle(.plain)
-                            .background(accentRed.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
                         }
                     }
+                    // The flanking regions and this one do not share a gutter:
+                    // measured off the render, the stat blocks sit ~6pt deeper
+                    // than the buttons, so «СКОРОСТЬ» and «Пауза» did not share
+                    // a left edge. Matching by moving THIS block inward is the
+                    // safe direction — the other way pushes the captions back
+                    // into the island's corner curve, which is what clipped
+                    // them before.
+                    .padding(.horizontal, 6)
                 }
             } compactLeading: {
                 if context.state.isFinished {
@@ -131,26 +225,39 @@ struct TripTrackLiveActivity: Widget {
                         .frame(width: 20, height: 20)
                         .clipShape(RoundedRectangle(cornerRadius: 5))
                 } else {
-                    // Figma 03b: red REC dot + speed on the leading side.
-                    Label {
+                    // Figma 03b: red REC dot + speed on the leading side. The
+                    // dot is the state light — it goes amber pause while the
+                    // trip is held, which is why the speed can read 0.
+                    //
+                    // A `Label` here spaced the dot and the number apart with
+                    // its own icon gutter and pinned the pair against the left
+                    // edge of the island. The mock has them tight and inset.
+                    HStack(spacing: 4) {
+                        if context.state.isPaused {
+                            Image(systemName: "pause.fill")
+                                .font(.system(size: 9, weight: .black))
+                                .foregroundStyle(accentOrange)
+                        } else {
+                            Circle().fill(accentRed).frame(width: 7, height: 7)
+                        }
                         Text("\(Int(context.state.speedKmh))").font(.caption.bold())
-                    } icon: {
-                        Circle().fill(accentRed).frame(width: 7, height: 7)
                     }
+                    .padding(.leading, 3)
                 }
             } compactTrailing: {
                 if context.state.isFinished {
                     Text(fmtDist(context.state.distanceKm) + (context.state.isRu ? " км" : " km")).font(.caption)
-                } else if context.state.isPaused {
-                    // A live timer would keep counting through the pause.
-                    Image(systemName: "pause.fill").font(.caption2)
                 } else {
-                    // Figma 03b: elapsed time on the trailing side.
-                    let adj = context.attributes.startDate.addingTimeInterval(context.state.pausedDuration)
-                    Text(timerInterval: adj...(.distantFuture), countsDown: false)
-                        .monospacedDigit()
+                    // Figma 03b: elapsed time on the trailing side — frozen
+                    // rather than ticking while paused (`timerText` handles
+                    // that), because the pause used to swap this whole region
+                    // for a lone glyph. The island sizes the trailing slot to
+                    // its content, so that glyph got pinned against the right
+                    // edge with a hole where the time had been.
+                    timerText(context: context)
                         .font(.caption)
                         .frame(maxWidth: 44)
+                        .foregroundStyle(context.state.isPaused ? accentOrange : .primary)
                 }
             } minimal: {
                 if context.state.isFinished {
@@ -158,6 +265,10 @@ struct TripTrackLiveActivity: Widget {
                         .resizable().scaledToFit()
                         .frame(width: 16, height: 16)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
+                } else if context.state.isPaused {
+                    Image(systemName: "pause.fill")
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundStyle(accentOrange)
                 } else {
                     // Figma 03b: red dot (static — ActivityKit minimal can't pulse).
                     Circle().fill(accentRed).frame(width: 8, height: 8)
@@ -168,6 +279,36 @@ struct TripTrackLiveActivity: Widget {
                 : URL(string: "triptrack://recording"))
         }
         .withWatchSupport()
+    }
+
+    /// One labelled number for the expanded island's flanks (Figma
+    /// «Расширенный»): a tiny grey caption over the value with its unit.
+    private func statBlock(
+        caption: String, value: String, unit: String, alignment: HorizontalAlignment
+    ) -> some View {
+        VStack(alignment: alignment, spacing: 1) {
+            Text(caption)
+                .font(.system(size: 9, weight: .semibold))
+                .kerning(0.3)
+                .foregroundStyle(.white.opacity(0.45))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(.system(size: 17, weight: .heavy))
+                    .monospacedDigit()
+                Text(unit)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity,
+               alignment: alignment == .leading ? .leading : .trailing)
+        // The regions run right up to the island's rounded corners, so text
+        // pinned to their outer edge gets eaten by the curve — «СКОРОСТЬ» lost
+        // its С and «ПРОЙДЕНО» its О. Hold it off the bend.
+        .padding(alignment == .leading ? .leading : .trailing, 6)
     }
 
     @ViewBuilder
@@ -277,19 +418,27 @@ private struct LiveLockScreenView: View {
             // fat-fingering the old bottom-right stop next to the lock-screen
             // camera), Pause is the wide primary on the right.
             HStack(spacing: 8) {
+                // End stays small and on the left (the fat-finger fix above),
+                // but grey-on-grey made it read as disabled rather than as
+                // «this ends the recording». Red says what it does; small and
+                // left still says «not by accident».
                 Button(intent: StopTripIntent()) {
                     Text(context.state.isRu ? "Завершить" : "End")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(c.textSecondary)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(accentRed)
                         .frame(width: 90)
                         .frame(height: 36)
                 }
                 .buttonStyle(.plain)
+                .background(accentRed.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(c.textTertiary.opacity(0.5), lineWidth: 1)
+                        .strokeBorder(accentRed.opacity(0.45), lineWidth: 1)
                 )
 
+                // Paused is a state you should be able to read at a glance
+                // from the Lock Screen: the button goes solid accent and says
+                // «Продолжить», instead of looking identical to running.
                 Button(intent: PauseTripIntent()) {
                     HStack(spacing: 6) {
                         Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
@@ -299,12 +448,15 @@ private struct LiveLockScreenView: View {
                              : (context.state.isRu ? "Пауза" : "Pause"))
                             .font(.system(size: 13, weight: .semibold))
                     }
-                    .foregroundStyle(c.text)
+                    .foregroundStyle(context.state.isPaused ? .white : c.text)
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
                 }
                 .buttonStyle(.plain)
-                .background(c.buttonBg, in: RoundedRectangle(cornerRadius: 12))
+                .background(
+                    context.state.isPaused ? Color(red: 0.92, green: 0.34, blue: 0.12) : c.buttonBg,
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
             }
         }
         .padding(.horizontal, 16)

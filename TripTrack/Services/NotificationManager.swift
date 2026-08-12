@@ -159,6 +159,25 @@ final class NotificationManager: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
+    /// The car was detected, the app tried to start recording, and the start
+    /// was refused. Silence here is worse than a notification: the driver has
+    /// every reason to think the trip is being recorded, and finds out at the
+    /// end of the road that it never was.
+    func sendAutoStartFailedNotification(reason: MapViewModel.StartRefusal?) {
+        let lang = currentLang()
+        let content = UNMutableNotificationContent()
+        content.title = AppStrings.notifAutoStartFailedTitle(lang)
+        content.body = AppStrings.notifAutoStartFailedBody(lang, reason: reason)
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "trip-auto-start-failed",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
     func sendAutoStopNotification(distanceKm: Double, duration: String) {
         let lang = currentLang()
         let content = UNMutableNotificationContent()

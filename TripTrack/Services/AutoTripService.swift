@@ -324,6 +324,17 @@ final class AutoTripService: ObservableObject {
         switch settings.autoRecordMode {
         case .auto:
             vm.startRecording()
+            // `startRecording` refuses on a denied location permission and
+            // while the force-quit recovery prompt is up — and said so only in
+            // `startRefusal`, which nobody here read. Everything below assumed
+            // success: the trip got backdated, «Запись началась» was posted,
+            // and the driver spent the whole journey believing the road was
+            // being written down. Say nothing rather than something false.
+            guard vm.isRecording else {
+                autoLog.error("[auto.trip_start.refused] reason=\(String(describing: vm.startRefusal), privacy: .public) device=\"\(deviceName, privacy: .public)\"")
+                notificationManager.sendAutoStartFailedNotification(reason: vm.startRefusal)
+                return
+            }
             // Backdate trip start to when automotive activity actually began
             if let realStart = estimatedStartDate {
                 vm.tripManager.backdateTrip(to: realStart)
@@ -555,6 +566,40 @@ final class AutoTripService: ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
+    // MARK: - Recording lifecycle
+
+    /// A recording just began — reset the inactivity tracker to THIS trip's
+    /// odometer.
+    ///
+    /// The tracker's only other reset lives in `updateMovementForInactivity`'s
+    /// guard-else, which needs a location update to run — and the moment a trip
+    /// ends, `TripManager.stopTrip` stops CoreLocation, so that callback never
+    /// arrives again. The tracker therefore carried the *previous* trip's
+    /// distance baseline and last-movement timestamp into the next one. The
+    /// next trip starts its odometer at zero, so `record()` compared 0 against
+    /// (say) 45 km and concluded "no meaningful movement", while `isStale`
+    /// measured against a timestamp from the last drive: an inactivity prompt
+    /// within minutes of setting off, and — once the auto-stop timer fired —
+    /// a recording silently ended and backdated in the middle of the drive.
+    func recordingDidStart() {
+        movementTracker.reset()
+        cancelAutoStopTimer()
+        autoLog.notice("[auto.tracker.reset] reason=recording_started")
+    }
+
+    /// A recording ended — drop the tracker state and any armed auto-stop so
+    /// nothing from this trip can reach the next one.
+    func recordingDidEnd() {
+        movementTracker.reset()
+        cancelAutoStopTimer()
+        // A pending Live-Activity retry belongs to the trip that armed it.
+        if let obs = foregroundRetryObserver {
+            NotificationCenter.default.removeObserver(obs)
+            foregroundRetryObserver = nil
+        }
+        autoLog.notice("[auto.tracker.reset] reason=recording_ended")
+    }
+
     private func cancelAutoStopTimer() {
         if autoStopTimer != nil {
             autoLog.notice("[auto.stop_timer.cancel]")
@@ -657,11 +702,18 @@ final class AutoTripService: ObservableObject {
             forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self, weak vm] _ in
             Task { @MainActor in
-                guard let self, let vm, vm.isRecording else { return }
+                guard let self else { return }
+                // Fire once, whatever the outcome. Unregistering only on the
+                // branch that went on to create the card left the observer
+                // armed whenever the app was foregrounded after the trip had
+                // already ended — and it then outlived its own trip and
+                // rebuilt a Live Activity mid-drive weeks later, with a fresh
+                // start date and isPaused=false over a paused recording.
                 if let obs = self.foregroundRetryObserver {
                     NotificationCenter.default.removeObserver(obs)
                     self.foregroundRetryObserver = nil
                 }
+                guard let vm, vm.isRecording else { return }
                 let settings = SettingsManager.shared
                 let vehicle = settings.vehicles.first { $0.id == settings.selectedVehicleId } ?? settings.vehicles.first
                 let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
