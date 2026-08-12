@@ -24,7 +24,15 @@ final class LanguageManager: ObservableObject {
         } else {
             // Detect from system language
             let preferred = Locale.preferredLanguages.first ?? "en"
-            self.language = preferred.hasPrefix("ru") ? .ru : .en
+            let detected: Language = preferred.hasPrefix("ru") ? .ru : .en
+            self.language = detected
+            // `didSet` does not run for assignments made inside `init`, so the
+            // detected language never reached UserDefaults — and everything
+            // that reads it from there instead of from this object (the Live
+            // Activity, the Dynamic Island, the widget extension) fell back to
+            // English. A Russian phone that never opened the language picker
+            // recorded its trips under an English lock-screen card.
+            UserDefaults.standard.set(detected.rawValue, forKey: "appLanguage")
         }
     }
 }

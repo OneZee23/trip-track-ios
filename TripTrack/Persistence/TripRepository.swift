@@ -10,7 +10,9 @@ protocol TripRepository {
     func fetchTrips(limit: Int, offset: Int) -> [Trip]
     func fetchAllTrips() -> [Trip]
     func hasAnyPrivateTrip() -> Bool
-    func fetchTripsWithTrackPoints() -> [Trip]
+    /// Every completed trip, carrying the simplified preview polyline but NOT
+    /// its track points. See the implementation for why that matters.
+    func fetchTripsForMap() -> [Trip]
     func fetchTripsModifiedSince(_ date: Date) -> [Trip]
     func fetchTripDetail(id: UUID) -> Trip?
     func fetchTripCount() -> Int
@@ -23,6 +25,7 @@ protocol TripRepository {
     func updateNotes(for tripId: UUID, notes: String)
     func updatePrivacy(for tripId: UUID, isPrivate: Bool)
     func updateVehicle(for tripId: UUID, vehicleId: UUID?)
+    func updateCompanions(for tripId: UUID, companions: [TripCompanion])
     /// Resets server-side metadata after a successful `/trips/delete` triggered
     /// by un-publishing. The local entity stays — only the bookkeeping that
     /// links it to the server copy is cleared, so subsequent re-publish treats
@@ -158,13 +161,28 @@ final class CoreDataTripRepository: TripRepository {
         return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
     }
 
-    func fetchTripsWithTrackPoints() -> [Trip] {
+    /// Trips for «Моя карта».
+    ///
+    /// Track points are deliberately left behind. This runs on the view
+    /// context — the main actor — and materialising every point of every trip
+    /// meant thousands of managed objects per trip before the map could draw
+    /// anything: on a large library that is a multi-second freeze on opening
+    /// the tab, for data the map never looks at. It draws the simplified
+    /// preview polyline, and the one route that needs per-point speed colours
+    /// is fetched on its own when you select it.
+    ///
+    /// The exception is a trip saved before previews existed: with no polyline
+    /// there is nothing else to draw it from, so those — and only those — still
+    /// pay for their points.
+    func fetchTripsForMap() -> [Trip] {
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = completedTripPredicate
         request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
-        request.fetchBatchSize = 10
+        request.fetchBatchSize = 40
         guard let entities = try? context.fetch(request) else { return [] }
-        return entities.compactMap { tripFromEntity($0) }
+        return entities.compactMap {
+            tripFromEntity($0, includeTrackPoints: $0.previewPolyline == nil)
+        }
     }
 
     func fetchTripsModifiedSince(_ date: Date) -> [Trip] {
@@ -301,6 +319,26 @@ final class CoreDataTripRepository: TripRepository {
         if Self.shouldFlipPendingUpload(for: entity) {
             entity.syncStatus = SyncStatus.pendingUpload.rawValue
         }
+        persistenceController.save()
+    }
+
+    /// Replace the trip's companion list.
+    ///
+    /// Purely local: the sync payload has no field for companions yet, so this
+    /// deliberately does NOT flip the trip to pending-upload. Marking it would
+    /// queue an upload that carries none of the change — cost with no effect,
+    /// and on a metered connection that is somebody's data.
+    func updateCompanions(for tripId: UUID, companions: [TripCompanion]) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        if companions.isEmpty {
+            entity.companionsJSON = nil
+        } else if let data = try? JSONEncoder().encode(companions),
+                  let json = String(data: data, encoding: .utf8) {
+            entity.companionsJSON = json
+        } else {
+            return
+        }
+        entity.lastModifiedAt = Date()
         persistenceController.save()
     }
 
@@ -596,6 +634,15 @@ final class CoreDataTripRepository: TripRepository {
             badgeIds = []
         }
 
+        let companions: [TripCompanion]
+        if let json = entity.companionsJSON,
+           let data = json.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([TripCompanion].self, from: data) {
+            companions = decoded
+        } else {
+            companions = []
+        }
+
         return Trip(
             id: id, startDate: startDate, endDate: entity.endDate,
             distance: entity.distance, maxSpeed: entity.maxSpeed,
@@ -604,7 +651,8 @@ final class CoreDataTripRepository: TripRepository {
             fuelUsed: entity.fuelUsed, elevation: entity.elevation,
             region: entity.region, isPrivate: entity.isPrivate,
             vehicleId: entity.vehicleId, fuelCurrency: entity.fuelCurrency,
-            previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds
+            previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds,
+            companions: companions
         )
     }
 

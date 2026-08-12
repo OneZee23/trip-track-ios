@@ -21,6 +21,9 @@ struct Trip: Identifiable, Codable {
     var fuelCurrency: String?
     var previewPolyline: Data?
     var earnedBadgeIds: [String]
+    /// Who else was in the car. Stored with the trip on this device; see
+    /// `TripCompanion` for why they are not accounts yet.
+    var companions: [TripCompanion] = []
 
     /// Decoded simplified coordinates for feed card route previews.
     /// Hits an `NSCache` keyed by trip id so a feed scroll past 30 cards
@@ -195,10 +198,14 @@ struct Trip: Identifiable, Codable {
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
         let secs = totalSeconds % 60
+        // A zero component is noise, not precision: «4 мин 0 сек» and «2 ч 0
+        // мин» both spend a word saying nothing.
         if hours > 0 {
+            if minutes == 0 { return lang == .ru ? "\(hours) ч" : "\(hours) h" }
             return lang == .ru ? "\(hours) ч \(minutes) мин" : "\(hours) h \(minutes) min"
         }
         if minutes > 0 {
+            if secs == 0 { return lang == .ru ? "\(minutes) мин" : "\(minutes) min" }
             return lang == .ru ? "\(minutes) мин \(secs) сек" : "\(minutes) min \(secs) sec"
         }
         return lang == .ru ? "\(secs) сек" : "\(secs) sec"
@@ -211,7 +218,8 @@ struct Trip: Identifiable, Codable {
          fuelUsed: Double = 0, elevation: Double = 0,
          region: String? = nil, isPrivate: Bool = true, vehicleId: UUID? = nil,
          fuelCurrency: String? = nil,
-         previewPolyline: Data? = nil, earnedBadgeIds: [String] = []) {
+         previewPolyline: Data? = nil, earnedBadgeIds: [String] = [],
+         companions: [TripCompanion] = []) {
         self.id = id
         self.startDate = startDate
         self.endDate = endDate
@@ -230,6 +238,7 @@ struct Trip: Identifiable, Codable {
         self.fuelCurrency = fuelCurrency
         self.previewPolyline = previewPolyline
         self.earnedBadgeIds = earnedBadgeIds
+        self.companions = companions
     }
 
     var earnedBadges: [Badge] {

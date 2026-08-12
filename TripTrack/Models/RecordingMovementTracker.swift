@@ -35,6 +35,15 @@ struct RecordingMovementTracker {
             lastChangeTime = now
             return false
         }
+        // A shrinking odometer is not stillness — it is a different trip.
+        // Re-seed instead of measuring this trip's first metres against the
+        // last trip's total, which no drive can ever exceed and which would
+        // read as "parked" for the whole journey.
+        guard currentDistance >= lastDist else {
+            lastDistanceMeters = currentDistance
+            lastChangeTime = now
+            return false
+        }
         guard currentDistance - lastDist >= AutoTripPolicy.meaningfulMovementDistance else {
             return false
         }

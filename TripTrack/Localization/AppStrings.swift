@@ -111,6 +111,53 @@ enum AppStrings {
 
     // MARK: - Recording states (6.1.0)
 
+    /// Shown when a start is refused, so the slider never just springs back
+    /// with nothing said.
+    static func startRefusedRecovery(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Сначала закончите с прошлой поездкой"
+            : "Finish with the previous trip first"
+    }
+    static func startRefusedNoGeo(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Нужен доступ к геолокации"
+            : "Location access is required"
+    }
+    /// Deliberately vague, because the honest answer is that we do not know —
+    /// and saying nothing is worse than saying that.
+    static func startRefusedUnknown(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Не получилось начать запись — попробуйте ещё раз"
+            : "Could not start recording — try again"
+    }
+    /// No fix yet. Starting here records a trip whose beginning is missing,
+    /// so the control waits — and says what it is waiting for.
+    static func startRefusedNoFix(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Ждём сигнал GPS — начало поездки не запишется"
+            : "Waiting for GPS — the start of the trip would be lost"
+    }
+    /// The escape hatch: an underground car park may never give a fix, and
+    /// refusing forever is worse than recording a trip that begins late.
+    static func startAnyway(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Всё равно начать" : "Start anyway"
+    }
+    /// Label on the start control itself while there is no fix.
+    static func slideWaitingForGPS(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ждём сигнал GPS" : "Waiting for GPS"
+    }
+    /// Before the first accepted fix. Distinct from «слабый» on purpose —
+    /// waiting for satellites is normal and temporary, a weak signal is a
+    /// problem, and showing the alarming one for the ordinary case made the
+    /// whole screen look broken.
+    static func gpsSearching(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ищем спутники" : "Finding GPS"
+    }
+    static func gpsLegendSearching(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Обычно пара секунд — под крышей дольше"
+            : "Usually a couple of seconds — longer under cover"
+    }
     static func gpsAccurate(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "GPS точный" : "GPS strong"
     }
@@ -151,6 +198,30 @@ enum AppStrings {
     }
     static func pauseShort(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "ПАУЗА" : "PAUSED"
+    }
+    static func pauseAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пауза" : "Pause"
+    }
+    static func resumeAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Продолжить" : "Resume"
+    }
+    /// Ending a recording cannot be undone — the trip closes and a later drive
+    /// becomes a separate one. Worth one question.
+    static func stopConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Завершить поездку?" : "Finish the trip?"
+    }
+    static func stopConfirmBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Продолжить эту же запись потом будет нельзя"
+            : "You won't be able to continue this recording later"
+    }
+    static func stopConfirmAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Завершить и сохранить" : "Finish and save"
+    }
+    /// Offered inside the stop dialog — «стоп» at a petrol station usually
+    /// means «wait», and that answer belongs next to the question.
+    static func stopConfirmPause(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поставить на паузу" : "Pause instead"
     }
     static func stop(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Стоп" : "Stop"
@@ -194,6 +265,19 @@ enum AppStrings {
         lang == .ru
             ? "Поездки приватны, пока Вы не опубликуете их сами."
             : "Trips stay private until you publish them yourself."
+    }
+    /// The canon's one-line toggle hint. It replaces the two-line
+    /// subtitle-plus-footnote on the finish card: both said the same thing at
+    /// different lengths, and neither said what the switch does in each
+    /// position — which is the only thing you need at that moment.
+    static func publishToggleHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Вкл — увидят все · выкл — только вы"
+            : "On — everyone sees it · off — only you"
+    }
+    /// Placeholder on the finish card's inline description field.
+    static func describeTripPlaceholder(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Добавить описание…" : "Add a description…"
     }
     static func tripFinishedTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Поездка завершена!" : "Trip finished!"
@@ -545,15 +629,146 @@ enum AppStrings {
     static func myMapTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Моя карта" : "My Map"
     }
-    static func mapModeRoutes(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Маршруты" : "Routes"
+    // The «Маршруты · Территория · Всё» segment is gone on purpose: the canon
+    // note on the Карта page reads «Слоёв-переключателей нет» — territory and
+    // trips share one layer, and depth comes from zoom instead.
+
+    /// Collapsed sheet: «8 регионов · 12 890 км · 47 поездок».
+    static func mapSummary(
+        _ lang: LanguageManager.Language, regions: Int, km: Int, trips: Int
+    ) -> String {
+        let r = "\(groupedNumber(regions, lang)) \(regionsGenitive(lang, count: regions))"
+        let k = "\(groupedNumber(km, lang)) \(lang == .ru ? "км" : "km")"
+        let t = "\(groupedNumber(trips, lang)) \(tripsGenitive(lang, count: trips))"
+        return "\(r) · \(k) · \(t)"
     }
-    static func mapModeTerritory(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Территория" : "Territory"
+    static func mapKmDriven(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "км проехано" : "km driven"
     }
-    static func mapModeAll(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Всё" : "All"
+    /// «9 из 44» — the region's opened cities over its whole list.
+    static func mapCitiesOfTotal(
+        _ lang: LanguageManager.Language, opened: Int, total: Int
+    ) -> String {
+        "\(opened) \(lang == .ru ? "из" : "of") \(total)"
     }
+    /// Progress bar over the region card — canon copy. The value beside it is
+    /// real opened road in km; the bar itself is progress toward a stated
+    /// per-region goal, since no road-network dataset exists to divide by.
+    static func mapRoadsProgress(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Дороги края" : "Roads opened"
+    }
+    /// «84 км · 8%» — the kilometres first, because they are the honest part.
+    static func mapRoadsValue(
+        _ lang: LanguageManager.Language, km: Double, percent: String
+    ) -> String {
+        let value = km < 10
+            ? String(format: "%.1f", km).replacingOccurrences(of: ".", with: lang == .ru ? "," : ".")
+            : groupedNumber(Int(km.rounded()), lang)
+        return "\(value) \(lang == .ru ? "км" : "km") · \(percent)"
+    }
+    static func mapPullHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Потяни вверх — города и поездки" : "Pull up — cities and trips"
+    }
+    static func mapCitiesSection(
+        _ lang: LanguageManager.Language, opened: Int, total: Int
+    ) -> String {
+        let head = lang == .ru ? "ГОРОДА" : "CITIES"
+        return "\(head) · \(mapCitiesOfTotal(lang, opened: opened, total: total))"
+    }
+    static func mapTripsSection(_ lang: LanguageManager.Language, count: Int) -> String {
+        "\(lang == .ru ? "ПОЕЗДКИ ЗДЕСЬ" : "TRIPS HERE") · \(count)"
+    }
+    static func mapCityLocked(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "не открыт" : "not opened"
+    }
+    /// Section-header action. Short on purpose — it sits beside the heading,
+    /// not on a line of its own at the bottom of the list.
+    static func mapSeeAll(_ lang: LanguageManager.Language, count: Int) -> String {
+        lang == .ru ? "Все \(count)" : "All \(count)"
+    }
+    static func mapOpenTrip(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Открыть поездку" : "Open trip"
+    }
+    /// Tapping a road you have driven many times: every trip that used it.
+    static func mapRoadTrips(_ lang: LanguageManager.Language, count: Int) -> String {
+        lang == .ru
+            ? "\(count) \(tripsGenitive(lang, count: count)) по этой дороге"
+            : "\(count) trips on this road"
+    }
+    static func mapRoadPullHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Потяни вверх — все поездки" : "Pull up — all of them"
+    }
+    /// The map ships ahead of the rest — say so on the screen rather than
+    /// leaving people to wonder whether what they see is a bug or the design.
+    static func mapBetaBadge(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "БЕТА" : "BETA"
+    }
+    static func mapBetaTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Карта — бета" : "The map is in beta"
+    }
+    static func mapBetaBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Мы её ещё дорабатываем. Если что-то выглядит не так или работает странно — напишите нам, это правда помогает."
+            : "We are still working on it. If something looks wrong or behaves oddly, tell us — it genuinely helps."
+    }
+    static func mapBetaReport(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Написать в Telegram" : "Message us on Telegram"
+    }
+    /// Endpoints of the selected route. Voice-over only — on screen they are
+    /// the same green-start / white-finish dots the share poster uses.
+    static func mapRouteStart(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Начало поездки" : "Trip start"
+    }
+    static func mapRouteFinish(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Конец поездки" : "Trip finish"
+    }
+    static func mapRegionLocked(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ещё не открыт" : "not opened yet"
+    }
+    /// «0 км · 0 поездок · 0 из 26 городов» — the zeroes are the point.
+    static func mapLockedStats(_ lang: LanguageManager.Language, totalCities: Int) -> String {
+        lang == .ru
+            ? "0 км · 0 поездок · 0 из \(totalCities) городов"
+            : "0 km · 0 trips · 0 of \(totalCities) cities"
+    }
+    /// «Ближайший твой след — 40 км западнее: Кропоткин, май 2026.
+    /// Заедешь — регион загорится на карте.»
+    static func mapLockedTeaser(
+        _ lang: LanguageManager.Language, km: Int, bearing: String, city: String, when: String?
+    ) -> String {
+        let place = when.map { "\(city), \($0)" } ?? city
+        return lang == .ru
+            ? "Ближайший твой след — \(km) км \(bearing): \(place). Заедешь — регион загорится на карте."
+            : "Your nearest trace — \(km) km \(bearing): \(place). Drive in and the region lights up."
+    }
+    static func mapBearing(
+        _ lang: LanguageManager.Language, _ bearing: MyMapViewModel.NearestTrace.Bearing
+    ) -> String {
+        switch bearing {
+        case .north: return lang == .ru ? "севернее" : "to the north"
+        case .south: return lang == .ru ? "южнее" : "to the south"
+        case .east:  return lang == .ru ? "восточнее" : "to the east"
+        case .west:  return lang == .ru ? "западнее" : "to the west"
+        }
+    }
+    /// «май 2026» / «May 2026».
+    static func monthYear(_ lang: LanguageManager.Language, _ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: lang == .ru ? "ru_RU" : "en_US")
+        formatter.setLocalizedDateFormatFromTemplate("LLLL yyyy")
+        return formatter.string(from: date)
+    }
+    /// Locale-aware thousands grouping («12 890» in RU, «12,890» in EN).
+    static func groupedNumber(_ value: Int, _ lang: LanguageManager.Language) -> String {
+        let formatter = lang == .ru ? ruGrouping : enGrouping
+        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+    private static let ruGrouping: NumberFormatter = {
+        let f = NumberFormatter(); f.numberStyle = .decimal; f.groupingSeparator = " "; return f
+    }()
+    private static let enGrouping: NumberFormatter = {
+        let f = NumberFormatter(); f.numberStyle = .decimal; f.groupingSeparator = ","; return f
+    }()
     static func km2ExploredLabel(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "км² освоено" : "km² explored"
     }
@@ -664,13 +879,16 @@ enum AppStrings {
         lang == .ru ? "Скорость" : "Speed"
     }
     static func movingAndStops(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "В движении и стоянки" : "Moving & stops"
+        lang == .ru ? "Движение" : "Movement"
     }
     static func movingDot(_ lang: LanguageManager.Language, _ value: String) -> String {
         lang == .ru ? "В движении · \(value)" : "Moving · \(value)"
     }
+    /// «Стоянки» read as car parks. This is the time the trip was standing
+    /// still — at lights, in traffic, waiting at a barrier — so it is named
+    /// as the plain opposite of «В движении».
     static func stopsDot(_ lang: LanguageManager.Language, _ value: String) -> String {
-        lang == .ru ? "Стоянки · \(value)" : "Stops · \(value)"
+        lang == .ru ? "Без движения · \(value)" : "Stopped · \(value)"
     }
     /// Detail-context header for the trip notes ("Описание"). `notes` stays
     /// for legacy call sites.
@@ -690,7 +908,7 @@ enum AppStrings {
         lang == .ru ? "В движении" : "Moving"
     }
     static func statStops(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Стоянки" : "Stops"
+        lang == .ru ? "Без движения" : "Stopped"
     }
     static func statAvg(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Средняя" : "Avg"
@@ -734,12 +952,24 @@ enum AppStrings {
     // levelShort deleted — the app-wide LVL convention is the hardcoded
     // "LVL n" pixel-font tag; the last caller migrated to it.
 
-    // MARK: - Comments (6.1.0)
+    // MARK: - Discussion (6.1.0)
+    //
+    // The product calls this ОБСУЖДЕНИЕ, not «комментарии» — a trip is a story
+    // people talk about, and the word «комментарий» never appears in the UI.
+    // The function names keep the old spelling so the diff stays readable.
     static func commentsTitleN(_ lang: LanguageManager.Language, _ n: Int) -> String {
-        lang == .ru ? "Комментарии · \(n)" : "Comments · \(n)"
+        lang == .ru ? "Обсуждение · \(n)" : "Discussion · \(n)"
     }
     static func commentPlaceholder(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Оставьте комментарий…" : "Leave a comment…"
+        lang == .ru ? "Написать в обсуждение…" : "Write in the discussion…"
+    }
+    /// Centred pill under the teaser: «Всё обсуждение · 12 ›».
+    static func discussionSeeAllPill(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        lang == .ru ? "Всё обсуждение · \(n)" : "Whole discussion · \(n)"
+    }
+    /// Zero state — the card stays, the invitation changes.
+    static func writeFirstMessage(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Написать первое сообщение…" : "Write the first message…"
     }
     static func send(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Отправить" : "Send"
@@ -1025,6 +1255,139 @@ enum AppStrings {
     }
     static func notifAutoStartBody(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "TripTrack автоматически начал запись" : "TripTrack automatically started recording"
+    }
+    /// Canon 510:119 — saving the share card needs somewhere to save it to.
+    static func photoAccessAlertTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Разрешите доступ к Фото" : "Allow access to Photos"
+    }
+    static func photoAccessAlertBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Чтобы сохранить карточку поездки в Фото, откройте доступ в Настройках."
+            : "To save the trip card to Photos, allow access in Settings."
+    }
+    static func close(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Закрыть" : "Close"
+    }
+    /// «Получен 14 мая 2026 · Дача и обратно» (Figma 117:1582). The trip is
+    /// what makes the date mean anything, so it joins the line when we know it.
+    static func badgeEarnedOn(
+        _ lang: LanguageManager.Language,
+        date: Date,
+        tripTitle: String?
+    ) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: lang == .ru ? "ru_RU" : "en_US")
+        f.dateFormat = lang == .ru ? "d MMMM yyyy" : "d MMMM yyyy"
+        let prefix = lang == .ru ? "Получен" : "Earned"
+        var line = "\(prefix) \(f.string(from: date))"
+        if let tripTitle, !tripTitle.isEmpty {
+            line += " · \(tripTitle)"
+        }
+        return line
+    }
+    static func noCommentsYet(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пока никто ничего не написал." : "Nobody has written anything yet."
+    }
+    static func addReaction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поставить реакцию" : "Add a reaction"
+    }
+
+    // MARK: - Locked social sections on a private trip (Figma 545:499)
+
+    static func publishForReactionsTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Опубликуйте, чтобы получить реакции" : "Publish to get reactions"
+    }
+    static func publishForReactionsBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Появятся, когда поездка станет публичной"
+            : "They appear once the trip is public"
+    }
+    static func publishForCommentsTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Опубликуйте, чтобы открыть обсуждение" : "Publish to open the discussion"
+    }
+    static func publishForCommentsBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Обсуждение доступно на публичных поездках"
+            : "The discussion lives on public trips"
+    }
+
+    // MARK: - Photo picker (Figma 117:587)
+
+    static func choosePhotosTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Выберите фото" : "Choose photos"
+    }
+    static func managePhotoAccess(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Показать больше фото…" : "Show more photos…"
+    }
+    static func noPhotosInLibrary(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "В медиатеке нет фотографий" : "No photos in your library"
+    }
+    static func photoAccessDenied(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Нет доступа к фотографиям. Разрешите его в Настройках, чтобы добавить снимки к поездке."
+            : "No access to photos. Allow it in Settings to attach photos to a trip."
+    }
+
+    /// Where along the route a chart sample sits: «212-й км» / «km 212».
+    static func chartKmMark(_ lang: LanguageManager.Language, km: Double) -> String {
+        let n = max(0, Int(km.rounded()))
+        return lang == .ru ? "\(n)-й км" : "km \(n)"
+    }
+
+    // MARK: - Trip edit sheet (Figma 543:119)
+
+    static func editTripTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Редактировать поездку" : "Edit trip"
+    }
+    static func tripTitleLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Название" : "Name"
+    }
+    static func vehicleSectionLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Машина" : "Car"
+    }
+    static func accessSectionLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Доступ" : "Access"
+    }
+    /// Under the access row: what the current state actually means, since
+    /// «Видна всем» and «Только вы» each describe half of it.
+    static func privacyPublicHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Публичная — в общей ленте" : "Public — in the shared feed"
+    }
+    static func privacyOnlyMeHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Приватная — видите только вы" : "Private — only you can see it"
+    }
+
+    /// A trip too short to be worth keeping was deleted on stop. Saying so is
+    /// the whole point: the alternative is a recording that silently
+    /// evaporates, which reads as data loss rather than as housekeeping.
+    static func junkTripDiscarded(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Поездка не сохранена — слишком короткая"
+            : "Trip not saved — too short"
+    }
+    static func notifAutoStartFailedTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Запись не началась" : "Recording didn't start"
+    }
+    /// Names the obstacle when we know it — «что-то пошло не так» is useless
+    /// standing at the car, while «нет доступа к геолокации» can be acted on.
+    static func notifAutoStartFailedBody(
+        _ lang: LanguageManager.Language,
+        reason: MapViewModel.StartRefusal?
+    ) -> String {
+        switch reason {
+        case .locationDenied:
+            return lang == .ru
+                ? "Нет доступа к геолокации — включите его в Настройках"
+                : "No location access — turn it on in Settings"
+        case .recoveryPending:
+            return lang == .ru
+                ? "Сначала завершите прошлую поездку — откройте приложение"
+                : "Finish the previous trip first — open the app"
+        case .noFix, .unknown, .none:
+            return lang == .ru
+                ? "Откройте приложение и начните поездку вручную"
+                : "Open the app and start the trip manually"
+        }
     }
     static func notifAutoStopTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Поездка завершена" : "Trip completed"
@@ -1374,9 +1737,9 @@ enum AppStrings {
     static func minutesUnitShort(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "мин" : "min"
     }
-    /// Accessibility label for the feed-card comment affordance.
+    /// Section title and accessibility label for the discussion.
     static func comments(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Комментарии" : "Comments"
+        lang == .ru ? "Обсуждение" : "Discussion"
     }
 
     // MARK: - Activity inbox (6.1.0)
@@ -1958,5 +2321,38 @@ enum AppStrings {
         lang == .ru
             ? "Слишком много комментариев — подождите минуту"
             : "Too many comments — wait a minute"
+    }
+
+    // MARK: - Companions
+
+    static func companionsSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Попутчики" : "Companions"
+    }
+    static func companionsAddPrompt(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Добавить попутчиков" : "Add companions"
+    }
+    static func companionsEmptyHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Кто ехал с вами?" : "Who rode with you?"
+    }
+    static func companionsRodeWithYou(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ездили вместе с вами" : "Rode along with you"
+    }
+    static func companionsRodeAlong(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ездили вместе" : "Rode along"
+    }
+    static func companionsNamePlaceholder(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Имя" : "Name"
+    }
+    static func companionsLimitReached(_ lang: LanguageManager.Language, limit: Int) -> String {
+        lang == .ru
+            ? "Больше \(limit) попутчиков в одну поездку не добавить"
+            : "A trip can hold up to \(limit) companions"
+    }
+    /// Says plainly that this list lives on this phone — companions are not
+    /// accounts yet, and a name here does not notify anybody.
+    static func companionsLocalNote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Попутчики хранятся вместе с поездкой на этом устройстве. Пока это просто отметка «кто был рядом» — приглашения и общие фото появятся позже."
+            : "Companions are stored with the trip on this device. For now this is just a note of who was there — invitations and shared photos come later."
     }
 }
