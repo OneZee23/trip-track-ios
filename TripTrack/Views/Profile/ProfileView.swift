@@ -30,6 +30,13 @@ struct ProfileView: View {
     private enum MeDest: Hashable {
         case stats
         case trip(UUID)
+        /// A «Со мной» trip — NOT in the local database (someone else's),
+        /// so it carries its own `SocialFeedTrip` payload rather than just
+        /// an id, exactly like `ProfilePreviewDest.socialTrip` does for the
+        /// feed. Kept as a separate case (rather than reusing that shared
+        /// enum for `mePath`) because `mePath`'s type predates it and this
+        /// is the only spot in the Я stack that needs a non-owned trip.
+        case companionTrip(SocialFeedTrip)
     }
 
     // Profile avatar
@@ -149,6 +156,18 @@ struct ProfileView: View {
                             // nothing telling them what happens next.
                             noTripsCard(c)
                         }
+
+                        // «Со мной» — trips the user rode as an accepted
+                        // companion. Signed-out users can't be a companion
+                        // on anything (the endpoint needs a token), so this
+                        // never even asks while signed out. Draws nothing of
+                        // its own when there's nothing to show — see
+                        // `WithMeSectionModel`.
+                        if auth.isSignedIn {
+                            WithMeSection(onTapTrip: { trip in
+                                mePath.append(.companionTrip(trip))
+                            })
+                        }
                     }
                 }
                 // As a tab (6.1.0), leave room for the floating tab bar so the
@@ -174,6 +193,16 @@ struct ProfileView: View {
                     TripDetailView(
                         tripId: id,
                         viewModel: TripsViewModel(tripManager: mapVM.tripManager)
+                    )
+                case .companionTrip(let trip):
+                    // Same construction FeedView's `.socialTrip` destination
+                    // uses: `social:` feeds the screen someone else's trip,
+                    // rendered through `Trip(social:)` instead of a local
+                    // CoreData read.
+                    TripDetailView(
+                        tripId: trip.id,
+                        viewModel: TripsViewModel(tripManager: mapVM.tripManager),
+                        social: trip
                     )
                 }
             }

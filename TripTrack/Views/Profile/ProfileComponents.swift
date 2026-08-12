@@ -119,6 +119,14 @@ struct MomentCard: View {
 struct ProfileTripRow: View {
     let trip: Trip
     let vehicleName: String?
+    /// Who was driving — set ONLY by `WithMeSection` for a «Со мной» row
+    /// (a trip that isn't the viewer's own). Takes priority over
+    /// `vehicleName` in the meta line when present: naming the driver is
+    /// the one fact that tells a companion row apart from the viewer's own
+    /// history, where the car matters more than "who else was in it"
+    /// (there usually isn't anyone to name). `historySection`'s own rows
+    /// never pass this, so their meta line is byte-identical to before.
+    var driverName: String? = nil
     let onTap: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
@@ -173,7 +181,9 @@ struct ProfileTripRow: View {
 
     private var metaText: String {
         var parts: [String] = [ProfileDateFormat.dayMonth(trip.startDate, lang: lang.language)]
-        if let vehicleName, !vehicleName.isEmpty {
+        if let driverName, !driverName.isEmpty {
+            parts.append(driverName)
+        } else if let vehicleName, !vehicleName.isEmpty {
             parts.append(vehicleName)
         }
         parts.append("\(GarageFormat.odometer(trip.distanceKm)) \(AppStrings.km(lang.language))")

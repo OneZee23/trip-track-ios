@@ -1790,6 +1790,48 @@ enum AppStrings {
         lang == .ru ? "В ответ" : "Follow back"
     }
 
+    // MARK: - Companion invite rows (6.1.0)
+
+    /// Chip filter label for `companion_invite` / `companion_accepted` rows.
+    static func chipCompanions(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Попутчики" : "Companions"
+    }
+    /// Decision-row header line — the invite verb, no trip specifics (those
+    /// live in the trip-shape line below it, once the preview loads).
+    static func companionInviteAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "пригласил вас в поездку" : "invited you on a trip"
+    }
+    /// `companion_accepted` action line — the OWNER's row: someone joined.
+    static func companionAcceptedAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "присоединился к вашей поездке" : "joined your trip"
+    }
+    /// Post-response note replacing the decision controls once the
+    /// invitee has accepted this session (or the server already has it
+    /// on record).
+    static func companionInviteAcceptedNote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вы приняли приглашение" : "You accepted the invite"
+    }
+    static func companionInviteDeclinedNote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вы отклонили приглашение" : "You declined the invite"
+    }
+    static func companionAccept(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Принять" : "Accept"
+    }
+    static func companionDecline(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Отклонить" : "Decline"
+    }
+    static func companionRespondFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось ответить на приглашение" : "Couldn't respond to the invite"
+    }
+    static func companionInvitePreviewFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось загрузить приглашение" : "Couldn't load the invite"
+    }
+    /// Shown when an accepted invite's trip can't be resolved yet from the
+    /// companion trips cache (see `NotificationsInboxView.openAcceptedInviteTrip`).
+    static func companionTripUnavailable(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездка пока недоступна" : "Trip isn't available yet"
+    }
+
     // MARK: - Discover (6.1.0)
     static func suggestedByRegions(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Рекомендуем · по Вашим регионам" : "Suggested · based on your regions"
@@ -2334,25 +2376,119 @@ enum AppStrings {
     static func companionsEmptyHint(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Кто ехал с вами?" : "Who rode with you?"
     }
-    static func companionsRodeWithYou(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Ездили вместе с вами" : "Rode along with you"
+    /// «Позвать» — opens the (Task 3) candidate picker. Same word for both
+    /// the empty-state row and the smaller CTA appended after an existing
+    /// roster.
+    static func companionsInvite(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Позвать" : "Invite"
     }
-    static func companionsRodeAlong(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Ездили вместе" : "Rode along"
+    /// The ONE note a companion row ever carries, and only while pending.
+    static func companionsWaiting(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ждёт" : "Pending"
     }
-    static func companionsNamePlaceholder(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Имя" : "Name"
+    static func companionsLoadFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось загрузить попутчиков" : "Couldn't load companions"
     }
-    static func companionsLimitReached(_ lang: LanguageManager.Language, limit: Int) -> String {
+    static func companionsRemoveFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось убрать попутчика" : "Couldn't remove companion"
+    }
+    /// Task 6: a companion's photo pick failed to reach the server at all
+    /// (the required thumbnail part never landed). Shown as an error
+    /// toast; the photo strip itself is left untouched (see
+    /// `CompanionPhotoUploadController`'s doc comment).
+    static func companionPhotoUploadFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось загрузить фото" : "Couldn't upload photo"
+    }
+    /// Task 6: a companion's photo DID land (its thumbnail is on the
+    /// server and it's visible on the trip) but the full-quality original
+    /// didn't. Deliberately NOT phrased as a failure — the photo is there.
+    static func companionPhotoUploadDegraded(_ lang: LanguageManager.Language) -> String {
         lang == .ru
-            ? "Больше \(limit) попутчиков в одну поездку не добавить"
-            : "A trip can hold up to \(limit) companions"
+            ? "Фото добавлено, но в уменьшенном качестве"
+            : "Photo added, but at reduced quality"
     }
-    /// Says plainly that this list lives on this phone — companions are not
-    /// accounts yet, and a name here does not notify anybody.
-    static func companionsLocalNote(_ lang: LanguageManager.Language) -> String {
+    /// Task 6, review fix: a companion picked SEVERAL photos and only some
+    /// landed — the rest were genuinely attempted and failed, not silently
+    /// skipped. `succeeded`/`total` name exactly how many, so this can
+    /// never be read as a flat failure when photos actually did get added.
+    static func companionPhotoUploadPartial(_ succeeded: Int, _ total: Int, _ lang: LanguageManager.Language) -> String {
         lang == .ru
-            ? "Попутчики хранятся вместе с поездкой на этом устройстве. Пока это просто отметка «кто был рядом» — приглашения и общие фото появятся позже."
-            : "Companions are stored with the trip on this device. For now this is just a note of who was there — invitations and shared photos come later."
+            ? "Добавлено \(succeeded) из \(total) фото"
+            : "\(succeeded) of \(total) photos added"
+    }
+    /// Task 6, review fix: the upload itself succeeded (at least one photo
+    /// landed on the server), but the follow-up refresh of the trip's
+    /// photo list failed — a distinct, separate network call. The strip
+    /// keeps showing whatever it showed before this attempt (see
+    /// `TripDetailView.uploadCompanionPhotos`); this says why the newly
+    /// added photo isn't visible YET, not that the upload failed.
+    static func companionPhotoReloadFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Фото загружено, но список не обновился. Загляните на поездку позже"
+            : "Photo uploaded, but the list didn't refresh. Check back on this trip later"
+    }
+    static func companionsRemoveConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Убрать попутчика?" : "Remove companion?"
+    }
+    /// The confirmation dialog's destructive button AND the row's own
+    /// remove control — deliberately NOT `delete`: a companion is being
+    /// taken off the trip, not destroyed, and the dialog's own title
+    /// already says «Убрать».
+    static func companionsRemove(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Убрать" : "Remove"
+    }
+
+    // MARK: - Companions picker (Task 3)
+
+    /// `CompanionsPickerSheet`'s own header — deliberately not reusing
+    /// `companionsInvite` ("Позвать"), which is the CTA that OPENS this
+    /// sheet, not what the sheet itself is titled.
+    static func companionsPickerTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пригласить попутчика" : "Invite a companion"
+    }
+    static func companionsSearchPlaceholder(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поиск по подпискам" : "Search who you follow"
+    }
+    /// The picker's loaded-and-empty state — states the actual rule rather
+    /// than implying the request is broken.
+    static func companionsCandidatesEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Некого позвать" : "No one to invite"
+    }
+    static func companionsCandidatesEmptyHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Позвать можно только тех, на кого вы подписаны."
+            : "You can only invite people you follow."
+    }
+    static func companionsCandidatesLoadFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось загрузить список" : "Couldn't load the list"
+    }
+    static func companionsInviteFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось позвать" : "Couldn't invite"
+    }
+    /// The row state right after a successful (optimistic) tap — kept
+    /// lowercase to match `companionsWaiting`'s «ждёт» styling.
+    static func companionsInvited(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "приглашён" : "Invited"
+    }
+
+    // MARK: - «Со мной» profile section (Task 5)
+
+    /// Section header. Reuses `ProfileTripRow` — same row `historySection`
+    /// draws for the user's own trips — but each row names the driver, the
+    /// one fact that tells this section apart from «История».
+    static func withMeSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Со мной" : "With me"
+    }
+    static func withMeLoadFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось загрузить поездки" : "Couldn't load trips"
+    }
+    /// The driver-name fallback for a «Со мной» row. Same copy as the four
+    /// pre-existing inline `displayName ?? (lang == .ru ? "Без имени" :
+    /// "No name")` spots (`TripCompanionsSection.swift`,
+    /// `CompanionsPickerSheet.swift`, `TripDetailView.swift` ×2) — this task
+    /// only owns `WithMeSection`'s copy of that pattern (review finding),
+    /// not a sweep of the pre-existing ones.
+    static func withMeDriverNoName(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Без имени" : "No name"
     }
 }
