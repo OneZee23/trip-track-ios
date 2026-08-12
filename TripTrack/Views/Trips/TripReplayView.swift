@@ -5,7 +5,9 @@ import QuartzCore
 /// Fullscreen «cinema» replay of an OWN trip (Figma 117:533, spec section C
 /// «Реплей»): the poster route canvas full-bleed on #121214, the car riding
 /// the timestamped track, a floating speed bubble, photo-moment strip and a
-/// scrubbable transport bar with 1×/2×/4× rates.
+/// scrubbable transport bar. 1× is real time — the drive plays back over the
+/// same minutes it took — and the rate button climbs 1 → 1,5 → 2 → 3 → 5 from
+/// there.
 ///
 /// Presented as a fullScreenCover from the «Прожить заново» CTA — only for
 /// trips that carry per-point timestamps (the social «Смотреть поездку»
@@ -133,8 +135,7 @@ struct TripReplayView: View {
             engine.configure(
                 coords: coordinates,
                 timestamps: timestamps,
-                speeds: speeds,
-                distanceMeters: trip.distance
+                speeds: speeds
             )
             engine.play()
         }
@@ -305,7 +306,7 @@ struct TripReplayView: View {
                 Haptics.selection()
                 engine.cycleRate()
             } label: {
-                Text("\(Int(engine.rate))×")
+                Text(Self.rateLabel(engine.rate))
                     .font(.system(size: 12, weight: .bold).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.6))
                     .frame(width: 34, height: 34)
@@ -397,6 +398,22 @@ struct TripReplayView: View {
         storyShare = (data, url)
     }
 
+    /// «1×», «1,5×», «5×». Whole rates lose the decimal, and the separator
+    /// follows the device locale — a Russian phone writes 1,5.
+    private static func rateLabel(_ rate: Double) -> String {
+        let number = rateFormatter.string(from: NSNumber(value: rate))
+            ?? String(format: "%g", rate)
+        return "\(number)×"
+    }
+
+    private static let rateFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.minimumFractionDigits = 0
+        f.maximumFractionDigits = 1
+        return f
+    }()
+
     /// «02:14» — zero-padded H:MM of a trip-time interval.
     private static func hmm(_ seconds: TimeInterval) -> String {
         let s = max(0, Int(seconds))
@@ -424,14 +441,25 @@ final class TripReplayEngine: NSObject, ObservableObject {
     @Published private(set) var trailIndex: Int = -1
     /// Interpolated speed at the head, km/h.
     @Published private(set) var currentSpeedKmh: Double = 0
-    /// Playback rate multiplier (1 / 2 / 4).
+    /// Playback rate multiplier. 1× is real time — the car covers the road at
+    /// the speed it was actually driven.
     @Published private(set) var rate: Double = 1
+
+    /// The ladder the rate button walks. Starts at truth and climbs from there;
+    /// the old 1/2/4 ladder started at "watchable" and never offered truth at
+    /// all, which made every drive look like a getaway.
+    static let rateLadder: [Double] = [1, 1.5, 2, 3, 5]
 
     private var coords: [CLLocationCoordinate2D] = []
     private var timestamps: [Date] = []
     private var speeds: [Double] = []
-    /// Real seconds for a full 1× run — same adaptive pacing as the inline
-    /// controller (~1.4 s/km clamped to a watchable window).
+    /// Wall-clock seconds for a full 1× run. This is the trip's OWN duration,
+    /// so at 1× the playback and the drive take the same time and the car
+    /// moves across the map at the speed it really moved. The previous value
+    /// was an adaptive 7–40 s window, which squeezed a two-hour drive into
+    /// half a minute and made the car tear along the road at an impossible
+    /// pace — the whole point of reliving a trip is that it looks like the
+    /// trip.
     private var baseDuration: Double = 12
     private var displayLink: CADisplayLink?
     private var lastTick: CFTimeInterval = 0
@@ -444,15 +472,18 @@ final class TripReplayEngine: NSObject, ObservableObject {
     func configure(
         coords: [CLLocationCoordinate2D],
         timestamps: [Date],
-        speeds: [Double],
-        distanceMeters: Double
+        speeds: [Double]
     ) {
         guard coords.count >= 2, timestamps.count == coords.count else { return }
         self.coords = coords
         self.timestamps = timestamps
         self.speeds = speeds.count == coords.count ? speeds : []
-        let km = max(0, distanceMeters / 1000.0)
-        baseDuration = max(7.0, min(40.0, km * 1.4))
+        // The track's own span. A floor keeps a degenerate track (all points
+        // stamped the same second) from dividing by zero and jumping straight
+        // to the end.
+        let span = timestamps[timestamps.count - 1].timeIntervalSince(timestamps[0])
+        baseDuration = max(1, span)
+        rate = 1
         progress = 0
         cursor = 0
         applyFrame()
@@ -495,7 +526,9 @@ final class TripReplayEngine: NSObject, ObservableObject {
     /// 1× → 2× → 4× → 1×. Rate multiplies the per-tick advance, so
     /// changing it mid-flight is seamless (no clock re-anchor needed).
     func cycleRate() {
-        rate = rate >= 4 ? 1 : rate * 2
+        let ladder = Self.rateLadder
+        let next = ladder.firstIndex(of: rate).map { ($0 + 1) % ladder.count } ?? 0
+        rate = ladder[next]
     }
 
     /// Scrub/photo-tap seek — works both paused and playing.

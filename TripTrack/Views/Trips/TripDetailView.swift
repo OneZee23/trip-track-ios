@@ -77,7 +77,9 @@ struct TripDetailView: View {
     @State private var showTripActions = false
     /// «Редактировать поездку» — name, description, car, access in one sheet.
     @State private var showEditSheet = false
-    @State private var showCompanionsSheet = false
+    /// Task 3's candidate picker, opened from `TripCompanionsSection`'s
+    /// «Позвать» affordance via `openCompanionsPicker`.
+    @State private var showCompanionsPicker = false
     /// Publish confirmation sheet (Figma 533:119) — replaces the old plain
     /// alert. The user consciously acknowledges the visibility change and
     /// can attach an optional description in the same step.
@@ -104,6 +106,13 @@ struct TripDetailView: View {
     /// Reacting goes through the same store the feed uses, so a reaction left
     /// here shows on the card you came from.
     @ObservedObject private var socialFeed = SocialFeedStore.shared
+    /// Task 6: same roster `companionsSection` already fetches for this
+    /// trip — `canAddCompanionPhoto` reads it to decide whether the add-
+    /// photo control shows on a foreign trip.
+    @ObservedObject private var companionsStore = CompanionsStore.shared
+    /// Task 6: owns upload-in-progress/error state for a companion's
+    /// add-photo control. `@StateObject` because this view creates it.
+    @StateObject private var companionPhotoUpload = CompanionPhotoUploadController()
     /// Sign-in prompt for the signed-out edge state (e.g. «keep public and
     /// sign out» leaves own public trips visible): the comments composer
     /// routes guests here instead of letting them post into USER_NOT_AUTH.
@@ -144,6 +153,21 @@ struct TripDetailView: View {
         return nil
     }
 
+    /// Whether the poster's Share button should be offered at all. Pulled out
+    /// as a pure, testable `static func` (`TripTrackTests
+    /// /TripDetailSharePrivacyTests.swift`) rather than an inline `if` —
+    /// the same reasoning as `CompanionsCardModel`/`WithMeSectionModel`: a
+    /// visibility rule worth pinning with a test shouldn't only live inside
+    /// a SwiftUI body. Your own trip can always be shared (public or not —
+    /// sharing your own private trip is how you'd publish + share in one
+    /// motion). Someone else's trip can be shared only if it's public;
+    /// `SocialService.share` refuses a non-owner sharing a private trip
+    /// server-side (`TripNotPublic`), so offering the button for that case
+    /// is offering an action that can only fail.
+    static func canOfferShare(isOwn: Bool, isPrivate: Bool) -> Bool {
+        isOwn || !isPrivate
+    }
+
     /// Back + «…» + share over the poster.
     @ViewBuilder
     private func posterChrome(trip: Trip) -> some View {
@@ -165,8 +189,7 @@ struct TripDetailView: View {
             // item — «Удалить» — with editing hidden behind a tap on the title
             // and privacy behind a tap on a chip, so the only discoverable
             // action was the destructive one. On someone else's trip there is
-            // nothing here at all and the button does not appear; sharing has
-            // its own button next to it either way.
+            // nothing here at all and the button does not appear.
             if isOwn {
                 PosterCircleButton(
                     systemImage: "ellipsis",
@@ -178,13 +201,23 @@ struct TripDetailView: View {
                 }
             }
 
-            PosterCircleButton(
-                systemImage: "square.and.arrow.up",
-                accessibilityLabelText: AppStrings.share(lang.language)
-            ) {
-                Task { await openStoryShare(for: trip) }
+            // Sharing your own trip, or someone else's PUBLIC trip, works —
+            // the server mints a link either way. A companion's PRIVATE trip
+            // is the one case it never can: `SocialService.share` refuses
+            // with `TripNotPublic` for any non-owner viewer of a private
+            // trip, so offering the button just to watch it fail silently
+            // (see `openStoryShare`'s `catch { url = nil }`) was worse than
+            // not offering it (Task 5 review finding).
+            if TripDetailView.canOfferShare(isOwn: isOwn, isPrivate: trip.isPrivate) {
+                PosterCircleButton(
+                    systemImage: "square.and.arrow.up",
+                    accessibilityLabelText: AppStrings.share(lang.language)
+                ) {
+                    Task { await openStoryShare(for: trip) }
+                }
+                .disabled(isGeneratingShare)
+                .accessibilityIdentifier("detail_share")
             }
-            .disabled(isGeneratingShare)
         }
         .padding(.top, safeAreaTop + 8)
         .padding(.horizontal, 16)
@@ -500,12 +533,24 @@ struct TripDetailView: View {
             .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .onChange(of: pickedImages) { newImages in
-            for image in newImages {
-                if let photo = mapVM.tripManager.addPhoto(to: tripId, image: image) {
-                    trip?.photos.append(photo)
+            guard !newImages.isEmpty else { return }
+            // Owner path is UNCHANGED — still writes straight to CoreData via
+            // TripManager. A companion has no local TripEntity for this trip
+            // (and must never get one), so that path is impossible for them;
+            // `isOwn` is exactly the flag that already tells the two apart
+            // everywhere else on this screen.
+            if isOwn {
+                for image in newImages {
+                    if let photo = mapVM.tripManager.addPhoto(to: tripId, image: image) {
+                        trip?.photos.append(photo)
+                    }
                 }
+                pickedImages = []
+            } else {
+                let images = newImages
+                pickedImages = []
+                Task { await uploadCompanionPhotos(images) }
             }
-            pickedImages = []
         }
         .fullScreenCover(isPresented: Binding(
             get: { selectedPhotoIndex != nil },
@@ -670,13 +715,11 @@ struct TripDetailView: View {
                 .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
-        .sheet(isPresented: $showCompanionsSheet) {
+        .sheet(isPresented: $showCompanionsPicker) {
             if let t = trip {
-                TripCompanionsSheet(companions: t.companions) { updated in
-                    applyCompanions(updated, to: t)
-                }
-                .environmentObject(lang)
-                .preferredColorScheme(themeManager.preferredColorScheme)
+                CompanionsPickerSheet(tripId: t.id)
+                    .environmentObject(lang)
+                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
         .alert(
@@ -831,6 +874,69 @@ struct TripDetailView: View {
             // Non-fatal: the strip stays hidden rather than the screen failing.
             remotePhotos = []
             photosLoadFailed = true
+        }
+    }
+
+    /// Task 6: a companion's pick goes straight to the server —
+    /// `CompanionPhotoUploadController` never touches `remotePhotos`
+    /// itself, so this function is the ONLY place that can change what the
+    /// strip shows, and it only ever does so by reloading from source of
+    /// truth (never an optimistic local append). `succeededAny` is exactly
+    /// "at least one image landed on the server" — on a wholly-failed pick
+    /// this stays `false`, `loadRemotePhotos()` never runs, and the strip
+    /// is left exactly as it was: no phantom thumbnail, no half-state.
+    ///
+    /// Review fix: the reload that follows a successful upload is its OWN
+    /// network call and can itself fail — previously that meant
+    /// `loadRemotePhotos()`'s own failure path (`remotePhotos = []`) wiped
+    /// out photos that were already on screen before this pick, with no
+    /// message at all. Captures the strip's contents beforehand and
+    /// restores them if the reload comes back failed, so a transient
+    /// second-call blip never blanks anything that was already visible.
+    private func uploadCompanionPhotos(_ images: [UIImage]) async {
+        let succeededAny = await companionPhotoUpload.upload(tripId: tripId, images: images)
+
+        var reloadFailed = false
+        if succeededAny {
+            let photosBeforeReload = remotePhotos
+            await loadRemotePhotos()
+            if photosLoadFailed {
+                // `loadRemotePhotos()` just set `remotePhotos = []` — that's
+                // correct for ITS OWN failure path (nothing has ever loaded
+                // yet), but wrong here: we know good data existed a moment
+                // ago. `resolvedPhotosAfterReload` is the pure, tested rule;
+                // also un-flip `photosLoadFailed` so it doesn't drift out of
+                // sync with `remotePhotos` for any other reader of that flag
+                // on this screen.
+                remotePhotos = CompanionPhotoUploadModel.resolvedPhotosAfterReload(
+                    previous: photosBeforeReload, reloaded: remotePhotos, reloadFailed: true)
+                photosLoadFailed = false
+                reloadFailed = true
+            }
+        }
+
+        if reloadFailed {
+            // The upload itself may have fully succeeded — this toast is
+            // about the SEPARATE refresh call, not the upload, so it must
+            // never be conflated with (or overwritten by) the batch outcome
+            // toast below.
+            toastItem = ToastItem(type: .error, message: AppStrings.companionPhotoReloadFailed(lang.language))
+            return
+        }
+
+        // Degraded/partial are NOT the same as an outright failure — the
+        // photo(s) ARE on the trip, just not all at full quality or not
+        // all of them at all — so each gets its own distinct wording,
+        // never collapsed into a flat "couldn't upload".
+        switch companionPhotoUpload.lastBatchOutcome {
+        case .allFull, nil:
+            break
+        case .allSucceededSomeDegraded:
+            toastItem = ToastItem(type: .info, message: AppStrings.companionPhotoUploadDegraded(lang.language))
+        case .partial(let succeeded, let total):
+            toastItem = ToastItem(type: .info, message: AppStrings.companionPhotoUploadPartial(succeeded, total, lang.language))
+        case .allFailed:
+            toastItem = ToastItem(type: .error, message: AppStrings.companionPhotoUploadFailed(lang.language))
         }
     }
 
@@ -1313,33 +1419,36 @@ struct TripDetailView: View {
 
     // MARK: - Companions («Попутчики»)
 
-    /// Shown on our own trip always — an empty card is the invitation to fill
-    /// it — and on someone else's only when they actually named people.
-    @ViewBuilder
+    /// Server-backed roster (Task 1's `CompanionsStore`). The section owns
+    /// its own header, loading/error states and three-way own/read-only/
+    /// hidden rendering — see `TripCompanionsSection`'s doc comment.
     private func companionsSection(trip: Trip) -> some View {
-        if isOwn || !trip.companions.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                DetailSectionHeader(text: AppStrings.companionsSection(lang.language))
-                TripCompanionsCard(
-                    companions: trip.companions,
-                    isOwn: isOwn,
-                    language: lang.language
-                ) {
-                    Haptics.tap()
-                    showCompanionsSheet = true
-                }
+        TripCompanionsSection(
+            tripId: trip.id,
+            isOwn: isOwn,
+            onInvite: openCompanionsPicker,
+            onOpenProfile: openProfile,
+            onError: { msg in
+                toastItem = ToastItem(type: .error, message: msg)
             }
+        )
+    }
+
+    /// Same navigation the reactor rows and the author pill on this screen
+    /// already use: a shared `pushPath` when we're inside a
+    /// `PreviewNavigator` stack, or the local `selectedReactorAuthor` +
+    /// `TripDetailLocalReactorDestination` fallback otherwise.
+    private func openProfile(_ author: SocialAuthor) {
+        if let pushPath {
+            pushPath.wrappedValue.cappedAppend(.profile(author.id, author))
+        } else {
+            selectedReactorAuthor = author
         }
     }
 
-    private func applyCompanions(_ companions: [TripCompanion], to t: Trip) {
-        mapVM.tripManager.updateCompanions(for: tripId, companions: companions)
-        if let local = viewModel.tripDetail(id: tripId) {
-            trip = local
-        } else {
-            trip?.companions = companions
-        }
-        Haptics.success()
+    /// Task 3: presents the companion candidate picker.
+    private func openCompanionsPicker() {
+        showCompanionsPicker = true
     }
 
     // MARK: - Description («Описание»)
@@ -1919,27 +2028,49 @@ struct TripDetailView: View {
 
     // MARK: - Photos Section
 
+    /// Task 6: whether THIS device — a companion, not the owner — may add a
+    /// photo to this trip. `false` for a stranger, a still-pending or
+    /// declined invite, or while signed out; `true` only once the roster
+    /// carries our own account id with `.accepted`. See
+    /// `CompanionPhotoUploadModel.canAddPhoto`'s own doc comment.
+    private var canAddCompanionPhoto: Bool {
+        CompanionPhotoUploadModel.canAddPhoto(
+            isOwn: isOwn,
+            companions: companionsStore.companionsByTrip[tripId] ?? [],
+            viewerAccountId: TokenStore.shared.accountId
+        )
+    }
+
     @ViewBuilder
     private func photosSection(_ c: AppTheme.Colors) -> some View {
         if !isOwn {
-            // Someone else's photos: served from R2, and there is nothing here
-            // to add to or delete.
-            if !remotePhotos.isEmpty {
+            // Someone else's photos: served from R2. Nothing here to delete
+            // even for a companion — only Task 6's add control, gated by
+            // `canAddCompanionPhoto`.
+            if !remotePhotos.isEmpty || canAddCompanionPhoto {
                 VStack(alignment: .leading, spacing: 10) {
-                    DetailSectionHeader(
-                        text: "\(AppStrings.photos(lang.language)) · \(remotePhotos.count)"
-                    )
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(Array(remotePhotos.enumerated()), id: \.element.id) { index, photo in
-                                RemoteThumbnailView(
-                                    urlString: photo.thumbnailUrl,
-                                    fallbackURLString: photo.originalUrl
-                                )
-                                .frame(width: 74, height: 74)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .contentShape(Rectangle())
-                                .onTapGesture { selectedPhotoIndex = index }
+                    HStack {
+                        DetailSectionHeader(text: remotePhotos.isEmpty
+                            ? AppStrings.photos(lang.language)
+                            : "\(AppStrings.photos(lang.language)) · \(remotePhotos.count)")
+                        if canAddCompanionPhoto {
+                            Spacer()
+                            companionAddPhotoButton
+                        }
+                    }
+                    if !remotePhotos.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(Array(remotePhotos.enumerated()), id: \.element.id) { index, photo in
+                                    RemoteThumbnailView(
+                                        urlString: photo.thumbnailUrl,
+                                        fallbackURLString: photo.originalUrl
+                                    )
+                                    .frame(width: 74, height: 74)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { selectedPhotoIndex = index }
+                                }
                             }
                         }
                     }
@@ -1948,6 +2079,30 @@ struct TripDetailView: View {
         } else {
             ownPhotosSection(c)
         }
+    }
+
+    /// Task 6: the companion's add-photo control — same glyph/identifier as
+    /// the owner's (`ownPhotosSection`'s), swapped for a spinner and
+    /// disabled while `companionPhotoUpload.isUploading`, so the upload's
+    /// progress is visible right where the tap happened.
+    private var companionAddPhotoButton: some View {
+        Button {
+            Haptics.tap()
+            showPhotoPicker = true
+        } label: {
+            if companionPhotoUpload.isUploading {
+                ProgressView()
+                    .scaleEffect(0.8)
+                    .frame(width: 20, height: 20)
+            } else {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(AppTheme.accent)
+            }
+        }
+        .disabled(companionPhotoUpload.isUploading)
+        .accessibilityIdentifier("detail_add_photo")
+        .accessibilityLabel(AppStrings.addPhotos(lang.language))
     }
 
     /// How many tiles the strip shows before the overflow badge takes over.

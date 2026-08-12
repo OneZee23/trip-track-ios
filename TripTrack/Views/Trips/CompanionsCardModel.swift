@@ -1,0 +1,112 @@
+import Foundation
+
+/// What the trip-detail companions card should show, pulled out of the view
+/// body as a pure function so the own/stranger, empty/waiting/declined AND
+/// loading/error branching is unit-testable without spinning up SwiftUI
+/// (`TripTrackTests/CompanionsCardTests.swift`).
+///
+/// The server already filters what a non-owner's `/companions/list` call
+/// returns — pending and declined rows are only ever sent to the trip owner
+/// (see `CompanionItem`'s doc comment in `CompanionsDTOs.swift`). `decide`
+/// re-applies the same filter defensively on the client: a roster cached
+/// from an earlier owner view, or a future relaxation of the server filter,
+/// must never leak a pending/declined row onto a read-only card.
+enum CompanionsCardModel {
+    /// One row the card draws, plus the one thing that varies per viewer:
+    /// whether it carries the "ждёт" / "pending" note.
+    struct Row: Identifiable, Equatable {
+        let companion: CompanionItem
+        var id: UUID { companion.accountId }
+        var status: CompanionStatus { companion.status }
+        /// The ONLY note a row ever carries — an accepted or declined
+        /// companion shows nothing next to their name.
+        var isWaiting: Bool { status == .pending }
+    }
+
+    /// What, if anything, to say ABOVE/ALONGSIDE the rows about the state of
+    /// the request itself — independent of which rows are showing. `.error`
+    /// is deliberately reachable with a non-empty `rows`: a failed refresh
+    /// must surface, but it must not blank a roster that was already on
+    /// screen (see `decide`'s `banner` helper).
+    enum Banner: Equatable {
+        case none
+        case loading
+        case error
+    }
+
+    enum Decision: Equatable {
+        /// Own trip — ALWAYS drawn. Empty `rows` with `banner == .none` is
+        /// the invitation to invite someone; empty with `.loading`/`.error`
+        /// means the invitation can't be trusted yet. Carries every status
+        /// the server sent (pending/accepted/declined): declined rows are
+        /// only ever sent to the owner in the first place, so nothing
+        /// further needs filtering here.
+        case own(rows: [Row], banner: Banner)
+        /// Someone else's trip with at least one row to draw: either a real
+        /// accepted companion, or (when `rows` is empty) an `.error` banner
+        /// on its own — see `decide`. Whether the viewer is a fellow
+        /// companion or a stranger makes no difference to what's drawn:
+        /// the roster item for a companion viewer WOULD carry their own
+        /// `TokenStore.shared.accountId` (the same id `CompanionsStore
+        /// .respond` compares against) among the accepted rows, so the two
+        /// cases are technically distinguishable — nothing in the required
+        /// behaviour currently depends on making that distinction, so both
+        /// render through this one case.
+        case readOnly(rows: [Row], banner: Banner)
+        /// Someone else's trip with nothing to show AND no reason to
+        /// believe there's anything to show yet (never loaded, still
+        /// loading, or loaded and genuinely empty). The card (and its
+        /// section header) are not drawn at all. A CONFIRMED failure is
+        /// never represented here — see `decide`: it always surfaces as
+        /// `.readOnly(rows: [], banner: .error)` instead, so a network
+        /// blip can never be mistaken for "this trip has no companions".
+        case hidden
+    }
+
+    static func decide(
+        companions: [CompanionItem], isOwn: Bool, loadState: CompanionsLoadState
+    ) -> Decision {
+        if isOwn {
+            let rows = companions.map(Row.init)
+            return .own(rows: rows, banner: banner(for: loadState, hasRows: !rows.isEmpty))
+        }
+        // Defense in depth, not trust: only ever show accepted companions
+        // to a non-owner, even if a pending/declined row somehow made it
+        // into the cache.
+        let rows = companions.filter { $0.status == .accepted }.map(Row.init)
+        guard rows.isEmpty else {
+            return .readOnly(rows: rows, banner: banner(for: loadState, hasRows: true))
+        }
+        // Nothing to show — but "nothing YET" (never asked / still asking /
+        // loaded and truly empty) must render as `.hidden`, exactly like
+        // before, while a CONFIRMED failure must not: that's the bug this
+        // whole `loadState` threading exists to close. A trip that really
+        // does have companions must never look permanently empty just
+        // because one request blipped.
+        return loadState == .failed ? .readOnly(rows: [], banner: .error) : .hidden
+    }
+
+    /// Shared by both `own` and `readOnly`: what to show about the request
+    /// itself, given whether there are already rows on screen to protect.
+    ///  - `.idle`/`.loading` + no rows yet → `.loading` (spinner; nothing
+    ///    confirmed either way).
+    ///  - `.idle`/`.loading` + rows already cached → `.none`. A background
+    ///    refresh must not blank, or even visibly flag, a roster that's
+    ///    already showing — "loading with a cached roster keeps showing the
+    ///    roster" means exactly that, not "roster plus a spinner".
+    ///  - `.loaded` → `.none` always; the rows (or lack of them) already
+    ///    speak for themselves.
+    ///  - `.failed` → `.error` always, WITH or WITHOUT rows — a failure is
+    ///    always worth saying, it just must not evict rows that are still
+    ///    good.
+    private static func banner(for loadState: CompanionsLoadState, hasRows: Bool) -> Banner {
+        switch loadState {
+        case .idle, .loading:
+            return hasRows ? .none : .loading
+        case .loaded:
+            return .none
+        case .failed:
+            return .error
+        }
+    }
+}
