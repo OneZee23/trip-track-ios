@@ -298,7 +298,15 @@ struct FeedView: View {
         // Статистика). The second segment is now «Подписки» per Figma.
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTrip)) { notif in
             if let link = notif.object as? TripDeepLink {
-                authorPath = [.trip(link.tripId, focus: link.focus)]
+                if let social = link.social {
+                    // Someone else's trip (e.g. a companion invite the
+                    // recipient just accepted) — no local row to key off,
+                    // so route through the feed-item path exactly like a
+                    // tapped social card does.
+                    authorPath = [.socialTrip(social, focus: link.focus)]
+                } else {
+                    authorPath = [.trip(link.tripId, focus: link.focus)]
+                }
             } else if let tripId = notif.object as? UUID {
                 authorPath = [.trip(tripId)]
             }

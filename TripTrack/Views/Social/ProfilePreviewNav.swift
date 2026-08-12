@@ -29,6 +29,14 @@ enum TripFocus: Hashable {
 struct TripDeepLink {
     let tripId: UUID
     var focus: TripFocus = .top
+    /// Present when the sender already has the trip as someone else's feed
+    /// item (not a local recording) — e.g. the notifications inbox, after
+    /// a companion invite is accepted, has no local copy of a trip it
+    /// doesn't own. `FeedView`'s `.navigateToTrip` handler pushes
+    /// `.socialTrip(social, focus:)` instead of the bare-id `.trip(id,
+    /// focus:)` when this is set, so `TripDetailView` renders through
+    /// `Trip(social:)` rather than failing to find a local row.
+    var social: SocialFeedTrip? = nil
 }
 
 enum ProfilePreviewDest: Hashable {

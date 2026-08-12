@@ -6,6 +6,11 @@ import SwiftUI
 /// shared `pushPath` pattern the social feed uses.
 struct NotificationsInboxView: View {
     @ObservedObject private var store = NotificationsInboxStore.shared
+    /// Backs the `companion_invite` decision rows: `respondedStatus(for:)`
+    /// (session-persistent, survives this sheet being dismissed and
+    /// reopened) and `myTrips` (for opening a just-accepted invite's trip
+    /// — see `openAcceptedInviteTrip`).
+    @ObservedObject private var companionsStore = CompanionsStore.shared
     @EnvironmentObject private var lang: LanguageManager
     /// Injected by both presenters (FeedView, ProfileSettingsSheet) — needed
     /// to re-apply the in-app theme override on the nested prefs sheet.
@@ -28,6 +33,20 @@ struct NotificationsInboxView: View {
     /// server's AlreadyFollowing.
 
     @State private var followedBack: Set<UUID> = []
+    /// `CompanionsStore.invitePreview(tripId:)` result per notification id.
+    /// Cached HERE, not in the store — `invitePreview` is deliberately
+    /// stateless (see its doc comment: no cached state, the caller renders
+    /// its own failure state) — so a row scrolled off-screen and back
+    /// within this sheet's lifetime doesn't refetch. Reopening the sheet
+    /// starts fresh, which is fine: a still-pending invite SHOULD refetch
+    /// for current data; it's only re-fetching mid-scroll this guards
+    /// against.
+    @State private var invitePreviews: [UUID: NotificationInviteRowModel.PreviewState] = [:]
+    /// A just-accepted invite's trip, looked up from `companionsStore
+    /// .myTrips` lazily on tap (see `openAcceptedInviteTrip`) and cached
+    /// so a second tap doesn't re-fetch.
+    @State private var acceptedInviteTrips: [UUID: SocialFeedTrip] = [:]
+    @State private var toastItem: ToastItem?
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -90,6 +109,7 @@ struct NotificationsInboxView: View {
         // Peek-and-close: report whatever was on screen before the debounce
         // had a chance to fire.
         .onDisappear { Task { await store.flushSeen() } }
+        .toast(item: $toastItem)
     }
 
     // MARK: - Header (Figma 117:1841)
@@ -207,6 +227,10 @@ struct NotificationsInboxView: View {
         case .reactions: return store.items.filter { $0.typedKind == .reaction }
         case .follows: return store.items.filter { $0.typedKind == .follow }
         case .comments: return store.items.filter { $0.typedKind == .comment }
+        case .companions:
+            return store.items.filter {
+                $0.typedKind == .companionInvite || $0.typedKind == .companionAccepted
+            }
         }
     }
 
@@ -321,8 +345,21 @@ struct NotificationsInboxView: View {
             .padding(.leading, 2)
     }
 
+    /// `companion_invite` rows not yet answered this session render as a
+    /// decision card (`decisionRow`) instead of the shared tap-to-open
+    /// row — see `NotificationInviteRowModel.presentation`.
     @ViewBuilder
     private func row(_ item: NotificationItem, c: AppTheme.Colors, isRu: Bool) -> some View {
+        switch rowPresentation(for: item) {
+        case .decision(let preview):
+            decisionRow(item, preview: preview, c: c, isRu: isRu)
+        case .info:
+            infoRow(item, c: c, isRu: isRu)
+        }
+    }
+
+    @ViewBuilder
+    private func infoRow(_ item: NotificationItem, c: AppTheme.Colors, isRu: Bool) -> some View {
         Button {
             Haptics.tap()
             handleTap(item)
@@ -387,6 +424,250 @@ struct NotificationsInboxView: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Companion invite decision row
+
+    /// A pending `companion_invite`: actor + trip shape (date/region/
+    /// distance/duration) fetched via `invitePreview`, and Accept/Decline.
+    /// NOT wrapped in a single tap-to-navigate `Button` like `infoRow` —
+    /// there is nowhere to navigate to yet, the whole point of this state
+    /// is that the invitee doesn't have trip access until they answer.
+    @ViewBuilder
+    private func decisionRow(
+        _ item: NotificationItem, preview: NotificationInviteRowModel.PreviewState,
+        c: AppTheme.Colors, isRu: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 11) {
+                avatar(item, c: c)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(actorName(item, isRu: isRu))
+                        .font(.inter(14, weight: .bold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    Text(AppStrings.companionInviteAction(lang.language))
+                        .font(.inter(13))
+                        .foregroundStyle(c.textSecondary)
+                }
+                Spacer(minLength: 0)
+            }
+
+            decisionPreviewContent(item, preview: preview, c: c)
+
+            HStack(spacing: 8) {
+                Button {
+                    Haptics.tap()
+                    respond(item, accept: false)
+                } label: {
+                    Text(AppStrings.companionDecline(lang.language))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(c.cardAlt, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("companion_invite_decline")
+
+                Button {
+                    Haptics.tap()
+                    respond(item, accept: true)
+                } label: {
+                    Text(AppStrings.companionAccept(lang.language))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(AppTheme.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("companion_invite_accept")
+            }
+        }
+        .padding(11)
+        .surfaceCard(cornerRadius: 16)
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(item.isRead ? Color.clear : AppTheme.accent)
+                .frame(width: 3.5)
+                .padding(.vertical, 14)
+        }
+        .task(id: item.id) { await ensurePreviewIfNeeded(item) }
+        .accessibilityIdentifier("companion_invite_row")
+    }
+
+    @ViewBuilder
+    private func decisionPreviewContent(
+        _ item: NotificationItem, preview: NotificationInviteRowModel.PreviewState, c: AppTheme.Colors
+    ) -> some View {
+        switch preview {
+        case .loading:
+            HStack { Spacer(); ProgressView(); Spacer() }
+                .padding(.vertical, 4)
+        case .failed:
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppTheme.red)
+                Text(AppStrings.companionInvitePreviewFailed(lang.language))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(c.textSecondary)
+                Spacer(minLength: 4)
+                Button {
+                    Haptics.tap()
+                    invitePreviews[item.id] = nil
+                    Task { await ensurePreviewIfNeeded(item) }
+                } label: {
+                    Text(AppStrings.retry(lang.language))
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+                }
+                .buttonStyle(.plain)
+            }
+        case .loaded(let loadedPreview):
+            let line = NotificationInviteRowModel.decisionLine(
+                item: item, preview: loadedPreview, lang: lang.language)
+            Text(decisionLineText(line))
+                .font(.system(size: 12.5))
+                .foregroundStyle(c.textSecondary)
+        }
+    }
+
+    /// Joins a `DecisionLine`'s present parts with the same "· " separator
+    /// `SocialFeedCardView.dateRegionText` uses elsewhere in the app.
+    private func decisionLineText(_ line: NotificationInviteRowModel.DecisionLine) -> String {
+        var parts = [line.dateText]
+        if let region = line.regionText { parts.append(region) }
+        parts.append(line.distanceText)
+        if let duration = line.durationText { parts.append(duration) }
+        return parts.joined(separator: " · ")
+    }
+
+    // MARK: - Companion invite state + networking
+
+    private func respondedStatus(for item: NotificationItem) -> CompanionStatus? {
+        guard let tripId = item.tripId else { return nil }
+        return companionsStore.respondedStatus(for: tripId)
+    }
+
+    private func localResponse(for item: NotificationItem) -> NotificationInviteRowModel.LocalResponse? {
+        switch respondedStatus(for: item) {
+        case .accepted: return .accepted
+        case .declined: return .declined
+        case .pending, nil: return nil
+        }
+    }
+
+    private func rowPresentation(for item: NotificationItem) -> NotificationInviteRowModel.Presentation {
+        NotificationInviteRowModel.presentation(
+            for: item, localResponse: localResponse(for: item),
+            preview: invitePreviews[item.id] ?? .loading)
+    }
+
+    /// Fetches the invite preview for a still-pending decision row exactly
+    /// once — guarded on both the local response (don't bother once
+    /// answered) and the cache (don't bother if a fetch already
+    /// resolved/is resolving for this row). Called from `decisionRow`'s
+    /// `.task(id:)`, which SwiftUI may re-invoke if the row is recycled by
+    /// the LazyVStack while scrolling; the guard is what actually prevents
+    /// the repeat network call, not the `.task` lifecycle.
+    private func ensurePreviewIfNeeded(_ item: NotificationItem) async {
+        guard item.kind == NotificationKind.companionInvite.rawValue,
+              localResponse(for: item) == nil,
+              invitePreviews[item.id] == nil,
+              let tripId = item.tripId else { return }
+        invitePreviews[item.id] = .loading
+        do {
+            let preview = try await companionsStore.invitePreview(tripId: tripId)
+            invitePreviews[item.id] = .loaded(preview)
+        } catch {
+            invitePreviews[item.id] = .failed
+        }
+    }
+
+    /// Accept/decline, optimistic — `CompanionsStore.respond` already
+    /// rolls its own state back and rethrows on failure; this just turns
+    /// that failure into a visible toast (the row itself reverts on its
+    /// own since `rowPresentation` re-derives from the now-rolled-back
+    /// store state).
+    private func respond(_ item: NotificationItem, accept: Bool) {
+        guard let tripId = item.tripId else { return }
+        Haptics.action()
+        Task {
+            do {
+                try await companionsStore.respond(tripId: tripId, accept: accept)
+            } catch {
+                toastItem = ToastItem(
+                    type: .error, message: AppStrings.companionRespondFailed(lang.language))
+            }
+        }
+    }
+
+    /// Opens the trip for a `companion_invite` already accepted (this
+    /// session or a prior one — `CompanionsStore.respondedTripIds` is now
+    /// persisted). There is currently no server endpoint to fetch an
+    /// arbitrary non-owned trip by id — only listings (`/social/feed`,
+    /// `/companions/my-trips`) — so this looks the trip up in
+    /// `companionsStore.myTrips`, paging forward with the store's existing
+    /// `loadMyTrips(reset: false)` continuation (capped at
+    /// `Self.maxMyTripsPagesForTripLookup` pages total) if it isn't on the
+    /// first page. `myTrips` orders by trip start date descending, so this
+    /// only runs out before finding the trip when it's older than
+    /// `maxMyTripsPagesForTripLookup * 20` other companion trips — the cap
+    /// keeps the request count bounded on a single user-initiated tap while
+    /// making that gap practically unreachable. A genuinely-exhausted
+    /// search (or `hasMoreMyTrips` running out first) falls back to an
+    /// error toast instead of a broken detail screen. A proper single-trip
+    /// fetch endpoint would close this gap entirely but is a backend change
+    /// out of this task's scope — recorded as a follow-up.
+    private func openAcceptedInviteTrip(_ item: NotificationItem) {
+        guard let tripId = item.tripId else { return }
+        if let cached = acceptedInviteTrips[tripId] {
+            navigateToTrip(tripId: tripId, social: cached)
+            return
+        }
+        Task {
+            if let found = companionsStore.myTrips.first(where: { $0.id == tripId }) {
+                acceptedInviteTrips[tripId] = found
+                navigateToTrip(tripId: tripId, social: found)
+                return
+            }
+            await companionsStore.loadMyTrips(reset: true)
+            var pagesLoaded = 1
+            while companionsStore.myTrips.first(where: { $0.id == tripId }) == nil,
+                  companionsStore.hasMoreMyTrips,
+                  pagesLoaded < Self.maxMyTripsPagesForTripLookup {
+                await companionsStore.loadMyTrips(reset: false)
+                pagesLoaded += 1
+            }
+            if let found = companionsStore.myTrips.first(where: { $0.id == tripId }) {
+                acceptedInviteTrips[tripId] = found
+                navigateToTrip(tripId: tripId, social: found)
+            } else {
+                toastItem = ToastItem(
+                    type: .error, message: AppStrings.companionTripUnavailable(lang.language))
+            }
+        }
+    }
+
+    /// Total `loadMyTrips` calls (the initial `reset: true` page plus any
+    /// `reset: false` continuations) `openAcceptedInviteTrip` will make
+    /// before giving up — see its doc comment.
+    private static let maxMyTripsPagesForTripLookup = 5
+
+    /// Same dismiss-then-post handoff `handleTap`'s reaction/comment
+    /// branch already uses — `social` lets `FeedView`'s `.navigateToTrip`
+    /// handler render a non-owned trip (see `TripDeepLink.social`'s doc
+    /// comment). `nil` reproduces the pre-existing own-trip behavior
+    /// exactly.
+    private func navigateToTrip(tripId: UUID, social: SocialFeedTrip?) {
+        dismiss()
+        let link = TripDeepLink(tripId: tripId, focus: .top, social: social)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            NotificationCenter.default.post(name: .openTripDetail, object: link)
+        }
+    }
+
     private func avatar(_ item: NotificationItem, c: AppTheme.Colors) -> some View {
         // Actor rows: warm cardAlt disc. System rows (no actor): tinted
         // accent disc + the payload emoji. The kind rides as a badge on the
@@ -427,6 +708,11 @@ struct NotificationsInboxView: View {
             badgeCircle("person.fill.badge.plus", tint: AppTheme.accent, c: c, size: size)
         case .comment:
             badgeCircle("bubble.right.fill", tint: AppTheme.accent, c: c, size: size)
+        case .companionInvite, .companionAccepted:
+            // Reached here only for the INFO state — an already-answered
+            // invite or the owner's "someone joined" row. The pending
+            // decision card (`decisionRow`) doesn't go through this badge.
+            badgeCircle("person.2.fill", tint: AppTheme.accent, c: c, size: size)
         case .none:
             EmptyView()
         }
@@ -463,6 +749,15 @@ struct NotificationsInboxView: View {
             return AppStrings.activityFollowedYou(lang.language)
         case .comment:
             return AppStrings.activityCommented(lang.language, text: item.commentText, trip: trip)
+        case .companionAccepted:
+            return AppStrings.companionAcceptedAction(lang.language)
+        case .companionInvite:
+            // Reached only once answered (the decision card never calls
+            // this) — say which way it went instead of re-issuing the
+            // invite verb.
+            return respondedStatus(for: item) == .declined
+                ? AppStrings.companionInviteDeclinedNote(lang.language)
+                : AppStrings.companionInviteAcceptedNote(lang.language)
         case .none:
             return trip
         }
@@ -479,9 +774,12 @@ struct NotificationsInboxView: View {
         //   follow   → push the follower's profile (so the user can
         //              decide whether to follow back).
         switch item.typedKind {
-        case .reaction, .comment:
-            // Both land on the user's own trip — a comment's payload lives
-            // in the trip's comment thread, not on the actor's profile.
+        case .reaction, .comment, .companionAccepted:
+            // All three land on the user's OWN trip: a comment's payload
+            // lives in the trip's comment thread, and `companion_accepted`
+            // only ever notifies the trip's owner (someone accepted onto
+            // a trip they own) — see `dispatchAcceptedSideEffects` on the
+            // backend.
             if let tripId = item.tripId {
                 dismiss()
                 // A comment row lands on ITS comment (highlighted); a
@@ -501,6 +799,16 @@ struct NotificationsInboxView: View {
                 }
             } else if let actor = item.actor {
                 path.cappedAppend(.profile(actor.id, actor))
+            }
+        case .companionInvite:
+            // Reached only for the INFO state (the decision card has its
+            // own Accept/Decline buttons, not this tap handler). An
+            // accepted invite opens the trip — see `openAcceptedInviteTrip`
+            // for why that needs a `myTrips` lookup rather than the plain
+            // own-trip path above (this recipient doesn't own the trip). A
+            // declined invite has nothing to open.
+            if respondedStatus(for: item) == .accepted {
+                openAcceptedInviteTrip(item)
             }
         case .follow, .none:
             guard let actor = item.actor else { return }
@@ -537,6 +845,14 @@ private enum InboxChipFilter: String, CaseIterable, Identifiable {
     case reactions
     case follows
     case comments
+    /// `companion_invite` + `companion_accepted`. A dedicated chip rather
+    /// than folding them into an existing one — companions is its own
+    /// growing feature (roster, picker, "Со мной" trips), not a variant of
+    /// reactions/follows/comments, and it earns a chip the same way
+    /// Comments did when it shipped. Every row still shows under «Все»
+    /// regardless, so this chip is a discoverability win, not the only
+    /// path to these rows.
+    case companions
 
     var id: String { rawValue }
 
@@ -546,6 +862,7 @@ private enum InboxChipFilter: String, CaseIterable, Identifiable {
         case .reactions: return AppStrings.chipReactions(lang)
         case .follows: return AppStrings.chipFollows(lang)
         case .comments: return AppStrings.chipComments(lang)
+        case .companions: return AppStrings.chipCompanions(lang)
         }
     }
 }
