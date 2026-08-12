@@ -1,17 +1,23 @@
 import SwiftUI
 
-/// The full discussion, opened from «Все ›» on the trip detail.
+/// The whole discussion, opened from the teaser on the trip detail.
 ///
 /// Same `TripCommentsSection` the detail embeds, just not in preview mode:
-/// one implementation of a comment row, one composer, one delete flow. What
-/// changes is the depth — here every comment is loaded and paginated, and
-/// replying is available, which is why the preview can stay three clean
-/// rows (canon 549:129).
+/// one implementation of a row, one composer, one delete flow. What changes is
+/// the depth — here everything is loaded and paginated, and replying lives.
+///
+/// A sheet rather than a pushed screen, deliberately: the trip stays behind it,
+/// and getting in and out costs a swipe.
 struct TripCommentsScreen: View {
     let tripId: UUID
     let isTripOwner: Bool
     var initialCount: Int = 0
+    /// Opened by tapping the write row rather than the pill — come up with the
+    /// keyboard, at .large, ready to type.
+    var startFocused: Bool = false
     var onError: (String) -> Void
+
+    @State private var detent: PresentationDetent = .medium
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -45,6 +51,7 @@ struct TripCommentsScreen: View {
                     tripId: tripId,
                     isTripOwner: isTripOwner,
                     initialCount: initialCount,
+                    startFocused: startFocused,
                     onError: onError,
                     isPreview: false
                 )
@@ -55,6 +62,11 @@ struct TripCommentsScreen: View {
         }
         .background(c.bg)
         .dismissesKeyboardOnTapAnywhere()
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
+        .onAppear {
+            // Typing needs the room; browsing does not.
+            if startFocused { detent = .large }
+        }
     }
 }

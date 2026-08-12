@@ -13,7 +13,34 @@ struct TripDetailView: View {
     /// Where to land: top (default), the discussion, or one specific
     /// comment that also gets highlighted on arrival.
     var focus: TripFocus = .top
+    /// The feed's copy, when we arrived from there. Used for a trip that is
+    /// NOT in our own database — someone else's — which this screen renders
+    /// through `Trip(social:)`. A trip of our own ignores it and reads the
+    /// local record, which has the full track the server does not send.
+    var social: SocialFeedTrip?
     @State private var trip: Trip?
+    /// Photos of someone else's trip live on the server, not in Documents.
+    @State private var remotePhotos: [SocialTripPhoto] = []
+    /// Ours to edit, delete, publish and photograph. Decided at load: a trip
+    /// in our own database is ours whatever the token says, which is what
+    /// keeps a cold start from opening our own trip read-only.
+    @State private var isOwn = true
+    /// Nothing came back from the server for someone else's trip. Neither flag
+    /// means much alone — see `showLoadError`.
+    /// These coordinates are a simplified preview, not a recorded track — see
+    /// `buildCaches`.
+    @State private var isPreviewRoute = false
+    @State private var reactionsLoadFailed = false
+    @State private var photosLoadFailed = false
+    /// The reaction WE left on someone else's trip, EXACTLY as the server
+    /// spells it. Legacy prod reactions (❤️ 🏎️ 🗺️) display as the icon that
+    /// replaced them, but un-reacting has to send back the emoji the server
+    /// actually stored — canonicalising it first made "take mine back" read as
+    /// "leave a different one".
+    @State private var myReaction: String?
+    @State private var showReactionPicker = false
+    /// The fullscreen cinema replay (canon 117:533).
+    @State private var showReplay = false
     @State private var showPhotoPicker = false
     @State private var pickedImages: [UIImage] = []
     @State private var selectedPhotoIndex: Int?
@@ -21,11 +48,6 @@ struct TripDetailView: View {
     @State private var badgeLastEarnedDates: [String: Date] = [:]
     @State private var photoToDelete: TripPhoto?
     @State private var toastItem: ToastItem?
-    @State private var isEditingTitle = false
-    @State private var editedTitle: String = ""
-    @State private var originalTitle: String = ""
-    @State private var showNotesEditor = false
-    @State private var editedNotes: String = ""
     @State private var cachedCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSpeeds: [Double] = []
     /// Per-trackpoint timestamps for time-driven route playback (the
@@ -53,6 +75,9 @@ struct TripDetailView: View {
     @State private var showDeleteConfirm = false
     /// «…» popover on the poster header.
     @State private var showTripActions = false
+    /// «Редактировать поездку» — name, description, car, access in one sheet.
+    @State private var showEditSheet = false
+    @State private var showCompanionsSheet = false
     /// Publish confirmation sheet (Figma 533:119) — replaces the old plain
     /// alert. The user consciously acknowledges the visibility change and
     /// can attach an optional description in the same step.
@@ -67,7 +92,6 @@ struct TripDetailView: View {
     @State private var reactionEntries: [SocialReactionEntry] = []
     @State private var selectedReactorAuthor: SocialAuthor?
     @State private var isMapFullscreen = false
-    @State private var showVehiclePicker = false
     /// Drives the «Прожить заново» CTA on the poster. Owned via
     /// `@StateObject` so the timer survives view re-renders and is
     /// stopped cleanly on `.onDisappear`. Since the fullscreen replay
@@ -77,11 +101,13 @@ struct TripDetailView: View {
     /// Presents the fullscreen cinema replay (Figma 117:533). Timestamped
     /// own trips only; preview-only trips fall back to the inline crawl.
     @ObservedObject private var auth = AuthService.shared
+    /// Reacting goes through the same store the feed uses, so a reaction left
+    /// here shows on the card you came from.
+    @ObservedObject private var socialFeed = SocialFeedStore.shared
     /// Sign-in prompt for the signed-out edge state (e.g. «keep public and
     /// sign out» leaves own public trips visible): the comments composer
     /// routes guests here instead of letting them post into USER_NOT_AUTH.
     @State private var signInPrompt: SignInPromptSheet.Action?
-    @FocusState private var isTitleFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var lang: LanguageManager
@@ -135,25 +161,21 @@ struct TripDetailView: View {
             // animation put the source snapshot back against stale
             // geometry and the «…» visibly slid away across the
             // screen.
-            PosterCircleButton(
-                systemImage: "ellipsis",
-                accessibilityLabelText: AppStrings.moreActions(lang.language)
-            ) { showTripActions = true }
-            .popover(isPresented: $showTripActions, arrowEdge: .top) {
-                ActionPopoverList(items: [
-                    .init(
-                        title: AppStrings.delete(lang.language),
-                        systemImage: "trash",
-                        isDestructive: true
-                    ) {
-                        showTripActions = false
-                        Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: 260_000_000)
-                            Haptics.action()
-                            showDeleteConfirm = true
-                        }
-                    },
-                ])
+            // Everything you can do to a trip you own. It used to hold one
+            // item — «Удалить» — with editing hidden behind a tap on the title
+            // and privacy behind a tap on a chip, so the only discoverable
+            // action was the destructive one. On someone else's trip there is
+            // nothing here at all and the button does not appear; sharing has
+            // its own button next to it either way.
+            if isOwn {
+                PosterCircleButton(
+                    systemImage: "ellipsis",
+                    accessibilityLabelText: AppStrings.moreActions(lang.language)
+                ) { showTripActions = true }
+                .accessibilityIdentifier("detail_actions")
+                .popover(isPresented: $showTripActions, arrowEdge: .top) {
+                    ActionPopoverList(items: ownerActions(trip: trip))
+                }
             }
 
             PosterCircleButton(
@@ -168,18 +190,190 @@ struct TripDetailView: View {
         .padding(.horizontal, 16)
     }
 
+    /// Whose trip this is — shown only on someone else's, where the answer is
+    /// not obvious and is the first thing you want to know. Tapping it opens
+    /// their profile, the same as tapping the author on a feed card.
+    @ViewBuilder
+    private var authorPill: some View {
+        if let author = social?.author, !isOwn {
+            Button {
+                Haptics.tap()
+                if let pushPath {
+                    pushPath.wrappedValue.cappedAppend(.profile(author.id, author))
+                } else {
+                    selectedReactorAuthor = author
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color(red: 0xF4/255, green: 0xF2/255, blue: 0xEE/255))
+                        .frame(width: 28, height: 28)
+                        .overlay { Text(author.avatarEmoji ?? "🚗").font(.system(size: 16)) }
+                    Text(author.displayName ?? (lang.language == .ru ? "Без имени" : "No name"))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    // App-wide LVL convention — uppercase in both languages.
+                    Text("LVL \(author.profileLevel)")
+                        .font(.custom("PressStart2P-Regular", size: 7))
+                        .foregroundStyle(Color(red: 0xD9/255, green: 0xDB/255, blue: 0xE5/255).opacity(0.7))
+                }
+                .padding(.leading, 5)
+                .padding(.trailing, 12)
+                .padding(.vertical, 5)
+                .background(.black.opacity(0.42), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("detail_author_pill")
+        }
+    }
+
+    /// Edit · publish/hide · delete, in that order: the two reversible ones
+    /// first, the irreversible one last and in red.
+    ///
+    /// The popover has to be dismissed before anything is presented from it —
+    /// UIKit drops a sheet requested while a popover is still on screen — hence
+    /// the short sleep each item shares.
+    private func ownerActions(trip: Trip) -> [ActionPopoverList.Item] {
+        func present(_ work: @escaping @MainActor () -> Void) {
+            showTripActions = false
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 260_000_000)
+                work()
+            }
+        }
+        return [
+            .init(title: AppStrings.edit(lang.language), systemImage: "pencil") {
+                present { showEditSheet = true }
+            },
+            .init(
+                title: trip.isPrivate
+                    ? AppStrings.publishAction(lang.language)
+                    : AppStrings.makePrivateAction(lang.language),
+                systemImage: trip.isPrivate ? "globe" : "lock"
+            ) {
+                present {
+                    Haptics.selection()
+                    // Publishing puts the trip on a server that has no idea who
+                    // we are until we sign in. Offering it to a signed-out
+                    // owner produced a confirmation, a spinner and a failure.
+                    if trip.isPrivate { requestPublish() } else { unpublishConfirm = true }
+                }
+            },
+            // Last in the list, and the only destructive entry. It lived as a
+            // red button at the foot of the screen for a while; a screen that
+            // ENDS on «delete» reads as if that were the conclusion of looking
+            // back at a trip.
+            .init(
+                title: AppStrings.deleteTrip(lang.language),
+                systemImage: "trash",
+                isDestructive: true
+            ) {
+                present { showDeleteConfirm = true }
+            },
+        ]
+    }
+
+    /// Someone else's trip whose data never arrived: no route to draw, and
+    /// both server calls failed. Our own trips are never in this state — they
+    /// come from our own database, and a missing polyline there just means an
+    /// old trip.
+    private var showLoadError: Bool {
+        !isOwn && trip?.previewPolyline == nil && reactionsLoadFailed && photosLoadFailed
+    }
+
+    /// «Не удалось загрузить поездку» (canon 519:158). Replaces the whole
+    /// screen: a poster with no route, empty stats and no photos is not a trip,
+    /// it is a failure pretending to be one.
+    private func loadErrorState(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                PosterCircleButton(
+                    systemImage: "chevron.left",
+                    accessibilityLabelText: AppStrings.back(lang.language)
+                ) { dismiss() }
+                Spacer()
+                Text(AppStrings.tripTitle(lang.language))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(c.text)
+                Spacer()
+                // Balances the chevron so the title sits centred.
+                Color.clear.frame(width: 36, height: 36)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, safeAreaTop + 8)
+
+            Spacer()
+
+            Circle()
+                .strokeBorder(c.cardAlt, lineWidth: 10)
+                .frame(width: 108, height: 108)
+                .padding(.bottom, 26)
+
+            Text(AppStrings.tripLoadFailed(lang.language))
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+
+            Text(AppStrings.tripLoadFailedBody(lang.language))
+                .font(.system(size: 14))
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+                .padding(.top, 8)
+
+            Button {
+                Haptics.tap()
+                Task {
+                    reactionsLoadFailed = false
+                    photosLoadFailed = false
+                    await loadRemotePhotos()
+                    await loadReactions()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14, weight: .bold))
+                    Text(AppStrings.tryAgain(lang.language))
+                        .font(.system(size: 15, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 13)
+                .background(Capsule().fill(AppTheme.accent))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 22)
+            .accessibilityIdentifier("trip_load_retry")
+
+            Spacer()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(c.bg)
+        .ignoresSafeArea()
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         ZStack(alignment: .topLeading) {
-            if let trip {
+            if showLoadError {
+                loadErrorState(c)
+            } else if let trip {
                 ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 0) {
                         heroSection(trip: trip)
                             .frame(height: posterHeight)
                             // Chrome rides the poster instead of floating over
-                            // the whole screen — see SocialTripDetailView.
+                            // the whole screen.
                             .overlay(alignment: .top) { posterChrome(trip: trip) }
+                            .overlay(alignment: .topLeading) {
+                                authorPill
+                                    .padding(.leading, 16)
+                                    .padding(.top, safeAreaTop + 56)
+                            }
 
                         // Bottom info panel
                         infoPanel(trip: trip, c: c)
@@ -239,7 +433,8 @@ struct TripDetailView: View {
             FullscreenMapSheet(
                 coordinates: cachedCoordinates,
                 speeds: cachedSpeeds,
-                fogCutoffDate: trip?.endDate,
+                fogCutoffDate: isOwn ? trip?.endDate : nil,
+                treatAsPreview: isPreviewRoute,
                 language: lang.language
             )
         }
@@ -258,9 +453,38 @@ struct TripDetailView: View {
         .onDisappear { routePlayback.stop() }
         .task(id: tripId) {
             if trip == nil {
-                trip = viewModel.tripDetail(id: tripId)
-                if let t = trip { buildCaches(for: t) }
-                badgeLastEarnedDates = BadgeManager.lastEarnedDates(for: trip?.earnedBadgeIds ?? [], using: mapVM.tripManager)
+                if let local = viewModel.tripDetail(id: tripId) {
+                    isOwn = true
+                    trip = local
+                    buildCaches(for: local)
+                } else if social == nil {
+                    // Nothing to show: no local row and no feed payload. Rather
+                    // than a skeleton that shimmers forever with no way back,
+                    // treat it as what it is — a trip we cannot load.
+                    reactionsLoadFailed = true
+                    photosLoadFailed = true
+                    isOwn = false
+                } else if let social {
+                    // Someone else's trip, or one of ours that this device has
+                    // never recorded. Everything below works off a `Trip`, so
+                    // the feed's copy becomes one.
+                    isOwn = social.author.id == TokenStore.shared.accountId
+                    myReaction = social.myReaction
+                    let adapted = Trip(social: social)
+                    trip = adapted
+                    buildCaches(for: adapted)
+                    seedCaches(from: social)
+                    await loadRemotePhotos()
+                }
+                // Earned-on dates come from OUR trip history, so they mean
+                // nothing on somebody else's badge — and printing our date
+                // under their achievement is worse than printing none.
+                if isOwn {
+                    badgeLastEarnedDates = BadgeManager.lastEarnedDates(
+                        for: trip?.earnedBadgeIds ?? [],
+                        using: mapVM.tripManager
+                    )
+                }
             }
             await loadReactions()
         }
@@ -269,9 +493,11 @@ struct TripDetailView: View {
             else { reactionEntries = [] }
         }
         .sheet(isPresented: $showPhotoPicker) {
-            // TODO(v6.1-defer): Figma 117:587 specs a custom photo-picker
-            // grid with orange order badges; the system picker ships v1.
-            PhotoPickerView(selectedImages: $pickedImages)
+            TripPhotoPicker { images in
+                pickedImages = images
+            }
+            .environmentObject(lang)
+            .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .onChange(of: pickedImages) { newImages in
             for image in newImages {
@@ -285,9 +511,23 @@ struct TripDetailView: View {
             get: { selectedPhotoIndex != nil },
             set: { if !$0 { selectedPhotoIndex = nil } }
         )) {
-            if let photos = trip?.photos, let index = selectedPhotoIndex {
+            if let index = selectedPhotoIndex {
+                // Ours from disk, someone else's from the server — one viewer
+                // either way, which is what the canon draws (117:1086 and its
+                // social twin 117:1589).
+                let pages: [PhotoFullScreenView.Page] = isOwn
+                    ? (trip?.photos ?? []).map {
+                        .init(id: $0.id, source: .local(filename: $0.filename), timestamp: $0.timestamp)
+                    }
+                    : remotePhotos.map {
+                        .init(
+                            id: $0.id,
+                            source: .remote(url: $0.originalUrl ?? $0.thumbnailUrl),
+                            timestamp: $0.timestamp
+                        )
+                    }
                 PhotoFullScreenView(
-                    photos: photos,
+                    pages: pages,
                     initialIndex: index,
                     region: trip?.region,
                     language: lang.language,
@@ -295,9 +535,32 @@ struct TripDetailView: View {
                 )
             }
         }
+        .fullScreenCover(isPresented: $showReplay) {
+            if let t = trip {
+                let replay = replayInput
+                TripReplayView(
+                    trip: t,
+                    coordinates: replay.coords,
+                    speeds: replay.speeds,
+                    timestamps: replay.timestamps
+                )
+                .environmentObject(lang)
+                .environmentObject(themeManager)
+            }
+        }
         .overlay {
-            // TODO(v6.1-defer): BadgeDetailOverlay modal restyle per Figma
-            // 117:1547 (300pt card, tinted 96pt icon circle, share button).
+            if showReactionPicker {
+                ReactionPickerOverlay(
+                    currentReaction: myReaction,
+                    onPick: { emoji in
+                        showReactionPicker = false
+                        react(with: emoji)
+                    },
+                    onDismiss: { showReactionPicker = false }
+                )
+            }
+        }
+        .overlay {
             if let badge = selectedDetailBadge {
                 BadgeDetailOverlay(
                     badge: badge,
@@ -305,6 +568,14 @@ struct TripDetailView: View {
                     language: lang.language,
                     colorScheme: scheme,
                     lastEarnedDate: badgeLastEarnedDates[badge.id],
+                    // The trip is what earned it, and it is the trip we are
+                    // standing on — so the card can name it.
+                    earnedOnTripTitle: trip?.title,
+                    onShare: {
+                        selectedDetailBadge = nil
+                        guard let t = trip else { return }
+                        Task { await openStoryShare(for: t) }
+                    },
                     onDismiss: { selectedDetailBadge = nil }
                 )
             }
@@ -357,13 +628,6 @@ struct TripDetailView: View {
                     .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
-        .sheet(isPresented: $showNotesEditor) {
-            NotesEditorView(text: $editedNotes, onSave: { commitNotesEdit() })
-                .environmentObject(lang)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .preferredColorScheme(themeManager.preferredColorScheme)
-        }
         .sheet(isPresented: $showPublishSheet) {
             PublishTripSheet(
                 language: lang.language,
@@ -380,6 +644,40 @@ struct TripDetailView: View {
                 .environmentObject(lang)
                 .environmentObject(auth)
                 .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .sheet(isPresented: $showEditSheet) {
+            if let t = trip {
+                TripEditSheet(
+                    trip: t,
+                    vehicles: settings.vehicles,
+                    onSave: { newTitle, newNotes, newVehicleId, newIsPrivate in
+                        let saved = applyEdits(
+                            title: newTitle, notes: newNotes,
+                            vehicleId: newVehicleId, to: t
+                        )
+                        // Access last, and only once the text is safely written:
+                        // publishing and hiding both raise a confirmation, and
+                        // this screen owns them. Asking BEFORE saving is what
+                        // used to throw away everything the user had typed.
+                        guard saved, newIsPrivate != t.isPrivate else { return }
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 260_000_000)
+                            if newIsPrivate { unpublishConfirm = true } else { requestPublish() }
+                        }
+                    }
+                )
+                .environmentObject(lang)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+            }
+        }
+        .sheet(isPresented: $showCompanionsSheet) {
+            if let t = trip {
+                TripCompanionsSheet(companions: t.companions) { updated in
+                    applyCompanions(updated, to: t)
+                }
+                .environmentObject(lang)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+            }
         }
         .alert(
             lang.language == .ru ? "Сделать поездку приватной?" : "Make trip private?",
@@ -408,21 +706,37 @@ struct TripDetailView: View {
             cachedSpeeds = pts.map(\.speed)
             cachedTimestamps = pts.map(\.timestamp)
 
-            // Chart series over cumulative distance (≤200 pts).
-            let chartStep = max(1, pts.count / 200)
-            var elev: [DetailChartPoint] = []
-            var spd: [DetailChartPoint] = []
-            var cumulative = 0.0
-            var lastLoc: CLLocation?
-            for (i, p) in pts.enumerated() {
-                let loc = CLLocation(latitude: p.latitude, longitude: p.longitude)
-                if let prev = lastLoc { cumulative += loc.distance(from: prev) }
-                lastLoc = loc
-                if i % chartStep == 0 || i == pts.count - 1 {
-                    let km = cumulative / 1000
-                    elev.append(DetailChartPoint(id: elev.count, x: km, y: p.altitude))
-                    spd.append(DetailChartPoint(id: spd.count, x: km, y: max(0, p.speed * 3.6)))
-                }
+            // Distance travelled at every point. Computed from the coordinates
+            // directly rather than through CLLocation objects — a ten-hour
+            // trip is tens of thousands of points, and that many allocations
+            // are felt as a stutter when the screen opens.
+            var cumulativeKm = [Double](repeating: 0, count: pts.count)
+            var running = 0.0
+            for i in 1..<pts.count {
+                running += GeometryUtils.haversineDistance(
+                    cachedCoordinates[i - 1], cachedCoordinates[i]
+                )
+                cumulativeKm[i] = running / 1000
+            }
+            let totalKm = running / 1000
+
+            let altitudes = pts.map(\.altitude)
+            let speedsKmh = pts.map { max(0, $0.speed * 3.6) }
+            // The timestamps ride along so a touch on either chart can say
+            // when that kilometre happened.
+            let elevBuckets = ChartSeriesBuilder.buckets(
+                cumulativeKm: cumulativeKm, values: altitudes,
+                dates: cachedTimestamps, totalKm: totalKm
+            )
+            let speedBuckets = ChartSeriesBuilder.buckets(
+                cumulativeKm: cumulativeKm, values: speedsKmh,
+                dates: cachedTimestamps, totalKm: totalKm
+            )
+            let elev = elevBuckets.enumerated().map { i, b in
+                DetailChartPoint(id: i, x: b.km, y: b.mean, date: b.date, yMin: b.low, yMax: b.high)
+            }
+            let spd = speedBuckets.enumerated().map { i, b in
+                DetailChartPoint(id: i, x: b.km, y: b.mean, date: b.date, yMin: b.low, yMax: b.high)
             }
             // A dead-flat altitude series (simulator, barometer-less data)
             // renders as a meaningless line — hide the section instead.
@@ -447,6 +761,76 @@ struct TripDetailView: View {
             // charts and the moving/stops bar stay hidden (no series).
             cachedCoordinates = Trip.decodePolyline(preview)
             cachedSpeeds = []
+            // Remember WHERE these coordinates came from. A preview polyline is
+            // RDP-simplified, so on a motorway its points sit kilometres apart —
+            // and RouteMapView's 1km gap-splitting reads every one of those as a
+            // break in the track, drops each singleton segment, and ends up with
+            // nothing to draw and no bounds to zoom to. A stranger's intercity
+            // trip opened onto a world map with two pins on it.
+            isPreviewRoute = true
+        }
+    }
+
+    /// Numbers a remote trip carries as fields rather than as track points.
+    ///
+    /// `buildCaches` derives these by walking the track; the server sends the
+    /// answers instead. Without this the movement split, the elevation gain and
+    /// the peak altitude simply vanished from someone else's trip — the four
+    /// tiles the canon puts between «время» and «топливо».
+    /// The replay canvas is documented as taking at most ~300 points and it
+    /// repaints at display-link rate; the raw track of a long drive is tens of
+    /// thousands. Computed here rather than inline in the presentation, which
+    /// the type-checker could not chew through.
+    private var replayInput: (
+        coords: [CLLocationCoordinate2D],
+        speeds: [Double],
+        timestamps: [Date]
+    ) {
+        Self.downsampledForReplay(
+            coords: cachedCoordinates,
+            speeds: cachedSpeeds,
+            timestamps: cachedTimestamps
+        )
+    }
+
+    /// Every Nth point, index-aligned across all three arrays.
+    private static func downsampledForReplay(
+        coords: [CLLocationCoordinate2D],
+        speeds: [Double],
+        timestamps: [Date]
+    ) -> (coords: [CLLocationCoordinate2D], speeds: [Double], timestamps: [Date]) {
+        let limit = 300
+        guard coords.count > limit else { return (coords, speeds, timestamps) }
+        let step = max(1, coords.count / limit)
+        var idx = Array(stride(from: 0, to: coords.count, by: step))
+        if idx.last != coords.count - 1 { idx.append(coords.count - 1) }
+        return (
+            idx.map { coords[$0] },
+            speeds.count == coords.count ? idx.map { speeds[$0] } : [],
+            timestamps.count == coords.count ? idx.map { timestamps[$0] } : []
+        )
+    }
+
+    private func seedCaches(from social: SocialFeedTrip) {
+        cachedDrivingTime = Double(social.drivingTime ?? 0)
+        cachedStoppedTime = Double(social.stoppedTime ?? 0)
+        cachedElevationGain = social.elevation ?? 0
+        cachedMaxAltitude = social.maxAltitude ?? 0
+    }
+
+    private func loadRemotePhotos() async {
+        do {
+            let res: SocialTripPhotosResponse = try await APIClient.shared.post(
+                APIEndpoint.socialTripPhotos,
+                body: SocialTripPhotosRequest(tripId: tripId),
+                requiresAuth: AuthService.shared.isSignedIn
+            )
+            remotePhotos = res.photos
+            photosLoadFailed = false
+        } catch {
+            // Non-fatal: the strip stays hidden rather than the screen failing.
+            remotePhotos = []
+            photosLoadFailed = true
         }
     }
 
@@ -496,7 +880,10 @@ struct TripDetailView: View {
                         coordinates: cachedCoordinates,
                         speeds: cachedSpeeds,
                         isInteractive: true,
-                        fogCutoffDate: trip.endDate,
+                        // Our own territory fog has no business over someone
+                        // else's route.
+                        fogCutoffDate: isOwn ? trip.endDate : nil,
+                        treatAsPreview: isPreviewRoute,
                         playbackCarCoord: routePlayback.currentCoord,
                         playbackTrailIndex: routePlayback.currentTrailIndex
                     )
@@ -512,12 +899,42 @@ struct TripDetailView: View {
 
             if cachedCoordinates.count > 1 {
                 HStack(spacing: 8) {
-                    RoutePlaybackButton(isPlaying: routePlayback.isPlaying) {
-                        routePlayback.toggle(
-                            coords: cachedCoordinates,
-                            timestamps: cachedTimestamps.isEmpty ? nil : cachedTimestamps,
-                            distanceMeters: trip.distance
-                        )
+                    // «Прожить заново» — the cinema replay (canon 117:533,
+                    // reached from the CTA at 117:1085). It was written, it
+                    // works, and nothing in the app opened it: the only replay
+                    // anyone could reach was the little inline crawl on the
+                    // hero. The pill needs per-point timestamps, so a
+                    // preview-only trip keeps the crawl instead.
+                    if cachedTimestamps.count > 1 {
+                        Button {
+                            Haptics.tap()
+                            showReplay = true
+                        } label: {
+                            HStack(spacing: 7) {
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 13, weight: .bold))
+                                Text(isOwn
+                                     ? AppStrings.reliveTrip(lang.language)
+                                     : AppStrings.watchTrip(lang.language))
+                                    .font(.system(size: 14, weight: .bold))
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                            .background(Capsule().fill(.white))
+                            .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("detail_replay")
+                    } else {
+                        RoutePlaybackButton(isPlaying: routePlayback.isPlaying) {
+                            routePlayback.toggle(
+                                coords: cachedCoordinates,
+                                timestamps: cachedTimestamps.isEmpty ? nil : cachedTimestamps,
+                                distanceMeters: trip.distance
+                            )
+                        }
                     }
                     Button {
                         Haptics.tap()
@@ -549,87 +966,53 @@ struct TripDetailView: View {
         }
     }
 
-    /// Date-region line + editable title, on the theme background below the
-    /// map (the release layout). Replaces the poster text block.
+    /// Date-region line + title, on the theme background below the map.
+    ///
+    /// Read-only. Editing used to be scattered across this screen — a pencil on
+    /// the title, a chevron on the car chip, a tap on the privacy pill — each
+    /// its own flow, none of them where you would look for "change this trip".
+    /// «…» → «Редактировать» now holds all of it, and one door is better than
+    /// four half-hidden ones.
     private func titleBlock(trip: Trip, c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(TripDetailFormat.posterDateLine(
-                date: trip.startDate, region: trip.region, lang: lang.language))
-                .font(.system(size: 12, weight: .semibold))
+        // A named trip and an unnamed one need different headers, or the same
+        // date is printed three times in fifty points of screen — once in the
+        // pixel line, once as the heading, once in the chip below it.
+        //
+        //   named    → «14 ИЮНЯ · КРАСНОДАР. КРАЙ» over «Дорога к морю»
+        //   unnamed  → «14 ИЮНЯ» over «Краснодарский край»
+        //
+        // Either way every line carries something the others do not.
+        let named = (trip.title?.trimmingCharacters(in: .whitespacesAndNewlines)).map { !$0.isEmpty } ?? false
+        let region = RegionDisplay.localized(trip.region, language: lang.language)
+        let eyebrow = TripDetailFormat.posterDateLine(
+            date: trip.startDate,
+            region: named ? trip.region : nil,
+            lang: lang.language
+        )
+        let heading: String = {
+            if named { return trip.title ?? "" }
+            if let region, !region.isEmpty { return region }
+            return formattedDateFallback(trip.startDate)
+        }()
+
+        return VStack(alignment: .leading, spacing: 6) {
+            // The pixel face, as the canon sets it (117:1078). It is the app's
+            // signature marker for "this is a trip", and it appears here and on
+            // the feed card and nowhere else — rendered in the system font it
+            // was just another grey caption.
+            Text(eyebrow)
+                .font(.custom("PressStart2P-Regular", size: 9))
                 .foregroundStyle(c.textSecondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.6)
 
-            heroTitle(trip: trip, c: c)
-        }
-        .animation(.easeInOut(duration: 0.25), value: isEditingTitle)
-    }
-
-    /// Hero title with the inline edit flow carried over from the pre-6.1
-    /// identity block — tap the title (or the pencil) to edit in place.
-    @ViewBuilder
-    private func heroTitle(trip: Trip, c: AppTheme.Colors) -> some View {
-        if isEditingTitle {
-            HStack(spacing: 10) {
-                TextField(
-                    AppStrings.tripTitlePlaceholder(lang.language),
-                    text: $editedTitle
-                )
+            Text(heading)
                 .font(.system(size: 26, weight: .heavy))
+                .tracking(-0.52)
                 .foregroundStyle(c.text)
-                .tint(AppTheme.accent)
-                .focused($isTitleFieldFocused)
-                .onSubmit { commitTitleEdit() }
-
-                Button {
-                    Haptics.tap()
-                    cancelTitleEdit()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(c.textTertiary)
-                }
-                Button {
-                    Haptics.action()
-                    commitTitleEdit()
-                } label: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(AppTheme.green)
-                }
-            }
-            .transition(.opacity)
-        } else {
-            Button {
-                Haptics.tap()
-                editedTitle = trip.title ?? ""
-                originalTitle = editedTitle
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    isEditingTitle = true
-                }
-                isTitleFieldFocused = true
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(trip.title ?? formattedDateFallback(trip.startDate))
-                        .font(.system(size: 26, weight: .heavy))
-                        .tracking(-0.52)
-                        .foregroundStyle(c.text)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.7)
-                        .multilineTextAlignment(.leading)
-                    // The small pencil keeps the title-edit flow
-                    // discoverable.
-                    Image(systemName: "pencil")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(c.textTertiary)
-                }
-            }
-            .buttonStyle(.plain)
-            // VoiceOver otherwise reads the title text with no clue that
-            // activating it starts the rename flow.
-            .accessibilityLabel(trip.title ?? formattedDateFallback(trip.startDate))
-            .accessibilityHint(AppStrings.editTitleA11y(lang.language))
-            .transition(.opacity)
+                .lineLimit(2)
+                .minimumScaleFactor(0.7)
+                .multilineTextAlignment(.leading)
         }
     }
 
@@ -641,9 +1024,13 @@ struct TripDetailView: View {
         // so conditional sections (charts, badges, reactions) don't produce
         // uneven spacing when they appear/disappear.
         VStack(alignment: .leading, spacing: 22) {
-            titleBlock(trip: trip, c: c)
-
-            chipsRow(trip: trip, c: c)
+            // Heading and chips are one block — they describe the same thing.
+            // At the body's 22pt rhythm they read as two separate sections with
+            // a hole between them.
+            VStack(alignment: .leading, spacing: 12) {
+                titleBlock(trip: trip, c: c)
+                chipsRow(trip: trip, c: c)
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 DetailSectionHeader(text: AppStrings.detailsSection(lang.language))
@@ -693,29 +1080,50 @@ struct TripDetailView: View {
                 }
             }
 
+            companionsSection(trip: trip)
+
             notesSection(trip: trip, c: c)
 
             photosSection(c)
 
             badgesSection(trip: trip, c: c)
 
-            // Reactions surface — Strava-style:
-            //   * Public + has reactions → «Реакции · N» card.
-            //   * Public + 0 reactions → ghost line ("No reactions yet").
-            //   * Private (signed-in) → publish nudge card to convert.
-            //   * Guest (private fallback) — nothing, no payoff to show.
-            if auth.isSignedIn {
+            // Reactions:
+            //   * Public → the «Реакции · N» card, for everyone. Reading them
+            //     needs no account; the canon draws no signed-in precondition,
+            //     and a signed-out visitor opening a public trip saw a screen
+            //     with the discussion cut out of it.
+            //   * Private + ours → the locked card that explains why.
+            //   * Private + not ours → nothing; it is not our business.
+            if !trip.isPrivate || isOwn {
                 reactionsArea(trip: trip, c: c)
             }
 
-            // «Комментарии · N» (Figma 549:129) — PUBLIC trips only.
-            // Comments live server-side against the published trip; a
-            // private trip has no social surface to comment on, so the
-            // section hides entirely (no ghost card).
+            // «Комментарии» — the section is always here; what changes is
+            // whether there is anything to comment on. A private trip used to
+            // drop it silently, so the one place that could explain why there
+            // is no discussion said nothing at all (canon 545:499
+            // «КОММЕНТАРИИ · ПРИВАТНАЯ ПОЕЗДКА»).
+            if trip.isPrivate, isOwn {
+                VStack(alignment: .leading, spacing: 10) {
+                    DetailSectionHeader(text: AppStrings.comments(lang.language))
+                    lockedSocialCard(
+                        title: AppStrings.publishForCommentsTitle(lang.language),
+                        body: AppStrings.publishForCommentsBody(lang.language),
+                        identifier: "comments_locked_card",
+                        c: c
+                    )
+                }
+            }
+
             if !trip.isPrivate {
                 TripCommentsSection(
                     tripId: trip.id,
-                    isTripOwner: true,
+                    isTripOwner: isOwn,
+                    // The header states the server-known total; without it the
+                    // section opened as «Комментарии · 0» over a list of
+                    // comments.
+                    initialCount: social?.commentCount ?? 0,
                     // Own public trips ARE reachable signed-out («keep
                     // public and sign out» / dead session) — without this
                     // the composer looks active but every send dies with
@@ -728,10 +1136,13 @@ struct TripDetailView: View {
                 )
                 .id(Self.commentsAnchor)
             }
+
         }
         .padding(.horizontal, 16)
         .padding(.top, 22)
-        .padding(.bottom, safeAreaBottom + 90)
+        // Enough to clear the home indicator and let the last card breathe.
+        // It used to reserve 90pt for a tab bar this screen does not show.
+        .padding(.bottom, safeAreaBottom + 20)
         .background(c.bg)
     }
 
@@ -740,8 +1151,13 @@ struct TripDetailView: View {
     private func chipsRow(trip: Trip, c: AppTheme.Colors) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                // Day and hours in one chip. «12:31 – 13:18» alone answers "how
+                // long" and leaves "when" to the poster line above, which is off
+                // screen the moment you scroll to the numbers — but as two
+                // separate chips the day and the clock read as two unrelated
+                // facts, and the row ran out of width before the car.
                 DetailChipSurface {
-                    Text(timeRange(trip))
+                    Text("\(Self.chipDateFormatter(for: lang.language).string(from: trip.startDate)), \(timeRange(trip))")
                         .monospacedDigit()
                 }
 
@@ -750,13 +1166,33 @@ struct TripDetailView: View {
                 // Privacy chip is per-trip and works independently of global
                 // Cloud Sync (privacy-first model: publishing one trip should
                 // NOT require turning on full-account mirror).
-                if auth.isSignedIn {
+                if auth.isSignedIn, isOwn {
                     privacyChip(trip: trip, c: c)
                 }
             }
         }
         .scrollClipDisabled()
     }
+
+    /// «14 июня» / «14 Jun» — day and month, no year: a trip from another year
+    /// is rare enough that the poster line above can carry it.
+    private static func chipDateFormatter(for lang: LanguageManager.Language) -> DateFormatter {
+        lang == .ru ? chipDateRU : chipDateEN
+    }
+
+    private static let chipDateRU: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ru_RU")
+        f.dateFormat = "d MMMM"
+        return f
+    }()
+
+    private static let chipDateEN: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateFormat = "d MMM"
+        return f
+    }()
 
     private var tripVehicle: Vehicle? {
         if let vid = trip?.vehicleId {
@@ -769,100 +1205,166 @@ struct TripDetailView: View {
     /// a "no vehicle" clear option. Reassignment is metadata-only (see
     /// TripRepository.updateVehicle) — odometer/stats are not rebalanced,
     /// matching how title/notes edits behave.
+    @ViewBuilder
     private func vehicleChip(trip: Trip, c: AppTheme.Colors) -> some View {
-        Button {
-            Haptics.selection()
-            showVehiclePicker = true
-        } label: {
-            DetailChipSurface {
-                if let v = tripVehicle {
-                    Text(v.displayEmoji)
-                        .font(.system(size: 12))
-                    Text(v.name)
-                        .lineLimit(1)
-                } else {
-                    Image(systemName: "car")
-                        .font(.system(size: 11, weight: .medium))
-                    Text(AppStrings.noVehicle(lang.language))
-                }
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-            }
-        }
-        .buttonStyle(.plain)
-        .confirmationDialog(
-            AppStrings.tripVehicle(lang.language),
-            isPresented: $showVehiclePicker,
-            titleVisibility: .visible
-        ) {
-            ForEach(settings.vehicles) { v in
-                Button("\(v.displayEmoji) \(v.name)") {
-                    applyVehicleChange(v.id)
+        if !isOwn {
+            // Someone else's car is a name and an avatar the server rendered,
+            // not a row in our garage — and it is not ours to reassign.
+            if let v = social?.vehicle {
+                DetailChipSurface {
+                    // A pixel avatar is an asset name, not a glyph — drawn as
+                    // text it reads «pixel_car_white».
+                    if v.isPixelAvatar {
+                        Image(v.avatarEmoji)
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Text(v.avatarEmoji).font(.system(size: 12))
+                    }
+                    Text(v.name).lineLimit(1)
                 }
             }
-            Button(AppStrings.noVehicle(lang.language), role: .destructive) {
-                applyVehicleChange(nil)
-            }
-            Button(AppStrings.cancel(lang.language), role: .cancel) {}
+        } else {
+            ownVehicleChip(trip: trip, c: c)
         }
     }
 
-    @ViewBuilder
+    /// Which car this was, stated and nothing more — reassignment lives in the
+    /// edit sheet, next to the name and the description, where the canon puts
+    /// it (Figma 543:119 «Машина для поездки»).
+    private func ownVehicleChip(trip: Trip, c: AppTheme.Colors) -> some View {
+        DetailChipSurface {
+            if let v = tripVehicle {
+                Text(v.displayEmoji)
+                    .font(.system(size: 12))
+                Text(v.name)
+                    .lineLimit(1)
+            } else {
+                Image(systemName: "car")
+                    .font(.system(size: 11, weight: .medium))
+                Text(AppStrings.noVehicle(lang.language))
+            }
+        }
+    }
+
+    /// Who can see this trip. A state, not a switch: publishing and hiding both
+    /// have consequences worth a confirmation, and they are one tap away in
+    /// «…» and in the edit sheet. A chip that silently flipped either way was
+    /// the most dangerous control on the screen and looked like a label.
     private func privacyChip(trip: Trip, c: AppTheme.Colors) -> some View {
         let isPrivate = trip.isPrivate
-        // Plain chip + onTapGesture instead of Button — Button + custom
-        // background inside a ScrollView often loses its hit-region in
-        // SwiftUI 17/18. The tap gesture on a contentShape'd chip is
-        // dependable.
-        DetailChipSurface {
+        return DetailChipSurface {
             Image(systemName: isPrivate ? "lock.fill" : "globe")
                 .font(.system(size: 10, weight: .semibold))
             Text(isPrivate
                  ? AppStrings.privacyOnlyMe(lang.language)
                  : AppStrings.privacyPublic(lang.language))
         }
-        .contentShape(Capsule())
-        .onTapGesture {
-            Haptics.selection()
-            // Both directions surface a one-shot confirm — going public has
-            // privacy implications (visible to strangers), going private
-            // discards reactions/comments accrued while public.
-            if isPrivate {
-                showPublishSheet = true
-            } else {
-                unpublishConfirm = true
+    }
+
+    /// Writes back only what actually changed — each setter enqueues a sync
+    /// operation, and saving three fields that nobody touched would push three
+    /// updates for a sheet the user opened and closed.
+    /// Returns false when the content filter rejected the name or the note, so
+    /// the caller knows not to carry on to the access change.
+    @discardableResult
+    private func applyEdits(title: String, notes: String, vehicleId: UUID?, to t: Trip) -> Bool {
+        // The inline editors this sheet replaced ran everything through
+        // `ContentFilter` first — a published trip's name and description are
+        // shown to strangers. Saving straight from the sheet would have been a
+        // way around a check the old path always made.
+        if title != (t.title ?? ""), !title.isEmpty {
+            if let err = ContentFilter.validate(title, field: .tripTitle, language: lang.language) {
+                toastItem = ToastItem(type: .error, message: err)
+                return false
+            }
+        }
+        if notes != (t.tripDescription ?? "") {
+            if let err = ContentFilter.validate(notes, field: .tripNote, language: lang.language) {
+                toastItem = ToastItem(type: .error, message: err)
+                return false
+            }
+        }
+        if title != (t.title ?? ""), !title.isEmpty {
+            mapVM.tripManager.updateTitle(for: tripId, title: title)
+        }
+        if notes != (t.tripDescription ?? "") {
+            mapVM.tripManager.updateNotes(for: tripId, notes: notes)
+        }
+        if vehicleId != t.vehicleId {
+            mapVM.tripManager.updateVehicle(for: tripId, vehicleId: vehicleId)
+        }
+        // Same reason as in `applyPrivacyChange`: only a local trip has a row
+        // to re-read. Editing is owner-only, so in practice this always finds
+        // one — the fallback is there so it can never blank the screen.
+        if let local = viewModel.tripDetail(id: tripId) {
+            trip = local
+        } else {
+            trip?.title = title.isEmpty ? trip?.title : title
+            trip?.tripDescription = notes
+            trip?.vehicleId = vehicleId
+        }
+        Haptics.success()
+        return true
+    }
+
+
+    // MARK: - Companions («Попутчики»)
+
+    /// Shown on our own trip always — an empty card is the invitation to fill
+    /// it — and on someone else's only when they actually named people.
+    @ViewBuilder
+    private func companionsSection(trip: Trip) -> some View {
+        if isOwn || !trip.companions.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.companionsSection(lang.language))
+                TripCompanionsCard(
+                    companions: trip.companions,
+                    isOwn: isOwn,
+                    language: lang.language
+                ) {
+                    Haptics.tap()
+                    showCompanionsSheet = true
+                }
             }
         }
     }
 
-    private func applyVehicleChange(_ vehicleId: UUID?) {
-        Haptics.selection()
-        mapVM.tripManager.updateVehicle(for: tripId, vehicleId: vehicleId)
-        trip = viewModel.tripDetail(id: tripId)
+    private func applyCompanions(_ companions: [TripCompanion], to t: Trip) {
+        mapVM.tripManager.updateCompanions(for: tripId, companions: companions)
+        if let local = viewModel.tripDetail(id: tripId) {
+            trip = local
+        } else {
+            trip?.companions = companions
+        }
+        Haptics.success()
     }
 
     // MARK: - Description («Описание»)
 
-    /// Free-text note for the trip (road conditions, detours, fuel stops) —
-    /// editable by the owner via `NotesEditorView`. Persists through the same
-    /// path as the title (`updateNotes` → repository + sync) and is already
-    /// surfaced to others on the social trip view.
+    /// «Описание» — the text, and on our own trip an invitation to write one
+    /// when there is none. Both open the same edit sheet as «…» →
+    /// «Редактировать», so the description is never edited two different ways.
     @ViewBuilder
     private func notesSection(trip: Trip, c: AppTheme.Colors) -> some View {
         let notes = trip.tripDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        VStack(alignment: .leading, spacing: 10) {
-            DetailSectionHeader(text: AppStrings.descriptionSection(lang.language))
-            Button {
-                Haptics.tap()
-                editedNotes = trip.tripDescription ?? ""
-                showNotesEditor = true
-            } label: {
-                if notes.isEmpty {
-                    // Inviting empty-state CTA: an accent dashed-border button
-                    // reads as "tap to add a description", not disabled
-                    // metadata — so owners discover the feature. (Figma has no
-                    // empty state for this section — existing CTA kept.)
+        if !notes.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.descriptionSection(lang.language))
+                DetailDescriptionCard(text: notes, showsEditHint: false)
+            }
+        } else if isOwn {
+            // An empty section would just be a header over nothing; the prompt
+            // is the only thing worth the space, and it is how an owner finds
+            // out the field exists at all.
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.descriptionSection(lang.language))
+                Button {
+                    Haptics.tap()
+                    showEditSheet = true
+                } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "square.and.pencil")
                             .font(.system(size: 15, weight: .semibold))
@@ -881,11 +1383,10 @@ struct TripDetailView: View {
                             )
                     )
                     .contentShape(Rectangle())
-                } else {
-                    DetailDescriptionCard(text: notes, showsEditHint: true)
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("detail_add_description")
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -896,66 +1397,177 @@ struct TripDetailView: View {
     /// private trips, or a quiet "no reactions yet" line for public trips.
     @ViewBuilder
     private func reactionsArea(trip: Trip, c: AppTheme.Colors) -> some View {
-        if !trip.isPrivate, !reactionEntries.isEmpty {
+        if !trip.isPrivate, !reactionTallies.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                DetailSectionHeader(text: AppStrings.reactionsTitleN(lang.language, reactionEntries.count))
+                DetailSectionHeader(text: AppStrings.reactionsTitleN(lang.language, totalReactions))
                 reactionsCard(c)
             }
         } else if trip.isPrivate {
             publishNudgeCard(trip: trip, c: c)
         } else {
-            // Public, zero reactions — quiet line, no CTA. Owner already
-            // chose to share; spamming them with a "share more!" prompt
-            // would be tone-deaf.
-            HStack(spacing: 8) {
-                Image(systemName: "face.dashed")
-                    .font(.system(size: 14))
-                    .foregroundStyle(c.textTertiary)
-                Text(AppStrings.noReactionsYet(lang.language))
-                    .font(.system(size: 13))
-                    .foregroundStyle(c.textTertiary)
-                Spacer()
+            // Public, zero reactions (canon: «РЕАКЦИИ · ПУСТО»): the section
+            // keeps its header and its card, and the card says the quiet part.
+            // A bare grey line under a heading read as a rendering failure —
+            // the section looked like it had lost its content rather than like
+            // it was waiting for someone to react.
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.chipReactions(lang.language))
+                VStack(spacing: 12) {
+                    Text(AppStrings.noReactionsYet(lang.language))
+                        .font(.system(size: 14))
+                        .foregroundStyle(c.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
+                    // Somebody has to be first, and on someone else's trip that
+                    // is the whole point of the section. Without this the «+»
+                    // only existed once a reaction was already there — you
+                    // could join a crowd but never start one.
+                    if !isOwn {
+                        Button {
+                            Haptics.tap()
+                            guard auth.isSignedIn else { signInPrompt = .react; return }
+                            showReactionPicker = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 12, weight: .bold))
+                                Text(AppStrings.beFirstToReact(lang.language))
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(AppTheme.accent)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Capsule().fill(AppTheme.accent.opacity(0.12)))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("reaction_add_first")
+                    }
+                }
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity)
+                .surfaceCard(cornerRadius: 14)
             }
-            .padding(.horizontal, 4)
         }
     }
 
-    private func publishNudgeCard(trip: Trip, c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
-        return Button {
+    /// Leave, move or take back our reaction on someone else's trip.
+    ///
+    /// Goes through `SocialFeedStore` so the feed card behind us updates with
+    /// the same optimistic bump — reacting here and finding the card unchanged
+    /// when you go back would read as the tap not having worked.
+    private func react(with emoji: String) {
+        Haptics.tap()
+        guard auth.isSignedIn else {
+            signInPrompt = .react
+            return
+        }
+        let tapped = ReactionEmoji.canonical(emoji)
+        let previous = myReaction
+        let wasMine = ReactionEmoji.canonical(previous ?? "") == tapped
+        // Taking one back must name the emoji the server has, not the one we
+        // draw for it.
+        let payload = wasMine ? (previous ?? tapped) : tapped
+        myReaction = wasMine ? nil : tapped
+        Task {
+            await socialFeed.toggleReaction(for: tripId, emoji: payload)
+            await loadReactions()
+            // The reload is the source of truth; if it could not reach the
+            // server, put the optimistic guess back rather than leaving the
+            // chip lit for a reaction that never landed.
+            if reactionsLoadFailed { myReaction = previous }
+        }
+    }
+
+    /// Reaction tallies to draw: the server's list once it lands, and until
+    /// then whatever the feed already knew. Without the fallback a stranger's
+    /// trip with 23 reactions opened claiming «Пока никто не отреагировал»
+    /// for as long as the request took.
+    private var reactionTallies: [(emoji: String, count: Int)] {
+        if !reactionEntries.isEmpty {
+            return Dictionary(grouping: reactionEntries, by: { ReactionEmoji.canonical($0.emoji) })
+                .mapValues(\.count)
+                .sorted { $0.value > $1.value }
+                .map { (emoji: $0.key, count: $0.value) }
+        }
+        guard let breakdown = social?.reactionBreakdown, !breakdown.isEmpty else { return [] }
+        return Dictionary(grouping: breakdown, by: { ReactionEmoji.canonical($0.emoji) })
+            .mapValues { $0.reduce(0) { $0 + $1.count } }
+            .sorted { $0.value > $1.value }
+            .map { (emoji: $0.key, count: $0.value) }
+    }
+
+    private var totalReactions: Int {
+        reactionEntries.isEmpty
+            ? (social?.reactionCount ?? 0)
+            : reactionEntries.count
+    }
+
+    /// Publishing needs an account. Every entry point goes through here so the
+    /// gate cannot be forgotten on one of them — it already had been, twice.
+    private func requestPublish() {
+        guard auth.isSignedIn else {
+            signInPrompt = .publish
+            return
+        }
+        showPublishSheet = true
+    }
+
+    /// The canon's locked-section card: a trip nobody else can see cannot
+    /// collect reactions or comments, and the screen says so instead of
+    /// dropping the section on the floor.
+    private func lockedSocialCard(
+        title: String,
+        body: String,
+        identifier: String,
+        c: AppTheme.Colors
+    ) -> some View {
+        Button {
             Haptics.tap()
-            showPublishSheet = true
+            requestPublish()
         } label: {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
-                    .frame(width: 24, alignment: .center)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(isRu ? "Опубликуйте, чтобы получить реакции" : "Publish to get reactions")
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.accent.opacity(0.12))
+                        .frame(width: 34, height: 34)
+                    Image(systemName: "lock.fill")
                         .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(c.text)
                         .multilineTextAlignment(.leading)
-                    // Scope must match the publish sheet: publishing puts
-                    // the trip into the PUBLIC feed (visible to everyone),
-                    // not a followers-only feed.
-                    Text(isRu
-                         ? "Поездку увидят другие пользователи в общей ленте. Сейчас она только у Вас."
-                         : "Other users will see this trip in the public feed. Right now it's just yours.")
-                        .font(.system(size: 12))
+                    Text(body)
+                        .font(.system(size: 12.5))
                         .foregroundStyle(c.textSecondary)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
+                Spacer(minLength: 0)
             }
             .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .surfaceCard(cornerRadius: 14)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    /// «Опубликуйте, чтобы получить реакции» (canon 545:499).
+    ///
+    /// The old copy spelled out the whole privacy scope here — «поездку увидят
+    /// другие пользователи в общей ленте» — which is the sentence the publish
+    /// confirmation exists to say, at the moment consent is actually given.
+    /// Saying it twice made the card an argument rather than an offer.
+    private func publishNudgeCard(trip: Trip, c: AppTheme.Colors) -> some View {
+        lockedSocialCard(
+            title: AppStrings.publishForReactionsTitle(lang.language),
+            body: AppStrings.publishForReactionsBody(lang.language),
+            identifier: "reactions_locked_card",
+            c: c
+        )
     }
 
     /// «Реакции · N» — one card: breakdown chips row, then reactor rows
@@ -965,26 +1577,68 @@ struct TripDetailView: View {
         // Group by CANONICAL key so legacy prod reactions (❤️ 🏎️ 🗺️) fold
         // into the drawn icon that replaced them instead of spawning a
         // twin chip next to it.
-        let breakdown = Dictionary(grouping: reactionEntries, by: { ReactionEmoji.canonical($0.emoji) })
-            .mapValues { $0.count }
-            .sorted { $0.value > $1.value }
+        let breakdown = reactionTallies
         return VStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(breakdown, id: \.key) { emoji, count in
-                        ReactionCountChip(emoji: emoji, count: count, style: .breakdown)
+                    ForEach(breakdown, id: \.emoji) { emoji, count in
+                        // On someone else's trip a chip is a control, not a
+                        // tally: tapping the one you already left takes it
+                        // back, tapping another moves your reaction to it.
+                        // Ours stays a read-out — you cannot react to yourself.
+                        if isOwn {
+                            ReactionCountChip(emoji: emoji, count: count, style: .breakdown)
+                        } else {
+                            Button {
+                                react(with: emoji)
+                            } label: {
+                                ReactionCountChip(
+                                    emoji: emoji,
+                                    count: count,
+                                    style: ReactionEmoji.canonical(myReaction ?? "") == emoji
+                                        ? .mine
+                                        : .unselected
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    // «+» — the way in for a reaction that is not on the card
+                    // yet (canon 467:259). Without it the only reactions a
+                    // viewer could leave were the ones somebody had already
+                    // left, which is not a reaction picker, it is a poll.
+                    if !isOwn {
+                        Button {
+                            Haptics.tap()
+                            guard auth.isSignedIn else { signInPrompt = .react; return }
+                            showReactionPicker = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(c.textSecondary)
+                                .frame(width: 34, height: 28)
+                                .background(Capsule().fill(c.cardAlt))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("reaction_add")
+                        .accessibilityLabel(AppStrings.addReaction(lang.language))
                     }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 13)
             }
 
-            ForEach(Array(reactionEntries.enumerated()), id: \.offset) { idx, entry in
-                Rectangle()
-                    .fill(c.border)
-                    .frame(height: 1)
-                    .padding(.leading, idx == 0 ? 0 : 14)
-                reactionRow(entry, c: c, isRu: isRu)
+            // Who reacted is the owner's view of their own trip; on someone
+            // else's the canon card is the chips alone.
+            if isOwn {
+                ForEach(Array(reactionEntries.enumerated()), id: \.offset) { idx, entry in
+                    Rectangle()
+                        .fill(c.border)
+                        .frame(height: 1)
+                        .padding(.leading, idx == 0 ? 0 : 14)
+                    reactionRow(entry, c: c, isRu: isRu)
+                }
             }
         }
         .background {
@@ -1031,13 +1685,20 @@ struct TripDetailView: View {
     }
 
     private func loadReactions() async {
-        guard let t = trip, !t.isPrivate, auth.isSignedIn else { return }
+        // No auth gate: reactions on a public trip are public.
+        guard let t = trip, !t.isPrivate else { return }
         do {
             let res: SocialReactionsResponse = try await APIClient.shared.post(
                 APIEndpoint.socialReactions, body: SocialUnreactRequest(tripId: t.id))
-            await MainActor.run { reactionEntries = res.reactions }
+            await MainActor.run {
+                reactionEntries = res.reactions
+                reactionsLoadFailed = false
+            }
         } catch {
-            // Non-fatal — reactions section just stays hidden
+            // Non-fatal on its own — the section stays hidden. Together with a
+            // failed photo load and a trip that arrived without a route, it is
+            // how we know nothing came back at all.
+            await MainActor.run { reactionsLoadFailed = true }
         }
     }
 
@@ -1077,7 +1738,15 @@ struct TripDetailView: View {
     private func applyPrivacyChange(isPrivate newValue: Bool, suppressSuccessToast: Bool = false) {
         let isRu = lang.language == .ru
         mapVM.tripManager.updatePrivacy(for: tripId, isPrivate: newValue)
-        self.trip = viewModel.tripDetail(id: tripId)
+        // Re-read from the database only if that is where this trip came from.
+        // A trip opened from the feed has no local row, so the fetch returns
+        // nil — and assigning that blanked the whole screen the moment its
+        // privacy changed.
+        if let local = viewModel.tripDetail(id: tripId) {
+            self.trip = local
+        } else {
+            self.trip?.isPrivate = newValue
+        }
         NotificationCenter.default.post(
             name: .tripPrivacyChanged,
             object: PrivacyChangePayload(tripId: tripId, isPrivate: newValue)
@@ -1094,42 +1763,8 @@ struct TripDetailView: View {
         }
     }
 
-    private func commitTitleEdit() {
-        let trimmed = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            if let err = ContentFilter.validate(trimmed, field: .tripTitle, language: lang.language) {
-                toastItem = ToastItem(type: .error, message: err)
-                cancelTitleEdit()
-                return
-            }
-            mapVM.tripManager.updateTitle(for: tripId, title: trimmed)
-            trip = viewModel.tripDetail(id: tripId)
-        }
-        withAnimation(.easeInOut(duration: 0.25)) {
-            isEditingTitle = false
-        }
-        isTitleFieldFocused = false
-    }
 
-    private func cancelTitleEdit() {
-        editedTitle = originalTitle
-        withAnimation(.easeInOut(duration: 0.25)) {
-            isEditingTitle = false
-        }
-        isTitleFieldFocused = false
-    }
 
-    private func commitNotesEdit() {
-        let trimmed = editedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Dismiss first so a validation toast isn't hidden behind the sheet.
-        showNotesEditor = false
-        if let err = ContentFilter.validate(trimmed, field: .tripNote, language: lang.language) {
-            toastItem = ToastItem(type: .error, message: err)
-            return
-        }
-        mapVM.tripManager.updateNotes(for: tripId, notes: trimmed)
-        trip = viewModel.tripDetail(id: tripId)
-    }
 
     /// Body of the "Publish trip?" confirmation sheet. Extracted so the
     /// sheet closure stays type-checker friendly.
@@ -1167,7 +1802,7 @@ struct TripDetailView: View {
                 staggerIndex: 0
             )
             DetailStatCard(
-                value: TripDetailFormat.hoursMinutes(trip.duration),
+                segments: TripDetailFormat.durationSegments(trip.duration, lang: l),
                 label: AppStrings.duration(l),
                 color: AppTheme.accent,
                 staggerIndex: 1
@@ -1178,13 +1813,13 @@ struct TripDetailView: View {
             // when the trip has no usable track-point data.
             if (cachedDrivingTime + cachedStoppedTime) > 0 {
                 DetailStatCard(
-                    value: TripDetailFormat.hoursMinutes(cachedDrivingTime),
+                    segments: TripDetailFormat.durationSegments(cachedDrivingTime, lang: l),
                     label: AppStrings.statMoving(l),
                     color: AppTheme.blue,
                     staggerIndex: 2
                 )
                 DetailStatCard(
-                    value: TripDetailFormat.hoursMinutes(cachedStoppedTime),
+                    segments: TripDetailFormat.durationSegments(cachedStoppedTime, lang: l),
                     label: AppStrings.statStops(l),
                     color: c.textSecondary,
                     staggerIndex: 3
@@ -1222,14 +1857,17 @@ struct TripDetailView: View {
             // Fuel consumption (if vehicle configured)
             if let fuel = tripFuelInfo(trip) {
                 DetailStatCard(
-                    value: String(format: "~%.1f", fuel.volume),
+                    // Canon writes «23.4 л» and «1 310 ₽». The «~» we used to
+                    // prefix said "estimated", which every number on this
+                    // screen is — and it made the tile read like a warning.
+                    value: TripDetailFormat.fuelVolume(fuel.volume),
                     unit: fuel.volUnit,
                     label: AppStrings.statFuel(l),
                     color: AppTheme.yellow,
                     staggerIndex: 8
                 )
                 DetailStatCard(
-                    value: String(format: "~%.0f", fuel.cost),
+                    value: TripDetailFormat.money(fuel.cost),
                     unit: fuel.currency,
                     label: AppStrings.statCost(l),
                     color: AppTheme.accent,
@@ -1281,7 +1919,41 @@ struct TripDetailView: View {
 
     // MARK: - Photos Section
 
+    @ViewBuilder
     private func photosSection(_ c: AppTheme.Colors) -> some View {
+        if !isOwn {
+            // Someone else's photos: served from R2, and there is nothing here
+            // to add to or delete.
+            if !remotePhotos.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    DetailSectionHeader(
+                        text: "\(AppStrings.photos(lang.language)) · \(remotePhotos.count)"
+                    )
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(remotePhotos.enumerated()), id: \.element.id) { index, photo in
+                                RemoteThumbnailView(
+                                    urlString: photo.thumbnailUrl,
+                                    fallbackURLString: photo.originalUrl
+                                )
+                                .frame(width: 74, height: 74)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .contentShape(Rectangle())
+                                .onTapGesture { selectedPhotoIndex = index }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            ownPhotosSection(c)
+        }
+    }
+
+    /// How many tiles the strip shows before the overflow badge takes over.
+    private static let photoStripVisible = 4
+
+    private func ownPhotosSection(_ c: AppTheme.Colors) -> some View {
         let count = trip?.photos.count ?? 0
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -1294,6 +1966,8 @@ struct TripDetailView: View {
                         .font(.system(size: 20))
                         .foregroundStyle(AppTheme.accent)
                 }
+                .accessibilityIdentifier("detail_add_photo")
+                .accessibilityLabel(AppStrings.addPhotos(lang.language))
             }
 
             if let photos = trip?.photos, !photos.isEmpty {
@@ -1303,19 +1977,31 @@ struct TripDetailView: View {
                             AsyncThumbnailView(filename: photo.filename)
                                 .frame(width: 74, height: 74)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                                // The fourth tile carries the remainder, so the
+                                // strip says how many photos there are without
+                                // making you scroll to find out.
+                                .overlay {
+                                    if index == Self.photoStripVisible - 1,
+                                       photos.count > Self.photoStripVisible {
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(.black.opacity(0.45))
+                                            Text("+\(photos.count - Self.photoStripVisible + 1)")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundStyle(.white)
+                                        }
+                                    }
+                                }
                                 .onTapGesture {
                                     selectedPhotoIndex = index
                                 }
-                                .overlay(alignment: .topTrailing) {
-                                    Button {
-                                        photoToDelete = photo
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 16))
-                                            .symbolRenderingMode(.palette)
-                                            .foregroundStyle(.white, .black.opacity(0.5))
-                                    }
-                                    .padding(3)
+                                // Delete on a long press, not on a badge over
+                                // every thumbnail. The canon strip is bare
+                                // pictures (465:145-148), and a row of little
+                                // ✕ marks turned a memory into an inbox.
+                                .onLongPressGesture {
+                                    Haptics.action()
+                                    photoToDelete = photo
                                 }
                         }
                     }

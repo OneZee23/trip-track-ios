@@ -1,28 +1,24 @@
 import SwiftUI
 
-/// Async full-resolution photo loader for fullscreen viewer.
-private struct AsyncFullPhotoView: View {
-    let filename: String
-    @State private var image: UIImage?
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-            } else {
-                Color.clear
-                    .overlay { CarLoadingView(size: .compact) }
-            }
-        }
-        .task(id: filename) {
-            image = await PhotoStorageService.loadPhotoAsync(filename: filename)
-        }
-    }
+/// One page of the viewer, wherever the picture lives.
+///
+/// Our own photos are files in Documents; someone else's arrive as presigned
+/// URLs. The viewer used to know only the first kind, which is why the photo
+/// strip on another rider's trip was a row of pictures you could not open.
+enum FullScreenPhotoSource: Hashable {
+    case local(filename: String)
+    case remote(url: String?)
 }
 
 struct PhotoFullScreenView: View {
-    let photos: [TripPhoto]
+    /// One entry per page: where the picture is, and when it was taken.
+    struct Page: Identifiable, Hashable {
+        let id: UUID
+        let source: FullScreenPhotoSource
+        let timestamp: Date
+    }
+
+    let pages: [Page]
     let initialIndex: Int
     /// Trip region for the bottom caption («14 апр, 10:40 · Тверская обл.»).
     var region: String? = nil
@@ -30,189 +26,144 @@ struct PhotoFullScreenView: View {
     let onDismiss: () -> Void
 
     @State private var currentIndex: Int = 0
-    @State private var dragOffset: CGSize = .zero
-    @State private var scale: CGFloat = 1.0
-    @State private var lastScale: CGFloat = 1.0
-    @State private var imageOffset: CGSize = .zero
-    @State private var lastImageOffset: CGSize = .zero
-    /// Full-res copy of the CURRENT photo backing the top-right ShareLink
-    /// (Figma 117:1086). Reloaded per page; the button hides while nil.
-    @State private var shareImage: UIImage?
+    @State private var dragOffset: CGFloat = 0
+    /// Zoom scale of the page on screen. Anything above 1 means the scroll
+    /// view owns the touches, so the viewer's own swipes stand down.
+    @State private var zoomScale: CGFloat = 1
 
-    private var opacity: Double {
-        let progress = min(abs(dragOffset.height) / 300, 1.0)
-        return 1.0 - progress * 0.5
+    private var isZoomed: Bool { zoomScale > 1.01 }
+
+    /// How far through a dismissing swipe we are, 0…1.
+    private var dismissProgress: CGFloat {
+        min(abs(dragOffset) / 260, 1)
     }
 
     var body: some View {
         ZStack {
-            Color.black.opacity(opacity)
+            // Fades as the picture is pulled away, so the trip underneath comes
+            // back into view instead of the photo jumping off a black wall.
+            Color.black
+                .opacity(1 - dismissProgress * 0.55)
                 .ignoresSafeArea()
-                .onTapGesture { onDismiss() }
 
-            TabView(selection: $currentIndex) {
-                ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
-                    photoPage(index: index, photo: photo)
-                        .tag(index)
+            pager
+                .ignoresSafeArea()
+                .offset(y: dragOffset)
+                // Shrinking as it goes is what makes the swipe feel like it is
+                // putting the picture back where it came from.
+                .scaleEffect(1 - dismissProgress * 0.12)
+                .gesture(dismissDrag)
+
+            // Chrome deliberately does NOT ignore the safe area: the close
+            // button belongs under the status bar, not on top of the clock.
+            chrome
+                .opacity(isZoomed ? 0 : 1 - dismissProgress)
+                .animation(.easeOut(duration: 0.18), value: isZoomed)
+        }
+        .statusBarHidden(false)
+        .onAppear { currentIndex = initialIndex }
+        .onChange(of: currentIndex) { _, _ in
+            // A new page starts at fit scale; the zoom belonged to the old one.
+            zoomScale = 1
+        }
+    }
+
+    // MARK: - Pages
+
+    private var pager: some View {
+        TabView(selection: $currentIndex) {
+            ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
+                PhotoPage(
+                    source: page.source,
+                    onZoomChange: { scale in
+                        guard index == currentIndex else { return }
+                        zoomScale = scale
+                    },
+                    onSingleTap: {
+                        // While zoomed a stray tap must not close the viewer —
+                        // the scroll view will take it back to fit first.
+                        guard !isZoomed else { return }
+                        onDismiss()
+                    }
+                )
+                .tag(index)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+    }
+
+    /// Pull down (or up) to put the photo away. Off while zoomed — there the
+    /// same finger movement is panning around the picture.
+    private var dismissDrag: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                guard !isZoomed else { return }
+                // Horizontal intent belongs to the pager.
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                dragOffset = value.translation.height
+            }
+            .onEnded { value in
+                guard !isZoomed else { return }
+                let far = abs(value.translation.height) > 120
+                let flung = abs(value.predictedEndTranslation.height) > 300
+                if far || flung {
+                    onDismiss()
+                } else {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                        dragOffset = 0
+                    }
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .offset(y: scale <= 1.0 ? dragOffset.height : 0)
-            .gesture(
-                scale <= 1.0 ?
-                DragGesture()
-                    .onChanged { value in
-                        dragOffset = value.translation
-                    }
-                    .onEnded { value in
-                        if abs(value.translation.height) > 120 || abs(value.predictedEndTranslation.height) > 300 {
-                            onDismiss()
-                        } else {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                dragOffset = .zero
-                            }
-                        }
-                    }
-                : nil
-            )
+    }
 
-            // Top chrome (Figma 117:1086): dismiss circle left + «2 / 6»
-            // counter centered + share circle right (symmetric 34pt).
-            VStack {
-                ZStack {
-                    Text("\(currentIndex + 1) / \(photos.count)")
-                        .font(.system(size: 13, weight: .medium).monospacedDigit())
+    // MARK: - Chrome
+
+    private var chrome: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                if pages.count > 1 {
+                    Text("\(currentIndex + 1) / \(pages.count)")
+                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
                         .foregroundStyle(.white)
-                    HStack {
-                        Button(action: onDismiss) {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 34, height: 34)
-                                .background(.black.opacity(0.4), in: Circle())
-                        }
-                        Spacer()
-                        if let shareImage {
-                            ShareLink(
-                                item: Image(uiImage: shareImage),
-                                preview: SharePreview(
-                                    captionLine ?? AppStrings.photos(language),
-                                    image: Image(uiImage: shareImage)
-                                )
-                            ) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 34, height: 34)
-                                    .background(.black.opacity(0.4), in: Circle())
-                            }
-                            .accessibilityLabel(AppStrings.share(language))
-                        }
-                    }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.black.opacity(0.35), in: Capsule())
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                Spacer()
+                HStack {
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(.black.opacity(0.4), in: Circle())
+                    }
+                    .accessibilityLabel(AppStrings.closeSheet(language))
+                    .accessibilityIdentifier("photo_viewer_close")
+                    Spacer(minLength: 0)
+                    // No share button: a photo is shared as part of the trip,
+                    // from the ↑ in the detail header. A per-photo share was a
+                    // second, quieter way to publish someone else's picture.
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
 
-            // Bottom chrome: page dots + timestamp/region caption.
+            Spacer(minLength: 0)
+
             VStack(spacing: 10) {
-                Spacer()
-                if photos.count > 1 {
-                    PhotoPageDots(count: photos.count, current: currentIndex)
+                if pages.count > 1 {
+                    PhotoPageDots(count: pages.count, current: currentIndex)
                 }
                 if let caption = captionLine {
                     Text(caption)
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
                 }
             }
-            .padding(.bottom, 24)
+            .padding(.bottom, 12)
             .allowsHitTesting(false)
         }
-        .onAppear { currentIndex = initialIndex }
-        .task(id: currentIndex) {
-            // Feed the ShareLink the full-res image of the visible page.
-            // Loads are local-disk; the index re-check keeps a slow stale
-            // load from clobbering the image of a newer page.
-            shareImage = nil
-            let idx = currentIndex
-            guard photos.indices.contains(idx) else { return }
-            let img = await PhotoStorageService.loadPhotoAsync(filename: photos[idx].filename)
-            if !Task.isCancelled, idx == currentIndex {
-                shareImage = img
-            }
-        }
-        .onChange(of: currentIndex) { _ in
-            // Reset zoom when switching photos
-            scale = 1.0
-            lastScale = 1.0
-            imageOffset = .zero
-            lastImageOffset = .zero
-        }
-    }
-
-    /// One swipeable page: the image with pinch-zoom, pan-while-zoomed, and
-    /// double-tap-to-zoom. Extracted from `body` so the type-checker doesn't
-    /// choke on the combined gesture chain.
-    @ViewBuilder
-    private func photoPage(index: Int, photo: TripPhoto) -> some View {
-        AsyncFullPhotoView(filename: photo.filename)
-            .scaledToFit()
-            .scaleEffect(index == currentIndex ? scale : 1.0)
-            .offset(index == currentIndex ? imageOffset : .zero)
-            .gesture(
-                MagnificationGesture()
-                    .onChanged { value in
-                        scale = lastScale * value
-                    }
-                    .onEnded { _ in
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            if scale < 1.0 {
-                                scale = 1.0
-                                imageOffset = .zero
-                                lastImageOffset = .zero
-                            } else if scale > 4.0 {
-                                scale = 4.0
-                            }
-                        }
-                        lastScale = scale
-                    }
-            )
-            .simultaneousGesture(
-                scale > 1.0 ?
-                DragGesture()
-                    .onChanged { value in
-                        imageOffset = CGSize(
-                            width: lastImageOffset.width + value.translation.width,
-                            height: lastImageOffset.height + value.translation.height
-                        )
-                    }
-                    .onEnded { _ in
-                        lastImageOffset = imageOffset
-                    }
-                : nil
-            )
-            .onTapGesture(count: 2) {
-                if index == currentIndex { toggleZoom() }
-            }
-            .onTapGesture(count: 1) {
-                guard index == currentIndex else { return }
-                // While zoomed, a single tap resets to fit (not dismiss) — only a
-                // tap at fit scale dismisses, matching standard photo viewers and
-                // the backdrop tap above. (count:2 is declared first so a double
-                // tap is consumed by the zoom toggle, not this.)
-                if scale > 1.0 {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        scale = 1.0
-                        lastScale = 1.0
-                        imageOffset = .zero
-                        lastImageOffset = .zero
-                    }
-                } else {
-                    onDismiss()
-                }
-            }
     }
 
     private static let captionFormatters: (ru: DateFormatter, en: DateFormatter) = {
@@ -227,27 +178,79 @@ struct PhotoFullScreenView: View {
 
     /// «14 апр, 10:40 · Тверская обл.» — photo timestamp + trip region.
     private var captionLine: String? {
-        guard photos.indices.contains(currentIndex) else { return nil }
+        guard pages.indices.contains(currentIndex) else { return nil }
         let f = language == .ru ? Self.captionFormatters.ru : Self.captionFormatters.en
-        var line = f.string(from: photos[currentIndex].timestamp)
+        var line = f.string(from: pages[currentIndex].timestamp)
         if let region, !region.isEmpty {
             line += " · \(region)"
         }
         return line
     }
+}
 
-    /// Double-tap toggles between fit and 2.5× (centered). Pinch still allows
-    /// finer zoom up to 4×; panning stays available while zoomed.
-    private func toggleZoom() {
-        withAnimation(.easeOut(duration: 0.2)) {
-            if scale > 1.0 {
-                scale = 1.0
-                lastScale = 1.0
-                imageOffset = .zero
-                lastImageOffset = .zero
+/// Loads one photo — from Documents or from the network — and hands it to the
+/// zoomable surface. Kept separate so a page that is still loading, or that
+/// failed, is a state of the page rather than a branch inside the pager.
+private struct PhotoPage: View {
+    let source: FullScreenPhotoSource
+    let onZoomChange: (CGFloat) -> Void
+    let onSingleTap: () -> Void
+
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let image {
+                ZoomableImageView(
+                    image: image,
+                    onZoomChange: onZoomChange,
+                    onSingleTap: onSingleTap
+                )
+            } else if failed {
+                VStack(spacing: 10) {
+                    Image(systemName: "photo.badge.exclamationmark")
+                        .font(.system(size: 28))
+                    Text(verbatim: "—")
+                        .font(.system(size: 13))
+                }
+                .foregroundStyle(.white.opacity(0.5))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onSingleTap)
             } else {
-                scale = 2.5
-                lastScale = 2.5
+                Color.clear
+                    .overlay { CarLoadingView(size: .compact) }
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onSingleTap)
+            }
+        }
+        .task(id: source) {
+            await load()
+        }
+    }
+
+    private func load() async {
+        switch source {
+        case .local(let filename):
+            let loaded = await PhotoStorageService.loadPhotoAsync(filename: filename)
+            if Task.isCancelled { return }
+            image = loaded
+            failed = loaded == nil
+        case .remote(let urlString):
+            guard let urlString, let url = URL(string: urlString) else {
+                failed = true
+                return
+            }
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                if Task.isCancelled { return }
+                let decoded = UIImage(data: data)
+                image = decoded
+                failed = decoded == nil
+            } catch {
+                if Task.isCancelled { return }
+                failed = true
             }
         }
     }

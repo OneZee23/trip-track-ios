@@ -29,6 +29,10 @@ struct TripReplayView: View {
     @State private var isGeneratingShare = false
     /// Playback was running when a scrub began — resume on release.
     @State private var resumeAfterScrub = false
+    /// Camera rides with the car by default: that is the drive as you took it,
+    /// street by street. The toggle pulls back to the whole route for the
+    /// «where did I actually go» view.
+    @State private var followsCar = true
 
     /// Root cinema background (Figma #121214).
     private static let rootBg = Color(red: 0x12/255, green: 0x12/255, blue: 0x14/255)
@@ -72,23 +76,36 @@ struct TripReplayView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .top) {
-                PosterRouteCanvas(
+                // A real map, not a canvas. The route on its own is a shape;
+                // on the map it is a place — the reason to relive a drive is
+                // to see WHERE you went, and the towns and the coastline are
+                // half of what you are looking at.
+                RouteMapView(
                     coordinates: coordinates,
                     speeds: speeds,
-                    playbackCoord: engine.headCoord,
+                    isInteractive: false,
+                    // Fog as it stood when the trip ended, so reliving it
+                    // shows the map you were exploring then, not the one you
+                    // have filled in since.
+                    fogCutoffDate: trip.endDate,
+                    playbackCarCoord: engine.headCoord,
                     playbackTrailIndex: engine.trailIndex,
-                    style: .cinema
+                    playbackFollow: followsCar,
+                    fitInsets: UIEdgeInsets(
+                        top: safeAreaTop + 56, left: 28,
+                        bottom: safeAreaBottom + (sortedPhotos.isEmpty ? 96 : 170), right: 28
+                    )
                 )
+                .id(coordinates.count)
 
-                // Figma cinema gradient: rgba(18,18,20,.5) → 0@30% → 0@50%
-                // → .94@100% — keeps the route readable mid-frame while the
-                // chrome zones go near-black.
+                // Legibility gradient: the map has to stay bright in the
+                // middle band and go dark where the chrome sits.
                 LinearGradient(
                     stops: [
-                        .init(color: Self.rootBg.opacity(0.5), location: 0),
-                        .init(color: Self.rootBg.opacity(0), location: 0.30),
-                        .init(color: Self.rootBg.opacity(0), location: 0.50),
-                        .init(color: Self.rootBg.opacity(0.94), location: 1)
+                        .init(color: Self.rootBg.opacity(0.55), location: 0),
+                        .init(color: Self.rootBg.opacity(0), location: 0.22),
+                        .init(color: Self.rootBg.opacity(0), location: 0.55),
+                        .init(color: Self.rootBg.opacity(0.88), location: 1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -158,6 +175,16 @@ struct TripReplayView: View {
             Spacer(minLength: 0)
 
             PosterCircleButton(
+                systemImage: followsCar ? "location.fill" : "map",
+                accessibilityLabelText: lang.language == .ru
+                    ? (followsCar ? "Показать весь маршрут" : "Следовать за машиной")
+                    : (followsCar ? "Show whole route" : "Follow the car")
+            ) {
+                withAnimation(.easeInOut(duration: 0.25)) { followsCar.toggle() }
+            }
+            .accessibilityIdentifier("replay_camera_toggle")
+
+            PosterCircleButton(
                 systemImage: "square.and.arrow.up",
                 accessibilityLabelText: AppStrings.share(lang.language)
             ) {
@@ -171,31 +198,33 @@ struct TripReplayView: View {
 
     // MARK: - Speed bubble
 
-    /// Current-speed pill floating above the car, projected through the
-    /// same equirectangular fit the canvas draws with, clamped inside the
-    /// chrome-free band.
+    /// Current speed, read where the car actually is.
+    ///
+    /// While the camera follows, the car is pinned to the middle of the map by
+    /// construction, so the pill can sit just above the centre with no
+    /// projection maths at all. Pulled back to the whole route the car's screen
+    /// position belongs to MapKit and nobody else, so the pill parks under the
+    /// top bar instead of guessing.
     @ViewBuilder
     private func speedBubble(in size: CGSize) -> some View {
-        if speeds.count == coordinates.count, !speeds.isEmpty,
-           let head = engine.headCoord,
-           let pt = PosterRouteCanvas.overlayPoint(for: head, route: coordinates, in: size) {
+        if speeds.count == coordinates.count, !speeds.isEmpty, engine.headCoord != nil {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(Int(engine.currentSpeedKmh.rounded()))")
                     .font(.system(size: 15, weight: .heavy).monospacedDigit())
                     .foregroundStyle(AppTheme.accent)
                 Text(AppStrings.kmh(lang.language))
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.white.opacity(0.7))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .background(.black.opacity(0.32), in: Capsule())
+            .background(.black.opacity(0.45), in: Capsule())
             .position(
-                x: min(max(pt.x, 62), size.width - 62),
-                y: min(max(pt.y - 34, safeAreaTop + 66), size.height - safeAreaBottom - 190)
+                x: followsCar ? size.width / 2 : 74,
+                y: followsCar ? size.height / 2 - 44 : safeAreaTop + 68
             )
             .allowsHitTesting(false)
-            .animation(nil, value: engine.progress)
+            .animation(.easeInOut(duration: 0.25), value: followsCar)
         }
     }
 
@@ -226,21 +255,28 @@ struct TripReplayView: View {
 
     private func photoMoment(_ photo: TripPhoto) -> some View {
         let isActive = photo.id == activePhotoId
-        return VStack(spacing: 4) {
-            AsyncThumbnailView(filename: photo.filename, maxSize: 124)
-                .frame(width: 62, height: 62)
-                .background(Self.tileBg)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay {
-                    if isActive {
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(.white, lineWidth: 2)
-                    }
+        // The time sits ON the tile (canon): stacked underneath it made every
+        // moment 79pt tall for 62pt of picture, and the strip lost a quarter of
+        // its height to a row of timestamps.
+        return AsyncThumbnailView(filename: photo.filename, maxSize: 124)
+            .frame(width: 62, height: 62)
+            .background(Self.tileBg)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(alignment: .bottom) {
+                Text(Self.hhmmFormatter.string(from: photo.timestamp))
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.white.opacity(isActive ? 0.9 : 0.55))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(.black.opacity(0.45)))
+                    .padding(.bottom, 4)
+            }
+            .overlay {
+                if isActive {
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(.white, lineWidth: 2)
                 }
-            Text(Self.hhmmFormatter.string(from: photo.timestamp))
-                .font(.system(size: 11, weight: .medium).monospacedDigit())
-                .foregroundStyle(.white.opacity(isActive ? 0.7 : 0.32))
-        }
+            }
         .contentShape(Rectangle())
         .onTapGesture {
             Haptics.tap()

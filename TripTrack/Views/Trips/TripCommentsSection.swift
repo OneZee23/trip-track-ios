@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// «Комментарии · N» — shared comments card of the trip-detail poster
-/// redesign (Figma 549:129 own / 531:119 social): white card r16 with
-/// comment rows, a «Показать ещё» pager and the composer row. Used by both
-/// TripDetailView (public own trips) and SocialTripDetailView (always).
+/// «Обсуждение · N» — the discussion of a trip, in two shapes.
 ///
-/// Empty state is the composer row alone — no ghost rows, no fake copy.
+/// On the detail screen it is a TEASER of constant height: the two freshest
+/// messages, a centred «Всё обсуждение · N ›» pill, and a row that looks like
+/// a composer but is a door — tapping it opens the sheet with the keyboard
+/// already up. Writing happens in one place, with the whole thread in view.
+///
+/// The same view with `isPreview: false` IS that sheet.
 struct TripCommentsSection: View {
     let tripId: UUID
     /// Viewer owns the trip → may delete ANY comment (server enforces the
@@ -19,6 +21,9 @@ struct TripCommentsSection: View {
     /// composer — parent presents its SignInPromptSheet. nil on the
     /// own-trip screen (composing there implies an account already).
     var onGuestInputTap: (() -> Void)? = nil
+    /// Raise the keyboard as soon as the sheet is up — set when the user came
+    /// in by tapping the write row.
+    var startFocused: Bool = false
     /// Error surface — parents route the message into their toast host.
     var onError: (String) -> Void
     /// Opened from that comment's notification: page until it's loaded,
@@ -41,6 +46,9 @@ struct TripCommentsSection: View {
     @State private var replyTarget: TripComment?
     /// Full-thread sheet, opened from «Все ›» or by tapping a row.
     @State private var showAllComments = false
+    /// Whether the sheet should open with the keyboard up — true when the user
+    /// tapped the write row rather than the «Всё обсуждение» pill.
+    @State private var openSheetFocused = false
     @State private var commentToDelete: TripComment?
     @FocusState private var composerFocused: Bool
     @EnvironmentObject private var lang: LanguageManager
@@ -53,8 +61,10 @@ struct TripCommentsSection: View {
     /// total (if known) is the honest figure. A FAILED first page taught us
     /// nothing — keep trusting the feed-DTO count instead of flipping a
     /// commented trip to «· 0».
-    /// Canon shows three rows under a five-comment header.
-    private static let previewLimit = 3
+    /// The teaser shows the two freshest messages; everything else lives in
+    /// the sheet. Two is what keeps the block a constant ~180pt on the detail
+    /// screen instead of a section that grows with the conversation.
+    private static let previewLimit = 2
 
     /// Newest-first list; the preview keeps the freshest few.
     private var visibleComments: [TripComment] {
@@ -84,55 +94,117 @@ struct TripCommentsSection: View {
     private var content: some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                DetailSectionHeader(text: AppStrings.commentsTitleN(lang.language, displayCount))
-                Spacer(minLength: 8)
-                // «Все ›» only when the preview is actually hiding something.
-                if isPreview, displayCount > Self.previewLimit {
-                    Button {
-                        Haptics.tap()
-                        showAllComments = true
-                    } label: {
-                        HStack(spacing: 2) {
-                            Text(AppStrings.commentsSeeAll(lang.language))
-                                .font(.system(size: 13, weight: .semibold))
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 11, weight: .bold))
-                        }
-                        .foregroundStyle(AppTheme.accent)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+            DetailSectionHeader(text: AppStrings.commentsTitleN(lang.language, displayCount))
 
             VStack(spacing: 0) {
+                // Canon 545:520: an empty public thread invites rather than
+                // showing a bare composer under a heading. The composer alone
+                // read as a section that had failed to load its contents.
+                if visibleComments.isEmpty {
+                    Text(AppStrings.noCommentsYet(lang.language))
+                        .font(.system(size: 14))
+                        .foregroundStyle(c.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 16)
+                    Rectangle()
+                        .fill(c.border)
+                        .frame(height: 1)
+                }
+
                 ForEach(visibleComments) { comment in
                     commentRow(comment, c: c)
                         .id(comment.id)
+                    Rectangle()
+                        .fill(c.border)
+                        .frame(height: 1)
                 }
 
-                // The preview never paginates — «Все ›» is the way deeper.
+                // The preview never paginates — the pill below is the way in.
                 if !isPreview, store.nextCursor != nil {
                     showMoreButton
                 }
 
-                composerRow(c)
+                // On the detail the composer is a doorway, not a field: tapping
+                // it opens the sheet with the keyboard already up, so writing
+                // happens in one place with the whole thread in view.
+                if isPreview {
+                    Button {
+                        Haptics.tap()
+                        guard !(onGuestInputTap != nil && !auth.isSignedIn) else {
+                            onGuestInputTap?()
+                            return
+                        }
+                        openSheetFocused = true
+                        showAllComments = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(AppTheme.accent.opacity(0.12))
+                                .frame(width: 30, height: 30)
+                                .overlay { Text(settings.avatarEmoji).font(.system(size: 15)) }
+                            Text(store.comments.isEmpty
+                                 ? AppStrings.writeFirstMessage(lang.language)
+                                 : AppStrings.commentPlaceholder(lang.language))
+                                .font(.system(size: 14))
+                                .foregroundStyle(c.textTertiary)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("discussion_cta_row")
+                } else {
+                    composerRow(c)
+                }
             }
             .background {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(c.card)
                     .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
             }
+
+            if isPreview, displayCount > Self.previewLimit {
+                Button {
+                    Haptics.tap()
+                    openSheetFocused = false
+                    showAllComments = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(AppStrings.discussionSeeAllPill(lang.language, displayCount))
+                            .font(.system(size: 13, weight: .semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(AppTheme.accent)
+                    .padding(.horizontal, 14)
+                    .frame(height: 32)
+                    .background(Capsule().fill(AppTheme.accent.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .accessibilityIdentifier("discussion_see_all")
+            }
         }
         .task(id: tripId) {
             await store.load(tripId: tripId)
             await spotlightIfRequested()
+        }
+        .task {
+            guard startFocused, !isPreview else { return }
+            // A beat, so the sheet has finished presenting before the keyboard
+            // is asked for — otherwise iOS drops the focus request.
+            try? await Task.sleep(for: .milliseconds(350))
+            composerFocused = true
         }
         .sheet(isPresented: $showAllComments) {
             TripCommentsScreen(
                 tripId: tripId,
                 isTripOwner: isTripOwner,
                 initialCount: displayCount,
+                startFocused: openSheetFocused,
                 onError: onError
             )
             .environmentObject(lang)
@@ -325,16 +397,29 @@ struct TripCommentsSection: View {
                 .frame(minHeight: 38)
                 .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 999))
 
+            // A round «↑», grey until there is something to send. The word
+            // «Отправить» is gone from the product: the arrow is the same
+            // control everywhere, and it never has to be translated or
+            // squeezed next to a growing field.
             Button {
                 sendDraft()
             } label: {
-                Text(AppStrings.send(lang.language))
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppTheme.accent)
-                    .opacity(trimmed.isEmpty || store.isPosting ? 0.4 : 1)
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        Circle().fill(
+                            trimmed.isEmpty || store.isPosting
+                                ? c.textTertiary.opacity(0.35)
+                                : AppTheme.accent
+                        )
+                    )
             }
             .buttonStyle(.plain)
             .disabled(trimmed.isEmpty || store.isPosting)
+            .accessibilityLabel(AppStrings.send(lang.language))
+            .accessibilityIdentifier("discussion_send")
             }
         }
         .padding(.horizontal, 14)

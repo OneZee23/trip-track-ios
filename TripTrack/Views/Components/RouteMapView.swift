@@ -37,6 +37,10 @@ struct RouteMapView: UIViewRepresentable {
     /// which the 1 km gap threshold treats as discontinuities and leaves the
     /// map with zero drawable segments (so no bounding rect, so no zoom).
     var treatAsPreview: Bool = false
+    /// Bumped by the caller's «+» / «−» buttons. Only the CHANGE matters — the
+    /// coordinator remembers the last value it applied, so an unrelated
+    /// re-render never re-zooms the map under the user's fingers.
+    var zoomTick: Int = 0
     /// Interpolated car position for the current playback frame, or `nil`
     /// when not playing. Pre-computed by `RoutePlaybackController` and
     /// passed through here — the view does not interpolate, it only
@@ -49,8 +53,38 @@ struct RouteMapView: UIViewRepresentable {
     /// we only do it when the trail tip actually advances to a new
     /// real waypoint.
     var playbackTrailIndex: Int = -1
+    /// Camera rides with the playback head instead of framing the whole route.
+    /// The car then sits at a FIXED point on screen — the middle — which is
+    /// what lets the replay draw a speed bubble over it without projecting
+    /// coordinates into view space itself.
+    var playbackFollow: Bool = false
+    /// Metres across the map while following.
+    var playbackFollowSpan: Double = 1400
+    /// Padding used when framing the whole route. The replay needs a wider
+    /// bottom margin than the previews do — its transport controls sit there.
+    var fitInsets: UIEdgeInsets?
 
     private static let gapThreshold = GeometryUtils.defaultGapThreshold
+
+    /// Smallest rect the preview will zoom to, ~400 m across.
+    ///
+    /// A trip recorded standing still collapses to a rect of almost no size,
+    /// and `setVisibleMapRect` honours it literally: the camera goes to its
+    /// maximum zoom, past the level any tiles exist for, and the preview comes
+    /// out an empty grey rectangle. A floor keeps the surrounding streets in
+    /// frame, so a stationary trip looks like a place instead of a bug.
+    private static let minimumSpanMetres: Double = 400
+
+    static func floored(_ rect: MKMapRect) -> MKMapRect {
+        let centre = MKMapPoint(x: rect.midX, y: rect.midY)
+        let pointsPerMetre = MKMapPointsPerMeterAtLatitude(centre.coordinate.latitude)
+        let minimum = minimumSpanMetres * pointsPerMetre
+        guard rect.size.width < minimum || rect.size.height < minimum else { return rect }
+        let width = max(rect.size.width, minimum)
+        let height = max(rect.size.height, minimum)
+        return MKMapRect(x: centre.x - width / 2, y: centre.y - height / 2,
+                         width: width, height: height)
+    }
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -65,6 +99,15 @@ struct RouteMapView: UIViewRepresentable {
         mapView.preferredConfiguration = MKStandardMapConfiguration(
             elevationStyle: isInteractive ? .realistic : .flat
         )
+        // Apple requires the Maps attribution to stay visible, and it is laid
+        // out against these margins. Without this the replay's transport row
+        // sits right on top of it.
+        if let fitInsets {
+            mapView.layoutMargins = UIEdgeInsets(
+                top: 0, left: fitInsets.left,
+                bottom: max(0, fitInsets.bottom - 24), right: fitInsets.right
+            )
+        }
 
         if coordinates.count >= 2 {
             // Split into continuous segments first, then simplify each.
@@ -106,8 +149,12 @@ struct RouteMapView: UIViewRepresentable {
             }
 
             if !unionRect.isNull {
-                let insets = UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
-                mapView.setVisibleMapRect(unionRect, edgePadding: insets, animated: false)
+                let insets = fitInsets ?? UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
+                // Remembered so the replay can come back to the whole route
+                // after following the car around.
+                context.coordinator.overviewRect = unionRect
+                context.coordinator.overviewInsets = insets
+                mapView.setVisibleMapRect(Self.floored(unionRect), edgePadding: insets, animated: false)
 
                 // Add fog of war overlay (below route polylines)
                 let visitedHashes: Set<String>
@@ -120,6 +167,18 @@ struct RouteMapView: UIViewRepresentable {
                     mapView.insertOverlay(fog, at: 0, level: .aboveRoads)
                 }
             }
+        }
+
+        // A trip that never moved — a wait at a barrier, a two-minute test —
+        // still has a place, and «where you were» is the one thing the preview
+        // can honestly show. Without this the map got a rect of zero size,
+        // MapKit zoomed to its limit and drew a blank grey field with a lone
+        // dot in it, which reads as a broken map rather than a short trip.
+        if coordinates.count < 2, let only = coordinates.first {
+            mapView.setVisibleMapRect(
+                Self.floored(MKMapRect(origin: MKMapPoint(only), size: MKMapSize(width: 0, height: 0))),
+                animated: false
+            )
         }
 
         // Start / end dots
@@ -140,10 +199,17 @@ struct RouteMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
+        context.coordinator.applyZoom(tick: zoomTick, mapView: mapView)
         context.coordinator.applyPlayback(
             carCoord: playbackCarCoord,
             trailIndex: playbackTrailIndex,
             coords: coordinates,
+            mapView: mapView
+        )
+        context.coordinator.applyCamera(
+            follow: playbackFollow,
+            car: playbackCarCoord,
+            spanMetres: playbackFollowSpan,
             mapView: mapView
         )
     }
@@ -246,6 +312,79 @@ struct RouteMapView: UIViewRepresentable {
     // MARK: - Coordinator
 
     class Coordinator: NSObject, MKMapViewDelegate {
+        /// Last zoom tick applied, so a re-render for any other reason does not
+        /// re-run the zoom.
+        private var lastZoomTick: Int = 0
+
+        /// One step of the «+» / «−» buttons: halve or double the visible span.
+        func applyZoom(tick: Int, mapView: MKMapView) {
+            guard tick != lastZoomTick else { return }
+            let zoomingIn = tick > lastZoomTick
+            lastZoomTick = tick
+            var region = mapView.region
+            let factor = zoomingIn ? 0.5 : 2.0
+            region.span = MKCoordinateSpan(
+                latitudeDelta: min(max(region.span.latitudeDelta * factor, 0.0005), 120),
+                longitudeDelta: min(max(region.span.longitudeDelta * factor, 0.0005), 120)
+            )
+            mapView.setRegion(region, animated: true)
+        }
+
+        /// The whole-route rect the map opened on, so «обзор» can return to it.
+        var overviewRect: MKMapRect = .null
+        var overviewInsets = UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
+        /// Whether the camera is currently riding with the car.
+        private var following = false
+
+        /// Camera mode for the replay: ride with the playback head, or frame
+        /// the whole route.
+        ///
+        /// Entering follow mode animates once, to a street-level box around the
+        /// car; from then on the centre is moved without animation, every
+        /// frame, which is how a navigation camera behaves. Animating each
+        /// frame would queue 60 competing animations a second and the map
+        /// would visibly lag behind the car.
+        func applyCamera(
+            follow: Bool,
+            car: CLLocationCoordinate2D?,
+            spanMetres: Double,
+            mapView: MKMapView
+        ) {
+            guard follow else {
+                guard following else { return }
+                following = false
+                guard !overviewRect.isNull else { return }
+                mapView.setVisibleMapRect(
+                    RouteMapView.floored(overviewRect),
+                    edgePadding: overviewInsets,
+                    animated: true
+                )
+                return
+            }
+            guard let car else { return }
+            if following {
+                // Let the zoom-in that started this mode finish. Without the
+                // pause the very next playback frame calls setCenter, which
+                // cancels the animation — and the camera arrives by a cut
+                // rather than by moving there.
+                guard CACurrentMediaTime() >= followAnimationUntil else { return }
+                mapView.setCenter(car, animated: false)
+            } else {
+                following = true
+                followAnimationUntil = CACurrentMediaTime() + 0.45
+                mapView.setRegion(
+                    MKCoordinateRegion(
+                        center: car,
+                        latitudinalMeters: spanMetres,
+                        longitudinalMeters: spanMetres
+                    ),
+                    animated: true
+                )
+            }
+        }
+
+        private var followAnimationUntil: CFTimeInterval = 0
+
         weak var playbackPolyline: PlaybackPolyline?
         /// Two-point overlay that bridges the gap between the body
         /// trail's end and the interpolated car position. Replaced
@@ -307,7 +446,13 @@ struct RouteMapView: UIViewRepresentable {
                 let safe = min(trailIndex, coords.count - 1)
                 var body = Array(coords[0...safe])
                 let poly = PlaybackPolyline(coordinates: &body, count: body.count)
-                mapView.addOverlay(poly, level: .aboveLabels)
+                // UNDER the route, not over it. Drawn on top, a solid trail
+                // painted out the speed colours behind the car, and by the end
+                // of the replay the whole trip was one white line. As a casing
+                // beneath it the covered stretch is haloed and still coloured.
+                mapView.insertOverlay(
+                    poly, at: min(1, mapView.overlays.count), level: .aboveRoads
+                )
                 playbackPolyline = poly
                 playbackLastIndex = trailIndex
             }
@@ -323,7 +468,9 @@ struct RouteMapView: UIViewRepresentable {
                 }
                 var tip = [coords[trailIndex], car]
                 let poly = PlaybackTipPolyline(coordinates: &tip, count: 2)
-                mapView.addOverlay(poly, level: .aboveLabels)
+                mapView.insertOverlay(
+                    poly, at: min(1, mapView.overlays.count), level: .aboveRoads
+                )
                 playbackTip = poly
             }
             // Car position — KVO-observed `@objc dynamic coordinate` on
@@ -345,11 +492,11 @@ struct RouteMapView: UIViewRepresentable {
             }
             if let playback = overlay as? PlaybackPolyline {
                 let renderer = MKPolylineRenderer(polyline: playback)
-                // Bright accent + thicker stroke so the trail is visibly
-                // "this is what you've covered so far" against the static
-                // route underneath.
+                // A white casing, wider than the route, sitting under it: the
+                // covered stretch reads as lit up without losing the speed
+                // colour that is the whole point of the line.
                 renderer.strokeColor = UIColor(red: 0xFF/255, green: 0xFF/255, blue: 0xFF/255, alpha: 1.0)
-                renderer.lineWidth = 6
+                renderer.lineWidth = 12
                 renderer.lineCap = .round
                 renderer.lineJoin = .round
                 return renderer
@@ -360,7 +507,7 @@ struct RouteMapView: UIViewRepresentable {
                 // update because the tip is just 2 points.
                 let renderer = MKPolylineRenderer(polyline: tip)
                 renderer.strokeColor = UIColor(red: 0xFF/255, green: 0xFF/255, blue: 0xFF/255, alpha: 1.0)
-                renderer.lineWidth = 6
+                renderer.lineWidth = 12
                 renderer.lineCap = .round
                 renderer.lineJoin = .round
                 return renderer
