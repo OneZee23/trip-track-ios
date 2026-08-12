@@ -1,45 +1,53 @@
 import Foundation
 
-/// Someone who was in the car with you.
+/// Offline cache of the SERVER's companion roster for one of the viewer's
+/// OWN trips (`/companions/list`, via `CompanionsStore.list`).
 ///
-/// Local for now, and honest about it: a companion is a name and a face you
-/// attach to a trip, stored with the trip on this device. Linking them to a
-/// real account — so the trip shows up in THEIR history, so they can add their
-/// own photos, so they get asked first — needs the server to know what a
-/// companion is, and it does not yet. `accountId` is where that link will go;
-/// everything else about the feature works without it.
+/// This type used to hold a locally-invented label — a name and an emoji
+/// you typed in yourself, with no server involvement (`accountId` was
+/// optional, a placeholder for a real-accounts feature that didn't exist
+/// yet). The product owner then decided companions must be real accounts
+/// only, and the client UI that let you invent one was deleted. What
+/// remains of this type is repurposed, not retired: `CompanionsStore.list`
+/// writes the server's answer here after every successful load ON THE
+/// VIEWER'S OWN TRIP, so the companions card still has something to draw
+/// the next time that same request can't reach the network
+/// (`CompanionsCardModel.decide`'s `cached` parameter).
+///
+/// Two invariants this type's callers must keep:
+///  - It is NEVER the source of truth — `/companions/list`'s live response
+///    is, and a cache hit is always flagged as possibly stale (see
+///    `CompanionsCardModel.Banner.stale`), never presented as confirmed.
+///  - It is NEVER written for someone else's trip.
+///    `TripRepository.updateCompanions` no-ops when `tripId` has no local
+///    `TripEntity`, and a foreign trip never has one — see
+///    `CompanionsCachePersistenceTests` for the count-based proof.
+///
+/// Field-for-field mirror of `CompanionItem` (`CompanionsDTOs.swift`) so
+/// converting either direction (`init(item:)` / `asCompanionItem`) is
+/// lossless.
 struct TripCompanion: Identifiable, Codable, Hashable {
-    let id: UUID
-    /// What you call them — «Аня», «Дмитрий П.», «Папа».
-    var name: String
-    /// Emoji face, chosen from a small palette. Not a photo: a photo of another
-    /// person is theirs to give, not ours to store because they sat in a car.
-    var avatar: String
-    /// Set once companions are real accounts. Nil means a local label.
-    var accountId: String?
+    /// The server account this row is about — every companion cached here
+    /// IS a real account.
+    let accountId: UUID
+    var displayName: String?
+    var avatarEmoji: String?
+    var status: CompanionStatus
 
-    init(id: UUID = UUID(), name: String, avatar: String = "🙂", accountId: String? = nil) {
-        self.id = id
-        self.name = name
-        self.avatar = avatar
-        self.accountId = accountId
-    }
-
-    /// Longest name the row will show without turning into a paragraph.
-    static let nameLimit = 24
-
-    /// Faces offered when adding someone. Deliberately a short list — this is
-    /// a marker so you can tell two companions apart at a glance, not an
-    /// avatar builder.
-    static let avatarPalette = [
-        "🙂", "😎", "🐻", "🐱", "🦊", "🐼", "🦁", "🐧",
-        "👩", "👨", "🧑", "👵", "👴", "🚀", "⚡️", "🌿"
-    ]
+    var id: UUID { accountId }
 }
 
-extension Array where Element == TripCompanion {
-    /// «Аня К., Дмитрий П.» — the line under the faces.
-    var displayNames: String {
-        map(\.name).joined(separator: ", ")
+extension TripCompanion {
+    /// What `CompanionsStore.list(tripId:)` caches after a successful fetch.
+    init(item: CompanionItem) {
+        self.init(
+            accountId: item.accountId, displayName: item.displayName,
+            avatarEmoji: item.avatarEmoji, status: item.status)
+    }
+
+    /// The reverse — feeding a cached roster back through
+    /// `CompanionsCardModel.decide`, which only knows `CompanionItem` rows.
+    var asCompanionItem: CompanionItem {
+        CompanionItem(accountId: accountId, displayName: displayName, avatarEmoji: avatarEmoji, status: status)
     }
 }

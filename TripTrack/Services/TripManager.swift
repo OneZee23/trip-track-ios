@@ -1040,6 +1040,16 @@ final class TripManager: ObservableObject {
     }
 
     /// Local-only, so no sync enqueue — see `updateCompanions` in the repo.
+    ///
+    /// NOTE: `CompanionsStore` — the actual writer of this cache after Task
+    /// 7 — is a standalone `@MainActor` singleton with no reference to a
+    /// `TripManager` instance (`TripManager` isn't a singleton; it's owned
+    /// per-`MapViewModel`). It calls `TripRepository.updateCompanions`
+    /// directly instead of through here, the same way `APISyncTransport`
+    /// takes its own `TripRepository` rather than a `TripManager`. This
+    /// method is kept for API parity with the rest of `TripManager`'s
+    /// update* methods and as a stable entry point for any future caller
+    /// that DOES hold a `TripManager`, but has no callers of its own today.
     func updateCompanions(for tripId: UUID, companions: [TripCompanion]) {
         repository.updateCompanions(for: tripId, companions: companions)
     }

@@ -2389,6 +2389,14 @@ enum AppStrings {
     static func companionsLoadFailed(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Не удалось загрузить попутчиков" : "Couldn't load companions"
     }
+    /// Task 7: shown alongside a cached roster (`Trip.companions`) on the
+    /// viewer's own trip when today's `/companions/list` refresh failed —
+    /// real rows ARE on screen, so this is deliberately quieter than
+    /// `companionsLoadFailed`'s error phrasing, just flagging that they
+    /// might be out of date.
+    static func companionsCachedNotice(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Нет сети — может быть неактуально" : "Offline — may be out of date"
+    }
     static func companionsRemoveFailed(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Не удалось убрать попутчика" : "Couldn't remove companion"
     }

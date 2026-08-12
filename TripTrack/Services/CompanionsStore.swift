@@ -117,13 +117,28 @@ final class CompanionsStore: ObservableObject {
     private var myTripsTask: Task<Void, Never>?
     private var myTripsGeneration = 0
 
+    private let client: APIClient
+    /// Where `list(tripId:)` writes its Task 7 offline cache after a
+    /// successful fetch. Defaults to a plain `CoreDataTripRepository()`
+    /// (backed by `PersistenceController.shared`) rather than going through
+    /// a `TripManager` — `TripManager` has no app-wide singleton (it's
+    /// owned per-`MapViewModel`), and `CompanionsStore` is constructed
+    /// before any view exists. Same shape as `APISyncTransport`'s own
+    /// `repo: TripRepository` dependency.
+    private let repository: TripRepository
+
     /// Not `private` — `CompanionsStorePersistenceTests` constructs a
     /// SECOND instance (independent of `.shared`) to prove
     /// `respondedTripIds` restores from `UserDefaults` in `init` itself,
     /// not merely "the same running instance remembers what it was told".
-    /// Production code has no reason to call this directly and should
-    /// always go through `.shared`.
-    init() {
+    /// `CompanionsCachePersistenceTests` uses the same non-private `init`
+    /// to inject a mocked `APIClient` and an ISOLATED in-memory
+    /// `TripRepository`, so those tests' network/CoreData side effects
+    /// never touch the shared store or `.shared`. Production code has no
+    /// reason to call this directly and should always go through `.shared`.
+    init(client: APIClient = .shared, repository: TripRepository = CoreDataTripRepository()) {
+        self.client = client
+        self.repository = repository
         respondedTripIds = Self.loadRespondedTripIds()
     }
 
@@ -168,27 +183,47 @@ final class CompanionsStore: ObservableObject {
 
     // MARK: - Roster (list)
 
-    /// Loads (and caches) the companion roster for one trip. Throws on
-    /// failure — unlike `candidates`/`loadMyTrips`, callers here (the trip
-    /// detail companion section) need to distinguish "still loading" from
-    /// "failed to load" rather than silently keep stale/empty state. Also
-    /// records the same distinction into `loadStateByTrip` BEFORE the
-    /// throw/return, so a caller reading only the published state (not
-    /// catching this call itself) still sees it.
+    /// Loads (and caches, in memory) the companion roster for one trip.
+    /// Throws on failure — unlike `candidates`/`loadMyTrips`, callers here
+    /// (the trip detail companion section) need to distinguish "still
+    /// loading" from "failed to load" rather than silently keep
+    /// stale/empty state. Also records the same distinction into
+    /// `loadStateByTrip` BEFORE the throw/return, so a caller reading only
+    /// the published state (not catching this call itself) still sees it.
+    ///
+    /// Task 7: a successful response is ALSO written to the on-device cache
+    /// (`Trip.companions` / `companionsJSON`) via `cacheRoster`, so the next
+    /// time this same call can't reach the network, the card has something
+    /// to fall back to — see `CompanionsCardModel.decide`'s `cached`
+    /// parameter.
     @discardableResult
     func list(tripId: UUID) async throws -> CompanionsListResponse {
         loadStateByTrip[tripId] = .loading
         do {
-            let res: CompanionsListResponse = try await APIClient.shared.post(
+            let res: CompanionsListResponse = try await client.post(
                 APIEndpoint.companionsList, body: CompanionsTripRequest(tripId: tripId))
             companionsByTrip[tripId] = res.items
             loadStateByTrip[tripId] = .loaded
+            cacheRoster(res.items, for: tripId)
             return res
         } catch {
             loadStateByTrip[tripId] = .failed
             companionsLog.error("list failed: \(error.localizedDescription)")
             throw error
         }
+    }
+
+    /// Writes a just-fetched roster into the local offline cache. Called
+    /// unconditionally after every successful `list(tripId:)` — own trip or
+    /// not. That's deliberate, not an oversight: `TripRepository
+    /// .updateCompanions` itself no-ops when `tripId` has no local
+    /// `TripEntity` (`guard let entity = fetchEntity(id: tripId) else {
+    /// return }`), and a trip that isn't ours never has one. That guard —
+    /// not a check performed here — is what keeps a foreign trip's roster
+    /// from ever creating a local row. See `CompanionsCachePersistenceTests`
+    /// for the count-based proof this holds.
+    private func cacheRoster(_ items: [CompanionItem], for tripId: UUID) {
+        repository.updateCompanions(for: tripId, companions: items.map(TripCompanion.init(item:)))
     }
 
     // MARK: - Candidates (invite picker, cursor-paged)
@@ -236,7 +271,7 @@ final class CompanionsStore: ObservableObject {
         guard generation == candidatesGeneration else { return }
         candidatesLoadState = .loading
         do {
-            let res: CompanionsCandidatesResponse = try await APIClient.shared.post(
+            let res: CompanionsCandidatesResponse = try await client.post(
                 APIEndpoint.companionsCandidates,
                 body: CompanionsCandidatesRequest(tripId: tripId, query: query, cursor: cursor))
             // A newer `reset: true` call superseded this one while it was
@@ -298,7 +333,7 @@ final class CompanionsStore: ObservableObject {
         guard generation == myTripsGeneration else { return }
         myTripsLoadState = .loading
         do {
-            let res: CompanionsMyTripsResponse = try await APIClient.shared.post(
+            let res: CompanionsMyTripsResponse = try await client.post(
                 APIEndpoint.companionsMyTrips, body: CompanionsMyTripsRequest(cursor: cursor))
             guard generation == myTripsGeneration else { return }
             if replace {
@@ -323,7 +358,7 @@ final class CompanionsStore: ObservableObject {
     /// Throws directly — no cached state, the caller needs the error to
     /// render its own failure state.
     func invitePreview(tripId: UUID) async throws -> CompanionInvitePreview {
-        try await APIClient.shared.post(
+        try await client.post(
             APIEndpoint.companionsInvitePreview, body: CompanionsTripRequest(tripId: tripId))
     }
 
@@ -353,7 +388,7 @@ final class CompanionsStore: ObservableObject {
         }
 
         do {
-            let _: CompanionsInviteResponse = try await APIClient.shared.post(
+            let _: CompanionsInviteResponse = try await client.post(
                 APIEndpoint.companionsInvite, body: CompanionsInviteRequest(tripId: tripId, accountId: accountId))
         } catch {
             candidates = previousCandidates
@@ -383,7 +418,7 @@ final class CompanionsStore: ObservableObject {
         persistRespondedTripIds()
 
         do {
-            let _: CompanionsRespondResponse = try await APIClient.shared.post(
+            let _: CompanionsRespondResponse = try await client.post(
                 APIEndpoint.companionsRespond, body: CompanionsRespondRequest(tripId: tripId, accept: accept))
         } catch {
             companionsByTrip[tripId] = previousRoster
@@ -402,7 +437,7 @@ final class CompanionsStore: ObservableObject {
         companionsByTrip[tripId]?.removeAll { $0.accountId == accountId }
 
         do {
-            let _: CompanionsRemoveResponse = try await APIClient.shared.post(
+            let _: CompanionsRemoveResponse = try await client.post(
                 APIEndpoint.companionsRemove, body: CompanionsRemoveRequest(tripId: tripId, accountId: accountId))
         } catch {
             companionsByTrip[tripId] = previousRoster

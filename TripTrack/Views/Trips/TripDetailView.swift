@@ -1426,6 +1426,12 @@ struct TripDetailView: View {
         TripCompanionsSection(
             tripId: trip.id,
             isOwn: isOwn,
+            // Task 7: whatever this trip's last successful `/companions/list`
+            // cached locally (empty for a trip that never had one, or one
+            // that isn't ours — see `TripCompanion`'s doc comment). Only
+            // consulted when today's fetch fails and nothing survived in
+            // memory either.
+            cachedCompanions: trip.companions,
             onInvite: openCompanionsPicker,
             onOpenProfile: openProfile,
             onError: { msg in

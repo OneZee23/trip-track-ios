@@ -322,9 +322,23 @@ final class CoreDataTripRepository: TripRepository {
         persistenceController.save()
     }
 
-    /// Replace the trip's companion list.
+    /// Replace the trip's cached companion roster.
     ///
-    /// Purely local: the sync payload has no field for companions yet, so this
+    /// The ONLY caller in production is `CompanionsStore.list(tripId:)`,
+    /// after a successful `/companions/list` response — this is a cache
+    /// write, not user-entered data. `companions: []` clears the column
+    /// rather than leaving a stale roster around (e.g. the last companion
+    /// having been removed).
+    ///
+    /// The `guard let entity` below is not just a null-check: it is the
+    /// WHOLE mechanism that keeps a foreign trip from ever gaining a local
+    /// row. `CompanionsStore.list` calls this unconditionally after any
+    /// successful fetch, own trip or not — a trip this device doesn't have
+    /// locally (someone else's) simply has no entity to find, so the call
+    /// is a no-op. See `CompanionsCachePersistenceTests` for the row-count
+    /// proof.
+    ///
+    /// Purely local: the sync payload has no field for companions, so this
     /// deliberately does NOT flip the trip to pending-upload. Marking it would
     /// queue an upload that carries none of the change — cost with no effect,
     /// and on a metered connection that is somebody's data.

@@ -21,8 +21,10 @@ struct Trip: Identifiable, Codable {
     var fuelCurrency: String?
     var previewPolyline: Data?
     var earnedBadgeIds: [String]
-    /// Who else was in the car. Stored with the trip on this device; see
-    /// `TripCompanion` for why they are not accounts yet.
+    /// Offline CACHE of the server's companion roster, for the viewer's OWN
+    /// trips only — see `TripCompanion`. Not the source of truth
+    /// (`/companions/list` via `CompanionsStore` is); this is what lets the
+    /// companions card draw something when that request has no network.
     var companions: [TripCompanion] = []
 
     /// Decoded simplified coordinates for feed card route previews.

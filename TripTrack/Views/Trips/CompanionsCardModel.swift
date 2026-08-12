@@ -32,6 +32,13 @@ enum CompanionsCardModel {
         case none
         case loading
         case error
+        /// Task 7, own trip only: today's fetch failed AND nothing was left
+        /// in memory, but a PRIOR successful load wrote something into the
+        /// on-device cache (`Trip.companions`). The rows in this `Decision`
+        /// ARE that cache — shown instead of the plain `.error` state, with
+        /// a quiet note that they might not be current rather than a retry
+        /// prompt with nothing to show.
+        case stale
     }
 
     enum Decision: Equatable {
@@ -63,10 +70,29 @@ enum CompanionsCardModel {
         case hidden
     }
 
+    /// - Parameter cached: Task 7's offline cache for OWN trips
+    ///   (`Trip.companions`, converted to `CompanionItem`) — consulted ONLY
+    ///   when `companions` (the in-memory roster) is empty AND `loadState
+    ///   == .failed`, i.e. exactly the state that used to render as the
+    ///   bare `.own(rows: [], banner: .error)`. A non-owner never has one
+    ///   (a foreign trip has no local cache to read — see `TripCompanion`'s
+    ///   doc comment), so this parameter is unused on that path.
     static func decide(
-        companions: [CompanionItem], isOwn: Bool, loadState: CompanionsLoadState
+        companions: [CompanionItem], isOwn: Bool, loadState: CompanionsLoadState,
+        cached: [CompanionItem] = []
     ) -> Decision {
         if isOwn {
+            // Nothing in memory this session (never asked yet, or asked and
+            // got back nothing) AND today's request outright failed: if an
+            // EARLIER successful load left something in the on-device
+            // cache, show it — flagged as possibly stale — instead of the
+            // plain retry prompt. `loadState == .failed` (not `.loading`)
+            // deliberately excludes still-in-flight/never-asked states:
+            // the fallback only kicks in once the network has genuinely
+            // been tried and lost.
+            if companions.isEmpty, loadState == .failed, !cached.isEmpty {
+                return .own(rows: cached.map(Row.init), banner: .stale)
+            }
             let rows = companions.map(Row.init)
             return .own(rows: rows, banner: banner(for: loadState, hasRows: !rows.isEmpty))
         }

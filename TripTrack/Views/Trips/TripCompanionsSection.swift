@@ -30,6 +30,12 @@ import SwiftUI
 struct TripCompanionsSection: View {
     let tripId: UUID
     let isOwn: Bool
+    /// Task 7's offline cache (`Trip.companions`) for THIS trip, as loaded
+    /// by `TripDetailView` from local storage — empty for a foreign trip
+    /// (which never has one) or an own trip that never had a successful
+    /// `list()` yet. Only consulted by `CompanionsCardModel.decide` when
+    /// today's fetch fails and nothing survived in memory either.
+    var cachedCompanions: [TripCompanion] = []
     /// Task 3 hook: presents the candidate picker. The picker doesn't exist
     /// yet — this is deliberately just a closure the detail screen passes
     /// in, not a built flow.
@@ -49,7 +55,8 @@ struct TripCompanionsSection: View {
     private var companions: [CompanionItem] { store.companionsByTrip[tripId] ?? [] }
     private var decision: CompanionsCardModel.Decision {
         CompanionsCardModel.decide(
-            companions: companions, isOwn: isOwn, loadState: store.loadState(for: tripId))
+            companions: companions, isOwn: isOwn, loadState: store.loadState(for: tripId),
+            cached: cachedCompanions.map(\.asCompanionItem))
     }
 
     var body: some View {
@@ -97,6 +104,12 @@ struct TripCompanionsSection: View {
                 case .loading: loadingRow
                 case .error: errorRow(c)
                 case .none: inviteRow(c, emptyState: true)
+                // Unreachable by construction — `CompanionsCardModel.decide`
+                // only ever returns `.stale` together with the cached rows
+                // it's flagging, so `rows` is never empty here. Handled
+                // anyway so this switch stays exhaustive; falls back to the
+                // same empty-state invitation `.none` shows.
+                case .stale: inviteRow(c, emptyState: true)
                 }
             } else {
                 ForEach(rows) { row in
@@ -105,9 +118,14 @@ struct TripCompanionsSection: View {
                 }
                 // A failed BACKGROUND refresh must not evict rows that are
                 // still good — surface it as a strip alongside them instead
-                // of replacing the list.
+                // of replacing the list. `.stale` is the Task 7 twin of this:
+                // the rows themselves ARE the (possibly outdated) cache, so
+                // the strip just says so more quietly than `.error` does.
                 if banner == .error {
                     errorRow(c)
+                    divider(c)
+                } else if banner == .stale {
+                    staleRow(c)
                     divider(c)
                 }
                 inviteRow(c, emptyState: false)
@@ -305,6 +323,32 @@ struct TripCompanionsSection: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 14)
         .accessibilityIdentifier("companions_retry")
+    }
+
+    /// Task 7: today's roster fetch failed, but the rows above ARE a
+    /// previously-cached one (`Trip.companions`) rather than nothing.
+    /// Deliberately quieter than `errorRow` — no red triangle, no "couldn't
+    /// load" — because real rows are on screen; this only flags that they
+    /// might not be current, with the same retry affordance.
+    private func staleRow(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 13))
+                .foregroundStyle(c.textTertiary)
+            Text(AppStrings.companionsCachedNotice(lang.language))
+                .font(.system(size: 12.5))
+                .foregroundStyle(c.textTertiary)
+            Spacer(minLength: 8)
+            Button(AppStrings.retry(lang.language)) {
+                Haptics.tap()
+                Task { await load() }
+            }
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(AppTheme.accent)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .accessibilityIdentifier("companions_stale")
     }
 
     // MARK: - Networking
