@@ -46,7 +46,11 @@ struct TripDetailView: View {
     @State private var selectedPhotoIndex: Int?
     @State private var selectedDetailBadge: Badge?
     @State private var badgeLastEarnedDates: [String: Date] = [:]
-    @State private var photoToDelete: TripPhoto?
+    /// Fix 1: carries enough of a merged `OwnTripPhotosModel.Item` to delete
+    /// either a local photo (existing CoreData path) or a remote-only one
+    /// (a companion's upload — no local row to delete; goes through
+    /// `/photos/delete`, see `deleteOwnPhoto`).
+    @State private var photoToDelete: OwnTripPhotosModel.Item?
     @State private var toastItem: ToastItem?
     @State private var cachedCoordinates: [CLLocationCoordinate2D] = []
     @State private var cachedSpeeds: [Double] = []
@@ -490,6 +494,23 @@ struct TripDetailView: View {
                     isOwn = true
                     trip = local
                     buildCaches(for: local)
+                    // Fix 1: a companion's photo never gets a local CoreData
+                    // row on the owner's device — `/sync/pull` deliberately
+                    // excludes photos on trips the account doesn't own (by
+                    // design: a foreign trip must never gain a local row).
+                    // The owner's own photo section has to read the server
+                    // roster too, then union it with `trip.photos` by id
+                    // (`OwnTripPhotosModel.merge`) — otherwise the entire
+                    // point of the feature, someone else adding photos to
+                    // YOUR trip, stays invisible to you. Gated exactly like
+                    // `canQueryCompanions`: a trip that was never published
+                    // cannot have a companion on it at all (an invite
+                    // targets a real server trip id), so asking would just
+                    // be a guaranteed `TRIP_NOT_FOUND` round trip for the
+                    // overwhelmingly common (cloud sync OFF) case.
+                    if auth.isSignedIn, local.isOnServer {
+                        await loadRemotePhotos()
+                    }
                 } else if social == nil {
                     // Nothing to show: no local row and no feed payload. Rather
                     // than a skeleton that shimmers forever with no way back,
@@ -557,12 +578,20 @@ struct TripDetailView: View {
             set: { if !$0 { selectedPhotoIndex = nil } }
         )) {
             if let index = selectedPhotoIndex {
-                // Ours from disk, someone else's from the server — one viewer
-                // either way, which is what the canon draws (117:1086 and its
-                // social twin 117:1589).
+                // Ours from disk, someone else's from the server, and (Fix 1)
+                // a companion's remote-only upload on OUR OWN trip — one
+                // viewer either way, which is what the canon draws
+                // (117:1086 and its social twin 117:1589).
                 let pages: [PhotoFullScreenView.Page] = isOwn
-                    ? (trip?.photos ?? []).map {
-                        .init(id: $0.id, source: .local(filename: $0.filename), timestamp: $0.timestamp)
+                    ? ownPhotoItems.map { item in
+                        let source: FullScreenPhotoSource
+                        switch item.source {
+                        case .local(let filename):
+                            source = .local(filename: filename)
+                        case .remote(let thumbnailURL, let originalURL):
+                            source = .remote(url: originalURL ?? thumbnailURL)
+                        }
+                        return .init(id: item.id, source: source, timestamp: item.timestamp)
                     }
                     : remotePhotos.map {
                         .init(
@@ -647,14 +676,9 @@ struct TripDetailView: View {
             titleVisibility: .visible
         ) {
             Button(AppStrings.delete(lang.language), role: .destructive) {
-                if let photo = photoToDelete {
+                if let item = photoToDelete {
                     Haptics.action()
-                    mapVM.tripManager.deletePhoto(id: photo.id, from: tripId)
-                    trip?.photos.removeAll { $0.id == photo.id }
-                    toastItem = ToastItem(
-                        type: .success,
-                        message: AppStrings.photoDeleted(lang.language)
-                    )
+                    deleteOwnPhoto(item)
                 }
                 photoToDelete = nil
             }
@@ -1422,10 +1446,26 @@ struct TripDetailView: View {
     /// Server-backed roster (Task 1's `CompanionsStore`). The section owns
     /// its own header, loading/error states and three-way own/read-only/
     /// hidden rendering — see `TripCompanionsSection`'s doc comment.
+    /// Fix 2: whether it's worth even ASKING the server for this trip's
+    /// companion roster. A `trip_companion` row can only ever exist for a
+    /// trip that's actually on the server — so a trip that was never
+    /// published (cloud sync starts OFF; new trips are created private,
+    /// which is the app's DEFAULT state, not an edge case) categorically
+    /// cannot have one, and every `/companions/*` call on it 404s with the
+    /// same `TRIP_NOT_FOUND` a genuinely missing trip would. A non-owner
+    /// never reaches this screen for a trip that isn't already server-side
+    /// (it arrived via the feed, a share link, or a companion invite —
+    /// all of which imply a server row), so only the own-trip path is
+    /// gated.
+    private var canQueryCompanions: Bool {
+        !isOwn || (auth.isSignedIn && (trip?.isOnServer ?? false))
+    }
+
     private func companionsSection(trip: Trip) -> some View {
         TripCompanionsSection(
             tripId: trip.id,
             isOwn: isOwn,
+            canQuery: canQueryCompanions,
             // Task 7: whatever this trip's last successful `/companions/list`
             // cached locally (empty for a trip that never had one, or one
             // that isn't ours — see `TripCompanion`'s doc comment). Only
@@ -2114,12 +2154,20 @@ struct TripDetailView: View {
     /// How many tiles the strip shows before the overflow badge takes over.
     private static let photoStripVisible = 4
 
+    /// Fix 1: local `trip.photos` UNIONED with the server roster
+    /// (`remotePhotos`, loaded on the owner path too — see `.task(id:
+    /// tripId)`) by photo id — see `OwnTripPhotosModel` for why this is the
+    /// only way a companion's upload ever becomes visible to the owner.
+    private var ownPhotoItems: [OwnTripPhotosModel.Item] {
+        OwnTripPhotosModel.merge(local: trip?.photos ?? [], remote: remotePhotos)
+    }
+
     private func ownPhotosSection(_ c: AppTheme.Colors) -> some View {
-        let count = trip?.photos.count ?? 0
+        let items = ownPhotoItems
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                DetailSectionHeader(text: count > 0
-                    ? "\(AppStrings.photos(lang.language)) · \(count)"
+                DetailSectionHeader(text: !items.isEmpty
+                    ? "\(AppStrings.photos(lang.language)) · \(items.count)"
                     : AppStrings.photos(lang.language))
                 Spacer()
                 Button { showPhotoPicker = true } label: {
@@ -2131,11 +2179,11 @@ struct TripDetailView: View {
                 .accessibilityLabel(AppStrings.addPhotos(lang.language))
             }
 
-            if let photos = trip?.photos, !photos.isEmpty {
+            if !items.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
-                            AsyncThumbnailView(filename: photo.filename)
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                            ownPhotoThumbnail(item)
                                 .frame(width: 74, height: 74)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 // The fourth tile carries the remainder, so the
@@ -2143,11 +2191,11 @@ struct TripDetailView: View {
                                 // making you scroll to find out.
                                 .overlay {
                                     if index == Self.photoStripVisible - 1,
-                                       photos.count > Self.photoStripVisible {
+                                       items.count > Self.photoStripVisible {
                                         ZStack {
                                             RoundedRectangle(cornerRadius: 12)
                                                 .fill(.black.opacity(0.45))
-                                            Text("+\(photos.count - Self.photoStripVisible + 1)")
+                                            Text("+\(items.count - Self.photoStripVisible + 1)")
                                                 .font(.system(size: 16, weight: .bold))
                                                 .foregroundStyle(.white)
                                         }
@@ -2160,9 +2208,11 @@ struct TripDetailView: View {
                                 // every thumbnail. The canon strip is bare
                                 // pictures (465:145-148), and a row of little
                                 // ✕ marks turned a memory into an inbox.
+                                // Works for a remote-only (companion's) photo
+                                // too — see `deleteOwnPhoto`.
                                 .onLongPressGesture {
                                     Haptics.action()
-                                    photoToDelete = photo
+                                    photoToDelete = item
                                 }
                         }
                     }
@@ -2184,6 +2234,54 @@ struct TripDetailView: View {
                 .surfaceCard(cornerRadius: 12)
                 .onTapGesture { showPhotoPicker = true }
             }
+        }
+    }
+
+    /// One tile of the owner's merged strip — a local file for anything
+    /// this device has on disk, a presigned R2 URL for a remote-only
+    /// (companion's) photo.
+    @ViewBuilder
+    private func ownPhotoThumbnail(_ item: OwnTripPhotosModel.Item) -> some View {
+        switch item.source {
+        case .local(let filename):
+            AsyncThumbnailView(filename: filename)
+        case .remote(let thumbnailURL, let originalURL):
+            RemoteThumbnailView(urlString: thumbnailURL, fallbackURLString: originalURL)
+        }
+    }
+
+    /// Fix 1: routes the delete through whichever mechanism the photo
+    /// actually has a home in. A local item keeps the existing CoreData
+    /// path (`TripManager.deletePhoto`, which also enqueues the server-side
+    /// delete once synced). A remote-only item — a companion's upload,
+    /// which never gets a local row by design — has nothing local to
+    /// remove, so it goes straight through `/photos/delete`; the server
+    /// authorises this because the caller owns the TRIP, not because they
+    /// own the photo (`PhotosService.assertCanDelete`).
+    private func deleteOwnPhoto(_ item: OwnTripPhotosModel.Item) {
+        switch item.source {
+        case .local:
+            mapVM.tripManager.deletePhoto(id: item.id, from: tripId)
+            trip?.photos.removeAll { $0.id == item.id }
+            toastItem = ToastItem(type: .success, message: AppStrings.photoDeleted(lang.language))
+        case .remote:
+            // Optimistic: drop it from the strip immediately, restore (via a
+            // fresh reload) if the server call fails.
+            let previous = remotePhotos
+            remotePhotos.removeAll { $0.id == item.id }
+            Task { await deleteRemoteOwnPhoto(item.id, previous: previous) }
+        }
+    }
+
+    private func deleteRemoteOwnPhoto(_ photoId: UUID, previous: [SocialTripPhoto]) async {
+        struct DeleteReq: Encodable { let photoId: UUID }
+        do {
+            let _: EmptyResponse = try await APIClient.shared.post(
+                APIEndpoint.photoDelete, body: DeleteReq(photoId: photoId))
+            toastItem = ToastItem(type: .success, message: AppStrings.photoDeleted(lang.language))
+        } catch {
+            remotePhotos = previous
+            toastItem = ToastItem(type: .error, message: AppStrings.companionPhotoDeleteFailed(lang.language))
         }
     }
 

@@ -26,6 +26,15 @@ protocol TripRepository {
     func updatePrivacy(for tripId: UUID, isPrivate: Bool)
     func updateVehicle(for tripId: UUID, vehicleId: UUID?)
     func updateCompanions(for tripId: UUID, companions: [TripCompanion])
+    /// Wipes the on-device companions cache (`companionsJSON`) for EVERY
+    /// local trip. Companions are per-account data — see `AuthService
+    /// .clearLocalIdentity` — but local trips themselves are device-scoped
+    /// (`TripEntity.userId` is `SettingsManager.localUserId`, a stable
+    /// per-device id that does NOT change across a sign-out/sign-in), so
+    /// they survive an account switch on their own. Without this, the next
+    /// account signing in on the same device would see whichever roster the
+    /// PREVIOUS account last cached on that trip.
+    func clearCompanionsCache()
     /// Resets server-side metadata after a successful `/trips/delete` triggered
     /// by un-publishing. The local entity stays — only the bookkeeping that
     /// links it to the server copy is cleared, so subsequent re-publish treats
@@ -352,7 +361,31 @@ final class CoreDataTripRepository: TripRepository {
         } else {
             return
         }
-        entity.lastModifiedAt = Date()
+        // Deliberately does NOT touch `lastModifiedAt` — that field is the
+        // last-write-wins clock the sync layer compares against the
+        // server's copy (`fetchTripsModifiedSince`, `applyRemoteTrip`'s
+        // conflict check). This is a pure cache write triggered by simply
+        // OPENING the trip detail screen, not a change to the trip's own
+        // data — bumping the clock here made every detail-screen visit look
+        // like a newer edit than whatever the server actually has, for a
+        // reason that has nothing to do with the trip itself.
+        persistenceController.save()
+    }
+
+    /// Fix 4: sign-out cleanup for the companions cache — see the protocol
+    /// doc comment. A plain fetch + loop rather than an `NSBatchUpdateRequest`
+    /// because a batch update writes straight to the SQL store and skips
+    /// `viewContext`'s in-memory objects entirely; any `TripEntity` already
+    /// faulted into memory (e.g. the trip currently on screen) would keep
+    /// showing its stale `companionsJSON` until the next fetch. This runs
+    /// once, at sign-out, so the per-row loop cost is a non-issue.
+    func clearCompanionsCache() {
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "companionsJSON != nil")
+        guard let entities = try? context.fetch(request), !entities.isEmpty else { return }
+        for entity in entities {
+            entity.companionsJSON = nil
+        }
         persistenceController.save()
     }
 
@@ -666,7 +699,7 @@ final class CoreDataTripRepository: TripRepository {
             region: entity.region, isPrivate: entity.isPrivate,
             vehicleId: entity.vehicleId, fuelCurrency: entity.fuelCurrency,
             previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds,
-            companions: companions
+            companions: companions, isOnServer: entity.serverCreatedAt != nil
         )
     }
 

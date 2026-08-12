@@ -451,6 +451,16 @@ final class AuthService: ObservableObject {
         // account's cached roster/candidates/"со мной" list until each
         // screen happened to re-fetch.
         CompanionsStore.shared.clear()
+        // `CompanionsStore.clear()` only wipes IN-MEMORY state — the
+        // on-device cache (`TripEntity.companionsJSON`, written by
+        // `TripRepository.updateCompanions` every time this device
+        // successfully loads a roster for one of its own trips) survives a
+        // sign-out because local trips are device-scoped, not
+        // account-scoped (see `clearCompanionsCache`'s doc comment). Without
+        // this, the next account signing in on this device would see the
+        // PREVIOUS account's cached roster on any trip whose detail screen
+        // they open, until that trip happened to re-fetch.
+        CoreDataTripRepository().clearCompanionsCache()
         // Wipe the cached APNs device token so it isn't replayed by the
         // next account's `syncTokenToServer`.
         PushNotificationManager.shared.clearCachedToken()

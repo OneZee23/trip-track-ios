@@ -98,6 +98,18 @@ final class CompanionsCachePersistenceTests: XCTestCase {
         }
     }
 
+    /// The exact wire shape `resolveTripAccess` sends for a trip it can't
+    /// find (`TripNotFound` → `"TRIP_NOT_FOUND"` → `APIError.tripNotFound`
+    /// — see `APIError.from`). This is what the server answers for a trip
+    /// this device has locally but never uploaded — no server row exists
+    /// to look up at all — AND for a genuine record→upload race.
+    private func tripNotFoundResponseHandler() -> (URLRequest) throws -> (HTTPURLResponse, Data) {
+        { req in
+            let body = Data(#"{"status":"error","code":"TRIP_NOT_FOUND","message":"nope"}"#.utf8)
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, body)
+        }
+    }
+
     // MARK: - 1. Successful list on an OWN trip writes the cache
 
     /// The core of this task: a successful `/companions/list` response for
@@ -206,5 +218,75 @@ final class CompanionsCachePersistenceTests: XCTestCase {
             companions: store.companionsByTrip[tripId] ?? [], isOwn: true,
             loadState: store.loadState(for: tripId), cached: cached.map(\.asCompanionItem))
         XCTAssertEqual(decision, .own(rows: [], banner: .error))
+    }
+
+    // MARK: - 5. Fix 2 — TRIP_NOT_FOUND on an own trip is an empty roster, not a failure
+
+    /// The record→upload race this fix closes: `TripCompanionsSection` only
+    /// calls `list` once it believes (via the LOCAL `Trip.isOnServer` flag)
+    /// the trip is server-side, but the server can still answer
+    /// `TRIP_NOT_FOUND` for it — same code a trip that never reached the
+    /// server at all gets. On an OWN trip (`treatTripNotFoundAsEmpty:
+    /// true`) this must resolve as a normal, successfully-loaded EMPTY
+    /// roster: no throw, `loadStateByTrip == .loaded`, not `.failed`. Fails
+    /// if `list` stops special-casing `APIError.tripNotFound` and instead
+    /// lets it fall through to the generic failure path.
+    func testTripNotFoundOnOwnTrip_TreatedAsEmptyLoadedRoster() async throws {
+        let tripId = insertLocalTrip()
+        MockURLProtocol.requestHandler = tripNotFoundResponseHandler()
+        let store = CompanionsStore(client: client, repository: repo)
+
+        let res = try await store.list(tripId: tripId, treatTripNotFoundAsEmpty: true)
+
+        XCTAssertTrue(res.items.isEmpty)
+        XCTAssertEqual(store.loadState(for: tripId), .loaded, "must read as a resolved empty roster, not .failed")
+        XCTAssertEqual(store.companionsByTrip[tripId], [])
+    }
+
+    /// The flag is opt-in — a non-owner's `TRIP_NOT_FOUND` (the default,
+    /// `treatTripNotFoundAsEmpty: false`) must still throw and record
+    /// `.failed`, exactly as every other error does. Fails if the remap
+    /// stops being conditional on the parameter.
+    func testTripNotFoundWithoutFlag_StillFails() async throws {
+        let tripId = insertLocalTrip()
+        MockURLProtocol.requestHandler = tripNotFoundResponseHandler()
+        let store = CompanionsStore(client: client, repository: repo)
+
+        do {
+            _ = try await store.list(tripId: tripId)
+            XCTFail("expected throw when treatTripNotFoundAsEmpty is false")
+        } catch {
+            // expected
+        }
+        XCTAssertEqual(store.loadState(for: tripId), .failed)
+    }
+
+    // MARK: - 6. Fix 3 — the cache write must not touch lastModifiedAt
+
+    /// `lastModifiedAt` is the last-write-wins clock the sync layer
+    /// compares against the server's copy — a pure cache write (drawing the
+    /// companions card) has nothing to do with the trip's own data and must
+    /// not make the local row look newer than the server's for that reason.
+    /// Fails if `updateCompanions` starts stamping `entity.lastModifiedAt =
+    /// Date()` again.
+    func testUpdateCompanions_DoesNotChangeLastModifiedAt() throws {
+        let tripId = insertLocalTrip()
+        let ctx = pc.container.viewContext
+        let fetch: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        fetch.predicate = NSPredicate(format: "id == %@", tripId as CVarArg)
+        let entityBefore = try XCTUnwrap(try ctx.fetch(fetch).first)
+        let before = try XCTUnwrap(entityBefore.lastModifiedAt)
+
+        // A real clock tick between the fixture's stamp and the cache write
+        // — without it, a bug that DOES re-stamp `Date()` could coincidentally
+        // land on the same millisecond and the assertion would pass by luck.
+        Thread.sleep(forTimeInterval: 0.05)
+
+        repo.updateCompanions(for: tripId, companions: [
+            TripCompanion(accountId: UUID(), displayName: "Аня", avatarEmoji: "🙂", status: .accepted)
+        ])
+
+        let entityAfter = try XCTUnwrap(try ctx.fetch(fetch).first)
+        XCTAssertEqual(entityAfter.lastModifiedAt, before, "the companions cache write must not advance the sync clock")
     }
 }

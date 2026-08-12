@@ -26,6 +26,22 @@ struct Trip: Identifiable, Codable {
     /// (`/companions/list` via `CompanionsStore` is); this is what lets the
     /// companions card draw something when that request has no network.
     var companions: [TripCompanion] = []
+    /// Whether this trip actually has a row on the server —
+    /// `TripEntity.serverCreatedAt != nil` for a local trip (see
+    /// `CoreDataTripRepository.tripFromEntity`), always `true` for a trip
+    /// adapted from the feed/social API (`Trip(social:)`) since it could
+    /// only have arrived here BY existing server-side.
+    ///
+    /// Exists so a screen can tell "this trip cannot possibly have
+    /// server-only state yet" (companions, a companion's remote-only
+    /// photos) apart from "it can, and today's fetch just came back empty
+    /// or failed" — asking the server about either for a trip that was
+    /// never published (cloud sync starts OFF; new trips are created
+    /// private) always answers `TRIP_NOT_FOUND`, which used to render as a
+    /// permanent, unfixable error on what is the app's DEFAULT state, not
+    /// an edge case. Defaults `false`: a freshly recorded trip has no
+    /// `serverCreatedAt` until it actually uploads.
+    var isOnServer: Bool = false
 
     /// Decoded simplified coordinates for feed card route previews.
     /// Hits an `NSCache` keyed by trip id so a feed scroll past 30 cards
@@ -221,7 +237,7 @@ struct Trip: Identifiable, Codable {
          region: String? = nil, isPrivate: Bool = true, vehicleId: UUID? = nil,
          fuelCurrency: String? = nil,
          previewPolyline: Data? = nil, earnedBadgeIds: [String] = [],
-         companions: [TripCompanion] = []) {
+         companions: [TripCompanion] = [], isOnServer: Bool = false) {
         self.id = id
         self.startDate = startDate
         self.endDate = endDate
@@ -241,6 +257,7 @@ struct Trip: Identifiable, Codable {
         self.previewPolyline = previewPolyline
         self.earnedBadgeIds = earnedBadgeIds
         self.companions = companions
+        self.isOnServer = isOnServer
     }
 
     var earnedBadges: [Badge] {

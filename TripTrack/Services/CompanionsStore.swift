@@ -196,8 +196,21 @@ final class CompanionsStore: ObservableObject {
     /// time this same call can't reach the network, the card has something
     /// to fall back to — see `CompanionsCardModel.decide`'s `cached`
     /// parameter.
+    ///
+    /// - Parameter treatTripNotFoundAsEmpty: Fix 2. `TripCompanionsSection`
+    ///   only calls `list` at all once it believes the trip is on the
+    ///   server (`TripDetailView`'s `canQueryCompanions` gate) — but that
+    ///   belief is a LOCAL flag (`Trip.isOnServer`), and a record→upload
+    ///   race (the sync push hasn't landed server-side yet, even though the
+    ///   local row already thinks it has) can still make the request come
+    ///   back `TRIP_NOT_FOUND` for a trip that IS, genuinely, this device's
+    ///   own. Passing `true` (only ever done for an own trip — see the call
+    ///   site) folds exactly that error into a normal empty, loaded roster
+    ///   instead of `.failed`, so the race can't flash the red retry
+    ///   banner. A non-owner's `TRIP_NOT_FOUND` is never remapped — for
+    ///   them it means what it says.
     @discardableResult
-    func list(tripId: UUID) async throws -> CompanionsListResponse {
+    func list(tripId: UUID, treatTripNotFoundAsEmpty: Bool = false) async throws -> CompanionsListResponse {
         loadStateByTrip[tripId] = .loading
         do {
             let res: CompanionsListResponse = try await client.post(
@@ -206,6 +219,12 @@ final class CompanionsStore: ObservableObject {
             loadStateByTrip[tripId] = .loaded
             cacheRoster(res.items, for: tripId)
             return res
+        } catch APIError.tripNotFound where treatTripNotFoundAsEmpty {
+            let empty = CompanionsListResponse(items: [], isOwnerView: true)
+            companionsByTrip[tripId] = empty.items
+            loadStateByTrip[tripId] = .loaded
+            cacheRoster(empty.items, for: tripId)
+            return empty
         } catch {
             loadStateByTrip[tripId] = .failed
             companionsLog.error("list failed: \(error.localizedDescription)")

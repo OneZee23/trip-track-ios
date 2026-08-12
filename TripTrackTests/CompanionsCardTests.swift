@@ -155,4 +155,42 @@ final class CompanionsCardTests: XCTestCase {
             companions: [accepted], isOwn: false, loadState: .failed)
         XCTAssertEqual(decision, .readOnly(rows: [.init(companion: accepted)], banner: .error))
     }
+
+    // MARK: - Fix 2: a trip with no server row is not an error
+
+    /// THE bug: an own trip that has never reached the server (cloud sync
+    /// starts OFF; new trips are private — the app's DEFAULT state, not an
+    /// edge case) must render the disabled invite-with-hint state, NOT the
+    /// same `.error` banner a genuine network failure gets. Fails if
+    /// `decide` stops special-casing `canQuery == false`, or starts
+    /// returning `.error` for it.
+    func testOwnTripNotQueryable_ShowsNotPublishedNotError() {
+        let decision = CompanionsCardModel.decide(
+            companions: [], isOwn: true, loadState: .idle, canQuery: false)
+        XCTAssertEqual(decision, .own(rows: [], banner: .notPublished))
+        XCTAssertNotEqual(decision, .own(rows: [], banner: .error))
+    }
+
+    /// `canQuery == false` must win even if a previous session cached rows
+    /// (in-memory `companions`, or a `.failed` loadState with a stale
+    /// on-device cache) — a trip that no longer has a server row cannot
+    /// genuinely have those companions anymore either. Fails if `decide`
+    /// starts consulting `loadState`/`cached` before checking `canQuery`.
+    func testOwnTripNotQueryable_IgnoresStaleCacheAndFailedLoadState() {
+        let accepted = item(.accepted)
+        let decision = CompanionsCardModel.decide(
+            companions: [accepted], isOwn: true, loadState: .failed,
+            cached: [accepted], canQuery: false)
+        XCTAssertEqual(decision, .own(rows: [], banner: .notPublished))
+    }
+
+    /// `canQuery` only ever gates the OWNER's path — a non-owner reaching
+    /// this screen at all implies the trip is already server-side, so the
+    /// default (`canQuery: true`) must leave every non-owner case exactly
+    /// as it was. Fails if a stray `canQuery` check leaks into the
+    /// non-owner branch.
+    func testStrangerTrip_UnaffectedByCanQueryDefault() {
+        let decision = CompanionsCardModel.decide(companions: [], isOwn: false, loadState: .failed)
+        XCTAssertEqual(decision, .readOnly(rows: [], banner: .error))
+    }
 }

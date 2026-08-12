@@ -2376,6 +2376,14 @@ enum AppStrings {
     static func companionsEmptyHint(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Кто ехал с вами?" : "Who rode with you?"
     }
+    /// Fix 2: own trip, not yet on the server — the invite row is shown
+    /// disabled (not a button) with this hint instead of the ordinary
+    /// `companionsEmptyHint`, because inviting isn't possible yet either.
+    static func companionsPublishFirstHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Чтобы звать попутчиков, сначала опубликуйте поездку"
+            : "Publish the trip first to invite companions"
+    }
     /// «Позвать» — opens the (Task 3) candidate picker. Same word for both
     /// the empty-state row and the smaller CTA appended after an existing
     /// roster.
@@ -2434,6 +2442,12 @@ enum AppStrings {
         lang == .ru
             ? "Фото загружено, но список не обновился. Загляните на поездку позже"
             : "Photo uploaded, but the list didn't refresh. Check back on this trip later"
+    }
+    /// Fix 1: the trip owner tried to delete a companion's remote-only
+    /// photo (no local row — `/photos/delete` failed). The optimistic
+    /// removal from the strip is rolled back alongside this toast.
+    static func companionPhotoDeleteFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не удалось удалить фото" : "Couldn't delete photo"
     }
     static func companionsRemoveConfirmTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Убрать попутчика?" : "Remove companion?"

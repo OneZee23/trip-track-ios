@@ -30,6 +30,15 @@ import SwiftUI
 struct TripCompanionsSection: View {
     let tripId: UUID
     let isOwn: Bool
+    /// Fix 2: whether it's worth even ASKING the server for this trip's
+    /// companion roster — `false` only for an own trip that is signed out
+    /// or has never reached the server (`TripDetailView.canQueryCompanions`).
+    /// A non-owner is never gated: they can only have reached this screen
+    /// for a trip that already exists server-side. When `false`, `load()`
+    /// never fires the request at all and `CompanionsCardModel.decide`
+    /// renders the disabled invite-with-hint state instead of asking a
+    /// question the server can only answer `TRIP_NOT_FOUND` to.
+    var canQuery: Bool = true
     /// Task 7's offline cache (`Trip.companions`) for THIS trip, as loaded
     /// by `TripDetailView` from local storage — empty for a foreign trip
     /// (which never has one) or an own trip that never had a successful
@@ -56,7 +65,17 @@ struct TripCompanionsSection: View {
     private var decision: CompanionsCardModel.Decision {
         CompanionsCardModel.decide(
             companions: companions, isOwn: isOwn, loadState: store.loadState(for: tripId),
-            cached: cachedCompanions.map(\.asCompanionItem))
+            cached: cachedCompanions.map(\.asCompanionItem), canQuery: canQuery)
+    }
+
+    /// `.task(id:)`'s identity — includes `canQuery` (not just `tripId`) so
+    /// a trip that flips from "not on the server" to "on the server" WHILE
+    /// this screen is already open (the record→upload race resolving in the
+    /// background) re-fires the fetch instead of staying stuck showing the
+    /// disabled hint until the screen is reopened.
+    private struct TaskKey: Equatable {
+        let tripId: UUID
+        let canQuery: Bool
     }
 
     var body: some View {
@@ -70,7 +89,7 @@ struct TripCompanionsSection: View {
                 EmptyView()
             }
         }
-        .task(id: tripId) { await load() }
+        .task(id: TaskKey(tripId: tripId, canQuery: canQuery)) { await load() }
         .confirmationDialog(
             AppStrings.companionsRemoveConfirmTitle(lang.language),
             isPresented: Binding(
@@ -110,6 +129,7 @@ struct TripCompanionsSection: View {
                 // anyway so this switch stays exhaustive; falls back to the
                 // same empty-state invitation `.none` shows.
                 case .stale: inviteRow(c, emptyState: true)
+                case .notPublished: notPublishedRow(c)
                 }
             } else {
                 ForEach(rows) { row in
@@ -293,6 +313,35 @@ struct TripCompanionsSection: View {
         .accessibilityIdentifier(emptyState ? "companions_invite_empty" : "companions_invite_more")
     }
 
+    /// Fix 2: own trip, no server row yet. The ordinary empty-state
+    /// invitation's layout, but NOT a button — inviting would hit the
+    /// identical `TRIP_NOT_FOUND` `/companions/candidates` throws for the
+    /// same reason (see the design doc §1.4), so a dead-end tap would just
+    /// trade one failure state for another. The hint says why instead of
+    /// leaving the disabled row unexplained.
+    private func notPublishedRow(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(c.cardAlt).frame(width: 34, height: 34)
+                Image(systemName: "person.badge.plus")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(AppStrings.companionsAddPrompt(lang.language))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(c.textSecondary)
+                Text(AppStrings.companionsPublishFirstHint(lang.language))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(c.textTertiary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .accessibilityIdentifier("companions_publish_first")
+    }
+
     // MARK: - Loading / error
 
     private var loadingRow: some View {
@@ -358,7 +407,10 @@ struct TripCompanionsSection: View {
     /// for this view to track locally — `decision` (computed from the
     /// store) updates on its own as that state changes.
     private func load() async {
-        try? await store.list(tripId: tripId)
+        // Fix 2: don't ask a question the server can only answer
+        // TRIP_NOT_FOUND to — see `canQuery`'s doc comment.
+        guard canQuery else { return }
+        try? await store.list(tripId: tripId, treatTripNotFoundAsEmpty: isOwn)
     }
 
     private func remove() {

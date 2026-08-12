@@ -39,6 +39,17 @@ enum CompanionsCardModel {
         /// a quiet note that they might not be current rather than a retry
         /// prompt with nothing to show.
         case stale
+        /// Fix 2, own trip only: this trip cannot possibly have a companion
+        /// roster because it has never reached the server (`Trip.isOnServer
+        /// == false`, or the viewer is signed out) — cloud sync starts OFF
+        /// and trips are created private, so this is the app's DEFAULT
+        /// state, not an edge case. `decide` never even asks the network
+        /// for this case (see `TripCompanionsSection.load`'s `canQuery`
+        /// guard) — every `/companions/*` call on a trip with no server row
+        /// answers the identical `TRIP_NOT_FOUND` a genuinely missing trip
+        /// would, which used to render as a permanent, unfixable `.error`
+        /// retry banner. `rows` is always empty alongside this banner.
+        case notPublished
     }
 
     enum Decision: Equatable {
@@ -77,11 +88,21 @@ enum CompanionsCardModel {
     ///   bare `.own(rows: [], banner: .error)`. A non-owner never has one
     ///   (a foreign trip has no local cache to read — see `TripCompanion`'s
     ///   doc comment), so this parameter is unused on that path.
+    /// - Parameter canQuery: Fix 2 — whether this trip could possibly have
+    ///   a roster at all (own trip, signed in, `Trip.isOnServer`). Defaults
+    ///   `true` so every pre-existing call site (and the loadState-driven
+    ///   branches below) is unaffected; only an own trip with `canQuery ==
+    ///   false` takes the new `.notPublished` branch, ignoring `loadState`
+    ///   and `cached` entirely — a trip that was never published has
+    ///   nothing genuine to fall back to.
     static func decide(
         companions: [CompanionItem], isOwn: Bool, loadState: CompanionsLoadState,
-        cached: [CompanionItem] = []
+        cached: [CompanionItem] = [], canQuery: Bool = true
     ) -> Decision {
         if isOwn {
+            guard canQuery else {
+                return .own(rows: [], banner: .notPublished)
+            }
             // Nothing in memory this session (never asked yet, or asked and
             // got back nothing) AND today's request outright failed: if an
             // EARLIER successful load left something in the on-device

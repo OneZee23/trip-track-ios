@@ -43,7 +43,10 @@ extension Trip {
             // garage — the detail screen reads it from `social.vehicle`.
             vehicleId: nil,
             previewPolyline: social.previewPolyline.flatMap { Data(base64Encoded: $0) },
-            earnedBadgeIds: social.badgeIds
+            earnedBadgeIds: social.badgeIds,
+            // A feed/`/companions/my-trips` item could only have arrived
+            // here by existing server-side.
+            isOnServer: true
         )
     }
 }
