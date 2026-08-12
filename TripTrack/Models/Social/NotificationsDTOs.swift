@@ -8,6 +8,13 @@ enum NotificationKind: String, Codable {
     case reaction
     case follow
     case comment
+    /// Owner invited the recipient onto a trip. Preview-only until
+    /// accepted — see `CompanionInvitePreview` — so the inbox row can never
+    /// show a trip title for this kind.
+    case companionInvite = "companion_invite"
+    /// Recipient's own trip: someone the recipient invited (or who was
+    /// invited on their trip) accepted. Ordinary informational row.
+    case companionAccepted = "companion_accepted"
 }
 
 struct NotificationItem: Codable, Identifiable, Hashable {

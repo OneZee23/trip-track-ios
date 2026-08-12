@@ -53,5 +53,13 @@ enum APIEndpoint {
     static let notificationPrefsGet     = "/auth/notification-prefs/get"
     static let notificationPrefsUpdate  = "/auth/notification-prefs/update"
 
+    static let companionsList          = "/companions/list"
+    static let companionsCandidates    = "/companions/candidates"
+    static let companionsInvite        = "/companions/invite"
+    static let companionsRespond       = "/companions/respond"
+    static let companionsRemove        = "/companions/remove"
+    static let companionsInvitePreview = "/companions/invite-preview"
+    static let companionsMyTrips       = "/companions/my-trips"
+
     static func userProfile(_ id: String) -> String { "/users/\(id)/profile" }
 }

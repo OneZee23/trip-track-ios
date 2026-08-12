@@ -72,6 +72,16 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     /// gas stops, drive-thru queues). Optional, see above.
     let stoppedTime: Int?
     let region: String?
+    /// Optional so an older server that hasn't shipped this field yet still
+    /// decodes — absent/`nil` reads as public via `Trip(social:)`'s
+    /// `social.isPrivate ?? false`, matching every trip this field's absence
+    /// could ever describe: `/social/feed` and `/companions/my-trips` both
+    /// only ever returned publicly-visible-to-this-viewer trips before this
+    /// field existed. Added so `TripDetailView` can tell a companion's
+    /// PRIVATE trip apart from a public one instead of assuming every social
+    /// trip is public (Task 5 review finding — the Share button and the
+    /// reactions/comments sections all key off this).
+    let isPrivate: Bool?
     let previewPolyline: String?
     // `var` so SocialFeedStore can apply optimistic bumps when the user adds
     // or removes a photo on their own trip — eliminates the 1-2s gap between
@@ -101,7 +111,7 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id, author, title, description, startDate, endDate
         case distance, duration, maxSpeed, elevation, maxAltitude
-        case drivingTime, stoppedTime, region, previewPolyline
+        case drivingTime, stoppedTime, region, isPrivate, previewPolyline
         case photoCount, firstPhotoThumbnail, vehicle
         case reactionCount, reactionBreakdown, myReaction, badgeIds
         case commentCountRaw = "commentCount"

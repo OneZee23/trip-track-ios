@@ -33,8 +33,12 @@ extension Trip {
             tripDescription: social.description,
             elevation: social.elevation ?? 0,
             region: social.region,
-            // It came out of the public feed, so it is public by definition.
-            isPrivate: false,
+            // `nil` (older server, or a feed source that predates this field)
+            // reads as public — every trip that could arrive without it was
+            // already publicly-visible-to-this-viewer before it existed.
+            // A `/companions/my-trips` trip can be genuinely private (that's
+            // the whole point of an invite), so this is no longer hardcoded.
+            isPrivate: social.isPrivate ?? false,
             // A remote vehicle is a name and an avatar, not a row in our
             // garage — the detail screen reads it from `social.vehicle`.
             vehicleId: nil,

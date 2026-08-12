@@ -446,6 +446,11 @@ final class AuthService: ObservableObject {
         // their own trips rendered as strangers' cards.
         SocialFeedStore.shared.clear()
         SocialFeedStore.following.clear()
+        // Companions are per-account by definition — without this, the next
+        // account signing in on this device would see the previous
+        // account's cached roster/candidates/"со мной" list until each
+        // screen happened to re-fetch.
+        CompanionsStore.shared.clear()
         // Wipe the cached APNs device token so it isn't replayed by the
         // next account's `syncTokenToServer`.
         PushNotificationManager.shared.clearCachedToken()
