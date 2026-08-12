@@ -6,7 +6,11 @@ struct IdleHUDView: View {
     /// Geo-denied variant (Figma 475:119): title/subtitle swap and the slider
     /// opens Settings instead of starting a dead 0-km recording.
     var locationDenied: Bool = false
+    /// No accepted GPS fix yet — the start control waits rather than starting
+    /// a trip whose first minutes would be missing.
+    var waitingForFix: Bool = false
     let onStartTrip: () -> Void
+    var onBlockedStart: () -> Void = {}
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var settings = SettingsManager.shared
     @State private var showVehiclePicker = false
@@ -42,21 +46,23 @@ struct IdleHUDView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 46, height: 46)
             }
-            .padding(.top, 28)
-            .padding(.bottom, 16)
+            // Figma's card rhythm (574:129): ring at 22, then a steady 14 pt
+            // between every block down to the slider, 22 pt under it.
+            .padding(.top, 22)
+            .padding(.bottom, 14)
 
             Text(locationDenied ? AppStrings.noGeoTitle(lang.language) : AppStrings.readyToRide(lang.language))
                 .font(.system(size: locationDenied ? 19 : 22, weight: .bold))
                 .foregroundStyle(.white)
-                .padding(.bottom, 6)
+                .padding(.bottom, 10)
 
-            // Quick vehicle picker — multi-car users were skipping the
-            // start because flipping vehicles meant a trip into Profile →
-            // Garage. The chip opens the 6.1.0 picker sheet (Figma 542:119);
-            // hidden when only one vehicle exists.
-            if !locationDenied && settings.vehicles.count > 1 {
-                vehicleChip
-                    .padding(.bottom, 10)
+            // The car this trip will be recorded on, one tap from the start
+            // control. Shown with a single car in the garage too — the sheet
+            // is also the door to «Управлять в Гараже», and hiding the chip
+            // meant most people never learned a trip HAS a car.
+            if !locationDenied {
+                VehicleChip { showVehiclePicker = true }
+                    .padding(.bottom, 14)
             }
 
             if locationDenied {
@@ -68,9 +74,9 @@ struct IdleHUDView: View {
                 Text("\(formatKmWithSeparator(totalKm)) \(AppStrings.totalKm(lang.language)) · \(tripCount) \(AppStrings.tripsGenitive(lang.language, count: tripCount))")
                     .font(.system(size: 13).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.42))
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 14)
             } else {
-                Spacer().frame(height: 20)
+                Spacer().frame(height: 14)
             }
 
             SlideToStartView(
@@ -83,10 +89,14 @@ struct IdleHUDView: View {
                         onStartTrip()
                     }
                 },
-                labelOverride: locationDenied ? AppStrings.openSettings(lang.language) : nil
+                labelOverride: locationDenied ? AppStrings.openSettings(lang.language) : nil,
+                // The geo-denied state has its own job for this control
+                // (opening Settings), and it does not need a fix to do it.
+                isBlocked: waitingForFix && !locationDenied,
+                onBlockedAttempt: onBlockedStart
             )
             .padding(.horizontal, 18)
-            .padding(.bottom, 20)
+            .padding(.bottom, 22)
         }
         .background(
             RoundedRectangle(cornerRadius: 22)
@@ -103,47 +113,6 @@ struct IdleHUDView: View {
             VehiclePickerSheet()
                 .environmentObject(lang)
         }
-    }
-
-    @ViewBuilder
-    private var vehicleChip: some View {
-        Button {
-            Haptics.tap()
-            showVehiclePicker = true
-        } label: {
-            HStack(spacing: 6) {
-                if let v = activeVehicle {
-                    if v.isPixelAvatar {
-                        Image(v.avatarEmoji)
-                            .resizable()
-                            .interpolation(.none)
-                            .scaledToFit()
-                            .frame(width: 16, height: 16)
-                    } else {
-                        Text(v.avatarEmoji).font(.system(size: 14))
-                    }
-                    Text(v.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .lineLimit(1)
-                } else {
-                    Image(systemName: "car")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                    Text(AppStrings.noVehicleShort(lang.language))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                }
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(Capsule().fill(.white.opacity(0.12)))
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("vehicle_chip")
     }
 
     // Per-language grouping, consistent with My Map (MyMapView.groupedNumber):

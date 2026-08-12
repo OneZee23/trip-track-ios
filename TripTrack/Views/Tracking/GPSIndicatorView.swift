@@ -13,31 +13,37 @@ struct GPSIndicatorView: View {
     @State private var autoDismissTask: DispatchWorkItem?
 
     enum Signal {
+        /// No fix accepted yet — the receiver is still warming up. This is
+        /// NOT a weak signal, and calling it one is what made the screen read
+        /// as broken: a red «GPS слабый» sitting there the whole time you
+        /// wait, when the honest answer is «ещё ищем».
+        case searching
         case accurate, medium, weak, lost
 
         var color: Color {
             switch self {
-            case .accurate: return Color(red: 0x30/255, green: 0xD1/255, blue: 0x58/255)
-            case .medium:   return Color(red: 0xFF/255, green: 0xD6/255, blue: 0x0A/255)
-            case .weak:     return Color(red: 0xFF/255, green: 0x45/255, blue: 0x3A/255)
-            case .lost:     return Color(red: 0xF5/255, green: 0xA6/255, blue: 0x23/255)
+            case .searching: return Color(red: 0x8E/255, green: 0x8E/255, blue: 0x93/255)
+            case .accurate:  return Color(red: 0x30/255, green: 0xD1/255, blue: 0x58/255)
+            case .medium:    return Color(red: 0xFF/255, green: 0xD6/255, blue: 0x0A/255)
+            case .weak:      return Color(red: 0xFF/255, green: 0x45/255, blue: 0x3A/255)
+            case .lost:      return Color(red: 0xF5/255, green: 0xA6/255, blue: 0x23/255)
             }
         }
 
         func label(_ lang: LanguageManager.Language) -> String {
             switch self {
-            case .accurate: return AppStrings.gpsAccurate(lang)
-            case .medium:   return AppStrings.gpsMedium(lang)
-            case .weak:     return AppStrings.gpsWeak(lang)
-            case .lost:     return AppStrings.gpsLost(lang)
+            case .searching: return AppStrings.gpsSearching(lang)
+            case .accurate:  return AppStrings.gpsAccurate(lang)
+            case .medium:    return AppStrings.gpsMedium(lang)
+            case .weak:      return AppStrings.gpsWeak(lang)
+            case .lost:      return AppStrings.gpsLost(lang)
             }
         }
     }
 
     private var signal: Signal {
         if isStale { return .lost }
-        // accuracy == 0 means "no fix accepted yet" — never show green for it.
-        guard accuracy > 0 else { return .weak }
+        guard accuracy > 0 else { return .searching }
         if accuracy <= 10 { return .accurate }
         if accuracy <= 35 { return .medium }
         return .weak
@@ -102,6 +108,9 @@ struct GPSIndicatorView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
+                if signal == .searching {
+                    legendRow(signal: .searching, detail: AppStrings.gpsLegendSearching(lang.language))
+                }
                 legendRow(signal: .accurate, detail: AppStrings.gpsLegendAccurate(lang.language))
                 legendRow(signal: .medium, detail: AppStrings.gpsLegendMedium(lang.language))
                 legendRow(signal: .weak, detail: AppStrings.gpsLegendWeak(lang.language))

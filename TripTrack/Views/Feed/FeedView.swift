@@ -221,14 +221,17 @@ struct FeedView: View {
                         focus: focus
                     )
                 case .socialTrip(let t, let focus):
-                    SocialTripDetailView(
-                        initialTrip: t,
-                        onShare: {
-                            if auth.isSignedIn { shareSocialTrip(t) }
-                            else { pendingSocialAction = .share(t); signInPrompt = .share }
-                        },
+                    // Same screen as our own trips, fed from the feed's copy.
+                    // There used to be a second, thinner detail view here; it
+                    // never grew the charts, its «…» offered only «Поделиться»,
+                    // and any trip of ours that opened in it looked like a
+                    // stranger's. One screen, ownership decides the controls.
+                    TripDetailView(
+                        tripId: t.id,
+                        viewModel: TripsViewModel(tripManager: feedVM.tripManager),
                         pushPath: $authorPath,
-                        focus: focus
+                        focus: focus,
+                        social: t
                     )
                 }
             }
@@ -1147,7 +1150,15 @@ struct FeedView: View {
     /// taps to the regular TripDetailView (with edit pencil + privacy toggle) instead
     /// of the read-only SocialTripDetailView.
     private func isOwnSocialTrip(_ trip: SocialFeedTrip) -> Bool {
-        TokenStore.shared.accountId == trip.author.id
+        if let me = TokenStore.shared.accountId, me == trip.author.id { return true }
+        // Account id compares nil-to-nil as equal and, worse, is nil for a
+        // stretch of every cold start while the token is restored from the
+        // Keychain. A tap in that window sent us to the read-only screen for
+        // our OWN trip: no route map, no charts, no edit, «Поделиться» as the
+        // only action — which is exactly what was reported. The trip being in
+        // our own database is the stronger signal, and it does not depend on
+        // when the token happens to land.
+        return feedVM.tripManager.tripDetail(id: trip.id) != nil
     }
 
     /// Runs the social action a guest tapped before signing in. Consumes the

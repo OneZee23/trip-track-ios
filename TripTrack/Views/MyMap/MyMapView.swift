@@ -1,40 +1,62 @@
 import SwiftUI
 import MapKit
 
-/// 6.1.0 «Моя карта» — the unified memory map under the Maps tab (Figma
-/// section 04). Replaces the fog-of-war RegionsView. Night map with amber
-/// territory glow + speed-gradient routes, floating chrome (title, dark-glass
-/// segment, expand button), and a zoom-morphing stats plate.
+/// 6.1.0 «Моя карта» — the living map of everywhere you have driven (Figma
+/// page «🧭 Карта», canon note «карта v2 · Polarsteps-модель»).
+///
+/// One flat MapKit map, free pan and zoom, everything on it tappable, and a
+/// permanent sheet that swaps its contents to whatever you touched. There is
+/// no layer switcher on purpose — the note says «слоёв-переключателей нет»,
+/// and depth comes from how close you are instead.
 struct MyMapView: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
     // Singleton by design — survives tab switches (see MyMapViewModel.shared).
     @ObservedObject private var vm = MyMapViewModel.shared
-    @State private var mode: MyMapMode = .all
-    @State private var showFullscreen = false
-    @State private var cameraRegion: MKCoordinateRegion?
-    /// Camera returned from the fullscreen cover, applied once by the main
-    /// map (distinct from `cameraRegion`, which tracks the map's own state).
-    @State private var handoffRegion: MKCoordinateRegion?
+    @State private var zoomLevel: MapZoomLevel = .far
+    /// Wrapper rather than a retroactive `UUID: Identifiable` conformance —
+    /// that one would leak app-wide from a map file.
+    private struct OpenedTrip: Identifiable { let id: UUID }
+    @State private var openedTrip: OpenedTrip?
+    /// Lives here, not in the sheet, so the tab bar can hide under the
+    /// pulled-up region list too.
+    @State private var isSummaryExpanded = false
+    @State private var showBetaNote = false
+
+    /// «Есть туман или нет» is not a question a screenshot can settle by eye —
+    /// a night map is dark either way. `-no-fog-veil` draws the same map
+    /// without it so a test can measure the difference in luminance.
+    #if DEBUG
+    static let showsVeil = !ProcessInfo.processInfo.arguments.contains("-no-fog-veil")
+    #else
+    static let showsVeil = true
+    #endif
 
     var body: some View {
         ZStack {
             MyMapRepresentable(
-                glow: vm.glow,
-                routeSegments: vm.routeSegments,
-                cityDots: vm.cityDots,
-                mode: mode,
-                onCameraSettled: { region in
-                    cameraRegion = region
-                    vm.resolveFocusedRegion(for: region)
-                },
-                handoffRegion: handoffRegion
+                exploration: vm.exploration,
+                fog: vm.fogOverlay,
+                veil: Self.showsVeil ? vm.fogVeil : nil,
+                selectedRoute: vm.selectedRoute,
+                selection: vm.selection,
+                highlightedRegionId: vm.highlightedRegionId,
+                language: lang.language,
+                onZoomLevelChange: { zoomLevel = $0 },
+                onSelectTrip: { vm.select(.trip($0)) },
+                onSelectRoad: { vm.selectRoad($0) },
+                // Auto-zoom to the region only from the country view, where
+                // that IS the gesture. Down at street level a tap that misses
+                // the road is a miss, and answering it by flinging the camera
+                // out to the whole krai loses your place.
+                onTapMap: { vm.selectRegion(at: $0, zoom: zoomLevel == .far) },
+                cameraCommand: $vm.cameraCommand
             )
             .ignoresSafeArea()
 
             topScrim
 
-            chrome
+            title
 
             if vm.isEmpty {
                 emptyState
@@ -43,18 +65,38 @@ struct MyMapView: View {
             if vm.isLoading {
                 CarLoadingView()
             }
+
+            MyMapSheet(
+                vm: vm,
+                isSummaryExpanded: $isSummaryExpanded,
+                onOpenTrip: { openedTrip = OpenedTrip(id: $0) },
+                onShare: shareSummary
+            )
         }
+        // Canon frames 2–5 have no tab bar: a selected card owns the bottom
+        // of the screen, and the bar sitting on top of it clipped the
+        // progress row clean off.
+        .hideAppTabBar(vm.selection != nil || isSummaryExpanded)
         .task {
             await vm.loadIfNeeded(tripManager: mapVM.tripManager, territory: mapVM.territoryManager)
         }
-        .fullScreenCover(isPresented: $showFullscreen) {
-            MyMapFullscreenView(
-                vm: vm,
-                mode: mode,
-                initialRegion: cameraRegion,
-                onDismiss: { region in handoffRegion = region }
-            )
-            .environmentObject(lang)
+        .alert(AppStrings.mapBetaTitle(lang.language), isPresented: $showBetaNote) {
+            Button(AppStrings.mapBetaReport(lang.language)) {
+                if let url = URL(string: "https://t.me/onezee_co") {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button(AppStrings.ok(lang.language), role: .cancel) {}
+        } message: {
+            Text(AppStrings.mapBetaBody(lang.language))
+        }
+        .fullScreenCover(item: $openedTrip) { opened in
+            NavigationStack {
+                TripDetailView(
+                    tripId: opened.id,
+                    viewModel: TripsViewModel(tripManager: mapVM.tripManager)
+                )
+            }
         }
     }
 
@@ -74,124 +116,38 @@ struct MyMapView: View {
         .allowsHitTesting(false)
     }
 
-    private var chrome: some View {
+    private var title: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .center) {
+            HStack(spacing: 8) {
                 Text(AppStrings.myMapTitle(lang.language))
                     .font(.system(size: 22, weight: .heavy))
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.5), radius: 8, y: 1)
-                Spacer()
+
+                // The map ships ahead of the rest of the app. Saying so where
+                // it lives — rather than nowhere — is the difference between
+                // «это баг?» and a bug report.
                 Button {
-                    showFullscreen = true
                     Haptics.tap()
+                    showBetaNote = true
                 } label: {
-                    ExpandBracketsIcon()
-                        .frame(width: 14, height: 14)
+                    Text(AppStrings.mapBetaBadge(lang.language))
+                        .font(.system(size: 10, weight: .heavy))
                         .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(.black.opacity(0.4), in: Circle())
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(AppTheme.accent.opacity(0.9), in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityIdentifier("mymap_expand")
+                .accessibilityIdentifier("map_beta_badge")
+                .accessibilityLabel(AppStrings.mapBetaTitle(lang.language))
+
+                Spacer()
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
-
-            MapSegmentControl(mode: $mode)
-                // The pill's material must resolve DARK over the night map
-                // regardless of the system theme (Figma: dark glass).
-                .environment(\.colorScheme, .dark)
-                .padding(.top, 10)
-
             Spacer()
-
-            if !vm.isEmpty && !vm.isLoading {
-                statsPlate
-                    .padding(.horizontal, 16)
-                    // Clear the floating tab bar (74pt pill + 14pt gap).
-                    .padding(.bottom, 102)
-            }
         }
-    }
-
-    // MARK: - Stats plate (absolute ↔ region morph)
-
-    @ViewBuilder
-    private var statsPlate: some View {
-        Group {
-            if let region = vm.focusedRegion {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 7) {
-                        Circle().fill(AppTheme.accent).frame(width: 9, height: 9)
-                        Text(region.name)
-                            .font(.system(size: 16, weight: .heavy))
-                            .foregroundStyle(Color(red: 30/255, green: 30/255, blue: 35/255))
-                            .lineLimit(1)
-                    }
-                    HStack(spacing: 0) {
-                        plateColumn(value: Self.groupedNumber(region.km2, lang.language),
-                                    label: AppStrings.km2Short(lang.language))
-                        divider
-                        plateColumn(value: "\(region.cityCount)",
-                                    label: AppStrings.citiesGenitive(lang.language, count: region.cityCount))
-                        divider
-                        plateColumn(value: "\(region.tripCount)",
-                                    label: AppStrings.tripsGenitive(lang.language, count: region.tripCount))
-                    }
-                }
-            } else {
-                HStack(spacing: 0) {
-                    plateColumn(value: Self.groupedNumber(vm.totalKm2, lang.language),
-                                label: AppStrings.km2ExploredLabel(lang.language))
-                    divider
-                    plateColumn(value: "\(vm.regionCount)",
-                                label: AppStrings.regionsGenitive(lang.language, count: vm.regionCount))
-                    divider
-                    plateColumn(value: "\(vm.cityCount)",
-                                label: AppStrings.citiesGenitive(lang.language, count: vm.cityCount))
-                }
-            }
-        }
-        .padding(14)
-        .background(.white.opacity(0.85), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.6), lineWidth: 1))
-        .shadow(color: .black.opacity(0.06), radius: 6, y: 3)
-        .animation(.easeInOut(duration: 0.2), value: vm.focusedRegion)
-    }
-
-    private var divider: some View {
-        // Fixed height — an unconstrained Rectangle is greedy vertically and
-        // would balloon the plate to fill the whole screen. Opacity per the
-        // Figma mock's clearly visible hairlines (~#707071 on the white card).
-        Rectangle()
-            .fill(.black.opacity(0.45))
-            .frame(width: 1, height: 36)
-    }
-
-    private func plateColumn(value: String, label: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.system(size: 18, weight: .heavy))
-                .foregroundStyle(Color(red: 30/255, green: 30/255, blue: 35/255))
-            Text(label)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Color(red: 100/255, green: 100/255, blue: 110/255))
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    /// «2 430» — locale-aware grouping (RU uses a space). Formatters are
-    /// static (never rebuild formatters per body pass).
-    private static let ruFormatter: NumberFormatter = {
-        let f = NumberFormatter(); f.numberStyle = .decimal; f.groupingSeparator = " "; return f
-    }()
-    private static let enFormatter: NumberFormatter = {
-        let f = NumberFormatter(); f.numberStyle = .decimal; f.groupingSeparator = ","; return f
-    }()
-    static func groupedNumber(_ value: Int, _ lang: LanguageManager.Language) -> String {
-        let formatter = lang == .ru ? ruFormatter : enFormatter
-        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 
     // MARK: - Empty state
@@ -210,23 +166,27 @@ struct MyMapView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: 280)
+        .allowsHitTesting(false)
     }
-}
 
-/// Figma expand icon: four corner brackets.
-struct ExpandBracketsIcon: View {
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width, h = geo.size.height
-            let arm = w * 0.36
-            Path { p in
-                p.move(to: CGPoint(x: 0, y: arm)); p.addLine(to: .zero); p.addLine(to: CGPoint(x: arm, y: 0))
-                p.move(to: CGPoint(x: w - arm, y: 0)); p.addLine(to: CGPoint(x: w, y: 0)); p.addLine(to: CGPoint(x: w, y: arm))
-                p.move(to: CGPoint(x: w, y: h - arm)); p.addLine(to: CGPoint(x: w, y: h)); p.addLine(to: CGPoint(x: w - arm, y: h))
-                p.move(to: CGPoint(x: arm, y: h)); p.addLine(to: CGPoint(x: 0, y: h)); p.addLine(to: CGPoint(x: 0, y: h - arm))
-            }
-            .stroke(style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
-        }
+    // MARK: - Share
+
+    /// Canon puts a share button on the collapsed summary. It passes on the
+    /// one line the summary already states — the numbers, not a rendered
+    /// poster of the map (that lives on the trip share screen).
+    private func shareSummary() {
+        let text = AppStrings.mapSummary(
+            lang.language,
+            regions: vm.exploration.regionCount,
+            km: Int(vm.exploration.totalKm.rounded()),
+            trips: vm.exploration.tripCount
+        )
+        let activity = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+        var controller = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
+            .first
+        while let presented = controller?.presentedViewController { controller = presented }
+        controller?.present(activity, animated: true)
     }
 }
 

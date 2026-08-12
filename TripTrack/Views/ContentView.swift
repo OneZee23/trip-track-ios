@@ -185,6 +185,23 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .switchToTrackingTab)) { _ in
             selectedTab = .record
         }
+        .onReceive(NotificationCenter.default.publisher(for: .tripRecordingEnded)) { note in
+            // The drive is over — the record screen has nothing left to say,
+            // and what you want next is the trip you just made. Only from the
+            // record tab: an auto-stop or a recovery finish can end a trip
+            // while you are reading something else, and yanking the tab out
+            // from under that would be worse than staying put.
+            //
+            // And only when there IS a trip. A junk-filtered one is deleted on
+            // the spot, so this threw the user onto Я with nothing to look at
+            // and no word about where their recording went — the record screen
+            // says that itself, and it can only say it if we leave them on it.
+            guard (note.object as? Bool) != true else { return }
+            guard selectedTab == .record else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                selectedTab = .profile
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openGarage)) { _ in
             // Two-phase: switch the tab, then re-post once ProfileView has
             // mounted its listener — a one-shot notification consumed before

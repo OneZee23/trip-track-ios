@@ -9,6 +9,7 @@ private let gpsLog = Logger(subsystem: "com.triptrack", category: "gps")
 /// Speed-pipeline diagnostics (raw GPS vs smoothed HUD value). `.debug` so it's
 /// live-Console only — catches "speed stuck / jumps" reports during dev.
 private let speedLog = Logger(subsystem: "com.triptrack", category: "speed")
+private let recLog = Logger(subsystem: "com.triptrack", category: "record-screen")
 
 @MainActor
 final class MapViewModel: ObservableObject {
@@ -33,6 +34,39 @@ final class MapViewModel: ObservableObject {
     /// Launch-time recovery prompt (Figma 505:119) — a force-quit recording
     /// was found; the user picks Continue vs Finish&Save (never discard).
     @Published var showRecoveryPrompt: Bool = false
+
+    /// Why a start attempt was turned down.
+    ///
+    /// `startRecording` used to just `return` on each of its guards. The
+    /// slider, meanwhile, always springs its thumb back half a second after a
+    /// completed swipe — so a refused start looked exactly like a broken
+    /// control: you drag it all the way, it snaps home, nothing happens, and
+    /// nothing says why. A refusal has to be a value someone can show.
+    enum StartRefusal: Equatable {
+        case locationDenied
+        case recoveryPending
+        /// The start did not take and nothing said why. Enumerating every
+        /// possible cause is a losing game — a future guard, a throw, a
+        /// re-entry — so the outcome is checked instead: if recording is not
+        /// running afterwards, the person is told, whatever the reason.
+        case unknown
+        /// No accepted fix yet («Ищем спутники»). Manual starts wait for one.
+        case noFix
+    }
+
+    /// Mirrors `GPSIndicatorView.Signal.searching` — an accuracy of 0 means no
+    /// fix has ever been accepted, not a poor one.
+    var hasGPSFix: Bool { gpsAccuracy > 0 }
+    /// Set on a refused start; the screen shows it and clears it.
+    @Published var startRefusal: StartRefusal?
+    /// Whether the tracking map has ever finished a first render.
+    ///
+    /// Lives here rather than in `TrackingView` because ContentView builds
+    /// that view fresh on every visit to the Record tab, so a `@State` flag
+    /// reset to false each time and replayed the loading animation over a map
+    /// that was already drawn — a little car driving back and forth on a
+    /// perfectly good map, which reads as the app being broken.
+    @Published var trackingMapDidRender = false
     var recoveryDistanceKm: Double = 0
     var recoveryDuration: String = "0:00"
     @Published var trackOverlays: [MKOverlay] = []
@@ -111,9 +145,23 @@ final class MapViewModel: ObservableObject {
         self.tripManager = TripManager(locationManager: manager)
 
         // Wire up Live Activity + Shortcuts intent handlers
-        TripIntentHandler.shared.onPause = { [weak self] in self?.togglePause() }
+        // Both buttons answer for a card that can outlive its trip: force-quit
+        // the app mid-drive and the Live Activity keeps ticking on the lock
+        // screen with no recording behind it. Pressing either used to do
+        // nothing whatsoever — the card sat there, counting, until iOS aged it
+        // out. If there is no trip, the honest response is to retire the card.
+        TripIntentHandler.shared.onPause = { [weak self] in
+            guard let self, self.isRecording else {
+                LiveActivityManager.shared.endActivity()
+                return
+            }
+            self.togglePause(source: .liveActivity)
+        }
         TripIntentHandler.shared.onStop = { [weak self] in
-            guard let self, self.isRecording else { return }
+            guard let self, self.isRecording else {
+                LiveActivityManager.shared.endActivity()
+                return
+            }
             self.toggleRecording()
         }
         // StartTripIntent fires from the Shortcuts app / personal
@@ -196,6 +244,17 @@ final class MapViewModel: ObservableObject {
                 guard let self, let newStart = note.object as? Date else { return }
                 self.recordingStartDate = newStart
                 self.updateDuration()
+                // The card's clock runs off `attributes.startDate`, which is
+                // fixed at request time and cannot be updated — so a backdated
+                // auto-trip left the lock screen counting from the wrong
+                // moment, minutes behind the app, for the whole drive. The
+                // only way to correct it is a fresh activity.
+                guard self.isRecording else { return }
+                self.startLiveActivity(
+                    tripId: self.tripManager.activeTrip?.id ?? UUID(),
+                    startDate: newStart,
+                    vehicleId: self.tripManager.activeTrip?.vehicleId ?? self.selectedVehicleId
+                )
             }
             .store(in: &cancellables)
 
@@ -267,12 +326,46 @@ final class MapViewModel: ObservableObject {
 
     // MARK: - Recording
 
+    /// The only way the start control begins a recording.
+    ///
+    /// Its contract is the point: when this returns, either `isRecording` is
+    /// true or `startRefusal` holds something the screen can show. A slider
+    /// that slides home with nothing said is indistinguishable from a broken
+    /// slider — and for a while it WAS hiding a real bug, where recording had
+    /// started and the screen never heard about it.
+    /// - Parameter force: skips the no-fix wait. Set by «Всё равно начать».
+    func requestStartRecording(vehicleId: UUID? = nil, force: Bool = false) {
+        recLog.notice("requestStart: entry recording=\(self.isRecording, privacy: .public) fix=\(self.hasGPSFix, privacy: .public) force=\(force, privacy: .public)")
+        startRefusal = nil
+        // A trip begun before the first fix records nothing until one lands:
+        // no start point, no first kilometres, and — as reported — a screen
+        // that looks like the swipe did nothing at all. Waiting is the honest
+        // state, so the control says so and this refuses until it clears.
+        //
+        // MANUAL starts only. `startRecording` stays open for the automatic
+        // paths (BT reconnect, Shortcuts, the recording recovery), because a
+        // car park with no fix is exactly where those have to keep working.
+        if !force, !hasGPSFix, !locationDenied {
+            recLog.notice("requestStart: refused, no fix yet")
+            startRefusal = .noFix
+            return
+        }
+        startRecording(vehicleId: vehicleId)
+        recLog.notice("requestStart: after recording=\(self.isRecording, privacy: .public) refusal=\(String(describing: self.startRefusal), privacy: .public)")
+        if !isRecording, startRefusal == nil {
+            recLog.error("start produced neither a recording nor a reason")
+            startRefusal = .unknown
+        }
+    }
+
     func toggleRecording(vehicleId: UUID? = nil) {
+        recLog.notice("toggle: was=\(self.isRecording, privacy: .public) main=\(Thread.isMainThread, privacy: .public)")
         if isRecording {
             stopRecording()
         } else {
             startRecording(vehicleId: vehicleId)
         }
+        recLog.notice("toggle: now=\(self.isRecording, privacy: .public)")
         // Push the new state to the Watch immediately. Without this
         // the wrist UI would stay on the prior "idle" / "recording"
         // screen until the next GPS sample lands (up to a few seconds
@@ -284,9 +377,24 @@ final class MapViewModel: ObservableObject {
         )
     }
 
-    func togglePause() {
+    /// Who asked for the pause. A pause nobody meant to press looks exactly
+    /// like one that was pressed on purpose — until the log says which surface
+    /// it came from. «Свернул приложение, а запись на паузе» is unanswerable
+    /// without this line.
+    enum PauseSource: String {
+        /// The control on the recording screen.
+        case screen
+        /// The button on the Live Activity — lock screen, Dynamic Island, or
+        /// the card mirrored onto a paired Apple Watch.
+        case liveActivity
+        /// The Watch companion app over WatchConnectivity.
+        case watch
+    }
+
+    func togglePause(source: PauseSource = .screen) {
         guard isRecording else { return }
         isPaused.toggle()
+        recLog.notice("pause: paused=\(self.isPaused, privacy: .public) source=\(source.rawValue, privacy: .public)")
         tripManager.isPaused = isPaused
         PhoneConnectivityManager.shared.publish(
             isRecording: true, isPaused: isPaused,
@@ -335,13 +443,20 @@ final class MapViewModel: ObservableObject {
             adoptRecoveredTrip(trip, startLiveActivity: true)
             return
         }
-        // 6.1.0 (Figma 505:119): a recoverable force-quit orphan raises the
-        // launch prompt instead of silently resuming.
-        if let orphan = tripManager.recoverableOrphan {
-            recoveryDistanceKm = orphan.distance / 1000
-            recoveryDuration = Self.formatRecoveryDuration(tripManager.recoverableOrphanDuration)
-            showRecoveryPrompt = true
+        guard let orphan = tripManager.recoverableOrphan else { return }
+
+        // The canon's hybrid: a recording that stopped minutes ago belongs to
+        // someone who is still driving — pick it up and say nothing. Anything
+        // older gets the prompt (Figma 505:119), because by then «продолжить
+        // или завершить» is a real question with a real answer.
+        if tripManager.recoverableOrphanIsFresh, let trip = tripManager.adoptRecoverableOrphan() {
+            adoptRecoveredTrip(trip, startLiveActivity: true)
+            return
         }
+
+        recoveryDistanceKm = orphan.distance / 1000
+        recoveryDuration = Self.formatRecoveryDuration(tripManager.recoverableOrphanDuration)
+        showRecoveryPrompt = true
     }
 
     /// «Продолжить запись» in the recovery prompt.
@@ -371,6 +486,13 @@ final class MapViewModel: ObservableObject {
         }
         showRecoveryPrompt = false
         adoptRecoveredTrip(trip, startLiveActivity: false)
+        // Adopting turns tracking back on, and this path ends the trip 450ms
+        // later — long enough for one live fix to be appended. That fix is
+        // taken wherever the phone is NOW, which for a trip recovered the next
+        // morning is a different town: it stretched the saved route with a
+        // straight line across everything in between. The trip is finished;
+        // nothing new belongs in it.
+        tripManager.isPaused = true
         let orphanEndDate = trip.startDate.addingTimeInterval(orphanDuration)
         // Let the prompt sheet finish dismissing before the stop pipeline
         // presents the badge celebration / summary — presenting during a
@@ -463,15 +585,29 @@ final class MapViewModel: ObservableObject {
         // Re-entry guard — BT auto-trigger + notification action + manual tap
         // can all reach this method on the same MainActor tick. Without the
         // guard each call would create its own TripEntity, leaving orphans.
-        guard !isRecording else { return }
+        guard !isRecording else {
+            NSLog("[record] start refused: already recording")
+            return
+        }
         // No location permission → no recording. The idle screen shows the
         // «Нет доступа к геолокации» state with an Open-Settings slider
         // instead; this guard covers programmatic starts (BT, Shortcuts).
-        guard !locationDenied else { return }
-        // The recovery prompt is on screen — an auto-start (BT reconnect is
-        // the CANONICAL recovery moment) would race the orphan adoption and
-        // corrupt both trips. The user resolves the prompt first.
-        guard !showRecoveryPrompt else { return }
+        guard !locationDenied else {
+            NSLog("[record] start refused: locationDenied")
+            startRefusal = .locationDenied
+            return
+        }
+        // The recovery prompt is up — an auto-start (BT reconnect is the
+        // CANONICAL recovery moment) would race the orphan adoption and
+        // corrupt both trips. The user resolves the prompt first, so say so
+        // and put the prompt back in front of them.
+        guard !showRecoveryPrompt else {
+            NSLog("[record] start refused: recovery prompt pending")
+            startRefusal = .recoveryPending
+            return
+        }
+        NSLog("[record] start accepted")
+        startRefusal = nil
         // Reset state
         isPaused = false
         tripManager.isPaused = false
@@ -499,6 +635,8 @@ final class MapViewModel: ObservableObject {
         let vid = overrideId ?? selectedVehicleId
         tripManager.startTrip(vehicleId: vid)
         isRecording = true
+        // This trip's inactivity window starts now, from this trip's odometer.
+        AutoTripService.shared.recordingDidStart()
 
         // Start Live Activity on Lock Screen / Dynamic Island
         startLiveActivity(
@@ -572,9 +710,19 @@ final class MapViewModel: ObservableObject {
         // Activity end, gamification, junk-discard delete) executed twice.
         guard isRecording else { return }
         isRecording = false
-        // Notify subscribers (Feed, Stats) regardless of which cleanup branch runs,
-        // including silent junk-discard where the trip is deleted
-        defer { NotificationCenter.default.post(name: .tripRecordingEnded, object: nil) }
+        // Stale from the previous trip would otherwise suppress the tab switch
+        // for a perfectly good one.
+        discardedJunkTrip = false
+        // Notify subscribers (Feed, Stats) regardless of which cleanup branch
+        // runs, including the junk-discard where the trip is deleted. The
+        // object carries whether anything was actually saved — ContentView
+        // uses it to decide whether there is a trip worth switching tabs for.
+        defer {
+            NotificationCenter.default.post(
+                name: .tripRecordingEnded,
+                object: discardedJunkTrip
+            )
+        }
 
         // Haptic immediately — before any async work, while app may still be in foreground
         let haptic = UINotificationFeedbackGenerator()
@@ -582,6 +730,10 @@ final class MapViewModel: ObservableObject {
         haptic.notificationOccurred(.success)
 
         let completedTrip = tripManager.stopTrip(suggestedEndDate: suggestedEndDate)
+        // Nothing from this trip may reach the next one: the inactivity
+        // tracker's own reset rides on a location callback that stops arriving
+        // the moment tracking stops, one line above.
+        AutoTripService.shared.recordingDidEnd()
         trackManager.stopAnimation()
         stopFogAnimation()
         isPaused = false
@@ -688,6 +840,44 @@ final class MapViewModel: ObservableObject {
     }
 
     /// Called after badge celebration is dismissed to show the trip summary
+    #if DEBUG
+    /// Reopens the finish screen for the most recent saved trip.
+    ///
+    /// Debug builds only, and it exists because the screen is otherwise
+    /// unreachable without going for a drive long enough to clear the junk
+    /// filter — every tweak to it cost a trip outside. The gamification card
+    /// is filled with plausible numbers rather than recomputed, so opening it
+    /// twice cannot award anything.
+    func debugShowLastTripSummary() {
+        // The paged fetch leaves track points behind, and without them the
+        // route preview has nothing to draw — the detail fetch is the one that
+        // returns a whole trip.
+        guard let recent = tripManager.fetchTrips(limit: 1, offset: 0).first else { return }
+        let trip = tripManager.tripDetail(id: recent.id) ?? recent
+        let badges = Array(Badge.all.prefix(2))
+        lastCompletionData = TripCompletionData(
+            xpEarned: 158,
+            xpBreakdown: XPBreakdown(base: 158),
+            previousLevel: 5,
+            newLevel: 6,
+            previousXP: 1_180,
+            newXP: 1_338,
+            previousRank: DriverRank.from(level: 5),
+            newRank: DriverRank.from(level: 6),
+            vehicleOdometerBefore: 12_000,
+            vehicleOdometerAfter: 12_158,
+            vehicleLevelBefore: 3,
+            vehicleLevelAfter: 3,
+            newBadges: badges,
+            repeatedBadgeCounts: Dictionary(uniqueKeysWithValues: badges.map { ($0.id, 5) }),
+            newStickers: [],
+            currentStreak: 14,
+            roadCard: nil
+        )
+        lastCompletedTrip = trip
+    }
+    #endif
+
     func showPendingSummary() {
         guard let trip = pendingCompletedTrip else { return }
         lastCompletionData = pendingCompletionData
@@ -941,8 +1131,15 @@ final class MapViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    /// Pins the map to its daylight look. The recording HUD floats straight on
+    /// the map, so half its contrast problems only exist while the map is
+    /// light — and whether it is light depends on the sun where you are
+    /// standing, which a screenshot test cannot arrange. Same shape as
+    /// `-no-fog-veil` on My Map.
+    static let forcesLightMap = ProcessInfo.processInfo.arguments.contains("-force-light-map")
+
     private func updateThemeForSun(coordinate: CLLocationCoordinate2D) {
-        isDarkMap = SunCalculator.isNight(at: coordinate)
+        isDarkMap = Self.forcesLightMap ? false : SunCalculator.isNight(at: coordinate)
         UserDefaults.standard.set(isDarkMap, forKey: "liveActivityDarkMode")
     }
 

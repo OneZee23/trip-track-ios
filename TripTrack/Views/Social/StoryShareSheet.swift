@@ -78,6 +78,9 @@ struct StoryShareSheet: View {
     @State private var posterMap: SharePosterMap?
     @State private var isLoadingMap = false
     @State private var savedToPhotos = false
+    /// «Разрешите доступ к Фото» (canon 510:119) — shown when saving the card
+    /// is refused by the system.
+    @State private var showPhotoAccessAlert = false
     @State private var linkCopied = false
     /// Summed height of the chrome + the card block. Drives a detent sized
     /// to the content: at a fixed fraction the sheet always ended with a
@@ -115,7 +118,10 @@ struct StoryShareSheet: View {
                     }
                 }
                 .padding(.top, 12)
-                .padding(.bottom, 20)
+                // Just enough to clear the buttons. The sheet then adds the
+                // home-indicator strip on top of this, and 20pt here made the
+                // two together read as a slab of nothing under the actions.
+                .padding(.bottom, 6)
                 // Where the content actually ENDS in the sheet's own space.
                 // Summing block heights over-counted by the sheet's chrome
                 // and left a slab of dead background under the link row.
@@ -132,10 +138,25 @@ struct StoryShareSheet: View {
         }
         .coordinateSpace(name: Self.space)
         .background(c.bg)
-        .presentationCornerRadius(22)
+        // No `presentationCornerRadius` override: on iOS 26 a sheet is a card
+        // that floats inset from the screen, and forcing the radius left its
+        // bottom corners squared off against the screen edge — the reported
+        // «обрезанная карточка». The system radius is correct on both.
         .presentationDetents([.height(sheetHeight)])
         .onPreferenceChange(SharePosterSheetHeightKey.self) { measuredHeight = $0 }
         .task(id: format) { await loadMap() }
+        .alert(
+            AppStrings.photoAccessAlertTitle(lang.language),
+            isPresented: $showPhotoAccessAlert
+        ) {
+            Button(AppStrings.openSettings(lang.language)) {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
+            }
+            Button(AppStrings.cancel(lang.language), role: .cancel) {}
+        } message: {
+            Text(AppStrings.photoAccessAlertBody(lang.language))
+        }
     }
 
     private static let space = "shareSheetContent"
@@ -392,7 +413,16 @@ struct StoryShareSheet: View {
     private func savePhoto() {
         guard let image = renderImage() else { return }
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            guard status == .authorized || status == .limited else { return }
+            guard status == .authorized || status == .limited else {
+                // Silence here is indistinguishable from a broken button: the
+                // user taps «Сохранить», nothing happens, and nothing says
+                // why. Canon 510:119 is the alert that answers it.
+                Task { @MainActor in
+                    Haptics.error()
+                    showPhotoAccessAlert = true
+                }
+                return
+            }
             PHPhotoLibrary.shared().performChanges({
                 PHAssetCreationRequest.creationRequestForAsset(from: image)
             }) { success, _ in

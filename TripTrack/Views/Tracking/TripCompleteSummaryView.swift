@@ -11,11 +11,32 @@ struct TripCompleteSummaryView: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
     @State private var showXP = false
-    @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var savedPhotoCount = 0
+    /// Multi-selection, kept for the life of the screen.
+    ///
+    /// A single-item picker forgets what you chose the moment it closes, so
+    /// re-opening it and tapping the same photo — the gesture everyone uses to
+    /// take one back — added it a second time. Holding the selection means the
+    /// picker opens with your photos already ticked and a second tap unticks
+    /// one, which is what that gesture means everywhere else.
+    @State private var photoSelection: [PhotosPickerItem] = []
+    /// Picked item → the photo it created, so a deselect can delete it.
+    ///
+    /// Keyed by the item itself, NOT by `itemIdentifier`: that property is nil
+    /// unless the picker is built with an explicit `photoLibrary`, and keying
+    /// on it meant every item was filtered out as «has no id» — the finish
+    /// screen accepted photos and attached none of them.
+    @State private var savedPhotoIds: [PhotosPickerItem: UUID] = [:]
+    @State private var isSavingPhotos = false
     /// Figma 147:1251: OFF by default — trips stay private until the user
     /// opts in. Applied on «Готово».
     @State private var publishToFeed = false
+    /// Inline description (canon: «Финиш = всё в одном экране»). Lands in
+    /// `trip.notes`, so it is the same text the detail screen and the feed show.
+    @State private var tripNotes: String = ""
+    /// What the editor is typing into until it is saved. See the sheet below.
+    @State private var notesDraft: String = ""
+    @State private var showNotesEditor = false
+    @State private var selectedBadge: Badge?
 
     var body: some View {
         // The finish screen is light-themed by design (Figma 147:1190) —
@@ -36,8 +57,13 @@ struct TripCompleteSummaryView: View {
                 .foregroundStyle(c.text)
                 .padding(.top, 8)
 
-            // Route preview (speed-gradient polylines via RouteMapView)
-            if trip.trackPoints.count > 1 {
+            // Route preview (speed-gradient polylines via RouteMapView).
+            //
+            // Drawn for a single point too. A trip that never moved still
+            // happened somewhere, and showing that place beats showing an
+            // empty slot — this used to require two points, so a two-minute
+            // wait produced a blank card with a dot in it.
+            if !trip.trackPoints.isEmpty {
                 RouteMapView(
                     coordinates: trip.trackPoints.map(\.coordinate),
                     speeds: trip.trackPoints.map(\.speed)
@@ -61,7 +87,10 @@ struct TripCompleteSummaryView: View {
                     c: c
                 )
                 summaryStatCard(
-                    value: trip.formattedDuration,
+                    // «02:12» is unreadable at a glance — two hours twelve, or
+                    // two minutes twelve? The app already has one honest
+                    // format and the canon uses it: «2 ч 14 мин».
+                    value: trip.formattedDurationHuman(lang.language),
                     unit: "",
                     label: AppStrings.duration(lang.language),
                     // Figma 147:1190: time is neutral dark, not accent.
@@ -91,90 +120,234 @@ struct TripCompleteSummaryView: View {
                 gamificationSection(data: data, c: c)
             }
 
-            // Publish row (Figma 147:1251): OFF by default; the footnote is
-            // the privacy invariant. Applied on «Готово».
-            publishRow(c)
+            // Description, then publish — the canon's «Финиш = всё в одном
+            // экране»: an optional note and an instant toggle, no intermediate
+            // publish screen.
+            descriptionCard(c)
                 .padding(.horizontal, 20)
                 .padding(.top, 14)
 
-            // Photo + Done, side by side (Figma bottom row).
-            HStack(spacing: 12) {
-                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                    HStack(spacing: 6) {
-                        Image(systemName: savedPhotoCount > 0 ? "checkmark.circle.fill" : "camera.fill")
-                            .font(.system(size: 15))
-                        Text(savedPhotoCount > 0
-                             ? "\(AppStrings.photoShort(lang.language)) (\(savedPhotoCount))"
-                             : AppStrings.photoShort(lang.language))
-                            .font(.system(size: 14, weight: .bold))
-                    }
-                    .foregroundStyle(c.text)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 14))
-                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(c.border, lineWidth: 1))
-                }
-
-                Button {
-                    if publishToFeed {
-                        mapVM.tripManager.updatePrivacy(for: trip.id, isPrivate: false)
-                        NotificationCenter.default.post(
-                            name: .tripPrivacyChanged,
-                            object: PrivacyChangePayload(tripId: trip.id, isPrivate: false)
-                        )
-                    }
-                    onDone()
-                } label: {
-                    Text(AppStrings.done(lang.language))
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
-                        .shadow(color: AppTheme.accent.opacity(0.3), radius: 1.5, y: 1)
-                }
-                .accessibilityIdentifier("summary_done")
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
-            .onChange(of: selectedPhotoItem) { _, item in
-                guard let item else { return }
-                Task {
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let image = UIImage(data: data) {
-                        onPhotoSaved(image)
-                        savedPhotoCount += 1
-                    }
-                    selectedPhotoItem = nil
-                }
-            }
+            // Publish row (Figma 147:1251): OFF by default. Applied on «Готово».
+            publishRow(c)
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
         }
         }
+        // Pinned, not scrolled: the actions belong to the sheet, not to the
+        // end of the content. Inside the scroll view they sat wherever the
+        // content happened to end, leaving a field of empty sheet under them.
+        .safeAreaInset(edge: .bottom) { bottomBar(c) }
         .background(c.bg)
         .environment(\.colorScheme, .light)
-    }
-
-    /// Eight static rotated confetti squares (Figma header decoration).
-    private var confettiHeader: some View {
-        let pieces: [(color: Color, rotation: Double, x: CGFloat, y: CGFloat)] = [
-            (AppTheme.accent, 18, -120, 8), (Color(red: 0xF5/255, green: 0xBE/255, blue: 0x1E/255), -24, -78, -6),
-            (Color(red: 0x2E/255, green: 0xAE/255, blue: 0x50/255), 40, -30, 10), (AppTheme.accent, -12, 12, -8),
-            (Color(red: 0x38/255, green: 0x84/255, blue: 0xE0/255), 28, 48, 6), (AppTheme.red, -35, 88, -4),
-            (Color(red: 0x50/255, green: 0xBE/255, blue: 0xD2/255), 12, 124, 9), (AppTheme.accent, -20, 156, -2),
-        ]
-        return ZStack {
-            ForEach(Array(pieces.enumerated()), id: \.offset) { _, piece in
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(piece.color)
-                    .frame(width: 6, height: 6)
-                    .rotationEffect(.degrees(piece.rotation))
-                    .offset(x: piece.x, y: piece.y)
+        // The editor edits a DRAFT. Bound straight to `tripNotes` it wrote
+        // through on every keystroke, so «Отмена» dismissed a sheet whose text
+        // was already on the card — and «Готово» then saved the draft the user
+        // had just discarded.
+        .sheet(isPresented: $showNotesEditor) {
+            NotesEditorView(text: $notesDraft) {
+                tripNotes = notesDraft
+                mapVM.tripManager.updateNotes(for: trip.id, notes: tripNotes)
+                showNotesEditor = false
+            }
+            .environmentObject(lang)
+            .presentationDetents([.medium, .large])
+        }
+        .overlay {
+            if let badge = selectedBadge {
+                BadgeDetailOverlay(
+                    badge: badge,
+                    isUnlocked: true,
+                    language: lang.language,
+                    colorScheme: .light,
+                    earnCount: completionData?.repeatedBadgeCounts[badge.id],
+                    lastEarnedDate: trip.endDate ?? trip.startDate,
+                    onDismiss: { selectedBadge = nil }
+                )
             }
         }
-        .frame(height: 24)
-        .allowsHitTesting(false)
+        .onAppear { tripNotes = trip.tripDescription ?? "" }
     }
+
+    /// Фото + Готово, pinned to the bottom of the sheet.
+    private func bottomBar(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 12) {
+            PhotosPicker(
+                selection: $photoSelection,
+                // The garage of photos for one trip is small; the cap keeps a
+                // stray «select all» from stalling the save loop.
+                maxSelectionCount: 10,
+                selectionBehavior: .continuousAndOrdered,
+                matching: .images
+            ) {
+                HStack(spacing: 6) {
+                    Image(systemName: savedPhotoIds.isEmpty ? "camera.fill" : "checkmark.circle.fill")
+                        .font(.system(size: 15))
+                    Text(savedPhotoIds.isEmpty
+                         ? AppStrings.photoShort(lang.language)
+                         : "\(AppStrings.photoShort(lang.language)) (\(savedPhotoIds.count))")
+                        .font(.system(size: 14, weight: .bold))
+                }
+                .foregroundStyle(c.text)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(c.border, lineWidth: 1))
+            }
+            .accessibilityIdentifier("summary_photo")
+
+            Button {
+                if publishToFeed {
+                    mapVM.tripManager.updatePrivacy(for: trip.id, isPrivate: false)
+                    NotificationCenter.default.post(
+                        name: .tripPrivacyChanged,
+                        object: PrivacyChangePayload(tripId: trip.id, isPrivate: false)
+                    )
+                }
+                let saved = tripNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+                if saved != (trip.tripDescription ?? "") {
+                    mapVM.tripManager.updateNotes(for: trip.id, notes: saved)
+                }
+                onDone()
+                // The trip you just made is the thing you want to look at, and
+                // the summary is a card, not the trip. Hand off to its detail.
+                NotificationCenter.default.post(name: .openTripDetail, object: trip.id)
+            } label: {
+                Text(AppStrings.done(lang.language))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
+                    .shadow(color: AppTheme.accent.opacity(0.3), radius: 1.5, y: 1)
+            }
+            .accessibilityIdentifier("summary_done")
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(c.bg)
+        .onChange(of: photoSelection) { _, items in
+            syncPhotos(items)
+        }
+    }
+
+    /// Adds what was newly ticked and deletes what was unticked.
+    private func syncPhotos(_ items: [PhotosPickerItem]) {
+        // Gone from the selection → gone from the trip.
+        for (item, photoId) in savedPhotoIds where !items.contains(item) {
+            mapVM.tripManager.deletePhoto(id: photoId, from: trip.id)
+            savedPhotoIds.removeValue(forKey: item)
+        }
+        let fresh = items.filter { savedPhotoIds[$0] == nil }
+        guard !fresh.isEmpty else { return }
+        isSavingPhotos = true
+        Task {
+            for item in fresh {
+                guard let data = try? await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else { continue }
+                if let photo = mapVM.tripManager.addPhoto(to: trip.id, image: image) {
+                    await MainActor.run { savedPhotoIds[item] = photo.id }
+                }
+            }
+            await MainActor.run { isSavingPhotos = false }
+        }
+    }
+
+    /// Inline «Добавить описание…» → the same editor the trip detail uses.
+    /// Clamped to two lines here so a long note cannot push the card apart.
+    private func descriptionCard(_ c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            notesDraft = tripNotes
+            showNotesEditor = true
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "text.alignleft")
+                    .font(.system(size: 15))
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(width: 38, height: 38)
+                    .background(AppTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                Text(tripNotes.isEmpty
+                     ? AppStrings.describeTripPlaceholder(lang.language)
+                     : tripNotes)
+                    .font(.system(size: 14, weight: tripNotes.isEmpty ? .medium : .regular))
+                    .foregroundStyle(tripNotes.isEmpty ? c.textTertiary : c.text)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+                    .padding(.top, 12)
+            }
+            .padding(16)
+            .background(.white, in: RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("summary_description")
+    }
+
+    /// Confetti that actually falls.
+    ///
+    /// It used to be eight squares parked at fixed offsets — the frozen frame
+    /// of a celebration, which reads as decoration nobody finished. Each piece
+    /// now drifts down its own column at its own speed, tumbling as it goes,
+    /// and wraps around, so the header is alive for as long as the card is up
+    /// without ever costing more than a few dozen rectangles.
+    private var confettiHeader: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { context, size in
+                for piece in Self.confetti {
+                    let cycle = (t * piece.speed + piece.phase)
+                        .truncatingRemainder(dividingBy: 1)
+                    let y = cycle * (size.height + 12) - 6
+                    let x = size.width * piece.column
+                        + sin((t * piece.sway + piece.phase) * .pi * 2) * 5
+                    let rect = CGRect(x: -3, y: -3, width: 6, height: 6)
+
+                    var layer = context
+                    layer.translateBy(x: x, y: y)
+                    layer.rotate(by: .degrees(t * piece.spin * 60 + piece.phase * 360))
+                    // Fades in at the top and out at the bottom, so pieces
+                    // enter and leave instead of popping at the edges.
+                    layer.opacity = min(1, min(cycle, 1 - cycle) * 6)
+                    layer.fill(
+                        Path(roundedRect: rect, cornerRadius: 1.5),
+                        with: .color(piece.color)
+                    )
+                }
+            }
+        }
+        .frame(height: 46)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private struct ConfettiPiece {
+        let color: Color
+        /// Horizontal position as a fraction of the header's width.
+        let column: CGFloat
+        /// Falls per second, so pieces separate instead of marching in step.
+        let speed: Double
+        /// Where in its fall the piece starts, so they do not all begin at the top.
+        let phase: Double
+        let spin: Double
+        let sway: Double
+    }
+
+    private static let confetti: [ConfettiPiece] = [
+        .init(color: AppTheme.accent, column: 0.06, speed: 0.28, phase: 0.10, spin: 1.2, sway: 0.5),
+        .init(color: Color(red: 0xF5/255, green: 0xBE/255, blue: 0x1E/255), column: 0.19, speed: 0.36, phase: 0.55, spin: -0.9, sway: 0.7),
+        .init(color: Color(red: 0x2E/255, green: 0xAE/255, blue: 0x50/255), column: 0.31, speed: 0.24, phase: 0.80, spin: 1.5, sway: 0.4),
+        .init(color: AppTheme.accent, column: 0.44, speed: 0.40, phase: 0.25, spin: -1.3, sway: 0.6),
+        .init(color: Color(red: 0x38/255, green: 0x84/255, blue: 0xE0/255), column: 0.56, speed: 0.30, phase: 0.65, spin: 1.0, sway: 0.55),
+        .init(color: AppTheme.red, column: 0.69, speed: 0.34, phase: 0.05, spin: -1.6, sway: 0.45),
+        .init(color: Color(red: 0x50/255, green: 0xBE/255, blue: 0xD2/255), column: 0.81, speed: 0.26, phase: 0.40, spin: 1.1, sway: 0.65),
+        .init(color: AppTheme.accent, column: 0.93, speed: 0.38, phase: 0.90, spin: -1.0, sway: 0.5),
+    ]
 
     /// «Опубликовать в ленту» + subtitle + privacy footnote + toggle.
     private func publishRow(_ c: AppTheme.Colors) -> some View {
@@ -191,10 +364,11 @@ struct TripCompleteSummaryView: View {
                 Text(AppStrings.publishToFeed(lang.language))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(c.text)
-                Text(AppStrings.publishToFeedSubtitle(lang.language))
-                    .font(.system(size: 11))
-                    .foregroundStyle(c.textTertiary)
-                Text(AppStrings.publishFootnote(lang.language))
+                // One line, and it says what each position of the switch does.
+                // The old pair — «Поездка появится в общей ленте» over
+                // «Поездки приватны, пока Вы не опубликуете их сами» — spent
+                // three lines restating the title and never mentioned «выкл».
+                Text(AppStrings.publishToggleHint(lang.language))
                     .font(.system(size: 11))
                     .foregroundStyle(c.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -232,17 +406,15 @@ struct TripCompleteSummaryView: View {
                 }
             }
 
-            // Single rank progress row — vehicle progression lives in the
-            // garage, not on the finish card (Figma 147:1232).
-            progressRow(
-                icon: "person.fill",
-                label: data.newRank.title(lang.language),
-                detail: "LVL \(data.newLevel)",
-                progress: LevelSystem.progressToNextLevel(xp: data.newXP, level: data.newLevel),
-                color: data.newRank.color,
-                didLevelUp: data.didLevelUp,
-                c: c
-            )
+            // No rank/level row here.
+            //
+            // It used to render «Водитель … LVL 6» with a progress bar, cited
+            // to this very node — and the node has no such row: the canon card
+            // is «+N XP» with the LEVEL UP pill, the streak, and the badges.
+            // The level and its progress belong to the driver screen in «Я»,
+            // which owns that whole story; repeating a slice of it here made
+            // the finish card argue with it (and «LVL 6» in a pixel font is
+            // not how that screen writes a level either).
 
             // Streak (Figma 147:1241: «14 дней подряд»)
             if data.currentStreak > 1 {
@@ -275,28 +447,43 @@ struct TripCompleteSummaryView: View {
             if !data.newBadges.isEmpty {
                 HStack(alignment: .top, spacing: 12) {
                     ForEach(data.newBadges.prefix(4)) { badge in
-                        VStack(spacing: 4) {
-                            ZStack {
-                                Circle()
-                                    .fill(badge.color.opacity(0.15))
-                                    .frame(width: 46, height: 46)
-                                    .shadow(color: badge.color.opacity(0.3), radius: 6)
+                        // Tappable: a badge you have never seen before appears
+                        // for two seconds and disappears with the sheet, and
+                        // until now there was nothing to press to find out
+                        // what it was for.
+                        Button {
+                            Haptics.tap()
+                            selectedBadge = badge
+                        } label: {
+                            VStack(spacing: 4) {
+                                ZStack {
+                                    Circle()
+                                        .fill(badge.color.opacity(0.15))
+                                        .frame(width: 46, height: 46)
+                                        .shadow(color: badge.color.opacity(0.3), radius: 6)
 
-                                Image(systemName: badge.icon)
-                                    .font(.system(size: 20))
+                                    Image(systemName: badge.icon)
+                                        .font(.system(size: 20))
+                                        .foregroundStyle(badge.color)
+                                }
+
+                                // Name only, as the canon draws it. The «×5»
+                                // that used to hang off it was the lifetime
+                                // count of a repeatable badge, and «×5» after
+                                // one short drive reads as «five at once».
+                                // That number now lives in the badge's own
+                                // card, where it can say «Получено 5 раз».
+                                Text(badge.title(lang.language))
+                                    .font(.system(size: 9, weight: .bold))
                                     .foregroundStyle(badge.color)
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(2)
                             }
-
-                            let count = data.repeatedBadgeCounts[badge.id] ?? 0
-                            Text(badge.isRepeatable && count > 1
-                                 ? "\(badge.title(lang.language)) ×\(count)"
-                                 : badge.title(lang.language))
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(badge.color)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
+                            .frame(width: 74)
+                            .contentShape(Rectangle())
                         }
-                        .frame(width: 74)
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("summary_badge")
                     }
                     Spacer()
                 }
@@ -321,47 +508,16 @@ struct TripCompleteSummaryView: View {
         .onAppear { withAnimation(.easeOut(duration: 0.5)) { showXP = true } }
     }
 
-    private func progressRow(
-        icon: String, label: String, detail: String,
-        progress: Double, color: Color, didLevelUp: Bool,
-        c: AppTheme.Colors
-    ) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundStyle(color)
-                .frame(width: 20)
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text(label)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(c.text)
-                    Spacer()
-                    Text(detail)
-                        .font(.custom("PressStart2P-Regular", size: 8))
-                        .foregroundStyle(color)
-                }
-
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(c.cardAlt).frame(height: 5)
-                        Capsule()
-                            .fill(color)
-                            .frame(width: max(2, geo.size.width * progress), height: 5)
-                    }
-                }
-                .frame(height: 5)
-            }
-        }
-    }
-
     private func summaryStatCard(value: String, unit: String, label: String, color: Color, c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .lastTextBaseline, spacing: 3) {
                 Text(value)
                     .font(.system(size: 24, weight: .heavy).monospacedDigit())
                     .foregroundStyle(color)
+                    // «2 ч 14 мин» is a longer string than «02:12» ever was;
+                    // it shrinks rather than wrapping or clipping.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                 if !unit.isEmpty {
                     Text(unit)
                         .font(.system(size: 14, weight: .medium))

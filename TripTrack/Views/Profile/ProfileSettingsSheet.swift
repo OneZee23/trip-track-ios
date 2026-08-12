@@ -9,6 +9,7 @@ import SwiftUI
 struct ProfileSettingsSheet: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
+    @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
@@ -375,6 +376,28 @@ struct ProfileSettingsSheet: View {
             ) {
                 SettingsRowChevron()
             }
+
+            #if DEBUG
+            rowDivider(c)
+
+            // Debug builds only. The finish screen is otherwise reachable only
+            // by driving far enough for the trip to survive the junk filter,
+            // which makes every change to it a trip outside.
+            SettingsIconRow(
+                icon: "flag.checkered",
+                title: l == .ru ? "Экран финиша (отладка)" : "Finish screen (debug)",
+                action: {
+                    dismiss()
+                    // After the sheet is gone: the summary is presented from
+                    // the app root and would otherwise queue behind this one.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        mapVM.debugShowLastTripSummary()
+                    }
+                }
+            ) {
+                SettingsRowChevron()
+            }
+            #endif
 
             if auth.isSignedIn {
                 rowDivider(c)

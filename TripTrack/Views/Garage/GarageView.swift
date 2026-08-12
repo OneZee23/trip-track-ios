@@ -31,6 +31,9 @@ struct GarageView: View {
                         }
                     }
                     .padding(.horizontal, 16)
+                    // The first card sat flush against the nav row, so the
+                    // highlighted one read as growing out of it.
+                    .padding(.top, 8)
                     .padding(.bottom, 96)
                 }
             }
@@ -64,24 +67,34 @@ struct GarageView: View {
 
     // MARK: - Nav Row (Figma 152:1328)
 
+    /// The app's own nav bar, not a local copy of one.
+    ///
+    /// This row used to be hand-built from `GarageCircleNavButton` — a 34pt
+    /// circle like the canon control but with a fainter shadow, a smaller
+    /// glyph and no 44pt hit area — inset 2pt from the top. On a sheet, whose
+    /// top edge is a hard rounded boundary with UIKit's grabber over the first
+    /// 10pt, 2pt glued the buttons into the corner and clipped them against
+    /// it. `CustomNavBar` already solves exactly this: it insets 20pt inside a
+    /// sheet for the grabber, 20pt horizontally so the controls clear the
+    /// curved glass, and it carries `NavCircleIcon` — the same control every
+    /// other sheet in the app uses.
     private func navRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         let atCap = settings.vehicles.count >= 5
-        return HStack {
-            // Garage is presented as a sheet — the chevron acts as close (fork F1).
-            GarageCircleNavButton(systemImage: "chevron.left") { dismiss() }
-            Spacer()
-            Text(AppStrings.garage(l))
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(c.text)
-            Spacer()
-            GarageCircleNavButton(systemImage: "plus") { showAddVehicle = true }
-                .disabled(atCap)
-                .opacity(atCap ? 0.35 : 1)
-                .accessibilityIdentifier("garage_add")
+        return CustomNavBar(title: AppStrings.garage(l)) {
+            Button {
+                Haptics.tap()
+                showAddVehicle = true
+            } label: {
+                NavCircleIcon(systemImage: "plus")
+            }
+            .buttonStyle(.plain)
+            .disabled(atCap)
+            .opacity(atCap ? 0.35 : 1)
+            .accessibilityIdentifier("garage_add")
         }
-        .padding(.top, 2)
-        .padding(.bottom, 10)
-        .padding(.horizontal, 16)
+        // Presented as a sheet from Profile, Settings and the Feed — the bar
+        // needs to know so it clears the grabber.
+        .environment(\.navBarInSheet, true)
     }
 
     // MARK: - Vehicle List
@@ -161,8 +174,13 @@ struct GarageView: View {
         .surfaceCard(cornerRadius: 16)
         .overlay {
             if isMain {
+                // `strokeBorder`, not `stroke`: stroke centres the line on the
+                // card's edge, so half of it lies OUTSIDE the bounds and the
+                // scroll view clips it — most visibly along the top, where the
+                // content has no inset to spare. strokeBorder keeps the whole
+                // line inside.
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(AppTheme.accent, lineWidth: 2)
+                    .strokeBorder(AppTheme.accent, lineWidth: 2)
             }
         }
         .contextMenu {
