@@ -87,8 +87,12 @@ struct TripDetailView: View {
     /// «Редактировать поездку» — name, description, car, access in one sheet.
     @State private var showEditSheet = false
     /// Task 3's candidate picker, opened from `TripCompanionsSection`'s
-    /// «Позвать» affordance via `openCompanionsPicker`.
+    /// empty-state «Позвать» affordance via `openCompanionsPicker`. Once a
+    /// roster exists, inviting happens inside `CompanionsRosterSheet`
+    /// instead, which presents its own copy of this picker.
     @State private var showCompanionsPicker = false
+    /// The roster screen behind the companions plaque.
+    @State private var showCompanionsRoster = false
     /// Publish confirmation sheet (Figma 533:119) — replaces the old plain
     /// alert. The user consciously acknowledges the visibility change and
     /// can attach an optional description in the same step.
@@ -835,7 +839,18 @@ struct TripDetailView: View {
             if let t = trip {
                 CompanionsPickerSheet(tripId: t.id)
                     .environmentObject(lang)
+                    .environmentObject(themeManager)
                     .preferredColorScheme(themeManager.preferredColorScheme)
+            }
+        }
+        .sheet(isPresented: $showCompanionsRoster) {
+            if let t = trip {
+                CompanionsRosterSheet(
+                    tripId: t.id, isOwn: isOwn, cachedCompanions: t.companions
+                )
+                .environmentObject(lang)
+                .environmentObject(themeManager)
+                .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
         .alert(
@@ -1565,10 +1580,7 @@ struct TripDetailView: View {
             // memory either.
             cachedCompanions: trip.companions,
             onInvite: openCompanionsPicker,
-            onOpenProfile: openProfile,
-            onError: { msg in
-                toastItem = ToastItem(type: .error, message: msg)
-            }
+            onOpenRoster: { showCompanionsRoster = true }
         )
     }
 

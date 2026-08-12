@@ -2412,9 +2412,68 @@ enum AppStrings {
     static func companionsInvite(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Позвать" : "Invite"
     }
-    /// The ONE note a companion row ever carries, and only while pending.
+    /// The note a roster row carries while the invite is unanswered.
     static func companionsWaiting(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "ждёт" : "Pending"
+    }
+    /// Declined rows reach the OWNER's roster only. They used to be told
+    /// apart by dimming alone, which says "different" without saying how —
+    /// on the roster screen, where the owner goes specifically to see who
+    /// answered what, the row says it outright.
+    static func companionsDeclinedNote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "отказался" : "Declined"
+    }
+    /// A companion with no display name — an account that never set one.
+    static func companionsNoName(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Без имени" : "No name"
+    }
+
+    // MARK: - Companions summary plaque (trip detail)
+
+    /// The plaque's second line when at least one companion accepted, on
+    /// the viewer's OWN trip.
+    static func companionsRodeWithYou(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ездили вместе с вами" : "Rode along with you"
+    }
+    /// Same line on someone else's trip — the viewer isn't the driver, so
+    /// "с вами" would be a lie for a stranger and only accidentally true
+    /// for a companion.
+    static func companionsRodeTogether(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ездили вместе" : "Rode along"
+    }
+    /// The plaque's second line when NOBODY has accepted yet and the
+    /// invites are still out.
+    static func companionsAwaitingReply(
+        _ count: Int, _ lang: LanguageManager.Language
+    ) -> String {
+        if lang == .ru { return count == 1 ? "Ждём ответа" : "Ждём ответов" }
+        return count == 1 ? "Waiting for a reply" : "Waiting for replies"
+    }
+    /// Appended after `companionsRodeWithYou` when some accepted and others
+    /// haven't answered — the accepted names are what the plaque shows, so
+    /// without this the pending invites would be invisible until the roster
+    /// screen is opened.
+    static func companionsPendingSuffix(
+        _ count: Int, _ lang: LanguageManager.Language
+    ) -> String {
+        if lang == .ru { return count == 1 ? "ещё один ждёт" : "ещё \(count) ждут" }
+        return count == 1 ? "1 more pending" : "\(count) more pending"
+    }
+    /// The plaque's second line when every invite was declined — owner-only
+    /// by construction (declined rows never leave the server for anyone
+    /// else).
+    static func companionsAllDeclined(
+        _ count: Int, _ lang: LanguageManager.Language
+    ) -> String {
+        if lang == .ru { return count == 1 ? "Отказался" : "Отказались" }
+        return count == 1 ? "Declined the invite" : "Declined the invite"
+    }
+    /// Tail of the names line when more people are on the trip than the
+    /// plaque spells out: «Аня К., Дмитрий П. и ещё 2».
+    static func companionsAndMore(
+        _ count: Int, _ lang: LanguageManager.Language
+    ) -> String {
+        lang == .ru ? "и ещё \(count)" : "and \(count) more"
     }
     static func companionsLoadFailed(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Не удалось загрузить попутчиков" : "Couldn't load companions"
