@@ -28,8 +28,8 @@ final class DriverRankTests: XCTestCase {
         XCTAssertEqual(DriverRank.from(level: 30), .legend)
     }
 
-    func testLegendIsHighestRank() {
-        XCTAssertEqual(DriverRank.allCases.last, .legend)
+    func testEternalIsHighestRank() {
+        XCTAssertEqual(DriverRank.allCases.last, .eternal)
         XCTAssertEqual(DriverRank.from(level: 30), .legend)
     }
 
