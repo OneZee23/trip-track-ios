@@ -156,6 +156,14 @@ struct TripCompanionsSection: View {
                 .fill(c.card)
                 .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
         }
+        // `.contain` makes this VStack its own accessibility container
+        // instead of a plain (`.ignore`) compound view — without it,
+        // SwiftUI floods this identifier onto every leaf element in the
+        // subtree, stomping the more specific identifiers each row/banner
+        // sets on itself (`companions_publish_first`, `companions_retry`,
+        // `companion_row`, ...), which made them unaddressable by XCUITest
+        // even though they render correctly on screen.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companions_card")
     }
 
@@ -190,6 +198,10 @@ struct TripCompanionsSection: View {
                 .fill(c.card)
                 .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
         }
+        // Same reason as `ownCard`'s identical modifier — keeps
+        // `companion_row`/`companions_retry` addressable on their own
+        // instead of getting overwritten by this container's identifier.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companions_card")
     }
 
