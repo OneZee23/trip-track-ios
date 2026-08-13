@@ -40,7 +40,12 @@ struct ContentSizedSheet: ViewModifier {
             .onPreferenceChange(ContentSheetHeightKey.self) { measured = $0 }
             // Content sits at the top; the ground runs to the bottom edge.
             .frame(maxHeight: .infinity, alignment: .top)
-            .background(background.ignoresSafeArea())
+            // The SHEET's own ground, not just the content's. A background
+            // behind the content stops where the content's frame stops, which
+            // leaves the strip above it — the one the grabber sits in — and
+            // the strip below showing whatever the system paints a sheet with,
+            // read as two pale bands framing the card.
+            .presentationBackground(background)
             .presentationDetents([.height(max(measured, minimum) + Self.bottomInset)])
     }
 
