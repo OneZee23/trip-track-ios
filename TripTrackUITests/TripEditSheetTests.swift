@@ -137,9 +137,13 @@ final class TripEditSheetTests: XCTestCase {
         usleep(1_200_000)
         snap("01_owner_menu")
 
-        // «Редактировать» is the first item in the popover.
-        let edit = app.buttons.element(boundBy: 0)
-        if edit.exists { edit.tap() }
+        // By name, not by position: `element(boundBy: 0)` is the first
+        // button ON SCREEN, which is only «Редактировать» for as long as
+        // nothing above the popover in the view tree moves — and the
+        // detail's chrome did move.
+        let edit = app.buttons.matching(identifier: "detail_action_edit").firstMatch
+        XCTAssertTrue(edit.waitForExistence(timeout: 3), "the popover must offer «Редактировать»")
+        edit.tap()
         usleep(2_000_000)
         snap("02_edit_sheet")
 

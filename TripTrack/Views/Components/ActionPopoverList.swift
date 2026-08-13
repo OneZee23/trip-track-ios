@@ -20,6 +20,11 @@ struct ActionPopoverList: View {
         let title: String
         let systemImage: String
         var isDestructive: Bool = false
+        /// Named so tests can tap «Редактировать» by name. They used to tap
+        /// `buttons.element(boundBy: 0)` — the first button anywhere on
+        /// screen — which is only "the first popover row" for as long as
+        /// nothing above it in the view tree moves.
+        var accessibilityId: String? = nil
         let action: () -> Void
     }
 
@@ -50,6 +55,7 @@ struct ActionPopoverList: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier(item.accessibilityId ?? "")
 
                 if index < items.count - 1 {
                     Divider()

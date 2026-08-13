@@ -91,16 +91,24 @@ final class CompanionsAndReplayTests: XCTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 4), "own trip must offer companions")
         snap("60_companions_card")
 
-        // Signed out (no Sign in with Apple in a UI test) + a device-only
-        // trip (never uploaded on this simulator) is exactly `canQuery ==
-        // false` in `TripDetailView.canQueryCompanions` — the card must
-        // show the disabled "publish first" invite, never ask the network
-        // a question it can only answer TRIP_NOT_FOUND to.
-        let publishHint = app.descendants(matching: .any)
-            .matching(identifier: "companions_publish_first").firstMatch
+        // Signed out (no Sign in with Apple in a UI test) is
+        // `TripDetailView.companionsGate == .signedOut` — the card must
+        // offer to sign in, never ask the network a question it can only
+        // answer TRIP_NOT_FOUND to. It must NOT show the publish-first
+        // hint: this simulator's trip happens to be unpublished too, but
+        // the session is the blocker the viewer can actually act on, and
+        // telling a signed-out owner of a PUBLIC trip to publish it is the
+        // defect that split these two states apart.
+        let signInRow = app.descendants(matching: .any)
+            .matching(identifier: "companions_sign_in").firstMatch
         XCTAssertTrue(
-            publishHint.waitForExistence(timeout: 3),
-            "a signed-out, unpublished own trip must show the publish-first hint"
+            signInRow.waitForExistence(timeout: 3),
+            "a signed-out own trip must offer sign-in from the companions card"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)
+                .matching(identifier: "companions_publish_first").firstMatch.exists,
+            "signed out must not be reported as «publish the trip first»"
         )
 
         // The defect this test exists to catch: that same trip must never
@@ -125,7 +133,11 @@ final class CompanionsAndReplayTests: XCTestCase {
         XCTAssertTrue(actions.waitForExistence(timeout: 6), "«…» must be on an own trip")
         actions.tap()
         usleep(1_200_000)
-        app.buttons.element(boundBy: 0).tap()
+        // By name, not by position — see the same change in
+        // `TripEditSheetTests`.
+        let edit = app.buttons.matching(identifier: "detail_action_edit").firstMatch
+        XCTAssertTrue(edit.waitForExistence(timeout: 3), "the popover must offer «Редактировать»")
+        edit.tap()
         usleep(2_000_000)
 
         let title = app.textFields.matching(identifier: "edit_title_field").firstMatch
