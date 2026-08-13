@@ -2076,6 +2076,29 @@ struct TripDetailView: View {
         }
     }
 
+    /// Waits for the queue to actually carry the privacy change to the server,
+    /// then re-reads the trip and everything hanging off it.
+    ///
+    /// Polled rather than pushed because the completion is not one event: the
+    /// operation is enqueued, may wait for a drain, may retry, and the photo
+    /// rescue can hold an unpublish for as long as the download takes. What
+    /// this waits for is the OUTCOME — the local row's server bookkeeping
+    /// matching the flip — which is exactly the condition every section here
+    /// keys off. Bounded at ~20s: past that it is not "just about to happen"
+    /// any more, and the pull-to-refresh is still there.
+    private func watchPrivacyFlip(expectingOnServer expected: Bool) {
+        Task { @MainActor in
+            for _ in 0..<40 {
+                try? await Task.sleep(for: .milliseconds(500))
+                guard let fresh = viewModel.tripDetail(id: tripId) else { continue }
+                guard fresh.isOnServer == expected else { continue }
+                trip = fresh
+                await refreshDetail()
+                return
+            }
+        }
+    }
+
     private func requestPublish() {
         guard auth.isSignedIn else {
             signInPrompt = .publish
@@ -2363,6 +2386,15 @@ struct TripDetailView: View {
             name: .tripPrivacyChanged,
             object: PrivacyChangePayload(tripId: tripId, isPrivate: newValue)
         )
+        // The screen you are standing on catches up by itself.
+        //
+        // Flipping privacy is only half local: the trip has to reach (or leave)
+        // the server before the sections that live there — reactions, the
+        // discussion, companions — can say anything different. Until now the
+        // detail simply kept showing its old state, so the only way to see the
+        // result was to leave, find the trip in the feed and come back.
+        watchPrivacyFlip(expectingOnServer: newValue == false)
+
         let wentPublic = newValue == false
         let firstPublishKey = "com.triptrack.firstPublishToastShown"
         if wentPublic && !suppressSuccessToast && !UserDefaults.standard.bool(forKey: firstPublishKey) {
