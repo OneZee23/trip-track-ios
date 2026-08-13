@@ -140,20 +140,29 @@ final class ScrubSurfaceView: UIView, UIGestureRecognizerDelegate {
 
     // MARK: - UIGestureRecognizerDelegate
 
-    /// Sideways only, and sideways by a clear margin.
+    /// Sideways only, and sideways by a clear margin — decided on how far the
+    /// finger has actually travelled, never on how fast it happens to be
+    /// moving in the single frame this is asked.
     ///
-    /// `|vx| > |vy|` was too generous by a hair: a finger heading down the
-    /// page with any diagonal drift could satisfy it in the one frame this
-    /// is asked, the chart claimed the touch — and because the scroll view
-    /// is required to wait for this recogniser (below), the page then could
-    /// not scroll at all for the rest of that drag. Requiring the sideways
-    /// component to dominate, and to be moving at all, keeps the ambiguous
-    /// middle with the page, where a drag that isn't obviously "read the
-    /// chart" belongs.
+    /// This one answer is final and there is no taking it back. The scroll
+    /// view is required to wait for this recogniser (below), so the moment
+    /// this returns true the page's own pan is not postponed — it is FAILED,
+    /// for the whole of that touch. Nothing later in the drag can revive it:
+    /// the escape hatch in `handlePan` can stop the chart from scrubbing, but
+    /// it cannot give the page back. Every wrong "yes" here is a drag the page
+    /// cannot follow however far the finger then travels down it.
+    ///
+    /// Which is why velocity was the wrong thing to ask. Sampled at the one
+    /// instant the gesture commits, it is the noisiest signal available: a
+    /// fast vertical flick that starts with a single sideways frame — a thumb
+    /// rolling, a phone in one hand — reads as a clean sideways drag and the
+    /// chart takes the page hostage. By the time this is asked the pan has
+    /// already collected its ~10pt of slop, and that offset is the drag's real
+    /// direction rather than one frame's worth of noise.
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         guard let pan = gesture as? UIPanGestureRecognizer else { return true }
-        let velocity = pan.velocity(in: self)
-        return abs(velocity.x) > abs(velocity.y) * 1.6 && abs(velocity.x) > 80
+        let travelled = pan.translation(in: self)
+        return abs(travelled.x) > abs(travelled.y) * 1.5 && abs(travelled.x) > 6
     }
 
     /// Make the enclosing scroll view wait until this recogniser has decided.

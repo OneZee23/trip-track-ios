@@ -341,6 +341,7 @@ struct FullscreenMapSheet: View {
             } else {
                 crawlProgressBar
             }
+            if hasStarted { stopButton }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -377,6 +378,36 @@ struct FullscreenMapSheet: View {
             ? AppStrings.stop(language)
             : (isOwnTrip ? AppStrings.reliveTrip(language) : AppStrings.watchTrip(language)))
         .accessibilityIdentifier("fullscreen_replay_play")
+    }
+
+    /// The playback has been begun and left something on the map — a car, a
+    /// trail, a camera that followed. Only then is there anything to clear.
+    private var hasStarted: Bool {
+        canReplay
+            ? (engine.isPlaying || engine.progress > 0 || engine.headCoord != nil)
+            : (crawl.isPlaying || crawl.progress > 0)
+    }
+
+    /// Puts the map back the way it was found: no car, no trail, whole route
+    /// in frame. Pausing leaves the drive parked on top of the route, which is
+    /// no way to go back to just looking at where you went.
+    private var stopButton: some View {
+        let c = AppTheme.colors(for: scheme)
+        return Button {
+            Haptics.tap()
+            withAnimation(.easeInOut(duration: 0.25)) { followsCar = false }
+            engine.stop()
+            crawl.stop()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(c.textSecondary)
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(language == .ru ? "Убрать воспроизведение" : "Clear playback")
+        .accessibilityIdentifier("fullscreen_replay_stop")
     }
 
     private var rateButton: some View {

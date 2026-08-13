@@ -383,7 +383,7 @@ struct TripDetailView: View {
                     // Publishing puts the trip on a server that has no idea who
                     // we are until we sign in. Offering it to a signed-out
                     // owner produced a confirmation, a spinner and a failure.
-                    if trip.isPrivate { requestPublish() } else { unpublishConfirm = true }
+                    if trip.isPrivate { requestPublish() } else { requestUnpublish() }
                 }
             },
             // Last in the list, and the only destructive entry. It lived as a
@@ -943,7 +943,7 @@ struct TripDetailView: View {
                         guard saved, newIsPrivate != t.isPrivate else { return }
                         Task { @MainActor in
                             try? await Task.sleep(nanoseconds: 260_000_000)
-                            if newIsPrivate { unpublishConfirm = true } else { requestPublish() }
+                            if newIsPrivate { requestUnpublish() } else { requestPublish() }
                         }
                     }
                 )
@@ -1272,7 +1272,13 @@ struct TripDetailView: View {
                     RouteMapView(
                         coordinates: cachedCoordinates,
                         speeds: cachedSpeeds,
-                        isInteractive: true,
+                        // Deliberately NOT interactive, and the expand button
+                        // below is why: panning happens fullscreen. While this
+                        // map took drags it also ate the only one that could
+                        // ever start a pull to refresh — the scroll sits at the
+                        // top exactly where this map is, so the gesture had
+                        // nowhere to begin and the refresh looked broken.
+                        isInteractive: false,
                         // Our own territory fog has no business over someone
                         // else's route.
                         fogCutoffDate: trip.endDate,
@@ -1768,7 +1774,14 @@ struct TripDetailView: View {
                 reactionsCard(c)
             }
         } else if trip.isPrivate {
-            publishNudgeCard(trip: trip, c: c)
+            // Header included, like every other section. Without it the locked
+            // card sat headerless between «Достижения поездки» and
+            // «Обсуждение», so it read as the tail of the achievements block
+            // rather than as the reactions section being closed.
+            VStack(alignment: .leading, spacing: 10) {
+                DetailSectionHeader(text: AppStrings.chipReactions(lang.language))
+                publishNudgeCard(trip: trip, c: c)
+            }
         } else {
             // Public, zero reactions (canon: «РЕАКЦИИ · ПУСТО»): the section
             // keeps its header and its card, and the card says the quiet part.
@@ -1903,6 +1916,22 @@ struct TripDetailView: View {
             return
         }
         showPublishSheet = true
+    }
+
+    /// Taking a trip back out of the feed needs the same session publishing
+    /// needed, for the same reason pointed the other way: the copy everyone
+    /// else can see lives on the server, and a signed-out owner cannot reach
+    /// it. Without this the flip was purely local — the trip vanished from
+    /// this device's feed, came back on the next refresh, and stayed public to
+    /// everyone else the whole time, which is the one thing «сделать
+    /// приватной» must never do quietly. A trip that never reached the server
+    /// has nothing to take back and is flipped on the spot.
+    private func requestUnpublish() {
+        guard auth.isSignedIn || !(trip?.isOnServer ?? false) else {
+            signInPrompt = .publish
+            return
+        }
+        unpublishConfirm = true
     }
 
     /// The canon's locked-section card: a trip nobody else can see cannot
@@ -2569,17 +2598,34 @@ struct TripDetailView: View {
         return f
     }()
 
+    private static let dayMonthFormatters: (ru: DateFormatter, en: DateFormatter) = {
+        let ru = DateFormatter()
+        ru.locale = Locale(identifier: "ru_RU")
+        ru.dateFormat = "d MMMM"
+        let en = DateFormatter()
+        en.locale = Locale(identifier: "en_US")
+        en.dateFormat = "d MMMM"
+        return (ru, en)
+    }()
+
     private func formattedDateFallback(_ date: Date) -> String {
         let fmts = Self.dateTimeFormatters
         return (lang.language == .ru ? fmts.ru : fmts.en).string(from: date)
     }
 
+    /// «12:31 – 13:18», and «22:00 – 15 июня, 05:00» when the drive crosses
+    /// midnight — the heading above already states the day it STARTED, so a
+    /// bare «22:00 – 05:00» under it reads as seventeen hours run backwards.
     private func timeRange(_ trip: Trip) -> String {
         let start = Self.timeFormatter.string(from: trip.startDate)
-        if let end = trip.endDate {
-            return "\(start) – \(Self.timeFormatter.string(from: end))"
+        guard let end = trip.endDate else { return start }
+        let endTime = Self.timeFormatter.string(from: end)
+        guard !Calendar.current.isDate(trip.startDate, inSameDayAs: end) else {
+            return "\(start) – \(endTime)"
         }
-        return start
+        let fmts = Self.dayMonthFormatters
+        let day = (lang.language == .ru ? fmts.ru : fmts.en).string(from: end)
+        return "\(start) – \(day), \(endTime)"
     }
 
     private var safeAreaTop: CGFloat {
