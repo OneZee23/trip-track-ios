@@ -229,8 +229,50 @@ struct MapViewRepresentable: UIViewRepresentable {
             }
         }
 
+        /// Pre-rendered pixel-car bitmap for the "you are here" marker.
+        /// Rasterised once and reused across every dequeue, the same way
+        /// `RouteMapView` prepares the replay play head.
+        ///
+        /// Aspect-fitted into the canon's 44pt box (146:1183) instead of drawn
+        /// into it: the sprite is 254×188, so a square draw rect squashes it.
+        /// Nearest-neighbour matches the `.interpolation(.none)` every other
+        /// surface uses for this art — smoothed, the pixels smear.
+        private static let userCarImage: UIImage? = {
+            guard let sprite = UIImage(named: "PixelCar") else { return nil }
+            let box = CGSize(width: 44, height: 44)
+            let ratio = min(box.width / sprite.size.width, box.height / sprite.size.height)
+            let fitted = CGSize(width: sprite.size.width * ratio, height: sprite.size.height * ratio)
+            let origin = CGPoint(x: (box.width - fitted.width) / 2,
+                                 y: (box.height - fitted.height) / 2)
+            return UIGraphicsImageRenderer(size: box).image { ctx in
+                ctx.cgContext.interpolationQuality = .none
+                sprite.draw(in: CGRect(origin: origin, size: fitted))
+            }
+        }()
+
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            if annotation is MKUserLocation { return nil }
+            // The pixel car is the app's marker for "you", and the recording
+            // map — the one screen where you are actually driving — was the
+            // last one still handing the job to MapKit's stock blue puck.
+            // No rotation: the replay's play head doesn't rotate either, and
+            // MapKit keeps annotation views upright while `.followWithHeading`
+            // turns the map under them. A missing asset falls through to the
+            // puck rather than to no marker at all.
+            if annotation is MKUserLocation {
+                guard let carImage = Self.userCarImage else { return nil }
+                let carIdentifier = "UserPixelCar"
+                let carView = mapView.dequeueReusableAnnotationView(withIdentifier: carIdentifier)
+                    ?? MKAnnotationView(annotation: annotation, reuseIdentifier: carIdentifier)
+                carView.annotation = annotation
+                carView.canShowCallout = false
+                // Nothing to open on tap; selectable, it would swallow taps
+                // meant for the map under it.
+                carView.isEnabled = false
+                carView.image = carImage
+                carView.centerOffset = .zero
+                carView.layer.zPosition = 1000
+                return carView
+            }
 
             let identifier = "SearchPin"
             let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView

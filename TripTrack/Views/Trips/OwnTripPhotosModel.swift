@@ -19,6 +19,9 @@ enum OwnTripPhotosModel {
     enum Source: Equatable {
         case local(filename: String)
         case remote(thumbnailURL: String?, originalURL: String?)
+        /// A row with nothing behind it: no file on this device and no copy
+        /// on the server either. See `merge`.
+        case missing(filename: String)
     }
 
     struct Item: Identifiable, Equatable {
@@ -36,12 +39,38 @@ enum OwnTripPhotosModel {
     /// local and finished syncing collapses onto its single local entry
     /// instead of appearing twice; a companion's photo — which never has a
     /// local entry at all — only ever contributes the remote copy.
-    static func merge(local: [TripPhoto], remote: [SocialTripPhoto]) -> [Item] {
+    ///
+    /// `localFileExists` is why a local row no longer wins unconditionally.
+    /// A CoreData row can name a file this device does not have — the sync
+    /// pull writes photo rows without ever downloading the JPEG, and a
+    /// restore from backup brings the store back while `TripPhotos/` (marked
+    /// `isExcludedFromBackup`) stays behind. Preferring that row meant the
+    /// strip drew a dead tile even when the picture was sitting on the
+    /// server under the same id, one presigned URL away. So: file present →
+    /// `.local`; file gone but the server has it → `.remote`; file gone and
+    /// the server does not have it → `.missing`, which the strip labels as
+    /// such instead of pretending it is loading. The default keeps the
+    /// function honest for callers that have no file system to ask.
+    static func merge(
+        local: [TripPhoto],
+        remote: [SocialTripPhoto],
+        localFileExists: (String) -> Bool = { _ in true }
+    ) -> [Item] {
         var seen = Set<UUID>()
         var result: [Item] = []
+        let remoteById = Dictionary(remote.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for photo in local {
             guard seen.insert(photo.id).inserted else { continue }
-            result.append(Item(id: photo.id, timestamp: photo.timestamp, source: .local(filename: photo.filename)))
+            let source: Source
+            if localFileExists(photo.filename) {
+                source = .local(filename: photo.filename)
+            } else if let twin = remoteById[photo.id],
+                      twin.thumbnailUrl != nil || twin.originalUrl != nil {
+                source = .remote(thumbnailURL: twin.thumbnailUrl, originalURL: twin.originalUrl)
+            } else {
+                source = .missing(filename: photo.filename)
+            }
+            result.append(Item(id: photo.id, timestamp: photo.timestamp, source: source))
         }
         for photo in remote {
             guard seen.insert(photo.id).inserted else { continue }
