@@ -162,35 +162,61 @@ final class CompanionsCardTests: XCTestCase {
     /// starts OFF; new trips are private — the app's DEFAULT state, not an
     /// edge case) must render the disabled invite-with-hint state, NOT the
     /// same `.error` banner a genuine network failure gets. Fails if
-    /// `decide` stops special-casing `canQuery == false`, or starts
-    /// returning `.error` for it.
+    /// `decide` stops special-casing a blocked gate, or starts returning
+    /// `.error` for it.
     func testOwnTripNotQueryable_ShowsNotPublishedNotError() {
         let decision = CompanionsCardModel.decide(
-            companions: [], isOwn: true, loadState: .idle, canQuery: false)
+            companions: [], isOwn: true, loadState: .idle, gate: .notPublished)
         XCTAssertEqual(decision, .own(rows: [], banner: .notPublished))
         XCTAssertNotEqual(decision, .own(rows: [], banner: .error))
     }
 
-    /// `canQuery == false` must win even if a previous session cached rows
+    /// A blocked gate must win even if a previous session cached rows
     /// (in-memory `companions`, or a `.failed` loadState with a stale
     /// on-device cache) — a trip that no longer has a server row cannot
     /// genuinely have those companions anymore either. Fails if `decide`
-    /// starts consulting `loadState`/`cached` before checking `canQuery`.
+    /// starts consulting `loadState`/`cached` before checking the gate.
     func testOwnTripNotQueryable_IgnoresStaleCacheAndFailedLoadState() {
         let accepted = item(.accepted)
         let decision = CompanionsCardModel.decide(
             companions: [accepted], isOwn: true, loadState: .failed,
-            cached: [accepted], canQuery: false)
+            cached: [accepted], gate: .notPublished)
         XCTAssertEqual(decision, .own(rows: [], banner: .notPublished))
     }
 
-    /// `canQuery` only ever gates the OWNER's path — a non-owner reaching
-    /// this screen at all implies the trip is already server-side, so the
-    /// default (`canQuery: true`) must leave every non-owner case exactly
-    /// as it was. Fails if a stray `canQuery` check leaks into the
-    /// non-owner branch.
-    func testStrangerTrip_UnaffectedByCanQueryDefault() {
+    /// The gate only ever applies to the OWNER's path — a non-owner
+    /// reaching this screen at all implies the trip is already server-side,
+    /// so the default (`.allowed`) must leave every non-owner case exactly
+    /// as it was. Fails if a stray gate check leaks into the non-owner
+    /// branch.
+    func testStrangerTrip_UnaffectedByGateDefault() {
         let decision = CompanionsCardModel.decide(companions: [], isOwn: false, loadState: .failed)
         XCTAssertEqual(decision, .readOnly(rows: [], banner: .error))
+    }
+
+    // MARK: - Signed out is not "unpublished"
+
+    /// The report that split the two: signed OUT on your own trip — which
+    /// may be public and on the server already — must NOT be told to
+    /// publish it first. Being signed out says nothing about the trip, and
+    /// publishing needs an account anyway, so that advice was both wrong
+    /// and a dead end. Fails if the two blockers are folded back together.
+    func testOwnTripSignedOut_SaysSignedOutNotNotPublished() {
+        let decision = CompanionsCardModel.decide(
+            companions: [], isOwn: true, loadState: .idle, gate: .signedOut)
+        XCTAssertEqual(decision, .own(rows: [], banner: .signedOut))
+        XCTAssertNotEqual(decision, .own(rows: [], banner: .notPublished))
+    }
+
+    /// Signed out ignores whatever a previous session left behind, for the
+    /// same reason `.notPublished` does: nothing can be verified without a
+    /// session, so a cached roster must not be presented as this trip's
+    /// current one.
+    func testOwnTripSignedOut_IgnoresStaleCache() {
+        let accepted = item(.accepted)
+        let decision = CompanionsCardModel.decide(
+            companions: [accepted], isOwn: true, loadState: .failed,
+            cached: [accepted], gate: .signedOut)
+        XCTAssertEqual(decision, .own(rows: [], banner: .signedOut))
     }
 }

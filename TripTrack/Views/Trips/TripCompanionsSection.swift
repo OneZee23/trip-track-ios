@@ -33,14 +33,14 @@ struct TripCompanionsSection: View {
     let tripId: UUID
     let isOwn: Bool
     /// Fix 2: whether it's worth even ASKING the server for this trip's
-    /// companion roster — `false` only for an own trip that is signed out
-    /// or has never reached the server (`TripDetailView.canQueryCompanions`).
-    /// A non-owner is never gated: they can only have reached this screen
-    /// for a trip that already exists server-side. When `false`, `load()`
-    /// never fires the request at all and `CompanionsCardModel.decide`
-    /// renders the disabled invite-with-hint state instead of asking a
-    /// question the server can only answer `TRIP_NOT_FOUND` to.
-    var canQuery: Bool = true
+    /// companion roster, and when it isn't, why — blocked only for an own
+    /// trip that is signed out or has never reached the server
+    /// (`TripDetailView.companionsGate`). A non-owner is never gated: they
+    /// can only have reached this screen for a trip that already exists
+    /// server-side. When blocked, `load()` never fires the request at all
+    /// and the card explains the blocker instead of asking a question the
+    /// server can only answer `TRIP_NOT_FOUND` to.
+    var gate: CompanionsCardModel.Gate = .allowed
     /// Task 7's offline cache (`Trip.companions`) for THIS trip, as loaded
     /// by `TripDetailView` from local storage — empty for a foreign trip
     /// (which never has one) or an own trip that never had a successful
@@ -52,6 +52,9 @@ struct TripCompanionsSection: View {
     var onInvite: (() -> Void)?
     /// Opens `CompanionsRosterSheet`.
     var onOpenRoster: () -> Void
+    /// Opens the sign-in sheet from the signed-out row. Without it that row
+    /// would state a blocker and give no way to clear it.
+    var onSignIn: (() -> Void)?
 
     @ObservedObject private var store = CompanionsStore.shared
     @EnvironmentObject private var lang: LanguageManager
@@ -61,17 +64,18 @@ struct TripCompanionsSection: View {
     private var decision: CompanionsCardModel.Decision {
         CompanionsCardModel.decide(
             companions: companions, isOwn: isOwn, loadState: store.loadState(for: tripId),
-            cached: cachedCompanions.map(\.asCompanionItem), canQuery: canQuery)
+            cached: cachedCompanions.map(\.asCompanionItem), gate: gate)
     }
 
-    /// `.task(id:)`'s identity — includes `canQuery` (not just `tripId`) so
-    /// a trip that flips from "not on the server" to "on the server" WHILE
-    /// this screen is already open (the record→upload race resolving in the
-    /// background) re-fires the fetch instead of staying stuck showing the
-    /// disabled hint until the screen is reopened.
+    /// `.task(id:)`'s identity — includes `gate` (not just `tripId`) so a
+    /// trip that becomes askable WHILE this screen is already open re-fires
+    /// the fetch instead of staying stuck on the blocked hint until the
+    /// screen is reopened. Two things can flip it: the record→upload race
+    /// resolving in the background, and the guest signing in from the row
+    /// below.
     private struct TaskKey: Equatable {
         let tripId: UUID
-        let canQuery: Bool
+        let gate: CompanionsCardModel.Gate
     }
 
     var body: some View {
@@ -85,7 +89,7 @@ struct TripCompanionsSection: View {
                 EmptyView()
             }
         }
-        .task(id: TaskKey(tripId: tripId, canQuery: canQuery)) { await load() }
+        .task(id: TaskKey(tripId: tripId, gate: gate)) { await load() }
     }
 
     private func section<Content: View>(_ content: Content) -> some View {
@@ -114,6 +118,7 @@ struct TripCompanionsSection: View {
                 // flagging, so it can't reach an empty card — folded in
                 // with `.none` so the switch stays exhaustive.
                 case .none, .stale: inviteRow(c)
+                case .signedOut: signInRow(c)
                 case .notPublished: notPublishedRow(c)
                 }
             }
@@ -285,6 +290,44 @@ struct TripCompanionsSection: View {
         .accessibilityIdentifier("companions_invite_empty")
     }
 
+    /// Own trip, signed out. Looks like the invitation and IS one — the
+    /// blocker is the missing session, and this row can clear it, so it
+    /// stays a button and opens the sign-in sheet. It used to render as
+    /// `notPublishedRow`, which told owners of already-public trips to
+    /// publish them.
+    private func signInRow(_ c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            onSignIn?()
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(c.cardAlt).frame(width: 36, height: 36)
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AppStrings.companionsAddPrompt(lang.language))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(c.textSecondary)
+                    Text(AppStrings.companionsSignInHint(lang.language))
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(c.textTertiary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("companions_sign_in")
+    }
+
     /// Fix 2: own trip, no server row yet. The ordinary empty-state
     /// invitation's layout, but NOT a button — inviting would hit the
     /// identical `TRIP_NOT_FOUND` `/companions/candidates` throws for the
@@ -378,8 +421,8 @@ struct TripCompanionsSection: View {
     /// store) updates on its own as that state changes.
     private func load() async {
         // Fix 2: don't ask a question the server can only answer
-        // TRIP_NOT_FOUND to — see `canQuery`'s doc comment.
-        guard canQuery else { return }
+        // TRIP_NOT_FOUND to — see `gate`'s doc comment.
+        guard gate == .allowed else { return }
         _ = try? await store.list(tripId: tripId, treatTripNotFoundAsEmpty: isOwn)
     }
 }

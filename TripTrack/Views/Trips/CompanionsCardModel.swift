@@ -12,6 +12,22 @@ import Foundation
 /// from an earlier owner view, or a future relaxation of the server filter,
 /// must never leak a pending/declined row onto a read-only card.
 enum CompanionsCardModel {
+    /// Whether it's worth asking the server about this trip's roster at
+    /// all — and when it isn't, which of the two blockers the viewer is
+    /// actually facing. Only meaningful on an OWN trip: a non-owner can
+    /// only have reached the detail screen for a trip that already exists
+    /// server-side, so their path is always `.allowed`.
+    enum Gate: Equatable {
+        case allowed
+        /// No session. Says nothing about the trip — it may well be public
+        /// already.
+        case signedOut
+        /// Signed in, but this trip has never reached the server
+        /// (`Trip.isOnServer == false`). Cloud sync starts OFF and trips
+        /// are created private, so this is the app's DEFAULT state.
+        case notPublished
+    }
+
     /// One row the card draws, plus the one thing that varies per viewer:
     /// whether it carries the "ждёт" / "pending" note.
     struct Row: Identifiable, Equatable {
@@ -39,9 +55,17 @@ enum CompanionsCardModel {
         /// a quiet note that they might not be current rather than a retry
         /// prompt with nothing to show.
         case stale
+        /// Own trip, signed out. Split out of `.notPublished` after that
+        /// banner was caught telling a signed-out owner of an ALREADY
+        /// PUBLIC trip to "publish it first" — true of the session, false
+        /// of the trip, and a dead end either way (publishing needs an
+        /// account too). This one names the actual blocker and, unlike
+        /// `.notPublished`, its row is tappable: it opens the sign-in
+        /// sheet. `rows` is always empty alongside it.
+        case signedOut
         /// Fix 2, own trip only: this trip cannot possibly have a companion
         /// roster because it has never reached the server (`Trip.isOnServer
-        /// == false`, or the viewer is signed out) — cloud sync starts OFF
+        /// == false`) — cloud sync starts OFF
         /// and trips are created private, so this is the app's DEFAULT
         /// state, not an edge case. `decide` never even asks the network
         /// for this case (see `TripCompanionsSection.load`'s `canQuery`
@@ -88,20 +112,26 @@ enum CompanionsCardModel {
     ///   bare `.own(rows: [], banner: .error)`. A non-owner never has one
     ///   (a foreign trip has no local cache to read — see `TripCompanion`'s
     ///   doc comment), so this parameter is unused on that path.
-    /// - Parameter canQuery: Fix 2 — whether this trip could possibly have
-    ///   a roster at all (own trip, signed in, `Trip.isOnServer`). Defaults
-    ///   `true` so every pre-existing call site (and the loadState-driven
-    ///   branches below) is unaffected; only an own trip with `canQuery ==
-    ///   false` takes the new `.notPublished` branch, ignoring `loadState`
-    ///   and `cached` entirely — a trip that was never published has
-    ///   nothing genuine to fall back to.
+    /// - Parameter gate: Fix 2 — whether this trip could possibly have a
+    ///   roster at all, and if not, WHY. Defaults `.allowed` so every
+    ///   pre-existing call site (and the loadState-driven branches below) is
+    ///   unaffected; a blocked own trip takes the matching banner branch,
+    ///   ignoring `loadState` and `cached` entirely — a trip nobody can ask
+    ///   the server about has nothing genuine to fall back to.
+    ///
+    ///   The two blocked reasons are kept apart deliberately: they used to
+    ///   share `.notPublished`, which meant a signed-out owner of a PUBLIC
+    ///   trip was told to publish it. Only the viewer can be asked to fix
+    ///   the blocker, so the card has to name the right one.
     static func decide(
         companions: [CompanionItem], isOwn: Bool, loadState: CompanionsLoadState,
-        cached: [CompanionItem] = [], canQuery: Bool = true
+        cached: [CompanionItem] = [], gate: Gate = .allowed
     ) -> Decision {
         if isOwn {
-            guard canQuery else {
-                return .own(rows: [], banner: .notPublished)
+            switch gate {
+            case .signedOut: return .own(rows: [], banner: .signedOut)
+            case .notPublished: return .own(rows: [], banner: .notPublished)
+            case .allowed: break
             }
             // Nothing in memory this session (never asked yet, or asked and
             // got back nothing) AND today's request outright failed: if an

@@ -61,7 +61,7 @@ struct CompanionsRosterSheet: View {
             // exists for a trip whose roster the server already answered —
             // so unlike the section, this screen is never in the
             // "not published yet" case it would need to gate.
-            canQuery: true
+            gate: .allowed
         )
     }
 

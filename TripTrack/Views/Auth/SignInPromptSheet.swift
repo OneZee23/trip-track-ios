@@ -15,6 +15,7 @@ struct SignInPromptSheet: View {
         case share
         case sync
         case publish
+        case companions
         case generic
 
         var id: String { rawValue }
@@ -27,6 +28,7 @@ struct SignInPromptSheet: View {
             case .share:    return AppStrings.signInPromptShare(lang)
             case .sync:     return AppStrings.signInPromptSync(lang)
             case .publish:  return AppStrings.signInPromptPublish(lang)
+            case .companions: return AppStrings.signInPromptCompanions(lang)
             case .generic:  return AppStrings.signInPromptGeneric(lang)
             }
         }
