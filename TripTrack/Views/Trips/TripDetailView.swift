@@ -709,6 +709,7 @@ struct TripDetailView: View {
                     if auth.isSignedIn, local.isOnServer {
                         await loadRemotePhotos()
                     }
+                    reapMissingPhotos()
                 } else if social == nil {
                     // Nothing to show: no local row and no feed payload. Rather
                     // than a skeleton that shimmers forever with no way back,
@@ -2509,11 +2510,50 @@ struct TripDetailView: View {
     /// `OwnTripPhotosModel.merge`. `PhotoStorageService.localFileExists`
     /// caches, so asking once per body pass is a dictionary hit.
     private var ownPhotoItems: [OwnTripPhotosModel.Item] {
-        OwnTripPhotosModel.merge(
+        let merged = OwnTripPhotosModel.merge(
             local: trip?.photos ?? [],
             remote: remotePhotos,
             localFileExists: { PhotoStorageService.localFileExists(filename: $0) }
         )
+        guard canJudgeMissingPhotos else { return merged }
+        return merged.filter { if case .missing = $0.source { return false } else { return true } }
+    }
+
+    /// Whether "the server does not have this picture" is something this
+    /// screen actually KNOWS, rather than something it merely failed to find
+    /// out. Only then may a row with no local file be treated as a photo that
+    /// no longer exists anywhere.
+    ///
+    /// Two cases qualify: a trip that was never on the server (there is no
+    /// remote copy by definition), and a signed-in owner whose photo roster
+    /// came back cleanly. A failed roster request, or no session to make one
+    /// with, means silence — and silence is not an answer.
+    private var canJudgeMissingPhotos: Bool {
+        guard isOwn else { return false }
+        if !(trip?.isOnServer ?? false) { return true }
+        return auth.isSignedIn && !photosLoadFailed
+    }
+
+    /// Retires photo rows whose picture is gone from both the device and the
+    /// server.
+    ///
+    /// Such a row is not a photo any more, but it still counted in «Фото · N»,
+    /// still drew a broken tile, and still asked the upload queue to send a
+    /// file that does not exist — `FAIL: missing local blob`, on every single
+    /// launch, forever. Nothing is lost by dropping it: there is no picture
+    /// left anywhere to lose, and the check above is what makes that a fact
+    /// rather than an assumption.
+    private func reapMissingPhotos() {
+        guard canJudgeMissingPhotos, let photos = trip?.photos, !photos.isEmpty else { return }
+        let remoteIds = Set(remotePhotos.map(\.id))
+        let dead = photos.filter {
+            !PhotoStorageService.localFileExists(filename: $0.filename) && !remoteIds.contains($0.id)
+        }
+        guard !dead.isEmpty else { return }
+        for photo in dead {
+            mapVM.tripManager.deletePhoto(id: photo.id, from: tripId)
+        }
+        trip?.photos.removeAll { photo in dead.contains { $0.id == photo.id } }
     }
 
     private func ownPhotosSection(_ c: AppTheme.Colors) -> some View {
