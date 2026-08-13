@@ -50,7 +50,7 @@ struct CloudSyncView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         accountCard(c: c, l: l)
 
-                        sectionLabel(AppStrings.sectionSyncLabel(l))
+                        sectionLabel(AppStrings.sectionSyncLabel(l), topPad: 14)
                         syncCard(c: c, l: l)
 
                         if auth.isSignedIn {
@@ -182,7 +182,7 @@ struct CloudSyncView: View {
                 .accessibilityIdentifier("account_back")
             Spacer()
             Text(AppStrings.accountSyncTitle(l))
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(c.text)
             Spacer()
             // Trailing spacer keeps the title optically centered.
@@ -195,11 +195,13 @@ struct CloudSyncView: View {
 
     // MARK: - Section label rhythm
 
-    private func sectionLabel(_ text: String) -> some View {
+    /// The 4pt leading pad pushed labels past the card edge they should align
+    /// with, and a flat 18pt top pad dropped the first label 4pt low — the gap
+    /// under the identity card is 14, the gaps between cards are 18.
+    private func sectionLabel(_ text: String, topPad: CGFloat = 18) -> some View {
         AccountSectionLabel(text: text)
-            .padding(.top, 18)
+            .padding(.top, topPad)
             .padding(.bottom, 8)
-            .padding(.leading, 4)
     }
 
     // MARK: - Account card (117:1412)
@@ -213,14 +215,14 @@ struct CloudSyncView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(auth.userName ?? AppStrings.profile(l))
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.inter(15, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 // F11: masked email; Apple-relay / legacy accounts without a
                 // stored email show just «Apple ID».
                 Text(appleIdSubtitle(l))
-                    .font(.system(size: 12))
+                    .font(.inter(12))
                     .foregroundStyle(c.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -267,7 +269,7 @@ struct CloudSyncView: View {
                 ) {
                     HStack(spacing: 6) {
                         Text(aggregateStatusValue(l))
-                            .font(.system(size: 13))
+                            .font(.inter(13))
                             .foregroundStyle(c.textSecondary)
                             .monospacedDigit()
                             .lineLimit(1)
@@ -425,7 +427,7 @@ struct CloudSyncView: View {
                     HStack(spacing: 6) {
                         if let count = blockedCount {
                             Text("\(count)")
-                                .font(.system(size: 13))
+                                .font(.inter(13))
                                 .foregroundStyle(c.textSecondary)
                                 .monospacedDigit()
                         }

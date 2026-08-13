@@ -121,7 +121,7 @@ struct SyncStatusSheetView: View {
     private func header(_ c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         HStack {
             Text(AppStrings.syncSheetTitle(l))
-                .font(.system(size: 17, weight: .heavy))
+                .font(.inter(17, weight: .heavy))
                 .tracking(-0.2)
                 .foregroundStyle(c.text)
             Spacer()
@@ -194,7 +194,7 @@ struct SyncStatusSheetView: View {
                     .frame(width: 24, alignment: .center)
 
                 Text(label)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
 
                 Spacer(minLength: 8)
@@ -211,10 +211,11 @@ struct SyncStatusSheetView: View {
             .frame(height: 52)
 
             if showsDivider {
+                // The divider was inset 50pt to the label column, so it stopped
+                // short of the card's left edge — canon is full-bleed (x=0, w=332).
                 Rectangle()
                     .fill(c.border)
                     .frame(height: 1)
-                    .padding(.leading, 50) // 14 + 24 icon slot + 12 gap
             }
         }
         .accessibilityIdentifier(a11yId)
@@ -231,14 +232,14 @@ struct SyncStatusSheetView: View {
                     .frame(width: 24, alignment: .center)
 
                 Text(AppStrings.profile(l))
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.inter(15, weight: .medium))
                     .foregroundStyle(c.text)
 
                 Spacer(minLength: 8)
 
                 if !snapshot.settingsExists {
                     Text("—")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.inter(12, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                 } else if snapshot.settingsSynced {
                     checkmark
@@ -256,7 +257,6 @@ struct SyncStatusSheetView: View {
             Rectangle()
                 .fill(c.border)
                 .frame(height: 1)
-                .padding(.leading, 50)
         }
         .accessibilityIdentifier("sync_row_profile")
     }
@@ -266,13 +266,13 @@ struct SyncStatusSheetView: View {
         c: AppTheme.Colors, l: LanguageManager.Language
     ) -> Text {
         let base = Text("\(synced) / \(total)")
-            .font(.system(size: 12, weight: .medium).monospacedDigit())
+            .font(.inter(12, weight: .medium).monospacedDigit())
             .foregroundStyle(c.textTertiary)
         guard failedCount > 0 else { return base }
         // F8: failed portion surfaces as a red counter suffix; details live
         // in the failed-ops list below the card.
         return base + Text(" · " + AppStrings.syncFailedCount(l, count: failedCount))
-            .font(.system(size: 12, weight: .medium).monospacedDigit())
+            .font(.inter(12, weight: .medium).monospacedDigit())
             .foregroundStyle(AppTheme.red)
     }
 
@@ -284,9 +284,15 @@ struct SyncStatusSheetView: View {
     }
 
     private func progressCapsule(fraction: Double, c: AppTheme.Colors) -> some View {
-        ZStack(alignment: .leading) {
+        // The track was `c.cardAlt`, which against the white card sat at ~1.06:1
+        // — the unfilled remainder was invisible and a half-done sync read as
+        // finished. The track needs its own contrast, not a surface token.
+        let track = c.scheme == .dark
+            ? Color.white.opacity(0.18)
+            : Color(red: 217/255, green: 217/255, blue: 222/255)
+        return ZStack(alignment: .leading) {
             Capsule()
-                .fill(c.cardAlt)
+                .fill(track)
                 .frame(width: 44, height: 6)
             Capsule()
                 .fill(AppTheme.accent)
@@ -303,7 +309,7 @@ struct SyncStatusSheetView: View {
                 Image(systemName: "clock")
                     .font(.system(size: 13))
                 Text(AppStrings.syncLastAt(l, RelativeTripDate.string(from: last, language: l)))
-                    .font(.system(size: 13))
+                    .font(.inter(13))
             }
             .foregroundStyle(c.textTertiary)
             .frame(maxWidth: .infinity)
@@ -331,7 +337,7 @@ struct SyncStatusSheetView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
-                .font(.system(size: 11, weight: .bold).monospacedDigit())
+                .font(.inter(11, weight: .bold).monospacedDigit())
                 .tracking(0.5)
                 .foregroundStyle(c.textTertiary)
                 .padding(.leading, 4)
@@ -363,13 +369,13 @@ struct SyncStatusSheetView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(entity)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.inter(14, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text("·")
                         .foregroundStyle(c.textTertiary)
                     Text(action)
-                        .font(.system(size: 13))
+                        .font(.inter(13))
                         .foregroundStyle(c.textSecondary)
                         .lineLimit(1)
                     Spacer()
@@ -381,12 +387,12 @@ struct SyncStatusSheetView: View {
                 }
                 if op.retryCount > 0 || isFailed {
                     Text(AppStrings.syncAttemptsLabel(max(op.retryCount, 1), lang.language))
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.inter(11, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                 }
                 if let err = op.lastError, !err.isEmpty {
                     Text(err)
-                        .font(.system(size: 12))
+                        .font(.inter(12))
                         .foregroundStyle(AppTheme.red.opacity(0.85))
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -423,7 +429,7 @@ struct SyncStatusSheetView: View {
                         .font(.system(size: 14, weight: .semibold))
                 }
                 Text(AppStrings.syncStatusRetry(lang.language))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.inter(15, weight: .semibold))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)

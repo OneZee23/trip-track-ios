@@ -18,7 +18,7 @@ struct GroupsComingSoonView: View {
             // Page header (feed-header convention: 28 heavy, tracking −0.56).
             HStack {
                 Text(AppStrings.tabGroups(l))
-                    .font(.system(size: 28, weight: .heavy))
+                    .font(.inter(28, weight: .heavy))
                     .tracking(-0.56)
                     .foregroundStyle(c.text)
                 Spacer()
@@ -36,13 +36,13 @@ struct GroupsComingSoonView: View {
                 IdleRing()
 
                 Text(AppStrings.groupsComingTitle(l))
-                    .font(.system(size: 21, weight: .heavy))
+                    .font(.inter(21, weight: .heavy))
                     .foregroundStyle(c.text)
                     .multilineTextAlignment(.center)
                     .padding(.top, 22)
 
                 Text(AppStrings.groupsComingBody(l))
-                    .font(.system(size: 14))
+                    .font(.inter(14))
                     .lineSpacing(6)
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
@@ -56,7 +56,7 @@ struct GroupsComingSoonView: View {
                     .padding(.top, 22)
 
                 Text(AppStrings.groupsWaitlistCount(l))
-                    .font(.system(size: 12))
+                    .font(.inter(12))
                     .foregroundStyle(c.textTertiary)
                     .padding(.top, 10)
             }
@@ -89,7 +89,7 @@ struct GroupsComingSoonView: View {
 
     private func chip(_ text: String, c: AppTheme.Colors) -> some View {
         Text(text)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.inter(13, weight: .semibold))
             .foregroundStyle(c.text)
             .padding(.horizontal, 13)
             .padding(.vertical, 8)
@@ -109,7 +109,7 @@ struct GroupsComingSoonView: View {
                 Image(systemName: notifyRequested ? "checkmark" : "bell.fill")
                     .font(.system(size: 15, weight: .bold))
                 Text(notifyRequested ? AppStrings.groupsNotifyDone(l) : AppStrings.groupsNotifyMe(l))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
             }
             .foregroundStyle(notifyRequested ? AppTheme.accent : .white)
             .padding(.horizontal, 18)

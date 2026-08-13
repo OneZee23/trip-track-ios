@@ -207,7 +207,7 @@ struct MyMapSheet: View {
                     km: Int(vm.exploration.totalKm.rounded()),
                     trips: vm.exploration.tripCount
                 ))
-                .font(.inter(14, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(vm.isEmpty ? c.textTertiary : c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -419,12 +419,15 @@ struct MyMapSheet: View {
         }
     }
 
+    /// 17, not 19: the panel swaps this header in place for the road and the
+    /// locked card, so all three follow the one canon size (1117:229). The flag
+    /// stays on `.system` — Inter carries no emoji.
     private func regionHeader(_ region: MapRegionStat, _ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
             Text(RegionAtlas.flag(for: region.countryCode))
                 .font(.system(size: 17))
             Text(region.localizedName(lang.language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(17, weight: .heavy))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -434,15 +437,18 @@ struct MyMapSheet: View {
         .padding(.top, 16)
     }
 
+    /// The value drew in SF while the label right under it drew in Inter — two
+    /// typefaces stacked inside one card, and at heavy weight the digits gave
+    /// it away. Canon: 18 ExtraBold over 10 SemiBold (1117:230/231).
     private func statColumn(_ value: String, _ label: String, _ c: AppTheme.Colors) -> some View {
         VStack(spacing: 3) {
             Text(value)
-                .font(.system(size: 18, weight: .heavy))
+                .font(.inter(18, weight: .heavy))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(label)
-                .font(.inter(11))
+                .font(.inter(10, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
                 .lineLimit(1)
         }
@@ -633,7 +639,7 @@ struct MyMapSheet: View {
     private func roadCard(_ trips: [MapTripPin], _ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
             Text(AppStrings.mapRoadTrips(lang.language, count: trips.count))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(17, weight: .heavy))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -725,7 +731,7 @@ struct MyMapSheet: View {
     private func lockedCard(_ region: RegionAtlas.Region, _ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
             Text(region.localizedName(lang.language))
-                .font(.system(size: 19, weight: .heavy))
+                .font(.inter(17, weight: .heavy))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)

@@ -31,7 +31,7 @@ struct DebugLogsView: View {
 
                     if let err = errorMessage {
                         Text(err)
-                            .font(.system(size: 13))
+                            .font(.inter(13))
                             .foregroundStyle(AppTheme.red)
                             .multilineTextAlignment(.center)
                     }
@@ -69,7 +69,7 @@ struct DebugLogsView: View {
             GarageCircleNavButton(systemImage: "chevron.left") { dismiss() }
             Spacer()
             Text(AppStrings.logsJournalTitle(l))
-                .font(.system(size: 16, weight: .bold))
+                .font(.inter(16, weight: .bold))
                 .foregroundStyle(c.text)
             Spacer()
             GarageCircleNavButton(systemImage: "square.and.arrow.up") {
@@ -90,7 +90,7 @@ struct DebugLogsView: View {
         if let entries {
             if entries.isEmpty {
                 Text(loadFailed ? AppStrings.logsLoadFailed(l) : AppStrings.logsEmpty(l))
-                    .font(.system(size: 13))
+                    .font(.inter(13))
                     .foregroundStyle(loadFailed ? AppTheme.red : c.textTertiary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 48)
@@ -119,7 +119,7 @@ struct DebugLogsView: View {
     private func journalRow(_ row: DebugLogExporter.LogEntryRow, c: AppTheme.Colors) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text(Self.timeFormatter.string(from: row.date))
-                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .font(.inter(11, weight: .medium).monospacedDigit())
                 .foregroundStyle(c.textTertiary)
 
             Circle()
@@ -128,7 +128,7 @@ struct DebugLogsView: View {
                 .padding(.top, 4)
 
             Text("\(row.category): \(row.message)")
-                .font(.system(size: 11.5))
+                .font(.inter(11.5))
                 .foregroundStyle(c.textSecondary)
                 .lineLimit(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -169,7 +169,7 @@ struct DebugLogsView: View {
                 .accessibilityIdentifier("logs_send_cta")
 
                 Text(url.lastPathComponent)
-                    .font(.system(size: 11))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
             } else {
                 Button {
@@ -186,7 +186,7 @@ struct DebugLogsView: View {
             // entries may contain trip metadata, so no "no personal data"
             // claims; the user can inspect the file in the share preview.
             Text(AppStrings.logsPrivacyCaption(l))
-                .font(.system(size: 12))
+                .font(.inter(12))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -202,7 +202,7 @@ struct DebugLogsView: View {
                     .font(.system(size: 16, weight: .semibold))
             }
             Text(text)
-                .font(.system(size: 14, weight: .bold))
+                .font(.inter(14, weight: .bold))
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity)

@@ -120,7 +120,7 @@ struct MyMapView: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(AppStrings.myMapTitle(lang.language))
-                    .font(.system(size: 22, weight: .heavy))
+                    .font(.inter(22, weight: .heavy))
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.5), radius: 8, y: 1)
 
@@ -132,7 +132,7 @@ struct MyMapView: View {
                     showBetaNote = true
                 } label: {
                     Text(AppStrings.mapBetaBadge(lang.language))
-                        .font(.system(size: 10, weight: .heavy))
+                        .font(.inter(10, weight: .heavy))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -158,10 +158,10 @@ struct MyMapView: View {
                 .stroke(.white.opacity(0.3), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
                 .frame(width: 48, height: 20)
             Text(AppStrings.emptyMapTitle(lang.language))
-                .font(.system(size: 18, weight: .heavy))
+                .font(.inter(18, weight: .heavy))
                 .foregroundStyle(.white)
             Text(AppStrings.emptyMapSubtitle(lang.language))
-                .font(.system(size: 13))
+                .font(.inter(13))
                 .foregroundStyle(Color(red: 178/255, green: 178/255, blue: 189/255))
                 .multilineTextAlignment(.center)
         }

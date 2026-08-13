@@ -52,7 +52,7 @@ struct IdleHUDView: View {
             .padding(.bottom, 14)
 
             Text(locationDenied ? AppStrings.noGeoTitle(lang.language) : AppStrings.readyToRide(lang.language))
-                .font(.system(size: locationDenied ? 19 : 22, weight: .bold))
+                .font(.inter(locationDenied ? 19 : 22, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(.bottom, 10)
 
@@ -67,12 +67,12 @@ struct IdleHUDView: View {
 
             if locationDenied {
                 Text(AppStrings.noGeoSubtitle(lang.language))
-                    .font(.system(size: 13))
+                    .font(.inter(13))
                     .foregroundStyle(.white.opacity(0.42))
                     .padding(.bottom, 24)
             } else if totalKm > 0 || tripCount > 0 {
                 Text("\(formatKmWithSeparator(totalKm)) \(AppStrings.totalKm(lang.language)) · \(tripCount) \(AppStrings.tripsGenitive(lang.language, count: tripCount))")
-                    .font(.system(size: 13).monospacedDigit())
+                    .font(.inter(13).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.42))
                     .padding(.bottom, 14)
             } else {

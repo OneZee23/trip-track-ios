@@ -114,7 +114,7 @@ struct SlideToStartView: View {
     /// no chevrons — both of those say «drag me», and it will not be dragged.
     private var blockedHint: some View {
         Text(blockedLabel ?? AppStrings.slideWaitingForGPS(lang.language))
-            .font(.system(size: 17, weight: .semibold))
+            .font(.inter(17, weight: .semibold))
             .foregroundStyle(.white.opacity(0.5))
             .lineLimit(1)
             .minimumScaleFactor(0.75)
@@ -154,7 +154,7 @@ struct SlideToStartView: View {
     private func shimmerHint(progress: CGFloat) -> some View {
         let text = labelOverride ?? AppStrings.slideToStart(lang.language)
         let label = Text(text)
-            .font(.system(size: 17, weight: .semibold))
+            .font(.inter(17, weight: .semibold))
             .lineLimit(1)
             .minimumScaleFactor(0.75)
             // Centered on the FULL pill (Figma) — the 6.1.0 hints are short

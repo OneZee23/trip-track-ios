@@ -108,7 +108,7 @@ struct OnboardingView: View {
     private func primaryButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 18, weight: .bold))
+                .font(.inter(18, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
@@ -119,7 +119,7 @@ struct OnboardingView: View {
 
     private func bodyText(_ text: String, _ c: AppTheme.Colors, size: CGFloat = 15) -> some View {
         Text(text)
-            .font(.system(size: size))
+            .font(.inter(size))
             .foregroundStyle(c.textSecondary)
             .multilineTextAlignment(.center)
             // Long RU subtitles otherwise wrap to 9-10 lines on iPhone SE
@@ -158,7 +158,7 @@ struct OnboardingView: View {
                 Text(AppStrings.onboardingWelcomeTitle2(lang.language))
                     .foregroundStyle(AppTheme.accent)
             }
-            .font(.system(size: 24, weight: .heavy))
+            .font(.inter(24, weight: .heavy))
             .multilineTextAlignment(.center)
             .padding(.horizontal, 32)
             .padding(.top, 47)
@@ -172,7 +172,7 @@ struct OnboardingView: View {
                 Image(systemName: "globe")
                     .font(.system(size: 13, weight: .semibold))
                 Text(AppStrings.onboardingPrivacyPill(lang.language))
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.inter(12, weight: .bold))
             }
             .foregroundStyle(AppTheme.green)
             .padding(.horizontal, 13)
@@ -213,11 +213,14 @@ struct OnboardingView: View {
                 }
 
                 Text(AppStrings.onboardingValueTitle(lang.language))
-                    .font(.system(size: 24, weight: .heavy))
+                    .font(.inter(24, weight: .heavy))
                     .foregroundStyle(c.text)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
-                    .padding(.top, 24)
+                    // 49, like every other hero page: at 24 this title sat
+                    // 25pt higher than its neighbours (y≈183 vs the canon
+                    // y=208), so the headline jumped on every swipe.
+                    .padding(.top, 49)
 
                 mockTripCard(c)
                     .padding(.horizontal, 28)
@@ -295,7 +298,10 @@ struct OnboardingView: View {
                             .resizable()
                             .interpolation(.none)
                             .scaledToFit()
-                            .frame(width: 36, height: 36)
+                            // 47pt is the canon size for this 304×150
+                            // preview (Figma 213:14); at 36 the car read as
+                            // a speck on the route instead of riding it.
+                            .frame(width: 47, height: 47)
                             .position(mid)
                     }
                 } else {
@@ -328,7 +334,7 @@ struct OnboardingView: View {
                         .resizable()
                         .interpolation(.none)
                         .scaledToFit()
-                        .frame(width: 36, height: 36)
+                        .frame(width: 47, height: 47)
                         .rotationEffect(.degrees(-24))
                         .position(x: w * 0.5, y: h * 0.3)
                 }
@@ -337,7 +343,7 @@ struct OnboardingView: View {
             VStack {
                 HStack {
                     Text(AppStrings.onboardingRecordedAuto(lang.language))
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.inter(12.5, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -419,7 +425,7 @@ struct OnboardingView: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             Text(realTripTitle ?? AppStrings.onboardingMockTripTitle(lang.language))
-                .font(.system(size: 13.5, weight: .bold))
+                .font(.inter(13.5, weight: .bold))
                 .foregroundStyle(Color(red: 30/255, green: 30/255, blue: 35/255))
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
@@ -451,16 +457,16 @@ struct OnboardingView: View {
                         .foregroundStyle(Color(red: 100/255, green: 100/255, blue: 110/255))
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(m.value)
-                            .font(.system(size: 17, weight: .heavy).monospacedDigit())
+                            .font(.inter(17, weight: .heavy).monospacedDigit())
                             .foregroundStyle(m.color)
                         if !m.unit.isEmpty {
                             Text(m.unit)
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(.inter(9, weight: .semibold))
                                 .foregroundStyle(Color(red: 100/255, green: 100/255, blue: 110/255))
                         }
                     }
                     Text(m.label.uppercased())
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.inter(8, weight: .bold))
                         .tracking(0.32)
                         .foregroundStyle(Color(red: 155/255, green: 155/255, blue: 165/255))
                         .lineLimit(1)
@@ -483,7 +489,7 @@ struct OnboardingView: View {
             }
 
             Text(AppStrings.onboardingLocation(lang.language))
-                .font(.system(size: 24, weight: .heavy))
+                .font(.inter(24, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -501,7 +507,7 @@ struct OnboardingView: View {
                     // is a no-op in iOS, so the screen states the fact and
                     // the button just moves forward.
                     Text(AppStrings.onboardingAlreadyGranted(lang.language))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(AppTheme.green)
 
                     primaryButton(AppStrings.onboardingContinue(lang.language)) {
@@ -521,7 +527,7 @@ struct OnboardingView: View {
                         withAnimation { currentPage = 3 }
                     } label: {
                         Text(AppStrings.onboardingSkipForNow(lang.language))
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.inter(14, weight: .medium))
                             .foregroundStyle(c.textSecondary)
                     }
                 }
@@ -551,7 +557,7 @@ struct OnboardingView: View {
             }
 
             Text(AppStrings.onboardingBackgroundTitle(lang.language))
-                .font(.system(size: 24, weight: .heavy))
+                .font(.inter(24, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -567,7 +573,7 @@ struct OnboardingView: View {
             VStack(spacing: 10) {
                 if hasAlwaysPermission {
                     Text(AppStrings.onboardingAlreadyGranted(lang.language))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(AppTheme.green)
                 }
 
@@ -584,7 +590,7 @@ struct OnboardingView: View {
                     withAnimation { currentPage = 4 }
                 } label: {
                     Text(AppStrings.onboardingSkipForNow(lang.language))
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.inter(14, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                 }
 
@@ -607,7 +613,7 @@ struct OnboardingView: View {
             }
 
             Text(AppStrings.onboardingNotificationsTitle(lang.language))
-                .font(.system(size: 24, weight: .heavy))
+                .font(.inter(24, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -621,7 +627,7 @@ struct OnboardingView: View {
             VStack(spacing: 10) {
                 if notificationsGranted {
                     Text(AppStrings.onboardingAlreadyGranted(lang.language))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(AppTheme.green)
 
                     primaryButton(AppStrings.onboardingContinue(lang.language)) {
@@ -637,7 +643,7 @@ struct OnboardingView: View {
                         finishOnboarding()
                     } label: {
                         Text(AppStrings.onboardingNotNow(lang.language))
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.inter(14, weight: .medium))
                             .foregroundStyle(c.textSecondary)
                     }
                 }
@@ -665,7 +671,7 @@ struct OnboardingView: View {
             privacyURL: privacyURL
         )
         return Text(.init(text))
-            .font(.system(size: 11))
+            .font(.inter(11))
             .foregroundStyle(c.textTertiary)
             .tint(AppTheme.accent)
             .multilineTextAlignment(.center)

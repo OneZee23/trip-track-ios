@@ -4,6 +4,18 @@ import OSLog
 
 private let recLog = Logger(subsystem: "com.triptrack", category: "record-screen")
 
+/// Where both bottom control blocks dock. The artboard is 780 pt tall and the
+/// idle card (144:1182) and the recording block (146:1199) both end at 756 — the
+/// design docks them to one y. 8 pt put the idle card's bottom edge below the
+/// home indicator, which drew straight over the slider; a full safe-area inset
+/// overshot the other way and left a band of map showing under a panel that is
+/// supposed to sit at the bottom.
+///
+/// The recording block used `safeAreaBottom + 12` (~46 pt on a home-indicator
+/// phone) against the card's 24, so the whole control block hopped ~22 pt the
+/// moment recording started.
+private let controlBlockBottomInset: CGFloat = 24
+
 struct TrackingView: View {
     @EnvironmentObject var viewModel: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
@@ -76,6 +88,10 @@ struct TrackingView: View {
             // the pill spent the whole drive repeating them. The chip earns
             // the slot instead, and it is the only place the recording screen
             // says which car you are driving.
+            //
+            // Re-ruled by the owner on 2026-08-13 against Figma 146:1196,
+            // which still draws the pill: the chip stays, the pill does not
+            // come back.
             VStack(spacing: 10) {
                 HStack {
                     if viewModel.isRecording {
@@ -198,13 +214,13 @@ struct TrackingView: View {
                 // Speedometer — 92pt fixed accent (grey while paused/lost).
                 VStack(spacing: 0) {
                     Text(speedText)
-                        .font(.system(size: 92, weight: .heavy))
+                        .font(.inter(92, weight: .heavy))
                         .kerning(-3.68)
                         .foregroundStyle(speedDimmed ? mapDimmedText : AppTheme.accent)
                         .contentTransition(.numericText())
                         .animation(.easeInOut(duration: 0.2), value: speedText)
                     Text(AppStrings.kmh(lang.language).uppercased())
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.inter(13, weight: .medium))
                         .kerning(0.78)
                         .foregroundStyle(mapSecondaryText)
                 }
@@ -246,7 +262,7 @@ struct TrackingView: View {
                 controlsRow
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, safeAreaBottom + 12)
+            .padding(.bottom, controlBlockBottomInset)
 
         }
         .ignoresSafeArea(edges: [.top, .bottom])
@@ -260,6 +276,11 @@ struct TrackingView: View {
     /// Pause is the move you make dozens of times a drive; ending is the move
     /// you make once and cannot take back — so the big target under the thumb
     /// is pause, and stopping asks first.
+    ///
+    /// This MIRRORS the canon (Figma 146:1227 puts the wide red «Стоп» on the
+    /// right), and it stays mirrored: ruled by the owner on 2026-08-13, after
+    /// a conformance pass raised it. Do not "fix" it back — the design file is
+    /// what needs annotating.
     private var controlsRow: some View {
         HStack(spacing: 12) {
             Button {
@@ -293,7 +314,7 @@ struct TrackingView: View {
                     Text(viewModel.isPaused
                          ? AppStrings.resumeAction(lang.language)
                          : AppStrings.pauseAction(lang.language))
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.inter(16, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
@@ -346,10 +367,10 @@ struct TrackingView: View {
             VStack(spacing: 16) {
                 VStack(spacing: 6) {
                     Text(AppStrings.stopConfirmTitle(lang.language))
-                        .font(.system(size: 20, weight: .heavy))
+                        .font(.inter(20, weight: .heavy))
                         .foregroundStyle(.white)
                     Text(AppStrings.stopConfirmBody(lang.language))
-                        .font(.system(size: 13.5))
+                        .font(.inter(13.5))
                         .foregroundStyle(.white.opacity(0.55))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
@@ -362,7 +383,7 @@ struct TrackingView: View {
                     Text("·").foregroundStyle(.white.opacity(0.3))
                     Text(viewModel.duration)
                 }
-                .font(.system(size: 14, weight: .semibold))
+                .font(.inter(14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.75))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
@@ -398,7 +419,7 @@ struct TrackingView: View {
                         dismissStopConfirm()
                     } label: {
                         Text(AppStrings.cancel(lang.language))
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.inter(16, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.6))
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
@@ -438,7 +459,7 @@ struct TrackingView: View {
                 Image(systemName: icon)
                     .font(.system(size: 15, weight: .bold))
                 Text(title)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.inter(16, weight: .bold))
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
@@ -492,7 +513,7 @@ struct TrackingView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(amber)
                 Text(text)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
@@ -509,7 +530,7 @@ struct TrackingView: View {
                     viewModel.requestStartRecording(force: true)
                 } label: {
                     Text(AppStrings.startAnyway(lang.language))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.inter(13, weight: .bold))
                         .foregroundStyle(AppTheme.accent)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
@@ -564,7 +585,7 @@ struct TrackingView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.7))
             Text(AppStrings.junkTripDiscarded(lang.language))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.inter(13, weight: .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -596,7 +617,7 @@ struct TrackingView: View {
             Image(systemName: "pause.fill")
                 .font(.system(size: 12, weight: .bold))
             Text(AppStrings.recordingPausedPill(lang.language))
-                .font(.system(size: 14, weight: .bold))
+                .font(.inter(14, weight: .bold))
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
@@ -613,15 +634,15 @@ struct TrackingView: View {
                 .frame(width: 22, height: 22)
                 .overlay(
                     Text("!")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.inter(14, weight: .bold))
                         .foregroundStyle(.white)
                 )
             VStack(alignment: .leading, spacing: 1) {
                 Text(AppStrings.weakSignalTitle(lang.language))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .foregroundStyle(.white)
                 Text(AppStrings.weakSignalHint(lang.language))
-                    .font(.system(size: 11.5))
+                    .font(.inter(11.5))
                     .foregroundStyle(Color(red: 0xB8/255, green: 0xB8/255, blue: 0xC2/255))
             }
             Spacer(minLength: 0)
@@ -648,10 +669,10 @@ struct TrackingView: View {
                 .foregroundStyle(amber)
             VStack(alignment: .leading, spacing: 1) {
                 Text(AppStrings.signalLostTitle(lang.language))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.inter(13, weight: .semibold))
                     .foregroundStyle(.white)
                 Text(AppStrings.signalLostHint(lang.language))
-                    .font(.system(size: 11.5))
+                    .font(.inter(11.5))
                     .foregroundStyle(Color(red: 0xC9/255, green: 0xA8/255, blue: 0x78/255))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -702,12 +723,12 @@ struct TrackingView: View {
                 .foregroundStyle(.white.opacity(0.4))
             HStack(alignment: .lastTextBaseline, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 18, weight: .heavy).monospacedDigit())
+                    .font(.inter(18, weight: .heavy).monospacedDigit())
                     .foregroundStyle(.white)
                     .contentTransition(.numericText())
                 if let unit {
                     Text(unit.uppercased())
-                        .font(.system(size: 11))
+                        .font(.inter(11))
                         .foregroundStyle(.white.opacity(0.5))
                 }
             }
@@ -753,12 +774,6 @@ struct TrackingView: View {
                     .padding(.bottom, 12)
             }
 
-            // Figma's card floats: 16 pt margins either side, 24 pt under it.
-            // 8 pt put its bottom edge below the home indicator, which drew
-            // straight over the slider; a full safe-area inset overshot the
-            // other way and left a band of map showing under a panel that is
-            // supposed to sit at the bottom. 24 is the design's own number and
-            // clears the indicator bar.
             // Refusals appear directly above the control that was refused —
             // the top of the screen is where the GPS toasts live, and it is
             // not where you are looking when you have just pushed a slider at
@@ -795,7 +810,7 @@ struct TrackingView: View {
                     }
                 }
             )
-            .padding(.bottom, 24)
+            .padding(.bottom, controlBlockBottomInset)
         }
         .ignoresSafeArea(edges: .bottom)
     }

@@ -175,7 +175,9 @@ struct VehicleDetailView: View {
     private func heroCard(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         let year = Calendar.current.component(.year, from: vehicle.createdAt)
 
-        return VStack(spacing: 10) {
+        // Canon stacks 96-avatar · 12 · name · 3 · subtitle · 14 · XP row;
+        // the block was built with 10/2/14 and read a touch tighter than drawn.
+        return VStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 18)
                     .fill(c.cardAlt)
@@ -183,14 +185,20 @@ struct VehicleDetailView: View {
                 vehicle.avatarView(size: 64)
             }
 
-            VStack(spacing: 2) {
+            VStack(spacing: 3) {
                 Text(vehicle.name.isEmpty ? AppStrings.unnamedVehicle(l) : vehicle.name)
                     .font(.system(size: 18, weight: .heavy))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .minimumScaleFactor(0.7)
-                // No plate/year fields in the model — odometer + «с YYYY» (fork F3).
+                // Canon (119:968 · 499:137) draws «А123БВ 77 · 2019» here.
+                // `Vehicle` carries neither field: a plate would need a new
+                // CoreData attribute, a store migration and a server column for
+                // one cosmetic line, and the year would be a plate-adjacent
+                // invention (`createdAt` is when the car was ADDED, not its
+                // model year). Every canvas comparison re-raises this line —
+                // the answer is still odometer + «с YYYY» (fork F3, settled).
                 Text("\(GarageFormat.odometer(vehicle.odometerKm)) \(AppStrings.km(l)) · \(AppStrings.sinceYear(l, year: year))")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(c.textTertiary)
@@ -203,7 +211,7 @@ struct VehicleDetailView: View {
                     .foregroundStyle(AppTheme.blue)
                     .fixedSize()
             }
-            .padding(.top, 4)
+            .padding(.top, 2)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 14)
@@ -236,7 +244,8 @@ struct VehicleDetailView: View {
     }
 
     private func statCard(value: String, valueColor: Color, unit: String, label: String, c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // Canon gap between the value row and its caption is 4, not 6.
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
                     .font(.system(size: 22, weight: .heavy).monospacedDigit())
@@ -260,12 +269,18 @@ struct VehicleDetailView: View {
 
     private func stickersSection(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            GarageSectionLabel(text: AppStrings.stickersLabel(l))
-                .padding(.horizontal, 2)
+            // Canon puts this header a step above the in-card labels (12/0.36)
+            // and starts it on the screen's 14pt gutter — the extra 2pt indent
+            // pushed it out of line with the card edges below it.
+            GarageSectionLabel(text: AppStrings.stickersLabel(l), size: 12, tracking: 0.36)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    // All stickers, locked ones grayed with a lock (fork F11).
+                // Canon draws only the three EARNED badges, so it needs no
+                // container; showing all ten with locks (fork F11) needs a
+                // scroll, and a bare scrolling strip would bleed under both
+                // screen edges with nothing to bound it — hence the card. Cell
+                // pitch (74 wide, 10 apart, top-aligned) is canon's.
+                HStack(alignment: .top, spacing: 10) {
                     ForEach(VehicleSticker.allCases, id: \.self) { sticker in
                         stickerCell(sticker, earned: vehicle.stickers.contains(sticker), c: c, l: l)
                     }
@@ -278,7 +293,7 @@ struct VehicleDetailView: View {
     }
 
     private func stickerCell(_ sticker: VehicleSticker, earned: Bool, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
             ZStack {
                 Circle()
                     .fill(earned ? sticker.color.opacity(0.15) : c.cardAlt)
@@ -293,11 +308,16 @@ struct VehicleDetailView: View {
                         .foregroundStyle(c.textTertiary.opacity(0.6))
                 }
             }
+            // Canon wraps the caption over two 70pt lines. One line + a 0.7
+            // scale floor shrank «Платиновая рамка»/«Серебряная рамка» — the
+            // longest of the ten — to ~7pt while the drawn badge reads at 10.
             Text(l == .ru ? sticker.titleRu() : sticker.titleEn())
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(earned ? sticker.color : c.textTertiary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+                .frame(width: 70)
         }
         .frame(width: 74)
     }
@@ -339,7 +359,18 @@ struct VehicleDetailView: View {
             .fixedSize()
         }
         .padding(14)
-        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 16))
+        // Canon fills this one with card-alt instead of card, but it is still a
+        // card and carries the same 1pt elevation as the ones above it — the
+        // chip was drawn flat and sank into the background.
+        .background {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(c.cardAlt)
+                .shadow(
+                    color: scheme == .dark ? .clear : .black.opacity(0.03),
+                    radius: 2,
+                    y: 1
+                )
+        }
     }
 
     // MARK: - Auto-Record Row (undrawn glue, fork F14)
@@ -388,8 +419,9 @@ struct VehicleDetailView: View {
         let priceUnit = "\(currency)/\(GarageFormat.volumeShort(volumeUnit, isRu: isRu))"
 
         return VStack(alignment: .leading, spacing: 8) {
+            // Canon (499:193) keeps this one at the in-card 10/0.5, but on the
+            // screen gutter — the 2pt indent misaligned it with the card below.
             GarageSectionLabel(text: AppStrings.fuelSectionLabel(l))
-                .padding(.horizontal, 2)
 
             VStack(spacing: 0) {
                 fuelRow(
@@ -439,10 +471,11 @@ struct VehicleDetailView: View {
     }
 
     private func fuelDivider(c: AppTheme.Colors) -> some View {
+        // Canon (499:199/499:204) runs the rule edge to edge; the 14pt leading
+        // inset was a Settings-style habit the card was never drawn with.
         Rectangle()
             .fill(c.cardAlt)
             .frame(height: 1)
-            .padding(.leading, 14)
     }
 
     // MARK: - Helpers

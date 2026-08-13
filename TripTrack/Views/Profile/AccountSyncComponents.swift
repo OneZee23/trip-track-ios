@@ -15,7 +15,7 @@ struct AccountSectionLabel: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         Text(text.uppercased())
-            .font(.system(size: 12, weight: .bold))
+            .font(.inter(12, weight: .bold))
             .tracking(0.36)
             .foregroundStyle(c.textTertiary)
     }
@@ -26,8 +26,7 @@ struct AccountSectionLabel: View {
 /// Figma settings row: px14 py13, 17pt icon in a fixed 22pt slot (keeps
 /// titles aligned across rows with different glyph widths), 15-medium title,
 /// wrapping 11.5-regular subtitle, arbitrary trailing content (Toggle /
-/// value+chevron / none), optional 1px bottom divider inset to the text
-/// column.
+/// value+chevron / none), optional full-bleed 1px bottom divider.
 struct AccountSettingsRow<Trailing: View>: View {
     let icon: String
     var iconColor: Color?
@@ -50,11 +49,11 @@ struct AccountSettingsRow<Trailing: View>: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.inter(15, weight: .medium))
                         .foregroundStyle(titleColor ?? c.text)
                     if let subtitle {
                         Text(subtitle)
-                            .font(.system(size: 11.5))
+                            .font(.inter(11.5))
                             .foregroundStyle(c.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -67,10 +66,11 @@ struct AccountSettingsRow<Trailing: View>: View {
             .padding(.vertical, 13)
 
             if showsDivider {
+                // The divider was inset 48pt to the text column, so it stopped
+                // short of the card's left edge — canon is full-bleed (x=0, w=332).
                 Rectangle()
                     .fill(c.border)
                     .frame(height: 1)
-                    .padding(.leading, 48) // 14 (px) + 22 (icon slot) + 12 (gap)
             }
         }
     }

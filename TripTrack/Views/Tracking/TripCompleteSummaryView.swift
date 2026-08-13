@@ -53,7 +53,7 @@ struct TripCompleteSummaryView: View {
 
             // Title
             Text(AppStrings.tripFinishedTitle(lang.language))
-                .font(.system(size: 22, weight: .heavy))
+                .font(.inter(22, weight: .heavy))
                 .foregroundStyle(c.text)
                 .padding(.top, 8)
 
@@ -90,7 +90,7 @@ struct TripCompleteSummaryView: View {
                     // «02:12» is unreadable at a glance — two hours twelve, or
                     // two minutes twelve? The app already has one honest
                     // format and the canon uses it: «2 ч 14 мин».
-                    value: trip.formattedDurationHuman(lang.language),
+                    value: compactDuration(lang.language),
                     unit: "",
                     label: AppStrings.duration(lang.language),
                     // Figma 147:1190: time is neutral dark, not accent.
@@ -161,6 +161,10 @@ struct TripCompleteSummaryView: View {
                     colorScheme: .light,
                     earnCount: completionData?.repeatedBadgeCounts[badge.id],
                     lastEarnedDate: trip.endDate ?? trip.startDate,
+                    // The drive that just ended is the one that earned it, so
+                    // the card can print what it actually took («47.3 км»
+                    // under «проедьте 42.2 км») instead of the rule alone.
+                    recordValue: badge.recordValue(for: trip, language: lang.language),
                     onDismiss: { selectedBadge = nil }
                 )
             }
@@ -185,7 +189,7 @@ struct TripCompleteSummaryView: View {
                     Text(savedPhotoIds.isEmpty
                          ? AppStrings.photoShort(lang.language)
                          : "\(AppStrings.photoShort(lang.language)) (\(savedPhotoIds.count))")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.inter(14, weight: .bold))
                 }
                 .foregroundStyle(c.text)
                 .frame(maxWidth: .infinity)
@@ -213,7 +217,7 @@ struct TripCompleteSummaryView: View {
                 NotificationCenter.default.post(name: .openTripDetail, object: trip.id)
             } label: {
                 Text(AppStrings.done(lang.language))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
@@ -270,7 +274,7 @@ struct TripCompleteSummaryView: View {
                 Text(tripNotes.isEmpty
                      ? AppStrings.describeTripPlaceholder(lang.language)
                      : tripNotes)
-                    .font(.system(size: 14, weight: tripNotes.isEmpty ? .medium : .regular))
+                    .font(.inter(14, weight: tripNotes.isEmpty ? .medium : .regular))
                     .foregroundStyle(tripNotes.isEmpty ? c.textTertiary : c.text)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -362,14 +366,23 @@ struct TripCompleteSummaryView: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(AppStrings.publishToFeed(lang.language))
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.inter(14, weight: .bold))
                     .foregroundStyle(c.text)
                 // One line, and it says what each position of the switch does.
                 // The old pair — «Поездка появится в общей ленте» over
                 // «Поездки приватны, пока Вы не опубликуете их сами» — spent
                 // three lines restating the title and never mentioned «выкл».
                 Text(AppStrings.publishToggleHint(lang.language))
-                    .font(.system(size: 11))
+                    .font(.inter(11))
+                    .foregroundStyle(c.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Figma 480:137. This card is the app's only place where a
+                // trip is handed to the public, and it had stopped saying the
+                // rule the consent rests on — that nothing leaves the phone
+                // unless you send it. The hint above says what the switch
+                // does; this says what happens when you never touch it.
+                Text(AppStrings.publishFootnote(lang.language))
+                    .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -392,7 +405,7 @@ struct TripCompleteSummaryView: View {
             // XP earned (Figma 147:1190: bare «+N XP» ↔ pixel LEVEL UP pill)
             HStack {
                 Text("+\(data.xpEarned) XP")
-                    .font(.system(size: 24, weight: .heavy))
+                    .font(.inter(28, weight: .heavy))
                     .foregroundStyle(AppTheme.accent)
                 Spacer()
                 if data.didLevelUp {
@@ -423,7 +436,7 @@ struct TripCompleteSummaryView: View {
                         .font(.system(size: 14))
                         .foregroundStyle(AppTheme.accent)
                     Text(AppStrings.streakDaysInARow(lang.language, n: data.currentStreak))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(c.text)
                     Spacer()
                 }
@@ -436,7 +449,7 @@ struct TripCompleteSummaryView: View {
                         .font(.system(size: 14))
                         .foregroundStyle(AppTheme.accent)
                     Text(AppStrings.repeatRouteTimes(lang.language, n: road.timesDriven))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.inter(13, weight: .semibold))
                         .foregroundStyle(c.text)
                     Spacer()
                 }
@@ -474,7 +487,7 @@ struct TripCompleteSummaryView: View {
                                 // That number now lives in the badge's own
                                 // card, where it can say «Получено 5 раз».
                                 Text(badge.title(lang.language))
-                                    .font(.system(size: 9, weight: .bold))
+                                    .font(.inter(9, weight: .bold))
                                     .foregroundStyle(badge.color)
                                     .multilineTextAlignment(.center)
                                     .lineLimit(2)
@@ -508,11 +521,31 @@ struct TripCompleteSummaryView: View {
         .onAppear { withAnimation(.easeOut(duration: 0.5)) { showXP = true } }
     }
 
+    /// Duration for this card's stat cell only.
+    ///
+    /// The shared `Trip.formattedTimeHuman` keeps the seconds under an hour,
+    /// and «45 мин 20 сек» wants ~172pt in a cell about 133pt wide: it fit only
+    /// by shrinking to ≈0.78, so the one number that reads smaller than its
+    /// three neighbours was the one nobody meant to de-emphasise. Seconds are
+    /// noise once the drive is over, so they are dropped below an hour — and
+    /// kept below a minute, where they are the whole value.
+    private func compactDuration(_ lang: LanguageManager.Language) -> String {
+        let total = Int(trip.duration)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        if hours > 0 {
+            if minutes == 0 { return lang == .ru ? "\(hours) ч" : "\(hours) h" }
+            return lang == .ru ? "\(hours) ч \(minutes) мин" : "\(hours) h \(minutes) min"
+        }
+        if minutes > 0 { return lang == .ru ? "\(minutes) мин" : "\(minutes) min" }
+        return lang == .ru ? "\(total) сек" : "\(total) sec"
+    }
+
     private func summaryStatCard(value: String, unit: String, label: String, color: Color, c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .lastTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 24, weight: .heavy).monospacedDigit())
+                    .font(.inter(24, weight: .heavy).monospacedDigit())
                     .foregroundStyle(color)
                     // «2 ч 14 мин» is a longer string than «02:12» ever was;
                     // it shrinks rather than wrapping or clipping.
@@ -520,12 +553,12 @@ struct TripCompleteSummaryView: View {
                     .minimumScaleFactor(0.6)
                 if !unit.isEmpty {
                     Text(unit)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.inter(14, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                 }
             }
             Text(label)
-                .font(.system(size: 10, weight: .bold))
+                .font(.inter(10, weight: .bold))
                 .kerning(0.4)
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)

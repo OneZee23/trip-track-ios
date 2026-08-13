@@ -66,17 +66,25 @@ struct VehicleXPBar: View {
 // MARK: - Section Label
 
 /// Uppercased tracking section label («СТИКЕРЫ», «РАСХОД ТОПЛИВА», …).
+///
+/// The 10pt/0.5 default is canon for in-card labels and for «РАСХОД ТОПЛИВА»
+/// (499:193), but the screen-level «Стикеры» header is drawn a step larger —
+/// 12pt/0.36 in both 119:968 and 499:158 — and rendering it at the in-card
+/// size flattened the two levels into one. Size and tracking are independent
+/// because canon does not scale one from the other.
 struct GarageSectionLabel: View {
     let text: String
     var color: Color?
+    var size: CGFloat = 10
+    var tracking: CGFloat = 0.5
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         Text(text.uppercased())
-            .font(.system(size: 10, weight: .bold))
-            .tracking(0.5)
+            .font(.system(size: size, weight: .bold))
+            .tracking(tracking)
             .foregroundStyle(color ?? c.textTertiary)
     }
 }
