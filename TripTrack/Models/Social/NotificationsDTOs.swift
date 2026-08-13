@@ -15,6 +15,10 @@ enum NotificationKind: String, Codable {
     /// Recipient's own trip: someone the recipient invited (or who was
     /// invited on their trip) accepted. Ordinary informational row.
     case companionAccepted = "companion_accepted"
+    /// System-authored: the recipient unlocked a badge. Actor-less by
+    /// nature — nobody did this TO them — so the row is drawn on the
+    /// existing no-actor path and signed «TripTrack» instead of «Кто-то».
+    case achievement
 }
 
 struct NotificationItem: Codable, Identifiable, Hashable {
@@ -36,6 +40,17 @@ struct NotificationItem: Codable, Identifiable, Hashable {
     let isRead: Bool
     let createdAt: Date
     let actor: SocialAuthor?
+    /// `achievement` rows: which badge was unlocked, as a `Badge.all` id.
+    /// The TITLE is resolved client-side so it follows the in-app language
+    /// switch — a server-rendered name would freeze in whatever language
+    /// the account was set to when the badge fired.
+    ///
+    /// `var` with a default, NOT `let`: the memberwise init is called
+    /// positionally from `NotificationsInboxStore.makeRead` and the tests,
+    /// and a defaulted `var` keeps both compiling untouched. Optional so
+    /// today's production server (which sends no such rows at all) decodes
+    /// unchanged.
+    var badgeId: String? = nil
 
     /// Strongly-typed kind for known cases. Returns nil for unknown,
     /// callers fall back to a generic display string.

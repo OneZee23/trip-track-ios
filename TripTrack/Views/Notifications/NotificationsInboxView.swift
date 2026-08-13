@@ -232,6 +232,7 @@ struct NotificationsInboxView: View {
         case .reactions: return store.items.filter { $0.typedKind == .reaction }
         case .follows: return store.items.filter { $0.typedKind == .follow }
         case .comments: return store.items.filter { $0.typedKind == .comment }
+        case .achievements: return store.items.filter { $0.typedKind == .achievement }
         case .companions:
             return store.items.filter {
                 $0.typedKind == .companionInvite || $0.typedKind == .companionAccepted
@@ -304,18 +305,12 @@ struct NotificationsInboxView: View {
             Text(isFollowed
                  ? (isRu ? "Подписан" : "Following")
                  : AppStrings.followBack(lang.language))
-                .font(.system(size: 12, weight: .bold))
-                .lineLimit(1)
-                .foregroundStyle(isFollowed ? c.text : .white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                // Pinned width: the two labels differ in length and the row
-                // content jumped on every toggle without it (same fix as the
-                // Discover row button).
-                .frame(minWidth: 92)
-                .background(isFollowed ? c.cardAlt : AppTheme.accent, in: Capsule())
-                .overlay(
-                    Capsule().strokeBorder(isFollowed ? c.borderBright : .clear, lineWidth: 1.5)
+                // Pinned to the wider of the two labels: canon (117:1883)
+                // hugs «В ответ» at 89pt, but «Подписан» is wider and the row
+                // content jumped on every toggle (same fix as the Discover
+                // row button).
+                .socialActionButton(
+                    isFollowed ? .secondary : .primary, colors: c, width: 110
                 )
                 .animation(.easeOut(duration: 0.2), value: isFollowed)
         }
@@ -727,17 +722,33 @@ struct NotificationsInboxView: View {
         // corner (Instagram/Strava pattern) so the row type is readable from
         // the left rail alone — that's what lets the sentence lose the inline
         // emoji that used to shove the text around.
-        Circle()
-            .fill(item.actor == nil ? AppTheme.accent.opacity(0.15) : c.cardAlt)
+        // An achievement is a system row even though it arrives WITH an
+        // actor: the server fills `actor_account_id` with the recipient
+        // (the column is NOT NULL), so `item.actor == nil` is never true for
+        // it. Testing only that drew your OWN avatar under a name line
+        // reading «TripTrack», and made `fallbackGlyph`'s achievement branch
+        // dead code.
+        let isSystemRow = item.actor == nil || item.typedKind == .achievement
+        return Circle()
+            .fill(isSystemRow ? AppTheme.accent.opacity(0.15) : c.cardAlt)
             .frame(width: 40, height: 40)
             .overlay {
-                Text(item.actor?.avatarEmoji ?? item.emoji ?? "🚗")
+                Text(isSystemRow
+                     ? (item.emoji ?? fallbackGlyph(item))
+                     : (item.actor?.avatarEmoji ?? item.emoji ?? fallbackGlyph(item)))
                     .font(.system(size: 20))
             }
             .overlay(alignment: .bottomTrailing) {
                 kindBadge(item, c: c)
                     .offset(x: 3, y: 3)
             }
+    }
+
+    /// Glyph for an actor-less row whose payload carries no emoji either.
+    /// A car is the right nothing-in-particular default, but on an
+    /// achievement row it read as "someone drove", not "you earned this".
+    private func fallbackGlyph(_ item: NotificationItem) -> String {
+        item.typedKind == .achievement ? "🏅" : "🚗"
     }
 
     @ViewBuilder
@@ -766,6 +777,8 @@ struct NotificationsInboxView: View {
             // invite or the owner's "someone joined" row. The pending
             // decision card (`decisionRow`) doesn't go through this badge.
             badgeCircle("person.2.fill", tint: AppTheme.accent, c: c, size: size)
+        case .achievement:
+            badgeCircle("rosette", tint: AppTheme.accent, c: c, size: size)
         case .none:
             EmptyView()
         }
@@ -786,8 +799,26 @@ struct NotificationsInboxView: View {
     }
 
     private func actorName(_ item: NotificationItem, isRu: Bool) -> String {
-        item.actor?.displayName?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+        // A badge unlock has no actor by nature — nobody did it to the
+        // user — so the generic «Кто-то» fallback below would name a
+        // person who doesn't exist. The row is signed by the app instead.
+        if item.typedKind == .achievement { return AppStrings.activityAchievementActor }
+        return item.actor?.displayName?.trimmingCharacters(in: .whitespaces).nilIfEmpty
             ?? (isRu ? "Кто-то" : "Someone")
+    }
+
+    /// Localized title of the unlocked badge. `badgeId` resolves against
+    /// `Badge.all` so the name follows the in-app language switch; the
+    /// server-rendered `tripTitle` is the fallback for an id this build
+    /// doesn't know (a badge added server-side after this release) and
+    /// because it is the one string field `NotificationsInboxStore.makeRead`
+    /// already carries through.
+    private func achievementName(_ item: NotificationItem) -> String? {
+        if let id = item.badgeId?.trimmingCharacters(in: .whitespaces).nilIfEmpty,
+           let badge = Badge.all.first(where: { $0.id == id }) {
+            return badge.title(lang.language)
+        }
+        return item.tripTitle?.trimmingCharacters(in: .whitespaces).nilIfEmpty
     }
 
     /// Line two — the action, written as a plain phrase with the object in
@@ -804,6 +835,11 @@ struct NotificationsInboxView: View {
             return AppStrings.activityCommented(lang.language, text: item.commentText, trip: trip)
         case .companionAccepted:
             return AppStrings.companionAcceptedAction(lang.language)
+        case .achievement:
+            guard let badge = achievementName(item) else {
+                return AppStrings.activityAchievementUnlockedGeneric(lang.language)
+            }
+            return AppStrings.activityAchievementUnlocked(lang.language, badge: badge)
         case .companionInvite:
             // Reached only once answered locally, OR (Fix 2) once the
             // server confirms the invite is no longer live at all — the
@@ -834,12 +870,17 @@ struct NotificationsInboxView: View {
         //   follow   → push the follower's profile (so the user can
         //              decide whether to follow back).
         switch item.typedKind {
-        case .reaction, .comment, .companionAccepted:
-            // All three land on the user's OWN trip: a comment's payload
+        case .reaction, .comment, .companionAccepted, .achievement:
+            // All of these land on the user's OWN trip: a comment's payload
             // lives in the trip's comment thread, and `companion_accepted`
             // only ever notifies the trip's owner (someone accepted onto
             // a trip they own) — see `dispatchAcceptedSideEffects` on the
-            // backend.
+            // backend. An `achievement` row rides along because a badge is
+            // earned ON a trip: when the server names that trip the tap
+            // opens it, and when it doesn't (a cumulative badge answers to
+            // no single drive) both branches below fall through and the tap
+            // only marks the row read — which is the honest outcome, not a
+            // dead end into some unrelated screen.
             if let tripId = item.tripId {
                 dismiss()
                 // A comment row lands on ITS comment (highlighted); a
@@ -857,7 +898,10 @@ struct NotificationsInboxView: View {
                     try? await Task.sleep(nanoseconds: 300_000_000)
                     NotificationCenter.default.post(name: .openTripDetail, object: link)
                 }
-            } else if let actor = item.actor {
+            } else if item.typedKind != .achievement, let actor = item.actor {
+                // Same trap as the avatar: an achievement's actor IS the
+                // recipient, so without this an achievement row with no trip
+                // attached would push you onto your own profile.
                 path.cappedAppend(.profile(actor.id, actor))
             }
         case .companionInvite:
@@ -905,6 +949,10 @@ private enum InboxChipFilter: String, CaseIterable, Identifiable {
     case reactions
     case follows
     case comments
+    /// System-authored badge unlocks. Own chip for the same reason
+    /// companions got one: it is its own kind of news, not a variant of
+    /// what somebody else did to you.
+    case achievements
     /// `companion_invite` + `companion_accepted`. A dedicated chip rather
     /// than folding them into an existing one — companions is its own
     /// growing feature (roster, picker, "Со мной" trips), not a variant of
@@ -922,6 +970,7 @@ private enum InboxChipFilter: String, CaseIterable, Identifiable {
         case .reactions: return AppStrings.chipReactions(lang)
         case .follows: return AppStrings.chipFollows(lang)
         case .comments: return AppStrings.chipComments(lang)
+        case .achievements: return AppStrings.chipAchievements(lang)
         case .companions: return AppStrings.chipCompanions(lang)
         }
     }

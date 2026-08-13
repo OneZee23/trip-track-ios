@@ -280,6 +280,81 @@ struct SocialProfile: Codable, Hashable {
     let followerCount: Int
     let followingCount: Int
     let isFollowing: Bool?
+    /// Free-text «о себе» line rendered under the hero pills (Figma
+    /// 117:966). Optional because only server 6.1+ sends the key at all —
+    /// against today's production it decodes as nil and the hero renders
+    /// exactly as it did before. Blank strings are treated as absent by the
+    /// view, so a user who cleared their bio doesn't leave a gap.
+    let bio: String?
+}
+
+// MARK: - Suggested people (Discover)
+
+/// Row of `/social/suggested`. A superset of `SocialAuthor` rather than two
+/// more fields ON it: that type is shared by feed / search / followers /
+/// reactions and must not grow fields the backend doesn't send there (same
+/// reasoning as `BlockedUser`). Both extras are optional — they only exist
+/// on server 6.1+, and a deployment without them decodes to a row that
+/// renders exactly like the pre-6.1 one.
+struct SocialSuggestedUser: Codable, Hashable, Identifiable {
+    let id: UUID
+    let displayName: String?
+    let avatarEmoji: String?
+    let profileLevel: Int
+    /// Machine-readable "why is this person suggested" key
+    /// (`sharedRegion` / `nearby` / `popular`). NEVER rendered raw — see
+    /// `SuggestionMatchReason`.
+    let matchReason: String?
+    /// Lifetime public mileage in km (already divided by 1000 server-side,
+    /// same convention as `SocialProfileStats.totalKm`).
+    let totalKm: Double?
+
+    /// The shared shape the rest of the social stack speaks in — navigation
+    /// destinations and `PublicProfileView.preloaded` both take an author.
+    var author: SocialAuthor {
+        SocialAuthor(id: id, displayName: displayName,
+                     avatarEmoji: avatarEmoji, profileLevel: profileLevel)
+    }
+
+    var reason: SuggestionMatchReason? { SuggestionMatchReason(serverValue: matchReason) }
+}
+
+struct SocialSuggestedResponse: Codable {
+    let users: [SocialSuggestedUser]
+}
+
+/// Client-side localisation of the server's suggestion rationale. Not a
+/// `RawRepresentable` conformance on purpose: an unrecognised key (a reason
+/// a newer server invented) must resolve to nil so the row simply drops its
+/// rationale line instead of printing `"sharedRegion"` at the user.
+enum SuggestionMatchReason {
+    case sharedRegion
+    case nearby
+    case popular
+
+    /// Accepts both `sharedRegion` and `shared_region` spellings — the two
+    /// sides of the wire are shipping in parallel and JSON casing on this
+    /// endpoint isn't pinned down yet.
+    init?(serverValue: String?) {
+        guard let raw = serverValue?
+            .trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "_", with: "")
+            .lowercased(), !raw.isEmpty else { return nil }
+        switch raw {
+        case "sharedregion", "sharedregions": self = .sharedRegion
+        case "nearby": self = .nearby
+        case "popular": self = .popular
+        default: return nil
+        }
+    }
+
+    func label(_ lang: LanguageManager.Language) -> String {
+        switch self {
+        case .sharedRegion: return AppStrings.suggestReasonSharedRegion(lang)
+        case .nearby: return AppStrings.suggestReasonNearby(lang)
+        case .popular: return AppStrings.suggestReasonPopular(lang)
+        }
+    }
 }
 
 // MARK: - Profile appearance update

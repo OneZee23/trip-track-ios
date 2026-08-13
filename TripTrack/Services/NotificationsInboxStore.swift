@@ -236,6 +236,13 @@ final class NotificationsInboxStore: ObservableObject {
             commentId: item.commentId, commentText: item.commentText,
             isFollowing: item.isFollowing,
             isRead: true, createdAt: item.createdAt, actor: item.actor,
+            // Rebuilding the item field by field means every field added
+            // later has to be added HERE too, and `badgeId` defaults to nil,
+            // so the compiler said nothing when it wasn't: marking an
+            // achievement row read wiped the badge and the row rewrote
+            // itself in place ~800ms after you looked at it, falling back to
+            // the TRIP title as the achievement's name.
+            badgeId: item.badgeId,
         )
     }
 }
