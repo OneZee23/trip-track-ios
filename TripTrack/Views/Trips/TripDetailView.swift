@@ -1066,7 +1066,8 @@ struct TripDetailView: View {
         .sheet(isPresented: $showCompanionsRoster) {
             if let t = trip {
                 CompanionsRosterSheet(
-                    tripId: t.id, isOwn: isOwn, cachedCompanions: t.companions
+                    tripId: t.id, isOwn: isOwn, cachedCompanions: t.companions,
+                    canInvite: !t.isPrivate
                 )
                 .environmentObject(lang)
                 .environmentObject(themeManager)
@@ -1620,6 +1621,11 @@ struct TripDetailView: View {
                     // the composer looks active but every send dies with
                     // USER_NOT_AUTH. Mirrors the social screen's gate.
                     onGuestInputTap: { signInPrompt = .comment },
+                    // Private trip: the thread is there to be read, not added
+                    // to. Nobody else can see it, so a reply would be a message
+                    // to an empty room — and the server no longer holds the
+                    // trip to attach it to.
+                    isReadOnly: isOwn && trip.isPrivate,
                     onOpenProfile: { author in
                         Haptics.tap()
                         if let pushPath {
@@ -1830,7 +1836,13 @@ struct TripDetailView: View {
             // consulted when today's fetch fails and nothing survived in
             // memory either.
             cachedCompanions: trip.companions,
-            onInvite: openCompanionsPicker,
+            // Read-only while private. Inviting someone into a trip that is not
+            // on the server cannot work — the invite has nothing to point at —
+            // and offering it produced exactly the screen you got: an empty
+            // picker over «не удалось загрузить». The roster itself still
+            // shows, because who was in the car is yours to look at whatever
+            // the trip's privacy is.
+            onInvite: trip.isPrivate ? nil : openCompanionsPicker,
             onOpenRoster: { showCompanionsRoster = true },
             // Signing in flips `companionsGate` to `.allowed`, which is the
             // section's `.task` identity — so the roster loads by itself as
@@ -2270,8 +2282,13 @@ struct TripDetailView: View {
     }
 
     private func loadReactions() async {
-        // No auth gate: reactions on a public trip are public.
-        guard let t = trip, !t.isPrivate else { return }
+        // No auth gate: reactions on a public trip are public. And no PRIVACY
+        // gate either — this used to refuse outright for a private trip, which
+        // is why an own trip taken out of the feed showed no reactions at all
+        // whatever the server held. Privacy governs what OTHERS may see and
+        // what the owner may still DO; it was never supposed to govern what
+        // the owner is allowed to look at on their own trip.
+        guard let t = trip else { return }
         do {
             let res: SocialReactionsResponse = try await APIClient.shared.post(
                 APIEndpoint.socialReactions, body: SocialUnreactRequest(tripId: t.id))
@@ -2279,11 +2296,23 @@ struct TripDetailView: View {
                 reactionEntries = res.reactions
                 reactionsLoadFailed = false
             }
+            // Kept on the device on every successful read, not just once at
+            // some special moment. Taking a trip private removes it from the
+            // server, so afterwards there is nobody left to ask — the copy has
+            // to already exist by then.
+            DiscussionArchive.saveReactions(res.reactions, for: t.id)
         } catch {
-            // Non-fatal on its own — the section stays hidden. Together with a
-            // failed photo load and a trip that arrived without a route, it is
-            // how we know nothing came back at all.
-            await MainActor.run { reactionsLoadFailed = true }
+            // The server cannot answer for a trip it no longer has. Fall back
+            // to what was saved while it could.
+            let archived = DiscussionArchive.loadReactions(for: t.id)
+            await MainActor.run {
+                if archived.isEmpty {
+                    reactionsLoadFailed = true
+                } else {
+                    reactionEntries = archived
+                    reactionsLoadFailed = false
+                }
+            }
         }
     }
 

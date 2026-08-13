@@ -25,6 +25,9 @@ struct TripCommentsSection: View {
     /// write (see `isGuestComposer`) — it only leaves them without a way to
     /// sign in from here.
     var onGuestInputTap: (() -> Void)? = nil
+    /// The thread may be read but not written to — an own trip that is no
+    /// longer public. The composer and the per-row «Ответить» both go.
+    var isReadOnly: Bool = false
     /// Live «· N» for a parent that draws the heading itself — the sheet's
     /// title sits next to its close button, so it cannot read the count off
     /// this view without being told.
@@ -183,7 +186,7 @@ struct TripCommentsSection: View {
                 // On the detail the composer is a doorway, not a field: tapping
                 // it opens the sheet with the keyboard already up, so writing
                 // happens in one place with the whole thread in view.
-                if store.isArchived {
+                if store.isArchived || isReadOnly {
                     // Nothing to reply to: the trip this conversation belongs
                     // to is no longer on the server, and the thread survives
                     // only because the device kept a copy of it.
@@ -601,7 +604,7 @@ struct TripCommentsSection: View {
     /// could not possibly work. Gating on the session alone means a call site
     /// that forgets the closure gets an inert composer, not a live one.
     private var isGuestComposer: Bool {
-        !auth.isSignedIn
+        !auth.isSignedIn || isReadOnly
     }
 
     private func sendDraft() {

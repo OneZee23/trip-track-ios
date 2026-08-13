@@ -29,6 +29,10 @@ struct CompanionsRosterSheet: View {
     /// roster opened with no connection shows the same people the plaque
     /// just showed instead of an empty screen.
     var cachedCompanions: [TripCompanion] = []
+    /// Whether anyone can still be added. False on a private trip: the invite
+    /// would point at a trip the server does not have. Reading the roster is
+    /// unaffected — who rode along is the owner's to look at either way.
+    var canInvite: Bool = true
 
     @ObservedObject private var store = CompanionsStore.shared
     @EnvironmentObject private var lang: LanguageManager
@@ -205,7 +209,7 @@ struct CompanionsRosterSheet: View {
                 companionRow(row, c: c)
                 if isOwn || row.id != rows.last?.id { divider(c) }
             }
-            if isOwn { inviteRow(c) }
+            if isOwn, canInvite { inviteRow(c) }
             // Same rule the plaque follows: a failed refresh is appended to
             // the people it couldn't update, never substituted for them.
             if banner == .error {

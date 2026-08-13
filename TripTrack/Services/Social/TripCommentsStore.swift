@@ -56,6 +56,10 @@ final class TripCommentsStore: ObservableObject {
             loadFailed = false
             unavailable = false
             isArchived = false
+            // Saved on every successful read. The trip can leave the server at
+            // any moment — its owner taking it private does exactly that — and
+            // after that there is nobody to ask for the thread back.
+            DiscussionArchive.save(res.comments, for: tripId)
         } catch {
             // Non-fatal — the card keeps the feed-known count. A route-level
             // 404 means the backend doesn't ship comments yet → hide the UI.

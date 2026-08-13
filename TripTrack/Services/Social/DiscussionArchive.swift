@@ -40,6 +40,32 @@ enum DiscussionArchive {
         }
     }
 
+    /// The reaction list, kept for the same reason and under the same promise.
+    static func saveReactions(_ reactions: [SocialReactionEntry], for tripId: UUID) {
+        guard !reactions.isEmpty else { return }
+        do {
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            excludeFromBackup(directory)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            try encoder.encode(reactions).write(to: reactionsFile(for: tripId))
+        } catch {
+            archiveLog.error("reaction archive failed: \(error.localizedDescription)")
+        }
+    }
+
+    static func loadReactions(for tripId: UUID) -> [SocialReactionEntry] {
+        guard let data = try? Data(contentsOf: reactionsFile(for: tripId)) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([SocialReactionEntry].self, from: data)) ?? []
+    }
+
+    private static func reactionsFile(for tripId: UUID) -> URL {
+        directory.appendingPathComponent("\(tripId.uuidString)-reactions.json")
+    }
+
     static func load(for tripId: UUID) -> [TripComment] {
         guard let data = try? Data(contentsOf: file(for: tripId)) else { return [] }
         let decoder = JSONDecoder()
@@ -51,6 +77,7 @@ enum DiscussionArchive {
     /// about a trip that no longer exists is just an orphan.
     static func discard(for tripId: UUID) {
         try? FileManager.default.removeItem(at: file(for: tripId))
+        try? FileManager.default.removeItem(at: reactionsFile(for: tripId))
     }
 
     private static func excludeFromBackup(_ url: URL) {
