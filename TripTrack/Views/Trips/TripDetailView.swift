@@ -1837,6 +1837,7 @@ struct TripDetailView: View {
             // consulted when today's fetch fails and nothing survived in
             // memory either.
             cachedCompanions: trip.companions,
+            isOnServer: trip.isOnServer,
             // An invite points at a trip on the server. Off the server there
             // is nothing to point at, which is exactly the screen this used to
             // produce: an empty picker over «не удалось загрузить». Privacy is

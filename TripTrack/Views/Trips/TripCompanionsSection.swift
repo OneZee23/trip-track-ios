@@ -49,6 +49,9 @@ struct TripCompanionsSection: View {
     var cachedCompanions: [TripCompanion] = []
     /// Opens the candidate picker — reachable from here only in the empty
     /// state, where there is no plaque to lead into the roster.
+    /// Whether the trip exists server-side. Decides whether a cached roster is
+    /// «может быть неактуально, повторить» or simply «сохранено на устройстве».
+    var isOnServer: Bool = true
     var onInvite: (() -> Void)?
     /// Opens `CompanionsRosterSheet`.
     var onOpenRoster: () -> Void
@@ -64,7 +67,8 @@ struct TripCompanionsSection: View {
     private var decision: CompanionsCardModel.Decision {
         CompanionsCardModel.decide(
             companions: companions, isOwn: isOwn, loadState: store.loadState(for: tripId),
-            cached: cachedCompanions.map(\.asCompanionItem), gate: gate)
+            cached: cachedCompanions.map(\.asCompanionItem), gate: gate,
+            isOnServer: isOnServer)
     }
 
     /// `.task(id:)`'s identity — includes `gate` (not just `tripId`) so a
@@ -117,7 +121,7 @@ struct TripCompanionsSection: View {
                 // `.stale` only ever arrives WITH the cached rows it's
                 // flagging, so it can't reach an empty card — folded in
                 // with `.none` so the switch stays exhaustive.
-                case .none, .stale: inviteRow(c)
+                case .none, .stale, .savedCopy: inviteRow(c)
                 case .signedOut: signInRow(c)
                 case .notPublished: notPublishedRow(c)
                 }
@@ -178,6 +182,9 @@ struct TripCompanionsSection: View {
         if banner == .error {
             divider(c)
             errorRow(c)
+        } else if banner == .savedCopy {
+            Rectangle().fill(c.border).frame(height: 1)
+            savedCopyRow(c)
         } else if banner == .stale {
             divider(c)
             staleRow(c)
@@ -392,6 +399,24 @@ struct TripCompanionsSection: View {
     /// Deliberately quieter than `errorRow` — no red triangle, no "couldn't
     /// load" — because real people are on screen; this only flags that they
     /// might not be current, with the same retry affordance.
+    /// Like `staleRow`, minus the retry. The trip is not on the server, so
+    /// «повторить» could only ever come back with the same nothing — a button
+    /// that promises an outcome it cannot produce is worse than no button.
+    private func savedCopyRow(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "internaldrive")
+                .font(.system(size: 13))
+                .foregroundStyle(c.textTertiary)
+            Text(AppStrings.companionsSavedCopy(lang.language))
+                .font(.system(size: 12.5))
+                .foregroundStyle(c.textTertiary)
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .accessibilityIdentifier("companions_saved_copy")
+    }
+
     private func staleRow(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "wifi.slash")

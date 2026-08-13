@@ -1045,6 +1045,13 @@ enum AppStrings {
             : "Couldn't load the discussion"
     }
     /// A thread kept on the device after the trip left the server.
+    /// Companions shown from the device's copy of a trip the server no longer
+    /// holds. No «повторить» beside it — there is nothing to retry against.
+    static func companionsSavedCopy(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Сохранено на устройстве — поездка не на сервере"
+            : "Saved on this device — the trip is not on the server"
+    }
     static func discussionArchived(_ lang: LanguageManager.Language) -> String {
         lang == .ru
             ? "Сохранённая копия обсуждения — поездка больше не на сервере"

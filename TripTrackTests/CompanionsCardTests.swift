@@ -245,6 +245,31 @@ final class CompanionsCacheFallbackTests: XCTestCase {
         XCTAssertEqual(banner, .stale, "and flagged as possibly out of date")
     }
 
+    func test_off_the_server_the_banner_offers_no_retry() {
+        let decision = CompanionsCardModel.decide(
+            companions: [], isOwn: true, loadState: .loaded,
+            cached: [companion("Даниил")], isOnServer: false
+        )
+        guard case .own(_, let banner) = decision else {
+            return XCTFail("an own trip must render the own decision")
+        }
+        XCTAssertEqual(
+            banner, .savedCopy,
+            "a trip that is not on the server has nothing to retry against"
+        )
+    }
+
+    func test_on_the_server_a_failed_load_still_offers_retry() {
+        let decision = CompanionsCardModel.decide(
+            companions: [], isOwn: true, loadState: .failed,
+            cached: [companion("Даниил")], isOnServer: true
+        )
+        guard case .own(_, let banner) = decision else {
+            return XCTFail("an own trip must render the own decision")
+        }
+        XCTAssertEqual(banner, .stale, "a network blip is worth retrying")
+    }
+
     func test_a_genuinely_emptied_roster_stays_empty() {
         // A successful list overwrites the cache, so a roster the owner really
         // cleared leaves nothing here to resurrect.

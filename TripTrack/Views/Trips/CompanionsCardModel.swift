@@ -55,6 +55,12 @@ enum CompanionsCardModel {
         /// a quiet note that they might not be current rather than a retry
         /// prompt with nothing to show.
         case stale
+        /// The rows are the device's own copy AND there is no server-side
+        /// answer to be had: the trip is not up there. Distinct from `.stale`
+        /// because that one offers «повторить», which here would be a button
+        /// that can only ever fail — the request it retries has nothing to
+        /// find.
+        case savedCopy
         /// Own trip, signed out. Split out of `.notPublished` after that
         /// banner was caught telling a signed-out owner of an ALREADY
         /// PUBLIC trip to "publish it first" — true of the session, false
@@ -125,7 +131,7 @@ enum CompanionsCardModel {
     ///   the blocker, so the card has to name the right one.
     static func decide(
         companions: [CompanionItem], isOwn: Bool, loadState: CompanionsLoadState,
-        cached: [CompanionItem] = [], gate: Gate = .allowed
+        cached: [CompanionItem] = [], gate: Gate = .allowed, isOnServer: Bool = true
     ) -> Decision {
         if isOwn {
             switch gate {
@@ -153,7 +159,9 @@ enum CompanionsCardModel {
             // here to resurrect. `.loading` still shows nothing, so the rows
             // don't flash in before the first answer.
             if companions.isEmpty, !cached.isEmpty, loadState != .loading {
-                return .own(rows: cached.map(Row.init), banner: .stale)
+                // Off the server there is nothing to retry against, so the
+                // banner says so instead of offering the attempt.
+                return .own(rows: cached.map(Row.init), banner: isOnServer ? .stale : .savedCopy)
             }
             let rows = companions.map(Row.init)
             return .own(rows: rows, banner: banner(for: loadState, hasRows: !rows.isEmpty))
