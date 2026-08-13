@@ -82,35 +82,58 @@ struct TripDetailTopBar<Pill: View, Popover: View>: View {
         .allowsHitTesting(false)
     }
 
-    /// Share + «…» in one capsule. With only one of them available it
-    /// collapses to a plain circle rather than a capsule with a hole — a
-    /// stranger's public trip shows share alone, and half a segmented
-    /// control would look broken.
+    /// Share + «…» in one capsule — but only when there are two of them.
+    ///
+    /// A segmented control of one segment is not a segmented control. Alone in
+    /// the capsule, a cell kept the 44pt width it has for sitting next to a
+    /// sibling, so the surface drew a 44×36 oval next to the 36pt circle of
+    /// «Назад» — squat and visibly wider than its neighbour, which is what a
+    /// stranger's public trip shows, since only its owner gets «…». One
+    /// control is the plain map-chrome circle, the same token as every other
+    /// button on this map.
     @ViewBuilder
     private var actionsCapsule: some View {
-        if showShare || showActions {
+        if showShare, showActions {
             HStack(spacing: 0) {
-                if showShare {
-                    cell("square.and.arrow.up", label: AppStrings.share(language)) { onShare() }
-                        .disabled(shareDisabled)
-                        .accessibilityIdentifier("detail_share")
+                cell("square.and.arrow.up", label: AppStrings.share(language)) { onShare() }
+                    .disabled(shareDisabled)
+                    .accessibilityIdentifier("detail_share")
+
+                Rectangle()
+                    .fill(.white.opacity(progress > 0.5 ? 0 : 0.18))
+                    .frame(width: 0.5, height: 18)
+
+                cell("ellipsis", label: AppStrings.moreActions(language)) {
+                    actionsPresented = true
                 }
-                if showShare, showActions {
-                    Rectangle()
-                        .fill(.white.opacity(progress > 0.5 ? 0 : 0.18))
-                        .frame(width: 0.5, height: 18)
-                }
-                if showActions {
-                    cell("ellipsis", label: AppStrings.moreActions(language)) {
-                        actionsPresented = true
-                    }
-                    .accessibilityIdentifier("detail_actions")
-                    .popover(isPresented: $actionsPresented, arrowEdge: .top) { popover }
-                }
+                .accessibilityIdentifier("detail_actions")
+                .popover(isPresented: $actionsPresented, arrowEdge: .top) { popover }
             }
             .background {
                 MapChromeSurface(progress: progress, shape: AnyShape(Capsule())) { Color.clear }
             }
+        } else if showShare {
+            MapChromeButton(
+                systemImage: "square.and.arrow.up",
+                progress: progress,
+                accessibilityLabelText: AppStrings.share(language)
+            ) {
+                Haptics.tap()
+                onShare()
+            }
+            .disabled(shareDisabled)
+            .accessibilityIdentifier("detail_share")
+        } else if showActions {
+            MapChromeButton(
+                systemImage: "ellipsis",
+                progress: progress,
+                accessibilityLabelText: AppStrings.moreActions(language)
+            ) {
+                Haptics.tap()
+                actionsPresented = true
+            }
+            .accessibilityIdentifier("detail_actions")
+            .popover(isPresented: $actionsPresented, arrowEdge: .top) { popover }
         }
     }
 

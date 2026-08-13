@@ -12,10 +12,14 @@ import QuartzCore
 /// so the cinema moved in here — you open the map, press play, and watch the
 /// drive on the map you were already looking at.
 ///
-/// Chrome per Figma 117:1803: a close circle top-left, a «+» / «−» pair on the
-/// right edge, and the speed key as a full-width glass plaque along the bottom
-/// (117:1836). The playback chrome joins that stack only when there is
+/// Chrome per Figma 117:1803: a close circle top-left and a «+» / «−» pair on
+/// the right edge. The playback chrome joins that stack only when there is
 /// something to play.
+///
+/// The bottom used to also carry a full-width key explaining what the route's
+/// colours meant. It is gone: it took a band of every screen to restate a
+/// legend, and the route's own colours already run from green to red in front
+/// of you.
 struct FullscreenMapSheet: View {
     let coordinates: [CLLocationCoordinate2D]
     /// m/s, aligned with `coordinates` — paints the route and sets the top
@@ -33,6 +37,13 @@ struct FullscreenMapSheet: View {
     /// that tens of thousands of rebuilds of an ever-longer polyline. The
     /// route itself is still drawn from `coordinates`, at full resolution.
     var replayCoordinates: [CLLocationCoordinate2D] = []
+    /// m/s aligned with `replayCoordinates` — what the car's speed readout is
+    /// interpolated from. Separate from `speeds` for the same reason the
+    /// coordinates are: those paint the route at full resolution, these walk
+    /// the downsampled series, and the two counts do not match. Feeding the
+    /// engine the route's copy is what pinned the readout at «0 км/ч» — the
+    /// count check rejected it and left the engine with no speeds at all.
+    var replaySpeeds: [Double] = []
     /// The trip's own distance in metres — the second half of the replay
     /// readout. 0 (the default, and every call site without timestamps)
     /// simply drops that half.
@@ -41,6 +52,8 @@ struct FullscreenMapSheet: View {
     /// own and «Смотреть» on someone else's.
     var isOwnTrip: Bool = true
     var fogCutoffDate: Date?
+    /// Forwarded to the map — someone else's trip carries no fog of mine.
+    var showsFog: Bool = true
     /// Social trips pass `true` — their preview polyline is sparsely sampled
     /// and the gap-splitting in RouteMapView would zero out the bounds.
     var treatAsPreview: Bool = false
@@ -101,6 +114,7 @@ struct FullscreenMapSheet: View {
                 speeds: speeds,
                 isInteractive: true,
                 fogCutoffDate: fogCutoffDate,
+                showsFog: showsFog,
                 treatAsPreview: treatAsPreview,
                 zoomTick: zoomTick,
                 // The car and its trail are RouteMapView's job already — the
@@ -125,18 +139,16 @@ struct FullscreenMapSheet: View {
             // The chrome deliberately does NOT ignore the safe area, so every
             // control lands inside it instead of being nudged there by hand.
             // Layout follows what every map app has taught people: the way out
-            // is top-left, the zoom is thumb-height on the right, and the
-            // colour key runs along the bottom edge under both.
+            // is top-left and the zoom is thumb-height on the right.
             //
             // The replay controls slot into the two gaps that layout leaves
             // rather than on top of anything: the timecode takes the empty
             // middle of the top bar (where it is also furthest from both
             // thumbs — it is a readout, not a target) with the camera toggle
             // filling the unused top-right corner, and the transport bar
-            // becomes another full-width plaque stacked directly above the
-            // speed key. Everything at the bottom is one VStack, so the
-            // transport can never land on the key or under the zoom column —
-            // it pushes them, it does not overlap them.
+            // becomes a full-width plaque along the bottom. Everything down
+            // there is one VStack, so the transport can never land under the
+            // zoom column — it pushes it, it does not overlap it.
             VStack(spacing: 0) {
                 HStack {
                     mapCircleButton(
@@ -169,10 +181,6 @@ struct FullscreenMapSheet: View {
                         .padding(.top, 12)
                 }
 
-                if let topKmh = topSpeedKmh {
-                    speedKeyPlaque(topKmh)
-                        .padding(.top, 12)
-                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -189,7 +197,7 @@ struct FullscreenMapSheet: View {
             engine.configure(
                 coords: playbackSeries,
                 timestamps: timestamps,
-                speeds: speeds.count == playbackSeries.count ? speeds : []
+                speeds: replaySpeeds.count == playbackSeries.count ? replaySpeeds : []
             )
         }
         .onDisappear {
@@ -233,9 +241,17 @@ struct FullscreenMapSheet: View {
             .first?.windows.first?.safeAreaInsets.bottom ?? 34
     }
 
+    /// A button says what it will DO, not what is already true.
+    ///
+    /// The glyph used to name the current state — the arrow while the camera
+    /// was already following, the map while it already showed the whole route
+    /// — which is exactly backwards for a control: following the car, you were
+    /// offered a «follow the car» arrow. Its spoken label had it right all
+    /// along («Показать весь маршрут» while following), so the two contradicted
+    /// each other; the glyph is what moved.
     private var cameraToggle: some View {
         mapCircleButton(
-            systemImage: followsCar ? "location.fill" : "map",
+            systemImage: followsCar ? "map" : "location.fill",
             label: language == .ru
                 ? (followsCar ? "Показать весь маршрут" : "Следовать за машиной")
                 : (followsCar ? "Show whole route" : "Follow the car"),
@@ -292,8 +308,7 @@ struct FullscreenMapSheet: View {
     /// already answer "how fast was I going here".
     @ViewBuilder
     private var speedBubble: some View {
-        if canReplay, followsCar, engine.headCoord != nil,
-           !speeds.isEmpty, speeds.count == coordinates.count {
+        if canReplay, followsCar, engine.headCoord != nil, engine.hasSpeeds {
             let c = AppTheme.colors(for: scheme)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(Int(engine.currentSpeedKmh.rounded()))")
@@ -313,9 +328,10 @@ struct FullscreenMapSheet: View {
     /// Play / scrub / rate as one plaque, cut to the same width and corner as
     /// the speed key below it so the bottom of the screen reads as one object
     /// with two rows rather than a control bar someone dropped on a legend.
-    /// The crawl has no clock of its own, so it gets the button alone —
-    /// a scrubber and a rate control over a playback with no timeline would
-    /// be two controls that cannot answer what they ask.
+    /// The crawl cannot be seeked and has no timecode to seek TO, so it gets a
+    /// line that fills rather than a scrubber and a rate control — two controls
+    /// that could not answer what they ask. It does get the line: a lone button
+    /// in a full-width plaque read as a bar that had failed to load.
     private var transportPlaque: some View {
         HStack(spacing: 12) {
             playButton
@@ -323,7 +339,7 @@ struct FullscreenMapSheet: View {
                 progressBar
                 rateButton
             } else {
-                Spacer(minLength: 0)
+                crawlProgressBar
             }
         }
         .padding(.horizontal, 12)
@@ -377,6 +393,29 @@ struct FullscreenMapSheet: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("fullscreen_replay_rate")
+    }
+
+    /// How far the crawl has got, and nothing more: no knob, because there is
+    /// nothing to grab — a trip that arrived over sync has no per-point times,
+    /// so there is no position to seek to. Showing the same knob would promise
+    /// a scrub that cannot happen.
+    private var crawlProgressBar: some View {
+        let c = AppTheme.colors(for: scheme)
+        return GeometryReader { g in
+            let w = max(g.size.width, 1)
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(c.textTertiary.opacity(0.35))
+                    .frame(height: 5)
+                Capsule()
+                    .fill(AppTheme.accent)
+                    .frame(width: max(CGFloat(crawl.progress) * w, 0), height: 5)
+            }
+            .frame(height: g.size.height, alignment: .center)
+        }
+        .frame(height: 40)
+        .animation(.linear(duration: 0.1), value: crawl.progress)
+        .accessibilityIdentifier("fullscreen_crawl_progress")
     }
 
     /// 5pt track + accent fill + 13pt knob; the whole strip is a drag surface
@@ -445,60 +484,6 @@ struct FullscreenMapSheet: View {
     private static func hmm(_ seconds: TimeInterval) -> String {
         let s = max(0, Int(seconds))
         return String(format: "%02d:%02d", s / 3600, (s % 3600) / 60)
-    }
-
-    // MARK: - Speed key
-
-    /// The route's real top speed in km/h, straight from the series the sheet
-    /// is already handed. `nil` when the caller ships no speeds (social
-    /// previews) or nothing ever moved — a 0…0 scale is not a scale.
-    private var topSpeedKmh: Double? {
-        guard let fastestMS = speeds.max(), fastestMS > 0 else { return nil }
-        return fastestMS * 3.6
-    }
-
-    /// The colour key as a plaque across the bottom instead of a card in the
-    /// corner. The old legend listed the four fixed bands behind a chevron: it
-    /// explained the palette but never this drive — the trip's own top speed,
-    /// the one number the colours are about, was printed nowhere in the app.
-    private func speedKeyPlaque(_ topKmh: Double) -> some View {
-        let c = AppTheme.colors(for: scheme)
-        return VStack(alignment: .leading, spacing: 7) {
-            Capsule()
-                .fill(Self.speedGradient(topKmh: topKmh))
-                .frame(height: 6)
-
-            HStack(spacing: 8) {
-                Text("0 \(AppStrings.kmh(language))")
-                Spacer(minLength: 8)
-                Text("\(Int(topKmh.rounded())) \(AppStrings.kmh(language))")
-            }
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(c.textSecondary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity)
-        .glassBackground(cornerRadius: 16)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("fullscreen_speed_key")
-    }
-
-    /// The ramp is `SpeedColorScale`'s own thresholds laid on a 0…`topKmh`
-    /// axis, so the colour under any point of the bar is the colour the route
-    /// is painted at that speed and the key can't drift from the polyline.
-    /// Bands the trip never reached are simply never reached: a 60 km/h drive
-    /// gets a green-to-yellow bar, not the full-palette lie.
-    private static func speedGradient(topKmh: Double) -> LinearGradient {
-        let bands = SpeedColorScale.bands
-        var stops: [Gradient.Stop] = [.init(color: bands[0].color, location: 0)]
-        for (i, band) in bands.enumerated() {
-            guard i + 1 < bands.count, let upper = band.upperKmh, upper < topKmh else { break }
-            stops.append(.init(color: bands[i + 1].color, location: CGFloat(upper / topKmh)))
-        }
-        return LinearGradient(stops: stops, startPoint: .leading, endPoint: .trailing)
     }
 
     // MARK: - Zoom
@@ -592,6 +577,9 @@ final class TripReplayEngine: NSObject, ObservableObject {
     @Published private(set) var trailIndex: Int = -1
     /// Interpolated speed at the head, km/h.
     @Published private(set) var currentSpeedKmh: Double = 0
+    /// Whether this playback carries speeds at all — the readout is hidden
+    /// rather than parked at zero when it does not.
+    var hasSpeeds: Bool { !speeds.isEmpty }
     /// Fraction of the route's LENGTH the head has covered, 0…1.
     ///
     /// Separate from `progress` on purpose: time and distance are not the same

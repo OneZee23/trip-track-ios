@@ -17,7 +17,24 @@ struct TripCommentsScreen: View {
     var startFocused: Bool = false
     var onError: (String) -> Void
 
-    @State private var detent: PresentationDetent = .medium
+    /// The sheet hugs its content instead of standing at a fixed half-screen.
+    /// A thread of three messages left a beige field below the card that read
+    /// as something failing to load rather than as a thread that is simply
+    /// short. `.large` stays available by drag, and the system clamps a
+    /// `.height` bigger than the screen, so a long thread behaves as before.
+    @State private var detent: PresentationDetent = .height(Self.minimumHeight)
+    @State private var headerHeight: CGFloat = 0
+    @State private var bodyHeight: CGFloat = 0
+
+    /// Below this the sheet is too small to be worth being a sheet — an empty
+    /// thread is a heading, one grey sentence and a composer.
+    private static let minimumHeight: CGFloat = 260
+
+    /// Header + content, floored. Not capped: `.height` above the maximum is
+    /// clamped by the system, so a long thread lands at full height on its own.
+    private var fitted: CGFloat {
+        max(headerHeight + bodyHeight, Self.minimumHeight)
+    }
     /// The heading's «· N», kept live by the section below rather than frozen
     /// at whatever it was when the sheet opened.
     @State private var count: Int
@@ -69,6 +86,7 @@ struct TripCommentsScreen: View {
             .padding(.horizontal, 20)
             .padding(.top, 20)
             .padding(.bottom, 12)
+            .background { heightReader(HeaderHeightKey.self) }
 
             ScrollView {
                 TripCommentsSection(
@@ -81,18 +99,30 @@ struct TripCommentsScreen: View {
                     // never going to accept it.
                     onGuestInputTap: { signInPrompt = .comment },
                     onCountChange: { count = $0 },
+                    // Typing needs the room a fitted sheet does not have: at
+                    // three messages tall the keyboard would cover the very
+                    // field it was raised for.
+                    onComposerFocused: { detent = .large },
                     startFocused: startFocused,
                     onError: onError,
                     isPreview: false
                 )
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
+                .background { heightReader(BodyHeightKey.self) }
             }
             .scrollDismissesKeyboard(.interactively)
         }
         .background(c.bg)
         .dismissesKeyboardOnTapAnywhere()
-        .presentationDetents([.medium, .large], selection: $detent)
+        .onPreferenceChange(HeaderHeightKey.self) { headerHeight = $0 }
+        .onPreferenceChange(BodyHeightKey.self) { bodyHeight = $0 }
+        .onChange(of: fitted) { _, height in
+            // Never yank someone out of the tall detent they dragged to.
+            guard detent != .large else { return }
+            detent = .height(height)
+        }
+        .presentationDetents([.height(fitted), .large], selection: $detent)
         .presentationDragIndicator(.visible)
         .sheet(item: $signInPrompt) { action in
             SignInPromptSheet(action: action)
@@ -107,6 +137,30 @@ struct TripCommentsScreen: View {
         .onAppear {
             // Typing needs the room; browsing does not.
             if startFocused { detent = .large }
+        }
+    }
+}
+
+/// Measured heights of the two halves, so the sheet can be as tall as what it
+/// actually contains.
+private struct HeaderHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct BodyHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private extension View {
+    func heightReader<K: PreferenceKey>(_ key: K.Type) -> some View where K.Value == CGFloat {
+        GeometryReader { geo in
+            Color.clear.preference(key: key, value: geo.size.height)
         }
     }
 }

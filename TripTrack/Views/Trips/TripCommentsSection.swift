@@ -29,6 +29,9 @@ struct TripCommentsSection: View {
     /// title sits next to its close button, so it cannot read the count off
     /// this view without being told.
     var onCountChange: ((Int) -> Void)? = nil
+    /// The composer took focus — a parent sizing itself to this view needs to
+    /// make room for the keyboard before it covers the field.
+    var onComposerFocused: (() -> Void)? = nil
     /// Raise the keyboard as soon as the sheet is up — set when the user came
     /// in by tapping the write row.
     var startFocused: Bool = false
@@ -239,6 +242,9 @@ struct TripCommentsSection: View {
         }
         .onChange(of: displayCount, initial: true) { _, count in
             onCountChange?(count)
+        }
+        .onChange(of: composerFocused) { _, focused in
+            if focused { onComposerFocused?() }
         }
         .task {
             guard startFocused, !isPreview else { return }

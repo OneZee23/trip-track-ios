@@ -32,6 +32,14 @@ struct RouteMapView: UIViewRepresentable {
     var speeds: [Double] = []
     var isInteractive: Bool = false
     var fogCutoffDate: Date?
+    /// Whether the personal fog-of-war belongs on this map at all.
+    ///
+    /// A nil `fogCutoffDate` used to mean "fog from EVERYTHING I have ever
+    /// visited", which is right for my own maps and badly wrong for someone
+    /// else's trip: their route came out dimmed by MY exploration — and since
+    /// I have never driven where they drove, that meant dimmed end to end.
+    /// The two meanings needed separating; this is the one that says "no fog".
+    var showsFog: Bool = true
     /// When true, disable gap-splitting. Preview polylines from the social
     /// feed are already RDP-simplified — points can be several km apart,
     /// which the 1 km gap threshold treats as discontinuities and leaves the
@@ -164,14 +172,16 @@ struct RouteMapView: UIViewRepresentable {
                 mapView.setVisibleMapRect(Self.floored(unionRect), edgePadding: insets, animated: false)
 
                 // Add fog of war overlay (below route polylines)
-                let visitedHashes: Set<String>
-                if let cutoff = fogCutoffDate {
-                    visitedHashes = TerritoryManager().visitedHashes(before: cutoff)
-                } else {
-                    visitedHashes = TerritoryManager().visitedGeohashes
-                }
-                if let fog = FogPolygonBuilder.build(visitedHashes: visitedHashes, visibleRect: mapView.visibleMapRect) {
-                    mapView.insertOverlay(fog, at: 0, level: .aboveRoads)
+                if showsFog {
+                    let visitedHashes: Set<String>
+                    if let cutoff = fogCutoffDate {
+                        visitedHashes = TerritoryManager().visitedHashes(before: cutoff)
+                    } else {
+                        visitedHashes = TerritoryManager().visitedGeohashes
+                    }
+                    if let fog = FogPolygonBuilder.build(visitedHashes: visitedHashes, visibleRect: mapView.visibleMapRect) {
+                        mapView.insertOverlay(fog, at: 0, level: .aboveRoads)
+                    }
                 }
             }
         }

@@ -44,6 +44,11 @@ final class RoutePlaybackController: NSObject, ObservableObject {
     /// passed. Used by the map view to decide whether to redraw the
     /// trail polyline. -1 = trail not yet rendered.
     @Published private(set) var currentTrailIndex: Int = -1
+    /// 0…1 through the crawl. Published so the transport bar can show a
+    /// progress line: without one the bar was a lone play button in an
+    /// otherwise empty plaque, which reads as something that failed to load
+    /// rather than as a playback with no clock.
+    @Published private(set) var progress: Double = 0
 
     private var displayLink: CADisplayLink?
 
@@ -159,6 +164,7 @@ final class RoutePlaybackController: NSObject, ObservableObject {
             displayLink = nil
             currentCoord = resampled.last
             currentTrailIndex = trailHead.last ?? -1
+            self.progress = 1
             let myGen = generation
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(1200))
@@ -166,6 +172,7 @@ final class RoutePlaybackController: NSObject, ObservableObject {
                 self.currentCoord = nil
                 self.currentTrailIndex = -1
                 self.isPlaying = false
+                self.progress = 0
                 self.resampled.removeAll(keepingCapacity: false)
                 self.trailHead.removeAll(keepingCapacity: false)
             }
@@ -174,6 +181,7 @@ final class RoutePlaybackController: NSObject, ObservableObject {
         let idx = min(resampled.count - 1, max(0, Int(progress * Double(resampled.count))))
         currentCoord = resampled[idx]
         currentTrailIndex = trailHead[idx]
+        self.progress = progress
     }
 
     func stop() {
@@ -185,5 +193,6 @@ final class RoutePlaybackController: NSObject, ObservableObject {
         currentCoord = nil
         currentTrailIndex = -1
         isPlaying = false
+        progress = 0
     }
 }

@@ -643,9 +643,11 @@ struct TripDetailView: View {
                 speeds: cachedSpeeds,
                 timestamps: replayInput.timestamps,
                 replayCoordinates: replayInput.coords,
+                replaySpeeds: replayInput.speeds,
                 distanceMeters: trip?.distance ?? 0,
                 isOwnTrip: isOwn,
-                fogCutoffDate: isOwn ? trip?.endDate : nil,
+                fogCutoffDate: trip?.endDate,
+                showsFog: isOwn,
                 treatAsPreview: isPreviewRoute,
                 language: lang.language
             )
@@ -1273,7 +1275,8 @@ struct TripDetailView: View {
                         isInteractive: true,
                         // Our own territory fog has no business over someone
                         // else's route.
-                        fogCutoffDate: isOwn ? trip.endDate : nil,
+                        fogCutoffDate: trip.endDate,
+                        showsFog: isOwn,
                         treatAsPreview: isPreviewRoute,
                     )
                 } else {

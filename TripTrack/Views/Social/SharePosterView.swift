@@ -273,16 +273,21 @@ struct SharePosterView: View {
 
     private func metric(_ value: String, unit: String?, s: CGFloat) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 2 * s) {
+            // No `fixedSize` on either half. It was here to stop «68.0»
+            // breaking across two lines, but a fixed-size Text cannot shrink,
+            // so `minimumScaleFactor` above had nothing to work with and the
+            // row simply overflowed the card instead: on a 142 km trip the
+            // last metric's «км/ч» was pushed clean off the poster, leaving a
+            // bare «142» against the edge. `lineLimit(1)` alone stops the
+            // wrapping, and scaling now does what it was always meant to.
             Text(value)
                 .font(.system(size: 17 * s, weight: .heavy).monospacedDigit())
                 .tracking(-0.3 * s)
                 .foregroundStyle(.white)
-                .fixedSize(horizontal: true, vertical: false)
             if let unit {
                 Text(unit)
                     .font(.system(size: 9 * s, weight: .bold))
                     .foregroundStyle(.white.opacity(0.7))
-                    .fixedSize(horizontal: true, vertical: false)
             }
         }
     }
