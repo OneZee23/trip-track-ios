@@ -441,6 +441,14 @@ private struct ChartScrub<Tooltip: View>: ViewModifier {
                                     x: centreX(for: sel, in: plot),
                                     y: centreY(for: sel, in: plot)
                                 )
+                                // The bubble itself opts out of hit testing,
+                                // but the measuring backdrop wrapped around it
+                                // here does not — and `Color.clear` takes
+                                // touches in SwiftUI. Left alone it parked a
+                                // dead patch of chart wherever the readout had
+                                // last landed, so the chart stopped answering
+                                // exactly where you had just touched it.
+                                .allowsHitTesting(false)
                         }
                     }
             }
