@@ -244,6 +244,19 @@ final class APISyncTransport: SyncTransport {
             repo.markUnpublished(tripId: id)
             return
         }
+        // Bring home anything the device does not have a copy of, BEFORE the
+        // server loses its own. Taking a trip private with Cloud Sync off
+        // means «no trace on the server», and the server honours that by
+        // destroying the trip and its photo blobs. For a photo whose local
+        // file was already gone, that blob was the last copy in existence —
+        // and the flip silently took the picture with it.
+        //
+        // Deliberately BEFORE the delete and deliberately allowed to throw:
+        // a failed rescue leaves the operation in the queue to be retried, and
+        // the trip stays on the server until the pictures are safe. The trip
+        // is already private on this device by then, so nobody sees it in the
+        // meantime — the only thing still pending is the erasure.
+        try await rescueServerOnlyPhotos(tripId: id)
         let req = TripDeleteRequest(id: id, conflictVersion: Int(entity.conflictVersion))
         do {
             let _: EmptyResponse = try await client.post(APIEndpoint.tripDelete, body: req)
@@ -251,6 +264,45 @@ final class APISyncTransport: SyncTransport {
             // Already gone — treat as success, fall through to local cleanup.
         }
         repo.markUnpublished(tripId: id)
+    }
+
+    /// Downloads every photo of this trip that exists only on the server and
+    /// writes it into local storage.
+    ///
+    /// The original is preferred and the thumbnail is the fallback — a smaller
+    /// picture is still the picture, and losing it entirely is the outcome
+    /// this exists to prevent.
+    private func rescueServerOnlyPhotos(tripId: UUID) async throws {
+        let ids = repo.serverOnlyPhotoIds(tripId: tripId)
+        guard !ids.isEmpty else { return }
+        for photoId in ids {
+            let data = try await downloadPhotoData(photoId: photoId)
+            guard let image = UIImage(data: data),
+                  let filename = PhotoStorageService.savePhoto(image, for: tripId)
+            else {
+                // Undecodable or unwritable: refuse to proceed rather than
+                // delete the only copy. The op retries.
+                throw APIError.transport("photo rescue failed for \(photoId)")
+            }
+            repo.adoptRescuedPhoto(id: photoId, filename: filename)
+        }
+    }
+
+    private func downloadPhotoData(photoId: UUID) async throws -> Data {
+        do {
+            return try await fetchPhotoBytes(photoId: photoId, type: .original)
+        } catch {
+            return try await fetchPhotoBytes(photoId: photoId, type: .thumbnail)
+        }
+    }
+
+    private func fetchPhotoBytes(photoId: UUID, type: PhotoType) async throws -> Data {
+        let url = try await photos.fetchPresignedURL(photoId: photoId, type: type)
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw APIError.transport("photo download failed")
+        }
+        return data
     }
 
     // MARK: Vehicle

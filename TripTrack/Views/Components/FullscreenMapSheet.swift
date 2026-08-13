@@ -159,7 +159,12 @@ struct FullscreenMapSheet: View {
                         dismiss()
                     }
                     Spacer(minLength: 0)
-                    if canReplay { cameraToggle }
+                    // Riding with the car has nothing to do with WHICH kind of
+                    // playback is running — the car moves either way. Gating
+                    // this on the timestamped one made someone else's trip a
+                    // visibly poorer screen than your own for no reason the
+                    // viewer could see.
+                    if canReplay || canCrawl { cameraToggle }
                 }
                 // The timecode has to read as centred on the bar, and between
                 // two Spacers it would not be: the camera toggle makes the

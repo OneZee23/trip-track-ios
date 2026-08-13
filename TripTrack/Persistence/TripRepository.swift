@@ -24,6 +24,9 @@ protocol TripRepository {
     func updateTitle(for tripId: UUID, title: String)
     func updateNotes(for tripId: UUID, notes: String)
     func updatePrivacy(for tripId: UUID, isPrivate: Bool)
+    /// Photos whose only copy is the server's — see the implementation.
+    func serverOnlyPhotoIds(tripId: UUID) -> [UUID]
+    func adoptRescuedPhoto(id: UUID, filename: String)
     func updateVehicle(for tripId: UUID, vehicleId: UUID?)
     func updateCompanions(for tripId: UUID, companions: [TripCompanion])
     /// Wipes the on-device companions cache (`companionsJSON`) for EVERY
@@ -479,6 +482,36 @@ final class CoreDataTripRepository: TripRepository {
         let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
         req.predicate = NSPredicate(format: "trip.id == %@", tripId as CVarArg)
         return (try? context.fetch(req))?.compactMap(\.id) ?? []
+    }
+
+    /// Photos of this trip whose ONLY copy is the server's.
+    ///
+    /// Asked immediately before the trip is taken off the server, because that
+    /// removal destroys the server's blobs: anything in this list is about to
+    /// stop existing anywhere unless it is pulled down first.
+    func serverOnlyPhotoIds(tripId: UUID) -> [UUID] {
+        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "trip.id == %@", tripId as CVarArg)
+        guard let rows = try? context.fetch(req) else { return [] }
+        return rows.compactMap { row -> UUID? in
+            guard let id = row.id else { return nil }
+            guard row.remoteURL != nil || row.thumbnailURL != nil else { return nil }
+            let filename = row.filename ?? ""
+            guard !PhotoStorageService.localFileExists(filename: filename) else { return nil }
+            return id
+        }
+    }
+
+    /// Points a photo row at a file this device now holds, and clears the
+    /// server URLs it no longer has any claim to.
+    func adoptRescuedPhoto(id: UUID, filename: String) {
+        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let row = try? context.fetch(req).first else { return }
+        row.filename = filename
+        row.remoteURL = nil
+        row.thumbnailURL = nil
+        persistenceController.save()
     }
 
     func markUnpublished(tripId: UUID) {
