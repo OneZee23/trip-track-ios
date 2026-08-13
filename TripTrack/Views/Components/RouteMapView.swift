@@ -53,6 +53,13 @@ struct RouteMapView: UIViewRepresentable {
     /// we only do it when the trail tip actually advances to a new
     /// real waypoint.
     var playbackTrailIndex: Int = -1
+    /// Coordinates the PLAYBACK walks, when they differ from the ones the
+    /// route is drawn from. The trail is rebuilt from scratch every time the
+    /// head passes a waypoint, so a raw ten-hour track (tens of thousands of
+    /// points) turns that into tens of thousands of rebuilds of an
+    /// ever-longer polyline. Drawing wants every point; playback wants a few
+    /// hundred.
+    var playbackCoords: [CLLocationCoordinate2D]? = nil
     /// Camera rides with the playback head instead of framing the whole route.
     /// The car then sits at a FIXED point on screen — the middle — which is
     /// what lets the replay draw a speed bubble over it without projecting
@@ -203,7 +210,7 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.applyPlayback(
             carCoord: playbackCarCoord,
             trailIndex: playbackTrailIndex,
-            coords: coordinates,
+            coords: playbackCoords ?? coordinates,
             mapView: mapView
         )
         context.coordinator.applyCamera(
@@ -396,18 +403,45 @@ struct RouteMapView: UIViewRepresentable {
         /// trail's tail actually advanced.
         var playbackLastIndex: Int = -1
 
-        /// Pre-rendered pixel-car bitmap for the playback annotation.
-        /// Drawn once at first access; reused across every annotation
-        /// view dequeue. Saves a 36×36 `UIGraphicsImageRenderer` pass
-        /// each time MapKit recycles the view.
-        private static let playbackCarImage: UIImage? = {
-            guard let img = UIImage(named: "PixelCar") else { return nil }
-            let target = CGSize(width: 36, height: 36)
+        /// Pre-rendered pixel-car bitmaps for the playback annotation, one
+        /// per facing. Drawn once at first access; reused across every
+        /// annotation view dequeue.
+        ///
+        /// TWO fixes live in this renderer. The sprite is 254×188 and was
+        /// drawn into a 36×36 square, which squashed it horizontally; and
+        /// pixel art scaled with the default interpolation comes out
+        /// blurred. Both are already handled everywhere else the asset is
+        /// used (the rings, the poster canvas) — this call site had been
+        /// missed.
+        private static let playbackCarRight: UIImage? = renderCar(mirrored: false)
+        private static let playbackCarLeft: UIImage? = renderCar(mirrored: true)
+
+        /// The sprite is drawn from the SIDE, so it must never be rotated to
+        /// the course — on a northbound leg the car would stand on its nose.
+        /// A side view has exactly two honest states, and mirroring is how
+        /// you get the second one.
+        private static func renderCar(mirrored: Bool) -> UIImage? {
+            guard let img = UIImage(named: "PixelCar"), img.size.width > 0, img.size.height > 0
+            else { return nil }
+            let maxSide: CGFloat = 40
+            let scale = min(maxSide / img.size.width, maxSide / img.size.height)
+            let target = CGSize(width: img.size.width * scale, height: img.size.height * scale)
             let renderer = UIGraphicsImageRenderer(size: target)
-            return renderer.image { _ in
+            return renderer.image { ctx in
+                ctx.cgContext.interpolationQuality = .none
+                if mirrored {
+                    ctx.cgContext.translateBy(x: target.width, y: 0)
+                    ctx.cgContext.scaleBy(x: -1, y: 1)
+                }
                 img.draw(in: CGRect(origin: .zero, size: target))
             }
-        }()
+        }
+
+        /// Which way the car is currently drawn. Flipped only when the
+        /// sideways component of travel is decisive — on a due-north leg a
+        /// bare `dx > 0` test would flicker the sprite left and right on GPS
+        /// noise alone.
+        var playbackFacesRight = true
 
         func applyPlayback(
             carCoord: CLLocationCoordinate2D?,
@@ -478,12 +512,33 @@ struct RouteMapView: UIViewRepresentable {
             // without any overlay churn. Frame cadence comes from the
             // controller's CADisplayLink.
             if let annotation = playbackCar {
+                updateCarFacing(from: annotation.coordinate, to: car, mapView: mapView)
                 annotation.coordinate = car
             } else {
                 let annotation = PlaybackCarAnnotation(coordinate: car)
                 mapView.addAnnotation(annotation)
                 playbackCar = annotation
             }
+        }
+
+        /// Turn the car to face where it is going. Sideways travel only —
+        /// the sprite is a side view, so the two states are "facing right"
+        /// and "facing left", and the threshold keeps a due-north leg from
+        /// flipping it back and forth on GPS jitter.
+        private func updateCarFacing(
+            from previous: CLLocationCoordinate2D,
+            to next: CLLocationCoordinate2D,
+            mapView: MKMapView
+        ) {
+            let dx = next.longitude - previous.longitude
+            let dy = next.latitude - previous.latitude
+            guard abs(dx) > abs(dy) * 0.3, abs(dx) > 1e-7 else { return }
+            let facesRight = dx > 0
+            guard facesRight != playbackFacesRight else { return }
+            playbackFacesRight = facesRight
+            guard let annotation = playbackCar,
+                  let view = mapView.view(for: annotation) else { return }
+            view.image = facesRight ? Self.playbackCarRight : Self.playbackCarLeft
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -548,7 +603,7 @@ struct RouteMapView: UIViewRepresentable {
                     ?? MKAnnotationView(annotation: annotation, reuseIdentifier: id)
                 view.annotation = annotation
                 view.canShowCallout = false
-                view.image = Self.playbackCarImage
+                view.image = playbackFacesRight ? Self.playbackCarRight : Self.playbackCarLeft
                 view.centerOffset = .zero
                 view.layer.zPosition = 1000
                 return view

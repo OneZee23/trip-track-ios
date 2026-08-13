@@ -40,7 +40,6 @@ struct TripDetailView: View {
     @State private var myReaction: String?
     @State private var showReactionPicker = false
     /// The fullscreen cinema replay (canon 117:533).
-    @State private var showReplay = false
     @State private var showPhotoPicker = false
     @State private var pickedImages: [UIImage] = []
     @State private var selectedPhotoIndex: Int?
@@ -83,6 +82,8 @@ struct TripDetailView: View {
     /// the top bar's glass→toolbar morph. Quantized in steps of 0.05 before
     /// it lands here (see `DetailScrollOffsetKey`'s handler).
     @State private var heroProgress: Double = 0
+    /// Bumped by pull-to-refresh; the comments section reloads on change.
+    @State private var refreshToken = 0
     /// Fix 3: confirmation for a companion leaving someone else's trip.
     @State private var showLeaveConfirm = false
     /// Fix 3: guards `leaveTrip()` against a double-tap firing two
@@ -116,7 +117,6 @@ struct TripDetailView: View {
     /// stopped cleanly on `.onDisappear`. Since the fullscreen replay
     /// (117:533) shipped, this only runs for preview-only trips whose
     /// track carries no timestamps — the cinema screen needs them.
-    @StateObject private var routePlayback = RoutePlaybackController()
     /// Presents the fullscreen cinema replay (Figma 117:533). Timestamped
     /// own trips only; preview-only trips fall back to the inline crawl.
     @ObservedObject private var auth = AuthService.shared
@@ -185,12 +185,110 @@ struct TripDetailView: View {
         isOwn || !isPrivate
     }
 
+    /// The scroll view and everything attached to it.
+    ///
+    /// Split from `body` for a hard reason, not tidiness: with the refresh
+    /// modifier added, the single expression in `body` grew past what the
+    /// Swift type-checker will solve in reasonable time and the build failed
+    /// outright.
+    ///
+    /// Pull to refresh is here. Everything on this screen that somebody else
+    /// can change — a companion accepting, a reaction, a comment, a photo the
+    /// owner added — used to update only on entry, so the way to see it was
+    /// to leave the screen and come back. The gesture is made OF the
+    /// over-scroll bounce, which is why the bounce suppressor that used to be
+    /// attached here is gone; the dark filler above the map (the reason
+    /// bounce was suppressed) does that job on its own.
+    private func detailScroll(trip: Trip, c: AppTheme.Colors) -> some View {
+        ScrollView { scrollContent(trip: trip, c: c) }
+            .coordinateSpace(name: "detailScroll")
+            .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .refreshable { await refreshDetail() }
+    }
+
+    /// The scrollable body, lifted out of `body`.
+    ///
+    /// Not a style choice: with the refresh modifier added, the single
+    /// expression in `body` grew past what the type-checker will solve in
+    /// reasonable time and the build failed outright. Splitting it is the
+    /// documented fix.
+    @ViewBuilder
+    private func scrollContent(trip: Trip, c: AppTheme.Colors) -> some View {
+        VStack(spacing: 0) {
+            heroSection(trip: trip)
+                .frame(height: posterHeight)
+                // How far the map has scrolled away, for the top bar's
+                // glass→toolbar morph. Read from a `Color.clear` in the
+                // BACKGROUND, never from inside the map's own subtree: this
+                // fires on every frame of a scroll, and the map is an
+                // `MKMapView` with a display link running.
+                .background {
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: DetailScrollOffsetKey.self,
+                            value: geo.frame(in: .named("detailScroll")).minY
+                        )
+                    }
+                }
+
+            // What the route's colours mean — a line of type in the seam
+            // under the map, not a control on it.
+            if cachedCoordinates.count > 1, !cachedSpeeds.isEmpty {
+                RouteSpeedKeyStrip(language: lang.language)
+            }
+
+            infoPanel(trip: trip, c: c)
+                .background(c.bg)
+        }
+        .background(alignment: .top) {
+            // Over-scroll filler above the map (release value).
+            Color(UIColor(white: 0.12, alpha: 1.0))
+                .frame(height: posterHeight + 1000)
+                .offset(y: -1000)
+        }
+    }
+
+    /// Pull-to-refresh: re-ask the server for everything on this screen that
+    /// somebody ELSE can change.
+    ///
+    /// Deliberately no local reload — trips, photos on disk and the track
+    /// itself come from CoreData and cannot go stale behind your back. What
+    /// can: the companion roster (someone accepted or declined), reactions,
+    /// the discussion, and photos a companion added to your trip.
+    ///
+    /// A foreign trip's OWN fields (its title, description, privacy) cannot
+    /// be refreshed at all yet: there is no endpoint that returns one
+    /// non-owned trip by id — the client only ever receives them in pages of
+    /// `/companions/my-trips` and the feed. Rather than page through those
+    /// looking for one id, this refreshes what it honestly can.
+    private func refreshDetail() async {
+        await withTaskGroup(of: Void.self) { group in
+            if companionsGate == .allowed {
+                group.addTask { @MainActor in
+                    _ = try? await CompanionsStore.shared.list(
+                        tripId: tripId, treatTripNotFoundAsEmpty: isOwn)
+                }
+            }
+            if !(trip?.isPrivate ?? true) || !isOwn {
+                group.addTask { @MainActor in await loadReactions() }
+            }
+            if auth.isSignedIn, trip?.isOnServer == true || !isOwn {
+                group.addTask { @MainActor in await loadRemotePhotos() }
+            }
+            // The comments thread owns its own store, so it is refreshed by
+            // bumping the token its load task keys on rather than from here.
+            refreshToken &+= 1
+        }
+    }
+
     /// What the pinned bar says once the map has scrolled away — the same
     /// answer `titleBlock` gives, so the bar and the heading under it can't
     /// name the trip differently.
     private func barTitle(for trip: Trip) -> String {
-        let named = (trip.title?.trimmingCharacters(in: .whitespacesAndNewlines))
-            .map { !$0.isEmpty } ?? false
+        let trimmed = trip.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let named = (trimmed.map { !$0.isEmpty } ?? false)
+            && !TripAutoTitle.isAuto(trimmed, startDate: trip.startDate)
         if named { return trip.title ?? "" }
         if let region = RegionDisplay.localized(trip.region, language: lang.language),
            !region.isEmpty { return region }
@@ -440,46 +538,7 @@ struct TripDetailView: View {
                 loadErrorState(c)
             } else if let trip {
                 ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 0) {
-                        heroSection(trip: trip)
-                            .frame(height: posterHeight)
-                            // How far the map has scrolled away, for the top
-                            // bar's glass→toolbar morph. Read from a
-                            // `Color.clear` in the BACKGROUND, never from
-                            // inside the map's own subtree: this fires on
-                            // every frame of a scroll, and the map is an
-                            // `MKMapView` with a display link running.
-                            .background {
-                                GeometryReader { geo in
-                                    Color.clear.preference(
-                                        key: DetailScrollOffsetKey.self,
-                                        value: geo.frame(in: .named("detailScroll")).minY
-                                    )
-                                }
-                            }
-
-                        // What the route's colours mean — a line of type in
-                        // the seam under the map, not a control on it.
-                        if cachedCoordinates.count > 1, !cachedSpeeds.isEmpty {
-                            RouteSpeedKeyStrip(language: lang.language)
-                        }
-
-                        // Bottom info panel
-                        infoPanel(trip: trip, c: c)
-                            .background(c.bg)
-                    }
-                    .background(alignment: .top) {
-                        // Over-scroll filler above the map (release value).
-                        Color(UIColor(white: 0.12, alpha: 1.0))
-                            .frame(height: posterHeight + 1000)
-                            .offset(y: -1000)
-                    }
-                }
-                .coordinateSpace(name: "detailScroll")
-                .scrollIndicators(.hidden)
-                .scrollDismissesKeyboard(.interactively)
-                .background(ScrollBounceDisabler())
+                detailScroll(trip: trip, c: c)
                 .task { await scrollToCommentsIfRequested(proxy) }
                 }
 
@@ -553,9 +612,23 @@ struct TripDetailView: View {
         ))
         .hideAppTabBar()
         .fullScreenCover(isPresented: $isMapFullscreen) {
+            // Replay lives HERE now, not on a screen of its own: you open
+            // the map, press play, and watch the drive on the map you were
+            // already looking at. Timestamps decide whether it can — a
+            // preview route without per-point times gets the plain map.
+            // The route is drawn at full resolution; the REPLAY walks the
+            // downsampled series (`replayInput`, ≤300 points). The trail
+            // overlay is rebuilt every time the playhead passes a waypoint,
+            // so handing it a raw ten-hour track would mean tens of thousands
+            // of rebuilds of an ever-growing polyline — the exact reason this
+            // cap was written in the first place.
             FullscreenMapSheet(
                 coordinates: cachedCoordinates,
                 speeds: cachedSpeeds,
+                timestamps: replayInput.timestamps,
+                replayCoordinates: replayInput.coords,
+                distanceMeters: trip?.distance ?? 0,
+                isOwnTrip: isOwn,
                 fogCutoffDate: isOwn ? trip?.endDate : nil,
                 treatAsPreview: isPreviewRoute,
                 language: lang.language
@@ -582,7 +655,6 @@ struct TripDetailView: View {
             Button(AppStrings.companionsLeaveTrip(lang.language), role: .destructive) { leaveTrip() }
             Button(AppStrings.cancel(lang.language), role: .cancel) {}
         }
-        .onDisappear { routePlayback.stop() }
         .task(id: tripId) {
             if trip == nil {
                 if let local = viewModel.tripDetail(id: tripId) {
@@ -737,19 +809,6 @@ struct TripDetailView: View {
                     } : nil,
                     onDismiss: { selectedPhotoIndex = nil }
                 )
-            }
-        }
-        .fullScreenCover(isPresented: $showReplay) {
-            if let t = trip {
-                let replay = replayInput
-                TripReplayView(
-                    trip: t,
-                    coordinates: replay.coords,
-                    speeds: replay.speeds,
-                    timestamps: replay.timestamps
-                )
-                .environmentObject(lang)
-                .environmentObject(themeManager)
             }
         }
         .overlay {
@@ -1147,7 +1206,7 @@ struct TripDetailView: View {
     // real interactive street map with the speed-colored route, inline
     // playback + fullscreen expand — NOT the Figma navy poster with the
     // pixel car («что за машинка по маршруту? Надо как в релизной версии»).
-    // The Figma poster/cinema treatment stays only in TripReplayView.
+    // The Figma poster/cinema treatment now lives in the fullscreen map.
 
     @ViewBuilder
     private func heroSection(trip: Trip) -> some View {
@@ -1163,8 +1222,6 @@ struct TripDetailView: View {
                         // else's route.
                         fogCutoffDate: isOwn ? trip.endDate : nil,
                         treatAsPreview: isPreviewRoute,
-                        playbackCarCoord: routePlayback.currentCoord,
-                        playbackTrailIndex: routePlayback.currentTrailIndex
                     )
                 } else {
                     c.cardAlt
@@ -1196,77 +1253,6 @@ struct TripDetailView: View {
         }
     }
 
-    /// «Прожить заново» — the cinema replay (canon 117:533).
-    ///
-    /// Two homes ago it was a white pill floating on the map's bottom edge,
-    /// overlapping the expand button and covering the route it offers to
-    /// replay. One home ago it was a full-width solid-accent bar at the top
-    /// of the panel — which fixed the collision and created a new problem:
-    /// it became the loudest thing on the screen and sat exactly where the
-    /// thumb lands after the chips, so it got hit by accident.
-    ///
-    /// Now it is tonal and content-width: the accent still names it as THE
-    /// action, but it stops competing with the trip itself and the
-    /// mis-tappable area is about a third of what it was. The pill needs
-    /// per-point timestamps, so a preview-only trip keeps the inline crawl
-    /// instead — same rule as before.
-    @ViewBuilder
-    private func replayCTA(trip: Trip, c: AppTheme.Colors) -> some View {
-        if cachedCoordinates.count > 1 {
-            if cachedTimestamps.count > 1 {
-                Button {
-                    Haptics.tap()
-                    showReplay = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 13, weight: .bold))
-                        Text(isOwn
-                             ? AppStrings.reliveTrip(lang.language)
-                             : AppStrings.watchTrip(lang.language))
-                            .font(.system(size: 15, weight: .bold))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(AppTheme.accent)
-                    .padding(.horizontal, 18)
-                    .frame(height: 44)
-                    .background(Capsule().fill(AppTheme.accent.opacity(0.12)))
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("detail_replay")
-            } else {
-                Button {
-                    Haptics.tap()
-                    routePlayback.toggle(
-                        coords: cachedCoordinates,
-                        timestamps: cachedTimestamps.isEmpty ? nil : cachedTimestamps,
-                        distanceMeters: trip.distance
-                    )
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: routePlayback.isPlaying ? "stop.fill" : "play.fill")
-                            .font(.system(size: 14, weight: .bold))
-                        Text(routePlayback.isPlaying
-                             ? AppStrings.stop(lang.language)
-                             : (isOwn
-                                ? AppStrings.reliveTrip(lang.language)
-                                : AppStrings.watchTrip(lang.language)))
-                            .font(.system(size: 15, weight: .semibold))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(c.text)
-                    .padding(.horizontal, 18)
-                    .frame(height: 44)
-                    .background(Capsule().strokeBorder(c.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("detail_playback")
-            }
-        }
-    }
-
     /// Date-region line + title, on the theme background below the map.
     ///
     /// Read-only. Editing used to be scattered across this screen — a pencil on
@@ -1283,7 +1269,11 @@ struct TripDetailView: View {
         //   unnamed  → «14 ИЮНЯ» over «Краснодарский край»
         //
         // Either way every line carries something the others do not.
-        let named = (trip.title?.trimmingCharacters(in: .whitespacesAndNewlines)).map { !$0.isEmpty } ?? false
+        // An auto-stamped date is not a name — see `TripAutoTitle.isAuto`.
+        // Treating it as one is what printed the same date three times.
+        let trimmed = trip.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let named = (trimmed.map { !$0.isEmpty } ?? false)
+            && !TripAutoTitle.isAuto(trimmed, startDate: trip.startDate)
         let region = RegionDisplay.localized(trip.region, language: lang.language)
         let eyebrow = TripDetailFormat.posterDateLine(
             date: trip.startDate,
@@ -1296,7 +1286,10 @@ struct TripDetailView: View {
             return formattedDateFallback(trip.startDate)
         }()
 
-        return VStack(alignment: .leading, spacing: 6) {
+        // 4, not 6: the pixel line is the title's eyebrow, not a line of its
+        // own. The block reads as one heading only when the gap inside it is
+        // smaller than the gap to the chips under it.
+        return VStack(alignment: .leading, spacing: 4) {
             // The pixel face, as the canon sets it (117:1078). It is the app's
             // signature marker for "this is a trip", and it appears here and on
             // the feed card and nowhere else — rendered in the system font it
@@ -1328,12 +1321,10 @@ struct TripDetailView: View {
             // Heading and chips are one block — they describe the same thing.
             // At the body's 22pt rhythm they read as two separate sections with
             // a hole between them.
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
                 titleBlock(trip: trip, c: c)
                 chipsRow(trip: trip, c: c)
             }
-
-            replayCTA(trip: trip, c: c)
 
             VStack(alignment: .leading, spacing: 10) {
                 DetailSectionHeader(text: AppStrings.detailsSection(lang.language))
@@ -1435,7 +1426,8 @@ struct TripDetailView: View {
                     onError: { msg in
                         toastItem = ToastItem(type: .error, message: msg)
                     },
-                    highlightCommentId: highlightedCommentId
+                    highlightCommentId: highlightedCommentId,
+                    refreshToken: refreshToken
                 )
                 .id(Self.commentsAnchor)
             }
@@ -1454,13 +1446,13 @@ struct TripDetailView: View {
     private func chipsRow(trip: Trip, c: AppTheme.Colors) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                // Day and hours in one chip. «12:31 – 13:18» alone answers "how
-                // long" and leaves "when" to the poster line above, which is off
-                // screen the moment you scroll to the numbers — but as two
-                // separate chips the day and the clock read as two unrelated
-                // facts, and the row ran out of width before the car.
+                // Hours only. The day used to ride along here because the
+                // poster line above scrolls away — but that line now sits
+                // forty points up, in the same block, and printing «14 июня»
+                // under «14 ИЮНЯ» was two thirds of why this block read as
+                // noise.
                 DetailChipSurface {
-                    Text("\(Self.chipDateFormatter(for: lang.language).string(from: trip.startDate)), \(timeRange(trip))")
+                    Text(timeRange(trip))
                         .monospacedDigit()
                 }
 
@@ -1477,25 +1469,6 @@ struct TripDetailView: View {
         .scrollClipDisabled()
     }
 
-    /// «14 июня» / «14 Jun» — day and month, no year: a trip from another year
-    /// is rare enough that the poster line above can carry it.
-    private static func chipDateFormatter(for lang: LanguageManager.Language) -> DateFormatter {
-        lang == .ru ? chipDateRU : chipDateEN
-    }
-
-    private static let chipDateRU: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "d MMMM"
-        return f
-    }()
-
-    private static let chipDateEN: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "d MMM"
-        return f
-    }()
 
     private var tripVehicle: Vehicle? {
         if let vid = trip?.vehicleId {
@@ -2552,28 +2525,6 @@ struct TripDetailView: View {
 }
 
 // MARK: - Disable ScrollView Bounce
-
-private struct ScrollBounceDisabler: UIViewRepresentable {
-    func makeUIView(context: Context) -> ScrollBounceFinderView {
-        ScrollBounceFinderView()
-    }
-    func updateUIView(_ uiView: ScrollBounceFinderView, context: Context) {}
-}
-
-private class ScrollBounceFinderView: UIView {
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        guard window != nil else { return }
-        var current: UIView? = self
-        while let parent = current?.superview {
-            if let scrollView = parent as? UIScrollView {
-                scrollView.bounces = false
-                return
-            }
-            current = parent
-        }
-    }
-}
 
 /// Gates the local-state reactor `.navigationDestination` so SwiftUI only
 /// sees it in contexts where we don't have a shared `pushPath` (i.e. the

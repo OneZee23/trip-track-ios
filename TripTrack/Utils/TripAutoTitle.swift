@@ -29,6 +29,23 @@ enum TripAutoTitle {
         return string(from: date, language: language)
     }
 
+    /// Whether this title is one the app stamped on, not one a person typed.
+    ///
+    /// The detail screen has a rule — a NAMED trip gets «14 ИЮНЯ · КРАСНОДАР.
+    /// КРАЙ» over its name, an unnamed one gets «14 ИЮНЯ» over its region —
+    /// and the rule was right, but every trip has a title, because saving
+    /// stamps the date as one. So the screen printed the same date three
+    /// times: pixel line, heading, and the chip below. Auto-titles are a
+    /// formatted start date and nothing else, which is exactly what
+    /// `localized` already recognises.
+    static func isAuto(_ title: String?, startDate: Date) -> Bool {
+        guard let title, !title.isEmpty else { return false }
+        let en = enFormatter.string(from: startDate)
+        let ruDotted = ruFormatter.string(from: startDate)
+        let ru = ruDotted.replacingOccurrences(of: ".", with: "")
+        return title == en || title == ru || title == ruDotted
+    }
+
     static func localized(_ title: String?, startDate: Date, language: LanguageManager.Language) -> String? {
         guard let title, !title.isEmpty else { return title }
         let en = enFormatter.string(from: startDate)

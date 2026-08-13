@@ -1,7 +1,8 @@
 import XCTest
 
 /// Screenshot tour of the surfaces added in this round: companions, the access
-/// picker inside the edit sheet, and the replay now that it plays over a map.
+/// picker inside the edit sheet, and the replay now that it plays inside the
+/// fullscreen map instead of on a screen of its own.
 ///
 /// Guarded rather than asserted where the app's own data decides what exists —
 /// a device with no timestamped trip has no replay to open, and that is not a
@@ -165,23 +166,44 @@ final class CompanionsAndReplayTests: XCTestCase {
         snap("72_edit_after_access")
     }
 
+    /// The replay has no screen of its own any more: it lives inside the
+    /// fullscreen map, so the route in is the map's expand button and the
+    /// play control on the chrome — `detail_replay` no longer exists.
     func test_replay_shows_map() {
         openOwnTrip()
 
-        let replay = app.buttons.matching(identifier: "detail_replay").firstMatch
-        guard replay.waitForExistence(timeout: 5) else {
-            // No timestamped track on this device — nothing to relive.
+        let expand = app.buttons.matching(identifier: "detail_map_expand").firstMatch
+        guard expand.waitForExistence(timeout: 6) else {
+            // A trip with no drawable route has no map to expand.
             return
         }
-        replay.tap()
+        expand.tap()
+        usleep(3_000_000)
+
+        // The map itself is device-independent: whatever the trip carries,
+        // the fullscreen chrome must be up.
+        XCTAssertTrue(
+            app.buttons.matching(identifier: "fullscreen_map_close")
+                .firstMatch.waitForExistence(timeout: 5),
+            "the fullscreen map must open with its close button"
+        )
+        snap("90_fullscreen_map")
+
+        let play = app.buttons.matching(identifier: "fullscreen_replay_play").firstMatch
+        guard play.waitForExistence(timeout: 4) else {
+            // No per-point timestamps on this device's trip — the fullscreen
+            // map is then only a map, and that is not a failure.
+            return
+        }
+        play.tap()
         usleep(4_000_000)
-        snap("90_replay_follow")
+        snap("91_replay_playing")
 
         let toggle = app.buttons.matching(identifier: "replay_camera_toggle").firstMatch
         if toggle.waitForExistence(timeout: 3), toggle.isHittable {
             toggle.tap()
             usleep(2_500_000)
-            snap("91_replay_overview")
+            snap("92_replay_follow")
         }
     }
 }
