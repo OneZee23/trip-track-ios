@@ -17,10 +17,18 @@ struct TripCommentsSection: View {
     /// until the first page tells us better. 0 on the own-trip screen —
     /// the local Trip model carries no comment total.
     var initialCount: Int = 0
-    /// Social screen only: called when a signed-OUT viewer taps the
-    /// composer — parent presents its SignInPromptSheet. nil on the
-    /// own-trip screen (composing there implies an account already).
+    /// Called when a signed-OUT viewer taps the composer — the parent
+    /// presents its SignInPromptSheet. Every screen that shows this section
+    /// wants one: an own trip is reachable signed out too («keep public and
+    /// sign out», a dead session), so there is no screen where composing can
+    /// be assumed to imply an account. Leaving it nil no longer LETS a guest
+    /// write (see `isGuestComposer`) — it only leaves them without a way to
+    /// sign in from here.
     var onGuestInputTap: (() -> Void)? = nil
+    /// Live «· N» for a parent that draws the heading itself — the sheet's
+    /// title sits next to its close button, so it cannot read the count off
+    /// this view without being told.
+    var onCountChange: ((Int) -> Void)? = nil
     /// Raise the keyboard as soon as the sheet is up — set when the user came
     /// in by tapping the write row.
     var startFocused: Bool = false
@@ -101,7 +109,12 @@ struct TripCommentsSection: View {
     private var content: some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(alignment: .leading, spacing: 10) {
-            DetailSectionHeader(text: AppStrings.commentsTitleN(lang.language, displayCount))
+            // Only on the detail: the full-thread sheet draws its own
+            // «Обсуждение · N» beside the close button, and rendering this
+            // one under it printed the same heading twice.
+            if isPreview {
+                DetailSectionHeader(text: AppStrings.commentsTitleN(lang.language, displayCount))
+            }
 
             VStack(spacing: 0) {
                 // Canon 545:520: an empty public thread invites rather than
@@ -144,7 +157,7 @@ struct TripCommentsSection: View {
                 if isPreview {
                     Button {
                         Haptics.tap()
-                        guard !(onGuestInputTap != nil && !auth.isSignedIn) else {
+                        guard !isGuestComposer else {
                             onGuestInputTap?()
                             return
                         }
@@ -224,6 +237,9 @@ struct TripCommentsSection: View {
             await store.load(tripId: tripId)
             await spotlightIfRequested()
         }
+        .onChange(of: displayCount, initial: true) { _, count in
+            onCountChange?(count)
+        }
         .task {
             guard startFocused, !isPreview else { return }
             // A beat, so the sheet has finished presenting before the keyboard
@@ -240,6 +256,7 @@ struct TripCommentsSection: View {
                 onError: onError
             )
             .environmentObject(lang)
+            .environmentObject(auth)
         }
         .confirmationDialog(
             AppStrings.deleteCommentConfirm(lang.language),
@@ -406,7 +423,7 @@ struct TripCommentsSection: View {
 
     private func composerRow(_ c: AppTheme.Colors) -> some View {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isGuest = onGuestInputTap != nil && !auth.isSignedIn
+        let isGuest = isGuestComposer
         return VStack(alignment: .leading, spacing: 6) {
             if let target = replyTarget {
                 replyChip(target, c: c)
@@ -504,9 +521,17 @@ struct TripCommentsSection: View {
         .padding(.leading, 38)
     }
 
-    /// Guests read but can't compose — also hides the per-row «Ответить».
+    /// Guests read but never compose — also hides the per-row «Ответить».
+    ///
+    /// The session is the whole question. This used to also require
+    /// `onGuestInputTap != nil`, which quietly made the gate depend on a
+    /// caller remembering to pass a closure — and the full-thread sheet did
+    /// not pass one. A signed-out viewer could type into it and send, and the
+    /// send died on the server with `USER_NOT_AUTH`: an action offered that
+    /// could not possibly work. Gating on the session alone means a call site
+    /// that forgets the closure gets an inert composer, not a live one.
     private var isGuestComposer: Bool {
-        onGuestInputTap != nil && !auth.isSignedIn
+        !auth.isSignedIn
     }
 
     private func sendDraft() {
