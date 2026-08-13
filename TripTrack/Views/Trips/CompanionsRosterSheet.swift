@@ -29,9 +29,10 @@ struct CompanionsRosterSheet: View {
     /// roster opened with no connection shows the same people the plaque
     /// just showed instead of an empty screen.
     var cachedCompanions: [TripCompanion] = []
-    /// Whether anyone can still be added. False on a private trip: the invite
-    /// would point at a trip the server does not have. Reading the roster is
-    /// unaffected — who rode along is the owner's to look at either way.
+    /// Whether anyone can still be added — true exactly while the trip is on
+    /// the server, private or not, because that is what an invite points at.
+    /// Reading the roster is unaffected: who rode along is the owner's to look
+    /// at either way.
     var canInvite: Bool = true
 
     @ObservedObject private var store = CompanionsStore.shared

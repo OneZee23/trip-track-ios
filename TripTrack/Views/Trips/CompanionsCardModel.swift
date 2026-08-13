@@ -141,7 +141,18 @@ enum CompanionsCardModel {
             // deliberately excludes still-in-flight/never-asked states:
             // the fallback only kicks in once the network has genuinely
             // been tried and lost.
-            if companions.isEmpty, loadState == .failed, !cached.isEmpty {
+            // Not just on `.failed` any more. A trip that has been taken off
+            // the server resolves as a perfectly successful EMPTY roster — the
+            // server has no such trip to have companions on — and requiring a
+            // failure here meant that exact case, the one where the cache is
+            // the only record left, was the one where the cache was ignored.
+            //
+            // Safe against a genuine removal: a successful list overwrites the
+            // on-device cache with whatever came back, so a roster the owner
+            // really emptied leaves `cached` empty too and there is nothing
+            // here to resurrect. `.loading` still shows nothing, so the rows
+            // don't flash in before the first answer.
+            if companions.isEmpty, !cached.isEmpty, loadState != .loading {
                 return .own(rows: cached.map(Row.init), banner: .stale)
             }
             let rows = companions.map(Row.init)

@@ -220,3 +220,51 @@ final class CompanionsCardTests: XCTestCase {
         XCTAssertEqual(decision, .own(rows: [], banner: .signedOut))
     }
 }
+
+/// The cache fallback on a trip that has left the server.
+///
+/// Taking a trip private removes it there, so `/companions/list` answers
+/// «no such trip» — which the store resolves as a successful EMPTY roster,
+/// not a failure. The fallback used to require `.failed`, so the one case
+/// where the device's copy is the only record of who was in the car was
+/// exactly the case where it was ignored.
+final class CompanionsCacheFallbackTests: XCTestCase {
+    private func companion(_ name: String) -> CompanionItem {
+        CompanionItem(accountId: UUID(), displayName: name, avatarEmoji: "🙂", status: .accepted)
+    }
+
+    func test_loaded_but_empty_falls_back_to_the_device_copy() {
+        let decision = CompanionsCardModel.decide(
+            companions: [], isOwn: true, loadState: .loaded,
+            cached: [companion("Даниил")]
+        )
+        guard case .own(let rows, let banner) = decision else {
+            return XCTFail("an own trip must render the own decision")
+        }
+        XCTAssertEqual(rows.count, 1, "the cached companion must be shown")
+        XCTAssertEqual(banner, .stale, "and flagged as possibly out of date")
+    }
+
+    func test_a_genuinely_emptied_roster_stays_empty() {
+        // A successful list overwrites the cache, so a roster the owner really
+        // cleared leaves nothing here to resurrect.
+        let decision = CompanionsCardModel.decide(
+            companions: [], isOwn: true, loadState: .loaded, cached: []
+        )
+        guard case .own(let rows, _) = decision else {
+            return XCTFail("an own trip must render the own decision")
+        }
+        XCTAssertTrue(rows.isEmpty)
+    }
+
+    func test_still_loading_shows_nothing_yet() {
+        let decision = CompanionsCardModel.decide(
+            companions: [], isOwn: true, loadState: .loading,
+            cached: [companion("Даниил")]
+        )
+        guard case .own(let rows, _) = decision else {
+            return XCTFail("an own trip must render the own decision")
+        }
+        XCTAssertTrue(rows.isEmpty, "cached rows must not flash in before the first answer")
+    }
+}

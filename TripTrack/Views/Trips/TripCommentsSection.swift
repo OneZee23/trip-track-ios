@@ -25,8 +25,9 @@ struct TripCommentsSection: View {
     /// write (see `isGuestComposer`) — it only leaves them without a way to
     /// sign in from here.
     var onGuestInputTap: (() -> Void)? = nil
-    /// The thread may be read but not written to — an own trip that is no
-    /// longer public. The composer and the per-row «Ответить» both go.
+    /// The thread may be read but not written to — the trip is not on the
+    /// server, so there is nothing to attach a reply to. The composer and the
+    /// per-row «Ответить» both go.
     var isReadOnly: Bool = false
     /// Live «· N» for a parent that draws the heading itself — the sheet's
     /// title sits next to its close button, so it cannot read the count off

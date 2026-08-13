@@ -1067,7 +1067,7 @@ struct TripDetailView: View {
             if let t = trip {
                 CompanionsRosterSheet(
                     tripId: t.id, isOwn: isOwn, cachedCompanions: t.companions,
-                    canInvite: !t.isPrivate
+                    canInvite: t.isOnServer
                 )
                 .environmentObject(lang)
                 .environmentObject(themeManager)
@@ -1614,11 +1614,13 @@ struct TripDetailView: View {
                     // the composer looks active but every send dies with
                     // USER_NOT_AUTH. Mirrors the social screen's gate.
                     onGuestInputTap: { signInPrompt = .comment },
-                    // Private trip: the thread is there to be read, not added
-                    // to. Nobody else can see it, so a reply would be a message
-                    // to an empty room — and the server no longer holds the
-                    // trip to attach it to.
-                    isReadOnly: isOwn && trip.isPrivate,
+                    // The line is «is this trip on the server», not «is it
+                    // private». Comments, reactions and companions all live
+                    // server-side, so the server holding the trip is exactly
+                    // what makes writing possible — a private trip that is up
+                    // there (Cloud Sync on) takes comments perfectly well, and
+                    // a public one that has been taken down cannot.
+                    isReadOnly: !trip.isOnServer,
                     onOpenProfile: { author in
                         Haptics.tap()
                         if let pushPath {
@@ -1835,13 +1837,12 @@ struct TripDetailView: View {
             // consulted when today's fetch fails and nothing survived in
             // memory either.
             cachedCompanions: trip.companions,
-            // Read-only while private. Inviting someone into a trip that is not
-            // on the server cannot work — the invite has nothing to point at —
-            // and offering it produced exactly the screen you got: an empty
-            // picker over «не удалось загрузить». The roster itself still
-            // shows, because who was in the car is yours to look at whatever
-            // the trip's privacy is.
-            onInvite: trip.isPrivate ? nil : openCompanionsPicker,
+            // An invite points at a trip on the server. Off the server there
+            // is nothing to point at, which is exactly the screen this used to
+            // produce: an empty picker over «не удалось загрузить». Privacy is
+            // not the question — a private trip that is still up there can be
+            // invited to.
+            onInvite: trip.isOnServer ? openCompanionsPicker : nil,
             onOpenRoster: { showCompanionsRoster = true },
             // Signing in flips `companionsGate` to `.allowed`, which is the
             // section's `.task` identity — so the roster loads by itself as
