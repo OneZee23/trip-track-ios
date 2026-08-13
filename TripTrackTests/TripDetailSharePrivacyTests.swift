@@ -159,3 +159,43 @@ final class LocallyPrivateTripsFetchTests: XCTestCase {
         XCTAssertTrue(TripManager.locallyPrivateTripIds(among: []).isEmpty)
     }
 }
+
+/// The gate that decides whether a photo delete is allowed to leave the
+/// device with Cloud Sync OFF.
+///
+/// It used to answer by looking the photo up in CoreData — from inside a call
+/// that runs AFTER the row has been deleted. The lookup could only ever fail,
+/// the gate fails closed, and so a deleted photo was never deleted on the
+/// server: it stayed public, and every screen that reads the server's roster
+/// put it back on the trip. These pin the answer to what the caller read off
+/// the row while it still existed.
+final class PhotoDeleteEnqueueGateTests: XCTestCase {
+    private func gate(_ hasServerCopy: Bool?) -> Bool {
+        SyncEnqueuer.allowsPhotoDelete(
+            hasServerCopy: hasServerCopy,
+            cloudSyncEnabled: false,
+            lookup: { nil as Bool? }  // the row is gone — exactly the real situation
+        )
+    }
+
+    func test_photo_that_was_on_the_server_is_deleted_there_too() {
+        XCTAssertTrue(gate(true))
+    }
+
+    func test_photo_that_never_reached_the_server_stays_local() {
+        XCTAssertFalse(gate(false))
+    }
+
+    func test_without_an_answer_it_still_fails_closed() {
+        // No caller-supplied answer and no row to read: deny, as before.
+        XCTAssertFalse(gate(nil))
+    }
+
+    func test_cloud_sync_on_needs_no_gate_at_all() {
+        XCTAssertTrue(
+            SyncEnqueuer.allowsPhotoDelete(
+                hasServerCopy: nil, cloudSyncEnabled: true, lookup: { nil as Bool? }
+            )
+        )
+    }
+}

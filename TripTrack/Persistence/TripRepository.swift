@@ -605,6 +605,11 @@ final class CoreDataTripRepository: TripRepository {
         let request: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         if let entity = try? context.fetch(request).first {
+            // Read BEFORE the row goes: this is the only moment anyone can
+            // still tell whether the server holds a copy, and the enqueue gate
+            // needs exactly that answer. A thumbnail counts — an upload that
+            // got that far has a blob on the server to remove.
+            let hadServerCopy = entity.remoteURL != nil || entity.thumbnailURL != nil
             PhotoStorageService.deletePhoto(filename: entity.filename ?? "")
             if let trip = entity.trip {
                 trip.lastModifiedAt = Date()
@@ -612,7 +617,10 @@ final class CoreDataTripRepository: TripRepository {
             context.delete(entity)
             persistenceController.save()
             Task { @MainActor in
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: id, action: .delete))
+                SyncEnqueuer.enqueue(
+                    SyncOperation(entityType: .photo, entityId: id, action: .delete),
+                    hasServerCopy: hadServerCopy
+                )
                 SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
                 NotificationCenter.default.post(
                     name: .tripPhotosChanged, object: nil,
