@@ -282,14 +282,18 @@ final class CompanionsCacheFallbackTests: XCTestCase {
         XCTAssertTrue(rows.isEmpty)
     }
 
-    func test_still_loading_shows_nothing_yet() {
+    /// The device's copy is shown WHILE the refresh runs, not after it.
+    /// Blanking the rows for the duration is what made the roster flash on the
+    /// way in: people, then nothing, then the same people.
+    func test_loading_keeps_showing_the_device_copy() {
         let decision = CompanionsCardModel.decide(
             companions: [], isOwn: true, loadState: .loading,
             cached: [companion("Даниил")]
         )
-        guard case .own(let rows, _) = decision else {
+        guard case .own(let rows, let banner) = decision else {
             return XCTFail("an own trip must render the own decision")
         }
-        XCTAssertTrue(rows.isEmpty, "cached rows must not flash in before the first answer")
+        XCTAssertEqual(rows.count, 1, "the roster must not blank out mid-refresh")
+        XCTAssertEqual(banner, .loading, "and the banner still says a request is running")
     }
 }

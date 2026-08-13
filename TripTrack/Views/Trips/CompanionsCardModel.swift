@@ -156,12 +156,20 @@ enum CompanionsCardModel {
             // Safe against a genuine removal: a successful list overwrites the
             // on-device cache with whatever came back, so a roster the owner
             // really emptied leaves `cached` empty too and there is nothing
-            // here to resurrect. `.loading` still shows nothing, so the rows
-            // don't flash in before the first answer.
-            if companions.isEmpty, !cached.isEmpty, loadState != .loading {
-                // Off the server there is nothing to retry against, so the
-                // banner says so instead of offering the attempt.
-                return .own(rows: cached.map(Row.init), banner: isOnServer ? .stale : .savedCopy)
+            // here to resurrect.
+            //
+            // Including `.loading`, deliberately. Blanking the rows while the
+            // refresh is in flight is what made the roster flash on the way in
+            // — people, then nothing, then the same people — and there is
+            // nothing to gain by hiding a copy that is about to be confirmed.
+            // The banner still says a request is running.
+            if companions.isEmpty, !cached.isEmpty {
+                let banner: Banner = loadState == .loading
+                    ? .loading
+                    // Off the server there is nothing to retry against, so the
+                    // banner says so instead of offering the attempt.
+                    : (isOnServer ? .stale : .savedCopy)
+                return .own(rows: cached.map(Row.init), banner: banner)
             }
             let rows = companions.map(Row.init)
             return .own(rows: rows, banner: banner(for: loadState, hasRows: !rows.isEmpty))

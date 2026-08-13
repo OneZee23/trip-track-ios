@@ -34,6 +34,8 @@ struct CompanionsRosterSheet: View {
     /// Reading the roster is unaffected: who rode along is the owner's to look
     /// at either way.
     var canInvite: Bool = true
+    /// Whether the trip exists server-side — see `decision`.
+    var isOnServer: Bool = true
 
     @ObservedObject private var store = CompanionsStore.shared
     @EnvironmentObject private var lang: LanguageManager
@@ -66,7 +68,11 @@ struct CompanionsRosterSheet: View {
             // exists for a trip whose roster the server already answered —
             // so unlike the section, this screen is never in the
             // "not published yet" case it would need to gate.
-            gate: .allowed
+            gate: .allowed,
+            // Same distinction the plaque draws: a roster shown for a trip the
+            // server does not have is a saved copy, not a stale one, and gets
+            // no «повторить» — there is nothing for it to reach.
+            isOnServer: isOnServer
         )
     }
 
@@ -135,7 +141,11 @@ struct CompanionsRosterSheet: View {
         }
         .presentationDetents([.height(sheetHeight)])
         .presentationDragIndicator(.hidden)
-        .task(id: tripId) { await load() }
+        // Only asked when there is something to ask. A trip that is not on the
+        // server answers TRIP_NOT_FOUND every time, and the round trip is what
+        // made this sheet flash: cached rows drawn, `.loading` blanking them,
+        // then the same rows again a moment later.
+        .task(id: tripId) { if isOnServer { await load() } }
         .toast(item: $toastItem)
         .confirmationDialog(
             AppStrings.companionsRemoveConfirmTitle(lang.language),
@@ -219,6 +229,9 @@ struct CompanionsRosterSheet: View {
             } else if banner == .stale {
                 divider(c)
                 staleStrip(c)
+            } else if banner == .savedCopy {
+                divider(c)
+                savedCopyStrip(c)
             }
         }
         .background {
@@ -358,6 +371,22 @@ struct CompanionsRosterSheet: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 14)
         .accessibilityIdentifier("companions_retry")
+    }
+
+    /// The same note the plaque carries, without the retry button.
+    private func savedCopyStrip(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "internaldrive")
+                .font(.system(size: 13))
+                .foregroundStyle(c.textTertiary)
+            Text(AppStrings.companionsSavedCopy(lang.language))
+                .font(.system(size: 12.5))
+                .foregroundStyle(c.textTertiary)
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .accessibilityIdentifier("companions_saved_copy")
     }
 
     private func staleStrip(_ c: AppTheme.Colors) -> some View {

@@ -1067,7 +1067,7 @@ struct TripDetailView: View {
             if let t = trip {
                 CompanionsRosterSheet(
                     tripId: t.id, isOwn: isOwn, cachedCompanions: t.companions,
-                    canInvite: t.isOnServer
+                    canInvite: t.isOnServer, isOnServer: t.isOnServer
                 )
                 .environmentObject(lang)
                 .environmentObject(themeManager)
