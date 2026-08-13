@@ -609,10 +609,28 @@ struct SocialCommentDeleteResponse: Codable {
 /// own item shape, for a detail screen refreshing what it already shows.
 struct SocialTripRequest: Codable {
     let tripId: UUID
+    /// Ask for the drive as something playable, not just drawable. Off by
+    /// default: a refresh that only needs the trip's own fields has no use for
+    /// a few hundred track points.
+    var includeTrack: Bool = false
+}
+
+/// One step of a viewable trip's drive: where, how fast, and when.
+///
+/// Deliberately terse on the wire — this arrives a few hundred at a time.
+struct SocialTrackPoint: Codable, Hashable {
+    let lat: Double
+    let lon: Double
+    /// m/s, the same unit the local track stores.
+    let speed: Double
+    let t: Date
 }
 
 struct SocialTripResponse: Codable {
     let item: SocialFeedTrip
+    /// Present only when asked for, and empty for a trip whose points never
+    /// reached the server (older syncs shipped the preview polyline alone).
+    var track: [SocialTrackPoint]? = nil
 }
 
 // MARK: - Trip photos (public view)

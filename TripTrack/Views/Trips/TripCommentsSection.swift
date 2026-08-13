@@ -32,6 +32,10 @@ struct TripCommentsSection: View {
     /// The composer took focus — a parent sizing itself to this view needs to
     /// make room for the keyboard before it covers the field.
     var onComposerFocused: (() -> Void)? = nil
+    /// Someone in the thread was tapped. Routed by the parent, because where a
+    /// profile opens from depends on whether this is the teaser on the detail
+    /// (push) or the sheet over it (its own navigator).
+    var onOpenProfile: ((SocialAuthor) -> Void)? = nil
     /// Raise the keyboard as soon as the sheet is up — set when the user came
     /// in by tapping the write row.
     var startFocused: Bool = false
@@ -68,6 +72,7 @@ struct TripCommentsSection: View {
     @State private var commentToDelete: TripComment?
     @FocusState private var composerFocused: Bool
     @EnvironmentObject private var lang: LanguageManager
+    @EnvironmentObject private var themeManager: ThemeManager
     @ObservedObject private var auth = AuthService.shared
     @ObservedObject private var settings = SettingsManager.shared
     @Environment(\.colorScheme) private var scheme
@@ -263,6 +268,7 @@ struct TripCommentsSection: View {
             )
             .environmentObject(lang)
             .environmentObject(auth)
+            .environmentObject(themeManager)
         }
         .confirmationDialog(
             AppStrings.deleteCommentConfirm(lang.language),
@@ -318,18 +324,25 @@ struct TripCommentsSection: View {
         let isSpotlit = spotlightId == comment.id
         let isReply = comment.parentId != nil
         return HStack(alignment: .top, spacing: 10) {
-            Circle()
-                .fill(c.cardAlt)
-                .frame(width: 34, height: 34)
-                .overlay { Text(comment.user.avatarEmoji ?? "🚗").font(.system(size: 17)) }
+            // Avatar and name are one target, the same as everywhere else a
+            // person appears in this app: a thread is a room full of people
+            // and the way to find out who they are is to tap them.
+            profileTapTarget(comment.user) {
+                Circle()
+                    .fill(c.cardAlt)
+                    .frame(width: 34, height: 34)
+                    .overlay { Text(comment.user.avatarEmoji ?? "🚗").font(.system(size: 17)) }
+            }
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(comment.user.displayName
-                         ?? (lang.language == .ru ? "Без имени" : "No name"))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
+                    profileTapTarget(comment.user) {
+                        Text(comment.user.displayName
+                             ?? (lang.language == .ru ? "Без имени" : "No name"))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(c.text)
+                            .lineLimit(1)
+                    }
                     Text("· \(Self.relativeAge(of: comment.createdAt, lang: lang.language))")
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
@@ -490,6 +503,26 @@ struct TripCommentsSection: View {
                         onGuestInputTap?()
                     }
             }
+        }
+    }
+
+    /// Wraps a piece of a comment row in a tap that opens its author, and
+    /// leaves it exactly as it was when there is nowhere to open one.
+    @ViewBuilder
+    private func profileTapTarget<Content: View>(
+        _ author: SocialAuthor, @ViewBuilder content: () -> Content
+    ) -> some View {
+        if let onOpenProfile {
+            Button {
+                Haptics.tap()
+                onOpenProfile(author)
+            } label: {
+                content()
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("comment_author")
+        } else {
+            content()
         }
     }
 

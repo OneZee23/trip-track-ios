@@ -43,8 +43,11 @@ struct TripCommentsScreen: View {
     /// behind a presented sheet and cannot put another one up over it, so
     /// routing it there would have offered sign-in and then shown nothing.
     @State private var signInPrompt: SignInPromptSheet.Action?
+    @State private var openedProfile: SocialAuthor?
+    @State private var profilePath: [ProfilePreviewDest] = []
 
     @EnvironmentObject private var lang: LanguageManager
+    @EnvironmentObject private var themeManager: ThemeManager
     @ObservedObject private var auth = AuthService.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
@@ -103,6 +106,10 @@ struct TripCommentsScreen: View {
                     // three messages tall the keyboard would cover the very
                     // field it was raised for.
                     onComposerFocused: { detent = .large },
+                    // Opened INSIDE this sheet, like the companions roster
+                    // does it: coming back from a profile should land on the
+                    // thread you were reading, not on the screen before it.
+                    onOpenProfile: { openedProfile = $0 },
                     startFocused: startFocused,
                     onError: onError,
                     isPreview: false
@@ -133,6 +140,24 @@ struct TripCommentsScreen: View {
                 // different appearances one on top of the other is worse than
                 // either choice on its own.
                 .preferredColorScheme(scheme)
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { openedProfile != nil },
+                set: { if !$0 { openedProfile = nil } }
+            ),
+            onDismiss: { profilePath = [] }
+        ) {
+            if let author = openedProfile {
+                PreviewNavigator(
+                    rootDest: .profile(author.id, author),
+                    path: $profilePath,
+                    onCloseSheet: { openedProfile = nil }
+                )
+                .environmentObject(lang)
+                .environmentObject(themeManager)
+                .preferredColorScheme(themeManager.preferredColorScheme)
+            }
         }
         .onAppear {
             // Typing needs the room; browsing does not.

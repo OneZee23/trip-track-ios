@@ -659,7 +659,10 @@ struct FeedView: View {
                 }
                 .id("feedTopAll")
                 .padding(.horizontal, 14)
-                .padding(.bottom, 120)
+                // Clears the floating tab bar and no more. It was 120, which
+                // left a field of empty background under the last card that a
+                // scroll had to cross before it stopped.
+                .padding(.bottom, 96)
             }
             .scrollIndicators(.hidden)
             .background(c.bg)
@@ -694,7 +697,10 @@ struct FeedView: View {
                 }
                 .id("feedTopFollowing")
                 .padding(.horizontal, 14)
-                .padding(.bottom, 120)
+                // Clears the floating tab bar and no more. It was 120, which
+                // left a field of empty background under the last card that a
+                // scroll had to cross before it stopped.
+                .padding(.bottom, 96)
             }
             .scrollIndicators(.hidden)
             .background(c.bg)
@@ -772,7 +778,21 @@ struct FeedView: View {
                         // one editor, not a second one inlined in the feed.
                         authorPath.cappedAppend(.trip(trip.id))
                     } : nil,
-                    onMakePrivate: isOwn ? { tripPendingPrivate = trip } : nil,
+                    // Signed out this cannot reach the server, and doing it
+                    // locally anyway is what produced a trip the feed still
+                    // offered to hide while its own detail already showed it
+                    // as private: the flip landed in CoreData, the server kept
+                    // serving it publicly, and the two copies disagreed for
+                    // good. Offer the session instead.
+                    onMakePrivate: isOwn
+                        ? {
+                            guard auth.isSignedIn else {
+                                signInPrompt = .publish
+                                return
+                            }
+                            tripPendingPrivate = trip
+                        }
+                        : nil,
                     onDelete: isOwn ? { tripPendingDelete = trip } : nil,
                     onReport: isOwn ? nil : {
                         // Guests can't report — the endpoint needs an

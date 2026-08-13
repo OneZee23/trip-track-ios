@@ -32,6 +32,12 @@ struct TripDetailView: View {
     /// exactly the case where the trip's own fields can change behind our back
     /// and the only case where re-reading them is worth a round trip.
     @State private var isRemoteBacked = false
+    /// Someone else's drive, as something that can be PLAYED. The feed's copy
+    /// of a trip carries only the preview polyline — a shape with no clock —
+    /// so a viewer got a paced crawl with no timecode, no scrubbing and no
+    /// speed while the owner of the same trip got all three. `/social/trip`
+    /// serves the points; this is where they land.
+    @State private var remoteTrack: [SocialTrackPoint] = []
     @State private var trip: Trip?
     /// Photos of someone else's trip live on the server, not in Documents.
     @State private var remotePhotos: [SocialTripPhoto] = []
@@ -710,7 +716,10 @@ struct TripDetailView: View {
                     isOwn = social.author.id == TokenStore.shared.accountId
                     isRemoteBacked = true
                     apply(social)
+                    // The feed handed us everything except the drive itself.
+                    async let track: Void = refreshRemoteTrip()
                     await loadRemotePhotos()
+                    await track
                 }
                 // Earned-on dates come from OUR trip history, so they mean
                 // nothing on somebody else's badge — and printing our date
@@ -1076,7 +1085,19 @@ struct TripDetailView: View {
         speeds: [Double],
         timestamps: [Date]
     ) {
-        Self.downsampledForReplay(
+        // Someone else's trip has no local track at all, so its playable
+        // series is whatever the server sent. Already sampled there; sampled
+        // again here only if a future server ever raises its own cap.
+        if !remoteTrack.isEmpty {
+            return Self.downsampledForReplay(
+                coords: remoteTrack.map {
+                    CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+                },
+                speeds: remoteTrack.map(\.speed),
+                timestamps: remoteTrack.map(\.t)
+            )
+        }
+        return Self.downsampledForReplay(
             coords: cachedCoordinates,
             speeds: cachedSpeeds,
             timestamps: cachedTimestamps
@@ -1137,9 +1158,10 @@ struct TripDetailView: View {
     private func refreshRemoteTrip() async {
         guard let res: SocialTripResponse = try? await APIClient.shared.post(
             APIEndpoint.socialTrip,
-            body: SocialTripRequest(tripId: tripId),
+            body: SocialTripRequest(tripId: tripId, includeTrack: true),
             requiresAuth: AuthService.shared.isSignedIn
         ) else { return }
+        if let track = res.track { remoteTrack = track }
         // Nothing changed is the ordinary case for a refresh, and applying an
         // identical copy is not free: it rebuilds the trip, re-decodes the
         // route and hands the map a new object to fit itself to. Comparing
@@ -1485,6 +1507,14 @@ struct TripDetailView: View {
                     // the composer looks active but every send dies with
                     // USER_NOT_AUTH. Mirrors the social screen's gate.
                     onGuestInputTap: { signInPrompt = .comment },
+                    onOpenProfile: { author in
+                        Haptics.tap()
+                        if let pushPath {
+                            pushPath.wrappedValue.cappedAppend(.profile(author.id, author))
+                        } else {
+                            selectedReactorAuthor = author
+                        }
+                    },
                     onError: { msg in
                         toastItem = ToastItem(type: .error, message: msg)
                     },
