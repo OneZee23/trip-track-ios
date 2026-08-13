@@ -264,7 +264,11 @@ struct CompanionsRosterSheet: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("companion_row")
 
-            if isOwn {
+            // Removing is a server operation like inviting is: it POSTs to
+            // `/companions/remove`, which answers «no such trip» for a trip
+            // that is not up there. Offering the button anyway would be a
+            // control whose only possible outcome is an error toast.
+            if isOwn, isOnServer {
                 Button {
                     Haptics.tap()
                     companionToRemove = row.companion
@@ -309,8 +313,9 @@ struct CompanionsRosterSheet: View {
                 .foregroundStyle(c.textTertiary)
         }
         .padding(.leading, 14)
-        // On an own row the remove button supplies the trailing margin.
-        .padding(.trailing, isOwn ? 4 : 14)
+        // On an own row the remove button supplies the trailing margin — when
+        // it is there. Without it the row needs its own.
+        .padding(.trailing, (isOwn && isOnServer) ? 4 : 14)
         .padding(.vertical, 11)
         .contentShape(Rectangle())
     }
