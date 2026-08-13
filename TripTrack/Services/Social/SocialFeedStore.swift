@@ -269,6 +269,25 @@ final class SocialFeedStore: ObservableObject {
     /// Also invalidates `lastLoadedAt` so a subsequent `loadIfNeeded` re-fetches
     /// the authoritative server state instead of treating the locally-mutated
     /// cache as fresh (which would let the freshness window mask a missed sync).
+    /// Drops trips this device has already been told to hide.
+    ///
+    /// Taking a trip private writes the flip locally and queues the server
+    /// side of it; until that operation lands — no session, no network, a
+    /// failed attempt — the server keeps serving the trip publicly and the
+    /// next feed load put it straight back in front of the person who hid it.
+    /// `removeOptimistically` only ever covered the same session. The local
+    /// row is the owner's stated intent, so it wins over the server's copy on
+    /// the owner's own screen.
+    ///
+    /// It does NOT mean the trip is hidden from anyone else — that is what the
+    /// queued operation is for, and why taking a trip private now requires a
+    /// session it can actually run in.
+    static func withoutLocallyHidden(_ trips: [SocialFeedTrip]) -> [SocialFeedTrip] {
+        let hidden = TripManager.locallyPrivateTripIds(among: trips.map(\.id))
+        guard !hidden.isEmpty else { return trips }
+        return trips.filter { !hidden.contains($0.id) }
+    }
+
     func removeOptimistically(tripId: UUID) {
         trips.removeAll { $0.id == tripId }
         lastLoadedAt = nil
@@ -304,15 +323,16 @@ final class SocialFeedStore: ObservableObject {
                 requiresAuth: AuthService.shared.isSignedIn)
             try Task.checkCancellation()
             guard refreshGeneration == myGen else { return }
+            let served = Self.withoutLocallyHidden(res.trips)
             if replace {
-                trips = res.trips
+                trips = served
             } else {
                 // Id-dedup on append: the trending feed orders by reaction
                 // count but pages by a startDate cursor, so page 2 can
                 // re-serve high-reaction trips already on page 1. Duplicate
                 // ids double the card AND break ForEach identity in FeedView.
                 let known = Set(trips.map(\.id))
-                trips.append(contentsOf: res.trips.filter { !known.contains($0.id) })
+                trips.append(contentsOf: served.filter { !known.contains($0.id) })
             }
             for t in res.trips { knownReactions[t.id] = t.myReaction }
             nextCursor = res.nextCursor

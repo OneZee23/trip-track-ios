@@ -1058,6 +1058,24 @@ final class TripManager: ObservableObject {
         repository.updatePrivacy(for: tripId, isPrivate: isPrivate)
     }
 
+    /// Which of these trips this device holds a PRIVATE local row for.
+    ///
+    /// The feed asks before drawing: a trip taken private here is still served
+    /// publicly by the server until the queued unpublish lands, and putting it
+    /// back in front of the person who just hid it is the one thing that
+    /// screen must not do.
+    static func locallyPrivateTripIds(among ids: [UUID]) -> Set<UUID> {
+        guard !ids.isEmpty else { return [] }
+        let context = PersistenceController.shared.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "id IN %@ AND isPrivate == YES AND isDeleted == NO", ids
+        )
+        request.propertiesToFetch = ["id"]
+        guard let rows = try? context.fetch(request) else { return [] }
+        return Set(rows.compactMap { $0.id })
+    }
+
     // MARK: - Geocoding Retry
 
     private var lastGeocodingRetry: Date = .distantPast
