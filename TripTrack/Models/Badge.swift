@@ -185,6 +185,76 @@ struct Badge: Identifiable {
     func description(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? descriptionRu : descriptionEn
     }
+
+    // MARK: - Personal record
+
+    /// Which number of the earning trip answers the badge's rule.
+    ///
+    /// Only single-trip badges have one. A cumulative badge («1 000 км
+    /// суммарно») is not answered by the drive that happened to cross the
+    /// line, and printing that drive's 12 км under it would read as the
+    /// record — so those stay `nil`.
+    enum RecordMetric {
+        case tripDistance
+        case tripMaxSpeed
+        case tripDuration
+        case tripElevationGain
+        case tripMaxAltitude
+    }
+
+    var recordMetric: RecordMetric? {
+        switch id {
+        case "marathon_42", "marathon_100", "iron_butt", "highway_wolf":
+            return .tripDistance
+        case "speed_demon":
+            return .tripMaxSpeed
+        case "long_shift":
+            return .tripDuration
+        case "mountain_goat":
+            return .tripElevationGain
+        case "above_clouds":
+            return .tripMaxAltitude
+        default:
+            return nil
+        }
+    }
+
+    /// The personal number under the generic rule (Figma 117:1581) — «проедьте
+    /// 42.2 км» is the badge, «47.3 км» is the memory. `nil` when the badge is
+    /// not about a single drive, or when this trip carries no figure for it
+    /// (a feed-adapted trip has no track points, so no altitude).
+    func recordValue(for trip: Trip, language: LanguageManager.Language) -> String? {
+        guard let recordMetric else { return nil }
+        switch recordMetric {
+        case .tripDistance:
+            guard trip.distanceKm > 0 else { return nil }
+            return "\(Self.oneDecimal(trip.distanceKm, language)) \(AppStrings.km(language))"
+        case .tripMaxSpeed:
+            guard trip.maxSpeedKmh > 0 else { return nil }
+            return "\(Int(trip.maxSpeedKmh.rounded())) \(AppStrings.kmh(language))"
+        case .tripDuration:
+            guard trip.duration > 0 else { return nil }
+            return trip.formattedDurationHuman(language)
+        case .tripElevationGain:
+            guard trip.elevation > 0 else { return nil }
+            return Self.metres(trip.elevation, language)
+        case .tripMaxAltitude:
+            let peak = trip.trackPoints.map(\.altitude).max() ?? 0
+            guard peak > 0 else { return nil }
+            return Self.metres(peak, language)
+        }
+    }
+
+    /// RU writes decimals with a comma, and the app's language is not the
+    /// device's — a device on en_US showing the RU card still owes «47,3».
+    private static func oneDecimal(_ value: Double, _ lang: LanguageManager.Language) -> String {
+        let s = String(format: "%.1f", value)
+        return lang == .ru ? s.replacingOccurrences(of: ".", with: ",") : s
+    }
+
+    private static func metres(_ value: Double, _ lang: LanguageManager.Language) -> String {
+        "\(AppStrings.groupedNumber(Int(value.rounded()), lang)) \(AppStrings.unitMeters(lang))"
+    }
 }
 
 extension Badge: Equatable, Hashable {

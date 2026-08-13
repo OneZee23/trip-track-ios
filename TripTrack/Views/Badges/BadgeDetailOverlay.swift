@@ -14,8 +14,6 @@ struct BadgeDetailOverlay: View {
     var recordValue: String? = nil
     /// Trip this badge was earned on, for the «Получен … · Дача и обратно» line.
     var earnedOnTripTitle: String? = nil
-    /// Present to offer the canon's «Поделиться» button.
-    var onShare: (() -> Void)? = nil
     let onDismiss: () -> Void
     @State private var appear = false
 
@@ -29,24 +27,18 @@ struct BadgeDetailOverlay: View {
                 .onTapGesture { close() }
 
             VStack(spacing: 16) {
-                // Large badge icon
+                // Large badge icon. The two rings around it were ours, not the
+                // canon's (117:1572 is a single 96pt disc) — and at 88pt with
+                // a 40pt glyph the medallion read as a list cell blown up
+                // rather than as the card's subject.
                 ZStack {
-                    if isUnlocked {
-                        Circle()
-                            .fill(badge.color.opacity(0.08))
-                            .frame(width: 120, height: 120)
-                        Circle()
-                            .stroke(badge.color.opacity(0.2), lineWidth: 2)
-                            .frame(width: 110, height: 110)
-                    }
-
                     Circle()
                         .fill(isUnlocked ? badge.color.opacity(0.15) : c.cardAlt)
-                        .frame(width: 88, height: 88)
+                        .frame(width: 96, height: 96)
 
                     if isUnlocked {
                         Image(systemName: badge.icon)
-                            .font(.system(size: 40))
+                            .font(.system(size: 48))
                             .foregroundStyle(badge.color)
                     } else if badge.isHidden {
                         Image(systemName: "questionmark")
@@ -54,7 +46,7 @@ struct BadgeDetailOverlay: View {
                             .foregroundStyle(c.textTertiary)
                     } else {
                         Image(systemName: badge.icon)
-                            .font(.system(size: 40))
+                            .font(.system(size: 48))
                             .foregroundStyle(c.textTertiary.opacity(0.5))
                         Image(systemName: "lock.fill")
                             .font(.system(size: 16))
@@ -62,9 +54,20 @@ struct BadgeDetailOverlay: View {
                     }
                 }
 
+                // The badge's own colour is the card's only identity accent
+                // (117:1575) — in the neutral text token every achievement
+                // looked like the same achievement.
+                // Two lines and a floor on the scale: «Воскресный водитель»
+                // at 22pt heavy runs the full width of the card, and with
+                // nothing to fall back on a longer name would either clip or
+                // stretch the card into a slab.
                 Text(isUnlocked || !badge.isHidden ? badge.title(language) : "???")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(c.text)
+                    .font(.system(size: 22, weight: .heavy))
+                    .foregroundStyle(isUnlocked ? badge.color : c.text)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .padding(.horizontal, 4)
 
                 Text(isUnlocked || !badge.isHidden
                     ? badge.description(language)
@@ -73,26 +76,26 @@ struct BadgeDetailOverlay: View {
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
 
-                // Status pill
-                HStack(spacing: 5) {
-                    Image(systemName: isUnlocked ? "checkmark.circle.fill" : "lock.fill")
-                    if isUnlocked, badge.isRepeatable, let count = earnCount, count > 0 {
-                        Text(AppStrings.earnedTimes(language, count: count))
-                            .font(.system(size: 13, weight: .semibold))
-                    } else {
-                        Text(isUnlocked
-                            ? (isRu ? "Получено" : "Unlocked")
-                            : (isRu ? "Не получено" : "Locked"))
+                // «Не получено» + the category are what a LOCKED card has
+                // instead of a story. On an unlocked one the canon (117:1567)
+                // draws neither: a green «Получено» pill under a card that
+                // already says «Получен 14 мая» was the same fact twice, and
+                // the category is a filter from the grid you arrived from.
+                if !isUnlocked {
+                    HStack(spacing: 5) {
+                        Image(systemName: "lock.fill")
+                        Text(isRu ? "Не получено" : "Locked")
                             .font(.system(size: 13, weight: .semibold))
                     }
+                    .foregroundStyle(c.textTertiary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(c.cardAlt, in: Capsule())
+
+                    Text(badge.category.title(language))
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textTertiary)
                 }
-                .foregroundStyle(isUnlocked ? AppTheme.green : c.textTertiary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(
-                    (isUnlocked ? AppTheme.green.opacity(0.1) : c.cardAlt),
-                    in: Capsule()
-                )
 
                 if isUnlocked, let recordValue {
                     Text(recordValue)
@@ -101,40 +104,25 @@ struct BadgeDetailOverlay: View {
                 }
 
                 if isUnlocked, let date = lastEarnedDate {
-                    Text(AppStrings.badgeEarnedOn(
-                        language,
-                        date: date,
-                        tripTitle: earnedOnTripTitle
-                    ))
+                    VStack(spacing: 3) {
+                        Text(earnHeadline(date: date))
+                        if let trip = earnedOnTripTitle, !trip.isEmpty, !isRepeated {
+                            Text(trip)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
                     .font(.system(size: 12))
-                    .foregroundStyle(c.textSecondary)
+                    .foregroundStyle(c.textTertiary)
                     .multilineTextAlignment(.center)
                 }
 
-                Text(badge.category.title(language))
-                    .font(.system(size: 11))
-                    .foregroundStyle(c.textTertiary)
-
-                if isUnlocked, let onShare {
-                    Button {
-                        Haptics.tap()
-                        onShare()
-                    } label: {
-                        HStack(spacing: 7) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text(AppStrings.share(language))
-                                .font(.system(size: 15, weight: .bold))
-                        }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(RoundedRectangle(cornerRadius: 14).fill(AppTheme.accent))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 2)
-                    .accessibilityIdentifier("badge_share")
-                }
+                // No «Поделиться» here. The button shared the TRIP, not
+                // the achievement — you tapped a badge and handed someone
+                // your drive. Sharing a badge on its own is a different
+                // feature (its own card, its own image); until that exists,
+                // the honest thing is to offer nothing rather than
+                // something adjacent.
             }
             .padding(24)
             .padding(.top, 8)
@@ -162,6 +150,30 @@ struct BadgeDetailOverlay: View {
                 appear = true
             }
         }
+    }
+
+    /// Earned more than once — so no single trip can honestly be called THE
+    /// one it came from.
+    private var isRepeated: Bool {
+        badge.isRepeatable && (earnCount ?? 0) > 1
+    }
+
+    /// One line about earning it, and the trip on a second line under it —
+    /// never «Получен 9 августа 2026 · 14 Jun, 12:31 · ×15» on one run, which
+    /// is what folding all three together produced: a Russian date, an
+    /// auto-generated English trip name and a bare ×15 wrapping onto a line
+    /// of its own.
+    ///
+    /// A repeatable badge earned fifteen times drops the trip entirely. The
+    /// card only ever knows the LAST one, and naming it implies it was
+    /// special.
+    private func earnHeadline(date: Date) -> String {
+        guard isRepeated, let count = earnCount else {
+            return AppStrings.badgeEarnedOn(language, date: date, tripTitle: nil)
+        }
+        let times = AppStrings.earnedTimes(language, count: count)
+        let last = AppStrings.badgeLastEarned(language, date: date)
+        return "\(times) · \(last)"
     }
 
     private func close() {

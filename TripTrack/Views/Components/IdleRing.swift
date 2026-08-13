@@ -1,9 +1,11 @@
 import SwiftUI
 
 /// Figma 114:151 empty-state hero: double orange ring around the pixel-art
-/// car on a soft accent disc. Shared component for the Me-tab surfaces; the
-/// existing `FeedIdleRing` (FeedView) and `SignInIdleRing` (SignInPromptSheet)
-/// stay untouched — triplication flagged for a later cleanup pass.
+/// car on a soft accent disc. Shared by the Me-tab surfaces and by the Feed's
+/// empty states — the latter used to draw their own `FeedIdleRing` with a
+/// neutral grey outer ring and no disc, so the same hero looked like two
+/// different components depending on which tab you were standing on.
+/// `SignInIdleRing` (SignInPromptSheet) is still separate.
 struct IdleRing: View {
     var body: some View {
         ZStack {
@@ -11,10 +13,12 @@ struct IdleRing: View {
                 .stroke(AppTheme.accent.opacity(0.25), lineWidth: 2)
                 .frame(width: 100, height: 100)
             ZStack {
+                // `accentBg` (8%) washed out against the card behind it at
+                // this diameter — canon 114:153 fills the disc at ~15%.
                 Circle()
-                    .fill(AppTheme.accentBg)
+                    .fill(AppTheme.accent.opacity(0.15))
                 Circle()
-                    .stroke(AppTheme.accent, lineWidth: 2)
+                    .stroke(AppTheme.accent, lineWidth: 2.5)
                 Image("PixelCar")
                     .resizable()
                     .interpolation(.none)

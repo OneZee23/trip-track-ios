@@ -27,10 +27,12 @@ struct NameEditorSheet: View {
                       && trimmed.count <= Self.maxLength
 
         VStack(spacing: 0) {
-            // Custom grabber — standardized 40×5 variant.
+            // Custom grabber — this sheet drew a one-off 40×5 bar; every other
+            // sheet (SignInPromptSheet, VehiclePickerSheet) uses 34×5 at 18%,
+            // so it read as a different component stacked over them.
             Capsule()
-                .fill(c.textTertiary.opacity(0.5))
-                .frame(width: 40, height: 5)
+                .fill(.primary.opacity(0.18))
+                .frame(width: 34, height: 5)
                 .padding(.top, 8)
                 .padding(.bottom, 10)
 
@@ -116,7 +118,9 @@ struct NameEditorSheet: View {
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(AppTheme.accent, lineWidth: 1.5)
             )
-            .padding(.horizontal, 12)
+            // Was 12 while the header and helper rows sat at 16, so the one
+            // element with a hard border overhung the caption under it.
+            .padding(.horizontal, 16)
 
             // Helper (or validation error) + counter
             HStack(alignment: .top, spacing: 8) {

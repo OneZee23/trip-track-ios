@@ -57,6 +57,9 @@ struct PublicProfileView: View {
     /// consumed in the sheet's `onDismiss` so the follow the guest originally
     /// tapped isn't silently dropped after a successful sign-in.
     @State private var resumeFollowAfterAuth = false
+    /// Confirms «Скопировать ссылку» — the pasteboard is silent otherwise and
+    /// the popover has already closed by the time the copy happens.
+    @State private var toastItem: ToastItem?
 
     /// True when this view is rendering the signed-in user's own profile
     /// (e.g. "preview as others see you"). Hides Follow/Block/Report actions.
@@ -85,6 +88,78 @@ struct PublicProfileView: View {
             try? await Task.sleep(nanoseconds: 260_000_000)
             action()
         }
+    }
+
+    /// Public profile link. Built the same way the settings sheet's
+    /// «Поделиться профилем» row builds the owner's own — there is no
+    /// server-issued profile URL in any DTO, and that row is the only place
+    /// the client has ever written one.
+    private var profileShareURL: URL? {
+        URL(string: "https://trip-track.app/u/\(accountId.uuidString)")
+    }
+
+    private func shareProfile() {
+        guard let url = profileShareURL else { return }
+        let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        topPresentedViewController()?.present(av, animated: true)
+    }
+
+    private func copyProfileLink() {
+        guard let url = profileShareURL else { return }
+        UIPasteboard.general.string = url.absoluteString
+        Haptics.success()
+        toastItem = ToastItem(type: .success, message: AppStrings.profileLinkCopied(lang.language))
+    }
+
+    /// The profile is often on screen inside a sheet (Discover, the inbox),
+    /// and asking the root controller to present over one drops the activity
+    /// sheet on the floor. Same walk as `SharedTripLinkSheet`.
+    private func topPresentedViewController() -> UIViewController? {
+        var vc = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
+            .first
+        while let presented = vc?.presentedViewController { vc = presented }
+        return vc
+    }
+
+    /// «…» rows: share and copy-link first, then moderation. Sharing is open
+    /// to guests too — passing a profile on is not a moderation action, and
+    /// the whole button used to be hidden from signed-out viewers because the
+    /// menu held nothing but report/block. Those two still need an account:
+    /// for a guest they'd only detour through the sign-in sheet.
+    private func profileActionItems() -> [ActionPopoverList.Item] {
+        var items: [ActionPopoverList.Item] = [
+            .init(
+                // Same label as the settings row — one action, one wording.
+                title: AppStrings.settingsShareProfile(lang.language),
+                systemImage: "square.and.arrow.up",
+                accessibilityId: "profile_share"
+            ) {
+                runProfileAction { shareProfile() }
+            },
+            .init(
+                title: AppStrings.copyProfileLink(lang.language),
+                systemImage: "link",
+                accessibilityId: "profile_copy_link"
+            ) {
+                runProfileAction { copyProfileLink() }
+            },
+        ]
+        guard auth.isSignedIn else { return items }
+        items.append(.init(
+            title: AppStrings.reportProfileAction(lang.language),
+            systemImage: "exclamationmark.bubble"
+        ) {
+            runProfileAction { showReportSheet = true }
+        })
+        items.append(.init(
+            title: AppStrings.blockProfileAction(lang.language, isBlocked: isBlocked),
+            systemImage: isBlocked ? "hand.raised.slash" : "hand.raised.fill",
+            isDestructive: !isBlocked
+        ) {
+            runProfileAction { showBlockConfirm = true }
+        })
+        return items
     }
 
     /// Fallback chain: server profile → preloaded summary → own Apple name
@@ -123,9 +198,6 @@ struct PublicProfileView: View {
                         badgesSection(c, isRu: isRu)
                             .padding(.horizontal, 16)
 
-                        followCounters(c, isRu: isRu)
-                            .padding(.horizontal, 16)
-
                         recentTrips(c, isRu: isRu)
                             .padding(.horizontal, 16)
                     }
@@ -153,17 +225,12 @@ struct PublicProfileView: View {
                     } label: {
                         NavCircleIcon(systemImage: "xmark")
                     }
-                } else if !isOwnProfile && auth.isSignedIn {
-                    // Moderation controls require an account — guests see no
-                    // buttons at all (the actions would just bounce them to
-                    // the sign-in sheet, which is a confusing UX for
-                    // moderation controls).
-                    // Single «…» entry point (Figma 117:2335) — hosts both
-                    // «Пожаловаться» (wires the previously dormant
-                    // `ReportSheet`) and block/unblock. The block hand used
-                    // to sit as its own icon right next to «…»: two tiny
-                    // targets 2pt apart in the same corner, one of them a
-                    // one-tap path into a destructive confirm.
+                } else if !isOwnProfile {
+                    // Single «…» entry point (Figma 117:2367) — sharing on
+                    // top, moderation below. The block hand used to sit as
+                    // its own icon right next to «…»: two tiny targets 2pt
+                    // apart in the same corner, one of them a one-tap path
+                    // into a destructive confirm.
                     //
                     // Anchored popover, NOT a `Menu` — see `ActionPopoverList`
                     // for the plate artifact a Menu leaves behind on close.
@@ -176,23 +243,7 @@ struct PublicProfileView: View {
                     .accessibilityLabel(AppStrings.moreActions(lang.language))
                     .accessibilityIdentifier("profile_more")
                     .popover(isPresented: $showProfileActions, arrowEdge: .top) {
-                        ActionPopoverList(items: [
-                            .init(
-                                title: AppStrings.reportProfileAction(lang.language),
-                                systemImage: "exclamationmark.bubble"
-                            ) {
-                                runProfileAction { showReportSheet = true }
-                            },
-                            .init(
-                                title: AppStrings.blockProfileAction(
-                                    lang.language, isBlocked: isBlocked
-                                ),
-                                systemImage: isBlocked ? "hand.raised.slash" : "hand.raised.fill",
-                                isDestructive: !isBlocked
-                            ) {
-                                runProfileAction { showBlockConfirm = true }
-                            },
-                        ])
+                        ActionPopoverList(items: profileActionItems())
                     }
                 }
             }
@@ -239,6 +290,7 @@ struct PublicProfileView: View {
             ReportSheet(target: .user(accountId))
                 .environmentObject(lang)
         }
+        .toast(item: $toastItem)
         .overlay {
             if let badge = selectedBadge {
                 BadgeDetailOverlay(
@@ -349,19 +401,52 @@ struct PublicProfileView: View {
                     // server returned. Hidden when the account is in
                     // privacy mode (already shows "Hidden roads" lower
                     // down) or has no public trips at all.
-                    if !isPrivacyMode, let lastDate = profile?.recentTrips.first?.startDate {
+                    //
+                    // The streak sits next to it rather than in the stats
+                    // card: canon (117:975) has no «дней подряд» cell, and a
+                    // flame among the road totals read as a fourth number of
+                    // the same kind. Beside the last-drive line it stays what
+                    // it is — a note about habit, not a total.
+                    let lastDrive = isPrivacyMode ? nil : profile?.recentTrips.first?.startDate
+                    let streak = isPrivacyMode ? 0 : (profile?.currentStreak ?? 0)
+                    if lastDrive != nil || streak > 0 {
                         HStack(spacing: 6) {
-                            Image(systemName: "road.lanes")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(c.textTertiary)
-                            Text(lastActivityCopy(lastDate, isRu: isRu))
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(c.textSecondary)
+                            if let lastDrive {
+                                heroPill(
+                                    icon: "road.lanes",
+                                    text: lastActivityCopy(lastDrive, isRu: isRu),
+                                    c: c
+                                )
+                            }
+                            if streak > 0 {
+                                heroPill(
+                                    icon: "flame.fill",
+                                    text: AppStrings.streakDaysInARow(lang.language, n: streak),
+                                    c: c,
+                                    accent: AppTheme.accent
+                                )
+                            }
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(c.cardAlt, in: Capsule())
                         .padding(.top, 2)
+                    }
+
+                    // «О себе» (Figma 117:966). Server 6.1+ only: the field
+                    // decodes as nil against today's production, and a user
+                    // who cleared their bio sends back a blank string —
+                    // both draw nothing rather than an empty gap under the
+                    // pills. Width-capped so a long line wraps into a
+                    // centred block instead of running the full card width.
+                    if let bio = profile?.bio?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !bio.isEmpty {
+                        Text(bio)
+                            .font(.system(size: 13))
+                            .foregroundStyle(c.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: 290)
+                            .padding(.top, 4)
+                            .accessibilityIdentifier("profile_bio")
                     }
                 }
 
@@ -394,6 +479,25 @@ struct PublicProfileView: View {
         }
     }
 
+    /// Small capsule under the name (last drive, streak). `accent` tints both
+    /// the glyph and the label so the streak's flame doesn't read as a muted
+    /// timestamp next to it.
+    private func heroPill(
+        icon: String, text: String, c: AppTheme.Colors, accent: Color? = nil
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(accent ?? c.textTertiary)
+            Text(text)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(accent ?? c.textSecondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(c.cardAlt, in: Capsule())
+    }
+
     @ViewBuilder
     private func followButton(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         let isFollowing = profile?.isFollowing ?? false
@@ -417,13 +521,10 @@ struct PublicProfileView: View {
                 Text(isFollowing
                      ? (isRu ? "Подписан" : "Following")
                      : (isRu ? "Подписаться" : "Follow"))
-                    .font(.system(size: 14, weight: .semibold))
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .frame(minWidth: 140)
-            .background(isFollowing ? c.cardAlt : AppTheme.accent, in: Capsule())
-            .foregroundStyle(isFollowing ? c.text : .white)
+            // Hugs its label like canon (117:969, 130×41) — nothing sits
+            // beside it, so there's no row for a width change to disturb.
+            .socialActionButton(isFollowing ? .secondary : .primary, colors: c)
         }
         .buttonStyle(.plain)
         .disabled(isTogglingFollow)
@@ -459,33 +560,41 @@ struct PublicProfileView: View {
 
     private func statsGrid(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         let stats = profile?.stats
-        let streakValue = profile?.currentStreak ?? 0
         let privacy = isPrivacyMode
         let dots = "•••"
         let tripsValue = privacy ? dots : (stats.map { String($0.tripCount) } ?? "—")
         let kmValue = privacy ? dots : (stats.map { String(format: "%.0f", $0.totalKm) } ?? "—")
         let regionsValue = privacy ? dots : (stats.map { String($0.regionsCount) } ?? "—")
-        let streakDisplay = privacy ? dots : (profile == nil ? "—" : "\(streakValue)")
+        // Trace what the UI is ACTUALLY rendering right now. Compare with the
+        // `loadProfile decoded` line to spot the stale-state / wrong-field
+        // case. Runs on every body rebuild — noisy, but that's the point.
+        let followerShown = profile?.followerCount ?? 0
+        let followingShown = profile?.followingCount ?? 0
+        let loaded = profile != nil
+        countsLog.debug("render statsGrid counters id=\(self.accountId.uuidString.prefix(8), privacy: .public) loaded=\(loaded, privacy: .public) followerShown=\(followerShown, privacy: .public) followingShown=\(followingShown, privacy: .public)")
         return VStack(spacing: 8) {
-            // Two 2-cell rows with 1px column separators (Figma 117:931).
+            // One card, two rows (Figma 117:975): the road numbers on top, the
+            // social counters under a full-width hairline. The counters used
+            // to be a card of their own two sections down, which read as a
+            // second, unrelated set of stats — and let the trips grid drift
+            // that much further off the fold.
             VStack(spacing: 16) {
                 HStack(spacing: 0) {
                     statCell(value: tripsValue, label: isRu ? "поездок" : "trips", c: c)
-                    divider(c)
                     statCell(value: kmValue, label: AppStrings.km(lang.language), c: c)
-                }
-                HStack(spacing: 0) {
                     statCell(value: regionsValue, label: isRu ? "регионов" : "regions", c: c)
-                    divider(c)
-                    statCell(
-                        value: streakDisplay,
-                        // Spelled out "day streak" so the icon+number doesn't look
-                        // like a generic score — it's specifically consecutive days
-                        // of recording trips.
-                        label: isRu ? "дней подряд" : "day streak",
-                        c: c,
-                        accent: !privacy && streakValue > 0 ? AppTheme.accent : nil,
-                        iconSystemName: !privacy && streakValue > 0 ? "flame.fill" : nil
+                }
+                divider(c)
+                HStack(spacing: 0) {
+                    followCounterCell(
+                        count: followerShown,
+                        label: AppStrings.followersCaption(lang.language, n: followerShown),
+                        mode: .followers, c: c
+                    )
+                    followCounterCell(
+                        count: followingShown,
+                        label: AppStrings.followingCaption(lang.language, n: followingShown),
+                        mode: .following, c: c
                     )
                 }
             }
@@ -510,24 +619,13 @@ struct PublicProfileView: View {
         }
     }
 
-    private func statCell(
-        value: String,
-        label: String,
-        c: AppTheme.Colors,
-        accent: Color? = nil,
-        iconSystemName: String? = nil
-    ) -> some View {
+    /// Both rows of the card use this — the `accent` + icon overload it used
+    /// to carry existed only for the streak cell, which canon doesn't have.
+    private func statCell(value: String, label: String, c: AppTheme.Colors) -> some View {
         VStack(spacing: 2) {
-            HStack(spacing: 3) {
-                if let icon = iconSystemName {
-                    Image(systemName: icon)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(accent ?? c.text)
-                }
-                Text(value)
-                    .font(.system(size: 16, weight: .heavy).monospacedDigit())
-                    .foregroundStyle(accent ?? c.text)
-            }
+            Text(value)
+                .font(.system(size: 16, weight: .heavy).monospacedDigit())
+                .foregroundStyle(c.text)
             Text(label)
                 .font(.system(size: 10, weight: .bold))
                 .tracking(0.5)
@@ -537,10 +635,28 @@ struct PublicProfileView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Follower / following half of the stats card. Still a button — the
+    /// counts are the only way into the follow lists.
+    private func followCounterCell(
+        count: Int, label: String, mode: FollowListMode, c: AppTheme.Colors
+    ) -> some View {
+        Button {
+            Haptics.tap()
+            openFollowList(mode)
+        } label: {
+            statCell(value: "\(count)", label: label, c: c)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Full-width hairline between the two rows of the stats card. Was a
+    /// vertical 28pt rule between columns back when the card was a 2×2 grid;
+    /// canon rules the ROWS apart and leaves the columns to their own spacing.
     private func divider(_ c: AppTheme.Colors) -> some View {
         Rectangle()
             .fill(c.border)
-            .frame(width: 1, height: 28)
+            .frame(height: 1)
     }
 
     // MARK: - Active vehicle
@@ -650,36 +766,34 @@ struct PublicProfileView: View {
         if !ids.isEmpty {
             let badges = ids.compactMap { id in Badge.all.first(where: { $0.id == id }) }
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Text(AppStrings.badges(lang.language))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(c.text)
-                    Text("·")
-                        .foregroundStyle(c.textTertiary)
-                    Text("\(badges.count)")
-                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(c.textTertiary)
-                    Spacer()
-                }
+                sectionHeader("\(AppStrings.badges(lang.language)) · \(badges.count)", c: c)
 
-                // Wrap ScrollView in a rounded container that owns both the
-                // background and the clip shape. Applying `surfaceCard` directly
-                // to the ScrollView worked for the fill but didn't clip the
-                // scroll content — items bled past the rounded corners and the
-                // card looked broken when content overflowed horizontally.
+                // No card behind the cells (canon 117:1321 lays them straight
+                // on the page): each badge already carries its own tinted
+                // disc, so a second surface under them boxed one set of round
+                // shapes inside another for no gain.
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
+                    HStack(spacing: 10) {
                         ForEach(badges) { badge in
                             badgeCell(badge, c: c)
                         }
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 14)
                 }
-                .background(c.card)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
         }
+    }
+
+    /// Canon section header (Figma 117:1319 / 117:1338) — the 11pt uppercase
+    /// tertiary label every other social screen already uses. This screen set
+    /// its two headers 15pt bold mixed-case in primary, so they carried more
+    /// weight than the profile name they sat under.
+    private func sectionHeader(_ title: String, c: AppTheme.Colors) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(0.44)
+            .textCase(.uppercase)
+            .foregroundStyle(c.textTertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func badgeCell(_ badge: Badge, c: AppTheme.Colors) -> some View {
@@ -710,57 +824,6 @@ struct PublicProfileView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Follow counters
-
-    private func followCounters(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        // Trace what the UI is ACTUALLY rendering right now. Compare with the
-        // `loadProfile decoded` line to spot the stale-state / wrong-field
-        // case. Runs on every body rebuild — noisy, but that's the point.
-        let followerShown = profile?.followerCount ?? 0
-        let followingShown = profile?.followingCount ?? 0
-        let loaded = profile != nil
-        countsLog.debug("render followCounters id=\(self.accountId.uuidString.prefix(8), privacy: .public) loaded=\(loaded, privacy: .public) followerShown=\(followerShown, privacy: .public) followingShown=\(followingShown, privacy: .public)")
-        return HStack(spacing: 0) {
-            Button {
-                Haptics.tap()
-                openFollowList(.followers)
-            } label: {
-                VStack(spacing: 3) {
-                    Text("\(profile?.followerCount ?? 0)")
-                        .font(.system(size: 17, weight: .heavy).monospacedDigit())
-                        .foregroundStyle(c.text)
-                    Text(AppStrings.followersCaption(lang.language, n: profile?.followerCount ?? 0))
-                        .font(.system(size: 11))
-                        .foregroundStyle(c.textTertiary)
-                }
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Rectangle().fill(c.border).frame(width: 0.5, height: 32)
-
-            Button {
-                Haptics.tap()
-                openFollowList(.following)
-            } label: {
-                VStack(spacing: 3) {
-                    Text("\(profile?.followingCount ?? 0)")
-                        .font(.system(size: 17, weight: .heavy).monospacedDigit())
-                        .foregroundStyle(c.text)
-                    Text(AppStrings.followingCaption(lang.language, n: profile?.followingCount ?? 0))
-                        .font(.system(size: 11))
-                        .foregroundStyle(c.textTertiary)
-                }
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.vertical, 12)
-        .surfaceCard(cornerRadius: 14)
-    }
-
     // MARK: - Recent trips
 
     @ViewBuilder
@@ -770,22 +833,10 @@ struct PublicProfileView: View {
             let totalCount = profile?.stats.tripCount ?? trips.count
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
-                    Text(isRu ? "Поездки" : "Trips")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(c.text)
-                    Text("·")
-                        .foregroundStyle(c.textTertiary)
-                    Text("\(publicCount)")
-                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(c.textSecondary)
-                    if totalCount > publicCount {
-                        Text("·")
-                            .foregroundStyle(c.textTertiary)
-                        Text(isRu ? "всего \(totalCount)" : "\(totalCount) total")
-                            .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(c.textTertiary)
-                    }
-                    Spacer()
+                    sectionHeader(
+                        tripsHeaderTitle(public: publicCount, total: totalCount, isRu: isRu),
+                        c: c
+                    )
                     layoutToggle(c)
                 }
 
@@ -814,6 +865,16 @@ struct PublicProfileView: View {
         } else if isLoading {
             skeleton()
         }
+    }
+
+    /// «Поездки · 47 · всего 52» as one label rather than four Texts in three
+    /// sizes — canon (117:1339) writes the counts into the header line itself.
+    /// The «всего» tail only appears when the owner is holding trips back, so
+    /// the public number doesn't read as their whole road history.
+    private func tripsHeaderTitle(public publicCount: Int, total: Int, isRu: Bool) -> String {
+        let head = isRu ? "Поездки · \(publicCount)" : "Trips · \(publicCount)"
+        guard total > publicCount else { return head }
+        return head + (isRu ? " · всего \(total)" : " · \(total) total")
     }
 
     /// Grid ↔ list segmented mini-toggle in the trips header.
@@ -1115,7 +1176,7 @@ private extension SocialProfile {
             stats: stats, activeVehicle: activeVehicle, recentBadges: recentBadges,
             recentTrips: recentTrips,
             followerCount: followerCount, followingCount: followingCount,
-            isFollowing: isFollowing
+            isFollowing: isFollowing, bio: bio
         )
     }
 }

@@ -58,7 +58,7 @@ struct TripPhotoPicker: View {
     private func header(_ c: AppTheme.Colors) -> some View {
         ZStack {
             Text(AppStrings.choosePhotosTitle(lang.language))
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 17, weight: .heavy))
                 .foregroundStyle(c.text)
 
             HStack {
@@ -71,7 +71,7 @@ struct TripPhotoPicker: View {
                     dismiss()
                 } label: {
                     Text(AppStrings.cancel(lang.language))
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
                 }
                 .accessibilityIdentifier("photo_picker_cancel")
@@ -85,7 +85,7 @@ struct TripPhotoPicker: View {
                     Text(picked.isEmpty
                          ? AppStrings.done(lang.language)
                          : "\(AppStrings.done(lang.language)) · \(picked.count)")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(picked.isEmpty ? c.textTertiary : AppTheme.accent)
                 }
                 .disabled(picked.isEmpty || isFetchingFullSize)

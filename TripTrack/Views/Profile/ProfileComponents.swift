@@ -107,7 +107,9 @@ struct MomentCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .frame(width: 154, height: 120, alignment: .bottomLeading)
+        // 92, not 120: title + subtitle + padding only ever fill ~92, so the
+        // taller card left 28pt of empty gradient above the text.
+        .frame(width: 154, height: 92, alignment: .bottomLeading)
         .background(gradient, in: RoundedRectangle(cornerRadius: 16))
     }
 }

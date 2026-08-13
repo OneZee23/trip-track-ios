@@ -82,31 +82,15 @@ struct LightRoutePreview: View {
                 with: .color(.green)
             )
 
-            // End marker: checkered flag (adaptive direction)
+            // End dot (red). Used to be a checkered flag on a 10pt pole: it
+            // overhung the route bounds, needed an adaptive flip near the top
+            // edge, and at thumbnail scale (70×46 in История) read as noise
+            // rather than a finish. Canon mirrors the green start dot.
             let endPt = toPoint(simplified[simplified.count - 1])
-            let poleH: CGFloat = 10
-            let flagW: CGFloat = 7
-            let flagH: CGFloat = 5
-            let cellW = flagW / 2
-            let cellH = flagH / 2
-
-            // Flip flag downward if endpoint is near top edge
-            let drawUp = endPt.y > poleH + flagH + 2
-
-            // Flagpole
-            var polePath = Path()
-            polePath.move(to: CGPoint(x: endPt.x, y: endPt.y))
-            polePath.addLine(to: CGPoint(x: endPt.x, y: endPt.y + (drawUp ? -poleH : poleH)))
-            context.stroke(polePath, with: .color(.primary), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-
-            // Checkered pattern (2x2)
-            let flagOrigin = drawUp
-                ? CGPoint(x: endPt.x, y: endPt.y - poleH)
-                : CGPoint(x: endPt.x, y: endPt.y + poleH)
-            context.fill(Path(CGRect(x: flagOrigin.x, y: flagOrigin.y, width: cellW, height: cellH)), with: .color(.black))
-            context.fill(Path(CGRect(x: flagOrigin.x + cellW, y: flagOrigin.y + cellH, width: cellW, height: cellH)), with: .color(.black))
-            context.fill(Path(CGRect(x: flagOrigin.x + cellW, y: flagOrigin.y, width: cellW, height: cellH)), with: .color(.white))
-            context.fill(Path(CGRect(x: flagOrigin.x, y: flagOrigin.y + cellH, width: cellW, height: cellH)), with: .color(.white))
+            context.fill(
+                Path(ellipseIn: CGRect(x: endPt.x - dotSize/2, y: endPt.y - dotSize/2, width: dotSize, height: dotSize)),
+                with: .color(.red)
+            )
         }
         .background(c.cardAlt)
     }

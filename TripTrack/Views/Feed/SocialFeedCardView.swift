@@ -295,6 +295,24 @@ struct SocialFeedCardView: View {
                 // corners (measured off the FeedCard render), not a hard
                 // rectangle.
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else {
+            // A trip whose preview polyline is missing (or decodes to a single
+            // point) used to drop the ENTIRE 178pt band, so the card silently
+            // lost its picture and sat between neighbours as a stub. The
+            // `count > 1` guard has to stay — MapSnapshotPreview bails before
+            // it can set `failed`, leaving a shimmer that never resolves — so
+            // the empty case gets its own placeholder wearing that view's own
+            // failed chrome. The glyph centres rather than sitting in the
+            // corner: there's no faded route under it to defer to.
+            ZStack {
+                Rectangle().fill(c.cardAlt)
+                Image(systemName: "map.slash")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .frame(height: 178)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
     }
 

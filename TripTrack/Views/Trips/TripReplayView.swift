@@ -165,16 +165,6 @@ struct TripReplayView: View {
 
             Spacer(minLength: 0)
 
-            // «02:14 / 04:58» — trip-time elapsed / total, H:MM.
-            Text("\(Self.hmm(engine.progress * trip.duration)) / \(Self.hmm(trip.duration))")
-                .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(.black.opacity(0.32), in: Capsule())
-
-            Spacer(minLength: 0)
-
             PosterCircleButton(
                 systemImage: followsCar ? "location.fill" : "map",
                 accessibilityLabelText: lang.language == .ru
@@ -195,6 +185,24 @@ struct TripReplayView: View {
             .disabled(isGeneratingShare)
         }
         .frame(height: 40)
+        // The timecode has to read as centred on the bar, and between two
+        // Spacers it no longer did: the camera toggle made the right side a
+        // whole button wider than the left, pushing the pill 21pt off axis.
+        // An overlay puts it on the bar's true centre whatever flanks it.
+        .overlay(alignment: .center) { timecodePill }
+    }
+
+    /// «02:14 / 04:58» — trip-time elapsed / total, H:MM.
+    private var timecodePill: some View {
+        Text("\(Self.hmm(engine.progress * trip.duration)) / \(Self.hmm(trip.duration))")
+            .font(.system(size: 12, weight: .semibold).monospacedDigit())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.black.opacity(0.32), in: Capsule())
+            // Purely a readout — it must never swallow a tap meant for the
+            // buttons it now sits over.
+            .allowsHitTesting(false)
     }
 
     // MARK: - Speed bubble

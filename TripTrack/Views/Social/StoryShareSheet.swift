@@ -3,6 +3,15 @@ import MapKit
 import Photos
 import UIKit
 
+/// Where the «Фото-фон» card's photo comes from. Our own trips read the file
+/// in Documents; someone else's arrives as the 200px feed thumbnail, which is
+/// mush blown up to a 1080px export — so for those the sheet re-presigns the
+/// full-size original and only uses the thumbnail as the placeholder under it.
+enum SharePosterPhotoSource: Hashable {
+    case local(filename: String)
+    case remote(thumbnail: String?)
+}
+
 /// Decoupled data for the story preview — built from either a local `Trip`
 /// or a `SocialFeedTrip`.
 struct StoryShareData {
@@ -16,6 +25,9 @@ struct StoryShareData {
     let coordinates: [CLLocationCoordinate2D]
     let authorEmoji: String
     let authorName: String
+    /// First photo of the trip, for the «Фото-фон» card. Nil = this trip has
+    /// no photo, and that chip stays greyed out.
+    let photoSource: SharePosterPhotoSource?
     /// Carried in the data (not read from the environment) so the poster
     /// localizes identically on screen and inside ImageRenderer exports.
     let language: LanguageManager.Language
@@ -39,6 +51,12 @@ extension StoryShareData {
             coordinates: trip.previewCoordinates,
             authorEmoji: trip.author.avatarEmoji ?? "🚗",
             authorName: trip.author.displayName ?? (lang == .ru ? "Пользователь" : "User"),
+            // `photoCount`, not `firstPhotoThumbnail`: the thumbnail can still
+            // be presigning while the count is already right, and the chip
+            // should offer itself for any trip that has a photo at all.
+            photoSource: trip.photoCount > 0
+                ? SharePosterPhotoSource.remote(thumbnail: trip.firstPhotoThumbnail)
+                : nil,
             language: lang
         )
     }
@@ -59,6 +77,7 @@ extension StoryShareData {
             coordinates: trip.previewCoordinates,
             authorEmoji: authorEmoji,
             authorName: authorName,
+            photoSource: trip.photos.first.map { SharePosterPhotoSource.local(filename: $0.filename) },
             language: lang
         )
     }
@@ -72,11 +91,17 @@ struct StoryShareSheet: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
+    /// The two axes the card is built from — what it's drawn ON and what
+    /// SHAPE it exports as. They used to be the same three-way chip row.
+    @State private var background: SharePosterBackground
     @State private var format: SharePosterFormat = .poster
     /// Tiles for the selected format. Nil = still loading (or a route the
     /// snapshotter can't serve) — the card falls back to navy meanwhile.
     @State private var posterMap: SharePosterMap?
     @State private var isLoadingMap = false
+    /// The trip's first photo, decoded. Nil = no photo, or still loading.
+    @State private var posterPhoto: UIImage?
+    @State private var isLoadingPhoto = false
     @State private var savedToPhotos = false
     /// «Разрешите доступ к Фото» (canon 510:119) — shown when saving the card
     /// is refused by the system.
@@ -91,6 +116,15 @@ struct StoryShareSheet: View {
     /// chips visibly change the SHAPE of the card, not just its contents.
     private static let previewHeight: CGFloat = 290
 
+    /// The canon (117:1959) opens on «Фото-фон». A trip with no photo opens
+    /// on «Карта» instead, so the sheet never starts on a chip it has to grey
+    /// out and show an empty poster behind.
+    init(data: StoryShareData, shareUrl: String?) {
+        self.data = data
+        self.shareUrl = shareUrl
+        _background = State(initialValue: data.photoSource == nil ? .map : .photo)
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let isRu = lang.language == .ru
@@ -98,12 +132,17 @@ struct StoryShareSheet: View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
                 header(c)
-                formatChips(c)
+                backgroundChips(c)
             }
 
             ScrollView {
                 VStack(spacing: 14) {
                     preview(c)
+
+                    // Under the preview, not next to the background chips:
+                    // this row changes the card's SHAPE, and the shape it
+                    // changes is the thing directly above it.
+                    formatChips(c)
 
                     Text(AppStrings.shareCardCaption(lang.language))
                         .font(.system(size: 12))
@@ -144,7 +183,14 @@ struct StoryShareSheet: View {
         // «обрезанная карточка». The system radius is correct on both.
         .presentationDetents([.height(sheetHeight)])
         .onPreferenceChange(SharePosterSheetHeightKey.self) { measuredHeight = $0 }
-        .task(id: format) { await loadMap() }
+        // One key for both axes: the snapshot is cached per (trip, format),
+        // so flipping away from «Карта» and back is free, and two separate
+        // `.task(id:)` modifiers would both fire on first appear.
+        .task(id: mapKey) { await loadMap() }
+        // Eager, not on-demand: «Фото-фон» is the default chip whenever the
+        // trip has a photo, so a lazy load would show navy for the first
+        // second every single time the sheet opens.
+        .task { await loadPhoto() }
         .alert(
             AppStrings.photoAccessAlertTitle(lang.language),
             isPresented: $showPhotoAccessAlert
@@ -170,9 +216,13 @@ struct StoryShareSheet: View {
             .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.bottom }
             .first ?? 0
         let screen = UIScreen.main.bounds.height
-        guard measuredHeight > 0 else { return min(600, screen * 0.92) }
+        guard measuredHeight > 0 else { return min(645, screen * 0.92) }
         return min(measuredHeight + bottomInset, screen * 0.92)
     }
+
+    /// Identity of the snapshot the card currently wants. Background is part
+    /// of it because only «Карта» needs tiles at all.
+    private var mapKey: String { "\(background.rawValue)|\(format.rawValue)" }
 
     // MARK: - Header + chips
 
@@ -198,32 +248,77 @@ struct StoryShareSheet: View {
         .padding(.bottom, 12)
     }
 
-    private func formatChips(_ c: AppTheme.Colors) -> some View {
+    /// Canon 117:1987 — what the card is drawn on.
+    private func backgroundChips(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
-            ForEach(SharePosterFormat.allCases) { item in
-                let isOn = format == item
-                Button {
-                    Haptics.selection()
-                    withAnimation(.easeOut(duration: 0.22)) { format = item }
-                } label: {
-                    Text(item.title(lang.language))
-                        .font(.system(size: 13, weight: isOn ? .bold : .semibold))
-                        .foregroundStyle(isOn ? AppTheme.accent : c.textSecondary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .background(c.card, in: Capsule())
-                        // `strokeBorder` — a centred stroke would be clipped
-                        // by the row's bounds.
-                        .overlay(Capsule().strokeBorder(isOn ? AppTheme.accent : .clear, lineWidth: 1.5))
-                        .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+            ForEach(SharePosterBackground.allCases) { item in
+                // Greyed rather than dropped, in both cases: a chip that
+                // disappears reflows the row, so the same sheet is a
+                // different shape from one trip to the next and «Карта»
+                // never sits where the user last found it. Dimmed reads as
+                // "this style exists, this trip can't use it".
+                //  • «Фото-фон» on a trip with no photo → an empty poster.
+                //  • Anything at all on the sticker → it exports its alpha,
+                //    so there is no ground to paint.
+                let enabled = !format.isTransparent
+                    && (item != .photo || data.photoSource != nil)
+                chip(
+                    item.title(lang.language),
+                    isOn: background == item && !format.isTransparent,
+                    isEnabled: enabled,
+                    c: c
+                ) {
+                    withAnimation(.easeOut(duration: 0.22)) { background = item }
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isOn ? [.isSelected] : [])
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
         .padding(.bottom, 4)
+        .animation(.easeOut(duration: 0.2), value: format.isTransparent)
+    }
+
+    /// The other axis: aspect ratio + export shape. Deliberately quieter than
+    /// the background row — it picks a container, not a look.
+    private func formatChips(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 8) {
+            ForEach(SharePosterFormat.allCases) { item in
+                chip(item.title(lang.language), isOn: format == item, isEnabled: true, c: c, compact: true) {
+                    withAnimation(.easeOut(duration: 0.22)) { format = item }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+    }
+
+    private func chip(
+        _ title: String,
+        isOn: Bool,
+        isEnabled: Bool,
+        c: AppTheme.Colors,
+        compact: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            Text(title)
+                .font(.system(size: compact ? 12 : 13, weight: isOn ? .bold : .semibold))
+                .foregroundStyle(isOn ? AppTheme.accent : c.textSecondary)
+                .padding(.horizontal, compact ? 12 : 14)
+                .padding(.vertical, compact ? 7 : 9)
+                .background(c.card, in: Capsule())
+                // `strokeBorder` — a centred stroke would be clipped by the
+                // row's bounds.
+                .overlay(Capsule().strokeBorder(isOn ? AppTheme.accent : .clear, lineWidth: 1.5))
+                .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.35)
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
     }
 
     // MARK: - Preview
@@ -237,8 +332,11 @@ struct StoryShareSheet: View {
                 // than as a card with a grey background.
                 TransparencyChecker()
             }
-            SharePosterView(data: data, format: format, map: posterMap)
-            if isLoadingMap && format.showsMap && posterMap == nil {
+            SharePosterView(
+                data: data, format: format,
+                background: background, map: posterMap, photo: posterPhoto
+            )
+            if isPreparingBackground {
                 ProgressView()
                     .controlSize(.small)
                     .tint(.white)
@@ -250,7 +348,21 @@ struct StoryShareSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
         .animation(.easeOut(duration: 0.25), value: format)
+        .animation(.easeOut(duration: 0.25), value: background)
         .animation(.easeOut(duration: 0.3), value: posterMap != nil)
+        .animation(.easeOut(duration: 0.3), value: posterPhoto != nil)
+    }
+
+    /// True while the layer the user picked is still on its way. The card
+    /// shows the navy fallback meanwhile, which without a spinner reads as
+    /// "the chip did nothing".
+    private var isPreparingBackground: Bool {
+        guard !format.isTransparent else { return false }
+        switch background {
+        case .map: return isLoadingMap && posterMap == nil
+        case .photo: return isLoadingPhoto && posterPhoto == nil
+        case .minimal: return false
+        }
     }
 
     // MARK: - Buttons
@@ -331,10 +443,12 @@ struct StoryShareSheet: View {
         .padding(.horizontal, 16)
     }
 
-    // MARK: - Map
+    // MARK: - Background layers
 
     private func loadMap() async {
-        guard format.showsMap else {
+        // Tiles are only ever wanted by «Карта» — the photo and minimal cards
+        // used to pay for a snapshot they then painted over.
+        guard background == .map, format.showsMap else {
             posterMap = nil
             return
         }
@@ -346,6 +460,52 @@ struct StoryShareSheet: View {
         )
     }
 
+    private func loadPhoto() async {
+        guard let source = data.photoSource else { return }
+        isLoadingPhoto = true
+        defer { isLoadingPhoto = false }
+        switch source {
+        case .local(let filename):
+            posterPhoto = await PhotoStorageService.loadPhotoAsync(filename: filename)
+        case .remote(let thumbnail):
+            // Thumbnail first so the card isn't navy for the length of a
+            // presign round-trip; the 200px upload is mush at export size, so
+            // the full-size original replaces it the moment it lands.
+            if let thumbnail, let placeholder = await Self.download(thumbnail) {
+                if Task.isCancelled { return }
+                posterPhoto = placeholder
+            }
+            guard let original = await presignedOriginal(), !Task.isCancelled else { return }
+            if let full = await Self.download(original), !Task.isCancelled {
+                posterPhoto = full
+            }
+        }
+    }
+
+    /// Someone else's trip only reaches the feed as a thumbnail URL.
+    /// `/social/trip/photos` re-presigns the 1440px original — the same call
+    /// the detail screen's photo strip makes.
+    private func presignedOriginal() async -> String? {
+        do {
+            let res: SocialTripPhotosResponse = try await APIClient.shared.post(
+                APIEndpoint.socialTripPhotos,
+                body: SocialTripPhotosRequest(tripId: data.tripId),
+                requiresAuth: AuthService.shared.isSignedIn
+            )
+            guard let first = res.photos.first else { return nil }
+            return first.originalUrl ?? first.thumbnailUrl
+        } catch {
+            // Non-fatal: whatever thumbnail already landed stays on the card.
+            return nil
+        }
+    }
+
+    private static func download(_ urlString: String) async -> UIImage? {
+        guard let url = URL(string: urlString),
+              let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        return UIImage(data: data)
+    }
+
     // MARK: - Export
 
     @MainActor
@@ -355,7 +515,10 @@ struct StoryShareSheet: View {
         // `SharePosterFormat.renderScale`).
         let size = format.renderPointSize
         let renderer = ImageRenderer(content:
-            SharePosterView(data: data, format: format, map: posterMap)
+            SharePosterView(
+                data: data, format: format,
+                background: background, map: posterMap, photo: posterPhoto
+            )
                 .frame(width: size.width, height: size.height)
                 .environmentObject(lang)
                 .environment(\.colorScheme, .dark)

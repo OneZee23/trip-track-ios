@@ -1,8 +1,12 @@
 import SwiftUI
 import MapKit
 
-/// Export formats offered by the share sheet (canon: the «Постер / Сторис
-/// 9:16 / Стикер PNG» chip row).
+/// The SHAPE of the export — aspect ratio, pixel size and whether the PNG
+/// keeps its alpha. Nothing about what the card is drawn on: that used to be
+/// conflated here, so the chip row labelled «Фото-фон / Карта / Минимал»
+/// silently picked an aspect ratio and the photo-backed poster the canon
+/// draws (117:1959) had no code path at all. Background now lives in
+/// `SharePosterBackground`.
 enum SharePosterFormat: String, CaseIterable, Identifiable {
     /// 4:5 card — the chat/post shape.
     case poster
@@ -56,9 +60,33 @@ enum SharePosterFormat: String, CaseIterable, Identifiable {
     /// Sticker exports keep their alpha; the cards are flattened.
     var isTransparent: Bool { self == .sticker }
 
-    /// Cards carry the map; the sticker is route-only so it can sit on any
-    /// background.
+    /// Cards can carry a background layer; the sticker is route-only so it
+    /// can sit on any background of someone else's choosing.
     var showsMap: Bool { self != .sticker }
+}
+
+/// What the card is drawn ON — the canon chip row «Фото-фон / Карта /
+/// Минимал» (117:1987). Ignored by the sticker, which is a transparent PNG
+/// and so has no ground to paint.
+enum SharePosterBackground: String, CaseIterable, Identifiable {
+    /// The trip's first photo, full-bleed.
+    case photo
+    /// Real map tiles under the route — what every card used to be.
+    case map
+    /// The navy gradient: route and numbers, nothing else.
+    case minimal
+
+    var id: String { rawValue }
+
+    /// Inline like `SharePosterFormat.title` rather than in `AppStrings`:
+    /// this sheet already keeps its own chip copy local.
+    func title(_ lang: LanguageManager.Language) -> String {
+        switch self {
+        case .photo: return lang == .ru ? "Фото-фон" : "Photo"
+        case .map: return lang == .ru ? "Карта" : "Map"
+        case .minimal: return lang == .ru ? "Минимал" : "Minimal"
+        }
+    }
 }
 
 /// Map tiles + the route projected onto them. Produced by
@@ -77,23 +105,35 @@ struct SharePosterMap {
 struct SharePosterView: View {
     let data: StoryShareData
     let format: SharePosterFormat
+    /// Which layer sits under the route. Defaults to the pre-background-axis
+    /// behaviour so nothing renders a hole if a call site forgets it.
+    var background: SharePosterBackground = .map
     /// Nil while the snapshot is still loading, or for the sticker.
     var map: SharePosterMap?
+    /// The trip's first photo, already decoded. Nil while it loads, or when
+    /// the trip has none.
+    var photo: UIImage?
 
     /// Reference width the ratios below were drawn against.
     private static let canonWidth: CGFloat = 201
+
+    /// Cools the tiles or the photo down so the route and the numbers stay
+    /// the loudest things on the card.
+    private static let tone = Color(red: 0x12/255, green: 0x18/255, blue: 0x28/255)
 
     var body: some View {
         GeometryReader { geo in
             let s = geo.size.width / Self.canonWidth
             ZStack(alignment: .topLeading) {
-                background(size: geo.size)
+                backgroundLayer(size: geo.size)
 
                 route(in: geo.size, s: s)
 
                 if format != .sticker {
-                    // Bottom scrim — map tiles are busy, and white text on a
-                    // sunlit field of roads is unreadable without it.
+                    // Bottom scrim — map tiles are busy and a photo is worse,
+                    // and white text on a sunlit field of roads (or on a
+                    // bright sky) is unreadable without it. One scrim serves
+                    // every background.
                     LinearGradient(
                         colors: [.clear, .black.opacity(0.75)],
                         startPoint: .center, endPoint: .bottom
@@ -111,22 +151,32 @@ struct SharePosterView: View {
 
     // MARK: - Layers
 
+    /// Not `background(size:)` — that base name collides with the stored
+    /// `background` property this now switches on.
     @ViewBuilder
-    private func background(size: CGSize) -> some View {
+    private func backgroundLayer(size: CGSize) -> some View {
         if format.isTransparent {
             Color.clear
-        } else if let map {
+        } else if background == .photo, let photo {
+            Image(uiImage: photo)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: size.width, height: size.height)
+                .clipped()
+                // Lighter than the map's tone: tiles are flat colour a scrim
+                // can bury, a photo is the thing the user picked to show.
+                .overlay(Self.tone.opacity(0.22))
+        } else if background == .map, let map {
             Image(uiImage: map.image)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: size.width, height: size.height)
                 .clipped()
-                // Tone the tiles down so the route and the numbers stay the
-                // loudest things on the card.
-                .overlay(Color(red: 0x12/255, green: 0x18/255, blue: 0x28/255).opacity(0.28))
+                .overlay(Self.tone.opacity(0.28))
         } else {
-            // Navy fallback — same constants as the trip-detail poster, used
-            // while tiles load and for trips the snapshotter can't serve.
+            // Navy fallback — same constants as the trip-detail poster. It is
+            // «Минимал» on purpose, and the stand-in while tiles or the photo
+            // load (and for trips the snapshotter can't serve).
             LinearGradient(
                 stops: [
                     .init(color: Color(red: 0x29/255, green: 0x36/255, blue: 0x4F/255), location: 0.07),
@@ -140,7 +190,10 @@ struct SharePosterView: View {
     @ViewBuilder
     private func route(in size: CGSize, s: CGFloat) -> some View {
         let width = (format == .sticker ? 9 : 7) * s
-        if let map, !map.points.isEmpty {
+        // Only the map background may use the snapshot's projection — over a
+        // photo or the navy those points are aligned to tiles that aren't
+        // there, which drew the route hugging one corner.
+        if background == .map, let map, !map.points.isEmpty {
             // Map-aligned: points are already in the snapshot's projection.
             SharePosterRoute(points: map.points.map {
                 CGPoint(x: $0.x * size.width, y: $0.y * size.height)

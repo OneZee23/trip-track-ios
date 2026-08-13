@@ -137,13 +137,20 @@ struct ProfileView: View {
                                 .padding(.bottom, 12)
                         }
 
-                        if auth.isSignedIn, let agg, agg.yearTripCount > 0 {
+                        // Every number in the hero and in Моменты comes out of
+                        // MeAggregates.compute over local CoreData — nothing
+                        // here touches a session. Gating both on isSignedIn
+                        // meant a guest with 40 trips saw the stat strip, the
+                        // sign-in card, then История, with their whole year
+                        // missing; the data-driven gates below are the real
+                        // ones.
+                        if let agg, agg.yearTripCount > 0 {
                             yearHero(agg, c)
                                 .padding(.horizontal, 14)
                                 .padding(.bottom, 12)
                         }
 
-                        if auth.isSignedIn, let agg {
+                        if let agg {
                             momentsSection(agg, c)
                         }
 
@@ -638,7 +645,10 @@ struct ProfileView: View {
                 }
                 .padding(.horizontal, 14)
             }
-            .padding(.bottom, 12)
+            // 6, not 12: the rail is 98 in canon (92 card + 6) — at 12 the
+            // section carried dead space under cards that were themselves
+            // 28pt taller than their content.
+            .padding(.bottom, 6)
         }
     }
 

@@ -832,21 +832,23 @@ struct FeedView: View {
     /// with the «find people» CTA: nobody followed yet (or the followed
     /// users have no public trips).
     private func followingEmptyState(_ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 0) {
-            FeedIdleRing()
-                .padding(.top, 36)
+        // Same skeleton as `socialEmptyState` — ring at 40, spacing 14,
+        // centred in the page. It used to hand-roll a 36/18/8/22 rhythm of
+        // per-child top paddings, which put the hero a few points off the All
+        // segment's and made it visibly jump as you swiped between the two.
+        VStack(spacing: 14) {
+            IdleRing()
+                .padding(.top, 40)
             Text(AppStrings.followingEmptyTitle(lang.language))
                 .font(.inter(19, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
-                .padding(.top, 18)
             Text(AppStrings.followingEmptyBody(lang.language))
                 .font(.inter(14))
                 .lineSpacing(6)
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 280)
-                .padding(.top, 8)
+                .frame(width: 280)
             Button {
                 Haptics.tap()
                 showDiscover = true
@@ -865,30 +867,32 @@ struct FeedView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("following_empty_find_people")
-            .padding(.top, 22)
         }
+        .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .padding(.bottom, 96)
+        .containerRelativeFrame(.vertical, alignment: .center)
     }
 
     /// Guest visiting «Подписки» — no fetch happens; the page pitches
     /// signing in (the banner above provides the actual CTA).
     private func followingGuestState(_ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 0) {
-            FeedIdleRing()
-                .padding(.top, 36)
+        // Shares the empty state's skeleton for the same reason — see
+        // `followingEmptyState`. Signing in swaps one of these for the other,
+        // so any drift between them showed up as a jolt.
+        VStack(spacing: 14) {
+            IdleRing()
+                .padding(.top, 40)
             Text(AppStrings.followingGuestTitle(lang.language))
                 .font(.inter(19, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
-                .padding(.top, 18)
             Text(AppStrings.followingGuestBody(lang.language))
                 .font(.inter(14))
                 .lineSpacing(6)
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 280)
-                .padding(.top, 8)
+                .frame(width: 280)
 
             Button {
                 Haptics.tap()
@@ -903,10 +907,11 @@ struct FeedView: View {
                     .shadow(color: AppTheme.accent.opacity(0.3), radius: 1.5, y: 1)
             }
             .buttonStyle(.plain)
-            .padding(.top, 18)
         }
+        .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .padding(.bottom, 96)
+        .containerRelativeFrame(.vertical, alignment: .center)
     }
 
     /// Surfaced when the SyncQueue has parked one or more ops in `failedQueue`.
@@ -1077,7 +1082,7 @@ struct FeedView: View {
         let hasPrivateTrips = hasAnyPrivateTrip
         let signedIn = auth.isSignedIn
         VStack(spacing: 14) {
-            FeedIdleRing()
+            IdleRing()
                 .padding(.top, 40)
 
             Text(AppStrings.feedEmptyTitle(lang.language))
@@ -1139,7 +1144,11 @@ struct FeedView: View {
         }
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
-        .padding(.bottom, 40)
+        .padding(.bottom, 96)
+        // Sized to the scroll view so the hero sits in the middle of the page.
+        // Top-anchored, the whole state measured ~76pt on a 360×780 frame and
+        // hung right under the segment with the rest of the screen empty.
+        .containerRelativeFrame(.vertical, alignment: .center)
     }
 
     /// Reactions must go through the store that owns the trip's card so its
@@ -1264,14 +1273,10 @@ struct FeedView: View {
 
 }
 
-// MARK: - Feed idle ring (Figma 141:1103)
+// MARK: - Feed state ring (Figma 141:1103)
 
-/// Empty-state hero: quiet outer ring + accent inner ring around the
-/// pixel-art car. Sibling of `SignInIdleRing` (SignInPromptSheet) which
-/// uses a translucent accent disc — deliberately separate, not extracted
-/// into a shared component.
-/// Neutral sibling of `FeedIdleRing` for non-empty states (network error):
-/// same double ring, no accent, an SF glyph instead of the car.
+/// Neutral sibling of the shared `IdleRing` for non-empty states (network
+/// error): same double ring, no accent, an SF glyph instead of the car.
 private struct FeedStateRing: View {
     let systemImage: String
     @Environment(\.colorScheme) private var scheme
@@ -1287,32 +1292,6 @@ private struct FeedStateRing: View {
                 Image(systemName: systemImage)
                     .font(.system(size: 30, weight: .light))
                     .foregroundStyle(c.textTertiary)
-            }
-            .frame(width: 82, height: 82)
-        }
-        .frame(width: 100, height: 100)
-    }
-}
-
-private struct FeedIdleRing: View {
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        let c = AppTheme.colors(for: scheme)
-        ZStack {
-            Circle()
-                .stroke(c.border, lineWidth: 2)
-                .frame(width: 100, height: 100)
-            ZStack {
-                Circle()
-                    .stroke(AppTheme.accent, lineWidth: 2)
-                Image("PixelCar")
-                    .resizable()
-                    .interpolation(.none)
-                    // The sprite asset is non-square — without fit it
-                    // squeezes into the 46×46 box.
-                    .scaledToFit()
-                    .frame(width: 46, height: 46)
             }
             .frame(width: 82, height: 82)
         }

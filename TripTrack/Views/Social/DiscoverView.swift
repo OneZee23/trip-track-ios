@@ -10,7 +10,9 @@ struct DiscoverView: View {
 
     @State private var query: String = ""
     @State private var results: [SocialAuthor] = []
-    @State private var suggested: [SocialAuthor] = []
+    /// Suggestions carry a rationale + mileage the plain `SocialAuthor` of
+    /// the search results doesn't — see `SocialSuggestedUser`.
+    @State private var suggested: [SocialSuggestedUser] = []
     @State private var followedIds: Set<UUID> = []
     @State private var isSearching = false
     @State private var isLoadingSuggested = false
@@ -155,7 +157,10 @@ struct DiscoverView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(suggested, id: \.id) { user in
-                        userRow(user, c: c, isRu: isRu)
+                        userRow(
+                            user.author, c: c, isRu: isRu,
+                            reason: user.reason, totalKm: user.totalKm
+                        )
                     }
                 }
             }
@@ -228,7 +233,13 @@ struct DiscoverView: View {
         .padding(.horizontal, 20)
     }
 
-    private func userRow(_ user: SocialAuthor, c: AppTheme.Colors, isRu: Bool) -> some View {
+    /// `reason` / `totalKm` are the suggestion-only extras (Figma 117:291);
+    /// search results pass neither and the row collapses back to the
+    /// name + level it has always drawn.
+    private func userRow(
+        _ user: SocialAuthor, c: AppTheme.Colors, isRu: Bool,
+        reason: SuggestionMatchReason? = nil, totalKm: Double? = nil
+    ) -> some View {
         Button {
             Haptics.tap()
             authorPath.cappedAppend(.profile(user.id, user))
@@ -245,10 +256,22 @@ struct DiscoverView: View {
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    // Context line / mileage only when the DTO carries them —
-                    // the suggestion DTO ships level only, so that's what we
-                    // render (no fabricated data).
-                    Text("LVL \(user.profileLevel)")
+                    // Line 2 — WHY this person is being suggested. Drawn
+                    // only for a reason key this build recognises: an
+                    // unknown one (a newer server's invention) drops the
+                    // line rather than printing `sharedRegion` at the user.
+                    if let reason {
+                        Text(reason.label(lang.language))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(c.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    // Line 3 — level, plus lifetime mileage when the DTO
+                    // carries it. Search results and pre-6.1 servers send no
+                    // mileage, so this stays the bare "LVL n" it was (no
+                    // fabricated data).
+                    Text(levelLine(user.profileLevel, totalKm: totalKm))
                         .font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(c.textTertiary)
                 }
@@ -266,6 +289,15 @@ struct DiscoverView: View {
         .buttonStyle(.plain)
     }
 
+    /// «LVL 4» alone, or «LVL 4 · 38 420 км» once the server ships mileage.
+    /// Zero km counts as no data — a suggestion whose whole rationale is
+    /// how much they drive shouldn't advertise «0 км».
+    private func levelLine(_ level: Int, totalKm: Double?) -> String {
+        let head = "LVL \(level)"
+        guard let km = totalKm, km > 0 else { return head }
+        return "\(head) · \(GarageFormat.odometer(km)) \(AppStrings.km(lang.language))"
+    }
+
     private func followButton(for user: SocialAuthor, c: AppTheme.Colors, isRu: Bool) -> some View {
         let isFollowed = followedIds.contains(user.id)
         return Button {
@@ -279,22 +311,13 @@ struct DiscoverView: View {
             Text(isFollowed
                  ? (isRu ? "Подписан" : "Following")
                  : (isRu ? "Подписаться" : "Follow"))
-                .font(.system(size: 12, weight: .semibold))
-                .lineLimit(1)
-                .padding(.vertical, 8)
-                // Fixed footprint (Figma: 122pt) — "Подписаться" (11 chars)
-                // vs "Подписан" (8 chars) caused visible row-content jump on
-                // toggle. Pinning width keeps the row stable between states.
-                .frame(width: 122)
-                .background(
-                    isFollowed ? c.cardAlt : AppTheme.accent,
-                    in: RoundedRectangle(cornerRadius: 14)
+                // Fixed footprint (canon 117:298 draws 122pt) — "Подписаться"
+                // (11 chars) vs "Подписан" (8 chars) caused visible
+                // row-content jump on toggle. Pinning width keeps the row
+                // stable between states.
+                .socialActionButton(
+                    isFollowed ? .secondary : .primary, colors: c, width: 122
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(isFollowed ? c.borderBright : Color.clear, lineWidth: 1.5)
-                )
-                .foregroundStyle(isFollowed ? c.text : .white)
         }
         .buttonStyle(.plain)
     }
@@ -335,7 +358,10 @@ struct DiscoverView: View {
         defer { isLoadingSuggested = false }
         do {
             let req = SocialSuggestedRequest(limit: 10)
-            let res: SocialUsersResponse = try await APIClient.shared.post(
+            // `SocialSuggestedResponse`, not the shared `SocialUsersResponse`:
+            // same `{users:[…]}` envelope, but its rows keep the rationale
+            // and mileage this endpoint alone returns.
+            let res: SocialSuggestedResponse = try await APIClient.shared.post(
                 APIEndpoint.socialSuggested, body: req,
                 requiresAuth: AuthService.shared.isSignedIn)
             await MainActor.run { suggested = res.users }
