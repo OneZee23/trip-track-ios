@@ -62,6 +62,18 @@ final class ScrubSurfaceView: UIView, UIGestureRecognizerDelegate {
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
         switch gesture.state {
         case .began, .changed:
+            // Escape hatch: a drag that starts sideways and then turns into a
+            // scroll hands the touch back instead of holding it hostage.
+            // Cancelling the recogniser (disable/enable is the only way to do
+            // that to a stock pan) lets the enclosing scroll view pick the
+            // gesture up mid-drag.
+            let translation = gesture.translation(in: self)
+            if abs(translation.y) > 44, abs(translation.y) > abs(translation.x) * 1.4 {
+                gesture.isEnabled = false
+                gesture.isEnabled = true
+                onEnded()
+                return
+            }
             onScrub(gesture.location(in: self))
         case .ended, .cancelled, .failed:
             onEnded()
@@ -77,12 +89,20 @@ final class ScrubSurfaceView: UIView, UIGestureRecognizerDelegate {
 
     // MARK: - UIGestureRecognizerDelegate
 
-    /// Sideways only. A finger that is mostly travelling up or down is on its
-    /// way past the chart, not reading it.
+    /// Sideways only, and sideways by a clear margin.
+    ///
+    /// `|vx| > |vy|` was too generous by a hair: a finger heading down the
+    /// page with any diagonal drift could satisfy it in the one frame this
+    /// is asked, the chart claimed the touch — and because the scroll view
+    /// is required to wait for this recogniser (below), the page then could
+    /// not scroll at all for the rest of that drag. Requiring the sideways
+    /// component to dominate, and to be moving at all, keeps the ambiguous
+    /// middle with the page, where a drag that isn't obviously "read the
+    /// chart" belongs.
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         guard let pan = gesture as? UIPanGestureRecognizer else { return true }
         let velocity = pan.velocity(in: self)
-        return abs(velocity.x) > abs(velocity.y)
+        return abs(velocity.x) > abs(velocity.y) * 1.6 && abs(velocity.x) > 80
     }
 
     /// Make the enclosing scroll view wait until this recogniser has decided.

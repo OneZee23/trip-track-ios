@@ -36,6 +36,11 @@ struct TripCommentsSection: View {
     /// which is where replying lives.
     var isPreview: Bool = true
 
+    /// Bumped by the detail's pull-to-refresh. The store is owned by this
+    /// view (one thread per screen), so the only way in from outside is a
+    /// value the load task keys on.
+    var refreshToken: Int = 0
+
     @StateObject private var store = TripCommentsStore()
     /// Currently spotlighted comment — set on arrival, cleared after the
     /// flash so the row settles back to normal.
@@ -85,7 +90,9 @@ struct TripCommentsSection: View {
         if store.unavailable && store.comments.isEmpty {
             Color.clear
                 .frame(height: 0)
-                .task(id: tripId) { await store.load(tripId: tripId) }
+                .task(id: RefreshKey(tripId: tripId, token: refreshToken)) {
+                    await store.load(tripId: tripId)
+                }
         } else {
             content
         }
@@ -213,7 +220,7 @@ struct TripCommentsSection: View {
                 .accessibilityIdentifier("discussion_see_all")
             }
         }
-        .task(id: tripId) {
+        .task(id: RefreshKey(tripId: tripId, token: refreshToken)) {
             await store.load(tripId: tripId)
             await spotlightIfRequested()
         }
@@ -532,4 +539,11 @@ struct TripCommentsSection: View {
         if delta < 86_400 { return AppStrings.relTimeHours(lang, Int(delta / 3600)) }
         return AppStrings.relTimeDays(lang, Int(delta / 86_400))
     }
+}
+
+/// `.task(id:)` identity for the comments thread: the trip it belongs to,
+/// plus a token the trip detail bumps when the user pulls to refresh.
+private struct RefreshKey: Equatable {
+    let tripId: UUID
+    let token: Int
 }
