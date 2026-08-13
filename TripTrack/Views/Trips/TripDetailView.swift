@@ -1814,7 +1814,14 @@ struct TripDetailView: View {
     private var companionsGate: CompanionsCardModel.Gate {
         guard isOwn else { return .allowed }
         guard auth.isSignedIn else { return .signedOut }
-        return (trip?.isOnServer ?? false) ? .allowed : .notPublished
+        if trip?.isOnServer ?? false { return .allowed }
+        // Off the server does NOT mean nobody was in the car. Taking a trip
+        // private removes it there, which clears this flag — and gating the
+        // whole roster on it meant the people who rode with you vanished
+        // behind «сначала опубликуйте» at exactly that moment. If the device
+        // remembers a roster, it is shown; «publish first» is left for a trip
+        // that genuinely never had one.
+        return (trip?.companions.isEmpty ?? true) ? .notPublished : .allowed
     }
 
     private func companionsSection(trip: Trip) -> some View {
