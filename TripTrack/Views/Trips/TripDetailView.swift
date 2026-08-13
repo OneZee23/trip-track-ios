@@ -1596,20 +1596,13 @@ struct TripDetailView: View {
             // exists, the owner can still read it, and hiding it behind that
             // card meant making a trip private silently took the conversation
             // away from the one person who was in it.
-            if trip.isPrivate, isOwn, !trip.isOnServer {
-                VStack(alignment: .leading, spacing: 10) {
-                    DetailSectionHeader(text: AppStrings.comments(lang.language))
-                    lockedSocialCard(
-                        title: AppStrings.publishForCommentsTitle(lang.language),
-                        body: AppStrings.publishForCommentsBody(lang.language),
-                        identifier: "comments_locked_card",
-                        c: c
-                    )
-                }
-            }
-
-            if !trip.isPrivate || (isOwn && trip.isOnServer) {
-                TripCommentsSection(
+            // No locked card on an own trip, in any state. It was gated on
+            // «is the trip on the server», which flips to false the moment a
+            // private trip is taken off it — so the moment the discussion most
+            // needed showing was exactly the moment this replaced it. On your
+            // own trip the section itself is always the right answer: it shows
+            // the thread, or the archived copy of it, or an honest empty line.
+            TripCommentsSection(
                     tripId: trip.id,
                     isTripOwner: isOwn,
                     // The header states the server-known total; without it the
@@ -1641,7 +1634,6 @@ struct TripDetailView: View {
                     refreshToken: refreshToken
                 )
                 .id(Self.commentsAnchor)
-            }
 
         }
         .padding(.horizontal, 16)
@@ -1928,16 +1920,13 @@ struct TripDetailView: View {
                 DetailSectionHeader(text: AppStrings.reactionsTitleN(lang.language, totalReactions))
                 reactionsCard(c)
             }
-        } else if trip.isPrivate, !trip.isOnServer {
-            // Only for a trip that has never been published — see the same
-            // distinction on the discussion below. Header included, like every
-            // other section: without it the locked card sat headerless between
-            // «Достижения поездки» and «Обсуждение» and read as the tail of the
-            // achievements block.
-            VStack(alignment: .leading, spacing: 10) {
-                DetailSectionHeader(text: AppStrings.chipReactions(lang.language))
-                publishNudgeCard(trip: trip, c: c)
-            }
+        } else if trip.isPrivate, !isOwn {
+            // Someone else's private trip is none of our business. Our OWN
+            // never gets the «опубликуйте, чтобы получить реакции» card any
+            // more: it stood exactly where the reactions the trip already has
+            // should have been, and on a trip taken back from the feed it read
+            // as though the app had forgotten them.
+            EmptyView()
         } else {
             // Public, zero reactions (canon: «РЕАКЦИИ · ПУСТО»): the section
             // keeps its header and its card, and the card says the quiet part.
