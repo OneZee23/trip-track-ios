@@ -131,8 +131,7 @@ struct SignInPromptSheet: View {
             // stops where the content does.
             .padding(.bottom, 28)
         }
-        .background(c.bg)
-        .contentSizedSheet()
+        .contentSizedSheet(background: c.bg)
         // No `presentationCornerRadius` override: on iOS 26 a sheet is a card
         // that floats inset from the screen, and forcing the radius left its
         // bottom corners squared off against the screen edge — the reported

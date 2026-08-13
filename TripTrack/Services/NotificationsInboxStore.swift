@@ -179,16 +179,20 @@ final class NotificationsInboxStore: ObservableObject {
 
     /// Flush whatever has accumulated. Called on the debounce and when the
     /// inbox goes away, so a quick peek-and-close still reports.
+    ///
+    /// The rows on screen are deliberately NOT restyled. Reporting a row as
+    /// read and making it LOOK read are two different things, and doing both
+    /// at once meant the highlight on a new notification died under the
+    /// reader's eyes a moment after the screen appeared — the one moment it
+    /// existed to serve. The server is told immediately (so the badge is
+    /// honest and the row is read everywhere else), the count drops, and the
+    /// rows keep their «new» look until the next time the inbox is opened and
+    /// reloads them from a server that now says they are read.
     func flushSeen() async {
         let ids = pendingSeen
         pendingSeen = []
         guard !ids.isEmpty else { return }
-        var flipped = 0
-        items = items.map { item in
-            guard ids.contains(item.id), !item.isRead else { return item }
-            flipped += 1
-            return makeRead(item)
-        }
+        let flipped = items.filter { ids.contains($0.id) && !$0.isRead }.count
         guard flipped > 0 else { return }
         unreadCount = max(0, unreadCount - flipped)
         do {

@@ -1037,11 +1037,10 @@ struct PublishTripSheet: View {
         // to the sheet's top edge that the grabber sat almost on the type.
         .padding(.top, 30)
         .padding(.bottom, 20)
-        .background(c.card)
         // Was `.medium` at the call site with a Spacer holding the slack: on a
         // short confirmation that left half a screen of empty card under the
         // buttons.
-        .contentSizedSheet()
+        .contentSizedSheet(background: c.card)
     }
 }
 

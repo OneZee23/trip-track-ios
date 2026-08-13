@@ -16,6 +16,12 @@ import SwiftUI
 /// Give the content its own bottom padding; this adds only the home-indicator
 /// strip, which is the phone's, not the design's.
 struct ContentSizedSheet: ViewModifier {
+    /// The sheet's own ground. Passed in rather than applied by the caller
+    /// because the detent adds the home-indicator strip on top of the measured
+    /// content: paint only as far as the content goes and that strip shows the
+    /// system's default sheet colour instead — a band of the wrong grey under
+    /// the buttons, which is exactly what this modifier exists to avoid.
+    var background: Color
     /// Floor, for a sheet that would otherwise be too small to grab.
     var minimum: CGFloat = 0
 
@@ -23,6 +29,7 @@ struct ContentSizedSheet: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .frame(maxWidth: .infinity)
             .background {
                 GeometryReader { geo in
                     Color.clear.preference(
@@ -31,6 +38,9 @@ struct ContentSizedSheet: ViewModifier {
                 }
             }
             .onPreferenceChange(ContentSheetHeightKey.self) { measured = $0 }
+            // Content sits at the top; the ground runs to the bottom edge.
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(background.ignoresSafeArea())
             .presentationDetents([.height(max(measured, minimum) + Self.bottomInset)])
     }
 
@@ -52,7 +62,7 @@ private struct ContentSheetHeightKey: PreferenceKey {
 
 extension View {
     /// Sizes this sheet to its content. See `ContentSizedSheet`.
-    func contentSizedSheet(minimum: CGFloat = 0) -> some View {
-        modifier(ContentSizedSheet(minimum: minimum))
+    func contentSizedSheet(background: Color, minimum: CGFloat = 0) -> some View {
+        modifier(ContentSizedSheet(background: background, minimum: minimum))
     }
 }

@@ -101,12 +101,16 @@ struct SharedTripLinkSheet: View {
             )
         }
         .coordinateSpace(name: Self.space)
-        .background(c.bg)
+
         // No `presentationCornerRadius` override: on iOS 26 a sheet is a card
         // that floats inset from the screen, and forcing the radius left its
         // bottom corners squared off against the screen edge — the reported
         // «обрезанная карточка». The system radius is correct on both.
-        .presentationDetents([.height(sheetHeight)])
+        // The ground is painted by the sizer, not here: the detent runs a
+        // little past the measured content, and a background that stopped at
+        // the content left a band of the system's own sheet colour under the
+        // buttons.
+        .contentSizedSheet(background: c.bg)
         .presentationDragIndicator(.visible)
         .onPreferenceChange(LinkSheetHeightKey.self) { contentBottom = $0 }
     }

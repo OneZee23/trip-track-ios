@@ -59,6 +59,13 @@ struct TripDetailView: View {
     /// "leave a different one".
     @State private var myReaction: String?
     @State private var showReactionPicker = false
+    /// Who left this reaction — the same peek the feed's pills offer, which
+    /// the detail's own chips never had: holding one here did nothing, on the
+    /// screen where "who reacted to my trip" is the whole question.
+    @State private var reactorsPeekEmoji: String?
+    /// Set by a chip's long press so the touch-up that follows doesn't also
+    /// count as a tap and move the viewer's reaction.
+    @State private var didLongPressChip = false
     /// The fullscreen cinema replay (canon 117:533).
     @State private var showPhotoPicker = false
     @State private var pickedImages: [UIImage] = []
@@ -925,6 +932,32 @@ struct TripDetailView: View {
                 descriptionText: trip?.tripDescription ?? "",
                 onPublish: { desc in handlePublishConfirm(descriptionText: desc) }
             )
+            .presentationDragIndicator(.visible)
+            .preferredColorScheme(themeManager.preferredColorScheme)
+        }
+        .sheet(item: Binding(
+            get: { reactorsPeekEmoji.map { ReactorsPeekTarget(emoji: $0) } },
+            set: { if $0 == nil { reactorsPeekEmoji = nil } }
+        )) { peek in
+            ReactionsListSheet(
+                tripId: tripId,
+                initialEmoji: peek.emoji,
+                onSelectUser: { author in
+                    reactorsPeekEmoji = nil
+                    // Pushing in the same runloop as the dismissal drops one
+                    // of the two — the feed's peek learned this the same way.
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 260_000_000)
+                        if let pushPath {
+                            pushPath.wrappedValue.cappedAppend(.profile(author.id, author))
+                        } else {
+                            selectedReactorAuthor = author
+                        }
+                    }
+                }
+            )
+            .environmentObject(lang)
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .preferredColorScheme(themeManager.preferredColorScheme)
         }
@@ -1939,6 +1972,18 @@ struct TripDetailView: View {
 
     /// Publishing needs an account. Every entry point goes through here so the
     /// gate cannot be forgotten on one of them — it already had been, twice.
+    private func peekReactors(_ emoji: String) {
+        didLongPressChip = true
+        Haptics.action()
+        reactorsPeekEmoji = emoji
+        // Self-clearing, so a long press with no tap after it cannot swallow
+        // the next real tap.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            didLongPressChip = false
+        }
+    }
+
     private func requestPublish() {
         guard auth.isSignedIn else {
             signInPrompt = .publish
@@ -2039,19 +2084,26 @@ struct TripDetailView: View {
                         // Ours stays a read-out — you cannot react to yourself.
                         if isOwn {
                             ReactionCountChip(emoji: emoji, count: count, style: .breakdown)
+                                .contentShape(Capsule())
+                                .onLongPressGesture { peekReactors(emoji) }
                         } else {
-                            Button {
+                            // Plain view + gestures rather than a `Button`: a
+                            // Button wins the recognition race and the long
+                            // press inside it never fires, which is why holding
+                            // a chip here did nothing at all.
+                            ReactionCountChip(
+                                emoji: emoji,
+                                count: count,
+                                style: ReactionEmoji.canonical(myReaction ?? "") == emoji
+                                    ? .mine
+                                    : .unselected
+                            )
+                            .contentShape(Capsule())
+                            .onTapGesture {
+                                if didLongPressChip { didLongPressChip = false; return }
                                 react(with: emoji)
-                            } label: {
-                                ReactionCountChip(
-                                    emoji: emoji,
-                                    count: count,
-                                    style: ReactionEmoji.canonical(myReaction ?? "") == emoji
-                                        ? .mine
-                                        : .unselected
-                                )
                             }
-                            .buttonStyle(.plain)
+                            .onLongPressGesture { peekReactors(emoji) }
                         }
                     }
 
@@ -2705,4 +2757,11 @@ struct DetailScrollOffsetKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
     }
+}
+
+/// Identifiable wrapper so the reactors peek can be presented with
+/// `.sheet(item:)` off a plain emoji string.
+private struct ReactorsPeekTarget: Identifiable {
+    let emoji: String
+    var id: String { emoji }
 }

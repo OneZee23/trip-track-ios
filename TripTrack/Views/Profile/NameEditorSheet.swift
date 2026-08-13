@@ -151,8 +151,7 @@ struct NameEditorSheet: View {
             .padding(.top, 8)
             .padding(.bottom, 20)
         }
-        .background(c.bg)
-        .contentSizedSheet()
+        .contentSizedSheet(background: c.bg)
         .presentationDragIndicator(.hidden)
         .onAppear {
             // Pre-fill placeholder users with empty so they don't have to
