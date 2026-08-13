@@ -890,10 +890,10 @@ struct TripDetailView: View {
                 language: lang.language
             )
             .padding(.horizontal, 12)
-            // Below the floating back/⋯/share row (Figma 522:119 puts the
-            // toast at y≈110) — at +8 it covered the buttons and swallowed
-            // their taps for the whole publish window.
-            .padding(.top, safeAreaTop + 56)
+            // On the bar's own line. The pill is a compact capsule that sits
+            // between the buttons; the error card carries its own drop below
+            // them, because that one IS full-width.
+            .padding(.top, safeAreaTop + 8)
         }
         .confirmationDialog(
             AppStrings.deletePhoto(lang.language),

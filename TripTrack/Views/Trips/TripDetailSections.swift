@@ -1078,6 +1078,9 @@ struct PublishStatusOverlay: View {
             if isActive {
                 if hasFailed || timedOut {
                     errorCard
+                        // Clear of the floating back / share / «…» row: the
+                        // card is full-width and would sit on top of them.
+                        .padding(.top, 48)
                         // The op can still drain on its own (connectivity
                         // returns → SyncQueue auto-retries the pending op).
                         // Without this watcher the card would keep claiming
@@ -1121,26 +1124,32 @@ struct PublishStatusOverlay: View {
 
     private var publishingPill: some View {
         let c = AppTheme.colors(for: scheme)
-        return HStack(spacing: 10) {
+        // A capsule that hugs its two words, sitting on the top bar's own
+        // line between the back button and the actions — the same place, and
+        // the same shape, as the timecode pill on the fullscreen map.
+        //
+        // It used to be a full-width slab pushed 56pt below the bar: a banner
+        // wide enough to read as a section of the page, floating in the middle
+        // of the map with the buttons stranded above it. Status this brief
+        // belongs IN the chrome, not under it. There is no clash to fear —
+        // the middle of the bar only ever carries the author of someone
+        // else's trip, and you cannot publish one of those.
+        return HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
                 .tint(AppTheme.accent)
             Text(AppStrings.publishing(language))
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(c.text)
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 9)
         .background {
-            RoundedRectangle(cornerRadius: 12)
+            Capsule()
                 .fill(c.card)
                 .shadow(color: .black.opacity(0.1), radius: 6, y: 3)
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(AppTheme.accent.opacity(0.25), lineWidth: 1)
-        )
+        .overlay(Capsule().stroke(AppTheme.accent.opacity(0.25), lineWidth: 1))
         // Pure status — never swallow taps meant for content below.
         .allowsHitTesting(false)
         .transition(.move(edge: .top).combined(with: .opacity))

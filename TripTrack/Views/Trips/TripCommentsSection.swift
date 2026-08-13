@@ -87,9 +87,23 @@ struct TripCommentsSection: View {
     /// screen instead of a section that grows with the conversation.
     private static let previewLimit = 2
 
-    /// Newest-first list; the preview keeps the freshest few.
+    /// Oldest at the top, newest at the bottom — a conversation read in the
+    /// order it happened, and a message you just sent appearing where you
+    /// stopped reading rather than jumping above everything.
+    ///
+    /// The STORE stays newest-first: that is the direction its keyset cursor
+    /// pages in, so «показать ещё» keeps fetching older comments and they land
+    /// at the top, which is where older comments belong. Only the reading
+    /// order is flipped, and only here.
+    ///
+    /// The preview still takes the freshest few — `prefix` before the reverse,
+    /// not after, or a two-line teaser would show the two OLDEST messages on a
+    /// long thread.
     private var visibleComments: [TripComment] {
-        isPreview ? Array(store.comments.prefix(Self.previewLimit)) : store.comments
+        let newestFirst = isPreview
+            ? Array(store.comments.prefix(Self.previewLimit))
+            : store.comments
+        return newestFirst.reversed()
     }
 
     private var displayCount: Int {
@@ -146,17 +160,22 @@ struct TripCommentsSection: View {
                         .frame(height: 1)
                 }
 
+                // Above the thread, not below it: what it loads is OLDER
+                // comments, and older is now up. The preview never paginates —
+                // its own «Всё обсуждение» pill is the way in.
+                if !isPreview, store.nextCursor != nil {
+                    showMoreButton
+                    Rectangle()
+                        .fill(c.border)
+                        .frame(height: 1)
+                }
+
                 ForEach(visibleComments) { comment in
                     commentRow(comment, c: c)
                         .id(comment.id)
                     Rectangle()
                         .fill(c.border)
                         .frame(height: 1)
-                }
-
-                // The preview never paginates — the pill below is the way in.
-                if !isPreview, store.nextCursor != nil {
-                    showMoreButton
                 }
 
                 // On the detail the composer is a doorway, not a field: tapping
