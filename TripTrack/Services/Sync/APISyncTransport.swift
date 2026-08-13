@@ -257,6 +257,7 @@ final class APISyncTransport: SyncTransport {
         // is already private on this device by then, so nobody sees it in the
         // meantime — the only thing still pending is the erasure.
         try await rescueServerOnlyPhotos(tripId: id)
+        await archiveDiscussion(tripId: id)
         let req = TripDeleteRequest(id: id, conflictVersion: Int(entity.conflictVersion))
         do {
             let _: EmptyResponse = try await client.post(APIEndpoint.tripDelete, body: req)
@@ -286,6 +287,33 @@ final class APISyncTransport: SyncTransport {
             }
             repo.adoptRescuedPhoto(id: photoId, filename: filename)
         }
+    }
+
+    /// Copies the trip's discussion onto the device before the server loses it.
+    ///
+    /// Deliberately NOT allowed to block the erasure the way the photo rescue
+    /// is: a photo that fails to come down is gone forever, while a thread
+    /// that fails to come down is a conversation the owner can still remember
+    /// having. Privacy is the promise being kept here; the archive is a
+    /// courtesy on top of it, and a courtesy must not hold a promise hostage.
+    private func archiveDiscussion(tripId: UUID) async {
+        var collected: [TripComment] = []
+        var cursor: String?
+        // Bounded: ten pages is a very long thread, and an archive that walks
+        // forever would stall the erasure it is supposed to precede.
+        for _ in 0..<10 {
+            do {
+                let res: TripCommentsResponse = try await client.post(
+                    APIEndpoint.socialComments,
+                    body: TripCommentsRequest(tripId: tripId, limit: 50, cursor: cursor))
+                collected.append(contentsOf: res.comments)
+                guard let next = res.nextCursor else { break }
+                cursor = next
+            } catch {
+                break
+            }
+        }
+        DiscussionArchive.save(collected, for: tripId)
     }
 
     private func downloadPhotoData(photoId: UUID) async throws -> Data {

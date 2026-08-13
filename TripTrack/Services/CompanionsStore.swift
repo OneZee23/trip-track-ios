@@ -269,11 +269,22 @@ final class CompanionsStore: ObservableObject {
             cacheRoster(res.items, for: tripId)
             return res
         } catch APIError.tripNotFound where treatTripNotFoundAsEmpty {
-            let empty = CompanionsListResponse(items: [], isOwnerView: true)
-            companionsByTrip[tripId] = empty.items
+            // «No such trip» for a trip we own means it is not on the server —
+            // never published, or published once and taken back. It does NOT
+            // mean nobody ever rode along, and this used to answer as though it
+            // did: it wrote an EMPTY roster into the offline cache, so pressing
+            // «повторить» on a trip that had just been made private erased the
+            // companions from the device too. The one durable record of who was
+            // in the car, destroyed by a refresh.
+            //
+            // Keep what is known. The cache is left exactly as it is, and the
+            // answer is whatever this session has already seen — the trip
+            // detail separately feeds the plaque from the cached roster, so a
+            // cold start still shows them.
+            let known = companionsByTrip[tripId] ?? []
+            companionsByTrip[tripId] = known
             loadStateByTrip[tripId] = .loaded
-            cacheRoster(empty.items, for: tripId)
-            return empty
+            return CompanionsListResponse(items: known, isOwnerView: true)
         } catch {
             loadStateByTrip[tripId] = .failed
             companionsLog.error("list failed: \(error.localizedDescription)")

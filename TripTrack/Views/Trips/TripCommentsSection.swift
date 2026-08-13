@@ -150,7 +150,9 @@ struct TripCommentsSection: View {
                 // bottom, far from the empty space it explains, so there
                 // the line stays.
                 if visibleComments.isEmpty, !isPreview {
-                    Text(AppStrings.noCommentsYet(lang.language))
+                    Text(store.loadFailed
+                         ? AppStrings.discussionUnavailable(lang.language)
+                         : AppStrings.noCommentsYet(lang.language))
                         .font(.system(size: 14))
                         .foregroundStyle(c.textTertiary)
                         .frame(maxWidth: .infinity, alignment: .center)
@@ -181,7 +183,17 @@ struct TripCommentsSection: View {
                 // On the detail the composer is a doorway, not a field: tapping
                 // it opens the sheet with the keyboard already up, so writing
                 // happens in one place with the whole thread in view.
-                if isPreview {
+                if store.isArchived {
+                    // Nothing to reply to: the trip this conversation belongs
+                    // to is no longer on the server, and the thread survives
+                    // only because the device kept a copy of it.
+                    Text(AppStrings.discussionArchived(lang.language))
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                } else if isPreview {
                     Button {
                         Haptics.tap()
                         guard !isGuestComposer else {

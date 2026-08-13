@@ -31,6 +31,10 @@ final class TripCommentsStore: ObservableObject {
     /// composer is worse than none); flips back on the next app launch
     /// against a deployed backend.
     @Published private(set) var unavailable = false
+    /// The thread on screen is the device's own copy of a conversation the
+    /// server no longer holds. Read-only by nature: there is nothing left to
+    /// reply to.
+    @Published private(set) var isArchived = false
 
     private var tripId: UUID?
     private let pageSize = 30
@@ -51,12 +55,27 @@ final class TripCommentsStore: ObservableObject {
             nextCursor = res.nextCursor
             loadFailed = false
             unavailable = false
+            isArchived = false
         } catch {
             // Non-fatal — the card keeps the feed-known count. A route-level
             // 404 means the backend doesn't ship comments yet → hide the UI.
             loadFailed = true
             if case APIError.invalidHTTPStatus(404) = error { unavailable = true }
             commentsLog.error("comments load failed: \(error.localizedDescription)")
+
+            // The server cannot answer for a trip it no longer has — which is
+            // precisely what happens when the owner takes one private, since
+            // that erases it there. The thread was copied to the device before
+            // the erasure; this is where that copy is read. Only ever as a
+            // fallback, so a live thread is always the live one.
+            let archived = DiscussionArchive.load(for: tripId)
+            if !archived.isEmpty {
+                comments = archived
+                nextCursor = nil
+                loadFailed = false
+                unavailable = false
+                isArchived = true
+            }
         }
     }
 

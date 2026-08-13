@@ -243,6 +243,33 @@ final class CompanionsCachePersistenceTests: XCTestCase {
         XCTAssertEqual(store.companionsByTrip[tripId], [])
     }
 
+    /// TRIP_NOT_FOUND on an own trip must not ERASE what is already known.
+    ///
+    /// It used to write an EMPTY roster straight into the offline cache. A trip
+    /// taken private leaves the server, so every later list is a
+    /// TRIP_NOT_FOUND — and pressing «повторить» on that trip wiped its
+    /// companions from the device. The one durable record of who was in the
+    /// car, destroyed by a refresh of it.
+    func testTripNotFoundOnOwnTrip_KeepsWhatIsAlreadyKnown() async throws {
+        let tripId = insertLocalTrip()
+        let store = CompanionsStore(client: client, repository: repo)
+
+        MockURLProtocol.requestHandler = listResponseHandler(
+            items: [(id: UUID(), name: "Даниил", emoji: "🕵️", status: 1)])
+        _ = try await store.list(tripId: tripId, treatTripNotFoundAsEmpty: true)
+        XCTAssertEqual(repo.fetchTripDetail(id: tripId)?.companions.count, 1)
+
+        // The trip leaves the server; every list now answers TRIP_NOT_FOUND.
+        MockURLProtocol.requestHandler = tripNotFoundResponseHandler()
+        let after = try await store.list(tripId: tripId, treatTripNotFoundAsEmpty: true)
+
+        XCTAssertEqual(after.items.count, 1, "the known roster must survive")
+        XCTAssertEqual(
+            repo.fetchTripDetail(id: tripId)?.companions.count, 1,
+            "the offline cache must not be overwritten with an empty roster"
+        )
+    }
+
     /// The flag is opt-in — a non-owner's `TRIP_NOT_FOUND` (the default,
     /// `treatTripNotFoundAsEmpty: false`) must still throw and record
     /// `.failed`, exactly as every other error does. Fails if the remap

@@ -1036,6 +1036,20 @@ enum AppStrings {
     /// says what happened rather than «не удалось загрузить»: nothing failed,
     /// the author simply closed it, and offering «попробовать снова» for that
     /// is an invitation to retry something that will never change.
+    /// The thread could not be read at all — as opposed to a thread that is
+    /// simply empty. Saying «пока никто ничего не написал» over a heading that
+    /// counts five messages is the app contradicting itself out loud.
+    static func discussionUnavailable(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Не удалось загрузить обсуждение"
+            : "Couldn't load the discussion"
+    }
+    /// A thread kept on the device after the trip left the server.
+    static func discussionArchived(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Сохранённая копия обсуждения — поездка больше не на сервере"
+            : "A saved copy — this trip is no longer on the server"
+    }
     static func tripPrivateTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Поездка закрыта" : "This trip is private"
     }
