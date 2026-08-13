@@ -36,8 +36,11 @@ enum AppStrings {
     static func groupsNotifyMe(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Уведомить меня" : "Notify me"
     }
+    /// The done state used to say «Вы в списке», which claims a server-side
+    /// waitlist — the flag is a local @AppStorage bool with no endpoint
+    /// behind it, so the copy now promises only what the app itself does.
     static func groupsNotifyDone(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Вы в списке" : "You're on the list"
+        lang == .ru ? "Покажем, когда откроем" : "We'll show it when it opens"
     }
     static func groupsWaitlistCount(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Уже ждут 1 240 человек" : "1,240 people already waiting"
@@ -520,10 +523,14 @@ enum AppStrings {
     static func onboardingBackgroundTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Запись в фоне" : "Recording in the background"
     }
+    // This page's button also fires the Motion & Fitness prompt
+    // (OnboardingView.requestAlwaysAndAdvance), and the copy named only
+    // location — activity data was asked for with nothing disclosed about
+    // it, so the sensor and its battery reason are spelled out here.
     static func onboardingBackgroundSub(_ lang: LanguageManager.Language) -> String {
         lang == .ru
-            ? "Чтобы поездки писались, когда телефон в кармане, нужен доступ к геолокации «Всегда». С «При использовании» запись прервётся в фоне."
-            : "For trips to keep recording with the phone in your pocket, location access must be «Always». With «While Using» recording stops in the background."
+            ? "Чтобы поездки писались, когда телефон в кармане, нужен доступ к геолокации «Всегда» — с «При использовании» запись прервётся в фоне. Датчик движения («Движение и фитнес») помогает заметить начало поездки без постоянного GPS — так батарея расходуется меньше."
+            : "For trips to keep recording with the phone in your pocket, location access must be «Always» — with «While Using» recording stops in the background. Motion & Fitness data lets the app spot a drive starting without keeping GPS on, so the battery lasts longer."
     }
     static func onboardingBackgroundAllow(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Разрешить «Всегда»" : "Allow «Always»"
@@ -555,21 +562,6 @@ enum AppStrings {
 
     static func onboardingAllow(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Разрешить" : "Allow"
-    }
-    static func onboardingAutoRecord(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Автоматическая запись" : "Automatic recording"
-    }
-    static func onboardingAutoRecordSub(_ lang: LanguageManager.Language) -> String {
-        if lang == .ru {
-            return "TripTrack сам определит, что Вы за рулём, и начнёт запись. Для этого нужен фоновый доступ к геолокации и датчику движения. Батарея почти не расходуется."
-        }
-        return "TripTrack detects when you're driving and starts recording automatically. This requires background location and motion sensor access. Minimal battery impact."
-    }
-    static func onboardingAutoRecordEnable(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Включить" : "Enable"
-    }
-    static func onboardingAutoRecordSkip(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Настрою позже" : "Set up later"
     }
     /// Composes the full onboarding consent sentence with clickable Markdown links.
     /// Uses correct Russian declension (instrumental after «соглашаетесь с»).
@@ -1270,6 +1262,16 @@ enum AppStrings {
     }
     /// «Получен 14 мая 2026 · Дача и обратно» (Figma 117:1582). The trip is
     /// what makes the date mean anything, so it joins the line when we know it.
+    /// The tail of «Получено 15 раз · последний 9 августа 2026» — lowercase
+    /// on purpose, it continues a sentence rather than starting one.
+    static func badgeLastEarned(_ lang: LanguageManager.Language, date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: lang == .ru ? "ru_RU" : "en_US")
+        f.dateFormat = "d MMMM yyyy"
+        return lang == .ru
+            ? "последний \(f.string(from: date))"
+            : "last on \(f.string(from: date))"
+    }
     static func badgeEarnedOn(
         _ lang: LanguageManager.Language,
         date: Date,
@@ -1526,6 +1528,9 @@ enum AppStrings {
     static func signInPromptPublish(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Войдите, чтобы опубликовать" : "Sign in to publish"
     }
+    static func signInPromptCompanions(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Войдите, чтобы звать попутчиков" : "Sign in to invite companions"
+    }
     static func signInPromptGeneric(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Войдите в TripTrack" : "Sign in to TripTrack"
     }
@@ -1755,6 +1760,10 @@ enum AppStrings {
     static func chipComments(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Комменты" : "Comments"
     }
+    /// Chip filter label for `achievement` rows.
+    static func chipAchievements(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Достижения" : "Achievements"
+    }
     static func today(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Сегодня" : "Today"
     }
@@ -1784,6 +1793,27 @@ enum AppStrings {
     /// Fallback object when a trip has no title of its own.
     static func activityYourTrip(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Вашу поездку" : "your trip"
+    }
+
+    // MARK: - Achievement rows (6.1.0)
+
+    /// Line one of a system-authored `achievement` row. Nobody did this TO
+    /// the user, so the name slot is signed by the app rather than falling
+    /// back to «Кто-то» the way an actor-less row otherwise would. A brand
+    /// name, hence untranslated and language-free — it lives here anyway so
+    /// the row keeps every string it draws in one place.
+    static let activityAchievementActor = "TripTrack"
+    /// Line two when the badge resolved to a known `Badge.all` entry.
+    static func activityAchievementUnlocked(
+        _ lang: LanguageManager.Language, badge: String
+    ) -> String {
+        lang == .ru ? "Открыто достижение «\(badge)»" : "Achievement unlocked: “\(badge)”"
+    }
+    /// Line two when the badge didn't resolve — an id this build doesn't
+    /// know yet, or a server that names the badge some other way. Still a
+    /// true, readable sentence instead of an empty row.
+    static func activityAchievementUnlockedGeneric(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Открыто новое достижение" : "New achievement unlocked"
     }
 
     static func followBack(_ lang: LanguageManager.Language) -> String {
@@ -1857,6 +1887,19 @@ enum AppStrings {
     // MARK: - Discover (6.1.0)
     static func suggestedByRegions(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Рекомендуем · по Вашим регионам" : "Suggested · based on your regions"
+    }
+
+    /// Rationale line of a suggested-person row (Figma 117:291). The server
+    /// sends a machine key, these are its only renderings — an unknown key
+    /// draws no line at all (see `SuggestionMatchReason`).
+    static func suggestReasonSharedRegion(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ездит в Ваших краях" : "Drives in your regions"
+    }
+    static func suggestReasonNearby(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Рядом с Вами" : "Near you"
+    }
+    static func suggestReasonPopular(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Популярный водитель" : "Popular driver"
     }
 
     // MARK: - Share sheet / report (6.1.0)
@@ -2380,6 +2423,15 @@ enum AppStrings {
         if isBlocked { return lang == .ru ? "Разблокировать" : "Unblock" }
         return lang == .ru ? "Заблокировать" : "Block"
     }
+    /// «…» menu entry on a public profile — puts the profile URL on the
+    /// pasteboard. The share row above it reuses `settingsShareProfile`.
+    static func copyProfileLink(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Скопировать ссылку" : "Copy link"
+    }
+    /// Toast that answers the copy — the pasteboard itself says nothing.
+    static func profileLinkCopied(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ссылка скопирована" : "Link copied"
+    }
     /// Comment-create throttle (10/min server-side).
     static func commentRateLimited(_ lang: LanguageManager.Language) -> String {
         lang == .ru
@@ -2405,6 +2457,16 @@ enum AppStrings {
         lang == .ru
             ? "Чтобы звать попутчиков, сначала опубликуйте поездку"
             : "Publish the trip first to invite companions"
+    }
+    /// The OTHER reason the invite row can't act yet, and the one that used
+    /// to be misreported as `companionsPublishFirstHint`: a signed-out
+    /// viewer on their own trip — which may well be published already, so
+    /// telling them to publish it is both wrong and a dead end. Unlike the
+    /// publish hint, this row IS tappable: it opens the sign-in sheet.
+    static func companionsSignInHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Войдите, чтобы звать попутчиков"
+            : "Sign in to invite companions"
     }
     /// «Позвать» — opens the (Task 3) candidate picker. Same word for both
     /// the empty-state row and the smaller CTA appended after an existing
@@ -2485,6 +2547,14 @@ enum AppStrings {
     /// might be out of date.
     static func companionsCachedNotice(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Нет сети — может быть неактуально" : "Offline — may be out of date"
+    }
+    /// Confirmation after picking photos. The system picker opens on a
+    /// library that already holds everything you added before, so without a
+    /// receipt afterwards there is nothing to tell "added" from "looked at
+    /// the same photos again".
+    static func photosAdded(_ count: Int, _ lang: LanguageManager.Language) -> String {
+        if lang == .ru { return "Добавлено \(count) фото" }
+        return count == 1 ? "1 photo added" : "\(count) photos added"
     }
     static func companionsRemoveFailed(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Не удалось убрать попутчика" : "Couldn't remove companion"

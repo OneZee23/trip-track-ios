@@ -63,7 +63,11 @@ struct ToastView: View {
             Text(item.message)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(c.text)
-                .lineLimit(1)
+                // Two lines rather than an ellipsis: «Не удалось загрузить
+                // фото попутчика» is longer than one line of a pill, and a
+                // truncated failure explains nothing.
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
 
             if item.type == .undo, item.undoAction != nil {
                 Spacer(minLength: 4)
@@ -80,16 +84,20 @@ struct ToastView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Sized to what it says, and centred — not a full-width slab. A
+        // three-word confirmation stretched across the screen reads as a
+        // banner announcing a problem; a pill reads as a receipt.
         .background {
-            RoundedRectangle(cornerRadius: 14)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+            let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+            // Solid card, not `.ultraThinMaterial`: over the app's warm
+            // light background the material turned into a milky grey plate
+            // whose edges picked up whatever was scrolling underneath.
+            shape
+                .fill(c.card)
+                .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.10), radius: 14, y: 5)
+                .overlay { shape.strokeBorder(c.border, lineWidth: 0.5) }
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(c.border, lineWidth: 0.5)
-        )
+        .frame(maxWidth: 340)
         .padding(.horizontal, 16)
     }
 }

@@ -12,6 +12,12 @@ struct PhotoPickerView: UIViewControllerRepresentable {
         var config = PHPickerConfiguration()
         config.selectionLimit = 0
         config.filter = .images
+        // Numbered badges instead of anonymous ticks. The picker opens on a
+        // library that already contains the photos you added a minute ago,
+        // so a tick that means "selected right now" and a photo that is
+        // already on the trip look identical — «1» «2» at least says how
+        // many this round is about, and in which order they will land.
+        config.selection = .ordered
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
         return picker

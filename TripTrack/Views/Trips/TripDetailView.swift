@@ -79,6 +79,10 @@ struct TripDetailView: View {
     @State private var showDeleteConfirm = false
     /// «…» popover on the poster header.
     @State private var showTripActions = false
+    /// 0 while the map fills the hero, 1 once it has scrolled away — drives
+    /// the top bar's glass→toolbar morph. Quantized in steps of 0.05 before
+    /// it lands here (see `DetailScrollOffsetKey`'s handler).
+    @State private var heroProgress: Double = 0
     /// Fix 3: confirmation for a companion leaving someone else's trip.
     @State private var showLeaveConfirm = false
     /// Fix 3: guards `leaveTrip()` against a double-tap firing two
@@ -181,72 +185,16 @@ struct TripDetailView: View {
         isOwn || !isPrivate
     }
 
-    /// Back + «…» + share over the poster.
-    @ViewBuilder
-    private func posterChrome(trip: Trip) -> some View {
-        HStack(spacing: 8) {
-            PosterCircleButton(
-                systemImage: "chevron.left",
-                accessibilityLabelText: AppStrings.back(lang.language)
-            ) { dismiss() }
-
-            Spacer()
-
-            // Popover, not a `Menu` — see `ActionPopoverList`. Here
-            // the artifact was at its worst: the button floats in an
-            // overlay above a ScrollView, so UIKit's dismissal
-            // animation put the source snapshot back against stale
-            // geometry and the «…» visibly slid away across the
-            // screen.
-            // Everything you can do to a trip you own. It used to hold one
-            // item — «Удалить» — with editing hidden behind a tap on the title
-            // and privacy behind a tap on a chip, so the only discoverable
-            // action was the destructive one. On someone else's trip there is
-            // nothing here at all and the button does not appear.
-            if isOwn {
-                PosterCircleButton(
-                    systemImage: "ellipsis",
-                    accessibilityLabelText: AppStrings.moreActions(lang.language)
-                ) { showTripActions = true }
-                .accessibilityIdentifier("detail_actions")
-                .popover(isPresented: $showTripActions, arrowEdge: .top) {
-                    ActionPopoverList(items: ownerActions(trip: trip))
-                }
-            } else if isAcceptedCompanion {
-                // Fix 3: the design gives a companion the right to remove
-                // themselves from a trip they don't own — this is the only
-                // action available here, so it gets the same «…» affordance
-                // rather than a standalone always-visible button.
-                PosterCircleButton(
-                    systemImage: "ellipsis",
-                    accessibilityLabelText: AppStrings.moreActions(lang.language)
-                ) { showTripActions = true }
-                .accessibilityIdentifier("detail_actions")
-                .popover(isPresented: $showTripActions, arrowEdge: .top) {
-                    ActionPopoverList(items: companionActions())
-                }
-            }
-
-            // Sharing your own trip, or someone else's PUBLIC trip, works —
-            // the server mints a link either way. A companion's PRIVATE trip
-            // is the one case it never can: `SocialService.share` refuses
-            // with `TripNotPublic` for any non-owner viewer of a private
-            // trip, so offering the button just to watch it fail silently
-            // (see `openStoryShare`'s `catch { url = nil }`) was worse than
-            // not offering it (Task 5 review finding).
-            if TripDetailView.canOfferShare(isOwn: isOwn, isPrivate: trip.isPrivate) {
-                PosterCircleButton(
-                    systemImage: "square.and.arrow.up",
-                    accessibilityLabelText: AppStrings.share(lang.language)
-                ) {
-                    Task { await openStoryShare(for: trip) }
-                }
-                .disabled(isGeneratingShare)
-                .accessibilityIdentifier("detail_share")
-            }
-        }
-        .padding(.top, safeAreaTop + 8)
-        .padding(.horizontal, 16)
+    /// What the pinned bar says once the map has scrolled away — the same
+    /// answer `titleBlock` gives, so the bar and the heading under it can't
+    /// name the trip differently.
+    private func barTitle(for trip: Trip) -> String {
+        let named = (trip.title?.trimmingCharacters(in: .whitespacesAndNewlines))
+            .map { !$0.isEmpty } ?? false
+        if named { return trip.title ?? "" }
+        if let region = RegionDisplay.localized(trip.region, language: lang.language),
+           !region.isEmpty { return region }
+        return formattedDateFallback(trip.startDate)
     }
 
     /// Whose trip this is — shown only on someone else's, where the answer is
@@ -303,14 +251,18 @@ struct TripDetailView: View {
             }
         }
         return [
-            .init(title: AppStrings.edit(lang.language), systemImage: "pencil") {
+            .init(
+                title: AppStrings.edit(lang.language), systemImage: "pencil",
+                accessibilityId: "detail_action_edit"
+            ) {
                 present { showEditSheet = true }
             },
             .init(
                 title: trip.isPrivate
                     ? AppStrings.publishAction(lang.language)
                     : AppStrings.makePrivateAction(lang.language),
-                systemImage: trip.isPrivate ? "globe" : "lock"
+                systemImage: trip.isPrivate ? "globe" : "lock",
+                accessibilityId: "detail_action_publish"
             ) {
                 present {
                     Haptics.selection()
@@ -327,7 +279,8 @@ struct TripDetailView: View {
             .init(
                 title: AppStrings.deleteTrip(lang.language),
                 systemImage: "trash",
-                isDestructive: true
+                isDestructive: true,
+                accessibilityId: "detail_action_delete"
             ) {
                 present { showDeleteConfirm = true }
             },
@@ -368,7 +321,8 @@ struct TripDetailView: View {
             .init(
                 title: AppStrings.companionsLeaveTrip(lang.language),
                 systemImage: "rectangle.portrait.and.arrow.right",
-                isDestructive: true
+                isDestructive: true,
+                accessibilityId: "detail_action_leave"
             ) {
                 showTripActions = false
                 Task { @MainActor in
@@ -490,14 +444,26 @@ struct TripDetailView: View {
                     VStack(spacing: 0) {
                         heroSection(trip: trip)
                             .frame(height: posterHeight)
-                            // Chrome rides the poster instead of floating over
-                            // the whole screen.
-                            .overlay(alignment: .top) { posterChrome(trip: trip) }
-                            .overlay(alignment: .topLeading) {
-                                authorPill
-                                    .padding(.leading, 16)
-                                    .padding(.top, safeAreaTop + 56)
+                            // How far the map has scrolled away, for the top
+                            // bar's glass→toolbar morph. Read from a
+                            // `Color.clear` in the BACKGROUND, never from
+                            // inside the map's own subtree: this fires on
+                            // every frame of a scroll, and the map is an
+                            // `MKMapView` with a display link running.
+                            .background {
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: DetailScrollOffsetKey.self,
+                                        value: geo.frame(in: .named("detailScroll")).minY
+                                    )
+                                }
                             }
+
+                        // What the route's colours mean — a line of type in
+                        // the seam under the map, not a control on it.
+                        if cachedCoordinates.count > 1, !cachedSpeeds.isEmpty {
+                            RouteSpeedKeyStrip(language: lang.language)
+                        }
 
                         // Bottom info panel
                         infoPanel(trip: trip, c: c)
@@ -537,6 +503,39 @@ struct TripDetailView: View {
                     .shimmer()
                     Spacer()
                 }
+            }
+        }
+        .onPreferenceChange(DetailScrollOffsetKey.self) { minY in
+            // Quantized before it reaches state: at full precision every
+            // scrolled point re-renders a body that hosts an MKMapView.
+            let span = max(1, posterHeight - safeAreaTop - 52)
+            let raw = min(max(-minY / span, 0), 1)
+            let stepped = (raw * 20).rounded() / 20
+            if stepped != heroProgress { heroProgress = stepped }
+        }
+        // The one top bar. Pinned to the screen, not to the map, so «Назад»
+        // survives scrolling; declared before `PublishStatusOverlay` so the
+        // publish toast still stacks above it.
+        .overlay(alignment: .top) {
+            if let trip, !showLoadError {
+                TripDetailTopBar(
+                    progress: heroProgress,
+                    topInset: safeAreaTop,
+                    title: barTitle(for: trip),
+                    language: lang.language,
+                    showShare: TripDetailView.canOfferShare(
+                        isOwn: isOwn, isPrivate: trip.isPrivate),
+                    shareDisabled: isGeneratingShare,
+                    showActions: isOwn || isAcceptedCompanion,
+                    actionsPresented: $showTripActions,
+                    onBack: { dismiss() },
+                    onShare: { Task { await openStoryShare(for: trip) } },
+                    pill: { authorPill },
+                    popover: {
+                        ActionPopoverList(
+                            items: isOwn ? ownerActions(trip: trip) : companionActions())
+                    }
+                )
             }
         }
         .background(c.bg)
@@ -648,6 +647,10 @@ struct TripDetailView: View {
             }
             .environmentObject(lang)
             .preferredColorScheme(themeManager.preferredColorScheme)
+            // The canon draws a grab handle (117:602). Without one the sheet
+            // looked like a pushed screen, and the only way out was «Отмена» —
+            // people swiped anyway and could not tell whether it was allowed.
+            .presentationDragIndicator(.visible)
         }
         .onChange(of: pickedImages) { newImages in
             guard !newImages.isEmpty else { return }
@@ -657,12 +660,24 @@ struct TripDetailView: View {
             // `isOwn` is exactly the flag that already tells the two apart
             // everywhere else on this screen.
             if isOwn {
+                var added = 0
                 for image in newImages {
                     if let photo = mapVM.tripManager.addPhoto(to: tripId, image: image) {
                         trip?.photos.append(photo)
+                        added += 1
                     }
                 }
                 pickedImages = []
+                // Say it landed. The picker shows the whole library — the
+                // photos you just added are in it too — so without this the
+                // only difference between "added two" and "changed nothing"
+                // was counting tiles in the strip.
+                if added > 0 {
+                    toastItem = ToastItem(
+                        type: .success,
+                        message: AppStrings.photosAdded(added, lang.language)
+                    )
+                }
             } else {
                 let images = newImages
                 pickedImages = []
@@ -682,7 +697,12 @@ struct TripDetailView: View {
                     ? ownPhotoItems.map { item in
                         let source: FullScreenPhotoSource
                         switch item.source {
-                        case .local(let filename):
+                        case .local(let filename), .missing(let filename):
+                            // A missing row goes in as the local page it is —
+                            // the viewer's own failure state (broken-photo
+                            // glyph) is exactly the right screen, and it is
+                            // the one place that offers the bin, so the user
+                            // can retire the row themselves.
                             source = .local(filename: filename)
                         case .remote(let thumbnailURL, let originalURL):
                             source = .remote(url: originalURL ?? thumbnailURL)
@@ -701,6 +721,20 @@ struct TripDetailView: View {
                     initialIndex: index,
                     region: trip?.region,
                     language: lang.language,
+                    // Deleting was only ever a long press on a thumbnail —
+                    // an affordance with nothing on screen to suggest it,
+                    // which read as "adding is allowed, deleting isn't".
+                    // The viewer is where you actually decide a picture
+                    // isn't worth keeping, so the bin lives here too. Own
+                    // trips only: on someone else's, deleting isn't ours to
+                    // offer (a companion's own upload included — the server
+                    // authorises the TRIP owner).
+                    onDelete: isOwn ? { pageId in
+                        guard let item = ownPhotoItems.first(where: { $0.id == pageId })
+                        else { return }
+                        selectedPhotoIndex = nil
+                        deleteOwnPhoto(item)
+                    } : nil,
                     onDismiss: { selectedPhotoIndex = nil }
                 )
             }
@@ -737,15 +771,23 @@ struct TripDetailView: View {
                     isUnlocked: true,
                     language: lang.language,
                     colorScheme: scheme,
+                    // Our own tally, so it is gated exactly like the earned-on
+                    // date below — «получен 3 раза» under someone else's badge
+                    // would be counting our drives on their card.
+                    earnCount: isOwn && badge.isRepeatable
+                        ? BadgeManager.earnCount(for: badge.id)
+                        : nil,
                     lastEarnedDate: badgeLastEarnedDates[badge.id],
+                    // «47.3 км» under «проедьте 42.2 км». The card has drawn
+                    // this line since it was written, but no call site ever
+                    // passed a value — and this is one of the two screens that
+                    // holds the earning trip, so it can.
+                    recordValue: trip.flatMap {
+                        badge.recordValue(for: $0, language: lang.language)
+                    },
                     // The trip is what earned it, and it is the trip we are
                     // standing on — so the card can name it.
                     earnedOnTripTitle: trip?.title,
-                    onShare: {
-                        selectedDetailBadge = nil
-                        guard let t = trip else { return }
-                        Task { await openStoryShare(for: t) }
-                    },
                     onDismiss: { selectedDetailBadge = nil }
                 )
             }
@@ -1134,71 +1176,93 @@ struct TripDetailView: View {
                 }
             }
 
+            // The map's only control. «Прожить заново» moved into the panel
+            // below (it was a wide white pill colliding with this button in
+            // the same corner) and the speed legend became a strip under the
+            // map, so from the bar down to the Apple attribution the route
+            // is now uninterrupted.
             if cachedCoordinates.count > 1 {
-                HStack(spacing: 8) {
-                    // «Прожить заново» — the cinema replay (canon 117:533,
-                    // reached from the CTA at 117:1085). It was written, it
-                    // works, and nothing in the app opened it: the only replay
-                    // anyone could reach was the little inline crawl on the
-                    // hero. The pill needs per-point timestamps, so a
-                    // preview-only trip keeps the crawl instead.
-                    if cachedTimestamps.count > 1 {
-                        Button {
-                            Haptics.tap()
-                            showReplay = true
-                        } label: {
-                            HStack(spacing: 7) {
-                                Image(systemName: "play.fill")
-                                    .font(.system(size: 13, weight: .bold))
-                                Text(isOwn
-                                     ? AppStrings.reliveTrip(lang.language)
-                                     : AppStrings.watchTrip(lang.language))
-                                    .font(.system(size: 14, weight: .bold))
-                                    .lineLimit(1)
-                            }
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 11)
-                            .background(Capsule().fill(.white))
-                            .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("detail_replay")
-                    } else {
-                        RoutePlaybackButton(isPlaying: routePlayback.isPlaying) {
-                            routePlayback.toggle(
-                                coords: cachedCoordinates,
-                                timestamps: cachedTimestamps.isEmpty ? nil : cachedTimestamps,
-                                distanceMeters: trip.distance
-                            )
-                        }
-                    }
-                    Button {
-                        Haptics.tap()
-                        isMapFullscreen = true
-                    } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(.black.opacity(0.45), in: Circle())
-                    }
-                    .accessibilityIdentifier("detail_map_expand")
-                    .accessibilityLabel(AppStrings.openRouteMapA11y(lang.language))
+                MapChromeButton(
+                    systemImage: "arrow.up.left.and.arrow.down.right",
+                    accessibilityLabelText: AppStrings.openRouteMapA11y(lang.language)
+                ) {
+                    Haptics.tap()
+                    isMapFullscreen = true
                 }
-                .padding(.trailing, 12)
-                .padding(.bottom, 12)
+                .accessibilityIdentifier("detail_map_expand")
+                .padding(.trailing, 8)
+                .padding(.bottom, 8)
             }
         }
-        // Speed-colour legend — collapsed pill below the floating back
-        // button; only when the route is speed-coloured. Corners are
-        // otherwise taken: back (top-left), ⋯/share (top-right), Apple
-        // attribution (bottom-left), play/expand (bottom-right).
-        .overlay(alignment: .topLeading) {
-            if cachedCoordinates.count > 1, !cachedSpeeds.isEmpty {
-                SpeedLegendView(language: lang.language, initiallyExpanded: false)
-                    .padding(.leading, 12)
-                    .padding(.top, safeAreaTop + 56)
+    }
+
+    /// «Прожить заново» — the cinema replay (canon 117:533).
+    ///
+    /// Two homes ago it was a white pill floating on the map's bottom edge,
+    /// overlapping the expand button and covering the route it offers to
+    /// replay. One home ago it was a full-width solid-accent bar at the top
+    /// of the panel — which fixed the collision and created a new problem:
+    /// it became the loudest thing on the screen and sat exactly where the
+    /// thumb lands after the chips, so it got hit by accident.
+    ///
+    /// Now it is tonal and content-width: the accent still names it as THE
+    /// action, but it stops competing with the trip itself and the
+    /// mis-tappable area is about a third of what it was. The pill needs
+    /// per-point timestamps, so a preview-only trip keeps the inline crawl
+    /// instead — same rule as before.
+    @ViewBuilder
+    private func replayCTA(trip: Trip, c: AppTheme.Colors) -> some View {
+        if cachedCoordinates.count > 1 {
+            if cachedTimestamps.count > 1 {
+                Button {
+                    Haptics.tap()
+                    showReplay = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        Text(isOwn
+                             ? AppStrings.reliveTrip(lang.language)
+                             : AppStrings.watchTrip(lang.language))
+                            .font(.system(size: 15, weight: .bold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(AppTheme.accent)
+                    .padding(.horizontal, 18)
+                    .frame(height: 44)
+                    .background(Capsule().fill(AppTheme.accent.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("detail_replay")
+            } else {
+                Button {
+                    Haptics.tap()
+                    routePlayback.toggle(
+                        coords: cachedCoordinates,
+                        timestamps: cachedTimestamps.isEmpty ? nil : cachedTimestamps,
+                        distanceMeters: trip.distance
+                    )
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: routePlayback.isPlaying ? "stop.fill" : "play.fill")
+                            .font(.system(size: 14, weight: .bold))
+                        Text(routePlayback.isPlaying
+                             ? AppStrings.stop(lang.language)
+                             : (isOwn
+                                ? AppStrings.reliveTrip(lang.language)
+                                : AppStrings.watchTrip(lang.language)))
+                            .font(.system(size: 15, weight: .semibold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(c.text)
+                    .padding(.horizontal, 18)
+                    .frame(height: 44)
+                    .background(Capsule().strokeBorder(c.border, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("detail_playback")
             }
         }
     }
@@ -1268,6 +1332,8 @@ struct TripDetailView: View {
                 titleBlock(trip: trip, c: c)
                 chipsRow(trip: trip, c: c)
             }
+
+            replayCTA(trip: trip, c: c)
 
             VStack(alignment: .leading, spacing: 10) {
                 DetailSectionHeader(text: AppStrings.detailsSection(lang.language))
@@ -1554,25 +1620,32 @@ struct TripDetailView: View {
     /// its own header, loading/error states and three-way own/read-only/
     /// hidden rendering — see `TripCompanionsSection`'s doc comment.
     /// Fix 2: whether it's worth even ASKING the server for this trip's
-    /// companion roster. A `trip_companion` row can only ever exist for a
-    /// trip that's actually on the server — so a trip that was never
-    /// published (cloud sync starts OFF; new trips are created private,
-    /// which is the app's DEFAULT state, not an edge case) categorically
-    /// cannot have one, and every `/companions/*` call on it 404s with the
-    /// same `TRIP_NOT_FOUND` a genuinely missing trip would. A non-owner
-    /// never reaches this screen for a trip that isn't already server-side
-    /// (it arrived via the feed, a share link, or a companion invite —
-    /// all of which imply a server row), so only the own-trip path is
-    /// gated.
-    private var canQueryCompanions: Bool {
-        !isOwn || (auth.isSignedIn && (trip?.isOnServer ?? false))
+    /// companion roster — and when it isn't, which blocker to name. A
+    /// `trip_companion` row can only ever exist for a trip that's actually
+    /// on the server, so a trip that was never published (cloud sync starts
+    /// OFF; new trips are created private, which is the app's DEFAULT
+    /// state, not an edge case) categorically cannot have one, and every
+    /// `/companions/*` call on it 404s with the same `TRIP_NOT_FOUND` a
+    /// genuinely missing trip would. A non-owner never reaches this screen
+    /// for a trip that isn't already server-side (it arrived via the feed,
+    /// a share link, or a companion invite — all of which imply a server
+    /// row), so only the own-trip path is gated.
+    ///
+    /// Signed-out wins over not-published when both are true: signing in is
+    /// the first step either way, and it's the only one of the two the card
+    /// can offer to do something about. Conflating them is what made a
+    /// signed-out owner of an already-PUBLIC trip read "publish it first".
+    private var companionsGate: CompanionsCardModel.Gate {
+        guard isOwn else { return .allowed }
+        guard auth.isSignedIn else { return .signedOut }
+        return (trip?.isOnServer ?? false) ? .allowed : .notPublished
     }
 
     private func companionsSection(trip: Trip) -> some View {
         TripCompanionsSection(
             tripId: trip.id,
             isOwn: isOwn,
-            canQuery: canQueryCompanions,
+            gate: companionsGate,
             // Task 7: whatever this trip's last successful `/companions/list`
             // cached locally (empty for a trip that never had one, or one
             // that isn't ours — see `TripCompanion`'s doc comment). Only
@@ -1580,7 +1653,11 @@ struct TripDetailView: View {
             // memory either.
             cachedCompanions: trip.companions,
             onInvite: openCompanionsPicker,
-            onOpenRoster: { showCompanionsRoster = true }
+            onOpenRoster: { showCompanionsRoster = true },
+            // Signing in flips `companionsGate` to `.allowed`, which is the
+            // section's `.task` identity — so the roster loads by itself as
+            // soon as the sheet closes on a real session.
+            onSignIn: { signInPrompt = .companions }
         )
     }
 
@@ -1671,11 +1748,23 @@ struct TripDetailView: View {
             // it was waiting for someone to react.
             VStack(alignment: .leading, spacing: 10) {
                 DetailSectionHeader(text: AppStrings.chipReactions(lang.language))
-                VStack(spacing: 12) {
+                // Left-aligned icon + line, the same rhythm as every other
+                // empty card on this screen. It used to be a lone sentence
+                // centred in an otherwise empty card, which reads as
+                // something that failed to arrive rather than as a state.
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().fill(c.cardAlt).frame(width: 36, height: 36)
+                        Image(systemName: "heart")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(c.textTertiary)
+                    }
                     Text(AppStrings.noReactionsYet(lang.language))
-                        .font(.system(size: 14))
-                        .foregroundStyle(c.textTertiary)
-                        .frame(maxWidth: .infinity, alignment: .center)
+                        .font(.system(size: 14.5))
+                        .foregroundStyle(c.textSecondary)
+                        .lineLimit(2)
+
+                    Spacer(minLength: 8)
 
                     // Somebody has to be first, and on someone else's trip that
                     // is the whole point of the section. Without this the «+»
@@ -1694,7 +1783,7 @@ struct TripDetailView: View {
                                     .font(.system(size: 13, weight: .semibold))
                             }
                             .foregroundStyle(AppTheme.accent)
-                            .padding(.horizontal, 14)
+                            .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(Capsule().fill(AppTheme.accent.opacity(0.12)))
                         }
@@ -1702,8 +1791,9 @@ struct TripDetailView: View {
                         .accessibilityIdentifier("reaction_add_first")
                     }
                 }
-                .padding(.vertical, 18)
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .surfaceCard(cornerRadius: 14)
             }
         }
@@ -2255,15 +2345,21 @@ struct TripDetailView: View {
         .accessibilityLabel(AppStrings.addPhotos(lang.language))
     }
 
-    /// How many tiles the strip shows before the overflow badge takes over.
-    private static let photoStripVisible = 4
-
     /// Fix 1: local `trip.photos` UNIONED with the server roster
     /// (`remotePhotos`, loaded on the owner path too — see `.task(id:
     /// tripId)`) by photo id — see `OwnTripPhotosModel` for why this is the
     /// only way a companion's upload ever becomes visible to the owner.
+    /// The file-system probe is passed in because a local row can name a JPEG
+    /// this device never had (sync pull writes photo rows but downloads no
+    /// bytes; a backup restore leaves `TripPhotos/` behind) — see
+    /// `OwnTripPhotosModel.merge`. `PhotoStorageService.localFileExists`
+    /// caches, so asking once per body pass is a dictionary hit.
     private var ownPhotoItems: [OwnTripPhotosModel.Item] {
-        OwnTripPhotosModel.merge(local: trip?.photos ?? [], remote: remotePhotos)
+        OwnTripPhotosModel.merge(
+            local: trip?.photos ?? [],
+            remote: remotePhotos,
+            localFileExists: { PhotoStorageService.localFileExists(filename: $0) }
+        )
     }
 
     private func ownPhotosSection(_ c: AppTheme.Colors) -> some View {
@@ -2287,24 +2383,18 @@ struct TripDetailView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                            ownPhotoThumbnail(item)
+                            ownPhotoThumbnail(item, c)
                                 .frame(width: 74, height: 74)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                                // The fourth tile carries the remainder, so the
-                                // strip says how many photos there are without
-                                // making you scroll to find out.
-                                .overlay {
-                                    if index == Self.photoStripVisible - 1,
-                                       items.count > Self.photoStripVisible {
-                                        ZStack {
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(.black.opacity(0.45))
-                                            Text("+\(items.count - Self.photoStripVisible + 1)")
-                                                .font(.system(size: 16, weight: .bold))
-                                                .foregroundStyle(.white)
-                                        }
-                                    }
-                                }
+                                // No "+N" badge. It was written for a strip
+                                // that stopped at four tiles; this strip
+                                // scrolls and draws every photo, so the
+                                // badge blacked out the fourth picture to
+                                // announce photos that were already on
+                                // screen beside it — five photos rendered as
+                                // four plus a «+2» over the fourth. The
+                                // header («Фото · 5») is where the count
+                                // belongs.
                                 .onTapGesture {
                                     selectedPhotoIndex = index
                                 }
@@ -2343,14 +2433,31 @@ struct TripDetailView: View {
 
     /// One tile of the owner's merged strip — a local file for anything
     /// this device has on disk, a presigned R2 URL for a remote-only
-    /// (companion's) photo.
+    /// (companion's) photo, and a stated blank for a row whose picture is
+    /// nowhere. The blank is deliberate: dropping the item instead would
+    /// quietly shrink the strip and the «Фото · N» header, so a photo the
+    /// user remembers taking would look like one they never took. A tile
+    /// that admits it is empty is the only version they can act on — tap it
+    /// and the viewer offers the bin (`onDelete`), which is the ONLY way one
+    /// of these rows is ever removed. Nothing here deletes on its own.
     @ViewBuilder
-    private func ownPhotoThumbnail(_ item: OwnTripPhotosModel.Item) -> some View {
+    private func ownPhotoThumbnail(_ item: OwnTripPhotosModel.Item, _ c: AppTheme.Colors) -> some View {
         switch item.source {
         case .local(let filename):
             AsyncThumbnailView(filename: filename)
         case .remote(let thumbnailURL, let originalURL):
             RemoteThumbnailView(urlString: thumbnailURL, fallbackURLString: originalURL)
+        case .missing:
+            // Same glyph the full-screen viewer already shows for a page it
+            // could not load (`PhotoFullScreenView`), so the tile and what
+            // it opens into say the same thing.
+            Rectangle()
+                .fill(c.cardAlt)
+                .overlay {
+                    Image(systemName: "photo.badge.exclamationmark")
+                        .font(.system(size: 20))
+                        .foregroundStyle(c.textTertiary)
+                }
         }
     }
 
@@ -2362,13 +2469,24 @@ struct TripDetailView: View {
     /// remove, so it goes straight through `/photos/delete`; the server
     /// authorises this because the caller owns the TRIP, not because they
     /// own the photo (`PhotosService.assertCanDelete`).
+    ///
+    /// The branch is chosen by whether a local ROW exists, not by which
+    /// picture the tile happened to draw. Since a row whose file is gone can
+    /// now render from its server twin (`OwnTripPhotosModel.merge`), keying
+    /// off `.remote` would have sent that one down the server-only path and
+    /// left the local row behind — to reappear as a missing tile on the next
+    /// reload. `.missing` lands here too: the row IS local, only its file is
+    /// gone, and removing a path with nothing behind it is a no-op followed
+    /// by the row delete we want. Only ever called from the long-press
+    /// confirmation or the viewer's bin — nothing deletes on its own.
     private func deleteOwnPhoto(_ item: OwnTripPhotosModel.Item) {
-        switch item.source {
-        case .local:
+        let hasLocalRow = trip?.photos.contains { $0.id == item.id } ?? false
+        if hasLocalRow {
             mapVM.tripManager.deletePhoto(id: item.id, from: tripId)
             trip?.photos.removeAll { $0.id == item.id }
+            remotePhotos.removeAll { $0.id == item.id }
             toastItem = ToastItem(type: .success, message: AppStrings.photoDeleted(lang.language))
-        case .remote:
+        } else {
             // Optimistic: drop it from the strip immediately, restore (via a
             // fresh reload) if the server call fails.
             let previous = remotePhotos
@@ -2479,5 +2597,15 @@ private struct TripDetailLocalReactorDestination: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+/// How far the hero has scrolled, published from a `Color.clear` behind the
+/// map (never from inside the map's own subtree — this fires on every frame
+/// of a scroll, and the hero hosts an `MKMapView` with a display link).
+struct DetailScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }

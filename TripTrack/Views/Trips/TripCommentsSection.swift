@@ -100,7 +100,14 @@ struct TripCommentsSection: View {
                 // Canon 545:520: an empty public thread invites rather than
                 // showing a bare composer under a heading. The composer alone
                 // read as a section that had failed to load its contents.
-                if visibleComments.isEmpty {
+                // …but on the DETAIL that invitation is the composer row
+                // itself, which already says «Написать первое сообщение…» —
+                // stacking a second grey sentence above it produced two
+                // muted lines in a row where neither looked tappable. In
+                // the full-thread sheet the composer is pinned at the
+                // bottom, far from the empty space it explains, so there
+                // the line stays.
+                if visibleComments.isEmpty, !isPreview {
                     Text(AppStrings.noCommentsYet(lang.language))
                         .font(.system(size: 14))
                         .foregroundStyle(c.textTertiary)
@@ -137,7 +144,12 @@ struct TripCommentsSection: View {
                         openSheetFocused = true
                         showAllComments = true
                     } label: {
-                        HStack(spacing: 8) {
+                        // Dressed as the text field it stands in for: a
+                        // filled, bordered pill with a send glyph at the
+                        // end. As a bare row of grey text it was
+                        // indistinguishable from the empty-state line above
+                        // it, so nothing on the section looked writable.
+                        HStack(spacing: 10) {
                             Circle()
                                 .fill(AppTheme.accent.opacity(0.12))
                                 .frame(width: 30, height: 30)
@@ -148,9 +160,22 @@ struct TripCommentsSection: View {
                                 .font(.system(size: 14))
                                 .foregroundStyle(c.textTertiary)
                                 .lineLimit(1)
-                            Spacer(minLength: 0)
+                            Spacer(minLength: 8)
+                            Image(systemName: "paperplane.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(AppTheme.accent)
                         }
-                        .padding(.horizontal, 14)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .background {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(c.cardAlt)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .strokeBorder(c.border, lineWidth: 1)
+                                }
+                        }
+                        .padding(.horizontal, 12)
                         .padding(.vertical, 12)
                         .contentShape(Rectangle())
                     }

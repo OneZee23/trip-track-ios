@@ -1243,34 +1243,3 @@ struct TripLoadErrorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
-
-// MARK: - Photo pager dots
-
-/// Bottom dot indicator of the fullscreen photo viewers. Photo count is
-/// unbounded (picker has no selection limit) — past 12 dots the row would
-/// overflow the screen, so it degrades to a compact «n / m» counter.
-struct PhotoPageDots: View {
-    let count: Int
-    let current: Int
-
-    private static let maxDots = 12
-
-    var body: some View {
-        if count <= Self.maxDots {
-            HStack(spacing: 12) {
-                ForEach(0..<count, id: \.self) { i in
-                    Circle()
-                        .fill(i == current ? Color.white : Color.white.opacity(0.35))
-                        .frame(width: 6, height: 6)
-                }
-            }
-        } else {
-            Text("\(current + 1) / \(count)")
-                .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.8))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.black.opacity(0.35), in: Capsule())
-        }
-    }
-}
