@@ -1068,8 +1068,13 @@ final class TripManager: ObservableObject {
         guard !ids.isEmpty else { return [] }
         let context = PersistenceController.shared.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        // `syncStatus`, not an `isDeleted` flag: there isn't one. Deletion here
+        // is soft and lives in the sync state, and naming a key the entity does
+        // not have does not return nothing — it throws, which is a crash on
+        // every launch that reaches the feed.
         request.predicate = NSPredicate(
-            format: "id IN %@ AND isPrivate == YES AND isDeleted == NO", ids
+            format: "id IN %@ AND isPrivate == YES AND syncStatus != %d",
+            ids, SyncStatus.pendingDelete.rawValue
         )
         request.propertiesToFetch = ["id"]
         guard let rows = try? context.fetch(request) else { return [] }

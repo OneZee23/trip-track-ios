@@ -119,3 +119,43 @@ final class ReactionTalliesOrderTests: XCTestCase {
         )
     }
 }
+
+/// The feed's local-privacy filter, at the level that actually broke: the
+/// predicate itself.
+///
+/// It named `isDeleted`, which `TripEntity` does not have — and CoreData does
+/// not answer an unknown key with an empty result, it throws. Every launch
+/// that reached the feed took the app down with it. A compiled predicate is
+/// only checked against the model at fetch time, so nothing before this test
+/// could have caught it.
+final class LocallyPrivateTripsFetchTests: XCTestCase {
+    func test_predicate_only_names_keys_the_entity_has() throws {
+        let model = PersistenceController.shared.container.managedObjectModel
+        let entity = try XCTUnwrap(
+            model.entitiesByName["TripEntity"], "the model must still have TripEntity"
+        )
+        let attributes = Set(entity.attributesByName.keys)
+
+        for key in ["id", "isPrivate", "syncStatus"] {
+            XCTAssertTrue(
+                attributes.contains(key),
+                "`locallyPrivateTripIds` filters on `\(key)`, which TripEntity no longer has"
+            )
+        }
+        XCTAssertFalse(
+            attributes.contains("isDeleted"),
+            "if this ever exists, revisit the filter — soft delete lives in syncStatus"
+        )
+    }
+
+    func test_fetch_runs_against_the_real_store() {
+        // The assertion is that this does not throw: an unsatisfiable id list
+        // still compiles and executes the same predicate the feed uses.
+        let ids = [UUID(), UUID()]
+        XCTAssertTrue(TripManager.locallyPrivateTripIds(among: ids).isEmpty)
+    }
+
+    func test_empty_input_short_circuits() {
+        XCTAssertTrue(TripManager.locallyPrivateTripIds(among: []).isEmpty)
+    }
+}
