@@ -50,6 +50,11 @@ struct TripDetailView: View {
     /// These coordinates are a simplified preview, not a recorded track — see
     /// `buildCaches`.
     @State private var isPreviewRoute = false
+    /// The server said this trip is not ours to see — `TRIP_NOT_PUBLIC`, the
+    /// author took it out of the feed. A different thing from a failed load,
+    /// and it deserves a different screen: nothing here will improve by
+    /// retrying.
+    @State private var accessDenied = false
     @State private var reactionsLoadFailed = false
     @State private var photosLoadFailed = false
     /// The reaction WE left on someone else's trip, EXACTLY as the server
@@ -62,7 +67,7 @@ struct TripDetailView: View {
     /// Who left this reaction — the same peek the feed's pills offer, which
     /// the detail's own chips never had: holding one here did nothing, on the
     /// screen where "who reacted to my trip" is the whole question.
-    @State private var reactorsPeekEmoji: String?
+    @State private var reactorsPeek: ReactorsPeekTarget?
     /// Set by a chip's long press so the touch-up that follows doesn't also
     /// count as a tap and move the viewer's reaction.
     @State private var didLongPressChip = false
@@ -299,7 +304,10 @@ struct TripDetailView: View {
                         tripId: tripId, treatTripNotFoundAsEmpty: isOwn)
                 }
             }
-            if !(trip?.isPrivate ?? true) || !isOwn {
+            // Privacy is not the question — existence on the server is. An
+            // own private trip that was once public still has its reactions
+            // there, and its owner may still read them.
+            if trip?.isOnServer == true || !isOwn {
                 group.addTask { @MainActor in await loadReactions() }
             }
             if auth.isSignedIn, trip?.isOnServer == true || !isOwn {
@@ -488,6 +496,58 @@ struct TripDetailView: View {
         !isOwn && trip?.previewPolyline == nil && reactionsLoadFailed && photosLoadFailed
     }
 
+    /// «Поездка закрыта» — the author took it out of the feed while we were
+    /// holding a link to it.
+    ///
+    /// Separate from the load failure below because it is not a failure: the
+    /// request worked and the answer was no. Offering «попробовать снова» for
+    /// that would be an invitation to keep knocking on a door that has been
+    /// locked on purpose, so this screen offers only the way back.
+    private func noAccessState(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                PosterCircleButton(
+                    systemImage: "chevron.left",
+                    accessibilityLabelText: AppStrings.back(lang.language)
+                ) { dismiss() }
+                Spacer()
+                Text(AppStrings.tripTitle(lang.language))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(c.text)
+                Spacer()
+                Color.clear.frame(width: 36, height: 36)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, safeAreaTop + 8)
+
+            Spacer()
+
+            Image(systemName: "lock.fill")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(c.textTertiary)
+                .frame(width: 108, height: 108)
+                .background(Circle().strokeBorder(c.cardAlt, lineWidth: 10))
+                .padding(.bottom, 26)
+
+            Text(AppStrings.tripPrivateTitle(lang.language))
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+
+            Text(AppStrings.tripPrivateBody(lang.language))
+                .font(.system(size: 14))
+                .foregroundStyle(c.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+                .padding(.top, 8)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(c.bg)
+        .accessibilityIdentifier("trip_private_state")
+    }
+
     /// «Не удалось загрузить поездку» (canon 519:158). Replaces the whole
     /// screen: a poster with no route, empty stats and no photos is not a trip,
     /// it is a failure pretending to be one.
@@ -563,7 +623,9 @@ struct TripDetailView: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         ZStack(alignment: .topLeading) {
-            if showLoadError {
+            if accessDenied, !isOwn {
+                noAccessState(c)
+            } else if showLoadError {
                 loadErrorState(c)
             } else if let trip {
                 ScrollViewReader { proxy in
@@ -709,7 +771,6 @@ struct TripDetailView: View {
                     if auth.isSignedIn, local.isOnServer {
                         await loadRemotePhotos()
                     }
-                    reapMissingPhotos()
                 } else if social == nil {
                     // Nothing to show: no local row and no feed payload. Rather
                     // than a skeleton that shimmers forever with no way back,
@@ -741,9 +802,13 @@ struct TripDetailView: View {
             }
             await loadReactions()
         }
-        .onChange(of: trip?.isPrivate) { _, newValue in
-            if newValue == false { Task { await loadReactions() } }
-            else { reactionEntries = [] }
+        // Reloaded, never wiped. Taking a trip out of the feed does not undo
+        // what happened while it was in it: the reactions are still there, on
+        // the server and in the owner's memory, and the owner is still allowed
+        // to read them. Clearing them here is what made a private trip look
+        // like a trip nobody ever responded to.
+        .onChange(of: trip?.isPrivate) { _, _ in
+            Task { await loadReactions() }
         }
         .sheet(isPresented: $showPhotoPicker) {
             TripPhotoPicker { images in
@@ -936,15 +1001,12 @@ struct TripDetailView: View {
             .presentationDragIndicator(.visible)
             .preferredColorScheme(themeManager.preferredColorScheme)
         }
-        .sheet(item: Binding(
-            get: { reactorsPeekEmoji.map { ReactorsPeekTarget(emoji: $0) } },
-            set: { if $0 == nil { reactorsPeekEmoji = nil } }
-        )) { peek in
+        .sheet(item: $reactorsPeek) { peek in
             ReactionsListSheet(
                 tripId: tripId,
                 initialEmoji: peek.emoji,
                 onSelectUser: { author in
-                    reactorsPeekEmoji = nil
+                    reactorsPeek = nil
                     // Pushing in the same runloop as the dismissal drops one
                     // of the two — the feed's peek learned this the same way.
                     Task { @MainActor in
@@ -1189,11 +1251,23 @@ struct TripDetailView: View {
     /// opening of it, from a feed that no longer lists it, is where that
     /// belongs.
     private func refreshRemoteTrip() async {
-        guard let res: SocialTripResponse = try? await APIClient.shared.post(
-            APIEndpoint.socialTrip,
-            body: SocialTripRequest(tripId: tripId, includeTrack: true),
-            requiresAuth: AuthService.shared.isSignedIn
-        ) else { return }
+        let res: SocialTripResponse
+        do {
+            res = try await APIClient.shared.post(
+                APIEndpoint.socialTrip,
+                body: SocialTripRequest(tripId: tripId, includeTrack: true),
+                requiresAuth: AuthService.shared.isSignedIn
+            )
+        } catch let error as APIError {
+            // The one refusal worth showing: the author closed the trip. Every
+            // other failure keeps the copy we already have on screen.
+            if case .unknownServer(let code, _) = error, code == "TRIP_NOT_PUBLIC" {
+                accessDenied = true
+            }
+            return
+        } catch {
+            return
+        }
         if let track = res.track { remoteTrack = track }
         // Nothing changed is the ordinary case for a refresh, and applying an
         // identical copy is not free: it rebuilds the trip, re-decodes the
@@ -1515,7 +1589,13 @@ struct TripDetailView: View {
             // drop it silently, so the one place that could explain why there
             // is no discussion said nothing at all (canon 545:499
             // «КОММЕНТАРИИ · ПРИВАТНАЯ ПОЕЗДКА»).
-            if trip.isPrivate, isOwn {
+            // «Опубликуйте, чтобы открыть обсуждение» belongs to a trip that
+            // has never been published — there, it is simply true. On a trip
+            // that WAS public it is a lie about its own history: the thread
+            // exists, the owner can still read it, and hiding it behind that
+            // card meant making a trip private silently took the conversation
+            // away from the one person who was in it.
+            if trip.isPrivate, isOwn, !trip.isOnServer {
                 VStack(alignment: .leading, spacing: 10) {
                     DetailSectionHeader(text: AppStrings.comments(lang.language))
                     lockedSocialCard(
@@ -1527,7 +1607,7 @@ struct TripDetailView: View {
                 }
             }
 
-            if !trip.isPrivate {
+            if !trip.isPrivate || (isOwn && trip.isOnServer) {
                 TripCommentsSection(
                     tripId: trip.id,
                     isTripOwner: isOwn,
@@ -1831,16 +1911,17 @@ struct TripDetailView: View {
     /// private trips, or a quiet "no reactions yet" line for public trips.
     @ViewBuilder
     private func reactionsArea(trip: Trip, c: AppTheme.Colors) -> some View {
-        if !trip.isPrivate, !reactionTallies.isEmpty {
+        if !reactionTallies.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 DetailSectionHeader(text: AppStrings.reactionsTitleN(lang.language, totalReactions))
                 reactionsCard(c)
             }
-        } else if trip.isPrivate {
-            // Header included, like every other section. Without it the locked
-            // card sat headerless between «Достижения поездки» and
-            // «Обсуждение», so it read as the tail of the achievements block
-            // rather than as the reactions section being closed.
+        } else if trip.isPrivate, !trip.isOnServer {
+            // Only for a trip that has never been published — see the same
+            // distinction on the discussion below. Header included, like every
+            // other section: without it the locked card sat headerless between
+            // «Достижения поездки» and «Обсуждение» and read as the tail of the
+            // achievements block.
             VStack(alignment: .leading, spacing: 10) {
                 DetailSectionHeader(text: AppStrings.chipReactions(lang.language))
                 publishNudgeCard(trip: trip, c: c)
@@ -1976,7 +2057,7 @@ struct TripDetailView: View {
     private func peekReactors(_ emoji: String) {
         didLongPressChip = true
         Haptics.action()
-        reactorsPeekEmoji = emoji
+        reactorsPeek = ReactorsPeekTarget(emoji: emoji)
         // Self-clearing, so a long press with no tap after it cannot swallow
         // the next real tap.
         Task { @MainActor in
@@ -2515,6 +2596,13 @@ struct TripDetailView: View {
             remote: remotePhotos,
             localFileExists: { PhotoStorageService.localFileExists(filename: $0) }
         )
+        // Hidden, never deleted. A row whose picture is gone from both the
+        // device and the server is not something to show — it counted in
+        // «Фото · N» and drew a broken tile — but it is also not something to
+        // quietly erase: the server can destroy its own copy without asking
+        // (taking a trip private does exactly that), and a row is the last
+        // record that the photo was ever there. Hiding is reversible; deleting
+        // is not, and this is not the code that gets to decide.
         guard canJudgeMissingPhotos else { return merged }
         return merged.filter { if case .missing = $0.source { return false } else { return true } }
     }
@@ -2532,28 +2620,6 @@ struct TripDetailView: View {
         guard isOwn else { return false }
         if !(trip?.isOnServer ?? false) { return true }
         return auth.isSignedIn && !photosLoadFailed
-    }
-
-    /// Retires photo rows whose picture is gone from both the device and the
-    /// server.
-    ///
-    /// Such a row is not a photo any more, but it still counted in «Фото · N»,
-    /// still drew a broken tile, and still asked the upload queue to send a
-    /// file that does not exist — `FAIL: missing local blob`, on every single
-    /// launch, forever. Nothing is lost by dropping it: there is no picture
-    /// left anywhere to lose, and the check above is what makes that a fact
-    /// rather than an assumption.
-    private func reapMissingPhotos() {
-        guard canJudgeMissingPhotos, let photos = trip?.photos, !photos.isEmpty else { return }
-        let remoteIds = Set(remotePhotos.map(\.id))
-        let dead = photos.filter {
-            !PhotoStorageService.localFileExists(filename: $0.filename) && !remoteIds.contains($0.id)
-        }
-        guard !dead.isEmpty else { return }
-        for photo in dead {
-            mapVM.tripManager.deletePhoto(id: photo.id, from: tripId)
-        }
-        trip?.photos.removeAll { photo in dead.contains { $0.id == photo.id } }
     }
 
     private func ownPhotosSection(_ c: AppTheme.Colors) -> some View {

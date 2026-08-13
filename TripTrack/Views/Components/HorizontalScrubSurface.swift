@@ -115,9 +115,10 @@ final class ScrubSurfaceView: UIView, UIGestureRecognizerDelegate {
             // within a few frames however the drag started.
             verticalCommitment = Self.advanceCommitment(verticalCommitment, dx: dx, dy: dy)
             if verticalCommitment > Self.escapeThreshold {
-                // Cancelling the recogniser (disable/enable is the only way to
-                // do that to a stock pan) lets the enclosing scroll view pick
-                // the gesture up mid-drag.
+                // Stop scrubbing: the readout should not chase a finger that
+                // is now scrolling the page. Disable/enable is the only way to
+                // cancel a stock pan. The page needs nothing from us here —
+                // its own gesture has been running all along.
                 gesture.isEnabled = false
                 gesture.isEnabled = true
                 verticalCommitment = 0
@@ -140,39 +141,52 @@ final class ScrubSurfaceView: UIView, UIGestureRecognizerDelegate {
 
     // MARK: - UIGestureRecognizerDelegate
 
-    /// Sideways only, and sideways by a clear margin — decided on how far the
-    /// finger has actually travelled, never on how fast it happens to be
-    /// moving in the single frame this is asked.
+    /// Sideways, judged on how far the finger has actually travelled.
     ///
-    /// This one answer is final and there is no taking it back. The scroll
-    /// view is required to wait for this recogniser (below), so the moment
-    /// this returns true the page's own pan is not postponed — it is FAILED,
-    /// for the whole of that touch. Nothing later in the drag can revive it:
-    /// the escape hatch in `handlePan` can stop the chart from scrubbing, but
-    /// it cannot give the page back. Every wrong "yes" here is a drag the page
-    /// cannot follow however far the finger then travels down it.
+    /// The bar is low on purpose now, and it can afford to be. It used to be
+    /// the single most consequential decision in this file: the page's pan was
+    /// required to WAIT for this one, which meant every "yes" here didn't
+    /// postpone the page — it killed the page's own gesture for the rest of
+    /// that touch, with nothing able to revive it. So the threshold kept being
+    /// raised to avoid wrong claims, and raising it made the chart hard to
+    /// read: you had to start with a deliberate sideways shove before it would
+    /// answer at all. Both complaints — "the page won't scroll" and "the chart
+    /// is awkward now" — were the same trade-off being paid from either end.
     ///
-    /// Which is why velocity was the wrong thing to ask. Sampled at the one
-    /// instant the gesture commits, it is the noisiest signal available: a
-    /// fast vertical flick that starts with a single sideways frame — a thumb
-    /// rolling, a phone in one hand — reads as a clean sideways drag and the
-    /// chart takes the page hostage. By the time this is asked the pan has
-    /// already collected its ~10pt of slop, and that offset is the drag's real
-    /// direction rather than one frame's worth of noise.
+    /// With the page's pan running alongside this one (see below), the trade
+    /// is gone. A wrong claim costs nothing: the page still scrolls. So this
+    /// can go back to answering the way a chart should — put a finger down,
+    /// move it sideways at all, and it reads.
     override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
         guard let pan = gesture as? UIPanGestureRecognizer else { return true }
         let travelled = pan.translation(in: self)
-        return abs(travelled.x) > abs(travelled.y) * 1.5 && abs(travelled.x) > 6
+        return abs(travelled.x) > abs(travelled.y) && abs(travelled.x) > 3
     }
 
-    /// Make the enclosing scroll view wait until this recogniser has decided.
-    /// It decides on the first movement — either it claims the touch (and the
-    /// page correctly stays put while you read the chart) or it fails and the
-    /// page scrolls as though this view were not here.
+    /// Run ALONGSIDE the page's scrolling instead of in place of it.
+    ///
+    /// This is the fix the two previous ones were groping for. The old
+    /// arrangement — `shouldBeRequiredToFailBy`, making the scroll view wait —
+    /// forced an exclusive choice at the first frame of a drag and made it
+    /// permanent: once this recogniser began, UIKit put the scroll view's pan
+    /// into `.failed`, and a failed recogniser does not come back inside the
+    /// same touch. The escape hatch in `handlePan` could stop the chart from
+    /// scrubbing but could never hand the page back, which is why the snag
+    /// survived two attempts at tuning the threshold — it was never the
+    /// threshold.
+    ///
+    /// Simultaneous recognition removes the choice. A vertical drag is not
+    /// claimed here and scrolls with no delay at all; a sideways drag scrubs
+    /// while the page, offered almost no vertical movement, stays where it is;
+    /// and a drag that starts sideways and turns down now scrolls the page
+    /// mid-gesture, because the page's pan was never taken away in the first
+    /// place. The cost is honest and small: a scrub with a wobbly finger can
+    /// nudge the page a few points. That is worth paying for a page that
+    /// always scrolls.
     func gestureRecognizer(
         _ gesture: UIGestureRecognizer,
-        shouldBeRequiredToFailBy other: UIGestureRecognizer
+        shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
     ) -> Bool {
-        gesture is UIPanGestureRecognizer && other.view is UIScrollView
+        other.view is UIScrollView
     }
 }

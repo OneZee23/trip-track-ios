@@ -1032,6 +1032,18 @@ enum AppStrings {
             ? "Проверьте подключение к интернету и попробуйте ещё раз"
             : "Check your internet connection and try again"
     }
+    /// Someone else's trip that has been taken out of the feed. Deliberately
+    /// says what happened rather than «не удалось загрузить»: nothing failed,
+    /// the author simply closed it, and offering «попробовать снова» for that
+    /// is an invitation to retry something that will never change.
+    static func tripPrivateTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Поездка закрыта" : "This trip is private"
+    }
+    static func tripPrivateBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Автор сделал её приватной — теперь её видит только он."
+            : "The author made it private — only they can see it now."
+    }
     static func tryAgain(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Попробовать снова" : "Try again"
     }
