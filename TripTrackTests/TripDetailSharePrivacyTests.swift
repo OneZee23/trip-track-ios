@@ -78,3 +78,44 @@ final class TripDetailSharePrivacyTests: XCTestCase {
         XCTAssertFalse(TripDetailView.companionCanLeave(isOwn: false, myAccountId: myId, companions: companions))
     }
 }
+
+/// The reaction row's ordering.
+///
+/// It only became worth pinning when the detail screen learned to re-read the
+/// trip it is showing: the row is rebuilt from that re-read, so an ordering
+/// that is not total lets equally popular reactions swap places on a pull to
+/// refresh — the tally appearing to change when nothing has.
+final class ReactionTalliesOrderTests: XCTestCase {
+    func test_most_reacted_first() {
+        XCTAssertEqual(
+            TripDetailView.tallies(["👍": 1, "❤️": 9, "🤯": 4]).map(\.emoji),
+            ["❤️", "🤯", "👍"]
+        )
+    }
+
+    func test_level_reactions_get_a_total_order() {
+        // Same tallies, and the only thing that differs between the two calls
+        // is the order the dictionary was written in — which is exactly what a
+        // re-read varies and what must not reach the screen.
+        XCTAssertEqual(
+            TripDetailView.tallies(["👍": 1, "❤️": 1, "🤯": 1]).map(\.emoji),
+            TripDetailView.tallies(["🤯": 1, "👍": 1, "❤️": 1]).map(\.emoji)
+        )
+    }
+
+    func test_the_count_still_outranks_the_emoji() {
+        // '❤️' sorts ahead of '👍' by code point, so the tiebreak must not be
+        // allowed to overturn a genuine lead.
+        XCTAssertEqual(
+            TripDetailView.tallies(["❤️": 1, "👍": 9]).map(\.emoji),
+            ["👍", "❤️"]
+        )
+    }
+
+    func test_counts_survive_the_sort() {
+        XCTAssertEqual(
+            TripDetailView.tallies(["👍": 2, "❤️": 5]).map(\.count),
+            [5, 2]
+        )
+    }
+}

@@ -603,6 +603,18 @@ struct SocialCommentDeleteResponse: Codable {
     let deleted: Bool
 }
 
+// MARK: - One trip (public view)
+
+/// Request body for `/social/trip` — re-reads a single trip in the feed's
+/// own item shape, for a detail screen refreshing what it already shows.
+struct SocialTripRequest: Codable {
+    let tripId: UUID
+}
+
+struct SocialTripResponse: Codable {
+    let item: SocialFeedTrip
+}
+
 // MARK: - Trip photos (public view)
 
 /// Request body for `/social/trip/photos` — lists photos attached to a

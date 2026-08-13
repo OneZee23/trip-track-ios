@@ -18,6 +18,20 @@ struct TripDetailView: View {
     /// through `Trip(social:)`. A trip of our own ignores it and reads the
     /// local record, which has the full track the server does not send.
     var social: SocialFeedTrip?
+    /// The server's copy of someone else's trip as of the last pull-to-refresh.
+    /// `social` is what we arrived holding and cannot be written back to (it is
+    /// the caller's value); this is where a re-read lands.
+    @State private var refreshedSocial: SocialFeedTrip?
+    /// The freshest copy of the feed payload — the re-read when there has been
+    /// one, otherwise the one we arrived with. Everything on screen that is fed
+    /// by the feed's copy reads this, so a refresh moves all of it at once
+    /// rather than leaving the author or the comment count a version behind.
+    private var liveSocial: SocialFeedTrip? { refreshedSocial ?? social }
+    /// This screen is drawn from the server's copy, not from a CoreData row —
+    /// someone else's trip, or one of ours this device never recorded. It is
+    /// exactly the case where the trip's own fields can change behind our back
+    /// and the only case where re-reading them is worth a round trip.
+    @State private var isRemoteBacked = false
     @State private var trip: Trip?
     /// Photos of someone else's trip live on the server, not in Documents.
     @State private var remotePhotos: [SocialTripPhoto] = []
@@ -257,13 +271,15 @@ struct TripDetailView: View {
     /// can: the companion roster (someone accepted or declined), reactions,
     /// the discussion, and photos a companion added to your trip.
     ///
-    /// A foreign trip's OWN fields (its title, description, privacy) cannot
-    /// be refreshed at all yet: there is no endpoint that returns one
-    /// non-owned trip by id — the client only ever receives them in pages of
-    /// `/companions/my-trips` and the feed. Rather than page through those
-    /// looking for one id, this refreshes what it honestly can.
+    /// A foreign trip's OWN fields — its title, its notes, its privacy — are
+    /// the exception, and they are re-read from `/social/trip`: the screen's
+    /// only copy of them is the feed payload it was opened with, and the
+    /// author can change any of it while it is on screen.
     private func refreshDetail() async {
         await withTaskGroup(of: Void.self) { group in
+            if isRemoteBacked {
+                group.addTask { @MainActor in await refreshRemoteTrip() }
+            }
             if companionsGate == .allowed {
                 group.addTask { @MainActor in
                     _ = try? await CompanionsStore.shared.list(
@@ -300,7 +316,7 @@ struct TripDetailView: View {
     /// their profile, the same as tapping the author on a feed card.
     @ViewBuilder
     private var authorPill: some View {
-        if let author = social?.author, !isOwn {
+        if let author = liveSocial?.author, !isOwn {
             Button {
                 Haptics.tap()
                 if let pushPath {
@@ -690,11 +706,8 @@ struct TripDetailView: View {
                     // never recorded. Everything below works off a `Trip`, so
                     // the feed's copy becomes one.
                     isOwn = social.author.id == TokenStore.shared.accountId
-                    myReaction = social.myReaction
-                    let adapted = Trip(social: social)
-                    trip = adapted
-                    buildCaches(for: adapted)
-                    seedCaches(from: social)
+                    isRemoteBacked = true
+                    apply(social)
                     await loadRemotePhotos()
                 }
                 // Earned-on dates come from OUR trip history, so they mean
@@ -1093,6 +1106,46 @@ struct TripDetailView: View {
         cachedMaxAltitude = social.maxAltitude ?? 0
     }
 
+    /// Draws the screen from a copy of the feed's payload — on arrival, and
+    /// again after a refresh. One function for both so a re-read can never
+    /// update half of what the first render set.
+    private func apply(_ item: SocialFeedTrip) {
+        refreshedSocial = item
+        myReaction = item.myReaction
+        let adapted = Trip(social: item)
+        trip = adapted
+        buildCaches(for: adapted)
+        seedCaches(from: item)
+    }
+
+    /// Re-reads someone else's trip from the server.
+    ///
+    /// The owner can rename it, rewrite its notes or make it private while we
+    /// are looking at it, and none of that reaches a screen whose only copy is
+    /// the feed payload it was opened with. `/social/trip` is the feed's own
+    /// item shape for a single id, behind the feed's own visibility gate.
+    ///
+    /// Failure is deliberately silent and total: on a refused or unreachable
+    /// re-read the screen keeps showing what it already had. A trip made
+    /// private mid-view is a `TRIP_NOT_PUBLIC` here, and tearing the screen
+    /// down under someone in the middle of reading is a worse answer than
+    /// letting them finish with the copy they arrived holding — the next
+    /// opening of it, from a feed that no longer lists it, is where that
+    /// belongs.
+    private func refreshRemoteTrip() async {
+        guard let res: SocialTripResponse = try? await APIClient.shared.post(
+            APIEndpoint.socialTrip,
+            body: SocialTripRequest(tripId: tripId),
+            requiresAuth: AuthService.shared.isSignedIn
+        ) else { return }
+        // Nothing changed is the ordinary case for a refresh, and applying an
+        // identical copy is not free: it rebuilds the trip, re-decodes the
+        // route and hands the map a new object to fit itself to. Comparing
+        // first keeps a pull that finds no news from visibly redrawing.
+        guard res.item != liveSocial else { return }
+        apply(res.item)
+    }
+
     private func loadRemotePhotos() async {
         do {
             let res: SocialTripPhotosResponse = try await APIClient.shared.post(
@@ -1417,7 +1470,7 @@ struct TripDetailView: View {
                     // The header states the server-known total; without it the
                     // section opened as «Комментарии · 0» over a list of
                     // comments.
-                    initialCount: social?.commentCount ?? 0,
+                    initialCount: liveSocial?.commentCount ?? 0,
                     // Own public trips ARE reachable signed-out («keep
                     // public and sign out» / dead session) — without this
                     // the composer looks active but every send dies with
@@ -1486,7 +1539,7 @@ struct TripDetailView: View {
         if !isOwn {
             // Someone else's car is a name and an avatar the server rendered,
             // not a row in our garage — and it is not ours to reassign.
-            if let v = social?.vehicle {
+            if let v = liveSocial?.vehicle {
                 DetailChipSurface {
                     // A pixel avatar is an asset name, not a glyph — drawn as
                     // text it reads «pixel_car_white».
@@ -1806,21 +1859,36 @@ struct TripDetailView: View {
     /// for as long as the request took.
     private var reactionTallies: [(emoji: String, count: Int)] {
         if !reactionEntries.isEmpty {
-            return Dictionary(grouping: reactionEntries, by: { ReactionEmoji.canonical($0.emoji) })
-                .mapValues(\.count)
-                .sorted { $0.value > $1.value }
-                .map { (emoji: $0.key, count: $0.value) }
+            return Self.tallies(
+                Dictionary(grouping: reactionEntries, by: { ReactionEmoji.canonical($0.emoji) })
+                    .mapValues(\.count)
+            )
         }
-        guard let breakdown = social?.reactionBreakdown, !breakdown.isEmpty else { return [] }
-        return Dictionary(grouping: breakdown, by: { ReactionEmoji.canonical($0.emoji) })
-            .mapValues { $0.reduce(0) { $0 + $1.count } }
-            .sorted { $0.value > $1.value }
+        guard let breakdown = liveSocial?.reactionBreakdown, !breakdown.isEmpty else { return [] }
+        return Self.tallies(
+            Dictionary(grouping: breakdown, by: { ReactionEmoji.canonical($0.emoji) })
+                .mapValues { $0.reduce(0) { $0 + $1.count } }
+        )
+    }
+
+    /// Orders the reaction row: most-reacted first, and the emoji itself as
+    /// the tiebreak.
+    ///
+    /// The tiebreak is not cosmetic. Sorting on the count alone leaves equally
+    /// popular reactions in whatever order a `Dictionary` iterates in, which is
+    /// no order at all — and the row is now redrawn from a re-read of the trip
+    /// every time the screen is pulled down. Without a total order, refreshing
+    /// a trip whose reactions are level shuffles them under the finger that
+    /// pulled, which reads as the tally changing when nothing has.
+    static func tallies(_ counts: [String: Int]) -> [(emoji: String, count: Int)] {
+        counts
+            .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
             .map { (emoji: $0.key, count: $0.value) }
     }
 
     private var totalReactions: Int {
         reactionEntries.isEmpty
-            ? (social?.reactionCount ?? 0)
+            ? (liveSocial?.reactionCount ?? 0)
             : reactionEntries.count
     }
 
