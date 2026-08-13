@@ -925,7 +925,6 @@ struct TripDetailView: View {
                 descriptionText: trip?.tripDescription ?? "",
                 onPublish: { desc in handlePublishConfirm(descriptionText: desc) }
             )
-            .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
             .preferredColorScheme(themeManager.preferredColorScheme)
         }

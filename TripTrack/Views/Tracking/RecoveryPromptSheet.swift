@@ -83,7 +83,7 @@ struct RecoveryPromptSheet: View {
             .padding(.bottom, 24)
         }
         .background(c.bg)
-        .presentationDetents([.height(400)])
+        .contentSizedSheet()
         // No `presentationCornerRadius` override: on iOS 26 a sheet is a card
         // that floats inset from the screen, and forcing the radius left its
         // bottom corners squared off against the screen edge — the reported

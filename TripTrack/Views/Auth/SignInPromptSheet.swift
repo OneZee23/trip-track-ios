@@ -46,32 +46,6 @@ struct SignInPromptSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showError = false
 
-    /// Sized to what the sheet actually contains, plus the home-indicator
-
-    /// strip. The 473 this replaces was a Figma number for one of the eight
-
-    /// headlines this sheet can carry — the shorter ones simply left the
-
-    /// difference as empty background.
-
-    @State private var measuredHeight: CGFloat = 0
-
-
-    private var sheetHeight: CGFloat {
-
-        let bottomInset = UIApplication.shared.connectedScenes
-
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.bottom }
-
-            .first ?? 0
-
-        guard measuredHeight > 0 else { return 473 }
-
-        return measuredHeight + bottomInset
-
-    }
-
-
     var body: some View {
         let c = AppTheme.colors(for: scheme)
 
@@ -158,15 +132,7 @@ struct SignInPromptSheet: View {
             .padding(.bottom, 28)
         }
         .background(c.bg)
-        .background {
-            GeometryReader { geo in
-                Color.clear.preference(
-                    key: SignInSheetHeightKey.self, value: geo.size.height
-                )
-            }
-        }
-        .onPreferenceChange(SignInSheetHeightKey.self) { measuredHeight = $0 }
-        .presentationDetents([.height(sheetHeight)])
+        .contentSizedSheet()
         // No `presentationCornerRadius` override: on iOS 26 a sheet is a card
         // that floats inset from the screen, and forcing the radius left its
         // bottom corners squared off against the screen edge — the reported
@@ -226,13 +192,5 @@ fileprivate struct SignInIdleRing: View {
             .opacity(0.85)
         }
         .frame(width: 100, height: 100)
-    }
-}
-
-/// Measured content height, so the sheet stops where the content does.
-private struct SignInSheetHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }

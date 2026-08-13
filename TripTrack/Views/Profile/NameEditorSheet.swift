@@ -149,11 +149,10 @@ struct NameEditorSheet: View {
             .animation(.easeInOut(duration: 0.15), value: validationError != nil)
             .padding(.horizontal, 16)
             .padding(.top, 8)
-
-            Spacer(minLength: 0)
+            .padding(.bottom, 20)
         }
         .background(c.bg)
-        .presentationDetents([.height(200)])
+        .contentSizedSheet()
         .presentationDragIndicator(.hidden)
         .onAppear {
             // Pre-fill placeholder users with empty so they don't have to
