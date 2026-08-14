@@ -1,10 +1,147 @@
 # App Store Review Notes — TripTrack
 
-Paste the relevant section into App Store Connect → **App Review Information** → **Notes** when submitting the build. Use the current-version section for the build you are submitting; the v0.6.0 social section below documents the underlying features.
+Paste the relevant section into App Store Connect → **App Review Information** → **Notes** when submitting the build. Use the current-submission section; the older sections stay as a record of what was said for earlier builds.
 
 ---
 
-## v0.5.8 — bug-fix update (current submission)
+## v0.6.0 — redesign + companions (current submission)
+
+### English
+
+```
+TripTrack 0.6.0 — Reviewer Notes
+
+This is the largest update since 0.5.6: the whole interface was redrawn, and trips
+became something people can share with whoever was in the car.
+
+WHAT'S NEW IN 0.6.0
+• Five tabs: Feed, Map, Record, Groups, Me
+• Companions — invite the people who rode with you to a trip; they can add their own
+  photos to it. Invitations arrive in Notifications and can be declined or left later.
+• Discussions — comments with replies on public trips, plus reactions and a
+  "who reacted" list
+• Trip replay, story-format share posters, a rewritten photo viewer
+• Profile: "how others see you" preview, followers/following, achievements, levels
+• Shared profile links (https://trip-track.app/u/<id>) now open a real profile page
+• Groups tab: a PREVIEW of clubs that do not exist yet. Every screen says "SOON";
+  the only live part is a waitlist ("Notify me"), which stores nothing but an
+  install id and an optional club key. No user content, no chat.
+• Delete Account (Guideline 5.1.1(v)) — see below
+• Privacy screen collecting the three visibility switches in one place
+
+ACCOUNT DELETION (Guideline 5.1.1(v))
+Me → Account & sync → Delete account. Two taps from the tab bar, no email, no support
+ticket. It deletes the server account and everything on it (trips, photos in object
+storage, reactions, comments, follows) AND erases the trips and photos stored on the
+device — the row states this ("Permanently, everywhere") and the confirmation names
+every category before the destructive button.
+
+LOCATION
+Background location ("Always") keeps a recording alive while the screen is off — that
+is the product. Location is collected ONLY during a recording the user started.
+
+SIGN IN
+Sign in with Apple only, and entirely optional: recording, history, photos, vehicles,
+map and stats all work signed out, offline. Signing in adds cloud sync and the social
+layer. A demo account is provided in App Review Information → User Account.
+
+UGC MODERATION (Guideline 1.2)
+• Report — on every public profile, every feed card and every trip. Eight reasons.
+• Block — from any public profile's "…" menu; hides both directions.
+• Comments can be deleted by their author and by the trip owner.
+• Terms of Service state a zero-tolerance policy and a 24-hour moderation SLA.
+• Automated denylist filter on user-entered trip titles.
+
+PRIVACY
+• No tracking, no ads, no third-party analytics, no cross-app identifiers.
+• Photos are stripped of EXIF/GPS metadata on the device before any upload.
+• Profiles are public only if the user turns them on (Me → Settings → Privacy).
+• Privacy Policy and Terms: https://trip-track.app
+
+HOW TO TEST WITHOUT DRIVING
+1. Onboarding → allow location "While using" is enough to see every screen.
+2. The Feed opens with public trips from real accounts — open one to see the trip
+   detail, replay, photos and discussion.
+3. Me → "How others see you" for the public profile preview; the "…" there has
+   share, report and block.
+4. Me → Account & sync for sign-out, "Clear my server data" and Delete account.
+5. Groups → "See what's coming" for the clubs preview.
+
+CONTACT
+privacy@trip-track.app
+```
+
+### Russian
+
+```
+TripTrack 0.6.0 — Заметки для ревьюера
+
+Самое крупное обновление с 0.5.6: интерфейс перерисован целиком, а поездку теперь
+можно разделить с теми, кто ехал рядом.
+
+ЧТО НОВОГО В 0.6.0
+• Пять вкладок: Лента, Карта, Запись, Группы, Я
+• Попутчики — приглашение тех, кто ехал с вами; они могут добавить свои фото в
+  поездку. Приглашения приходят в уведомления, их можно отклонить или выйти позже.
+• Обсуждения — комментарии с ответами к публичным поездкам, реакции и список
+  «кто отреагировал»
+• Реплей маршрута, постеры для историй, переписанный просмотрщик фото
+• Профиль: превью «как видят другие», подписчики/подписки, достижения, уровни
+• Ссылка на профиль (https://trip-track.app/u/<id>) открывает настоящую страницу
+• Вкладка «Группы» — ПРЕВЬЮ клубов, которых ещё нет. На каждом экране написано
+  «СКОРО»; живая часть одна — вайтлист («Уведомить меня»), который хранит только
+  идентификатор установки и, опционально, ключ клуба. Никакого контента и чатов.
+• Удаление аккаунта (Guideline 5.1.1(v)) — см. ниже
+• Экран «Приватность» с тремя переключателями видимости в одном месте
+
+УДАЛЕНИЕ АККАУНТА (Guideline 5.1.1(v))
+Я → Аккаунт и синхронизация → Удалить аккаунт. Два тапа от таб-бара, без писем и
+обращений в поддержку. Удаляется серверный аккаунт и всё, что на нём (поездки, фото
+в объектном хранилище, реакции, комментарии, подписки), И стираются поездки и фото
+на устройстве — так и написано на ряду («Безвозвратно, везде»), а подтверждение
+перечисляет всё это до красной кнопки.
+
+ГЕОЛОКАЦИЯ
+Фоновая геолокация («Всегда») нужна, чтобы запись продолжалась с выключенным
+экраном — это и есть продукт. Геолокация собирается ТОЛЬКО во время записи,
+начатой пользователем.
+
+ВХОД
+Только Sign in with Apple и полностью опционально: запись, история, фото, машины,
+карта и статистика работают без входа и офлайн. Вход добавляет облачную
+синхронизацию и социальный слой. Демо-аккаунт указан в App Review Information →
+User Account.
+
+МОДЕРАЦИЯ UGC (Guideline 1.2)
+• Жалоба — с любого публичного профиля, карточки ленты и поездки. Восемь причин.
+• Блокировка — из меню «…» на профиле, скрывает в обе стороны.
+• Комментарий может удалить его автор и владелец поездки.
+• В Условиях — нулевая терпимость к недопустимому контенту и SLA 24 часа.
+• Автофильтр по денилисту на названиях поездок.
+
+ПРИВАТНОСТЬ
+• Нет трекинга, рекламы, сторонней аналитики и cross-app идентификаторов.
+• EXIF/GPS удаляются из фото на устройстве до любой загрузки.
+• Профиль публичен, только если пользователь включил это сам (Я → Настройки →
+  Приватность).
+• Политика и Условия: https://trip-track.app
+
+КАК ПРОВЕРИТЬ БЕЗ ПОЕЗДКИ
+1. Онбординг → разрешения «При использовании» достаточно для всех экранов.
+2. В Ленте — публичные поездки реальных аккаунтов: откройте любую и посмотрите
+   деталку, реплей, фото и обсуждение.
+3. Я → «Как видят другие» — превью публичного профиля; в «…» шеринг, жалоба, блок.
+4. Я → Аккаунт и синхронизация — выход, «Удалить мои данные на сервере», удаление
+   аккаунта.
+5. Группы → «Посмотреть что будет» — превью клубов.
+
+КОНТАКТ
+privacy@trip-track.app
+```
+
+---
+
+## v0.5.8 — bug-fix update (previous submission)
 
 ```
 TripTrack 0.5.8 — Reviewer Notes
@@ -24,7 +161,14 @@ BUG FIXES IN THIS BUILD: map rendering during recording (route line flicker), sp
 
 ---
 
-## English (default)
+## Historical — first social submission draft
+
+Written before the App Store line existed, when the social work was numbered
+«v0.6.0» internally; it actually shipped as **0.5.6**. Kept because the moderation
+and privacy wording below is still the source these notes are trimmed from — the
+version numbers in it are NOT the current ones.
+
+### English
 
 ```
 TripTrack v0.6.0 — Reviewer Notes
@@ -70,7 +214,7 @@ privacy@trip-track.app
 
 ---
 
-## Russian (for RU App Store submissions)
+### Russian
 
 ```
 TripTrack v0.6.0 — Заметки для ревьюера
