@@ -8,7 +8,6 @@ import OSLog
 struct DebugLogsView: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.dismiss) private var dismiss
 
     /// nil = still reading OSLogStore (slow) — show the loader.
     @State private var entries: [DebugLogExporter.LogEntryRow]?
@@ -22,7 +21,7 @@ struct DebugLogsView: View {
         let l = lang.language
 
         VStack(spacing: 0) {
-            navRow(c: c, l: l)
+            navRow(l: l)
             ScrollView {
                 VStack(spacing: 16) {
                     journalCard(c: c, l: l)
@@ -63,24 +62,36 @@ struct DebugLogsView: View {
 
     // MARK: - Nav row
 
-    private func navRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        HStack {
-            // Sheet root — chevron acts as close (GarageView precedent).
-            GarageCircleNavButton(systemImage: "chevron.left") { dismiss() }
-            Spacer()
-            Text(AppStrings.logsJournalTitle(l))
-                .font(.inter(16, weight: .bold))
-                .foregroundStyle(c.text)
-            Spacer()
-            GarageCircleNavButton(systemImage: "square.and.arrow.up") {
+    /// The app's own bar, not a local copy of one.
+    ///
+    /// This row was hand-built from `GarageCircleNavButton` — a 34pt circle
+    /// with a 15pt glyph, no 44pt hit area, under a 16pt title — inset 2pt
+    /// from the top. A sheet has no status bar above it: its top edge is a
+    /// hard rounded boundary, so 2pt glued the controls into the corner.
+    /// `CustomNavBar` is the bar the rest of the app's sheets use, and it
+    /// carries the grabber clearance, the `NavCircleIcon` controls with their
+    /// 44pt hit areas and the `NavBarKiller`.
+    ///
+    /// Sheet root — the built-in back button dismisses, which here closes the
+    /// journal, exactly as the old chevron did (GarageView precedent).
+    private func navRow(l: LanguageManager.Language) -> some View {
+        CustomNavBar(title: AppStrings.logsJournalTitle(l)) {
+            Button {
+                // The old helper tapped haptics for every button it drew; the
+                // canon back button still does, so the export side has to.
+                Haptics.tap()
                 Task { await generate() }
+            } label: {
+                NavCircleIcon(systemImage: "square.and.arrow.up")
             }
+            .buttonStyle(.plain)
             .disabled(isExporting)
+            .accessibilityLabel(AppStrings.logsSendCTA(l))
             .accessibilityIdentifier("logs_export_nav")
         }
-        .padding(.top, 2)
-        .padding(.bottom, 10)
-        .padding(.horizontal, 14)
+        // Presented as a sheet from the settings dev row — the bar needs to
+        // know so it clears the sheet edge instead of the status bar.
+        .environment(\.navBarInSheet, true)
     }
 
     // MARK: - Journal card

@@ -1,8 +1,12 @@
 import SwiftUI
 
-/// Shared add/edit vehicle form (Figma 500:129 add / 541:119 edit).
-/// Presented as a sheet from the garage «+» (add) and from the vehicle
-/// detail menu and fuel rows (edit).
+/// Shared add/edit vehicle form (Figma «06 · Я · Гараж · Добавить», 500:129 add
+/// / 541:119 edit). Presented as a sheet from the garage «+» (add) and from the
+/// vehicle detail menu and fuel rows (edit).
+///
+/// The transport TYPE drives the shape of the form: a moped has no plate and a
+/// bicycle burns nothing, so those sections are absent rather than
+/// present-and-meaningless. Everything below the type tiles reacts to them.
 struct VehicleEditFormView: View {
     enum Mode {
         case add
@@ -18,13 +22,26 @@ struct VehicleEditFormView: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var name: String
-    /// nil = user hasn't picked a cell and the vehicle has a pixel avatar —
-    /// saving then must NOT clobber the pixel avatar (deferred integration
-    /// point for the car-avatar system).
-    @State private var selectedAvatar: String?
+    @State private var selectedType: VehicleType
+    @State private var plate: String
+    /// Off by default, and never inferred from `visibleToOthers`: in Russia a
+    /// plate is enough to look up the owner's name and address, so showing it
+    /// has to be its own deliberate answer.
+    @State private var plateVisible: Bool
+    @State private var visibleToOthers: Bool
+    /// Always a real avatar — either a `pixel_car_*` asset name or, for a
+    /// vehicle created before the pixel cars replaced the emoji set, that
+    /// vehicle's emoji. It used to be optional to keep an unpicked pixel avatar
+    /// from being clobbered by a grid that offered emoji only; the grid offers
+    /// the pixel cars themselves now, so the selection can say what it means.
+    @State private var selectedAvatar: String
     @State private var city: String
     @State private var highway: String
     @State private var price: String
+    /// Per-vehicle, not the app-wide default: a second car can live in a second
+    /// country. Held here until save because a new vehicle has no id yet.
+    @State private var currencySymbol: String
+    @State private var showCurrencyPicker = false
     /// Initial DISPLAY strings — fuel writes fire only when the text
     /// actually changed. Comparing parsed(display) against the stored
     /// full-precision doubles silently rounded e.g. 9.15 → 9.2 on a
@@ -35,33 +52,56 @@ struct VehicleEditFormView: View {
 
     @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
     @AppStorage("distanceUnit") private var distanceUnit: String = "km"
-    @AppStorage(FuelCurrency.storageKey) private var currency: String = FuelCurrency.defaultSymbol
+    @AppStorage(ConsumptionUnit.storageKey)
+    private var consumptionUnitRaw: String = ConsumptionUnit.per100.rawValue
 
     /// Snapshot of the edited vehicle taken at init — used for
     /// changed-only saves so SyncEnqueuer isn't churned needlessly.
     private let editedVehicle: Vehicle?
 
+    private static let avatarColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
+
     init(mode: Mode) {
         self.mode = mode
         let isRu = LanguageManager.currentLanguage == .ru
+        // The fields hold what a person reads, which may be mpg; storage
+        // is always per-100. Read the preference straight from defaults —
+        // @AppStorage is not available yet at init time.
+        let shownUnit = ConsumptionUnit.current
 
         if case .edit(let id) = mode,
            let vehicle = SettingsManager.shared.vehicles.first(where: { $0.id == id }) {
             editedVehicle = vehicle
             _name = State(initialValue: vehicle.name)
-            _selectedAvatar = State(initialValue: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji)
-            _city = State(initialValue: GarageFormat.fuel(vehicle.cityConsumption, isRu: isRu))
-            _highway = State(initialValue: GarageFormat.fuel(vehicle.highwayConsumption, isRu: isRu))
-            _price = State(initialValue: GarageFormat.fuel(vehicle.fuelPrice, isRu: isRu))
+            _selectedType = State(initialValue: vehicle.type)
+            _plate = State(initialValue: vehicle.plate)
+            _plateVisible = State(initialValue: vehicle.plateVisible)
+            _visibleToOthers = State(initialValue: vehicle.visibleToOthers)
+            _selectedAvatar = State(initialValue: vehicle.avatarEmoji)
+            _currencySymbol = State(initialValue: vehicle.fuelCurrency)
+            _city = State(initialValue: GarageFormat.fuel(
+                shownUnit.display(fromPer100: vehicle.cityConsumption), isRu: isRu))
+            _highway = State(initialValue: GarageFormat.fuel(
+                shownUnit.display(fromPer100: vehicle.highwayConsumption), isRu: isRu))
+            _price = State(initialValue: GarageFormat.fuel(
+                shownUnit.displayPrice(fromPerLitre: vehicle.fuelPrice), isRu: isRu))
         } else {
             editedVehicle = nil
             let defaults = Vehicle()
             _name = State(initialValue: "")
-            // Figma 500:129 draws the FIRST grid cell selected by default.
-            _selectedAvatar = State(initialValue: Vehicle.defaultAvatars.first ?? "🚗")
-            _city = State(initialValue: GarageFormat.fuel(defaults.cityConsumption, isRu: isRu))
-            _highway = State(initialValue: GarageFormat.fuel(defaults.highwayConsumption, isRu: isRu))
-            _price = State(initialValue: GarageFormat.fuel(defaults.fuelPrice, isRu: isRu))
+            _selectedType = State(initialValue: .car)
+            _plate = State(initialValue: "")
+            _plateVisible = State(initialValue: false)
+            _visibleToOthers = State(initialValue: true)
+            // Canon draws the FIRST grid cell selected by default.
+            _selectedAvatar = State(initialValue: Vehicle.pixelCarAssets.first ?? "🚗")
+            _currencySymbol = State(initialValue: FuelCurrency.current)
+            _city = State(initialValue: GarageFormat.fuel(
+                shownUnit.display(fromPer100: defaults.cityConsumption), isRu: isRu))
+            _highway = State(initialValue: GarageFormat.fuel(
+                shownUnit.display(fromPer100: defaults.highwayConsumption), isRu: isRu))
+            _price = State(initialValue: GarageFormat.fuel(
+                shownUnit.displayPrice(fromPerLitre: defaults.fuelPrice), isRu: isRu))
         }
         _initialCity = State(initialValue: _city.wrappedValue)
         _initialHighway = State(initialValue: _highway.wrappedValue)
@@ -77,9 +117,16 @@ struct VehicleEditFormView: View {
             ScrollView {
                 VStack(spacing: 12) {
                     nameCard(c: c, l: l)
+                    typeCard(c: c, l: l)
+                    if selectedType.hasPlate {
+                        plateCard(c: c, l: l)
+                    }
                     avatarCard(c: c, l: l)
-                    fuelCard(c: c, l: l)
-                    priceCard(c: c, l: l)
+                    if selectedType.burnsFuel {
+                        fuelCard(c: c, l: l)
+                        priceCard(c: c, l: l)
+                    }
+                    privacyCard(c: c, l: l)
                     if let vehicle = editedVehicle {
                         mileageCard(vehicle, c: c, l: l)
                     }
@@ -87,6 +134,7 @@ struct VehicleEditFormView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 .padding(.bottom, 24)
+                .animation(.easeInOut(duration: 0.2), value: selectedType)
             }
             .scrollDismissesKeyboard(.interactively)
         }
@@ -94,7 +142,20 @@ struct VehicleEditFormView: View {
         .safeAreaInset(edge: .bottom) {
             saveButton(l: l)
         }
+        // Deliberately NOT `.contentSizedSheet`: that modifier measures what it
+        // wraps, and a ScrollView reports whatever height it was handed — the
+        // detent would end up feeding its own measurement. The full-height sheet
+        // has no dead space anyway, because the Save bar is a bottom safe-area
+        // inset and the scroll view takes everything above it.
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .sheet(isPresented: $showCurrencyPicker) {
+            FuelCurrencyPickerSheet(selectedSymbol: $currencySymbol)
+                .environmentObject(lang)
+                // A sheet over a sheet does not inherit the theme override, and
+                // `scheme` is already the resolved one.
+                .preferredColorScheme(scheme)
+        }
     }
 
     // MARK: - Nav Row
@@ -110,7 +171,7 @@ struct VehicleEditFormView: View {
                     Haptics.tap()
                     dismiss()
                 } label: {
-                    NavCircleIcon(systemImage: "xmark")
+                    SheetCloseCircle()
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("vehicle_form_close")
@@ -124,7 +185,11 @@ struct VehicleEditFormView: View {
     private func title(_ l: LanguageManager.Language) -> String {
         switch mode {
         case .add: return AppStrings.addVehicleTitle(l)
-        case .edit: return AppStrings.myVehicle(l)
+        // Not «Мой автомобиль»: the garage holds transport now, and a moped
+        // opening a sheet that calls itself a car is exactly the wording the
+        // canon retired. `edit` is also the label on the menu item that opens
+        // this sheet, so the title repeats the tap that got here.
+        case .edit: return AppStrings.editVehicleTitle(l)
         }
     }
 
@@ -145,14 +210,16 @@ struct VehicleEditFormView: View {
         .surfaceCard(cornerRadius: 16)
     }
 
-    // MARK: - Avatar
+    // MARK: - Type
 
-    private func avatarCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+    private func typeCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            GarageSectionLabel(text: AppStrings.avatarSection(l), color: c.textSecondary)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
-                ForEach(Vehicle.defaultAvatars, id: \.self) { emoji in
-                    avatarCell(emoji, c: c)
+            GarageSectionLabel(text: AppStrings.vehicleTypeSection(l), color: c.textSecondary)
+            HStack(spacing: 8) {
+                // Iterated, not hand-written: the canon calls the selector
+                // extendable, so a fifth type must land here for free.
+                ForEach(VehicleType.allCases) { type in
+                    typeTile(type, c: c, l: l)
                 }
             }
         }
@@ -160,14 +227,143 @@ struct VehicleEditFormView: View {
         .surfaceCard(cornerRadius: 16)
     }
 
-    private func avatarCell(_ emoji: String, c: AppTheme.Colors) -> some View {
-        let isSelected = selectedAvatar == emoji
+    private func typeTile(_ type: VehicleType, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        let isSelected = selectedType == type
         return Button {
-            Haptics.tap()
-            selectedAvatar = emoji
+            Haptics.selection()
+            selectedType = type
         } label: {
-            Text(emoji)
-                .font(.system(size: 26))
+            VStack(spacing: 6) {
+                Image(systemName: type.icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(isSelected ? AppTheme.accent : c.textSecondary)
+                Text(type.label(l))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isSelected ? c.text : c.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 62)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? AppTheme.accent.opacity(0.12) : c.cardAlt)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? AppTheme.accent : .clear, lineWidth: 2)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("vehicle_type_\(type.rawValue)")
+    }
+
+    // MARK: - Plate
+
+    private func plateCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        let preview = VehiclePlate.normalized(plate)
+        return VStack(alignment: .leading, spacing: 10) {
+            GarageSectionLabel(text: AppStrings.plateSection(l), color: c.textSecondary)
+
+            TextField(AppStrings.platePlaceholder(l), text: $plate)
+                .font(.system(size: 15, weight: .semibold))
+                .tracking(0.4)
+                .foregroundStyle(c.text)
+                .tint(AppTheme.accent)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                // No mask and no country guess — `sanitize` only drops what
+                // cannot be part of a plate anywhere (emoji above all) and caps
+                // the length, so the field shows exactly what will be stored.
+                .onChange(of: plate) { _, newValue in
+                    let cleaned = VehiclePlate.sanitize(newValue)
+                    if cleaned != newValue { plate = cleaned }
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 44)
+                .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityIdentifier("vehicle_plate_field")
+
+            toggleRow(
+                AppStrings.plateShowToOthers(l),
+                isOn: $plateVisible,
+                c: c,
+                identifier: "vehicle_plate_visible_toggle"
+            )
+
+            // The preview answers the only question the toggle raises — "what
+            // will they see?" — so it exists only while the answer is "this".
+            if plateVisible, !preview.isEmpty {
+                VehiclePlateChip(plate: preview)
+            }
+
+            Text(plateVisible ? AppStrings.plateVisibilityHintOn(l) : AppStrings.plateVisibilityHint(l))
+                .font(.system(size: 12))
+                .foregroundStyle(c.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .surfaceCard(cornerRadius: 16)
+        .animation(.easeInOut(duration: 0.15), value: plateVisible)
+    }
+
+    // MARK: - Avatar
+
+    private func avatarCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GarageSectionLabel(text: AppStrings.avatarSection(l), color: c.textSecondary)
+            LazyVGrid(columns: Self.avatarColumns, spacing: 8) {
+                // A vehicle saved before the pixel cars replaced the emoji set
+                // keeps its emoji as a leading ninth cell: without it, opening
+                // the form would silently restyle every old vehicle.
+                if let legacy = legacyAvatar {
+                    avatarCell(isSelected: selectedAvatar == legacy, c: c) {
+                        selectedAvatar = legacy
+                    } content: {
+                        Text(legacy)
+                            .font(.system(size: 26))
+                    }
+                }
+                ForEach(Vehicle.pixelCarAssets, id: \.self) { asset in
+                    avatarCell(isSelected: selectedAvatar == asset, c: c) {
+                        selectedAvatar = asset
+                    } content: {
+                        // The assets are 254×188 — the TILE is square, the car
+                        // is not, so it fits inside rather than filling.
+                        Image(asset)
+                            .resizable()
+                            .interpolation(.none)
+                            .scaledToFit()
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 10)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .surfaceCard(cornerRadius: 16)
+    }
+
+    /// The emoji an existing vehicle was created with, when it is not one of the
+    /// pixel cars. Nil for new vehicles and for anything already on the new set.
+    private var legacyAvatar: String? {
+        guard let vehicle = editedVehicle, !vehicle.isPixelAvatar else { return nil }
+        return vehicle.avatarEmoji
+    }
+
+    private func avatarCell<Content: View>(
+        isSelected: Bool,
+        c: AppTheme.Colors,
+        onTap: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Button {
+            Haptics.tap()
+            onTap()
+        } label: {
+            content()
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
                 .background(
@@ -178,6 +374,7 @@ struct VehicleEditFormView: View {
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(isSelected ? AppTheme.accent : .clear, lineWidth: 2)
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
     }
@@ -185,31 +382,141 @@ struct VehicleEditFormView: View {
     // MARK: - Fuel
 
     private func fuelCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            GarageSectionLabel(text: AppStrings.fuelSectionLabel(l), color: c.textSecondary)
-            fuelInputRow(label: AppStrings.fuelCity(l), text: $city, unit: consumptionUnitLabel(l), maxValue: 50, c: c)
-            fuelInputRow(label: AppStrings.fuelHighway(l), text: $highway, unit: consumptionUnitLabel(l), maxValue: 50, c: c)
+        let unit = consumptionUnitLabel(l)
+        // 50 л/100 км is an absurd car; 50 mpg is an ordinary one. The ceiling
+        // has to speak the unit on screen or the field would refuse a perfectly
+        // normal figure the moment someone switched to mpg.
+        let ceiling: Double = consumptionUnit == .mpg ? 250 : 50
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                GarageSectionLabel(text: AppStrings.fuelSectionLabel(l), color: c.textSecondary)
+                Spacer(minLength: 8)
+                consumptionUnitSegment(c: c, l: l)
+            }
+            fuelInputRow(label: AppStrings.fuelCity(l), text: $city, maxValue: ceiling, c: c) {
+                unitLabel(unit, c: c)
+            }
+            fuelInputRow(label: AppStrings.fuelHighway(l), text: $highway, maxValue: ceiling, c: c) {
+                unitLabel(unit, c: c)
+            }
         }
         .padding(14)
         .surfaceCard(cornerRadius: 16)
     }
 
+    /// «л/100 | mpg».
+    ///
+    /// Switching it CONVERTS what is in the fields — it does not relabel them.
+    /// The two units run in opposite directions (9,1 л/100 км is 25,8 mpg), so
+    /// a relabel would turn a frugal car into a thirsty one on a tap. What gets
+    /// stored is litres per 100 km either way; this only chooses the dialect.
+    private func consumptionUnitSegment(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        HStack(spacing: 2) {
+            ForEach(ConsumptionUnit.allCases) { unit in
+                let selected = unit == consumptionUnit
+                Button {
+                    guard !selected else { return }
+                    Haptics.tap()
+                    convertFuelFields(to: unit)
+                    consumptionUnitRaw = unit.rawValue
+                } label: {
+                    Text(unit.segmentLabel(l))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(selected ? c.text : c.textTertiary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background {
+                            if selected {
+                                Capsule().fill(c.card)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(c.cardAlt, in: Capsule())
+        .accessibilityIdentifier("consumption_unit_segment")
+    }
+
+    /// Re-expresses whatever is typed right now in the new unit, going through
+    /// the stored per-100 value so the round trip cannot drift.
+    private func convertFuelFields(to unit: ConsumptionUnit) {
+        let isRu = lang.language == .ru
+        for field in [$city, $highway] {
+            guard let shown = parsed(field.wrappedValue) else { continue }
+            let stored = consumptionUnit.toPer100(shown)
+            field.wrappedValue = GarageFormat.fuel(unit.display(fromPer100: stored), isRu: isRu)
+        }
+        if let shownPrice = parsed(price) {
+            let perLitre = consumptionUnit.priceToPerLitre(shownPrice)
+            price = GarageFormat.fuel(unit.displayPrice(fromPerLitre: perLitre), isRu: isRu)
+        }
+        // One setting, not two. The trip screen prints fuel volume from this
+        // key, so leaving it behind would have a trip say gallons while the
+        // garage says litres.
+        volumeUnit = unit.volumeUnit.rawValue
+    }
+
     private func priceCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        // Figma 500:129/541:119: the form pill shows the bare currency
-        // symbol; the per-volume unit belongs to the DETAIL fuel row only.
-        let priceUnit = currency
+        // The row label carries the volume unit and the pill carries the
+        // currency: `pricePerLiter` interpolates the app-wide symbol, which is
+        // the wrong one now that each vehicle owns its currency.
+        // The segment above owns this too: mpg means gallons, so the row
+        // reads «Цена за галлон» and the number is converted, not relabelled.
+        let unit = GarageFormat.volumeShort(consumptionUnit.volumeUnit.rawValue, isRu: l == .ru)
         return VStack(alignment: .leading, spacing: 10) {
-            GarageSectionLabel(text: AppStrings.fuelPriceRow(l), color: c.textSecondary)
-            fuelInputRow(label: AppStrings.pricePerLiter(l), text: $price, unit: priceUnit, maxValue: 999, c: c)
+            GarageSectionLabel(text: AppStrings.fuelPriceSection(l), color: c.textSecondary)
+            fuelInputRow(
+                label: AppStrings.fuelPricePerUnit(l, unit: unit),
+                text: $price,
+                maxValue: 999,
+                c: c
+            ) {
+                currencyButton()
+            }
         }
         .padding(14)
         .surfaceCard(cornerRadius: 16)
+    }
+
+    private func currencyButton() -> some View {
+        Button {
+            Haptics.tap()
+            showCurrencyPicker = true
+        } label: {
+            HStack(spacing: 3) {
+                Text(currencySymbol)
+                    .font(.system(size: 13, weight: .semibold))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            // Accent, because it is the one part of the pill that is a control.
+            .foregroundStyle(AppTheme.accent)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("vehicle_currency_button")
+    }
+
+    private func unitLabel(_ text: String, c: AppTheme.Colors) -> some View {
+        Text(text)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(c.textTertiary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
     }
 
     /// Pill-styled inline decimal input. Input filtering, RU comma
     /// normalization and clamping are the retired FuelSettingsCard's
-    /// proven logic, verbatim.
-    private func fuelInputRow(label: String, text: Binding<String>, unit: String, maxValue: Double, c: AppTheme.Colors) -> some View {
+    /// proven logic, verbatim. The trailing element is a view rather than a
+    /// string because the price row's unit is the currency BUTTON.
+    private func fuelInputRow<Trailing: View>(
+        label: String,
+        text: Binding<String>,
+        maxValue: Double,
+        c: AppTheme.Colors,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
         let isRu = lang.language == .ru
         return HStack(spacing: 10) {
             Text(label)
@@ -241,15 +548,51 @@ struct VehicleEditFormView: View {
                 .tint(AppTheme.accent)
                 .frame(width: 64)
 
-                Text(unit)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(c.textTertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                trailing()
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    // MARK: - Privacy
+
+    private func privacyCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GarageSectionLabel(text: AppStrings.privacySection(l), color: c.textSecondary)
+            toggleRow(
+                AppStrings.showVehicleToggle(l),
+                isOn: $visibleToOthers,
+                c: c,
+                identifier: "vehicle_visible_toggle"
+            )
+            Text(AppStrings.showVehicleHint(l))
+                .font(.system(size: 12))
+                .foregroundStyle(c.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .surfaceCard(cornerRadius: 16)
+    }
+
+    private func toggleRow(
+        _ title: String,
+        isOn: Binding<Bool>,
+        c: AppTheme.Colors,
+        identifier: String
+    ) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(c.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Toggle(title, isOn: isOn)
+                .labelsHidden()
+                .tint(AppTheme.accent)
+                .accessibilityIdentifier(identifier)
         }
     }
 
@@ -290,51 +633,94 @@ struct VehicleEditFormView: View {
                 .background(trimmedEmpty ? Color.gray : AppTheme.accent, in: Capsule())
         }
         .disabled(trimmedEmpty)
+        .accessibilityIdentifier("vehicle_form_save")
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 12)
-        .background(.ultraThinMaterial)
+        // The bar is inset ABOVE the home indicator, so a material that stops at
+        // its own frame leaves a strip of bare sheet under it — the last row of
+        // the form then scrolls through a gap instead of under the bar.
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .bottom)
+        }
     }
 
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
 
+        // A type that carries no plate stores none: switching a car to a bicycle
+        // must not leave the number behind in the database. `updateVehicleIdentity`
+        // enforces this too; `addVehicle` writes what it is handed.
+        let plateToStore = selectedType.hasPlate ? VehiclePlate.normalized(plate) : ""
+        let showPlate = selectedType.hasPlate && plateVisible
+
         switch mode {
         case .add:
-            settings.addVehicle(name: trimmed, emoji: selectedAvatar ?? "🚗")
-            // The vehicles reload is name-sorted, so `vehicles.last` picks the
-            // wrong car when the new name doesn't sort last — select the newest
-            // vehicle by creation date instead.
-            guard let newVehicle = settings.vehicles.max(by: { $0.createdAt < $1.createdAt }) else { break }
-            let defaults = Vehicle()
-            let cityVal = parsed(city) ?? defaults.cityConsumption
-            let highwayVal = parsed(highway) ?? defaults.highwayConsumption
-            let priceVal = parsed(price) ?? defaults.fuelPrice
-            if cityVal != defaults.cityConsumption
-                || highwayVal != defaults.highwayConsumption
-                || priceVal != defaults.fuelPrice {
-                settings.updateVehicleFuel(id: newVehicle.id, city: cityVal, highway: highwayVal, price: priceVal)
+            let newId = settings.addVehicle(
+                name: trimmed,
+                emoji: selectedAvatar,
+                type: selectedType,
+                plate: plateToStore,
+                plateVisible: showPlate,
+                visibleToOthers: visibleToOthers
+            )
+            if selectedType.burnsFuel {
+                let defaults = Vehicle()
+                let cityVal = storedConsumption(city) ?? defaults.cityConsumption
+                let highwayVal = storedConsumption(highway) ?? defaults.highwayConsumption
+                let priceVal = storedPrice(price) ?? defaults.fuelPrice
+                if cityVal != defaults.cityConsumption
+                    || highwayVal != defaults.highwayConsumption
+                    || priceVal != defaults.fuelPrice {
+                    settings.updateVehicleFuel(id: newId, city: cityVal, highway: highwayVal, price: priceVal)
+                }
+                // Written even when it matches today's app-wide symbol.
+                // `addVehicle` leaves the column NULL, and NULL reads back as
+                // whatever the app-wide currency IS at read time — so skipping
+                // the write would leave this vehicle drifting behind the units
+                // card instead of keeping the currency the form showed.
+                settings.updateVehicleCurrency(id: newId, symbol: currencySymbol)
             }
-            settings.selectVehicle(id: newVehicle.id)
+            settings.selectVehicle(id: newId)
 
         case .edit(let id):
             guard let original = editedVehicle else { break }
-            if trimmed != original.name {
-                settings.renameVehicle(id: id, name: trimmed)
-            }
-            // Avatar is written only when the user explicitly picked a cell —
-            // protects pixel_car_* avatars from being clobbered.
-            if let avatar = selectedAvatar, avatar != original.avatarEmoji {
-                settings.updateVehicleAvatar(id: id, emoji: avatar)
-            }
-            if city != initialCity || highway != initialHighway || price != initialPrice {
-                settings.updateVehicleFuel(
+            // One write for the whole identity half, so a type + plate + name
+            // change costs one sync operation instead of three.
+            let identityChanged = trimmed != original.name
+                || selectedAvatar != original.avatarEmoji
+                || selectedType != original.type
+                || plateToStore != original.plate
+                || showPlate != original.plateVisible
+                || visibleToOthers != original.visibleToOthers
+            if identityChanged {
+                settings.updateVehicleIdentity(
                     id: id,
-                    city: city != initialCity ? (parsed(city) ?? original.cityConsumption) : original.cityConsumption,
-                    highway: highway != initialHighway ? (parsed(highway) ?? original.highwayConsumption) : original.highwayConsumption,
-                    price: price != initialPrice ? (parsed(price) ?? original.fuelPrice) : original.fuelPrice
+                    name: trimmed,
+                    emoji: selectedAvatar,
+                    type: selectedType,
+                    plate: plateToStore,
+                    plateVisible: showPlate,
+                    visibleToOthers: visibleToOthers
                 )
+            }
+            // Fuel figures belong to a type that burns fuel; a vehicle turned
+            // into a bicycle keeps whatever it had rather than being rewritten.
+            if selectedType.burnsFuel {
+                if city != initialCity || highway != initialHighway || price != initialPrice {
+                    settings.updateVehicleFuel(
+                        id: id,
+                        city: city != initialCity ? (storedConsumption(city) ?? original.cityConsumption) : original.cityConsumption,
+                        highway: highway != initialHighway ? (storedConsumption(highway) ?? original.highwayConsumption) : original.highwayConsumption,
+                        price: price != initialPrice ? (storedPrice(price) ?? original.fuelPrice) : original.fuelPrice
+                    )
+                }
+                if currencySymbol != original.fuelCurrency {
+                    settings.updateVehicleCurrency(id: id, symbol: currencySymbol)
+                }
             }
         }
 
@@ -346,10 +732,25 @@ struct VehicleEditFormView: View {
         Double(text.replacingOccurrences(of: ",", with: "."))
     }
 
+    /// A consumption field as it must be STORED: litres per 100 km, whatever
+    /// dialect the field was typed in.
+    private func storedConsumption(_ text: String) -> Double? {
+        parsed(text).map { consumptionUnit.toPer100($0) }
+    }
+
+    /// A price field as it must be STORED: per litre, whatever the field said.
+    private func storedPrice(_ text: String) -> Double? {
+        parsed(text).map { consumptionUnit.priceToPerLitre($0) }
+    }
+
     // MARK: - Helpers
 
+    private var consumptionUnit: ConsumptionUnit {
+        ConsumptionUnit(rawValue: consumptionUnitRaw) ?? .per100
+    }
+
     private func consumptionUnitLabel(_ l: LanguageManager.Language) -> String {
-        GarageFormat.consumptionUnit(
+        consumptionUnit.valueUnit(
             volumeRaw: volumeUnit, distanceRaw: distanceUnit, isRu: l == .ru)
     }
 }

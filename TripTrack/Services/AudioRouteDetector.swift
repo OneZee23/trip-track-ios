@@ -142,7 +142,7 @@ final class AudioRouteDetector: ObservableObject {
             return
         }
 
-        let previousBTOutputs = previousRoute.outputs.filter { isBluetoothPort($0.portType) }
+        let previousBTOutputs = previousRoute.outputs.filter { Self.isBluetoothPort($0.portType) }
         for output in previousBTOutputs {
             let name = output.portName
             guard isSavedDevice(name: name) else {
@@ -178,11 +178,25 @@ final class AudioRouteDetector: ObservableObject {
 
     /// Returns the name of the current Bluetooth audio output, if any
     func currentBluetoothOutput() -> String? {
-        let route = AVAudioSession.sharedInstance().currentRoute
-        return route.outputs.first(where: { isBluetoothPort($0.portType) })?.portName
+        Self.currentBluetoothOutputName()
     }
 
-    private func isBluetoothPort(_ portType: AVAudioSession.Port) -> Bool {
+    /// The Bluetooth audio device the phone is playing through right now.
+    ///
+    /// Static because a view asking "is the stereo connected?" needs an answer,
+    /// not a monitor. And it asks the AUDIO ROUTE, not `BluetoothDetector`: a
+    /// car stereo is a classic-Bluetooth audio sink, which BLE scanning never
+    /// sees — the route is the same source auto-record itself keys off.
+    static func currentBluetoothOutputName() -> String? {
+        AVAudioSession.sharedInstance().currentRoute.outputs
+            .first(where: { isBluetoothPort($0.portType) })?.portName
+    }
+
+    /// Re-exported so a view can watch the stereo come and go without
+    /// importing AVFoundation for one symbol.
+    static let routeChangeNotification = AVAudioSession.routeChangeNotification
+
+    private static func isBluetoothPort(_ portType: AVAudioSession.Port) -> Bool {
         portType == .bluetoothA2DP || portType == .bluetoothHFP || portType == .bluetoothLE
     }
 

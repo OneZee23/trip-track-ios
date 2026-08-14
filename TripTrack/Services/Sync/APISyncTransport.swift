@@ -354,7 +354,12 @@ final class APISyncTransport: SyncTransport {
             highwayConsumption: vehicle.highwayConsumption,
             fuelPrice: vehicle.fuelPrice,
             conflictVersion: Int(entity.conflictVersion),
-            lastModifiedAt: entity.lastModifiedAt ?? Date()
+            lastModifiedAt: entity.lastModifiedAt ?? Date(),
+            vehicleType: vehicle.type.rawValue,
+            plate: vehicle.plate,
+            plateVisible: vehicle.plateVisible,
+            visibleToOthers: vehicle.visibleToOthers,
+            fuelCurrency: vehicle.fuelCurrency
         )
         do {
             let res: VehicleUpsertResponse = try await client.post(APIEndpoint.vehicleUpsert, body: payload)

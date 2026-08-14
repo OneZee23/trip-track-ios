@@ -8,29 +8,58 @@ struct BluetoothScanSheet: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
 
     @ObservedObject private var bluetoothDetector = AutoTripService.shared.bluetoothDetector
-    @ObservedObject private var audioRouteDetector = AutoTripService.shared.audioRouteDetector
     @ObservedObject private var settings = SettingsManager.shared
 
+    /// The Bluetooth output the phone is playing through, kept live.
+    ///
+    /// This used to be read straight from `AudioRouteDetector` inside `body`.
+    /// That detector publishes nothing, so the section it feeds was frozen at
+    /// whatever the route happened to be when the sheet opened — and the
+    /// likeliest moment to open this sheet is right before the stereo
+    /// connects, which is exactly the case it missed.
+    @State private var currentAudioOutput: String?
+
+    // The two states want opposite sizing, so each carries its own: the scan
+    // list keeps a fixed detent, the BT-off message is measured. Flipping
+    // branches also restarts `.task`, which is what should happen the moment
+    // Bluetooth comes back on.
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
 
-        VStack(spacing: 0) {
-            header(c: c, l: l)
+        Group {
             if bluetoothDetector.isBluetoothAvailable {
-                scanContent(c: c, l: l)
+                VStack(spacing: 0) {
+                    header(c: c, l: l)
+                    scanContent(c: c, l: l)
+                }
+                .background(c.bg)
+                // Devices arrive one at a time while the scan runs. A sheet
+                // that re-measured itself on every discovery would slide the
+                // rows out from under a finger already reaching for one, so
+                // the height stays put and the list scrolls inside it.
+                .presentationDetents([.medium, .large])
             } else {
-                bluetoothOffState(c: c, l: l)
+                VStack(spacing: 0) {
+                    header(c: c, l: l)
+                    bluetoothOffState(c: c, l: l)
+                }
+                // Nothing in this state grows, so it is measured instead:
+                // `.medium` plus the Spacers that filled it left a field of
+                // empty card under «Открыть настройки».
+                .contentSizedSheet(background: c.bg)
             }
         }
-        .background(c.bg)
-        .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .task {
+            currentAudioOutput = AudioRouteDetector.currentBluetoothOutputName()
             bluetoothDetector.startScanning()
+        }
+        .onReceive(NotificationCenter.default.publisher(
+            for: AudioRouteDetector.routeChangeNotification)) { _ in
+            currentAudioOutput = AudioRouteDetector.currentBluetoothOutputName()
         }
     }
 
@@ -48,7 +77,7 @@ struct BluetoothScanSheet: View {
                     Haptics.tap()
                     dismiss()
                 } label: {
-                    NavCircleIcon(systemImage: "xmark")
+                    SheetCloseCircle()
                 }
                 .buttonStyle(.plain)
             }
@@ -62,7 +91,6 @@ struct BluetoothScanSheet: View {
 
     private func bluetoothOffState(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(spacing: 14) {
-            Spacer()
             ZStack {
                 Circle()
                     .fill(c.cardAlt)
@@ -71,6 +99,7 @@ struct BluetoothScanSheet: View {
                     .font(.system(size: 32))
                     .foregroundStyle(c.textSecondary)
             }
+            .padding(.top, 18)
             Text(AppStrings.btOffTitle(l))
                 .font(.system(size: 19, weight: .heavy))
                 .foregroundStyle(c.text)
@@ -80,9 +109,11 @@ struct BluetoothScanSheet: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             Button {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    openURL(url)
-                }
+                // Same door the recording screen opens when location is
+                // denied (IdleHUDView) — one system-settings deep link, not
+                // a per-screen URL each with its own way of being wrong.
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
             } label: {
                 Text(AppStrings.openSettings(l))
                     .font(.system(size: 15, weight: .bold))
@@ -93,10 +124,11 @@ struct BluetoothScanSheet: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 6)
-            Spacer()
-            Spacer()
         }
         .frame(maxWidth: .infinity)
+        // The measured detent adds only the home-indicator strip, so the gap
+        // under the button is this view's to give.
+        .padding(.bottom, 28)
     }
 
     // MARK: - Scan Content
@@ -123,13 +155,15 @@ struct BluetoothScanSheet: View {
 
     @ViewBuilder
     private func audioOutputSection(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        if let audioDevice = audioRouteDetector.currentBluetoothOutput(),
-           !settings.savedBluetoothDevices.contains(where: { $0.name == audioDevice }) {
+        if let audioDevice = currentAudioOutput {
+            let alreadyLinked = settings.savedBluetoothDevices.contains { $0.name == audioDevice }
+
             VStack(alignment: .leading, spacing: 8) {
                 GarageSectionLabel(text: AppStrings.currentAudioOutput(l))
                     .padding(.horizontal, 2)
 
                 Button {
+                    guard !alreadyLinked else { return }
                     saveDevice(name: audioDevice, uuid: "audio-\(audioDevice)")
                 } label: {
                     HStack(spacing: 10) {
@@ -148,14 +182,29 @@ struct BluetoothScanSheet: View {
                                 .foregroundStyle(c.textTertiary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundStyle(AppTheme.accent)
+
+                        // Linked already: the section stays, wearing the same
+                        // green badge the list below uses. Hiding it made the
+                        // stereo you are literally listening to vanish from a
+                        // screen about picking your stereo.
+                        if alreadyLinked {
+                            Text(AppStrings.added(l))
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(AppTheme.green)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(AppTheme.green.opacity(0.14), in: Capsule())
+                        } else {
+                            Image(systemName: "plus")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundStyle(AppTheme.accent)
+                        }
                     }
                     .padding(14)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(alreadyLinked)
                 .background(c.card, in: RoundedRectangle(cornerRadius: 16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
@@ -188,9 +237,10 @@ struct BluetoothScanSheet: View {
             VStack(spacing: 0) {
                 if bluetoothDetector.isScanning {
                     HStack(spacing: 10) {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(AppTheme.accent)
+                        // The app's own loader, not the system spinner —
+                        // everywhere else in TripTrack a wait is a car on a
+                        // road, and a scan is the longest wait in the garage.
+                        CarLoadingView(size: .compact)
                         Text(AppStrings.scanningDevices(l))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(c.textSecondary)
@@ -228,7 +278,8 @@ struct BluetoothScanSheet: View {
                             name: device.name,
                             rssi: device.rssi,
                             saved: saved,
-                            scheme: scheme
+                            scheme: scheme,
+                            l: l
                         ) {
                             saveDevice(name: device.name, uuid: device.id)
                         }
@@ -270,6 +321,11 @@ private struct DeviceRow: View {
     let rssi: Int
     let saved: Bool
     let scheme: ColorScheme
+    /// Handed down rather than read from `LanguageManager.currentLanguage`:
+    /// none of this row's other inputs change when the language does, so a
+    /// static read left «Добавлено» in the old language until the device list
+    /// itself changed.
+    let l: LanguageManager.Language
     let onAdd: () -> Void
 
     var body: some View {
@@ -279,12 +335,14 @@ private struct DeviceRow: View {
             onAdd()
         } label: {
             HStack(spacing: 10) {
-                // Figma 539:119 draws a filled blue device disc before the name.
-                Image(systemName: "hifispeaker.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
-                    .background(AppTheme.blue, in: Circle())
+                // A small quiet glyph, not the filled blue disc this row had.
+                // Canon marks the row's SUBJECT with the badge or the signal
+                // bars on the right; a saturated blue puck on the left fought
+                // both of them and made every device look selected.
+                Image(systemName: "music.note")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(saved ? AppTheme.green : c.textSecondary)
+                    .frame(width: 18)
                 // Long device names truncate first so the trailing badge stays visible
                 Text(name)
                     .font(.system(size: 14, weight: .semibold))
@@ -293,7 +351,7 @@ private struct DeviceRow: View {
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if saved {
-                    Text(AppStrings.added(LanguageManager.currentLanguage))
+                    Text(AppStrings.added(l))
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(AppTheme.green)
                         .padding(.horizontal, 8)

@@ -866,6 +866,13 @@ final class CoreDataTripRepository: TripRepository {
         entity.cityConsumption = p.cityConsumption
         entity.highwayConsumption = p.highwayConsumption
         entity.fuelPrice = p.fuelPrice
+        // A server that predates these columns sends nothing back, and nothing
+        // is not "reset to default" — keep whatever this device already knows.
+        if let type = p.vehicleType { entity.vehicleType = type }
+        if let plate = p.plate { entity.plate = plate }
+        if let plateVisible = p.plateVisible { entity.plateVisible = plateVisible }
+        if let visible = p.visibleToOthers { entity.visibleToOthers = visible }
+        if let currency = p.fuelCurrency { entity.fuelCurrency = currency }
         entity.conflictVersion = Int32(p.conflictVersion)
         entity.lastModifiedAt = p.lastModifiedAt
         entity.syncStatus = SyncStatus.synced.rawValue

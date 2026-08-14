@@ -253,7 +253,7 @@ enum AppStrings {
         lang == .ru ? "Завершить и сохранить" : "Finish and save"
     }
     static func vehiclePickerTitle(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Машина для поездки" : "Vehicle for this trip"
+        lang == .ru ? "Транспорт для поездки" : "Transport for this trip"
     }
     static func manageInGarage(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Управлять в Гараже" : "Manage in Garage"
@@ -433,7 +433,7 @@ enum AppStrings {
         lang == .ru ? "Нет" : "No"
     }
     static func noVehicle(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Без машины" : "No vehicle"
+        lang == .ru ? "Без транспорта" : "No transport"
     }
     static func tripVehicle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Машина поездки" : "Trip vehicle"
@@ -1149,6 +1149,9 @@ enum AppStrings {
     static func autoRecordOff(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Выкл" : "Off"
     }
+    static func autoRecordOn(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вкл" : "On"
+    }
     static func autoRecordRemind(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Напоминание" : "Remind"
     }
@@ -1653,12 +1656,10 @@ enum AppStrings {
         lang == .ru ? "Переименовать" : "Rename"
     }
     static func deleteVehicle(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Удалить авто" : "Delete vehicle"
+        lang == .ru ? "Удалить транспорт" : "Delete vehicle"
     }
     static func deleteVehicleConfirm(_ lang: LanguageManager.Language) -> String {
-        lang == .ru
-            ? "Удалить это авто? Поездки сохранятся без привязки к нему."
-            : "Delete this vehicle? Trips will keep their data without it."
+        lang == .ru ? "Удалить транспорт?" : "Delete this transport?"
     }
     static func makeMainVehicle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Сделать основной" : "Make main"
@@ -1685,7 +1686,7 @@ enum AppStrings {
         lang == .ru ? "Цена топлива" : "Fuel price"
     }
     static func addVehicleTitle(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Добавить автомобиль" : "Add vehicle"
+        lang == .ru ? "Добавить транспорт" : "Add transport"
     }
     static func vehicleNameSection(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Название" : "Name"
@@ -1728,13 +1729,174 @@ enum AppStrings {
         lang == .ru ? "Настройки" : "Settings"
     }
     static func maxVehiclesHint(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Максимум 5 автомобилей" : "Maximum 5 vehicles"
+        lang == .ru ? "Максимум 5 единиц транспорта" : "Maximum 5 vehicles"
     }
     static func unnamedVehicle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Без имени" : "Unnamed"
     }
     static func sinceYear(_ lang: LanguageManager.Language, year: Int) -> String {
         lang == .ru ? "с \(year)" : "since \(year)"
+    }
+
+    // MARK: - Garage: transport, plates, levels
+
+    static func vehicleTypeSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Тип транспорта" : "Transport type"
+    }
+    static func plateSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Госномер · необязательно" : "Plate · optional"
+    }
+    static func platePlaceholder(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Например, А 123 ВС 777" : "e.g. AB 12 CDE"
+    }
+    static func plateShowToOthers(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Показывать другим" : "Show to others"
+    }
+    /// Says who can see it today, not what the toggle does — the toggle's own
+    /// label already does that.
+    static func plateVisibilityHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "По умолчанию номер видите только вы"
+            : "By default only you can see the plate"
+    }
+    static func privacySection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Приватность" : "Privacy"
+    }
+    /// Read out for the lock glyph on a garage card. A state, not a section
+    /// heading — VoiceOver announces this in place of the icon.
+    static func vehicleHiddenFromOthers(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Скрыт от других" : "Hidden from others"
+    }
+    static func editVehicleTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Редактировать транспорт" : "Edit transport"
+    }
+    /// The other half of `plateVisibilityHint`. Leaving the "only you can see
+    /// it" line up after the toggle is switched ON reads as reassurance for a
+    /// state that no longer holds.
+    static func plateVisibilityHintOn(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Номер увидят все, кто открывает ваш профиль"
+            : "Anyone who opens your profile will see the plate"
+    }
+    /// One line, for the empty garage seen from inside the trip picker — the
+    /// full-screen empty state's two sentences run long in a sheet.
+    static func garageEmptyPickerHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Поездка запишется и без транспорта"
+            : "The trip records fine without transport"
+    }
+    /// Row label for the auto-stop stepper. Distinct from `autoStopTimeout`,
+    /// which is the section header directly above it.
+    static func autoStopRowLabel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Завершить через" : "Stop after"
+    }
+
+    // MARK: - Stereo status (vehicle card)
+
+    /// The stereo is linked AND the phone is playing through it right now.
+    static func stereoConnectedTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Магнитола подключена" : "Stereo connected"
+    }
+    static func stereoStartsItself(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "запись стартует сама" : "recording starts by itself"
+    }
+    /// Linked, but not connected at this moment — the promise is conditional,
+    /// and saying «подключена» when it is not would be a lie the card tells
+    /// every time the car is parked.
+    static func stereoLinkedTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Магнитола привязана" : "Stereo linked"
+    }
+    static func stereoStartsOnConnect(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "запись стартует при подключении" : "recording starts when it connects"
+    }
+    static func stereoNotLinkedTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Магнитола не привязана" : "No stereo linked"
+    }
+    static func stereoNotLinkedBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Привяжите её, чтобы запись стартовала сама."
+            : "Link one so recording can start by itself."
+    }
+    static func showVehicleToggle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Показывать транспорт" : "Show transport"
+    }
+    static func showVehicleHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Скрытый транспорт не виден в профиле — его нельзя указать в попутчиках. В публичных поездках транспорт скрыт."
+            : "Hidden transport does not appear in your profile and cannot be named in companions. It stays hidden on public trips."
+    }
+    static func fuelPriceSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Цена топлива" : "Fuel price"
+    }
+    static func fuelPricePerUnit(_ lang: LanguageManager.Language, unit: String) -> String {
+        lang == .ru ? "Цена за \(unit)" : "Price per \(unit)"
+    }
+    static func currencyPickerTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Валюта цены" : "Price currency"
+    }
+    static func currencyPickerHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Валюта цены топлива в этой машине — по умолчанию для все поездок. Другую можно выбрать на экране поездки."
+            : "The fuel price currency for this vehicle, used by default for its trips. A trip can override it."
+    }
+
+    // Empty garage
+
+    static func garageEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "В Гараже пусто" : "Your Garage is empty"
+    }
+    static func garageEmptyBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Добавьте транспорт — он будет копить уровень с каждой поездкой"
+            : "Add transport — it gains a level with every trip"
+    }
+
+    // Delete confirmation
+
+    static func deleteVehicleBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Поездки и статистика сохранятся."
+            : "Trips and statistics are kept."
+    }
+    static func vehicleDeletedNote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Транспорт удалён" : "Transport deleted"
+    }
+
+    // No-vehicle trips
+
+    static func noVehicleOption(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Без транспорта" : "No transport"
+    }
+
+    // Vehicle level info
+
+    static func vehicleLevelTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Уровень машины" : "Vehicle level"
+    }
+    static func vehicleLevelToNext(_ lang: LanguageManager.Language, km: String, level: Int) -> String {
+        lang == .ru ? "\(km) км до уровня \(level)" : "\(km) km to level \(level)"
+    }
+    static func vehicleLevelHowGrows(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Как растёт" : "How it grows"
+    }
+    static func vehicleLevelHowGrowsBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Единственный источник — километры в записанных поездках на этой машине. Каждый следующий уровень требует больше км, чем предыдущий: первые — за сотни, дальше — за тысячи. Потолка нет."
+            : "The only source is kilometres from recorded trips on this vehicle. Each level costs more than the last: the first ones take hundreds, later ones thousands. There is no ceiling."
+    }
+    static func vehicleLevelAffects(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "На что влияет" : "What it affects"
+    }
+    static func vehicleLevelAffectsBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Ни на что не влияет и ничего не открывает — это стаж машины, её летопись. Виден вам в Гараже; у публичного транспорта его видят другие. Каждые 10 уровней цифра меняет цвет."
+            : "It affects nothing and unlocks nothing — it is the vehicle's record of service. You see it in the Garage; on public transport others see it too. The number changes colour every 10 levels."
+    }
+    static func vehicleLevelColors(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Цвета уровней" : "Level colours"
+    }
+    static func vehicleLevelAndAbove(_ lang: LanguageManager.Language, level: Int) -> String {
+        lang == .ru ? "\(level) и выше" : "\(level) and above"
     }
 
     // MARK: - Home feed (6.1.0)
@@ -2315,9 +2477,6 @@ enum AppStrings {
         return n == 1 ? "You've driven this route once" : "You've driven this route \(n) times"
     }
     /// «Без авто» — shorter than noVehicle's «Без машины» (idle-HUD chip).
-    static func noVehicleShort(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Без авто" : "No vehicle"
-    }
     static func moreActions(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Ещё" : "More"
     }

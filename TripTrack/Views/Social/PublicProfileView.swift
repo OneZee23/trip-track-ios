@@ -662,7 +662,7 @@ struct PublicProfileView: View {
     // MARK: - Active vehicle
 
     /// "Your car" card that mirrors the garage's vehicle chrome — same
-    /// hierarchy (avatar, name, level title, odometer progress bar) so the
+    /// hierarchy (avatar, name, level, odometer progress bar) so the
     /// public view feels consistent with how the user sees their own garage.
     /// Uses VehicleLevelSystem directly because the server returns a leaner
     /// DTO without stickers/consumption.
@@ -670,8 +670,7 @@ struct PublicProfileView: View {
     private func activeVehicleCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
         if let v = profile?.activeVehicle {
             let progress = VehicleLevelSystem.progressToNext(km: v.odometerKm, level: v.level)
-            let title = VehicleLevelSystem.title(level: v.level, lang: lang.language)
-            let frame = vehicleFrameColor(level: v.level)
+            let frame = VehicleLevelSystem.color(for: v.level)
 
             HStack(spacing: 14) {
                 ZStack {
@@ -705,10 +704,6 @@ struct PublicProfileView: View {
                             .fixedSize()
                     }
 
-                    Text(title)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(frame)
-
                     HStack(spacing: 8) {
                         GeometryReader { geo in
                             ZStack(alignment: .leading) {
@@ -735,16 +730,6 @@ struct PublicProfileView: View {
         }
     }
 
-    private func vehicleFrameColor(level: Int) -> Color {
-        switch level {
-        case 1...2: return .gray
-        case 3: return Color(red: 205/255, green: 127/255, blue: 50/255)
-        case 4...5: return Color(red: 192/255, green: 192/255, blue: 192/255)
-        case 6: return Color(red: 255/255, green: 215/255, blue: 0/255)
-        case 7...8: return Color(red: 180/255, green: 210/255, blue: 230/255)
-        default: return AppTheme.accent
-        }
-    }
 
     /// «38 420 км» / "38 420 km" — same convention as the private stats
     /// strip (GarageFormat space grouping + localized unit). Replaces the

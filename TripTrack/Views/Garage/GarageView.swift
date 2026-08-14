@@ -22,19 +22,13 @@ struct GarageView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 navRow(c: c, l: l)
-                ScrollView {
-                    VStack(spacing: 12) {
-                        if settings.vehicles.isEmpty {
-                            emptyState(c: c, l: l)
-                        } else {
-                            vehicleList(c: c, l: l)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    // The first card sat flush against the nav row, so the
-                    // highlighted one read as growing out of it.
-                    .padding(.top, 8)
-                    .padding(.bottom, 96)
+                // An empty garage is a screen, not a card: it has to own the
+                // space under the nav row to centre in it, so it replaces the
+                // scroll view instead of living inside it.
+                if settings.vehicles.isEmpty {
+                    emptyState(c: c, l: l)
+                } else {
+                    vehicleScroll(c: c, l: l)
                 }
             }
             .background(c.bg)
@@ -49,10 +43,7 @@ struct GarageView: View {
             }
             .confirmationDialog(
                 AppStrings.deleteVehicleConfirm(l),
-                isPresented: Binding(
-                    get: { deleteCandidateId != nil },
-                    set: { if !$0 { deleteCandidateId = nil } }
-                ),
+                isPresented: deleteConfirmation,
                 titleVisibility: .visible
             ) {
                 Button(AppStrings.deleteVehicle(l), role: .destructive) {
@@ -61,8 +52,19 @@ struct GarageView: View {
                 Button(AppStrings.cancel(l), role: .cancel) {
                     deleteCandidateId = nil
                 }
+            } message: {
+                // Without it the sheet asks to delete and says nothing about
+                // what happens to the trips — the one thing worth fearing.
+                Text(AppStrings.deleteVehicleBody(l))
             }
         }
+    }
+
+    private var deleteConfirmation: Binding<Bool> {
+        Binding(
+            get: { deleteCandidateId != nil },
+            set: { if !$0 { deleteCandidateId = nil } }
+        )
     }
 
     // MARK: - Nav Row (Figma 152:1328)
@@ -99,6 +101,19 @@ struct GarageView: View {
 
     // MARK: - Vehicle List
 
+    private func vehicleScroll(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                vehicleList(c: c, l: l)
+            }
+            .padding(.horizontal, 16)
+            // The first card sat flush against the nav row, so the
+            // highlighted one read as growing out of it.
+            .padding(.top, 8)
+            .padding(.bottom, 96)
+        }
+    }
+
     @ViewBuilder
     private func vehicleList(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         let sorted = settings.vehicles.sorted { $0.odometerKm > $1.odometerKm }
@@ -124,53 +139,54 @@ struct GarageView: View {
             Haptics.tap()
             detailVehicleId = vehicle.id
         } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(c.cardAlt)
-                            .frame(width: 64, height: 64)
-                        vehicle.avatarView(size: 44)
-                    }
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(vehicle.name.isEmpty ? AppStrings.unnamedVehicle(l) : vehicle.name)
-                                .font(.system(size: 16, weight: .heavy))
-                                .foregroundStyle(c.text)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                            if isMain {
-                                Text(AppStrings.vehicleMainLabel(l).uppercased())
-                                    .font(.system(size: 10, weight: .bold))
-                                    .tracking(0.4)
-                                    .foregroundStyle(c.textSecondary)
-                                    .fixedSize()
-                            }
-                        }
-
-                        Text("\(GarageFormat.odometer(vehicle.odometerKm)) \(AppStrings.km(l))")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(c.textTertiary)
-                    }
-
-                    Spacer(minLength: 0)
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(c.cardAlt)
+                        .frame(width: 64, height: 64)
+                    vehicle.avatarView(size: 44)
                 }
 
-                HStack(spacing: 8) {
-                    VehicleXPBar(progress: vehicle.progressToNextLevel, tint: AppTheme.blue)
-                    Text("LVL \(vehicle.level)")
-                        .font(.custom("PressStart2P-Regular", size: 8))
-                        .foregroundStyle(AppTheme.accent)
-                        .fixedSize()
+                VStack(alignment: .leading, spacing: 6) {
+                    nameRow(vehicle, isMain: isMain, c: c, l: l)
+                    identityLine(vehicle, c: c, l: l)
+
+                    // The level line lives in this column, not across the
+                    // whole card. Run full-bleed under the avatar it reads
+                    // as a loading bar the card is waiting on; kept beside
+                    // the name it reads as one more fact about the car,
+                    // which is what it is.
+                    HStack(spacing: 10) {
+                        // Bar and pill share the decade colour: two
+                        // different colours for one level would read as
+                        // two facts.
+                        VehicleXPBar(
+                            progress: vehicle.progressToNextLevel,
+                            tint: vehicle.levelColor
+                        )
+                        VehicleLevelPill(level: vehicle.level, size: 9)
+                    }
+                    .padding(.top, 2)
                 }
-                .padding(.top, 6)
+                // The checkmark is trailing-aligned inside the name row,
+                // so the column has to take the full card width instead
+                // of being pushed left by a Spacer beside it.
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(14)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("garage_card")
+        .background {
+            // Drawn before `surfaceCard` so it lands ON the card fill rather
+            // than behind it — the peach wash is what marks the main vehicle
+            // at a glance; the border alone is easy to miss on a warm bg.
+            if isMain {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(AppTheme.accentBg)
+            }
+        }
         .surfaceCard(cornerRadius: 16)
         .overlay {
             if isMain {
@@ -199,19 +215,105 @@ struct GarageView: View {
         }
     }
 
+    private func nameRow(
+        _ vehicle: Vehicle,
+        isMain: Bool,
+        c: AppTheme.Colors,
+        l: LanguageManager.Language
+    ) -> some View {
+        HStack(spacing: 6) {
+            Text(vehicle.name.isEmpty ? AppStrings.unnamedVehicle(l) : vehicle.name)
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundStyle(c.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            // Hidden transport is still fully usable here, so the only cue the
+            // owner gets that others cannot see it is this lock.
+            if !vehicle.visibleToOthers {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+                    .accessibilityLabel(AppStrings.vehicleHiddenFromOthers(l))
+            }
+
+            Spacer(minLength: 8)
+
+            if isMain {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AppTheme.accent)
+                    .accessibilityLabel(AppStrings.vehicleMainLabel(l))
+            }
+        }
+    }
+
+    /// The plate is the card's identity line — but it is optional, and bikes
+    /// and mopeds never carry one, so the odometer takes the slot instead of
+    /// letting the card change height from vehicle to vehicle.
+    @ViewBuilder
+    private func identityLine(
+        _ vehicle: Vehicle,
+        c: AppTheme.Colors,
+        l: LanguageManager.Language
+    ) -> some View {
+        if vehicle.hasPlate {
+            // The owner's own screen — `plate`, not `publicPlate`, which is
+            // about what everyone else may see.
+            VehiclePlateChip(plate: vehicle.plate)
+        } else {
+            Text("\(GarageFormat.odometer(vehicle.odometerKm)) \(AppStrings.km(l))")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(c.textTertiary)
+        }
+    }
+
     // MARK: - Empty State
 
     private func emptyState(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "car.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(c.textTertiary)
-            Text(AppStrings.addVehicleTitle(l))
-                .font(.system(size: 14))
-                .foregroundStyle(c.textTertiary)
+        VStack(spacing: 14) {
+            // The asset is 254×188; a square frame would letterbox it, so only
+            // the width is pinned. `.interpolation` sits after `.resizable()`
+            // like every other pixel-art call site in the app — `resizable()`
+            // rebuilds the Image, and a nearest-neighbour hint set before it
+            // is not guaranteed to survive that.
+            Image("pixel_car_orange")
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(width: 96)
+
+            VStack(spacing: 8) {
+                Text(AppStrings.garageEmptyTitle(l))
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(c.text)
+                Text(AppStrings.garageEmptyBody(l))
+                    .font(.system(size: 14))
+                    .foregroundStyle(c.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button {
+                Haptics.tap()
+                showAddVehicle = true
+            } label: {
+                Text(AppStrings.addVehicleTitle(l))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(AppTheme.accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("garage_empty_add")
+            .padding(.top, 6)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
+        .padding(.horizontal, 32)
+        // Dead centre of the remaining space sits low once the nav row has
+        // taken the top of the sheet, so the block is lifted a notch.
+        .padding(.bottom, 48)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Actions

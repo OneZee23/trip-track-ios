@@ -45,5 +45,21 @@ final class GarageTourTests: XCTestCase {
 
         XCTAssertTrue(app.buttons.matching(identifier: "garage_add").firstMatch.exists,
                       "the «+» control must be on the canon nav bar")
+
+        // The vehicle card is the other half of this tour: its top bar and the
+        // stereo-status block are both layout that only a picture catches.
+        let card = app.buttons.matching(identifier: "garage_card").firstMatch
+        guard card.waitForExistence(timeout: 4) else { return }
+        card.tap()
+        usleep(2_000_000)
+
+        let detail = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        detail.name = "02_vehicle_card"
+        detail.lifetime = .keepAlways
+        add(detail)
+
+        XCTAssertTrue(app.otherElements.matching(identifier: "vehicle_stereo_status").firstMatch.exists
+                      || app.staticTexts.matching(identifier: "vehicle_stereo_status").firstMatch.exists,
+                      "the stereo state must be stated, not left to silence")
     }
 }

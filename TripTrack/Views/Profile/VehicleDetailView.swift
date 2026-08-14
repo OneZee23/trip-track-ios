@@ -1,9 +1,12 @@
 import SwiftUI
 
-/// Vehicle detail (Figma 499:119 canon). Presented two ways:
-/// pushed inside GarageView's NavigationStack, and as a sheet root from
-/// ProfileView — so it carries no NavigationStack of its own (nesting stacks
-/// is forbidden) and `dismiss()` covers both pop and sheet close.
+/// Vehicle detail (Figma 499:119 canon). Pushed inside GarageView's
+/// NavigationStack — it carries no NavigationStack of its own (nesting stacks
+/// is forbidden) and `dismiss()` pops it.
+///
+/// It now needs that host stack rather than merely tolerating one: the level
+/// row pushes `VehicleLevelInfoView` into it, so this view cannot be used as a
+/// bare sheet root.
 struct VehicleDetailView: View {
     let vehicleId: UUID
 
@@ -20,9 +23,15 @@ struct VehicleDetailView: View {
     @State private var showVehicleActions = false
     @State private var showAutoRecordSettings = false
     @State private var showDeleteConfirm = false
+    @State private var showLevelInfo = false
+    /// Name of the Bluetooth audio device the phone is playing through,
+    /// refreshed whenever the route changes. Nil when nothing is connected.
+    @State private var connectedStereo: String?
 
     @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
     @AppStorage("distanceUnit") private var distanceUnit: String = "km"
+    @AppStorage(ConsumptionUnit.storageKey)
+    private var consumptionUnitRaw: String = ConsumptionUnit.per100.rawValue
     @AppStorage(FuelCurrency.storageKey) private var currency: String = FuelCurrency.defaultSymbol
 
     private var vehicle: Vehicle? {
@@ -33,7 +42,6 @@ struct VehicleDetailView: View {
         vehicleId == (settings.selectedVehicleId ?? settings.vehicles.first?.id)
     }
 
-    @ViewBuilder
     /// Popover rows. Each closes first, then acts — presenting a sheet or
     /// an alert in the same runloop as the dismissal races it and SwiftUI
     /// drops one of the two.
@@ -45,8 +53,11 @@ struct VehicleDetailView: View {
                 action()
             }
         }
+        // «Редактировать», not «Переименовать»: the form it opens edits the
+        // type, the plate and its visibility too — the old title promised only
+        // the name field.
         var items: [ActionPopoverList.Item] = [
-            .init(title: AppStrings.renameVehicle(l), systemImage: "pencil") {
+            .init(title: AppStrings.edit(l), systemImage: "pencil") {
                 run { showEditForm = true }
             },
         ]
@@ -73,19 +84,28 @@ struct VehicleDetailView: View {
             let l = lang.language
 
             VStack(spacing: 0) {
-                navRow(c: c, l: l)
+                navRow(title: displayName(vehicle, l), c: c, l: l)
                 ScrollView {
                     VStack(spacing: 12) {
                         heroCard(vehicle, c: c, l: l)
                         statGrid(vehicle, c: c, l: l)
-                        stickersSection(vehicle, c: c, l: l)
-                        // BT-off warning only when it is true AND relevant (fork F12).
-                        if settings.autoRecordMode != .off && !bluetoothDetector.isBluetoothAvailable {
-                            btWarningChip(c: c, l: l)
+                        // A bicycle pairs with no stereo, so auto-record has
+                        // nothing to key off — the rows are absent, not
+                        // disabled (canon: hidden means gone).
+                        if vehicle.type.supportsAutoRecord {
+                            // Always present, never conditional. It used to
+                            // appear only when Bluetooth was off AND
+                            // auto-record was armed, which meant its silence
+                            // carried two opposite meanings — "all good" and
+                            // "nothing is set up" — and the card gave no way
+                            // to tell them apart at a glance.
+                            stereoStatusCard(c: c, l: l)
+                            autoRecordRow(c: c, l: l)
                         }
-                        autoRecordRow(c: c, l: l)
-                        fuelSection(vehicle, c: c, l: l)
-                        UnitsSettingsCard()
+                        // Same for fuel: a bicycle burns none.
+                        if vehicle.type.burnsFuel {
+                            fuelSection(vehicle, c: c, l: l)
+                        }
                     }
                     .padding(.horizontal, 14)
                     .padding(.top, 4)
@@ -94,10 +114,22 @@ struct VehicleDetailView: View {
                 .scrollIndicators(.hidden)
             }
             .background(c.bg)
+            .task { connectedStereo = AudioRouteDetector.currentBluetoothOutputName() }
+            // The stereo connects and drops while this screen is open — the
+            // card claims «подключена», so it has to keep earning it.
+            .onReceive(NotificationCenter.default.publisher(
+                for: AudioRouteDetector.routeChangeNotification)) { _ in
+                connectedStereo = AudioRouteDetector.currentBluetoothOutputName()
+            }
             .toolbar(.hidden, for: .navigationBar)
             // Re-enables the interactive pop gesture the hidden nav bar
             // kills — same wiring as TripDetailView/SocialTripDetailView.
             .background(NavBarKiller())
+            // Pushed, not presented: the level screen is a chapter of this one,
+            // and the Garage stack that hosts this view hosts it too.
+            .navigationDestination(isPresented: $showLevelInfo) {
+                VehicleLevelInfoView(level: vehicle.level, odometerKm: vehicle.odometerKm)
+            }
             .sheet(isPresented: $showEditForm) {
                 VehicleEditFormView(mode: .edit(vehicleId))
                     .environmentObject(lang)
@@ -117,47 +149,32 @@ struct VehicleDetailView: View {
                     performDelete()
                 }
                 Button(AppStrings.cancel(l), role: .cancel) {}
+            } message: {
+                // The one thing someone deleting a car is actually afraid of.
+                Text(AppStrings.deleteVehicleBody(l))
             }
         }
     }
 
     // MARK: - Nav Row
 
-    private func navRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        HStack {
-            Button {
-                Haptics.tap()
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(c.text)
-                    .frame(width: 34, height: 34)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Text(AppStrings.myVehicle(l))
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(c.text)
-
-            Spacer()
-
+    /// The app's own bar, not a local copy of one.
+    ///
+    /// This row was hand-built: bare glyphs in 34pt frames with 4pt of top
+    /// padding and a 16pt title. Next to the Garage's `CustomNavBar` — which
+    /// this screen is one push away from — it read as a different, thinner
+    /// app. `CustomNavBar` carries the circle controls, the 44pt hit areas,
+    /// the sheet-grabber clearance and the `NavBarKiller` that keeps the
+    /// interactive pop gesture alive.
+    private func navRow(title: String, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        CustomNavBar(title: title) {
             // Popover, not a `Menu` — see `ActionPopoverList` for the plate
             // artifact a Menu leaves behind when it closes.
             Button {
                 Haptics.tap()
                 showVehicleActions = true
             } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(c.text)
-                    .frame(width: 34, height: 34)
-                    .padding(5)
-                    .contentShape(Circle())
-                    .padding(-5)
+                NavCircleIcon(systemImage: "ellipsis")
             }
             .buttonStyle(.plain)
             .accessibilityLabel(AppStrings.moreActions(l))
@@ -165,19 +182,18 @@ struct VehicleDetailView: View {
                 ActionPopoverList(items: vehicleActionItems(l))
             }
         }
-        .padding(.top, 4)
-        .padding(.bottom, 8)
-        .padding(.horizontal, 12)
     }
 
     // MARK: - Hero Card
 
+    /// Avatar, name, plate, level. Nothing else.
+    ///
+    /// It also carried «295 км · с 2026». The odometer is the stat card
+    /// directly below it, so the line repeated the screen's own next row, and
+    /// the year was never a fact about the car — `createdAt` is when it was
+    /// added to the garage, which for an eight-year-old Polo reads as a lie.
     private func heroCard(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        let year = Calendar.current.component(.year, from: vehicle.createdAt)
-
-        // Canon stacks 96-avatar · 12 · name · 3 · subtitle · 14 · XP row;
-        // the block was built with 10/2/14 and read a touch tighter than drawn.
-        return VStack(spacing: 12) {
+        VStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 18)
                     .fill(c.cardAlt)
@@ -186,32 +202,26 @@ struct VehicleDetailView: View {
             }
 
             VStack(spacing: 3) {
-                Text(vehicle.name.isEmpty ? AppStrings.unnamedVehicle(l) : vehicle.name)
+                Text(displayName(vehicle, l))
                     .font(.system(size: 18, weight: .heavy))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .minimumScaleFactor(0.7)
-                // Canon (119:968 · 499:137) draws «А123БВ 77 · 2019» here.
-                // `Vehicle` carries neither field: a plate would need a new
-                // CoreData attribute, a store migration and a server column for
-                // one cosmetic line, and the year would be a plate-adjacent
-                // invention (`createdAt` is when the car was ADDED, not its
-                // model year). Every canvas comparison re-raises this line —
-                // the answer is still odometer + «с YYYY» (fork F3, settled).
-                Text("\(GarageFormat.odometer(vehicle.odometerKm)) \(AppStrings.km(l)) · \(AppStrings.sinceYear(l, year: year))")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(c.textTertiary)
+
+                if vehicle.hasPlate {
+                    // The owner always sees their own plate here. `plateVisible`
+                    // is about OTHER people (see `Vehicle.publicPlate`) — hiding
+                    // it from the person who typed it in would be theatre.
+                    // The chip carries 3pt of its own vertical padding, so 2
+                    // more on each side lands on canon's ~6pt gaps.
+                    VehiclePlateChip(plate: vehicle.plate)
+                        .padding(.vertical, 2)
+                }
+
             }
 
-            HStack(spacing: 8) {
-                VehicleXPBar(progress: vehicle.progressToNextLevel, tint: AppTheme.blue)
-                Text("LVL \(vehicle.level)")
-                    .font(.custom("PressStart2P-Regular", size: 8))
-                    .foregroundStyle(AppTheme.blue)
-                    .fixedSize()
-            }
-            .padding(.top, 2)
+            levelRow(vehicle, c: c)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 14)
@@ -219,11 +229,45 @@ struct VehicleDetailView: View {
         .surfaceCard(cornerRadius: 16)
     }
 
+    // MARK: - Level Row
+
+    /// Bar + «LVL 28», both in the decade colour, the whole strip a way into
+    /// «Уровень машины».
+    ///
+    /// The pair used to be a fixed blue, which made the colour decoration. It
+    /// carries the level's own decade now, so the number and its bar say the
+    /// same thing twice — and the chevron admits there is more to read.
+    private func levelRow(_ vehicle: Vehicle, c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            showLevelInfo = true
+        } label: {
+            HStack(spacing: 8) {
+                VehicleXPBar(progress: vehicle.progressToNextLevel, tint: vehicle.levelColor)
+                VehicleLevelPill(level: vehicle.level)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            // Pad → shape → unpad: a 6pt bar is a 6pt hit target otherwise,
+            // and canon's 14pt gap above the row must not grow (same idiom as
+            // the «…» button in the nav row).
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+            .padding(.vertical, -10)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("vehicle_level_row")
+        .padding(.top, 2)
+    }
+
     // MARK: - Stat Grid
 
     private func statGrid(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         // No measured consumption exists — mean of city/highway settings (fork F10).
-        let avg = (vehicle.cityConsumption + vehicle.highwayConsumption) / 2
+        // Averaged BEFORE conversion: mpg is a reciprocal, so the mean of
+        // two mpg figures is not the mpg of the mean consumption.
+        let avg = shownConsumption((vehicle.cityConsumption + vehicle.highwayConsumption) / 2)
 
         return HStack(spacing: 10) {
             statCard(
@@ -233,13 +277,17 @@ struct VehicleDetailView: View {
                 label: AppStrings.odometerLabel(l),
                 c: c
             )
-            statCard(
-                value: GarageFormat.oneDecimal(avg, isRu: l == .ru),
-                valueColor: AppTheme.green,
-                unit: consumptionUnitLabel(l),
-                label: AppStrings.avgConsumptionLabel(l),
-                c: c
-            )
+            // Consumption is a fuel figure like the ones below it, so a
+            // bicycle drops it too — the odometer card then takes the row.
+            if vehicle.type.burnsFuel {
+                statCard(
+                    value: GarageFormat.oneDecimal(avg, isRu: l == .ru),
+                    valueColor: AppTheme.green,
+                    unit: consumptionUnitLabel(l),
+                    label: AppStrings.avgConsumptionLabel(l),
+                    c: c
+                )
+            }
         }
     }
 
@@ -265,130 +313,139 @@ struct VehicleDetailView: View {
         .surfaceCard(cornerRadius: 14)
     }
 
-    // MARK: - Stickers
-
-    private func stickersSection(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Canon puts this header a step above the in-card labels (12/0.36)
-            // and starts it on the screen's 14pt gutter — the extra 2pt indent
-            // pushed it out of line with the card edges below it.
-            GarageSectionLabel(text: AppStrings.stickersLabel(l), size: 12, tracking: 0.36)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                // Canon draws only the three EARNED badges, so it needs no
-                // container; showing all ten with locks (fork F11) needs a
-                // scroll, and a bare scrolling strip would bleed under both
-                // screen edges with nothing to bound it — hence the card. Cell
-                // pitch (74 wide, 10 apart, top-aligned) is canon's.
-                HStack(alignment: .top, spacing: 10) {
-                    ForEach(VehicleSticker.allCases, id: \.self) { sticker in
-                        stickerCell(sticker, earned: vehicle.stickers.contains(sticker), c: c, l: l)
-                    }
-                }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 4)
-            }
-            .surfaceCard(cornerRadius: 16)
-        }
-    }
-
-    private func stickerCell(_ sticker: VehicleSticker, earned: Bool, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        VStack(spacing: 4) {
-            ZStack {
-                Circle()
-                    .fill(earned ? sticker.color.opacity(0.15) : c.cardAlt)
-                    .frame(width: 46, height: 46)
-                if earned {
-                    Image(systemName: sticker.icon)
-                        .font(.system(size: 18))
-                        .foregroundStyle(sticker.color)
-                } else {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(c.textTertiary.opacity(0.6))
-                }
-            }
-            // Canon wraps the caption over two 70pt lines. One line + a 0.7
-            // scale floor shrank «Платиновая рамка»/«Серебряная рамка» — the
-            // longest of the ten — to ~7pt while the drawn badge reads at 10.
-            Text(l == .ru ? sticker.titleRu() : sticker.titleEn())
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(earned ? sticker.color : c.textTertiary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
-                .frame(width: 70)
-        }
-        .frame(width: 74)
-    }
-
     // MARK: - BT Warning Chip (Figma canon bg, fork F4/F12)
 
-    private func btWarningChip(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+    /// Where the car stereo stands, always stated.
+    ///
+    /// Three facts, three faces: Bluetooth is off, no stereo is linked, or one
+    /// is linked — and if the phone is playing through it right now, connected.
+    /// The old card showed only the first, and only while auto-record was
+    /// armed, so «no card» meant both "everything is fine" and "nothing is set
+    /// up" and the screen never answered «подключён ли блютуз» at a glance.
+    ///
+    /// «Подключена» is read from the AUDIO ROUTE, not from BLE scanning: a car
+    /// stereo is a classic-Bluetooth sink that CoreBluetooth never sees, and
+    /// it is the route that auto-record itself keys off.
+    @ViewBuilder
+    private func stereoStatusCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        let linked = settings.bluetoothDevice(forVehicle: vehicleId)
+        let isConnected = linked.map { $0.name == connectedStereo } ?? false
+
+        if !bluetoothDetector.isBluetoothAvailable {
+            stereoRow(
+                icon: "antenna.radiowaves.left.and.right.slash",
+                tint: AppTheme.red,
+                title: AppStrings.btOffTitle(l),
+                subtitle: AppStrings.btOffChipBody(l),
+                c: c
+            ) {
+                // Public settings URL only — no private deep link (fork F13).
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        openURL(url)
+                    }
+                } label: {
+                    Text(AppStrings.settingsButton(l))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppTheme.accent)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(AppTheme.accentBg, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+            }
+        } else if let linked {
+            stereoRow(
+                icon: "antenna.radiowaves.left.and.right",
+                tint: isConnected ? AppTheme.green : c.textTertiary,
+                title: isConnected
+                    ? AppStrings.stereoConnectedTitle(l)
+                    : AppStrings.stereoLinkedTitle(l),
+                subtitle: "\(linked.name) · " + (isConnected
+                    ? AppStrings.stereoStartsItself(l)
+                    : AppStrings.stereoStartsOnConnect(l)),
+                c: c
+            ) {
+                // Connected is the resting state — nothing to do, so nothing
+                // to press. A button here would only ever undo something.
+                EmptyView()
+            }
+        } else {
+            stereoRow(
+                icon: "antenna.radiowaves.left.and.right",
+                tint: c.textTertiary,
+                title: AppStrings.stereoNotLinkedTitle(l),
+                subtitle: AppStrings.stereoNotLinkedBody(l),
+                c: c
+            ) {
+                Button {
+                    Haptics.tap()
+                    showAutoRecordSettings = true
+                } label: {
+                    Text(AppStrings.linkStereo(l))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppTheme.accent)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(AppTheme.accentBg, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+            }
+        }
+    }
+
+    /// One shape for all three states — the icon's colour is what changes, so
+    /// the row is recognised before it is read.
+    private func stereoRow<Action: View>(
+        icon: String,
+        tint: Color,
+        title: String,
+        subtitle: String,
+        c: AppTheme.Colors,
+        @ViewBuilder action: () -> Action
+    ) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(AppTheme.yellow)
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(tint.opacity(0.14)))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(AppStrings.btOffTitle(l))
-                    .font(.system(size: 13.5, weight: .bold))
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(c.text)
-                Text(AppStrings.btOffChipBody(l))
-                    .font(.system(size: 11.5))
+                Text(subtitle)
+                    .font(.system(size: 12))
                     .foregroundStyle(c.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 8)
 
-            Button {
-                // Public settings URL only — no private deep link (fork F13).
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    openURL(url)
-                }
-            } label: {
-                Text(AppStrings.settingsButton(l))
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
-                    .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
-            .fixedSize()
+            action()
         }
         .padding(14)
-        // Canon fills this one with card-alt instead of card, but it is still a
-        // card and carries the same 1pt elevation as the ones above it — the
-        // chip was drawn flat and sank into the background.
-        .background {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(c.cardAlt)
-                .shadow(
-                    color: scheme == .dark ? .clear : .black.opacity(0.03),
-                    radius: 2,
-                    y: 1
-                )
-        }
+        .surfaceCard(cornerRadius: 16)
+        .accessibilityIdentifier("vehicle_stereo_status")
     }
-
-    // MARK: - Auto-Record Row (undrawn glue, fork F14)
 
     private func autoRecordRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         Button {
             Haptics.tap()
             showAutoRecordSettings = true
         } label: {
+            // No leading glyph: the stereo card directly above already
+            // carries the Bluetooth icon, and two antennas one under the
+            // other read as two different subjects.
             HStack(spacing: 10) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 15))
-                    .foregroundStyle(settings.autoRecordMode != .off ? AppTheme.accent : c.textTertiary)
                 Text(AppStrings.autoRecord(l))
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(c.text)
                 Spacer()
-                Text(autoRecordModeLabel(l))
+                Text(autoRecordStateLabel(l))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(c.textSecondary)
                 Image(systemName: "chevron.right")
@@ -403,12 +460,14 @@ struct VehicleDetailView: View {
         .surfaceCard(cornerRadius: 16)
     }
 
-    private func autoRecordModeLabel(_ l: LanguageManager.Language) -> String {
-        switch settings.autoRecordMode {
-        case .off: return AppStrings.autoRecordOff(l)
-        case .remind: return AppStrings.autoRecordRemind(l)
-        case .auto: return AppStrings.autoRecordAuto(l)
-        }
+    /// On/Off, not the mode name: this row answers «is it armed?». Which of the
+    /// two armed modes is running is the auto-record screen's own headline, one
+    /// tap away, and naming it here made «Напоминание» look like a state of the
+    /// vehicle rather than a setting.
+    private func autoRecordStateLabel(_ l: LanguageManager.Language) -> String {
+        settings.autoRecordMode == .off
+            ? AppStrings.autoRecordOff(l)
+            : AppStrings.autoRecordOn(l)
     }
 
     // MARK: - Fuel Section
@@ -416,7 +475,11 @@ struct VehicleDetailView: View {
     private func fuelSection(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         let isRu = l == .ru
         let consumptionUnit = consumptionUnitLabel(l)
-        let priceUnit = "\(currency)/\(GarageFormat.volumeShort(volumeUnit, isRu: isRu))"
+        // Per litre or per gallon by the same choice that picks л/100 vs mpg —
+        // and the number converts with it. The vehicle currency, not the
+        // app-wide one: each vehicle owns its price.
+        let priceUnit = "\(vehicle.fuelCurrency)/"
+            + GarageFormat.volumeShort(shownConsumptionUnit.volumeUnit.rawValue, isRu: isRu)
 
         return VStack(alignment: .leading, spacing: 8) {
             // Canon (499:193) keeps this one at the in-card 10/0.5, but on the
@@ -426,19 +489,19 @@ struct VehicleDetailView: View {
             VStack(spacing: 0) {
                 fuelRow(
                     title: AppStrings.fuelCityRow(l),
-                    value: "\(GarageFormat.fuel(vehicle.cityConsumption, isRu: isRu)) \(consumptionUnit)",
+                    value: "\(GarageFormat.fuel(shownConsumption(vehicle.cityConsumption), isRu: isRu)) \(consumptionUnit)",
                     c: c
                 )
                 fuelDivider(c: c)
                 fuelRow(
                     title: AppStrings.fuelHighwayRow(l),
-                    value: "\(GarageFormat.fuel(vehicle.highwayConsumption, isRu: isRu)) \(consumptionUnit)",
+                    value: "\(GarageFormat.fuel(shownConsumption(vehicle.highwayConsumption), isRu: isRu)) \(consumptionUnit)",
                     c: c
                 )
                 fuelDivider(c: c)
                 fuelRow(
                     title: AppStrings.fuelPriceRow(l),
-                    value: "\(GarageFormat.fuel(vehicle.fuelPrice, isRu: isRu)) \(priceUnit)",
+                    value: "\(GarageFormat.fuel(shownConsumptionUnit.displayPrice(fromPerLitre: vehicle.fuelPrice), isRu: isRu)) \(priceUnit)",
                     c: c
                 )
             }
@@ -480,9 +543,27 @@ struct VehicleDetailView: View {
 
     // MARK: - Helpers
 
+    /// One name for the nav row and the hero, so an unnamed vehicle does not
+    /// read «Без имени» in one and blank in the other.
+    private func displayName(_ vehicle: Vehicle, _ l: LanguageManager.Language) -> String {
+        vehicle.name.isEmpty ? AppStrings.unnamedVehicle(l) : vehicle.name
+    }
+
+    /// The dialect chosen in the vehicle form. Kept in step with it on
+    /// purpose: the card showing «9,1 л/100 км» while the form that set the
+    /// figure shows «25,8 mpg» would read as two different cars.
+    private var shownConsumptionUnit: ConsumptionUnit {
+        ConsumptionUnit(rawValue: consumptionUnitRaw) ?? .per100
+    }
+
     private func consumptionUnitLabel(_ l: LanguageManager.Language) -> String {
-        GarageFormat.consumptionUnit(
+        shownConsumptionUnit.valueUnit(
             volumeRaw: volumeUnit, distanceRaw: distanceUnit, isRu: l == .ru)
+    }
+
+    /// A stored per-100 figure, expressed in whatever unit is on screen.
+    private func shownConsumption(_ per100: Double) -> Double {
+        shownConsumptionUnit.display(fromPer100: per100)
     }
 
     // MARK: - Actions

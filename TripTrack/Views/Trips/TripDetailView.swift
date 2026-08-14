@@ -1722,6 +1722,14 @@ struct TripDetailView: View {
                     .font(.system(size: 12))
                 Text(v.name)
                     .lineLimit(1)
+            } else if trip.vehicleId != nil {
+                // The trip names a vehicle the garage no longer holds. That is
+                // not the same fact as «recorded without one», and saying so
+                // keeps deleting transport honest: the trip survived, its car
+                // did not.
+                Image(systemName: "car.badge.xmark")
+                    .font(.system(size: 11, weight: .medium))
+                Text(AppStrings.vehicleDeletedNote(lang.language))
             } else {
                 Image(systemName: "car")
                     .font(.system(size: 11, weight: .medium))

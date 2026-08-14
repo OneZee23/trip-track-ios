@@ -10,29 +10,46 @@ struct AutoRecordSettingsView: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.dismiss) private var dismiss
 
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var showBluetoothScan = false
     @State private var permissionLocationManager: CLLocationManager?
 
+    /// Canon «Завершить через 1–10 мин». Stated once so the disabled states of
+    /// − / + and the clamps in their actions cannot drift apart.
+    private static let timeoutRange = 1...10
+
+    /// A bicycle or a moped pairs with no car stereo, so there is nothing for
+    /// auto-record to key off. VehicleDetailView already hides the row that
+    /// opens this screen; this is the second lock on the same door, and it
+    /// also catches the vehicle being deleted or retyped while it is open.
+    private var supportsAutoRecord: Bool {
+        settings.vehicles.first { $0.id == vehicleId }?.type.supportsAutoRecord ?? false
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
 
         VStack(spacing: 0) {
-            navRow(c: c, l: l)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 9) {
-                    toggleCard(c: c, l: l)
-                    if settings.autoRecordMode != .off {
-                        enabledSections(c: c, l: l)
+            navRow(l: l)
+            if supportsAutoRecord {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 9) {
+                        toggleCard(c: c, l: l)
+                        if settings.autoRecordMode != .off {
+                            enabledSections(c: c, l: l)
+                        }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 40)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 40)
+            } else {
+                // The nav row stays: a sheet with no controls AND no way back
+                // is worse than one that is merely empty.
+                Spacer()
             }
         }
         .background(c.bg)
@@ -46,29 +63,19 @@ struct AutoRecordSettingsView: View {
 
     // MARK: - Nav Row
 
-    private func navRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        ZStack {
-            Text(AppStrings.autoRecord(l))
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(c.text)
-            HStack {
-                Button {
-                    Haptics.tap()
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(c.text)
-                        .frame(width: 34, height: 34)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                Spacer()
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 14)
-        .padding(.bottom, 4)
+    /// The app's own bar, not a local copy of one.
+    ///
+    /// This row was hand-built too: a bare chevron in a 34pt frame under a
+    /// 16pt title. The vehicle card that opens this sheet is one tap away and
+    /// now carries `CustomNavBar` — two bars that close together cannot
+    /// disagree. The shared bar also brings the 44pt hit area the bare glyph
+    /// never had.
+    private func navRow(l: LanguageManager.Language) -> some View {
+        CustomNavBar(title: AppStrings.autoRecord(l))
+            // Presented as a sheet from the vehicle card, and this screen asks
+            // for the drag indicator — so the bar has to clear the grabber
+            // UIKit draws over its first 10pt.
+            .environment(\.navBarInSheet, true)
     }
 
     // MARK: - Toggle Card
@@ -246,19 +253,31 @@ struct AutoRecordSettingsView: View {
 
     private func timeoutCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         HStack(spacing: 8) {
-            Text(AppStrings.autoStopTimeout(l))
+            Text(AppStrings.autoStopRowLabel(l))
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(c.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            stepperButton(systemImage: "minus", enabled: settings.autoStopTimeout > 1, c: c) {
-                settings.autoStopTimeout = max(1, settings.autoStopTimeout - 1)
+            stepperButton(
+                systemImage: "minus",
+                enabled: settings.autoStopTimeout > Self.timeoutRange.lowerBound,
+                c: c
+            ) {
+                settings.autoStopTimeout = max(
+                    Self.timeoutRange.lowerBound, settings.autoStopTimeout - 1
+                )
             }
             Text(AppStrings.autoStopMinutes(l, minutes: settings.autoStopTimeout))
                 .font(.system(size: 15, weight: .bold).monospacedDigit())
                 .foregroundStyle(c.text)
                 .frame(width: 54)
-            stepperButton(systemImage: "plus", enabled: settings.autoStopTimeout < 10, c: c) {
-                settings.autoStopTimeout = min(10, settings.autoStopTimeout + 1)
+            stepperButton(
+                systemImage: "plus",
+                enabled: settings.autoStopTimeout < Self.timeoutRange.upperBound,
+                c: c
+            ) {
+                settings.autoStopTimeout = min(
+                    Self.timeoutRange.upperBound, settings.autoStopTimeout + 1
+                )
             }
         }
         .padding(14)

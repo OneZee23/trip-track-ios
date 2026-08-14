@@ -45,7 +45,7 @@ struct CloudSyncView: View {
 
         NavigationStack {
             VStack(spacing: 0) {
-                navRow(c: c, l: l)
+                navRow(l: l)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         accountCard(c: c, l: l)
@@ -175,22 +175,26 @@ struct CloudSyncView: View {
 
     // MARK: - Nav row
 
-    private func navRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        HStack {
-            // Sheet root — the chevron acts as close (GarageView fork precedent).
-            GarageCircleNavButton(systemImage: "chevron.left") { dismiss() }
-                .accessibilityIdentifier("account_back")
-            Spacer()
-            Text(AppStrings.accountSyncTitle(l))
-                .font(.inter(16, weight: .bold))
-                .foregroundStyle(c.text)
-            Spacer()
-            // Trailing spacer keeps the title optically centered.
-            Color.clear.frame(width: 34, height: 34)
-        }
-        .padding(.top, 2)
-        .padding(.bottom, 10)
-        .padding(.horizontal, 14)
+    /// The app's own bar, not a local copy of one.
+    ///
+    /// This row was hand-built from a 34pt `GarageCircleNavButton` — a fainter
+    /// shadow, a 15pt glyph and no 44pt hit area — under a 16pt title, inset
+    /// 2pt from the top. On a sheet, whose top edge is a hard rounded boundary
+    /// with UIKit's grabber over the first 10pt, those 2pt glued the chevron
+    /// into the corner. `CustomNavBar` already solves that (20pt of grabber
+    /// clearance, 20pt horizontal so the controls clear the curved glass) and
+    /// carries the `NavCircleIcon` control every other sheet in the app uses.
+    ///
+    /// Still a sheet root, so the chevron still means «close»: `NavBackButton`
+    /// dismisses, and at the root of this stack there is nothing to pop, so
+    /// the dismissal reaches the sheet (GarageView fork precedent). The title
+    /// stays optically centred by the bar's own ZStack — no phantom trailing
+    /// square needed to balance it.
+    private func navRow(l: LanguageManager.Language) -> some View {
+        CustomNavBar(title: AppStrings.accountSyncTitle(l))
+            // Presented as a sheet from the settings sheet — the bar has to
+            // know, so it clears the grabber.
+            .environment(\.navBarInSheet, true)
     }
 
     // MARK: - Section label rhythm

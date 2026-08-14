@@ -47,19 +47,60 @@ enum VolumeUnit: String, CaseIterable {
     }
 }
 
+/// Ordered as the picker shows them: the currencies this app's people actually
+/// refuel in first, the rest after. Raw value is the symbol because that is
+/// what gets persisted and printed next to a price.
 enum FuelCurrency: String, CaseIterable {
     case rub = "₽"
     case usd = "$"
     case eur = "€"
+    case kzt = "₸"
+    case gel = "₾"
+    case tryLira = "₺"
+    case cny = "¥"
+    case byn = "Br"
     case gbp = "£"
     case uah = "₴"
-    case kzt = "₸"
-    case tryLira = "₺"
     case inr = "₹"
-    case cny = "¥"
     case brl = "R$"
 
     var symbol: String { rawValue }
+
+    /// ISO code, shown greyed next to the name.
+    var code: String {
+        switch self {
+        case .rub:     return "RUB"
+        case .usd:     return "USD"
+        case .eur:     return "EUR"
+        case .kzt:     return "KZT"
+        case .gel:     return "GEL"
+        case .tryLira: return "TRY"
+        case .cny:     return "CNY"
+        case .byn:     return "BYN"
+        case .gbp:     return "GBP"
+        case .uah:     return "UAH"
+        case .inr:     return "INR"
+        case .brl:     return "BRL"
+        }
+    }
+
+    func name(_ lang: LanguageManager.Language) -> String {
+        let isRu = lang == .ru
+        switch self {
+        case .rub:     return isRu ? "Российский рубль" : "Russian ruble"
+        case .usd:     return isRu ? "Доллар США" : "US dollar"
+        case .eur:     return isRu ? "Евро" : "Euro"
+        case .kzt:     return isRu ? "Тенге" : "Tenge"
+        case .gel:     return isRu ? "Лари" : "Lari"
+        case .tryLira: return isRu ? "Лира" : "Lira"
+        case .cny:     return isRu ? "Юань" : "Yuan"
+        case .byn:     return isRu ? "Белорусский рубль" : "Belarusian ruble"
+        case .gbp:     return isRu ? "Фунт стерлингов" : "Pound sterling"
+        case .uah:     return isRu ? "Гривна" : "Hryvnia"
+        case .inr:     return isRu ? "Индийская рупия" : "Indian rupee"
+        case .brl:     return isRu ? "Бразильский реал" : "Brazilian real"
+        }
+    }
 
     static let storageKey = "fuelCurrency"
     static let defaultSymbol = "€"
@@ -244,56 +285,101 @@ enum LevelSystem {
     }
 }
 
-// MARK: - Vehicle Levels (10 levels)
+// MARK: - Vehicle Levels
 
+/// A vehicle's level is its mileage, counted.
+///
+/// It replaces a ten-rung ladder with named rungs ("Новая" … "Одометр ∞"). The
+/// names were the problem: they promised a story the number could not keep, and
+/// the tenth rung was a ceiling — a car that had earned "Одометр ∞" could never
+/// earn anything again. There is no ceiling here, and no titles. The level is
+/// the odometer read out loud, nothing more: it unlocks nothing, gates nothing,
+/// and exists so a car has a record of its own.
+///
+/// Each step costs more than the last, in the simplest possible way: going from
+/// level N to N+1 takes N × 100 km. First level is a hundred kilometres, the
+/// tenth is a thousand, and the curve keeps opening without ever stopping.
 enum VehicleLevelSystem {
-    static let thresholds: [(level: Int, km: Double, titleRu: String, titleEn: String)] = [
-        (1,  0,       "Новая",       "New"),
-        (2,  100,     "Обкатка",     "Break-in"),
-        (3,  500,     "Знакомая",    "Familiar"),
-        (4,  1_000,   "Своя",        "Yours"),
-        (5,  2_500,   "Напарник",    "Partner"),
-        (6,  5_000,   "Ветеран",     "Veteran"),
-        (7,  10_000,  "Боевой конь", "Warhorse"),
-        (8,  25_000,  "Легенда",     "Legend"),
-        (9,  50_000,  "Бессмертный", "Immortal"),
-        (10, 100_000, "Одометр ∞",   "Odometer ∞"),
-    ]
+    /// The first step, in km. Every later step is a multiple of it.
+    static let stepKm: Double = 100
 
-    static let maxLevel = 10
-
-    static func level(for km: Double) -> Int {
-        var lvl = 1
-        for t in thresholds {
-            if km >= t.km { lvl = t.level } else { break }
-        }
-        return lvl
-    }
-
+    /// Total distance needed to *be* at `level`.
+    ///
+    /// Summing the steps 1…L-1 gives 100 · (L-1)L/2, i.e. 50·L·(L-1):
+    /// level 2 at 100 km, level 11 at 5 500 km, level 28 at 37 800 km.
     static func kmForLevel(_ level: Int) -> Double {
-        guard level >= 1, level <= maxLevel else { return 0 }
-        return thresholds[level - 1].km
+        guard level > 1 else { return 0 }
+        let l = Double(level)
+        return stepKm / 2 * l * (l - 1)
     }
 
     static func kmForNextLevel(_ level: Int) -> Double {
-        guard level < maxLevel else { return thresholds[maxLevel - 1].km }
-        return thresholds[level].km
+        kmForLevel(max(1, level) + 1)
     }
 
+    /// Inverse of `kmForLevel` — the largest level whose threshold `km` clears.
+    ///
+    /// Solved directly rather than by looping, since there is no upper bound to
+    /// loop to. The closed form can land a hair under an exact threshold in
+    /// binary floating point (38 420 km is fine; 100 km is the kind of round
+    /// number that bites), so the result is nudged against the thresholds it
+    /// claims to sit between.
+    static func level(for km: Double) -> Int {
+        guard km > 0 else { return 1 }
+        let estimate = (1 + (1 + 8 * km / stepKm).squareRoot()) / 2
+        var level = max(1, Int(estimate.rounded(.down)))
+        while kmForLevel(level + 1) <= km { level += 1 }
+        while level > 1, kmForLevel(level) > km { level -= 1 }
+        return level
+    }
+
+    /// How far along the current step the odometer stands, 0…1.
     static func progressToNext(km: Double, level: Int) -> Double {
-        guard level < maxLevel else { return 1.0 }
         let current = kmForLevel(level)
         let next = kmForNextLevel(level)
         let range = next - current
-        guard range > 0 else { return 1.0 }
-        return min(1.0, (km - current) / range)
+        guard range > 0 else { return 0 }
+        return min(1, max(0, (km - current) / range))
     }
 
-    static func title(level: Int, lang: LanguageManager.Language) -> String {
-        guard level >= 1, level <= maxLevel else { return "" }
-        let t = thresholds[level - 1]
-        return lang == .ru ? t.titleRu : t.titleEn
+    /// Kilometres still owed for the next level. Never nil — there is always
+    /// a next level.
+    static func kmToNextLevel(km: Double, level: Int) -> Double {
+        max(0, kmForNextLevel(level) - km)
     }
+
+    // MARK: - Colour by decade
+
+    /// The level number changes colour every ten levels and holds from 100 on.
+    ///
+    /// Decades, not per-level shades: the point is that the colour reads as an
+    /// era of the car's life, and a ramp that shifts every level would just look
+    /// like noise. 20–29 is the brand orange because that is where a daily
+    /// driver spends its middle years.
+    static func color(for level: Int) -> Color {
+        let decade = max(0, min(10, level / 10))
+        return decadeColors[decade]
+    }
+
+    /// Index = decade (0 → levels 1–9, 1 → 10–19, …, 10 → 100 and above).
+    ///
+    /// Read straight off the «Уровень машины» canvas (1535:119), not sampled by
+    /// eye. The ramp walks from grey through the brand orange into deepening
+    /// reds, then violet, and lands on the app's own text colour — a hundred
+    /// levels in, the number stops being a badge and becomes type again.
+    private static let decadeColors: [Color] = [
+        Color(red: 155/255, green: 155/255, blue: 165/255),  // 1–9    #9B9BA5 grey, still new
+        Color(red: 160/255, green: 113/255, blue: 61/255),   // 10–19  #A0713D bronze
+        AppTheme.accent,                                     // 20–29  #EB571E brand orange
+        Color(red: 217/255, green: 58/255,  blue: 30/255),   // 30–39  #D93A1E
+        Color(red: 180/255, green: 35/255,  blue: 24/255),   // 40–49  #B42318
+        Color(red: 155/255, green: 30/255,  blue: 60/255),   // 50–59  #9B1E3C
+        Color(red: 122/255, green: 31/255,  blue: 77/255),   // 60–69  #7A1F4D
+        Color(red: 91/255,  green: 33/255,  blue: 96/255),   // 70–79  #5B2160
+        Color(red: 74/255,  green: 30/255,  blue: 81/255),   // 80–89  #4A1E51
+        Color(red: 51/255,  green: 32/255,  blue: 63/255),   // 90–99  #33203F
+        Color(red: 30/255,  green: 30/255,  blue: 35/255),   // 100+   #1E1E23, and no further change
+    ]
 }
 
 // MARK: - Vehicle Stickers

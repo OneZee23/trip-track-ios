@@ -38,7 +38,7 @@ struct ProfileSettingsSheet: View {
         let l = lang.language
 
         VStack(spacing: 0) {
-            titleRow(c)
+            navRow(l)
 
             ScrollView {
                 VStack(spacing: 10) {
@@ -185,29 +185,23 @@ struct ProfileSettingsSheet: View {
 
     // MARK: - Chrome
 
-    private func titleRow(_ c: AppTheme.Colors) -> some View {
-        HStack {
-            Text(AppStrings.settingsTitle(lang.language))
-                .font(.system(size: 22, weight: .heavy))
-                .foregroundStyle(c.text)
-            Spacer()
+    /// The shared bar, so this sheet's chrome measures the same as every
+    /// other screen's instead of a hand-sized row of its own. A sheet root has
+    /// nothing to pop — it closes from the trailing side — so the back chevron
+    /// is off and «×» is the one control (same shape as Discover). ProfileView
+    /// hands the bar `navBarInSheet`, which is what lifts the row clear of the
+    /// grabber UIKit draws over the sheet's top edge.
+    private func navRow(_ l: LanguageManager.Language) -> some View {
+        CustomNavBar(title: AppStrings.settingsTitle(l), showsBack: false) {
             Button {
                 Haptics.tap()
                 dismiss()
             } label: {
-                ZStack {
-                    Circle().fill(c.cardAlt)
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(c.textSecondary)
-                }
-                .frame(width: 30, height: 30)
+                NavCircleIcon(systemImage: "xmark")
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(AppStrings.closeSheet(l))
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 18)
-        .padding(.bottom, 16)
     }
 
     private func rowDivider(_ c: AppTheme.Colors) -> some View {

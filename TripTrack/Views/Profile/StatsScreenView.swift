@@ -41,7 +41,7 @@ struct StatsScreenView: View {
         .toolbar(.hidden, for: .navigationBar)
         .hideAppTabBar()
         .safeAreaInset(edge: .top, spacing: 0) {
-            navRow(c, l)
+            navRow(l)
         }
         .task {
             await load()
@@ -51,21 +51,25 @@ struct StatsScreenView: View {
 
     // MARK: - Nav row
 
-    private func navRow(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
-        HStack(spacing: 0) {
-            GarageCircleNavButton(systemImage: "chevron.left") { dismiss() }
-                .accessibilityIdentifier("stats_back")
-            Spacer()
-            Text(AppStrings.stats(l))
-                .font(.system(size: 28, weight: .heavy))
-                .tracking(-0.56)
-                .foregroundStyle(c.text)
-            Spacer()
-            Color.clear.frame(width: 34, height: 34)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(c.bg)
+    /// The app's own nav bar, not a local copy of one.
+    ///
+    /// This row was hand-built: a 34pt `GarageCircleNavButton` (15pt glyph,
+    /// fainter shadow, no 44pt hit area) inset 16pt from the edge, opposite a
+    /// `Color.clear` spacer that existed only to keep the title centred. On a
+    /// 393–440pt phone that control reads as a small circle floating in a thin
+    /// bar. `CustomNavBar` carries `NavCircleIcon` at 40pt with the canon
+    /// insets and centres the title in a ZStack over the full width, so the
+    /// balancing spacer goes with it.
+    ///
+    /// No `navBarInSheet`: Статистика is pushed onto the Я tab's
+    /// NavigationStack (`MeDest.stats`), so there is no grabber above it — and
+    /// sheet clearance on a pushed screen sinks the row 10pt too low.
+    private func navRow(_ l: LanguageManager.Language) -> some View {
+        CustomNavBar(title: AppStrings.stats(l))
+            // The screenshot tour walks back out of Статистика by this id. The
+            // back button is shared code now, so the id rides on the bar — it
+            // is the only button in there.
+            .accessibilityIdentifier("stats_back")
     }
 
     // MARK: - Summary card

@@ -36,14 +36,14 @@ struct CustomNavBar<Trailing: View>: View {
     @Environment(\.navBarInSheet) private var isInSheet
 
     /// Figma canon for every pushed screen that uses this bar (profile
-    /// 117:943, Discover 117:275, Activity 117:1853): the 34pt control row
-    /// is inset 8pt from the top, i.e. it clears the status bar by 8pt.
+    /// 117:943, Discover 117:275, Activity 117:1853) insets the control row
+    /// 8pt from the top, i.e. it clears the status bar by 8pt.
     ///
     /// A sheet has no status bar above it — its top edge is a hard rounded
     /// boundary and UIKit draws the grabber over the first 10pt of it. The
     /// canon 8pt there puts the row under the grabber and glued to the
     /// edge, so sheets get 10pt (grabber) + 10pt gap instead.
-    private var topInset: CGFloat { isInSheet ? 20 : 8 }
+    private var topInset: CGFloat { isInSheet ? 20 : 10 }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -52,12 +52,20 @@ struct CustomNavBar<Trailing: View>: View {
         // same layout model as `UINavigationBar` so long titles truncate
         // instead of pushing the trailing view off-screen.
         ZStack {
+            // 18pt, not the artboard's 15. See `NavCircleIcon.diameter` for
+            // why the whole bar was drawn a size too small for the phones it
+            // ships to; a 15pt title next to 40pt controls reads as a caption.
+            // iOS draws its own nav titles at 17pt semibold — this sits a
+            // hair above that because the bar carries no hairline to separate
+            // it from the content below.
             Text(title)
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .padding(.horizontal, 64)
+                // Clear both controls (40pt + 20pt inset) so a long title
+                // truncates instead of colliding with them.
+                .padding(.horizontal, 72)
 
             HStack {
                 if showsBack {
@@ -75,8 +83,8 @@ struct CustomNavBar<Trailing: View>: View {
         .padding(.horizontal, 20)
         // See `topInset` — 8pt on pushed screens (canon), 20pt in sheets.
         .padding(.top, topInset)
-        .padding(.bottom, 8)
-        .frame(minHeight: 42 + topInset)
+        .padding(.bottom, 12)
+        .frame(minHeight: NavCircleIcon.diameter + 12 + topInset)
         .frame(maxWidth: .infinity)
         .background(c.bg)
         // Per-destination NavBarKiller in addition to any root-level one.

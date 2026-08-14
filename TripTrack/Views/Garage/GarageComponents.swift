@@ -36,30 +36,108 @@ struct GarageCircleNavButton: View {
 
 // MARK: - Vehicle XP Bar
 
-/// 6pt capsule progress bar with a gradient fill, fed by `progressToNextLevel`.
+/// Capsule progress bar fed by `progressToNextLevel`.
+///
+/// The track is the tint's own ghost, not the neutral `cardAlt` it used to be.
+/// A grey fill (levels 1–9) on a grey track was one grey slab where the filled
+/// part could not be told from the empty part; a track made of the same hue
+/// keeps the contrast wherever the decade ramp goes. Solid, not a gradient —
+/// the gradient faded the leading edge and made short progress look shorter.
 struct VehicleXPBar: View {
     let progress: Double
     let tint: Color
+    var height: CGFloat = 5
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(tint.opacity(0.16))
+                Capsule()
+                    .fill(tint)
+                    .frame(width: max(height, geo.size.width * min(1, max(0, progress))))
+            }
+        }
+        .frame(height: height)
+    }
+}
+
+// MARK: - Sheet Close
+
+/// The «×» in a sheet header: a small grey disc, not the nav bar's control.
+///
+/// `NavCircleIcon` is a 40pt white circle with a shadow — right for a bar that
+/// has to hold its own against a screen, far too loud for a header whose job
+/// is to name the sheet. Canon draws this one grey, quiet and half the weight.
+struct SheetCloseCircle: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let c = AppTheme.colors(for: scheme)
+        Image(systemName: "xmark")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(c.textSecondary)
+            .frame(width: 30, height: 30)
+            .background(Circle().fill(c.cardAlt))
+            // Grown to the 44pt floor, then taken back out of layout.
+            .padding(7)
+            .contentShape(Circle())
+            .padding(-7)
+    }
+}
+
+// MARK: - Plate Chip
+
+/// The registration plate, drawn the same way for every country.
+///
+/// No flags, no blue EU band, no country-specific skin. A plate chip that
+/// dresses itself up as a German or Russian plate has to guess which one it is,
+/// and the guess is wrong often enough to look broken — the research that
+/// killed input masks kills plate skins for the same reason. One neutral chip
+/// reads as "this is the plate" everywhere.
+/// It is a plate, so it is drawn like one: dark characters on a light plate
+/// with a thin frame, small and tight. The first cut filled it with `cardAlt`
+/// and greyed the text, which on the warm card read as a disabled pill twice
+/// the size of the number it carried.
+struct VehiclePlateChip: View {
+    let plate: String
+    var size: CGFloat = 11
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(c.cardAlt)
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [tint, tint.opacity(0.7)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: max(4, geo.size.width * min(1, max(0, progress))))
+        Text(plate)
+            .font(.system(size: size, weight: .semibold))
+            .tracking(0.3)
+            .foregroundStyle(c.text)
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(c.card, in: RoundedRectangle(cornerRadius: 4))
+            .overlay {
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(c.border, lineWidth: 1)
             }
-        }
-        .frame(height: 6)
+            .fixedSize()
+    }
+}
+
+// MARK: - Level Pill
+
+/// «LVL 28» in the colour of its decade.
+///
+/// `fixedSize:` rather than `size:` — `Font.custom(_:size:)` scales with the
+/// system text-size setting while `.system(size:)` does not, so on a phone set
+/// below the default the pixel font shrank away from the text around it.
+struct VehicleLevelPill: View {
+    let level: Int
+    var size: CGFloat = 8
+
+    var body: some View {
+        Text("LVL \(level)")
+            .font(.custom("PressStart2P-Regular", fixedSize: size))
+            .foregroundStyle(VehicleLevelSystem.color(for: level))
+            .fixedSize()
     }
 }
 

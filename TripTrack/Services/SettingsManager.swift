@@ -112,7 +112,10 @@ final class SettingsManager: ObservableObject {
         loadSettings()
         persistenceController.migrateUserIdIfNeeded(userId: localUserId)
         loadVehicles()
-        ensureDefaultVehicle()
+        // No default vehicle is created. A fresh garage is empty on purpose:
+        // the app invented a car nobody had ever driven, gave it a random
+        // colour, and left the person to discover it. Trips record fine with
+        // no vehicle at all, so there is nothing to stand in for.
         migrateDefaultVehicleName()
     }
 
@@ -270,11 +273,16 @@ final class SettingsManager: ObservableObject {
         saveSettings()
     }
 
-    /// Resolve a vehicle by id, falling back to the first vehicle (the app's
-    /// implicit-default rule). Centralized so the fallback lives in one place
-    /// instead of being hand-rolled at each call site.
+    /// Resolve a vehicle by id. Nil in, nil out.
+    ///
+    /// This used to fall back to `vehicles.first` for any id it could not
+    /// match, which made two different facts look identical: "no vehicle was
+    /// chosen" and "the chosen one is gone". Recording without transport is a
+    /// first-class state now — falling back would put a car the person did not
+    /// pick on their Lock Screen.
     func vehicle(for id: UUID?) -> Vehicle? {
-        vehicles.first { $0.id == id } ?? vehicles.first
+        guard let id else { return nil }
+        return vehicles.first { $0.id == id }
     }
 
     // MARK: - Vehicles
@@ -285,29 +293,6 @@ final class SettingsManager: ObservableObject {
         request.sortDescriptors = [NSSortDescriptor(keyPath: \VehicleEntity.name, ascending: true)]
 
         vehicles = (try? context.fetch(request))?.compactMap { vehicleFromEntity($0) } ?? []
-    }
-
-    private func ensureDefaultVehicle() {
-        guard vehicles.isEmpty else { return }
-
-        let randomAvatar = Vehicle.pixelCarAssets.randomElement() ?? "pixel_car_orange"
-        let savedLang = UserDefaults.standard.string(forKey: "appLanguage")
-        let name = savedLang == "ru" ? "Ваша машина" : "Your car"
-
-        let context = persistenceController.container.viewContext
-        let entity = VehicleEntity(context: context)
-        let vehicleId = UUID()
-        entity.id = vehicleId
-        entity.name = name
-        entity.avatarEmoji = randomAvatar
-        entity.odometerKm = 0
-        entity.vehicleLevel = 1
-        entity.createdAt = Date()
-        persistenceController.save()
-
-        selectedVehicleId = vehicleId
-        saveSettings()
-        loadVehicles()
     }
 
     private func migrateDefaultVehicleName() {
@@ -326,13 +311,27 @@ final class SettingsManager: ObservableObject {
         loadVehicles()
     }
 
-    func addVehicle(name: String, emoji: String) {
+    /// Returns the new vehicle's id so the caller can select it or follow it
+    /// with the fuel figures from the same form submission.
+    @discardableResult
+    func addVehicle(
+        name: String,
+        emoji: String,
+        type: VehicleType = .car,
+        plate: String = "",
+        plateVisible: Bool = false,
+        visibleToOthers: Bool = true
+    ) -> UUID {
         let context = persistenceController.container.viewContext
         let entity = VehicleEntity(context: context)
         let vehicleId = UUID()
         entity.id = vehicleId
         entity.name = name
         entity.avatarEmoji = emoji
+        entity.vehicleType = type.rawValue
+        entity.plate = plate
+        entity.plateVisible = plateVisible
+        entity.visibleToOthers = visibleToOthers
         entity.odometerKm = 0
         entity.vehicleLevel = 1
         entity.createdAt = Date()
@@ -341,6 +340,7 @@ final class SettingsManager: ObservableObject {
         Task { @MainActor in
             SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: vehicleId, action: .upload))
         }
+        return vehicleId
     }
 
     func deleteVehicle(id: UUID) {
@@ -373,14 +373,67 @@ final class SettingsManager: ObservableObject {
             id: id,
             name: entity.name ?? "",
             avatarEmoji: entity.avatarEmoji ?? "🏎️",
+            type: VehicleType(storage: entity.vehicleType),
+            plate: entity.plate ?? "",
+            plateVisible: entity.plateVisible,
+            visibleToOthers: entity.visibleToOthers,
             odometerKm: entity.odometerKm,
-            level: Int(entity.vehicleLevel),
+            // Derived, not read. The stored column was written by the old
+            // ten-rung curve, so every vehicle that existed before this change
+            // carries a number that no longer means anything — and the level
+            // is a function of the odometer, so there is nothing to store.
+            // The column stays for the sync payload's sake.
+            level: VehicleLevelSystem.level(for: entity.odometerKm),
             stickers: stickers,
             createdAt: entity.createdAt ?? Date(),
             cityConsumption: entity.cityConsumption,
             highwayConsumption: entity.highwayConsumption,
-            fuelPrice: entity.fuelPrice
+            fuelPrice: entity.fuelPrice,
+            fuelCurrency: entity.fuelCurrency ?? FuelCurrency.current
         )
+    }
+
+    /// The identity half of the form: everything the person typed or picked
+    /// that is not a fuel figure. One write, one sync operation.
+    func updateVehicleIdentity(
+        id: UUID,
+        name: String,
+        emoji: String,
+        type: VehicleType,
+        plate: String,
+        plateVisible: Bool,
+        visibleToOthers: Bool
+    ) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let entity = try? context.fetch(request).first else { return }
+        entity.name = name
+        entity.avatarEmoji = emoji
+        entity.vehicleType = type.rawValue
+        // A type that cannot carry a plate keeps none: switching a car to a
+        // bicycle must not leave a hidden plate behind in the database.
+        entity.plate = type.hasPlate ? plate : ""
+        entity.plateVisible = type.hasPlate ? plateVisible : false
+        entity.visibleToOthers = visibleToOthers
+        persistenceController.save()
+        loadVehicles()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+        }
+    }
+
+    func updateVehicleCurrency(id: UUID, symbol: String) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let entity = try? context.fetch(request).first else { return }
+        entity.fuelCurrency = symbol
+        persistenceController.save()
+        loadVehicles()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+        }
     }
 
     func renameVehicle(id: UUID, name: String) {
