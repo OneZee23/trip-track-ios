@@ -2,7 +2,7 @@ import Foundation
 import MapKit
 import SwiftUI
 
-/// Data source for the 6.1.0 «Моя карта» screen (Figma page «🧭 Карта»).
+/// Data source for the 0.6.0 «Моя карта» screen (Figma page «🧭 Карта»).
 ///
 /// The canon note on that page sets the model: one free-pan map where the
 /// territory and the trips live in the SAME layer — «слоёв-переключателей

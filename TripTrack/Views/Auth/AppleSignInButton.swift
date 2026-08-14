@@ -11,7 +11,7 @@ private let appleButtonLog = Logger(subsystem: "com.triptrack", category: "signi
 /// Shared Sign-in-with-Apple button: one place for the nonce binding, the
 /// completion chain, the cancel-1001 filter, and the in-flight visual. Both
 /// sign-in surfaces (SignInPromptSheet, guest profile sync card) render this —
-/// before 6.1.0 they had drifted apart (the profile copy fired its failure
+/// before 0.6.0 they had drifted apart (the profile copy fired its failure
 /// alert even when the user cancelled the Apple dialog).
 struct AppleSignInButton: View {
     var cornerRadius: CGFloat = 14

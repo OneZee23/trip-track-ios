@@ -2,7 +2,7 @@ import XCTest
 
 /// Finding a trip in История, whichever way the user last left it displayed.
 ///
-/// Since 6.1.0 the section renders `profile_trip_card` in list mode and
+/// Since 0.6.0 the section renders `profile_trip_card` in list mode and
 /// `profile_trip_tile` in grid mode, and the choice persists in
 /// `@AppStorage("profileHistoryMode")` — so it survives an app reinstall's
 /// UserDefaults on the same simulator and a suite that hardcoded either id

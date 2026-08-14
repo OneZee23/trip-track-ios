@@ -1,7 +1,7 @@
 import XCTest
 @testable import TripTrack
 
-/// Unit tests for the Я-tab aggregates (§3 of the 6.1.0 Me-tab plan):
+/// Unit tests for the Я-tab aggregates (§3 of the 0.6.0 Me-tab plan):
 /// year scoping incl. Dec 31 / Jan 1 boundary trips, year-streak runs,
 /// first-visit «Новый регион» logic, and empty-input safety.
 final class MeAggregatesTests: XCTestCase {

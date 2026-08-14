@@ -29,12 +29,12 @@ struct NotificationItem: Codable, Identifiable, Hashable {
     let tripId: UUID?
     let tripTitle: String?
     let emoji: String?
-    /// Comment rows only (server 6.1+): which comment, and a short excerpt
+    /// Comment rows only (server 0.6+): which comment, and a short excerpt
     /// of it. Optional so older servers keep decoding.
     let commentId: UUID?
     let commentText: String?
     /// Follow rows: does the RECIPIENT already follow this actor? Server
-    /// 6.1+; nil on older servers, where the button falls back to its
+    /// 0.6+; nil on older servers, where the button falls back to its
     /// session-local guess.
     let isFollowing: Bool?
     let isRead: Bool

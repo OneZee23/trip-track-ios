@@ -75,7 +75,7 @@ final class TerritoryManager: ObservableObject {
         // Running coordinate accumulators per place — piggyback on the same
         // per-point loop so centroid/bounds cost no extra pass. Density-
         // weighted centroid (per matched point, not per tile) is what the
-        // 6.1.0 My-Map card wants: it lands where the activity actually is.
+        // 0.6.0 My-Map card wants: it lands where the activity actually is.
         var cityGeo: [String: GeoAccumulator] = [:]
         var regionGeo: [String: GeoAccumulator] = [:]
 
@@ -329,7 +329,7 @@ struct ExplorationPlace: Identifiable {
     let percentage: Double
     let status: ZoneStatus
     let region: String? // parent region for cities
-    /// Density-weighted center of the place's recorded activity (6.1.0 My Map
+    /// Density-weighted center of the place's recorded activity (0.6.0 My Map
     /// uses it for city dots and camera→region resolution). Nil when the
     /// place had no attributable points.
     var centroid: CLLocationCoordinate2D? = nil

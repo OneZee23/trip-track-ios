@@ -6,7 +6,7 @@ import XCTest
 /// the controls sat 2pt from a sheet's rounded top edge and read as clipped.
 /// Layout like that is only visible in a picture.
 ///
-/// Entry point since 6.1.0: the Гараж section of the «Я» tab, not the gear.
+/// Entry point since 0.6.0: the Гараж section of the «Я» tab, not the gear.
 final class GarageTourTests: XCTestCase {
     private var app: XCUIApplication!
 
@@ -21,7 +21,7 @@ final class GarageTourTests: XCTestCase {
         app.buttons.matching(identifier: "tab_profile").firstMatch.tap()
         usleep(1_500_000)
 
-        // The Гараж is a section of the «Я» screen itself since 6.1.0 — it used
+        // The Гараж is a section of the «Я» screen itself since 0.6.0 — it used
         // to be a row at the foot of the settings sheet, which is nobody's idea
         // of a place to walk into. The section header's «Весь транспорт ›» kept
         // the retired row's identifier, so the tour still has one thing to tap.

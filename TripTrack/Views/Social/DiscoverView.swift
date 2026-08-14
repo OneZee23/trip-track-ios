@@ -266,7 +266,7 @@ struct DiscoverView: View {
                             .truncationMode(.tail)
                     }
                     // Line 3 — level, plus lifetime mileage when the DTO
-                    // carries it. Search results and pre-6.1 servers send no
+                    // carries it. Search results and pre-0.6 servers send no
                     // mileage, so this stays the bare "LVL n" it was (no
                     // fabricated data).
                     Text(levelLine(user.profileLevel, totalKm: totalKm))

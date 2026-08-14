@@ -43,7 +43,7 @@ final class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(pinnedBadgeId, forKey: "com.triptrack.settings.pinnedBadgeId") }
     }
 
-    // MARK: - Profile identity («Мой профиль» hub, 6.1.0)
+    // MARK: - Profile identity («Мой профиль» hub, 0.6.0)
     //
     // All three are LOCAL ONLY. `ProfileUpdateRequest` carries none of them, so
     // nothing here leaves the device — and the public profile other people see

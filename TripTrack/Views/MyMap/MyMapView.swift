@@ -1,7 +1,7 @@
 import SwiftUI
 import MapKit
 
-/// 6.1.0 «Моя карта» — the living map of everywhere you have driven (Figma
+/// 0.6.0 «Моя карта» — the living map of everywhere you have driven (Figma
 /// page «🧭 Карта», canon note «карта v2 · Polarsteps-модель»).
 ///
 /// One flat MapKit map, free pan and zoom, everything on it tappable, and a

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Stat card of the trip-detail «Детали» grid (Figma 6.1.0 poster spec):
+/// Stat card of the trip-detail «Детали» grid (Figma 0.6.0 poster spec):
 /// colored ExtraBold value + baseline unit on top, tiny uppercase label
 /// below. Shared by the owner detail (10 cards) and the social detail
 /// (8 cards — no fuel/cost).

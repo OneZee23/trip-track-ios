@@ -361,7 +361,7 @@ struct SocialProfile: Codable, Hashable {
     let followingCount: Int
     let isFollowing: Bool?
     /// Free-text «о себе» line rendered under the hero pills (Figma
-    /// 117:966). Optional because only server 6.1+ sends the key at all —
+    /// 117:966). Optional because only server 0.6+ sends the key at all —
     /// against today's production it decodes as nil and the hero renders
     /// exactly as it did before. Blank strings are treated as absent by the
     /// view, so a user who cleared their bio doesn't leave a gap.
@@ -374,8 +374,8 @@ struct SocialProfile: Codable, Hashable {
 /// more fields ON it: that type is shared by feed / search / followers /
 /// reactions and must not grow fields the backend doesn't send there (same
 /// reasoning as `BlockedUser`). Both extras are optional — they only exist
-/// on server 6.1+, and a deployment without them decodes to a row that
-/// renders exactly like the pre-6.1 one.
+/// on server 0.6+, and a deployment without them decodes to a row that
+/// renders exactly like the pre-0.6 one.
 struct SocialSuggestedUser: Codable, Hashable, Identifiable {
     let id: UUID
     let displayName: String?

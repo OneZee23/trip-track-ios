@@ -3,7 +3,7 @@ import OSLog
 
 private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 
-/// «Я» tab — 6.1.0 canon (Figma 580:122 list / 755:119 grid, 127:896 guest).
+/// «Я» tab — 0.6.0 canon (Figma 580:122 list / 755:119 grid, 127:896 guest).
 /// Self-hosts a `NavigationStack` (ContentView mounts the tab bare) and pushes
 /// Статистика, Уровни, Достижения, «Как видят другие» + trip details (all hide
 /// the tab bar via the existing preference). Order: hero → Достижения → Гараж →
@@ -14,7 +14,7 @@ private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 /// sync line that sat under the name went to «Настройки → Аккаунт и
 /// синхронизация», the row that can actually do something about it.
 ///
-/// Pre-6.1.0 features that are NOT here: everything that moved into the
+/// Pre-0.6.0 features that are NOT here: everything that moved into the
 /// settings sheet (gear) or into Уровни (LVL pill), plus three the user cut
 /// outright — the follower/following counter card, «Год в кадре» / Wrapped,
 /// and the «Моменты» rail.
@@ -27,7 +27,7 @@ struct ProfileView: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
 
-    /// True when hosted as the «Я» tab (6.1.0) — the floating tab bar needs
+    /// True when hosted as the «Я» tab (0.6.0) — the floating tab bar needs
     /// scroll clearance. False when presented as the legacy Feed sheet.
     private let hostedInTab: Bool
 
@@ -107,7 +107,7 @@ struct ProfileView: View {
     @State private var showNameEditor = false
     @State private var showUsernameEditor = false
     @State private var showAboutEditor = false
-    /// Client-side aggregates. Since 6.1.0 they feed exactly two things: the
+    /// Client-side aggregates. Since 0.6.0 they feed exactly two things: the
     /// strip's region count and the «data has landed» gate — everything
     /// История draws comes out of `allTrips` instead.
     @State private var agg: MeAggregates?
@@ -192,7 +192,7 @@ struct ProfileView: View {
                         // Above История on purpose: История is an endless
                         // list, and anything under it is a place nobody
                         // scrolls to — which is exactly where the Гараж spent
-                        // 6.1.0 (at the foot of a settings sheet). The chain
+                        // 0.6.0 (at the foot of a settings sheet). The chain
                         // below is split around this call so the section keeps
                         // its place whether the library is empty, loading, or
                         // full.
@@ -225,7 +225,7 @@ struct ProfileView: View {
                         }
                     }
                 }
-                // As a tab (6.1.0), leave room for the floating tab bar so the
+                // As a tab (0.6.0), leave room for the floating tab bar so the
                 // last row can scroll clear of it; as a sheet there is no bar.
                 .padding(.bottom, hostedInTab ? 120 : 40)
             }
@@ -847,7 +847,7 @@ struct ProfileView: View {
 
     /// Header row, calendar filter, then the trips themselves. Canon goes
     /// straight from the calendar into the cards — the month headings the
-    /// pre-6.1.0 list drew are gone, the calendar names the dates now.
+    /// pre-0.6.0 list drew are gone, the calendar names the dates now.
     @ViewBuilder
     private func historyBlock(_ c: AppTheme.Colors) -> some View {
         // One filtered array for both consumers: the calendar prints the count,

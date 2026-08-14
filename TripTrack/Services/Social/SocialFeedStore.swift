@@ -403,7 +403,7 @@ final class SocialFeedStore: ObservableObject {
         // The trip may have been EVICTED from the cached page-1 while a detail
         // screen stayed open (every refresh replaces `trips` with a fresh
         // 20-item first page). The POST must still go out in that case — the
-        // pre-6.1 bug where store-absent trips silently no-oped is exactly
+        // pre-0.6 bug where store-absent trips silently no-oped is exactly
         // what this fallback fixes. `knownReactions` supplies the last-known
         // `myReaction` so toggle semantics survive eviction.
         let idx = trips.firstIndex(where: { $0.id == tripId })

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Floating glass tab bar — 6.1.0 redesign, 5 tabs: Лента / Карта / Запись /
+/// Floating glass tab bar — 0.6.0 redesign, 5 tabs: Лента / Карта / Запись /
 /// Группы / Я. Spec is the Figma TabBar masters (page 88:2, section 90:2):
 /// 74pt-tall pill, radius 30, glass background; regular tabs are a 20pt icon
 /// over a 9pt label, active = filled glyph + accent, inactive = tertiary

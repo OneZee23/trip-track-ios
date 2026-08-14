@@ -1,7 +1,7 @@
 import SwiftUI
 import CoreLocation
 
-/// Dark "poster" route render for the trip-detail hero (Figma 6.1.0,
+/// Dark "poster" route render for the trip-detail hero (Figma 0.6.0,
 /// section 05 «ОТКРЫТИЕ ПОЕЗДКИ»). MapKit tiles can't be recolored to the
 /// navy poster style, so the hero draws the route itself on a gradient
 /// canvas: speed-colored polyline, green start / red end dots and the

@@ -22,7 +22,7 @@ struct FollowListView: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
 
-    /// 6.1.0 (Figma 123:864): the followers/following switch lives in a
+    /// 0.6.0 (Figma 123:864): the followers/following switch lives in a
     /// segment header, so the mode is view state seeded from the init param —
     /// flipping it reloads the list in place instead of re-presenting.
     @State private var currentMode: FollowListMode

@@ -86,6 +86,87 @@ on one screen.
 
 ---
 
+## Описание в сторе (Description) — менять ли
+
+Да: описание рассказывает про приложение, а приложение изменилось. Ниже —
+готовый текст под 0.6.0. Вставлять в обе локали (English + Russian), «What's
+New» при этом остаётся отдельным полем.
+
+### Description — English
+
+```
+TripTrack is a diary of your drives. Start a recording, drive, stop — the app names
+the trip by where it went, keeps the route, the speed and the climb, and puts it in
+a feed you can open a year later.
+
+RECORD WITHOUT THINKING
+Recording survives a locked screen, a dead zone and a long day. Live Activity keeps
+the trip on the lock screen; the app can start recording by itself when you begin
+driving.
+
+THE TRIP, AFTERWARDS
+Replay the drive like a film. Read the route on the map, the speed and elevation on
+scrubable charts, and add the photos you took on the way.
+
+THE PEOPLE WHO WERE THERE
+Invite the companions who rode with you — the trip becomes shared, their photos land
+on it, and it appears in their history too. Publish a trip and it joins the feed,
+where it can collect reactions and a discussion.
+
+YOUR MAP
+Every road you have driven, on one map, with your regions and your numbers behind it.
+
+GARAGE
+Several cars, each with its own mileage, level and history.
+
+YOURS FIRST
+Everything works offline and without an account. Sign in with Apple only if you want
+cloud sync and the social side; your trips stay private until you publish them
+yourself, and the account can be deleted from inside the app at any time.
+```
+
+### Описание — Русский
+
+```
+TripTrack — дневник ваших дорог. Нажали «Запись», доехали, остановились — приложение
+само назовёт поездку по местам, сохранит маршрут, скорость и набор высоты и положит
+её в ленту, которую можно открыть через год.
+
+ЗАПИСЬ, О КОТОРОЙ НЕ ДУМАЕШЬ
+Запись переживает выключенный экран, мёртвую зону и длинный день. Live Activity
+держит поездку на экране блокировки, а начать запись приложение умеет само, когда
+вы поехали.
+
+ПОЕЗДКА — ПОТОМ
+Пересмотрите дорогу как маленькое кино. Маршрут на карте, скорость и высота на
+графиках с прокруткой, фотографии, снятые по пути.
+
+ТЕ, КТО БЫЛ РЯДОМ
+Пригласите попутчиков — поездка станет общей, их фото появятся в ней, и она попадёт
+в их историю. Опубликованная поездка уходит в ленту, где у неё появляются реакции и
+обсуждение.
+
+ВАША КАРТА
+Все проеханные дороги на одной карте — с регионами и вашими цифрами за ними.
+
+ГАРАЖ
+Несколько машин, у каждой свой пробег, уровень и история.
+
+СНАЧАЛА — ВАШЕ
+Всё работает офлайн и без аккаунта. Вход через Apple — только если нужны облачная
+синхронизация и социальная часть; поездки остаются приватными, пока вы сами их не
+опубликуете, а аккаунт удаляется прямо в приложении.
+```
+
+## Заметка для ревьюера — оставляем длинную
+
+Оставляем. Поле «Notes» не ограничено парой строк, а короткая записка не отвечает
+на то, из-за чего заявки и разворачивают: зачем фоновая геолокация, где удаление
+аккаунта, как модерируется UGC, работает ли приложение без входа. Текст в
+[app-review-notes.md](app-review-notes.md) → «v0.6.0 — current submission»
+закрывает все четыре пункта; вставлять английскую версию (RU — если подаёшь
+отдельно на российский стор).
+
 ## Promotional text (170 chars)
 
 ```

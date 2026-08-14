@@ -1,7 +1,7 @@
 import SwiftUI
 import PhotosUI
 
-// TODO(v6.1-defer): Figma 117:587 specs a custom photo-grid sheet (orange
+// TODO(v0.6-defer): Figma 117:587 specs a custom photo-grid sheet (orange
 // selection-order badges, «Готово · 3» header) — the system PHPicker ships
 // v1; the custom grid is a larger standalone piece.
 struct PhotoPickerView: UIViewControllerRepresentable {

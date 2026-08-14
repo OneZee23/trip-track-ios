@@ -5,8 +5,8 @@ import XCTest
 /// force-quit, reboot — and you open it again.
 ///
 /// Both extremes are wrong, and the app has now been at each of them. Always
-/// resuming silently (pre-6.1.0) kept a trip you abandoned hours ago quietly
-/// recording. Always asking (6.1.0 as shipped) put a modal in front of someone
+/// resuming silently (pre-0.6.0) kept a trip you abandoned hours ago quietly
+/// recording. Always asking (0.6.0 as shipped) put a modal in front of someone
 /// who crashed at a traffic light and is still driving. The canon calls for a
 /// hybrid, and the window is the whole of it.
 final class RecoveryWindowTests: XCTestCase {

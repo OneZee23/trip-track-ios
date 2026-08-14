@@ -1,15 +1,11 @@
 import SwiftUI
 import CoreData
 
-/// «Аккаунт и синхронизация» (Figma 6.1.0 frame 1, section 157:1390).
+/// «Аккаунт и синхронизация» (Figma 0.6.0 frame 1, section 157:1390).
 /// Presented as a sheet from the ProfileView «Аккаунт и синхронизация» row —
 /// the filename and type name are kept so that entry point is untouched.
 ///
 /// Deliberate omissions vs the Figma frame (documented forks):
-/// - F1: no «Удалить аккаунт» row and no 8px danger separator — user decision
-///   deferred. `AuthService.deleteAccount()` and its AppStrings are preserved
-///   as a code path; only this UI was removed. ⚠️ App Store 5.1.1(v) requires
-///   in-app account deletion — do not ship to the store until resolved.
 /// - F14: the five static explainer info-cards are gone (Figma ground truth);
 ///   the legal/privacy copy survives in the GDPR enable-consent dialog.
 struct CloudSyncView: View {
@@ -101,7 +97,7 @@ struct CloudSyncView: View {
                     .presentationCornerRadius(22)
             }
             // GDPR just-in-time consent — fires on the very first enable only
-            // (F12: flow preserved verbatim from pre-6.1.0 CloudSyncView).
+            // (F12: flow preserved verbatim from pre-0.6.0 CloudSyncView).
             .appConfirm(
                 isPresented: $showEnableConfirm,
                 title: AppStrings.syncEnableConfirmTitle(l),
@@ -301,7 +297,7 @@ struct CloudSyncView: View {
             : AppStrings.syncStateOff(l)
     }
 
-    /// Aggregate state machine — same branches as the pre-6.1.0 statusCard,
+    /// Aggregate state machine — same branches as the pre-0.6.0 statusCard,
     /// including the off-but-publishing state (queue can hold ops for
     /// explicitly-public trips while global sync is OFF — edge case #3).
     private func aggregateStatusValue(_ l: LanguageManager.Language) -> String {

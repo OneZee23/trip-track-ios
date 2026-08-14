@@ -1,6 +1,6 @@
 import XCTest
 
-/// Screenshot tour + assertions for the 6.1.0 «Моя карта» screen.
+/// Screenshot tour + assertions for the 0.6.0 «Моя карта» screen.
 ///
 /// The map is the one surface whose correctness cannot be judged from unit
 /// tests: the data can be perfect while the layer hierarchy shows nothing,

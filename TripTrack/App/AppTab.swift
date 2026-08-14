@@ -1,6 +1,6 @@
 import Foundation
 
-/// Single source of truth for the five top-level tabs (6.1.0 redesign
+/// Single source of truth for the five top-level tabs (0.6.0 redesign
 /// navigation). Replaces the previous hardcoded `Int` indices. Backed by a
 /// stable `String` rawValue so it persists cleanly via `@AppStorage`.
 enum AppTab: String, CaseIterable, Hashable {
@@ -12,7 +12,7 @@ enum AppTab: String, CaseIterable, Hashable {
     static let storageKey = "selectedTabV2"
     static let legacyStorageKey = "selectedTab"
 
-    /// Maps the pre-6.1.0 `Int` tab index to its 6.1.0 tab.
+    /// Maps the pre-0.6.0 `Int` tab index to its 0.6.0 tab.
     /// Old order was: 0 = Feed, 1 = Record, 2 = Regions.
     static func fromLegacyIndex(_ index: Int) -> AppTab {
         switch index {

@@ -3,7 +3,7 @@ import CoreLocation
 import UserNotifications
 import CoreMotion
 
-/// 6.1.0 onboarding — 5 pages per the Figma spec (§01 · ОНБОРДИНГ):
+/// 0.6.0 onboarding — 5 pages per the Figma spec (§01 · ОНБОРДИНГ):
 /// Welcome (IdleRing hook) → Ценность (trip card, real trip when there is
 /// one) → Гео «При использовании» → Гео «Всегда» + motion → Уведомления.
 /// One permission per screen, each with a way past it: asking for three at

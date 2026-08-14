@@ -1,7 +1,7 @@
 import SwiftUI
 import OSLog
 
-/// «Журнал» (Figma 6.1.0 frame 3) — on-screen log journal + export CTA.
+/// «Журнал» (Figma 0.6.0 frame 3) — on-screen log journal + export CTA.
 /// Entry point unchanged: the ProfileView «Отправить логи» dev row presents
 /// this as a sheet (the journal is not drawn on the account frame — it stays
 /// a hidden/dev surface).

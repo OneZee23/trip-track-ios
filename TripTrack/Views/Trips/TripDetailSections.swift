@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 import CoreLocation
 
-// Shared building blocks of the 6.1.0 trip-detail «poster» redesign, used
+// Shared building blocks of the 0.6.0 trip-detail «poster» redesign, used
 // by both TripDetailView (own trip) and SocialTripDetailView (others').
 // Poster chrome (scrims, circle buttons), section cards (charts, moving/
 // stops bar, description, achievements), the publish-with-description

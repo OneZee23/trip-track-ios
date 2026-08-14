@@ -43,7 +43,7 @@ final class TripManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var activeTripEntity: TripEntity?
 
-    /// A force-quit recording found at launch (6.1.0 recovery prompt).
+    /// A force-quit recording found at launch (0.6.0 recovery prompt).
     /// Stashed by `cleanupOrphanedTrips`; consumed by `adoptRecoverableOrphan`
     /// when the user picks Continue or Finish&Save in the prompt.
     private(set) var recoverableOrphan: Trip?
@@ -55,8 +55,8 @@ final class TripManager: ObservableObject {
     /// How stale a recording has to be before we ask about it at all.
     ///
     /// The canon calls this a hybrid, and both extremes are wrong. Always
-    /// resuming silently (pre-6.1.0) meant a trip you abandoned three hours
-    /// ago quietly kept recording. Always asking (6.1.0 as shipped) meant a
+    /// resuming silently (pre-0.6.0) meant a trip you abandoned three hours
+    /// ago quietly kept recording. Always asking (0.6.0 as shipped) meant a
     /// crash at a traffic light put a modal in front of a person who is still
     /// driving — the worst possible moment for a decision. Under fifteen
     /// minutes the answer is obvious enough to not ask for it.
@@ -365,7 +365,7 @@ final class TripManager: ObservableObject {
             }
 
             // Stash at most ONE orphan — the most recent — as RECOVERABLE.
-            // 6.1.0 (Figma 505:119): the app no longer silently resumes the
+            // 0.6.0 (Figma 505:119): the app no longer silently resumes the
             // recording; a launch-time prompt offers «Продолжить запись» /
             // «Завершить и сохранить» (never discard — non-junk orphans are
             // always preserved). Every OTHER orphan is closed (endDate set)

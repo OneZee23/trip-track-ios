@@ -25,7 +25,7 @@ struct TripTrackApp: App {
                 CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, nil)
             }
         }
-        // Translate the pre-6.1.0 Int tab selection into the new AppTab key
+        // Translate the pre-0.6.0 Int tab selection into the new AppTab key
         // BEFORE any view reads @AppStorage(AppTab.storageKey).
         AppTab.migrateLegacySelectedTabIfNeeded()
         #if DEBUG

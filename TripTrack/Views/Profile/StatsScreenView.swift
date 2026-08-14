@@ -112,7 +112,7 @@ struct StatsScreenView: View {
     /// The app's own nav bar, not a local copy of one.
     ///
     /// Canon draws «Статистика» at 28 heavy inside the bar; `CustomNavBar`
-    /// draws every pushed 6.1.0 screen's title at 18 bold and takes no font.
+    /// draws every pushed 0.6.0 screen's title at 18 bold and takes no font.
     /// Matching canon here would need an edit to the shared bar and would make
     /// this one screen the outlier among its siblings, so the house component
     /// wins — see its own note on why the artboard sizes were overridden.

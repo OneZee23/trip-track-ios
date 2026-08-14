@@ -186,7 +186,7 @@ enum AppStrings {
         lang == .ru ? "В путь?" : "Ready to roll?"
     }
 
-    // MARK: - Recording states (6.1.0)
+    // MARK: - Recording states (0.6.0)
 
     /// Shown when a start is refused, so the slider never just springs back
     /// with nothing said.
@@ -541,7 +541,7 @@ enum AppStrings {
     }
 
     // MARK: - Onboarding
-    // Two-tone welcome headline (6.1.0): the hook line in text color, the
+    // Two-tone welcome headline (0.6.0): the hook line in text color, the
     // punch line in accent.
     static func onboardingWelcomeTitle1(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Вы забудете почти каждую поездку." : "You'll forget almost every trip."
@@ -690,7 +690,7 @@ enum AppStrings {
     // plural forms were wrong («5 города»). Use proper plural helpers if a
     // caller ever appears.
 
-    // MARK: - My Map (6.1.0)
+    // MARK: - My Map (0.6.0)
 
     static func myMapTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Моя карта" : "My Map"
@@ -928,7 +928,7 @@ enum AppStrings {
         lang == .ru ? "Название поездки" : "Trip title"
     }
 
-    // MARK: - Trip Detail poster (6.1.0)
+    // MARK: - Trip Detail poster (0.6.0)
     static func reliveTrip(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Прожить заново" : "Relive"
     }
@@ -1018,7 +1018,7 @@ enum AppStrings {
     // levelShort deleted — the app-wide LVL convention is the hardcoded
     // "LVL n" pixel-font tag; the last caller migrated to it.
 
-    // MARK: - Discussion (6.1.0)
+    // MARK: - Discussion (0.6.0)
     //
     // The product calls this ОБСУЖДЕНИЕ, not «комментарии» — a trip is a story
     // people talk about, and the word «комментарий» never appears in the UI.
@@ -1069,7 +1069,7 @@ enum AppStrings {
         lang == .ru ? "\(n) д" : "\(n) d"
     }
 
-    // MARK: - Publish flow (6.1.0)
+    // MARK: - Publish flow (0.6.0)
     static func publishTripTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Опубликовать поездку?" : "Publish trip?"
     }
@@ -1734,7 +1734,7 @@ enum AppStrings {
         }
     }
 
-    // MARK: - Garage (v6.1.0 redesign)
+    // MARK: - Garage (v0.6.0 redesign)
 
     static func vehicleMainLabel(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Основная" : "Main"
@@ -1996,7 +1996,7 @@ enum AppStrings {
         lang == .ru ? "\(level) и выше" : "\(level) and above"
     }
 
-    // MARK: - Home feed (6.1.0)
+    // MARK: - Home feed (0.6.0)
     static func feedSegmentFollowing(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Подписки" : "Following"
     }
@@ -2039,7 +2039,7 @@ enum AppStrings {
         lang == .ru ? "Обсуждение" : "Discussion"
     }
 
-    // MARK: - Activity inbox (6.1.0)
+    // MARK: - Activity inbox (0.6.0)
     static func activityTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Активность" : "Activity"
     }
@@ -2065,7 +2065,7 @@ enum AppStrings {
     static func noFilteredNotifications(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Таких уведомлений пока нет" : "No such notifications yet"
     }
-    // MARK: - Activity rows (6.1.0)
+    // MARK: - Activity rows (0.6.0)
 
     /// Second line of a reaction row: what happened, to what. The reaction
     /// itself is drawn as a badge on the avatar, so it is not repeated here.
@@ -2087,7 +2087,7 @@ enum AppStrings {
         lang == .ru ? "Вашу поездку" : "your trip"
     }
 
-    // MARK: - Achievement rows (6.1.0)
+    // MARK: - Achievement rows (0.6.0)
 
     /// Line one of a system-authored `achievement` row. Nobody did this TO
     /// the user, so the name slot is signed by the app rather than falling
@@ -2125,7 +2125,7 @@ enum AppStrings {
             : "When you're invited on a trip or someone joins yours"
     }
 
-    // MARK: - Companion invite rows (6.1.0)
+    // MARK: - Companion invite rows (0.6.0)
 
     /// Chip filter label for `companion_invite` / `companion_accepted` rows.
     static func chipCompanions(_ lang: LanguageManager.Language) -> String {
@@ -2176,7 +2176,7 @@ enum AppStrings {
         lang == .ru ? "Приглашение больше не активно" : "This invite is no longer active"
     }
 
-    // MARK: - Discover (6.1.0)
+    // MARK: - Discover (0.6.0)
     static func suggestedByRegions(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Рекомендуем · по Вашим регионам" : "Suggested · based on your regions"
     }
@@ -2194,7 +2194,7 @@ enum AppStrings {
         lang == .ru ? "Популярный водитель" : "Popular driver"
     }
 
-    // MARK: - Share sheet / report (6.1.0)
+    // MARK: - Share sheet / report (0.6.0)
     static func copyAction(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Копировать" : "Copy"
     }
@@ -2204,7 +2204,7 @@ enum AppStrings {
             : "Reports are anonymous — the author won't know who sent them."
     }
 
-    // MARK: - Account & Sync page (6.1.0 Figma frames 1–3)
+    // MARK: - Account & Sync page (0.6.0 Figma frames 1–3)
     // Category rows of the sync sheet reuse existing keys:
     // tripsTab («Поездки»), photos («Фото»), profile («Профиль»), garage («Гараж»).
 
@@ -2288,7 +2288,7 @@ enum AppStrings {
     static func clearServerInProgress(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Очищаем…" : "Clearing…"
     }
-    // Migrated verbatim from the pre-6.1.0 CloudSyncView inline strings —
+    // Migrated verbatim from the pre-0.6.0 CloudSyncView inline strings —
     // the GDPR just-in-time consent alert (F12: confirmation flows survive).
     static func syncEnableConfirmTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Включить синхронизацию?" : "Turn on cloud sync?"
@@ -2361,7 +2361,7 @@ enum AppStrings {
         lang == .ru ? "Заблокирован \(date)" : "Blocked \(date)"
     }
 
-    // MARK: - Me tab (6.1.0)
+    // MARK: - Me tab (0.6.0)
 
     static func meGuestName(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Вы" : "You"
@@ -2639,7 +2639,7 @@ enum AppStrings {
             : "My \(year) on the road: \(tripsCount(lang, n: trips)), \(km) km — TripTrack"
     }
 
-    // MARK: - Audit-fix additions (6.1.0 post-release pass)
+    // MARK: - Audit-fix additions (0.6.0 post-release pass)
 
     /// «14 дней подряд» / "14 day streak" — trip-complete streak row.
     static func streakDaysInARow(_ lang: LanguageManager.Language, n: Int) -> String {
@@ -2688,9 +2688,9 @@ enum AppStrings {
         }
         return "following"
     }
-    // MARK: - Share sheet (6.1.0)
+    // MARK: - Share sheet (0.6.0)
 
-    // MARK: - Comment replies (6.1.0)
+    // MARK: - Comment replies (0.6.0)
 
     /// Owner «…» entries on a feed card (canon).
     static func edit(_ lang: LanguageManager.Language) -> String {
@@ -3074,7 +3074,7 @@ enum AppStrings {
         lang == .ru ? "Без имени" : "No name"
     }
 
-    // MARK: - Achievements screens (6.1.0)
+    // MARK: - Achievements screens (0.6.0)
 
     /// Navigation title of the full achievements screen. Same copy as the
     /// profile section header — aliased rather than duplicated so the two
@@ -3171,7 +3171,7 @@ enum AppStrings {
         "\(current) / \(target) \(unit)"
     }
 
-    // MARK: - «Мой профиль» hub (6.1.0, Figma 1687:119)
+    // MARK: - «Мой профиль» hub (0.6.0, Figma 1687:119)
 
     static func myProfileTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Мой профиль" : "My profile"
@@ -3234,7 +3234,7 @@ enum AppStrings {
         "\(tripsCount(lang, n: trips)) · \(km) \(lang == .ru ? "км" : "km")"
     }
 
-    // MARK: - Username editor (6.1.0, Figma 1833:6714)
+    // MARK: - Username editor (0.6.0, Figma 1833:6714)
 
     static func usernameTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Юзернейм" : "Username"
@@ -3272,7 +3272,7 @@ enum AppStrings {
             : "Couldn't check — try again"
     }
 
-    // MARK: - About editor (6.1.0, Figma 1873:6873)
+    // MARK: - About editor (0.6.0, Figma 1873:6873)
 
     /// «О приложении» already owns `about(_:)` — this is the profile bio.
     static func aboutTitle(_ lang: LanguageManager.Language) -> String {
@@ -3284,7 +3284,7 @@ enum AppStrings {
             : "Visible to everyone on your profile. Up to 140 characters."
     }
 
-    // MARK: - Country picker (6.1.0, Figma 675:119)
+    // MARK: - Country picker (0.6.0, Figma 675:119)
 
     static func countryTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Страна" : "Country"
@@ -3307,7 +3307,7 @@ enum AppStrings {
         lang == .ru ? "Нейтральный флаг" : "Neutral flag"
     }
 
-    // MARK: - Levels screen (6.1.0, Figma 888:3848)
+    // MARK: - Levels screen (0.6.0, Figma 888:3848)
 
     /// The pushed screen behind the LVL pill. «Уровень водителя»
     /// (`rankProgressTitle`) still names the sheet it grew out of; this is the
@@ -3392,7 +3392,7 @@ enum AppStrings {
         lang == .ru ? "за поездки от 200 км" : "for trips over 200 km"
     }
 
-    // MARK: - Settings sheet (6.1.0, Figma 580:232 / hints 1741:129)
+    // MARK: - Settings sheet (0.6.0, Figma 580:232 / hints 1741:129)
 
     /// Canon's «Добавление в попутчики» toggle — who may tag you on their trip.
     ///
@@ -3435,7 +3435,7 @@ enum AppStrings {
             : "Anyone can tag you as a companion on their trip. You always confirm the invite yourself."
     }
 
-    // MARK: - Unit / language / theme pickers (6.1.0, Figma 1685:119 / 176 / 233)
+    // MARK: - Unit / language / theme pickers (0.6.0, Figma 1685:119 / 176 / 233)
 
     /// Footnotes under each picker list: what actually changes on pick.
     static func unitsPickerFootnote(_ lang: LanguageManager.Language) -> String {
@@ -3466,7 +3466,7 @@ enum AppStrings {
             : "Overall divides the distance by the whole trip, stops included. Moving counts only the time you were driving."
     }
 
-    // MARK: - Statistics screen (6.1.0, Figma 580:316 / 580:416 / 1821:119 / 1827:119)
+    // MARK: - Statistics screen (0.6.0, Figma 580:316 / 580:416 / 1821:119 / 1827:119)
 
     static func statsYearAgoToday(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "ГОД НАЗАД В ЭТОТ ДЕНЬ" : "A YEAR AGO TODAY"
@@ -3580,7 +3580,7 @@ enum AppStrings {
         return "\(km) km of memories · photos and notes in \(trips) \(trips == 1 ? "trip" : "trips")"
     }
 
-    // MARK: - Public-profile preview (6.1.0, Figma 580:438 / 1716:119)
+    // MARK: - Public-profile preview (0.6.0, Figma 580:438 / 1716:119)
 
     /// Canon's second line (580:438) — what this screen IS, said every time.
     /// The card's first line names the screen; this one names its limits, and

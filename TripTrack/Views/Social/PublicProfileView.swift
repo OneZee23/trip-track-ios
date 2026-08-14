@@ -233,7 +233,7 @@ struct PublicProfileView: View {
         return handle.isEmpty ? resolvedDisplayName : "@\(handle)"
     }
 
-    /// «О себе». The server field only exists on 6.1+, so in the viewer's own
+    /// «О себе». The server field only exists on 0.6+, so in the viewer's own
     /// preview fall back to what they typed locally — `refresh()` pushes it up
     /// on this very screen, and a blank line under your own name reads as the
     /// bio having been lost rather than as a server that hasn't shipped yet.

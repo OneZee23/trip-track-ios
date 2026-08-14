@@ -208,7 +208,7 @@ struct ProfileSettingsSheet: View {
             rowDivider(c)
 
             // The row carries the state of the thing it opens: «выключена» /
-            // «синхронизировано» / «3 в очереди», live. That marker spent 6.1.0
+            // «синхронизировано» / «3 в очереди», live. That marker spent 0.6.0
             // as a grey line under the name on the «Я» tab, where it was the
             // second thing on the screen and nothing could be done about it.
             SettingsIconRow(

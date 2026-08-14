@@ -4,7 +4,7 @@ import WidgetKit
 
 // MARK: - Colors
 
-// 6.1.0 (Figma 356:119/365:119): brand accent #EB571E, cream light bg,
+// 0.6.0 (Figma 356:119/365:119): brand accent #EB571E, cream light bg,
 // #19191F dark bg.
 private let accentOrange = Color(red: 235/255, green: 87/255, blue: 30/255)
 private let accentRed = Color(red: 1.0, green: 0.231, blue: 0.188)
@@ -413,7 +413,7 @@ private struct LiveLockScreenView: View {
             }
             .padding(.bottom, 8)
 
-            // Row 3: Controls — 6.1.0 safety redesign (Figma 356:119): END is
+            // Row 3: Controls — 0.6.0 safety redesign (Figma 356:119): END is
             // a de-emphasized grey ghost chip on the far LEFT (users kept
             // fat-fingering the old bottom-right stop next to the lock-screen
             // camera), Pause is the wide primary on the right.

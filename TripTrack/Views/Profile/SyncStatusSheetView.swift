@@ -20,7 +20,7 @@ struct SyncCountSnapshot {
     static let empty = SyncCountSnapshot()
 }
 
-/// «Синхронизация» per-item status sheet (Figma 6.1.0 frame 2). Presented
+/// «Синхронизация» per-item status sheet (Figma 0.6.0 frame 2). Presented
 /// from TWO places — the ProfileView sync pill and the CloudSyncView status
 /// row — so it stays standalone-presentable and carries its own presentation
 /// styling (detents / grabber / r22 corners) in addition to the call sites'.

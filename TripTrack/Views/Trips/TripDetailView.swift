@@ -175,7 +175,7 @@ struct TripDetailView: View {
 
     /// Poster hero: 380pt of canvas below the status bar (Figma 360×380),
     /// with the navy canvas extending up under the status bar + scrim.
-    /// Release map-hero height: ~45% of the screen (same as pre-6.1).
+    /// Release map-hero height: ~45% of the screen (same as pre-0.6).
     private var posterHeight: CGFloat {
         (UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }

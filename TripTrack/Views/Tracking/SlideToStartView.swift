@@ -157,7 +157,7 @@ struct SlideToStartView: View {
             .font(.inter(17, weight: .semibold))
             .lineLimit(1)
             .minimumScaleFactor(0.75)
-            // Centered on the FULL pill (Figma) — the 6.1.0 hints are short
+            // Centered on the FULL pill (Figma) — the 0.6.0 hints are short
             // («Сдвиньте»/«Slide»), so they no longer collide with the thumb.
             // The geo-denied override is not short, though: «Открыть
             // Настройки» ran straight under the marching chevrons. Reserving

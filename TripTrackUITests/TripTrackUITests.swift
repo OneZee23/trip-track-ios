@@ -37,7 +37,7 @@ final class TripTrackUITests: XCTestCase {
         return false
     }
 
-    /// Asserting smoke test for the 6.1.0 five-tab navigation: every tab is
+    /// Asserting smoke test for the 0.6.0 five-tab navigation: every tab is
     /// reachable by tapping its (language-independent) accessibility id, the
     /// bar hides on the Record tab, and the back chevron restores it.
     func test_tab_navigation_smoke() {
@@ -63,7 +63,7 @@ final class TripTrackUITests: XCTestCase {
 
     /// Utility flow (used when seeding data for page verification): if a
     /// recording is active — stop it; otherwise start one via slide-to-start,
-    /// let (simulated) GPS accumulate, then stop. Handles the 6.1.0 recovery
+    /// let (simulated) GPS accumulate, then stop. Handles the 0.6.0 recovery
     /// prompt if one appears at launch. Locale-independent (ids + coordinates
     /// only); every step guarded so it passes trivially when the record
     /// surface is unavailable.
@@ -135,7 +135,7 @@ final class TripTrackUITests: XCTestCase {
     }
 
     /// Walks into the first own trip's detail poster + the cinema replay and
-    /// snaps them (6.1.0 Деталка verification). Locale-tolerant, guarded.
+    /// snaps them (0.6.0 Деталка verification). Locale-tolerant, guarded.
     func test_zz_trip_detail_shots() {
         normalizeToHome()
         // Own trips now live on the Я tab (История section) — the feed's
@@ -181,7 +181,7 @@ final class TripTrackUITests: XCTestCase {
     }
 
     /// Walks the redesigned Garage: list → add form → vehicle detail →
-    /// auto-record settings. Locale-tolerant, guarded (6.1.0 Гараж).
+    /// auto-record settings. Locale-tolerant, guarded (0.6.0 Гараж).
     func test_zz_garage_shots() {
         normalizeToHome()
         let me = app.buttons.matching(identifier: "tab_profile").firstMatch
@@ -221,7 +221,7 @@ final class TripTrackUITests: XCTestCase {
     }
 
     /// Walks the redesigned Home feed: both segments, bell (guest prompt),
-    /// search → Discover, long-press card (guest → sign-in). 6.1.0 Лента.
+    /// search → Discover, long-press card (guest → sign-in). 0.6.0 Лента.
     func test_zz_feed_shots() {
         normalizeToHome()
         sleep(3); snap("110_feed_all")
@@ -272,7 +272,7 @@ final class TripTrackUITests: XCTestCase {
         win.swipeUp(); usleep(700_000); snap("121_logs_lower")
     }
 
-    /// Groups teaser (6.1.0 Группы): tab → shot → notify CTA → done-state.
+    /// Groups teaser (0.6.0 Группы): tab → shot → notify CTA → done-state.
     func test_zz_groups_shots() {
         normalizeToHome()
         let groups = app.buttons.matching(identifier: "tab_groups").firstMatch
@@ -284,7 +284,7 @@ final class TripTrackUITests: XCTestCase {
         }
     }
 
-    /// Walks the redesigned Me tab (6.1.0 Профиль·Я): hero, settings
+    /// Walks the redesigned Me tab (0.6.0 Профиль·Я): hero, settings
     /// sheet, stats push, wrapped story. Guest-tolerant, guarded.
     func test_zz_me_shots() {
         normalizeToHome()
@@ -310,7 +310,7 @@ final class TripTrackUITests: XCTestCase {
             sleep(1)
         }
 
-        // 6.1.0 replaced the Wrapped hero with «Достижения» — shoot that instead.
+        // 0.6.0 replaced the Wrapped hero with «Достижения» — shoot that instead.
         let achievements = app.buttons.matching(identifier: "profile_achievements_all").firstMatch
         if achievements.waitForExistence(timeout: 2), achievements.isHittable {
             achievements.tap(); sleep(2); snap("145_achievements")
@@ -376,7 +376,7 @@ final class TripTrackUITests: XCTestCase {
         normalizeToHome()
         sleep(1); snap("01_feed")
 
-        // Sign-in sheet (6.1.0 Вход) — the guest feed banner opens it.
+        // Sign-in sheet (0.6.0 Вход) — the guest feed banner opens it.
         let guestBanner = app.buttons.matching(identifier: "guest_signin_banner").firstMatch
         if guestBanner.waitForExistence(timeout: 3), guestBanner.isHittable {
             guestBanner.tap()
@@ -384,7 +384,7 @@ final class TripTrackUITests: XCTestCase {
             win.swipeDown(); sleep(1)
         }
 
-        // Maps tab — 6.1.0 «Моя карта» (ids, locale-independent)
+        // Maps tab — 0.6.0 «Моя карта» (ids, locale-independent)
         let mapsTab = app.buttons.matching(identifier: "tab_maps").firstMatch
         if mapsTab.waitForExistence(timeout: 3), mapsTab.isHittable {
             mapsTab.tap(); sleep(3); snap("02_mymap_all")

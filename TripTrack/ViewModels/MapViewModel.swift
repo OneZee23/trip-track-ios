@@ -438,7 +438,7 @@ final class MapViewModel: ObservableObject {
     /// Restore active recording if TripManager recovered an orphaned trip on launch.
     private func restoreActiveRecordingIfNeeded() {
         // Legacy safety path: an already-adopted active recording (should not
-        // happen since 6.1.0 stashes orphans instead) still restores silently.
+        // happen since 0.6.0 stashes orphans instead) still restores silently.
         if tripManager.isRecording, let trip = tripManager.activeTrip {
             adoptRecoveredTrip(trip, startLiveActivity: true)
             return
