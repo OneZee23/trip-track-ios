@@ -43,6 +43,40 @@ final class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(pinnedBadgeId, forKey: "com.triptrack.settings.pinnedBadgeId") }
     }
 
+    // MARK: - Profile identity («Мой профиль» hub, 6.1.0)
+    //
+    // All three are LOCAL ONLY. `ProfileUpdateRequest` carries none of them, so
+    // nothing here leaves the device — and the public profile other people see
+    // is exactly where canon draws the handle, the flag pill and the bio
+    // (Figma 962:405). What the backend still owes, in order:
+    //   · `username` on the account + an availability endpoint. Until that
+    //     exists `UsernameEditorSheet` is handed a check that always answers
+    //     "не удалось проверить", and two accounts can claim the same handle.
+    //   · `bio` accepted on /auth/profile-update. It is already RETURNED on
+    //     `SocialProfile` (read-only), so only the write half is missing.
+    //   · `country` on the account, echoed back on `SocialProfile`.
+    // Deliberately UserDefaults and not CoreData: the model already gained a
+    // version this release, and a second migration in the same commit buys
+    // nothing for three short strings.
+
+    // Handle, stored WITHOUT the leading «@» and already lowercased by the
+    // editor. "" = not set.
+    @Published var profileUsername: String = UserDefaults.standard.string(forKey: "com.triptrack.settings.profileUsername") ?? "" {
+        didSet { UserDefaults.standard.set(profileUsername, forKey: "com.triptrack.settings.profileUsername") }
+    }
+
+    // «О себе» — free text, ≤140 chars (capped by the editor). "" = not set.
+    @Published var profileBio: String = UserDefaults.standard.string(forKey: "com.triptrack.settings.profileBio") ?? "" {
+        didSet { UserDefaults.standard.set(profileBio, forKey: "com.triptrack.settings.profileBio") }
+    }
+
+    // ISO-3166 alpha-2 ("RU"), or one of `CountryChoice`'s sentinels
+    // ("WORLD" / "NEUTRAL"). "" = «Не указывать», which is a real answer and
+    // not missing data — see `CountryChoice`.
+    @Published var profileCountry: String = UserDefaults.standard.string(forKey: "com.triptrack.settings.profileCountry") ?? "" {
+        didSet { UserDefaults.standard.set(profileCountry, forKey: "com.triptrack.settings.profileCountry") }
+    }
+
     // How average speed is reported. Default `.overall` = no change for existing
     // users; `.moving` reports distance / driving time (excludes stops & pauses).
     @Published var avgSpeedMode: AvgSpeedMode =

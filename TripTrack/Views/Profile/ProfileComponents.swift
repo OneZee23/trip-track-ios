@@ -3,8 +3,11 @@ import SwiftUI
 // MARK: - LVL Pill (Figma 113:53)
 
 /// Gold rank pill under the profile name: «★ LVL 12 Путешественник».
-/// FK-13: Figma wants Handjet Black 15 — the app deliberately ships no
-/// Handjet family, so system heavy 15 stands in.
+/// Handjet Black 15 is the canon face (Figma 580:129); the family ships in
+/// Resources/Fonts and is registered in TripTrackApp, so it renders for real —
+/// same treatment the feed card's LVL tag already uses at 13. No
+/// `.monospacedDigit()`: Handjet's digits are even-width by design and the
+/// modifier is a no-op on a custom face.
 struct LvlPill: View {
     let level: Int
     let rankTitle: String
@@ -13,17 +16,22 @@ struct LvlPill: View {
         HStack(spacing: 6) {
             Image(systemName: "star.fill")
                 .font(.system(size: 11))
+            // fixedSize — Dynamic Type must not rescale the custom face, or
+            // the capsule outgrows the header row it sits in.
             Text("LVL \(level)")
-                .font(.system(size: 15, weight: .heavy).monospacedDigit())
+                .font(.custom("Handjet-Black", fixedSize: 15))
             Text(rankTitle)
-                .font(.system(size: 15, weight: .heavy))
+                .font(.custom("Handjet-Black", fixedSize: 15))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
         .foregroundStyle(AppTheme.gold)
         .padding(.leading, 12)
         .padding(.trailing, 14)
-        .padding(.vertical, 4)
+        // 4 still centres optically after the font swap: Handjet's descent and
+        // its cap-to-ascender gap are both ~3.5pt at 15, so the caps land dead
+        // centre in the line box with symmetric padding.
+        .padding(.vertical, 2)
         .background(AppTheme.goldBg, in: Capsule())
     }
 }
@@ -80,37 +88,6 @@ struct ProfileStatsStrip: View {
         Rectangle()
             .fill(c.borderBright)
             .frame(width: 1, height: 34)
-    }
-}
-
-// MARK: - Moment Card (Figma 150:1244 «Моменты»)
-
-/// Horizontal-rail gradient card: bottom-aligned title + subtitle over a
-/// full-bleed gradient. Gradients intentionally identical in dark mode.
-struct MomentCard: View {
-    let title: String
-    let subtitle: String
-    let gradient: LinearGradient
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Spacer(minLength: 0)
-            Text(title)
-                .font(.system(size: 14, weight: .heavy))
-                .foregroundStyle(.white)
-                .lineSpacing(1.2)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(subtitle)
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.85))
-                .lineLimit(2)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        // 92, not 120: title + subtitle + padding only ever fill ~92, so the
-        // taller card left 28pt of empty gradient above the text.
-        .frame(width: 154, height: 92, alignment: .bottomLeading)
-        .background(gradient, in: RoundedRectangle(cornerRadius: 16))
     }
 }
 
@@ -195,7 +172,7 @@ struct ProfileTripRow: View {
 
 // MARK: - Section Label
 
-/// «Моменты» / «История» — 16 heavy section header.
+/// «Достижения» / «История» — 16 heavy section header.
 struct ProfileSectionLabel: View {
     let text: String
 
@@ -293,14 +270,20 @@ struct SettingsRowChevron: View {
 /// Trailing value text («км», «Русский», «Системная») for `SettingsIconRow`.
 struct SettingsRowValue: View {
     let text: String
+    /// Overrides the quiet default. «Мой профиль» paints an EMPTY field accent
+    /// (canon 1838:226): a blank profile field is a job the user hasn't done
+    /// yet, not a value, and the one orange thing on the screen is how it says
+    /// so.
+    var tint: Color?
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Text(text)
             .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(AppTheme.colors(for: scheme).textSecondary)
+            .foregroundStyle(tint ?? AppTheme.colors(for: scheme).textSecondary)
             .lineLimit(1)
+            .truncationMode(.tail)
     }
 }
 

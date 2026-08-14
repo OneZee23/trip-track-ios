@@ -14,7 +14,6 @@ struct NotificationsInboxView: View {
     @EnvironmentObject private var lang: LanguageManager
     /// Injected by both presenters (FeedView, ProfileSettingsSheet) — needed
     /// to re-apply the in-app theme override on the nested prefs sheet.
-    @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
@@ -86,7 +85,6 @@ struct NotificationsInboxView: View {
                         // override on the inbox sheet itself doesn't reach
                         // this one (same rationale as ProfileSettingsSheet's
                         // prefs presentation).
-                        .preferredColorScheme(themeManager.preferredColorScheme)
                 }
                 .navigationDestination(for: ProfilePreviewDest.self) { dest in
                     switch dest {
@@ -310,7 +308,7 @@ struct NotificationsInboxView: View {
                 // content jumped on every toggle (same fix as the Discover
                 // row button).
                 .socialActionButton(
-                    isFollowed ? .secondary : .primary, colors: c, width: 110
+                    isFollowed ? .done : .primary, colors: c, width: 110
                 )
                 .animation(.easeOut(duration: 0.2), value: isFollowed)
         }

@@ -196,7 +196,14 @@ struct TripEditSheet: View {
                 .environmentObject(lang)
         }
         .onAppear {
-            title = trip.title ?? ""
+            // Only a real name is pre-filled. Saving stamps every trip with its
+            // start date, and offering that back as the field's VALUE is what
+            // taught people the trip was called «14 Jun, 12:31» while the detail
+            // screen — which knows a stamp is not a name — headed it with the
+            // region. Empty with a prompt is the honest state, and it also means
+            // typing that same date is a real edit rather than a no-op the save
+            // guard would drop.
+            title = trip.hasDisplayableName ? (trip.title ?? "") : ""
             notes = trip.tripDescription ?? ""
             vehicleId = trip.vehicleId
             isPrivate = trip.isPrivate

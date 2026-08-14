@@ -80,16 +80,23 @@ struct MyMapView: View {
         .task {
             await vm.loadIfNeeded(tripManager: mapVM.tripManager, territory: mapVM.territoryManager)
         }
-        .alert(AppStrings.mapBetaTitle(lang.language), isPresented: $showBetaNote) {
-            Button(AppStrings.mapBetaReport(lang.language)) {
-                if let url = URL(string: "https://t.me/onezee_co") {
-                    UIApplication.shared.open(url)
+        // House dialog, never the system's (CLAUDE.md «Dialogs»). «ОК» is the
+        // way out, so it rides the component's own cancel row; «Сообщить»
+        // leaves the app for Telegram, which is why the component dismissing
+        // itself first matters here.
+        .appConfirm(
+            isPresented: $showBetaNote,
+            title: AppStrings.mapBetaTitle(lang.language),
+            message: AppStrings.mapBetaBody(lang.language),
+            actions: [
+                AppDialogAction(AppStrings.mapBetaReport(lang.language)) {
+                    if let url = URL(string: "https://t.me/onezee_co") {
+                        UIApplication.shared.open(url)
+                    }
                 }
-            }
-            Button(AppStrings.ok(lang.language), role: .cancel) {}
-        } message: {
-            Text(AppStrings.mapBetaBody(lang.language))
-        }
+            ],
+            cancelTitle: AppStrings.ok(lang.language)
+        )
         .fullScreenCover(item: $openedTrip) { opened in
             NavigationStack {
                 TripDetailView(

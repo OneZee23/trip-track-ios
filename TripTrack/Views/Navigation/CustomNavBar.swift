@@ -30,6 +30,12 @@ struct CustomNavBar<Trailing: View>: View {
     /// trailing side, so they hide the back button rather than show a
     /// chevron that would really mean "dismiss".
     var showsBack: Bool = true
+    /// Canon runs TWO title sizes on pushed screens. Most carry the small bar
+    /// («Мой профиль», «Страна»); the two collection screens — «Достижения»
+    /// (895:365) and «Статистика» (580:316) — are headed by a 28pt display
+    /// title, because they are destinations you land on rather than steps you
+    /// pass through.
+    var largeTitle: Bool = false
     @ViewBuilder var trailing: () -> Trailing
 
     @Environment(\.colorScheme) private var scheme
@@ -59,9 +65,11 @@ struct CustomNavBar<Trailing: View>: View {
             // hair above that because the bar carries no hairline to separate
             // it from the content below.
             Text(title)
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: largeTitle ? 28 : 18, weight: .heavy))
+                .tracking(largeTitle ? -0.56 : 0)
                 .foregroundStyle(c.text)
                 .lineLimit(1)
+                .minimumScaleFactor(largeTitle ? 0.7 : 1)
                 .truncationMode(.tail)
                 // Clear both controls (40pt + 20pt inset) so a long title
                 // truncates instead of colliding with them.
@@ -97,9 +105,10 @@ struct CustomNavBar<Trailing: View>: View {
 }
 
 extension CustomNavBar where Trailing == EmptyView {
-    init(title: String, showsBack: Bool = true) {
+    init(title: String, showsBack: Bool = true, largeTitle: Bool = false) {
         self.title = title
         self.showsBack = showsBack
+        self.largeTitle = largeTitle
         self.trailing = { EmptyView() }
     }
 }

@@ -191,18 +191,18 @@ struct StoryShareSheet: View {
         // trip has a photo, so a lazy load would show navy for the first
         // second every single time the sheet opens.
         .task { await loadPhoto() }
-        .alert(
-            AppStrings.photoAccessAlertTitle(lang.language),
-            isPresented: $showPhotoAccessAlert
-        ) {
-            Button(AppStrings.openSettings(lang.language)) {
-                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                UIApplication.shared.open(url)
-            }
-            Button(AppStrings.cancel(lang.language), role: .cancel) {}
-        } message: {
-            Text(AppStrings.photoAccessAlertBody(lang.language))
-        }
+        .appConfirm(
+            isPresented: $showPhotoAccessAlert,
+            title: AppStrings.photoAccessAlertTitle(lang.language),
+            message: AppStrings.photoAccessAlertBody(lang.language),
+            actions: [
+                AppDialogAction(AppStrings.openSettings(lang.language)) {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    UIApplication.shared.open(url)
+                }
+            ],
+            cancelTitle: AppStrings.cancel(lang.language)
+        )
     }
 
     private static let space = "shareSheetContent"

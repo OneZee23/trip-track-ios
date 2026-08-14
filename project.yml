@@ -54,8 +54,8 @@ targets:
         # the custom grid, and it is why the app asks for read access only.
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "TripTrack shows your photo library so you can attach photos to a trip. Photos stay on your device unless you publish the trip yourself."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        MARKETING_VERSION: "6.1.0"
-        CURRENT_PROJECT_VERSION: "50"
+        MARKETING_VERSION: "0.6.0"
+        CURRENT_PROJECT_VERSION: "51"
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.dev
@@ -85,6 +85,25 @@ targets:
         aps-environment: development
         com.apple.developer.applesignin:
           - Default
+        # UNIVERSAL LINKS — deliberately still off. Turning the two lines
+        # below on makes `https://trip-track.app/u/<id>` open the app
+        # directly instead of Safari; everything else for it already ships:
+        # the app parses the URL (`TripTrackApp.handleWebLink`), the website
+        # serves `/.well-known/apple-app-site-association` naming both bundle
+        # ids, and the landing page's «Открыть в приложении» button covers the
+        # link with the entitlement off.
+        #
+        # It needs one thing this repo cannot do: the Associated Domains
+        # capability on the App IDs themselves (both `com.onezee.TripTrack`
+        # and `.dev`). Without it the build fails at signing — «Provisioning
+        # profile doesn't include the Associated Domains capability». Enable
+        # it by building once from Xcode with the capability added (Xcode
+        # updates the App ID and the profile), or with
+        # `xcodebuild -allowProvisioningUpdates`, then uncomment:
+        #
+        # com.apple.developer.associated-domains:
+        #   - applinks:trip-track.app
+        #   - applinks:www.trip-track.app
 
   TripTrackLiveActivityExtension:
     type: app-extension
@@ -103,8 +122,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Live"
-        MARKETING_VERSION: "6.1.0"
-        CURRENT_PROJECT_VERSION: "50"
+        MARKETING_VERSION: "0.6.0"
+        CURRENT_PROJECT_VERSION: "51"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         APP_INTENTS_DEPLOYMENT_POSTPROCESSING: NO
@@ -139,8 +158,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
         INFOPLIST_KEY_WKApplication: YES
-        MARKETING_VERSION: "6.1.0"
-        CURRENT_PROJECT_VERSION: "50"
+        MARKETING_VERSION: "0.6.0"
+        CURRENT_PROJECT_VERSION: "51"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "4"
       configs:

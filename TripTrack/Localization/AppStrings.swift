@@ -42,8 +42,82 @@ enum AppStrings {
     static func groupsNotifyDone(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Покажем, когда откроем" : "We'll show it when it opens"
     }
-    static func groupsWaitlistCount(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Уже ждут 1 240 человек" : "1,240 people already waiting"
+    /// The real count, from `/groups/waitlist`. It used to be the literal
+    /// «Уже ждут 1 240 человек» printed into the layout — a made-up number
+    /// under a button that only set a local flag.
+    static func groupsWaitlistCount(_ lang: LanguageManager.Language, count: Int) -> String {
+        if lang == .ru {
+            let people: String
+            switch (count % 100, count % 10) {
+            case (11...14, _):  people = "человек"
+            case (_, 1):        people = "человек"
+            case (_, 2...4):    people = "человека"
+            default:            people = "человек"
+            }
+            return "Уже ждут \(formattedCount(count, lang: lang)) \(people)"
+        }
+        return count == 1
+            ? "1 person already waiting"
+            : "\(formattedCount(count, lang: lang)) people already waiting"
+    }
+
+    /// «1 240» / «1,240» — the grouping the rest of the app uses.
+    static func formattedCount(_ count: Int, lang: LanguageManager.Language) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.locale = Locale(identifier: lang == .ru ? "ru_RU" : "en_US")
+        return f.string(from: NSNumber(value: count)) ?? "\(count)"
+    }
+
+    /// Nobody has tapped it yet — an honest invitation instead of «ждут 0».
+    static func groupsWaitlistFirst(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вы можете быть первым" : "You could be the first"
+    }
+
+    static func groupsPreviewCTA(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Посмотреть что будет" : "See what's coming"
+    }
+    static func clubsTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Клубы" : "Clubs"
+    }
+    static func clubsSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Клубы по маркам и интересам" : "Clubs by make and interest"
+    }
+    static func clubsSoonBadge(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "СКОРО" : "SOON"
+    }
+    /// Section label on a club page.
+    static func clubPerksTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Что будет в клубе" : "What the club will have"
+    }
+    static func clubJoin(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Вступить" : "Join"
+    }
+    /// State after tapping «Вступить» on a club that does not exist yet: we
+    /// remember it and will say when it opens. Not «Вы участник» — nobody is
+    /// a member of anything yet.
+    static func clubJoinWaiting(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Ждёте" : "Waiting"
+    }
+    static func clubWaitingCount(_ lang: LanguageManager.Language, count: Int) -> String {
+        lang == .ru
+            ? "\(formattedCount(count, lang: lang)) ждут"
+            : "\(formattedCount(count, lang: lang)) waiting"
+    }
+    static func clubBeFirst(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пока никто не ждёт" : "Nobody waiting yet"
+    }
+    static func clubComingFootnote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Функция появится в одном из следующих обновлений"
+            : "This will arrive in one of the next updates"
+    }
+    /// Shown under the CTA to a signed-out visitor: their place in the queue
+    /// is recorded, but a push needs an account to land on.
+    static func groupsNotifySignInHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Войдите, чтобы мы точно смогли прислать уведомление"
+            : "Sign in so we can actually send you that notification"
     }
     static func groupsChipTrucking(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "🛻 Дальнобой" : "🛻 Trucking"
@@ -1490,13 +1564,29 @@ enum AppStrings {
     static func deleteAccount(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Удалить аккаунт" : "Delete account"
     }
+    /// The settings row. Same words as the canon frame (117:1412 danger row).
+    static func deleteAccountTitle(_ lang: LanguageManager.Language) -> String {
+        deleteAccount(lang)
+    }
+    /// «Безвозвратно, везде» is a promise, and the flow behind it keeps it:
+    /// the server account AND everything this device holds — see
+    /// `LocalDataWipe`.
+    static func deleteAccountSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Безвозвратно, везде" : "Permanently, everywhere"
+    }
     static func deleteAccountConfirmTitle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Удалить аккаунт?" : "Delete account?"
     }
-    static func deleteAccountConfirmMessage(_ lang: LanguageManager.Language) -> String {
+    /// Names everything that goes, in the order the user would miss it.
+    /// A destructive dialog that hedges is worse than none: this one has to
+    /// leave nobody surprised afterwards.
+    static func deleteAccountConfirmBody(_ lang: LanguageManager.Language) -> String {
         lang == .ru
-            ? "Все данные на нашем сервере (поездки, фото, машины, настройки) будут удалены навсегда. Ваши локальные поездки на этом устройстве останутся — Вы сможете продолжать пользоваться приложением без облака. Это действие необратимо."
-            : "All data on our server (trips, photos, vehicles, settings) will be permanently deleted. Your local trips on this device will remain — you can continue using the app offline. This action cannot be undone."
+            ? "Аккаунт и всё, что на сервере — поездки, фото, машины, реакции и комментарии — удаляются навсегда. Поездки и фото на этом устройстве тоже будут стёрты. Вернуть это будет нельзя."
+            : "Your account and everything on the server — trips, photos, vehicles, reactions and comments — are deleted for good. The trips and photos on this device are erased too. There is no way back."
+    }
+    static func deleteAccountConfirmAction(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Удалить навсегда" : "Delete forever"
     }
     static func deleteAccountFailed(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Не удалось удалить аккаунт. Попробуйте ещё раз." : "Couldn't delete account. Please try again."
@@ -1730,6 +1820,13 @@ enum AppStrings {
     }
     static func maxVehiclesHint(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Максимум 5 единиц транспорта" : "Maximum 5 vehicles"
+    }
+    /// Trailing action of the «Гараж» section on the Я tab. NOT a count («3
+    /// машины»): the house word for the category is «транспорт», which has no
+    /// plural form to agree with a number, and «машины» would be wrong for a
+    /// moped — the same reason the cap hint says «единиц транспорта».
+    static func garageAllVehicles(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Весь транспорт" : "All vehicles"
     }
     static func unnamedVehicle(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Без имени" : "Unnamed"
@@ -2269,34 +2366,59 @@ enum AppStrings {
     static func meGuestName(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Вы" : "You"
     }
-    static func wrappedKicker(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "ИТОГИ ГОДА" : "YEAR IN REVIEW"
+    /// Header placeholder when a signed-in account has no name yet — a prompt,
+    /// not a name. Never printed as an author: see `cardAuthorName`.
+    static func meAddYourName(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Добавьте имя" : "Add your name"
     }
-    static func wrappedHeroTitle(_ lang: LanguageManager.Language, year: Int) -> String {
-        lang == .ru ? "Ваш \(year)\nна дорогах" : "Your \(year)\non the road"
+    static func achievementsSection(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Достижения" : "Achievements"
     }
-    static func wrappedWatch(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Смотреть" : "Watch"
+    /// Counter next to the section header — bare numbers, the noun lives in
+    /// the header itself so the pill stays short on 360pt.
+    static func achievementsProgress(
+        _ lang: LanguageManager.Language, unlocked: Int, total: Int
+    ) -> String {
+        lang == .ru ? "\(unlocked) из \(total)" : "\(unlocked) of \(total)"
     }
-    static func momentsSection(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Моменты" : "Moments"
+    static func achievementPinned(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Закреплено" : "Pinned"
+    }
+    static func achievementsEmpty(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Пока ничего не открыто" : "Nothing unlocked yet"
+    }
+    /// Reassurance, not a call to action — achievements are never granted
+    /// by tapping anything, so the hint must not read like a button.
+    static func achievementsEmptyHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Достижения открываются сами, пока вы ездите"
+            : "Achievements unlock by themselves as you drive"
+    }
+    /// Same reassurance on SOMEBODY ELSE's profile. Deliberately says nothing
+    /// about who the driver is: the app never learns their gender, and «пока
+    /// он ездит» would be a guess printed under their name.
+    static func achievementsEmptyOtherHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Появятся после первых поездок"
+            : "They'll show up after the first drives"
     }
     static func historySection(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "История" : "History"
     }
-    static func momentYearAgo(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Год назад в этот день" : "A year ago today"
+    /// VoiceOver labels for the list/grid toggle — the control is icon-only.
+    static func historyModeList(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Списком" : "List"
     }
-    static func momentLongest(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Самая длинная поездка" : "Longest trip"
+    static func historyModeGrid(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Плиткой" : "Grid"
     }
-    static func momentNewRegion(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Новый регион" : "New region"
+    static func calendarClearFilter(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сбросить" : "Clear"
     }
-    /// Gender-neutral phrasing — region names are any gender («Пермский
-    /// край», «Москва», «Приморье»), a participle can't agree with all.
-    static func momentRegionOpened(_ lang: LanguageManager.Language, name: String) -> String {
-        lang == .ru ? "Теперь на карте: \(name) 🗺" : "\(name) unlocked 🗺"
+    /// How many trips the picked days hold. Delegates to `tripsCount` so the
+    /// RU declension table lives in exactly one place.
+    static func calendarFilterActive(_ lang: LanguageManager.Language, count: Int) -> String {
+        tripsCount(lang, n: count)
     }
     static func statsKmTotal(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "км всего" : "km total"
@@ -2304,11 +2426,13 @@ enum AppStrings {
     static func statsRegions(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "регионов" : "regions"
     }
+    /// Older name for the same metric tile — canon settled on `statsHoursOnRoad`,
+    /// so this forwards instead of keeping a second English wording alive.
     static func statsHours(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "ч в пути" : "h driving"
+        statsHoursOnRoad(lang)
     }
     static func statsKmByMonth(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Километры по месяцам" : "Kilometers by month"
+        lang == .ru ? "Километры по месяцам" : "Kilometres by month"
     }
     static func statsRecords(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "РЕКОРДЫ" : "RECORDS"
@@ -2355,12 +2479,14 @@ enum AppStrings {
         return n == 1 ? "1 trip" : "\(n) trips"
     }
     static func statsEmptyTitle(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? "Пока нет статистики" : "No stats yet"
+        lang == .ru ? "Пока нечего показать" : "Nothing to show yet"
     }
+    /// Names what the screen will hold, not what the chart is called — the
+    /// empty state promises places and records, which is why people come back.
     static func statsEmptyBody(_ lang: LanguageManager.Language) -> String {
         lang == .ru
-            ? "Запишите первую поездку — и здесь появятся километры, рекорды и графики по месяцам."
-            : "Record your first trip — kilometers, records and monthly charts will show up here."
+            ? "Проедьте первую поездку — здесь появятся километры, рекорды и новые места."
+            : "Take your first drive — kilometres, records and new places will show up here."
     }
     static func recordTripCta(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Записать поездку" : "Record a trip"
@@ -2377,6 +2503,38 @@ enum AppStrings {
     }
     static func settingsNotifications(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Уведомления" : "Notifications"
+    }
+
+    // MARK: - «Приватность» (nested screen — PrivacySettingsView)
+
+    /// The row in Настройки, and the title of the screen it opens.
+    static func privacyTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Приватность" : "Privacy"
+    }
+    /// The row's own subtitle: what is inside, in three words.
+    static func privacyRowSub(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "кто вас видит" : "who can see you"
+    }
+    /// Tighter than `settingsHintPublicProfile`, which stays as the «?» body:
+    /// a subtitle has one line to say what the switch does.
+    static func privacyPublicProfileSub(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Другие смогут открыть вашу страницу"
+            : "Other drivers can open your page"
+    }
+    /// Says what the switch ACTUALLY controls. The server field behind it is a
+    /// notification flag — turning it off does not stop anyone from tagging
+    /// you, and the copy must not imply that it does.
+    static func privacyCompanionSub(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Уведомлять, когда вас отмечают попутчиком"
+            : "Notify me when someone tags me as a companion"
+    }
+    /// Under the card. The one promise none of the three switches can break.
+    static func privacyFootnote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Приватную поездку не видит никто — ни на карте, ни в вашем профиле. Эти переключатели её не открывают."
+            : "A private trip is visible to nobody — not on the map, not on your page. None of these switches change that."
     }
     static func settingsInbox(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Входящие" : "Inbox"
@@ -2398,6 +2556,25 @@ enum AppStrings {
     }
     static func settingsSendLogs(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Отправить логи" : "Send debug logs"
+    }
+    /// Subtitle under «Отправить логи», which now sits in the card with the two
+    /// author links: the logs are the attachment to that letter, and the line
+    /// says what they are FOR rather than what they are.
+    static func settingsSendLogsSub(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "если что-то сломалось" : "when something breaks"
+    }
+    /// The nested screen that holds «Единицы» and «Средняя скорость» — named
+    /// for what it contains, not «Прочее»: a row called «Другое» teaches
+    /// nothing about whether the answer is behind it.
+    static func settingsAppPrefs(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Единицы и формат" : "Units & format"
+    }
+    /// Footnote under that screen's single card, in the same voice as the
+    /// picker footnotes it opens.
+    static func appPrefsFootnote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Как приложение считает и показывает цифры. На запись поездок это не влияет."
+            : "How the app counts and shows numbers. Trip recording is unaffected."
     }
     static func settingsProfileBackground(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Фон профиля" : "Profile background"
@@ -2615,6 +2792,28 @@ enum AppStrings {
         if isBlocked { return lang == .ru ? "Разблокировать" : "Unblock" }
         return lang == .ru ? "Заблокировать" : "Block"
     }
+    /// The confirmation the «…» row raises. Its button reuses
+    /// `blockProfileAction` above — one verb, named once.
+    static func blockProfileConfirmTitle(
+        _ lang: LanguageManager.Language, isBlocked: Bool
+    ) -> String {
+        if isBlocked {
+            return lang == .ru ? "Разблокировать пользователя?" : "Unblock this user?"
+        }
+        return lang == .ru ? "Заблокировать пользователя?" : "Block this user?"
+    }
+    static func blockProfileConfirmBody(
+        _ lang: LanguageManager.Language, isBlocked: Bool
+    ) -> String {
+        if isBlocked {
+            return lang == .ru
+                ? "Пользователь снова сможет видеть ваши публичные поездки и подписываться на вас."
+                : "This user will again be able to see your public trips and follow you."
+        }
+        return lang == .ru
+            ? "Пользователь не увидит ваш контент, а его поездки не появятся в вашей ленте. Вы оба автоматически отписываетесь друг от друга."
+            : "This user won't see your content, and their trips won't appear in your feed. Any follows between you will be removed."
+    }
     /// «…» menu entry on a public profile — puts the profile URL on the
     /// pasteboard. The share row above it reuses `settingsShareProfile`.
     static func copyProfileLink(_ lang: LanguageManager.Language) -> String {
@@ -2623,6 +2822,11 @@ enum AppStrings {
     /// Toast that answers the copy — the pasteboard itself says nothing.
     static func profileLinkCopied(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Ссылка скопирована" : "Link copied"
+    }
+    /// Long-press on the name in a profile. The name — not the @handle: the
+    /// handle is still device-local, so it is the name that Поиск can find.
+    static func profileNameCopied(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Имя скопировано" : "Name copied"
     }
     /// Comment-create throttle (10/min server-side).
     static func commentRateLimited(_ lang: LanguageManager.Language) -> String {
@@ -2868,5 +3072,533 @@ enum AppStrings {
     /// not a sweep of the pre-existing ones.
     static func withMeDriverNoName(_ lang: LanguageManager.Language) -> String {
         lang == .ru ? "Без имени" : "No name"
+    }
+
+    // MARK: - Achievements screens (6.1.0)
+
+    /// Navigation title of the full achievements screen. Same copy as the
+    /// profile section header — aliased rather than duplicated so the two
+    /// can never drift apart mid-navigation.
+    static func achievementsTitle(_ lang: LanguageManager.Language) -> String {
+        achievementsSection(lang)
+    }
+    /// The screen's own counter, which — unlike the profile pill — has room
+    /// for the verb. Built on `achievementsProgress` so «из»/«of» is written
+    /// once; `AppStrings.` qualifies `unlocked` past the Int parameter.
+    static func achievementsOpenedOf(
+        _ lang: LanguageManager.Language, unlocked: Int, total: Int
+    ) -> String {
+        let progress = achievementsProgress(lang, unlocked: unlocked, total: total)
+        return "\(progress) \(AppStrings.unlocked(lang))"
+    }
+    static func achievementsCollectHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Собери коллекцию дорожных достижений"
+            : "Collect the road achievement set"
+    }
+    static func achievementsFilterAll(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Все" : "All"
+    }
+    static func achievementsFilterUnlocked(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Открытые" : "Unlocked"
+    }
+    static func achievementsFilterSecret(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Секретные" : "Secret"
+    }
+    /// Stand-in title of a hidden badge. Typographic, so it is identical in
+    /// both languages; the parameter keeps the call site uniform with every
+    /// other title on the screen.
+    static func achievementsSecretTitle(_ lang: LanguageManager.Language) -> String {
+        "? ? ?"
+    }
+    static func achievementsSecretCaption(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Секретное" : "Secret"
+    }
+    /// Global rarity line. `percent` is the bare number already formatted for
+    /// the locale («0,4» in RU, "0.4" in EN) — the caller owns the separator,
+    /// this owns the sign and the wording around it.
+    static func achievementsEarnedBy(
+        _ lang: LanguageManager.Language, percent: String
+    ) -> String {
+        lang == .ru ? "Получили \(percent)%" : "Earned by \(percent)%"
+    }
+    /// Hero chips: «Легендарных 1». RU needs the genitive plural, which
+    /// `BadgeRarity.titleRu()` (feminine singular, «Легендарная») can't give,
+    /// so the declined forms live here with the rest of the copy. EN reuses
+    /// the enum's own titles, including "Special" for `.exclusive`.
+    static func achievementsRarityCount(
+        _ lang: LanguageManager.Language, rarity: BadgeRarity, count: Int
+    ) -> String {
+        guard lang == .ru else { return "\(rarity.title(lang)) \(count)" }
+        let word: String
+        switch rarity {
+        case .common:    word = "Обычных"
+        case .uncommon:  word = "Необычных"
+        case .rare:      word = "Редких"
+        case .epic:      word = "Эпических"
+        case .legendary: word = "Легендарных"
+        case .exclusive: word = "Особых"
+        }
+        return "\(word) \(count)"
+    }
+    /// The DETAIL screen is about one award — canon titles all four of its
+    /// states in the singular, against the plural of the list behind it.
+    static func achievementDetailTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Достижение" : "Achievement"
+    }
+    static func achievementPin(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Закрепить" : "Pin"
+    }
+    static func achievementUnpin(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Открепить" : "Unpin"
+    }
+    static func achievementPinConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Закрепить достижение?" : "Pin this achievement?"
+    }
+    /// Says who sees it, because pinning is the one achievement action with a
+    /// consequence outside the owner's own screen.
+    static func achievementPinConfirmBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Оно будет первым в вашем профиле — его увидят все, кто откроет вашу страницу."
+            : "It goes to the top of your profile, where anyone who opens your page will see it."
+    }
+    /// Progress toward a locked badge. Pure assembly — `current`, `target` and
+    /// `unit` all arrive formatted, so the separator and the unit are the
+    /// caller's; the language parameter keeps the call site uniform.
+    static func achievementLockedProgress(
+        _ lang: LanguageManager.Language, current: String, target: String, unit: String
+    ) -> String {
+        "\(current) / \(target) \(unit)"
+    }
+
+    // MARK: - «Мой профиль» hub (6.1.0, Figma 1687:119)
+
+    static func myProfileTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Мой профиль" : "My profile"
+    }
+    static func myProfileChangeAvatar(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Сменить аватар" : "Change avatar"
+    }
+    /// The grid has no Done button — say so, or the tap reads as unsaved.
+    static func myProfileAvatarHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Тап по эмодзи — аватар сохранится сразу"
+            : "Tap an emoji — saved right away"
+    }
+    /// The hub rows deliberately carry the same word as the editor each one
+    /// opens, so the four below forward to the editor titles instead of
+    /// keeping a second copy of the copy.
+    static func myProfileRowName(_ lang: LanguageManager.Language) -> String {
+        nameEditorTitle(lang)
+    }
+    static func myProfileRowUsername(_ lang: LanguageManager.Language) -> String {
+        usernameTitle(lang)
+    }
+    static func myProfileRowAbout(_ lang: LanguageManager.Language) -> String {
+        aboutTitle(lang)
+    }
+    static func myProfileRowLevel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Уровень" : "Level"
+    }
+    static func myProfileRowCountry(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Страна" : "Country"
+    }
+    /// Bottom row of the hub — opens the public profile as strangers see it.
+    static func myProfileRowPreview(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Как видят другие" : "How others see you"
+    }
+    /// Shown under the avatar grid ONLY to someone still wearing an emoji that
+    /// the curated set no longer offers. It is the one moment the fact matters:
+    /// the grid is open, and the next tap is irreversible.
+    static func myProfileAvatarRetired(
+        _ lang: LanguageManager.Language, emoji: String
+    ) -> String {
+        lang == .ru
+            ? "\(emoji) — из набора, которого больше нет. Сменишь — вернуть уже не получится."
+            : "\(emoji) is from a set that no longer exists. Change it and it is gone for good."
+    }
+    static func myProfileRowStats(_ lang: LanguageManager.Language) -> String {
+        stats(lang)
+    }
+    static func myProfileUsernameUnset(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Задать юзернейм" : "Set a username"
+    }
+    static func myProfileAboutUnset(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Рассказать о себе" : "Say something"
+    }
+    /// «47 поездок · 2 430 км». `km` arrives grouped for the locale — the
+    /// caller owns the separator, this owns the unit and the trip plural.
+    static func myProfileStatsSummary(
+        _ lang: LanguageManager.Language, trips: Int, km: String
+    ) -> String {
+        "\(tripsCount(lang, n: trips)) · \(km) \(lang == .ru ? "км" : "km")"
+    }
+
+    // MARK: - Username editor (6.1.0, Figma 1833:6714)
+
+    static func usernameTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Юзернейм" : "Username"
+    }
+    static func usernameHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Уникальное имя для профиля и ссылок. Латиница, цифры и «.», «_». 3–20 символов."
+            : "Your unique handle for links and mentions. Latin letters, digits, «.» and «_». 3–20 characters."
+    }
+    static func usernameFree(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Свободно" : "Available"
+    }
+    static func usernameTaken(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Уже занято" : "Already taken"
+    }
+    static func usernameTooShort(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Слишком коротко" : "Too short"
+    }
+    static func usernameInvalidChars(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Только латиница, цифры, «.» и «_»"
+            : "Latin letters, digits, «.» and «_» only"
+    }
+    /// Replaces `usernameHint` under the field when the name is taken, so it
+    /// has to repeat the ask — the rules line is gone at that moment.
+    static func usernameTakenHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Это имя уже использует другой водитель. Попробуйте другое."
+            : "Another driver already uses this handle. Try another."
+    }
+    /// The lookup failed, not the name — never blame the input here.
+    static func usernameCheckFailed(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Не удалось проверить — попробуйте ещё раз"
+            : "Couldn't check — try again"
+    }
+
+    // MARK: - About editor (6.1.0, Figma 1873:6873)
+
+    /// «О приложении» already owns `about(_:)` — this is the profile bio.
+    static func aboutTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "О себе" : "About"
+    }
+    static func aboutHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Видно всем в профиле. До 140 символов."
+            : "Visible to everyone on your profile. Up to 140 characters."
+    }
+
+    // MARK: - Country picker (6.1.0, Figma 675:119)
+
+    static func countryTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Страна" : "Country"
+    }
+    static func countryHint(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Необязательно — флаг виден в вашем профиле."
+            : "Optional — the flag shows on your profile."
+    }
+    static func countrySectionAll(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "СТРАНЫ" : "COUNTRIES"
+    }
+    static func countryNone(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Не указывать" : "Not set"
+    }
+    static func countryWorld(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Весь мир" : "Whole world"
+    }
+    static func countryNeutral(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Нейтральный флаг" : "Neutral flag"
+    }
+
+    // MARK: - Levels screen (6.1.0, Figma 888:3848)
+
+    /// The pushed screen behind the LVL pill. «Уровень водителя»
+    /// (`rankProgressTitle`) still names the sheet it grew out of; this is the
+    /// screen title, plural, because it now lists every rank.
+    static func levelsTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Уровни" : "Levels"
+    }
+    /// Rank position is 1-based over `DriverRank.allCases`, not the enum index.
+    static func levelsRankOf(_ lang: LanguageManager.Language, rank: Int, total: Int, level: Int) -> String {
+        lang == .ru
+            ? "Ранг \(rank) из \(total) · уровень \(level)"
+            : "Rank \(rank) of \(total) · level \(level)"
+    }
+    /// Both halves arrive pre-grouped («6 100»), so the digits are already
+    /// localised by the caller's formatter and the frame never varies by language.
+    static func levelsXpProgress(_ lang: LanguageManager.Language, current: String, target: String) -> String {
+        "\(current) / \(target) XP"
+    }
+    static func levelsToNextLevel(_ lang: LanguageManager.Language, level: Int) -> String {
+        lang == .ru ? "до \(level) уровня" : "to level \(level)"
+    }
+    /// `rank` is an already-localised `DriverRank.title(_:)`.
+    static func levelsNextRank(_ lang: LanguageManager.Language, rank: String, level: Int) -> String {
+        lang == .ru
+            ? "Дальше — \(rank) · ур. \(level)"
+            : "Next — \(rank) · lv. \(level)"
+    }
+    static func levelsHowToEarn(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Как получать опыт" : "How to earn XP"
+    }
+    static func levelsAllRanks(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Все ранги" : "All ranks"
+    }
+    /// Canon draws this uppercase inside the pill — apply `.textCase(.uppercase)`
+    /// at the call site rather than shouting in the catalogue.
+    static func levelsCurrentMarker(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "сейчас" : "now"
+    }
+    /// `to` is nil for the open-ended top rank («ур. 100+»).
+    static func levelsRankRange(_ lang: LanguageManager.Language, from: Int, to: Int?) -> String {
+        let prefix = lang == .ru ? "ур." : "lv."
+        guard let to else { return "\(prefix) \(from)+" }
+        return "\(prefix) \(from)–\(to)"
+    }
+    // The four XP rules. Badges carry only digits and symbols, so they read the
+    // same in both languages — the `lang` parameter keeps the call sites uniform.
+    /// Max level: there is no target left, so the bar's left-hand readout
+    /// switches from «6 100 / 6 600 XP» to a plain lifetime total.
+    static func levelsXpTotal(_ lang: LanguageManager.Language, xp: String) -> String {
+        lang == .ru ? "\(xp) XP всего" : "\(xp) XP total"
+    }
+    static func levelsMaxLevel(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "максимум" : "max level"
+    }
+    /// Replaces the «дальше — …» pill once there is no next rank to name.
+    static func levelsFinalRank(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Последний ранг — дальше только километры" : "Final rank — from here it is just kilometres"
+    }
+    static func levelsRuleKmBadge(_ lang: LanguageManager.Language) -> String {
+        "1 XP"
+    }
+    static func levelsRuleKm(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "за каждый километр" : "per kilometre"
+    }
+    static func levelsRuleFirstBadge(_ lang: LanguageManager.Language) -> String {
+        "+20"
+    }
+    static func levelsRuleFirst(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "за первую поездку дня" : "for the first trip of the day"
+    }
+    static func levelsRuleRegionBadge(_ lang: LanguageManager.Language) -> String {
+        "+50"
+    }
+    static func levelsRuleRegion(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "за новый регион — и ещё +50% к километрам" : "for a new region — plus 50% more on the distance XP"
+    }
+    /// Multiplication sign, not the letter x — canon sets it as ×2.
+    static func levelsRuleLongBadge(_ lang: LanguageManager.Language) -> String {
+        "×2"
+    }
+    static func levelsRuleLong(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "за поездки от 200 км" : "for trips over 200 km"
+    }
+
+    // MARK: - Settings sheet (6.1.0, Figma 580:232 / hints 1741:129)
+
+    /// Canon's «Добавление в попутчики» toggle — who may tag you on their trip.
+    ///
+    /// UNUSED since the settings restructure: the row it labelled was the same
+    /// server field as the one in `NotificationPreferencesView` (Входящие → ⚙),
+    /// and the «Уведомления» master directly above it already served the
+    /// impulse it answered. Kept as catalogue — the categories screen can take
+    /// this wording — not because anything calls it today.
+    static func settingsCompanionAdds(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Добавление в попутчики" : "Adding you as a companion"
+    }
+    /// Canon shortens the link subtitles; `bugsAndIdeas` / `telegramChannelSub`
+    /// keep their longer wording where they already ship (About screen).
+    static func settingsWriteToAuthorSub(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "отзывы и идеи" : "feedback and ideas"
+    }
+    static func settingsTelegramSub(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "дневник разработки" : "development diary"
+    }
+    /// Header of the «?» popover. Deliberately not a question mark — the button
+    /// already is one.
+    static func settingsHintTitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Что это" : "What this is"
+    }
+    /// Hint bodies explain the consequence of the switch, not its label — the
+    /// label is right above them and repeating it teaches nothing.
+    static func settingsHintPublicProfile(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Другие смогут открыть вашу страницу и увидеть поездки, которые вы сделали публичными. Приватные поездки не видит никто."
+            : "Other drivers can open your page and see the trips you made public. Nobody sees your private trips."
+    }
+    static func settingsHintNotifications(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Реакции и комментарии к вашим поездкам, приглашения в попутчики. Записи это не касается — она идёт без уведомлений."
+            : "Reactions and comments on your trips, plus companion invites. Recording is unaffected — it runs without notifications."
+    }
+    static func settingsHintCompanionAdds(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Кто угодно сможет отметить вас попутчиком в своей поездке. Вы всегда подтверждаете приглашение сами."
+            : "Anyone can tag you as a companion on their trip. You always confirm the invite yourself."
+    }
+
+    // MARK: - Unit / language / theme pickers (6.1.0, Figma 1685:119 / 176 / 233)
+
+    /// Footnotes under each picker list: what actually changes on pick.
+    static func unitsPickerFootnote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Дистанция и скорость, статистика и расстояния."
+            : "Distance and speed, stats and ranges."
+    }
+    static func languagePickerFootnote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Интерфейс перезагрузится на выбранном языке."
+            : "The interface reloads in the chosen language."
+    }
+    static func themePickerFootnote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Системная следует настройкам iPhone."
+            : "System follows your iPhone setting."
+    }
+
+    /// What VoiceOver reads over a placeholder standing in for content that
+    /// has not arrived — see `ProfileHistorySkeleton`.
+    static func loadingTrips(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Загружаем поездки" : "Loading trips"
+    }
+
+    static func avgSpeedPickerFootnote(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Общая делит расстояние на всё время поездки, вместе со стоянками. В движении считает только то время, когда вы ехали."
+            : "Overall divides the distance by the whole trip, stops included. Moving counts only the time you were driving."
+    }
+
+    // MARK: - Statistics screen (6.1.0, Figma 580:316 / 580:416 / 1821:119 / 1827:119)
+
+    static func statsYearAgoToday(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ГОД НАЗАД В ЭТОТ ДЕНЬ" : "A YEAR AGO TODAY"
+    }
+    /// The range segment reuses the app-wide period words — a second copy would
+    /// drift the moment one of them is retranslated.
+    static func statsRangeMonth(_ lang: LanguageManager.Language) -> String {
+        month(lang)
+    }
+    static func statsRangeYear(_ lang: LanguageManager.Language) -> String {
+        year(lang)
+    }
+    static func statsRangeAll(_ lang: LanguageManager.Language) -> String {
+        total(lang)
+    }
+    static func statsHoursOnRoad(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ч в пути" : "h on road"
+    }
+    /// «Больше, чем в прошлом июне — 840 км против 610». The caller owns the
+    /// declined period («июне», «году») and both already-grouped numbers; the
+    /// arrow glyph is the view's, not the copy's.
+    static func statsVsLastPeriod(
+        _ lang: LanguageManager.Language, more: Bool, period: String,
+        current: String, previous: String
+    ) -> String {
+        if lang == .ru {
+            return "\(more ? "Больше" : "Меньше"), чем в прошлом \(period) — \(current) км против \(previous)"
+        }
+        return "\(more ? "More" : "Less") than last \(period) — \(current) km vs \(previous)"
+    }
+    static func statsNewPlaces(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "НОВЫЕ МЕСТА" : "NEW PLACES"
+    }
+    /// «За июнь: +2 новые дороги · первый раз в Каргополе». The second half is
+    /// dropped whole — separator included — when there is no first-time place.
+    /// `firstPlace` arrives in the prepositional case from the caller.
+    static func statsNewPlacesLine(
+        _ lang: LanguageManager.Language, period: String, roads: Int, firstPlace: String?
+    ) -> String {
+        let head: String
+        if lang == .ru {
+            let m10 = roads % 10, m100 = roads % 100
+            let noun: String
+            if m10 == 1 && m100 != 11 { noun = "новая дорога" }
+            else if (2...4).contains(m10) && !(12...14).contains(m100) { noun = "новые дороги" }
+            else { noun = "новых дорог" }
+            head = "За \(period): +\(roads) \(noun)"
+        } else {
+            head = "In \(period): +\(roads) new \(roads == 1 ? "road" : "roads")"
+        }
+        guard let firstPlace else { return head }
+        return lang == .ru
+            ? "\(head) · первый раз в \(firstPlace)"
+            : "\(head) · first time in \(firstPlace)"
+    }
+    /// «Всего: 14 городов · 8 регионов» — lifetime counters under the period line.
+    static func statsTotalsLine(
+        _ lang: LanguageManager.Language, cities: Int, regions: Int
+    ) -> String {
+        let c = "\(groupedNumber(cities, lang)) \(citiesGenitive(lang, count: cities))"
+        let r = "\(groupedNumber(regions, lang)) \(regionsGenitive(lang, count: regions))"
+        return "\(lang == .ru ? "Всего" : "Total"): \(c) · \(r)"
+    }
+    static func statsHallOfFame(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "ДОСКА ПОЧЕТА" : "HALL OF FAME"
+    }
+    static func statsRecordLongest(_ lang: LanguageManager.Language) -> String {
+        recordLongest(lang)
+    }
+    static func statsRecordBestDay(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Лучший день по км" : "Best day by km"
+    }
+    static func statsRecordMostPhotos(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Больше всего фото" : "Most photos"
+    }
+    static func statsRecordChampionRoad(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Дорога-чемпион" : "Champion road"
+    }
+    static func statsRecordFarthest(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Самая дальняя точка" : "Farthest point"
+    }
+    /// Hall-of-Fame values carry their unit inside the number («14 фото»,
+    /// «47 раз»), so the row's right column stays a single styled string.
+    /// «Фото» is indeclinable in Russian — the digit does all the work.
+    static func photosCount(_ lang: LanguageManager.Language, n: Int) -> String {
+        lang == .ru ? "\(n) фото" : "\(n) \(n == 1 ? "photo" : "photos")"
+    }
+    static func timesCount(_ lang: LanguageManager.Language, n: Int) -> String {
+        guard lang == .ru else { return "\(n) \(n == 1 ? "time" : "times")" }
+        let m10 = n % 10, m100 = n % 100
+        if (2...4).contains(m10) && !(12...14).contains(m100) { return "\(n) раза" }
+        return "\(n) раз"
+    }
+    /// Footer plaque. `date` arrives already declined («марта 2024»).
+    static func statsWithTripTrackSince(
+        _ lang: LanguageManager.Language, date: String
+    ) -> String {
+        lang == .ru ? "С TripTrack с \(date)" : "With TripTrack since \(date)"
+    }
+    /// «2 430 км воспоминаний · фото и заметки в 29 поездках» — the second
+    /// clause needs the prepositional case, which no existing plural helper
+    /// produces (they are all genitive).
+    static func statsMemoriesLine(
+        _ lang: LanguageManager.Language, km: String, trips: Int
+    ) -> String {
+        if lang == .ru {
+            let m10 = trips % 10, m100 = trips % 100
+            let noun = (m10 == 1 && m100 != 11) ? "поездке" : "поездках"
+            return "\(km) км воспоминаний · фото и заметки в \(trips) \(noun)"
+        }
+        return "\(km) km of memories · photos and notes in \(trips) \(trips == 1 ? "trip" : "trips")"
+    }
+
+    // MARK: - Public-profile preview (6.1.0, Figma 580:438 / 1716:119)
+
+    /// Canon's second line (580:438) — what this screen IS, said every time.
+    /// The card's first line names the screen; this one names its limits, and
+    /// it is true of every account, not just the ones mid-sync.
+    static func previewBannerSubtitle(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Превью · подписки и реакции недоступны"
+            : "Preview · following and reactions are unavailable"
+    }
+    /// Names the fields the server does not have yet, so a preview that shows
+    /// them is not silently claiming other people can see them.
+    static func previewBannerBody(_ lang: LanguageManager.Language) -> String {
+        lang == .ru
+            ? "Юзернейм, флаг и «о себе» пока хранятся только на телефоне — другие их не увидят."
+            : "Your handle, flag and bio live on this device only — nobody else can see them yet."
+    }
+    /// Stands where the follow button would be on someone else's profile.
+    static func previewThisIsYou(_ lang: LanguageManager.Language) -> String {
+        lang == .ru ? "Это вы" : "This is you"
     }
 }

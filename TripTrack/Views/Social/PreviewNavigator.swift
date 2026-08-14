@@ -20,11 +20,20 @@ extension EnvironmentValues {
     }
 }
 
-/// Pure-SwiftUI stack navigator used by every flow that chains social
-/// destinations (profile → followers → profile → …). Replaces
-/// `NavigationStack` entirely so UIKit's `UINavigationBar` is never in the
-/// picture — the only way to kill the nav-bar flash that SwiftUI's
-/// NavigationStack exhibits at depth 4+.
+/// Pure-SwiftUI stack navigator for the two SHEET flows that chain social
+/// destinations (profile → followers → profile → …): the companions roster
+/// and the comments screen, both of which open a profile from inside a sheet
+/// via `fullScreenCover`. Replaces `NavigationStack` entirely so UIKit's
+/// `UINavigationBar` is never in the picture — the only way to kill the
+/// nav-bar flash that SwiftUI's NavigationStack exhibits at depth 4+.
+///
+/// NOT used by the «Я» tab any more. «Как видят другие» is an ordinary pushed
+/// screen on `ProfileView`'s own `NavigationStack` (canon 580:438), and the
+/// self-preview banner this navigator used to stack above it — an orange strip
+/// with a «Готово» pill — went with the cover: that chrome existed only
+/// because a cover has no nav bar. The «you are looking at your own profile»
+/// cue is a CARD inside `PublicProfileView`'s content now, which is where
+/// canon draws it and which every host of this navigator gets for free.
 ///
 /// Depth capped at `ProfilePreviewDest.previewDepthCap` via `cappedAppend`.
 /// At root (empty path) we do NOT inject `\.previewPop` so `NavBackButton`
@@ -38,7 +47,6 @@ struct PreviewNavigator: View {
     let onCloseSheet: () -> Void
 
     @Environment(\.colorScheme) private var scheme
-    @EnvironmentObject private var lang: LanguageManager
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -47,68 +55,13 @@ struct PreviewNavigator: View {
         ZStack {
             c.bg.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                // Mode indicator for self-preview only (the user tapped their
-                // own avatar/header in the Profile tab). Persistent banner
-                // explains "you're in preview" — the screen looks nearly
-                // identical to the Profile tab and without this users get
-                // disoriented (NN/g heuristic #6: same-looking modes need
-                // explicit recognition signals; LinkedIn's "View as" pattern).
-                if isSelfPreview {
-                    selfPreviewBanner(c)
-                }
-
-                // Only the topmost view is mounted — key fix for the
-                // nav-bar flash bug; rendering all layers makes SwiftUI
-                // animate intermediate states and exposes unstyled chrome.
-                currentView(rootBg: c)
-                    .id(path.count)
-            }
+            // Only the topmost view is mounted — key fix for the nav-bar
+            // flash bug; rendering all layers makes SwiftUI animate
+            // intermediate states and exposes unstyled chrome.
+            currentView(rootBg: c)
+                .id(path.count)
         }
         .environment(\.previewPop, popAction)
-    }
-
-    private var isSelfPreview: Bool {
-        guard let myId = TokenStore.shared.accountId else { return false }
-        if case .profile(let id, _) = rootDest, id == myId { return true }
-        return false
-    }
-
-    private func selfPreviewBanner(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
-        return HStack(spacing: 10) {
-            Image(systemName: "eye.fill")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
-            Text(isRu
-                 ? "Предпросмотр — так Ваш профиль видят другие"
-                 : "Preview — how others see your profile")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
-            Spacer(minLength: 8)
-            Button {
-                Haptics.tap()
-                onCloseSheet()
-            } label: {
-                Text(isRu ? "Готово" : "Done")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.white.opacity(0.22), in: Capsule())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity)
-        // Extend the accent fill up under the status bar so the banner
-        // visually anchors to the top edge — `.ignoresSafeArea(edges: .top)`
-        // applied to the background only (not the content) keeps text
-        // padding correct while the colour bleeds upward.
-        .background(AppTheme.accent.ignoresSafeArea(edges: .top))
     }
 
     @ViewBuilder

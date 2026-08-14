@@ -210,7 +210,12 @@ struct FeedView: View {
             .navigationDestination(for: ProfilePreviewDest.self) { dest in
                 switch dest {
                 case .profile(let id, let author):
-                    PublicProfileView(accountId: id, preloaded: author, pushPath: $authorPath)
+                    // `opensTrips` — this stack renders both trip destinations
+                    // below, so the profile's own trip cards are tappable.
+                    PublicProfileView(
+                        accountId: id, preloaded: author,
+                        pushPath: $authorPath, opensTrips: true
+                    )
                 case .followList(let id, let mode):
                     FollowListView(accountId: id, mode: mode, pushPath: $authorPath)
                 case .trip(let id, let focus):
@@ -311,6 +316,14 @@ struct FeedView: View {
                 authorPath = [.trip(tripId)]
             }
         }
+        // A shared profile link (`trip-track.app/u/<id>`) resolved to this tab.
+        // Replacing the path rather than pushing onto it: the link is an
+        // entry point, so it lands at the top of a one-deep stack no matter
+        // what the user was looking at before.
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToProfile)) { notif in
+            guard let id = notif.object as? UUID else { return }
+            authorPath = [.profile(id, nil)]
+        }
         // Privacy flipped on a trip the user owns. If it just went private, drop the
         // card from the feed immediately with a fade — waiting 2–3s for the sync push
         // to reach the server and come back through /social/feed felt laggy. Either way
@@ -345,7 +358,6 @@ struct FeedView: View {
                 .environmentObject(lang)
                 .environment(\.navBarInSheet, true)
                 .environmentObject(themeManager)
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         // Reset the resume flag whenever a NEW sign-in prompt presents. The
         // login Task outlives the sheet (dismissal doesn't cancel it), so a
@@ -379,41 +391,39 @@ struct FeedView: View {
             SignInPromptSheet(action: action, onAuthenticated: { resumeAfterAuth = true })
                 .environmentObject(lang)
                 .environmentObject(auth)
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
-        // Canon uses centred ALERTS for both irreversible-ish actions, with a
-        // «Нет» / «Да, …» pair rather than a generic Отмена/Удалить — the
-        // second word tells you what «Да» will do.
-        .alert(
-            AppStrings.hideFromFeedAlertTitle(lang.language),
-            isPresented: Binding(
-                get: { tripPendingPrivate != nil },
-                set: { if !$0 { tripPendingPrivate = nil } }
-            )
-        ) {
-            Button(AppStrings.no(lang.language), role: .cancel) { tripPendingPrivate = nil }
-            Button(AppStrings.hideFromFeedAlertConfirm(lang.language), role: .destructive) {
-                if let trip = tripPendingPrivate { makeTripPrivate(trip) }
-                tripPendingPrivate = nil
-            }
-        } message: {
-            Text(AppStrings.hideFromFeedAlertBody(lang.language))
-        }
-        .alert(
-            AppStrings.deleteTripAlertTitle(lang.language),
-            isPresented: Binding(
-                get: { tripPendingDelete != nil },
-                set: { if !$0 { tripPendingDelete = nil } }
-            )
-        ) {
-            Button(AppStrings.no(lang.language), role: .cancel) { tripPendingDelete = nil }
-            Button(AppStrings.deleteTripAlertConfirm(lang.language), role: .destructive) {
-                if let trip = tripPendingDelete { deleteOwnTrip(trip) }
-                tripPendingDelete = nil
-            }
-        } message: {
-            Text(AppStrings.deleteTripAlertBody(lang.language))
-        }
+        // Canon centres both irreversible-ish actions on our own dialog (no
+        // system modal ships here — CLAUDE.md «Dialogs»), with a «Нет» /
+        // «Да, …» pair rather than a generic Отмена/Удалить — the second word
+        // tells you what «Да» will do.
+        .appConfirm(
+            item: $tripPendingPrivate,
+            title: { _ in AppStrings.hideFromFeedAlertTitle(lang.language) },
+            message: { _ in AppStrings.hideFromFeedAlertBody(lang.language) },
+            actions: { trip in
+                [
+                    AppDialogAction(
+                        AppStrings.hideFromFeedAlertConfirm(lang.language),
+                        kind: .destructive
+                    ) { makeTripPrivate(trip) }
+                ]
+            },
+            cancelTitle: AppStrings.no(lang.language)
+        )
+        .appConfirm(
+            item: $tripPendingDelete,
+            title: { _ in AppStrings.deleteTripAlertTitle(lang.language) },
+            message: { _ in AppStrings.deleteTripAlertBody(lang.language) },
+            actions: { trip in
+                [
+                    AppDialogAction(
+                        AppStrings.deleteTripAlertConfirm(lang.language),
+                        kind: .destructive
+                    ) { deleteOwnTrip(trip) }
+                ]
+            },
+            cancelTitle: AppStrings.no(lang.language)
+        )
         .sheet(isPresented: Binding(
             get: { tripPendingReport != nil },
             set: { if !$0 { tripPendingReport = nil } }
@@ -421,13 +431,11 @@ struct FeedView: View {
             if let trip = tripPendingReport {
                 ReportSheet(target: .trip(trip.id))
                     .environmentObject(lang)
-                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
         .sheet(item: $linkShareData) { share in
             SharedTripLinkSheet(trip: share.trip, shareUrl: share.url)
                 .environmentObject(lang)
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(item: $reactorsPeek) { peek in
             ReactionsListSheet(
@@ -446,14 +454,12 @@ struct FeedView: View {
             .environmentObject(lang)
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-            .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showDiscover) {
             DiscoverView()
                 .presentationDetents([.large])
                 .environment(\.navBarInSheet, true)
                 .presentationDragIndicator(.visible)
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: Binding(
             get: { shareSheetData != nil },
@@ -464,14 +470,12 @@ struct FeedView: View {
                 StoryShareSheet(data: share.data, shareUrl: share.url)
                     .presentationDragIndicator(.visible)
                     .environmentObject(lang)
-                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
         .sheet(isPresented: $showGarage) {
             GarageView()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
 
         // Undo toast sits above the floating tab bar (canon).

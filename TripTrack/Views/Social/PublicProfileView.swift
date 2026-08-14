@@ -11,19 +11,30 @@ private let countsLog = Logger(subsystem: "com.triptrack", category: "profile.co
 struct PublicProfileView: View {
     let accountId: UUID
     var preloaded: SocialAuthor?
-    /// Provided only by the "preview as others see you" sheet — renders a
-    /// close button in the CustomNavBar trailing that dismisses the whole
-    /// sheet (distinct from back-button which pops the nav stack).
+    /// Retained for the sheet-root call sites (`PreviewNavigator`), which pass
+    /// it unconditionally. The bar no longer draws a close «×» from it: canon
+    /// (580:438, 1630:150) gives this screen a back circle and «⋯», and
+    /// `NavBackButton` at the root of a `PreviewNavigator` already falls
+    /// through to `\.dismiss`, i.e. closes the presenting sheet.
     var onClose: (() -> Void)?
     /// When set, all sub-navigation (follow lists, reactor profiles) is
     /// routed through a shared `NavigationPath` with a depth cap. Without
     /// this binding we fall back to local `@State`-driven
     /// `.navigationDestination(isPresented:)` for main-feed usage.
     var pushPath: Binding<[ProfilePreviewDest]>?
+    /// Whether this host renders `.trip` / `.socialTrip` destinations at all.
+    /// Feed and the Я stack do; the sheet navigator and Discover don't, and a
+    /// trip card that opens nothing there is worse than one that doesn't
+    /// invite the tap — so they leave this off and the cards stay inert.
+    var opensTrips: Bool = false
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @ObservedObject private var auth = AuthService.shared
+    /// Only ever read in the own-profile preview: username, country and bio
+    /// live on the device (the profile DTO carries none of the first two), so
+    /// they can be shown for the viewer and for nobody else.
+    @ObservedObject private var settings = SettingsManager.shared
 
     @State private var profile: SocialProfile?
     @State private var isLoading = false
@@ -36,7 +47,9 @@ struct PublicProfileView: View {
     @State private var selectedBadge: Badge?
     /// Presentation-only grid ↔ list toggle for the trips section (Figma
     /// 117:931 draws the 2-col mini-poster grid as default).
-    @State private var tripsAsGrid = true
+    /// Canon 580:438 opens on the LIST. The grid is the second choice,
+    /// not the landing one.
+    @State private var tripsAsGrid = false
     /// Gate initial fetch so `.task` — which re-fires on view re-appearance
     /// (e.g. after popping a pushed FollowListView) — doesn't re-run the
     /// sync+fetch cycle every time. Pull-to-refresh remains the explicit
@@ -60,6 +73,27 @@ struct PublicProfileView: View {
     /// Confirms «Скопировать ссылку» — the pasteboard is silent otherwise and
     /// the popover has already closed by the time the copy happens.
     @State private var toastItem: ToastItem?
+    /// The profile's trips as feed cards. Held apart from `profile` because
+    /// reacting rewrites ONE card and `SocialProfile` is a `let`-only DTO —
+    /// rebuilding the whole profile to bump a tally would redraw the hero,
+    /// the stats and the achievements with it.
+    @State private var tripCards: [SocialFeedTrip] = []
+    /// Long-pressed a card (or its «Реакция» pill) — the emoji palette.
+    @State private var reactionPickerTrip: SocialFeedTrip?
+    /// A trip being shared from its card's «…».
+    @State private var tripLinkShare: TripLinkShare?
+    /// Someone else's trip being reported from its card's «…». Same entry the
+    /// feed's cards have — a trip is reportable wherever it is shown, or the
+    /// answer to «where do I report this?» becomes «find it in the feed».
+    @State private var tripPendingReport: SocialFeedTrip?
+
+    /// `sheet(item:)` payload — the trip plus the link we managed to mint for
+    /// it, which may be nil when `/social/share` was unreachable.
+    private struct TripLinkShare: Identifiable {
+        let id = UUID()
+        let trip: SocialFeedTrip
+        let url: String?
+    }
 
     /// True when this view is rendering the signed-in user's own profile
     /// (e.g. "preview as others see you"). Hides Follow/Block/Report actions.
@@ -70,6 +104,25 @@ struct PublicProfileView: View {
     /// Route follow-list navigation through the shared path when one is
     /// wired in (sheet context) so deep flows stay capped; fall back to
     /// local state push for main-feed usage.
+    /// Whether a trip on this page can be opened. Needs a path to push onto
+    /// AND a host that renders trip destinations on it.
+    ///
+    /// A stranger's trip used to be un-openable on any host: the profile
+    /// payload was a six-field summary with nothing to render a detail screen
+    /// from. It is a full feed item now, so `.socialTrip` carries everything
+    /// `TripDetailView` needs — exactly as a tap in the Лента does.
+    private var canOpenTrips: Bool { opensTrips && pushPath != nil }
+
+    private func openTrip(_ trip: SocialFeedTrip, focus: TripFocus = .top) {
+        guard canOpenTrips else { return }
+        Haptics.tap()
+        // Own trips open the local copy (edit pencil, privacy toggle, the
+        // owner's «…»); everyone else's open from the payload we already hold.
+        pushPath?.wrappedValue.cappedAppend(
+            isOwnTrip(trip) ? .trip(trip.id, focus: focus) : .socialTrip(trip, focus: focus)
+        )
+    }
+
     private func openFollowList(_ mode: FollowListMode) {
         if let pushPath {
             pushPath.wrappedValue.cappedAppend(.followList(accountId, mode))
@@ -98,10 +151,14 @@ struct PublicProfileView: View {
         URL(string: "https://trip-track.app/u/\(accountId.uuidString)")
     }
 
-    private func shareProfile() {
+    /// «Поделиться профилем». Both failures this had — the sheet not opening
+    /// at all (raised while the «…» popover was still dismissing) and its
+    /// «Скопировать» copying nothing — live in `ShareLinkPresenter` now, which
+    /// every link share in the app goes through.
+    @MainActor
+    private func shareProfile() async {
         guard let url = profileShareURL else { return }
-        let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        topPresentedViewController()?.present(av, animated: true)
+        await ShareLinkPresenter.present(url: url, title: resolvedDisplayName)
     }
 
     private func copyProfileLink() {
@@ -109,17 +166,6 @@ struct PublicProfileView: View {
         UIPasteboard.general.string = url.absoluteString
         Haptics.success()
         toastItem = ToastItem(type: .success, message: AppStrings.profileLinkCopied(lang.language))
-    }
-
-    /// The profile is often on screen inside a sheet (Discover, the inbox),
-    /// and asking the root controller to present over one drops the activity
-    /// sheet on the floor. Same walk as `SharedTripLinkSheet`.
-    private func topPresentedViewController() -> UIViewController? {
-        var vc = UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
-            .first
-        while let presented = vc?.presentedViewController { vc = presented }
-        return vc
     }
 
     /// «…» rows: share and copy-link first, then moderation. Sharing is open
@@ -135,7 +181,7 @@ struct PublicProfileView: View {
                 systemImage: "square.and.arrow.up",
                 accessibilityId: "profile_share"
             ) {
-                runProfileAction { shareProfile() }
+                runProfileAction { Task { await shareProfile() } }
             },
             .init(
                 title: AppStrings.copyProfileLink(lang.language),
@@ -145,7 +191,10 @@ struct PublicProfileView: View {
                 runProfileAction { copyProfileLink() }
             },
         ]
-        guard auth.isSignedIn else { return items }
+        // Canon 1630:150 draws the own-profile «⋯» with share and copy-link and
+        // nothing else — reporting or blocking yourself is not an action, and
+        // both endpoints take a target that can't be the caller.
+        guard auth.isSignedIn, !isOwnProfile else { return items }
         items.append(.init(
             title: AppStrings.reportProfileAction(lang.language),
             systemImage: "exclamationmark.bubble"
@@ -174,77 +223,137 @@ struct PublicProfileView: View {
         return isRu ? "Водитель" : "Driver"
     }
 
+    /// Canon titles the bar «@alexandr» (580:444). The handle is device-local
+    /// (`SettingsManager.profileUsername`, no account field behind it yet) and
+    /// the profile DTO carries none, so only the viewer's own preview can show
+    /// one — everyone else's bar keeps the display name it had.
+    private var navTitle: String {
+        guard isOwnProfile else { return resolvedDisplayName }
+        let handle = settings.profileUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        return handle.isEmpty ? resolvedDisplayName : "@\(handle)"
+    }
+
+    /// «О себе». The server field only exists on 6.1+, so in the viewer's own
+    /// preview fall back to what they typed locally — `refresh()` pushes it up
+    /// on this very screen, and a blank line under your own name reads as the
+    /// bio having been lost rather than as a server that hasn't shipped yet.
+    private var resolvedBio: String? {
+        let server = profile?.bio?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !server.isEmpty { return server }
+        guard isOwnProfile else { return nil }
+        let local = settings.profileBio.trimmingCharacters(in: .whitespacesAndNewlines)
+        return local.isEmpty ? nil : local
+    }
+
+    /// True when this preview is showing something the server does not have,
+    /// i.e. something no other person can actually see.
+    ///
+    /// The handle, the flag and the bio are stored on this device only —
+    /// `ProfileUpdateRequest` carries none of them yet. Drawing them is right:
+    /// they are what the page WILL look like, and blanking them reads as data
+    /// loss. Drawing them silently, on a screen whose title is «так ваш профиль
+    /// видят другие», is not.
+    private var hasDeviceOnlyIdentity: Bool {
+        guard isOwnProfile else { return false }
+        let localHandle = !settings.profileUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let localCountry = !settings.profileCountry.isEmpty
+        let serverBio = profile?.bio?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let localBio = serverBio.isEmpty
+            && !settings.profileBio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return localHandle || localCountry || localBio
+    }
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let isRu = lang.language == .ru
 
         ScrollView {
-            // Skeleton placeholder until the first `loadProfile()` succeeds.
-            // Using `ZStack` with opacity-driven transition keeps the scroll
-            // offset stable between skeleton and real content — swapping
-            // branches via `if/else` would reset the ScrollView state.
-            ZStack {
-                if profile != nil {
-                    VStack(spacing: 16) {
-                        heroSection(c, isRu: isRu)
-                            .padding(.top, 16)
-
-                        statsGrid(c, isRu: isRu)
-                            .padding(.horizontal, 16)
-
-                        activeVehicleCard(c, isRu: isRu)
-                            .padding(.horizontal, 16)
-
-                        badgesSection(c, isRu: isRu)
-                            .padding(.horizontal, 16)
-
-                        recentTrips(c, isRu: isRu)
-                            .padding(.horizontal, 16)
-                    }
-                    .transition(.opacity)
-                } else {
-                    SkeletonProfileView()
-                        .transition(.opacity)
+            VStack(spacing: 0) {
+                // Canon 580:438 puts the «так ваш профиль видят другие» cue
+                // HERE — a card at the top of the content, under an ordinary
+                // nav bar. It used to be gated on `hasDeviceOnlyIdentity`
+                // because a persistent orange strip one level up
+                // (`PreviewNavigator.selfPreviewBanner`) already carried the
+                // mode, and two banners saying the same thing stacked. That
+                // strip is gone with the fullScreenCover that hosted it, so
+                // this card is now the ONLY thing distinguishing this page
+                // from a stranger's — it has to be up whenever the profile
+                // on screen is the viewer's own. The device-only caveat
+                // stays as its second line, still on its own gate.
+                if isOwnProfile {
+                    previewBanner(c)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
                 }
+
+                // Skeleton placeholder until the first `loadProfile()`
+                // succeeds. Using `ZStack` with opacity-driven transition
+                // keeps the scroll offset stable between skeleton and real
+                // content — swapping branches via `if/else` would reset the
+                // ScrollView state.
+                ZStack {
+                    if profile != nil {
+                        VStack(spacing: 16) {
+                            heroSection(c)
+                                .padding(.top, 6)
+
+                            statsGrid(c, isRu: isRu)
+                                .padding(.horizontal, 16)
+
+                            achievementsSection(c)
+                                .padding(.horizontal, 16)
+
+                            recentTrips(c, isRu: isRu)
+                                .padding(.horizontal, 16)
+                        }
+                        .transition(.opacity)
+                    } else {
+                        SkeletonProfileView()
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.25), value: profile != nil)
             }
-            .animation(.easeInOut(duration: 0.25), value: profile != nil)
             // Bottom inset clears the floating CustomTabBar so the last trip
             // card is fully visible. Matches FeedView's 120pt inset.
             .padding(.bottom, 120)
+            // Pins the content to the scroll view's width. A vertical
+            // ScrollView does NOT clamp its content horizontally: one greedy
+            // child (the trips grid, sizing its columns off a long title's
+            // ideal width) widened EVERY sibling, and the stats card silently
+            // grew — which is why its captions changed size when the layout
+            // toggle flipped. Nothing above needs to be wider than the screen.
+            .containerRelativeFrame(.horizontal)
         }
         .background(c.bg)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top, spacing: 0) {
-            CustomNavBar(title: resolvedDisplayName) {
-                if let onClose {
-                    // Preview-sheet mode: X dismisses the whole sheet
-                    // regardless of nav stack depth.
-                    Button {
-                        Haptics.tap()
-                        onClose()
-                    } label: {
-                        NavCircleIcon(systemImage: "xmark")
-                    }
-                } else if !isOwnProfile {
-                    // Single «…» entry point (Figma 117:2367) — sharing on
-                    // top, moderation below. The block hand used to sit as
-                    // its own icon right next to «…»: two tiny targets 2pt
-                    // apart in the same corner, one of them a one-tap path
-                    // into a destructive confirm.
-                    //
-                    // Anchored popover, NOT a `Menu` — see `ActionPopoverList`
-                    // for the plate artifact a Menu leaves behind on close.
-                    Button {
-                        Haptics.tap()
-                        showProfileActions = true
-                    } label: {
-                        NavCircleIcon(systemImage: "ellipsis")
-                    }
-                    .accessibilityLabel(AppStrings.moreActions(lang.language))
-                    .accessibilityIdentifier("profile_more")
-                    .popover(isPresented: $showProfileActions, arrowEdge: .top) {
-                        ActionPopoverList(items: profileActionItems())
-                    }
+            CustomNavBar(title: navTitle) {
+                // Single «…» entry point (Figma 117:2367) — sharing on top,
+                // moderation below. The block hand used to sit as its own
+                // icon right next to «…»: two tiny targets 2pt apart in the
+                // same corner, one of them a one-tap path into a destructive
+                // confirm.
+                //
+                // Drawn on every profile now, own preview included (canon
+                // 580:445 / 1630:150). It used to be swapped for a close «×»
+                // at a sheet root, which is why a profile opened from the
+                // companions roster or the comments sheet had no way to share
+                // — or to report — at all.
+                //
+                // Anchored popover, NOT a `Menu` — see `ActionPopoverList`
+                // for the plate artifact a Menu leaves behind on close.
+                Button {
+                    Haptics.tap()
+                    showProfileActions = true
+                } label: {
+                    NavCircleIcon(systemImage: "ellipsis")
+                }
+                .accessibilityLabel(AppStrings.moreActions(lang.language))
+                .accessibilityIdentifier("profile_more")
+                .popover(isPresented: $showProfileActions, arrowEdge: .top) {
+                    ActionPopoverList(items: profileActionItems())
                 }
             }
         }
@@ -268,9 +377,23 @@ struct PublicProfileView: View {
             // load manually so sign-out/sign-in flows refresh the view
             // instead of leaving it stuck on the previous account's data.
             profile = nil
+            tripCards = []
             Task { await refresh() }
         }
         .refreshable { await refresh() }
+        // Commented on a trip from the detail screen pushed off THIS page —
+        // the card behind it has to come back with the new count, exactly as
+        // the feed's cached cards do. Without it you close the discussion and
+        // the card still says what it said before you wrote.
+        .onReceive(NotificationCenter.default.publisher(for: .tripCommentCountChanged)) { note in
+            guard
+                let tripId = note.userInfo?["tripId"] as? UUID,
+                let delta = note.userInfo?["delta"] as? Int,
+                let idx = tripCards.firstIndex(where: { $0.id == tripId })
+            else { return }
+            let updated = max(0, tripCards[idx].commentCount + delta)
+            tripCards[idx] = tripCards[idx].with(commentCount: updated)
+        }
         .sheet(item: $signInPrompt, onDismiss: {
             guard resumeFollowAfterAuth else { return }
             resumeFollowAfterAuth = false
@@ -290,7 +413,31 @@ struct PublicProfileView: View {
             ReportSheet(target: .user(accountId))
                 .environmentObject(lang)
         }
+        .sheet(item: $tripLinkShare) { share in
+            SharedTripLinkSheet(trip: share.trip, shareUrl: share.url)
+                .environmentObject(lang)
+        }
+        .sheet(item: $tripPendingReport) { trip in
+            ReportSheet(target: .trip(trip.id))
+                .environmentObject(lang)
+        }
         .toast(item: $toastItem)
+        .overlay {
+            // Emoji palette for a long-pressed card. An overlay, not a sheet:
+            // it is the same picker the Лента raises over its own cards.
+            if let picked = reactionPickerTrip {
+                ReactionPickerOverlay(
+                    currentReaction: picked.myReaction,
+                    onPick: { emoji in
+                        Task { await toggleReaction(picked.id, emoji: emoji) }
+                        reactionPickerTrip = nil
+                    },
+                    onDismiss: { reactionPickerTrip = nil }
+                )
+                .transition(.opacity)
+                .zIndex(100)
+            }
+        }
         .overlay {
             if let badge = selectedBadge {
                 BadgeDetailOverlay(
@@ -310,192 +457,206 @@ struct PublicProfileView: View {
             followListMode: $followListMode,
             enabled: pushPath == nil
         ))
-        .alert(
-            isBlocked
-                ? (lang.language == .ru ? "Разблокировать пользователя?" : "Unblock this user?")
-                : (lang.language == .ru ? "Заблокировать пользователя?" : "Block this user?"),
-            isPresented: $showBlockConfirm
-        ) {
-            Button(lang.language == .ru ? "Отмена" : "Cancel", role: .cancel) {}
-            Button(
-                isBlocked
-                    ? (lang.language == .ru ? "Разблокировать" : "Unblock")
-                    : (lang.language == .ru ? "Заблокировать" : "Block"),
-                role: .destructive
-            ) {
-                guard auth.isSignedIn else {
-                    signInPrompt = .generic
-                    return
+        .appConfirm(
+            isPresented: $showBlockConfirm,
+            title: AppStrings.blockProfileConfirmTitle(lang.language, isBlocked: isBlocked),
+            message: AppStrings.blockProfileConfirmBody(lang.language, isBlocked: isBlocked),
+            actions: [
+                // Blocking is destructive; UNblocking is the restorative half of
+                // the same button, and painting «Разблокировать» red asks the
+                // user to confirm a kindness in the colour of a deletion.
+                AppDialogAction(AppStrings.blockProfileAction(lang.language, isBlocked: isBlocked),
+                                kind: isBlocked ? .primary : .destructive) {
+                    guard auth.isSignedIn else {
+                        signInPrompt = .generic
+                        return
+                    }
+                    Task { await toggleBlock() }
                 }
-                Task { await toggleBlock() }
+            ],
+            cancelTitle: AppStrings.cancel(lang.language)
+        )
+    }
+
+    // MARK: - Preview banner
+
+    /// «Так ваш профиль видят другие» (canon 580:544). Only the viewer's own
+    /// profile draws it, and it has to stay the first thing on the screen:
+    /// everything below is a faithful copy of a stranger's profile, so without
+    /// this card there is nothing at all to tell the two apart.
+    ///
+    /// The title is the same wording the «Я» hub puts on the row that opens
+    /// this screen — one flow, one phrase. Canon's second line says what the
+    /// screen cannot do, and it says it always: the limits of a preview are
+    /// not a per-account fact. The third line is, so it only shows up on an
+    /// account that still holds fields on the device.
+    private func previewBanner(_ c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 10) {
+                // SF Symbol rather than canon's 👁 emoji — the emoji keeps its
+                // own colours in dark mode, where this card is a dark surface.
+                Image(systemName: "eye.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(c.textSecondary)
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(AppStrings.myProfileRowPreview(lang.language))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(c.text)
+                    Text(AppStrings.previewBannerSubtitle(lang.language))
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textSecondary)
+                }
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
             }
-        } message: {
-            Text(isBlocked
-                 ? (lang.language == .ru
-                    ? "Пользователь снова сможет видеть ваши публичные поездки и подписываться на вас."
-                    : "This user will again be able to see your public trips and follow you.")
-                 : (lang.language == .ru
-                    ? "Пользователь не увидит ваш контент, а его поездки не появятся в вашей ленте. Вы оба автоматически отписываетесь друг от друга."
-                    : "This user won't see your content, and their trips won't appear in your feed. Any follows between you will be removed."))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .surfaceCard(cornerRadius: 12)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("profile_preview_banner")
+
+            // Third line, and OUTSIDE the card: the plaque is two lines by
+            // design, and this sentence is only true for an account that still
+            // holds fields the server has never seen. Inside the card it grew
+            // the plaque by half and made a permanent notice out of a
+            // conditional one.
+            if hasDeviceOnlyIdentity {
+                Text(AppStrings.previewBannerBody(lang.language))
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .accessibilityIdentifier("profile_preview_device_only")
+            }
         }
     }
 
     // MARK: - Hero
 
-    private func heroSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        let bg = ProfileBackground.from(profile?.profileBackground)
+    /// Avatar, name, level, flag, bio, action — centred straight on the page.
+    /// Canon (580:451, 580:579, 1635:119) has no header card and no cover
+    /// banner behind the avatar on either the preview or a stranger's profile;
+    /// the first surface on the screen is the stats card.
+    private func heroSection(_ c: AppTheme.Colors) -> some View {
         let avatarSize: CGFloat = 84
-        let bannerHeight: CGFloat = 140
-        let avatarOverlap = avatarSize / 2
         let emoji = profile?.avatarEmoji ?? preloaded?.avatarEmoji ?? "🚗"
 
         return VStack(spacing: 0) {
-            ZStack {
-                if bg == .none {
-                    c.cardAlt
-                } else {
-                    bg.view()
-                }
-            }
-            .frame(height: bannerHeight)
-            .frame(maxWidth: .infinity)
-            .clipShape(UnevenRoundedRectangle(
-                topLeadingRadius: 18, bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0, topTrailingRadius: 18
-            ))
-
-            VStack(spacing: 10) {
-                VStack(spacing: 6) {
-                    Text(resolvedDisplayName)
-                        .font(.system(size: 21, weight: .heavy))
-                        .tracking(-0.21)
-                        .foregroundStyle(c.text)
-                        .multilineTextAlignment(.center)
-
-                    if let lvl = profile?.profileLevel ?? preloaded?.profileLevel {
-                        // LvlPill (Figma 117:931) — star + rank-colored pixel
-                        // LVL + rank title on a warm pill. `c.cardAlt` stands
-                        // in for Figma #F7EFDE (nearest adaptive token).
-                        let rank = DriverRank.from(level: lvl)
-                        HStack(spacing: 6) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 11))
-                                .foregroundStyle(rank.color)
-                            Text("LVL \(lvl)")
-                                .font(.custom("PressStart2P-Regular", size: 9))
-                                .tracking(1)
-                                .foregroundStyle(rank.color)
-                            Text("·")
-                                .foregroundStyle(c.textTertiary)
-                            Text(rank.title(lang.language))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(c.textSecondary)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(c.cardAlt, in: Capsule())
-                    }
-
-                    // Last-trip pill — shows a relative "N days ago"
-                    // derived from the most recent PUBLIC trip the
-                    // server returned. Hidden when the account is in
-                    // privacy mode (already shows "Hidden roads" lower
-                    // down) or has no public trips at all.
-                    //
-                    // The streak sits next to it rather than in the stats
-                    // card: canon (117:975) has no «дней подряд» cell, and a
-                    // flame among the road totals read as a fourth number of
-                    // the same kind. Beside the last-drive line it stays what
-                    // it is — a note about habit, not a total.
-                    let lastDrive = isPrivacyMode ? nil : profile?.recentTrips.first?.startDate
-                    let streak = isPrivacyMode ? 0 : (profile?.currentStreak ?? 0)
-                    if lastDrive != nil || streak > 0 {
-                        HStack(spacing: 6) {
-                            if let lastDrive {
-                                heroPill(
-                                    icon: "road.lanes",
-                                    text: lastActivityCopy(lastDrive, isRu: isRu),
-                                    c: c
-                                )
-                            }
-                            if streak > 0 {
-                                heroPill(
-                                    icon: "flame.fill",
-                                    text: AppStrings.streakDaysInARow(lang.language, n: streak),
-                                    c: c,
-                                    accent: AppTheme.accent
-                                )
-                            }
-                        }
-                        .padding(.top, 2)
-                    }
-
-                    // «О себе» (Figma 117:966). Server 6.1+ only: the field
-                    // decodes as nil against today's production, and a user
-                    // who cleared their bio sends back a blank string —
-                    // both draw nothing rather than an empty gap under the
-                    // pills. Width-capped so a long line wraps into a
-                    // centred block instead of running the full card width.
-                    if let bio = profile?.bio?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       !bio.isEmpty {
-                        Text(bio)
-                            .font(.system(size: 13))
-                            .foregroundStyle(c.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(3)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: 290)
-                            .padding(.top, 4)
-                            .accessibilityIdentifier("profile_bio")
-                    }
-                }
-
-                // Guests get the CTA too: the backend omits `isFollowing`
-                // for unauthenticated requesters (it decodes nil), so gating
-                // on non-nil alone hid the primary Figma CTA (117:931) — and
-                // its sign-in funnel — from every signed-out viewer. The
-                // button's own guard routes guests to the sign-in prompt.
-                if !isOwnProfile, !auth.isSignedIn || profile?.isFollowing != nil {
-                    followButton(c, isRu: isRu)
-                }
-            }
-            .padding(.top, avatarOverlap + 14)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
-        }
-        .background(c.card)
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(c.border, lineWidth: 0.5)
-        )
-        .overlay(alignment: .top) {
             Text(emoji)
-                .font(.system(size: avatarSize * 0.55))
+                .font(.system(size: avatarSize * 0.52))
                 .frame(width: avatarSize, height: avatarSize)
-                .background(Circle().fill(c.card))
-                .overlay(Circle().stroke(c.card, lineWidth: 5))
-                .padding(.top, bannerHeight - avatarOverlap)
+                .background(Circle().fill(c.cardAlt))
+
+            // Long-press copies the name. It is the one string that can be
+            // pasted into Поиск and actually find this person again: the
+            // server matches display names, and the @handle is still
+            // device-local (no profile field behind it).
+            Text(resolvedDisplayName)
+                .font(.system(size: 21, weight: .heavy))
+                .tracking(-0.21)
+                .foregroundStyle(c.text)
+                .multilineTextAlignment(.center)
+                .padding(.top, 10)
+                .contentShape(Rectangle())
+                .onLongPressGesture {
+                    UIPasteboard.general.string = resolvedDisplayName
+                    Haptics.success()
+                    toastItem = ToastItem(
+                        type: .success,
+                        message: AppStrings.profileNameCopied(lang.language)
+                    )
+                }
+                .accessibilityIdentifier("profile_display_name")
+
+            // Rank and flag on ONE line, the flag trailing. They are two chips
+            // of the same kind — who this driver is — and stacking them put a
+            // third centred pill under the name, which made the hero read as a
+            // column of badges before the numbers even started.
+            HStack(spacing: 8) {
+                if let lvl = profile?.profileLevel ?? preloaded?.profileLevel {
+                    LvlPill(level: lvl, rankTitle: DriverRank.from(level: lvl).title(lang.language))
+                }
+
+                // Country (canon 1717:135). Device-local like the handle, so it
+                // renders in the owner's preview and nowhere else — see
+                // `countryGlyph`. «Не указывать» has no glyph and draws no pill.
+                if let glyph = countryGlyph {
+                    Text(countryPillText(glyph))
+                        .font(.system(size: 13))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(c.cardAlt, in: Capsule())
+                        .accessibilityIdentifier("profile_country")
+                }
+            }
+            .padding(.top, 8)
+
+            // Width-capped so a long line wraps into a centred block instead
+            // of running the full screen width.
+            if let bio = resolvedBio {
+                Text(bio)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(c.text)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+                    // The editor accepts 140 characters; at 13.5pt over 290pt
+                    // that is three lines, and two clipped a full bio for
+                    // every viewer.
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 290)
+                    .padding(.top, 12)
+                    .accessibilityIdentifier("profile_bio")
+            }
+
+            heroAction(c)
+                .padding(.top, 16)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
     }
 
-    /// Small capsule under the name (last drive, streak). `accent` tints both
-    /// the glyph and the label so the streak's flame doesn't read as a muted
-    /// timestamp next to it.
-    private func heroPill(
-        icon: String, text: String, c: AppTheme.Colors, accent: Color? = nil
-    ) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(accent ?? c.textTertiary)
-            Text(text)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(accent ?? c.textSecondary)
+    /// Canon 1717:135 pairs the flag with the country's name, except for the
+    /// neutral flag, which stands for «no country» and has no name to pair.
+    private func countryPillText(_ glyph: String) -> String {
+        let stored = settings.profileCountry.isEmpty ? nil : settings.profileCountry
+        guard let stored, stored != CountryChoice.neutral else { return glyph }
+        return "\(glyph) \(CountryChoice.label(for: stored, lang.language))"
+    }
+
+    /// The flag for the stored country, or nil for «Не указывать» — and nil on
+    /// anybody else's profile, because `profileCountry` is this device's
+    /// setting and the profile DTO carries no country at all.
+    private var countryGlyph: String? {
+        guard isOwnProfile else { return nil }
+        return CountryChoice.glyph(for: settings.profileCountry.isEmpty ? nil : settings.profileCountry)
+    }
+
+    /// Where a stranger's profile offers «Подписаться», the owner's preview
+    /// stands a dead pill of the same shape. Same chrome, same footprint, so
+    /// switching between the two views doesn't move anything under the thumb.
+    @ViewBuilder
+    private func heroAction(_ c: AppTheme.Colors) -> some View {
+        if isOwnProfile {
+            Text(AppStrings.previewThisIsYou(lang.language))
+                .socialActionButton(.inert, colors: c, width: 130)
+                .accessibilityIdentifier("profile_this_is_you")
+                .accessibilityAddTraits(.isStaticText)
+        } else if !auth.isSignedIn || profile?.isFollowing != nil {
+            // Guests get the CTA too: the backend omits `isFollowing`
+            // for unauthenticated requesters (it decodes nil), so gating
+            // on non-nil alone hid the primary Figma CTA (117:931) — and
+            // its sign-in funnel — from every signed-out viewer. The
+            // button's own guard routes guests to the sign-in prompt.
+            followButton(c, isRu: lang.language == .ru)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(c.cardAlt, in: Capsule())
     }
 
     @ViewBuilder
@@ -513,18 +674,24 @@ struct PublicProfileView: View {
                 if isTogglingFollow {
                     ProgressView()
                         .scaleEffect(0.7)
-                        .tint(isFollowing ? c.text : .white)
-                } else {
-                    Image(systemName: isFollowing ? "checkmark" : "plus")
-                        .font(.system(size: 12, weight: .bold))
+                        // Matches the chrome it spins on: the done state is an
+                        // accent tint with accent ink, not a grey chip.
+                        .tint(isFollowing ? AppTheme.accent : .white)
                 }
                 Text(isFollowing
                      ? (isRu ? "Подписан" : "Following")
                      : (isRu ? "Подписаться" : "Follow"))
+                // Canon 1635:145 puts the tick AFTER the word and draws no
+                // glyph at all on the offer — a leading «+» made «Подписаться»
+                // read as «add», which is a different promise.
+                if isFollowing && !isTogglingFollow {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                }
             }
-            // Hugs its label like canon (117:969, 130×41) — nothing sits
-            // beside it, so there's no row for a width change to disturb.
-            .socialActionButton(isFollowing ? .secondary : .primary, colors: c)
+            // Pinned to canon's 130pt (117:969) so it keeps the footprint of
+            // the «Это вы» pill that stands in its place on your own preview.
+            .socialActionButton(isFollowing ? .done : .primary, colors: c, width: 130)
         }
         .buttonStyle(.plain)
         .disabled(isTogglingFollow)
@@ -543,15 +710,6 @@ struct PublicProfileView: View {
     /// gentle "private routes" footnote — the LVL pill above still
     /// signals the account is active. Owner-side view is untouched
     /// (they see their own truth, which is just the zero state).
-    /// Builds the "last on the road N ago" copy from the most recent
-    /// public trip's start date. Uses the existing `RelativeTripDate`
-    /// formatter so the wording matches every other date pill in the
-    /// app ("3 days ago" / "вчера" / "только что").
-    private func lastActivityCopy(_ date: Date, isRu: Bool) -> String {
-        let rel = RelativeTripDate.string(from: date, language: isRu ? .ru : .en)
-        return isRu ? "На дороге · \(rel)" : "On the road · \(rel)"
-    }
-
     private var isPrivacyMode: Bool {
         guard !isOwnProfile, let p = profile else { return false }
         let tripCount = p.stats.tripCount
@@ -563,7 +721,9 @@ struct PublicProfileView: View {
         let privacy = isPrivacyMode
         let dots = "•••"
         let tripsValue = privacy ? dots : (stats.map { String($0.tripCount) } ?? "—")
-        let kmValue = privacy ? dots : (stats.map { String(format: "%.0f", $0.totalKm) } ?? "—")
+        // Grouped like every other km figure in the app — a bare "%.0f"
+        // printed «38420» beside «2 430» two cards away.
+        let kmValue = privacy ? dots : (stats.map { GarageFormat.odometer($0.totalKm) } ?? "—")
         let regionsValue = privacy ? dots : (stats.map { String($0.regionsCount) } ?? "—")
         // Trace what the UI is ACTUALLY rendering right now. Compare with the
         // `loadProfile decoded` line to spot the stale-state / wrong-field
@@ -580,9 +740,11 @@ struct PublicProfileView: View {
             // that much further off the fold.
             VStack(spacing: 16) {
                 HStack(spacing: 0) {
-                    statCell(value: tripsValue, label: isRu ? "поездок" : "trips", c: c)
+                    statCell(value: tripsValue, label: AppStrings.trips(lang.language), c: c)
+                    columnRule(c)
                     statCell(value: kmValue, label: AppStrings.km(lang.language), c: c)
-                    statCell(value: regionsValue, label: isRu ? "регионов" : "regions", c: c)
+                    columnRule(c)
+                    statCell(value: regionsValue, label: AppStrings.statsRegions(lang.language), c: c)
                 }
                 divider(c)
                 HStack(spacing: 0) {
@@ -591,6 +753,7 @@ struct PublicProfileView: View {
                         label: AppStrings.followersCaption(lang.language, n: followerShown),
                         mode: .followers, c: c
                     )
+                    columnRule(c)
                     followCounterCell(
                         count: followingShown,
                         label: AppStrings.followingCaption(lang.language, n: followingShown),
@@ -622,17 +785,40 @@ struct PublicProfileView: View {
     /// Both rows of the card use this — the `accent` + icon overload it used
     /// to carry existed only for the streak cell, which canon doesn't have.
     private func statCell(value: String, label: String, c: AppTheme.Colors) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 3) {
+            // Canon draws these big — they are the point of the card, and at 16
+            // they measured the same as the row of chips above and read as a
+            // caption. `minimumScaleFactor` rather than a smaller size: only
+            // «2 430» in a third of a 360pt phone ever needs to give way.
             Text(value)
-                .font(.system(size: 16, weight: .heavy).monospacedDigit())
+                .font(.system(size: 22, weight: .heavy).monospacedDigit())
                 .foregroundStyle(c.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            // Canon (580:467) sets these lowercase and quiet. They were
+            // uppercase and tracked, which put more emphasis on «ПОДПИСЧИКОВ»
+            // than on the number above it.
+            //
+            // NO `minimumScaleFactor` here, deliberately: it made the label
+            // shrink or not depending on how much width the card happened to
+            // get, and the trips grid two sections down was handing out
+            // different widths in list and grid mode — so «подписчиков» visibly
+            // changed size when the user flipped the layout toggle.
             Text(label)
-                .font(.system(size: 10, weight: .bold))
-                .tracking(0.5)
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(c.textTertiary)
-                .textCase(.uppercase)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Hairline between two cells of the same row (canon 580:468 rules every
+    /// column but the first). Fixed height rather than full-bleed so it
+    /// matches the rule `ProfileStatsStrip` draws on the Я tab.
+    private func columnRule(_ c: AppTheme.Colors) -> some View {
+        Rectangle()
+            .fill(c.border)
+            .frame(width: 1, height: 34)
     }
 
     /// Follower / following half of the stats card. Still a button — the
@@ -650,128 +836,197 @@ struct PublicProfileView: View {
         .buttonStyle(.plain)
     }
 
-    /// Full-width hairline between the two rows of the stats card. Was a
-    /// vertical 28pt rule between columns back when the card was a 2×2 grid;
-    /// canon rules the ROWS apart and leaves the columns to their own spacing.
+    /// Full-width hairline between the two rows of the stats card — heavier
+    /// than the column rules, which is how canon (580:474) keeps the road
+    /// numbers and the social counters reading as two separate rows.
     private func divider(_ c: AppTheme.Colors) -> some View {
         Rectangle()
-            .fill(c.border)
+            .fill(c.borderBright)
             .frame(height: 1)
     }
 
-    // MARK: - Active vehicle
+    // MARK: - Achievements
 
-    /// "Your car" card that mirrors the garage's vehicle chrome — same
-    /// hierarchy (avatar, name, level, odometer progress bar) so the
-    /// public view feels consistent with how the user sees their own garage.
-    /// Uses VehicleLevelSystem directly because the server returns a leaner
-    /// DTO without stickers/consumption.
+    /// «Достижения» card (canon 1667:206): the rarest award on a wash of its
+    /// own tier, then a strip of discs and a «+N» capsule.
+    ///
+    /// Deliberately NOT `ProfileAchievementsSection`. That component derives
+    /// everything from `trips: [Trip]` — the viewer's own CoreData — so on
+    /// somebody else's profile it would draw the VIEWER's collection under a
+    /// stranger's name. This screen only ever knows `recentBadges`, the id
+    /// list the server sends for the account being looked at.
     @ViewBuilder
-    private func activeVehicleCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        if let v = profile?.activeVehicle {
-            let progress = VehicleLevelSystem.progressToNext(km: v.odometerKm, level: v.level)
-            let frame = VehicleLevelSystem.color(for: v.level)
+    private func achievementsSection(_ c: AppTheme.Colors) -> some View {
+        let badges = orderedBadges
+        if let featured = badges.first {
+            let rest = Array(badges.dropFirst())
+            let strip = Array(rest.prefix(Self.achievementsStripLimit))
+            let overflow = rest.count - strip.count
 
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(frame.opacity(0.12))
-                        .frame(width: 52, height: 52)
-                    if v.isPixelAvatar {
-                        Image(v.avatarEmoji)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 44, height: 44)
-                    } else {
-                        Text(v.avatarEmoji.isEmpty ? "🏎️" : v.avatarEmoji)
-                            .font(.system(size: 26))
-                    }
-                }
+            VStack(spacing: 12) {
+                // Canon prints «12 из 45 ›» opposite the label. It stays off
+                // until `/social/profile` sends an unlocked/total pair: the
+                // only counts the client holds are its own, and the id list
+                // here is a server-truncated "recent", not the collection.
+                ProfileSectionLabel(text: AppStrings.achievementsSection(lang.language))
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(v.name.isEmpty ? (isRu ? "Авто" : "Car") : v.name)
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(c.text)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                featuredBadgeRow(featured, c)
 
-                        Spacer()
-
-                        Text("LVL \(v.level)")
-                            .font(.custom("PressStart2P-Regular", size: 9))
-                            .foregroundStyle(frame)
-                            .fixedSize()
-                    }
-
-                    HStack(spacing: 8) {
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(c.cardAlt).frame(height: 6)
-                                Capsule()
-                                    .fill(frame)
-                                    .frame(width: max(3, geo.size.width * progress), height: 6)
+                if !strip.isEmpty || overflow > 0 {
+                    HStack(spacing: 0) {
+                        ForEach(strip) { badge in
+                            Button {
+                                Haptics.tap()
+                                selectedBadge = badge
+                            } label: {
+                                badgeChip(badge, iconSize: 15)
                             }
+                            .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity)
                         }
-                        .frame(height: 6)
 
-                        Text(formatOdometer(v.odometerKm))
-                            .font(.system(size: 11))
-                            .foregroundStyle(c.textTertiary)
-                            .fixedSize()
+                        if overflow > 0 {
+                            Text("+\(overflow)")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(c.textSecondary)
+                                .frame(width: 34, height: 30)
+                                .background(c.cardAlt, in: Capsule())
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                 }
-                // Claim leftover space so long vehicle names truncate
-                // instead of pushing the LVL pill off-screen.
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .surfaceCard(cornerRadius: 16)
-        }
-    }
+            .accessibilityIdentifier("profile_achievements")
+        } else {
+            // A driver with nothing unlocked yet used to get NO card at all,
+            // so their profile silently lost a section every other profile
+            // has — which reads as a screen that failed to load its
+            // achievements, not as a collection that hasn't started.
+            VStack(spacing: 12) {
+                ProfileSectionLabel(text: AppStrings.achievementsSection(lang.language))
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-
-    /// «38 420 км» / "38 420 km" — same convention as the private stats
-    /// strip (GarageFormat space grouping + localized unit). Replaces the
-    /// old hardcoded "%.1fK km" which leaked Latin "K km" and a decimal
-    /// point into the otherwise fully-RU card.
-    private func formatOdometer(_ km: Double) -> String {
-        "\(GarageFormat.odometer(km)) \(AppStrings.km(lang.language))"
-    }
-
-    // MARK: - Badges
-
-    /// Recent badges the profile owner has earned. Horizontal scroll so the
-    /// row never gets truncated when a user has more than fits on screen —
-    /// same interaction model as the trip reaction palette. Tapping a badge
-    /// opens the same detail overlay as `BadgesView`.
-    @ViewBuilder
-    private func badgesSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        let ids = profile?.recentBadges ?? []
-        if !ids.isEmpty {
-            let badges = ids.compactMap { id in Badge.all.first(where: { $0.id == id }) }
-            VStack(alignment: .leading, spacing: 10) {
-                sectionHeader("\(AppStrings.badges(lang.language)) · \(badges.count)", c: c)
-
-                // No card behind the cells (canon 117:1321 lays them straight
-                // on the page): each badge already carries its own tinted
-                // disc, so a second surface under them boxed one set of round
-                // shapes inside another for no gain.
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(badges) { badge in
-                            badgeCell(badge, c: c)
-                        }
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle().fill(c.cardAlt)
+                        Image(systemName: "rosette")
+                            .font(.system(size: 15))
+                            .foregroundStyle(c.textTertiary)
                     }
+                    .frame(width: 30, height: 30)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(AppStrings.achievementsEmpty(lang.language))
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(c.textSecondary)
+                        // Second person for your own preview, third for
+                        // somebody else's page — «пока вы ездите» under a
+                        // stranger's name is a sentence about the wrong driver.
+                        Text(isOwnProfile
+                             ? AppStrings.achievementsEmptyHint(lang.language)
+                             : AppStrings.achievementsEmptyOtherHint(lang.language))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(c.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
                 }
             }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .surfaceCard(cornerRadius: 16)
+            .accessibilityIdentifier("profile_achievements_empty")
         }
     }
 
-    /// Canon section header (Figma 117:1319 / 117:1338) — the 11pt uppercase
-    /// tertiary label every other social screen already uses. This screen set
-    /// its two headers 15pt bold mixed-case in primary, so they carried more
-    /// weight than the profile name they sat under.
+    /// How many discs fit beside the «+N» capsule at 360pt.
+    private static let achievementsStripLimit = 6
+
+    /// Rarest first, catalogue order breaking a tie — so the awards worth
+    /// showing are the ones that fit. Ids the client doesn't know (a badge
+    /// added server-side after this build) drop out rather than draw blank.
+    private var orderedBadges: [Badge] {
+        let badges = (profile?.recentBadges ?? []).compactMap { id in
+            Badge.all.first(where: { $0.id == id })
+        }
+        return badges.enumerated()
+            .sorted { a, b in
+                a.element.displayRarity == b.element.displayRarity
+                    ? a.offset < b.offset
+                    : a.element.displayRarity > b.element.displayRarity
+            }
+            .map(\.element)
+    }
+
+    /// The one award worth reading a line about — the rest of the card is
+    /// discs. No «Закреплено» here: the pin is a local `SettingsManager` key,
+    /// so it is only ever true of the viewer, never of the profile shown.
+    private func featuredBadgeRow(_ badge: Badge, _ c: AppTheme.Colors) -> some View {
+        let rarity = badge.displayRarity
+        return Button {
+            Haptics.tap()
+            selectedBadge = badge
+        } label: {
+            HStack(spacing: 10) {
+                badgeChip(badge, iconSize: 16)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(badge.title(lang.language))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+
+                    Text(featuredBadgeSubtitle(badge))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(rarity.chipText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(rarity.rowTint, in: RoundedRectangle(cornerRadius: 12))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// «Легендарное · 0,4%» — the global share only when the catalogue carries
+    /// one, so a missing part leaves no dangling « · ».
+    private func featuredBadgeSubtitle(_ badge: Badge) -> String {
+        var parts = [badge.displayRarity.title(lang.language)]
+        if let percent = badge.globalUnlockPercent {
+            parts.append(Badge.unlockShareText(percent, lang.language) + "%")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The 30pt rarity disc (canon 1667:213). Two colours only — the glyph
+    /// takes the tier's ink, not `badge.color`, so a green glyph never lands
+    /// inside a purple ring.
+    private func badgeChip(_ badge: Badge, iconSize: CGFloat) -> some View {
+        let rarity = badge.displayRarity
+        return ZStack {
+            Circle().fill(rarity.chipTint)
+            Circle().strokeBorder(rarity.chipRing, lineWidth: 1.5)
+            Image(systemName: badge.icon)
+                .font(.system(size: iconSize))
+                .foregroundStyle(rarity.chipText)
+        }
+        .frame(width: 30, height: 30)
+    }
+
+    /// Canon page header (580:490) — the 11pt uppercase tertiary label every
+    /// other social screen already uses. Note the achievements CARD titles
+    /// itself differently, in 16 heavy inside its own surface (1667:208).
     private func sectionHeader(_ title: String, c: AppTheme.Colors) -> some View {
         Text(title)
             .font(.system(size: 11, weight: .semibold))
@@ -781,41 +1036,13 @@ struct PublicProfileView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func badgeCell(_ badge: Badge, c: AppTheme.Colors) -> some View {
-        Button {
-            Haptics.tap()
-            selectedBadge = badge
-        } label: {
-            // 74×74 cell (Figma 117:931): 46pt tinted icon disc + tier-colored
-            // caption.
-            VStack(spacing: 6) {
-                ZStack {
-                    Circle()
-                        .fill(badge.color.opacity(0.15))
-                        .frame(width: 46, height: 46)
-                    Image(systemName: badge.icon)
-                        .font(.system(size: 20))
-                        .foregroundStyle(badge.color)
-                }
-                Text(badge.title(lang.language))
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(badge.color)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .frame(width: 74)
-            }
-            .frame(width: 74)
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: - Recent trips
 
     @ViewBuilder
     private func recentTrips(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        if let trips = profile?.recentTrips, !trips.isEmpty {
-            let publicCount = profile?.stats.publicTripCount ?? trips.count
-            let totalCount = profile?.stats.tripCount ?? trips.count
+        if !tripCards.isEmpty {
+            let publicCount = profile?.stats.publicTripCount ?? tripCards.count
+            let totalCount = profile?.stats.tripCount ?? tripCards.count
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     sectionHeader(
@@ -827,16 +1054,18 @@ struct PublicProfileView: View {
 
                 if tripsAsGrid {
                     LazyVGrid(
-                        columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)],
-                        spacing: 8
+                        columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
+                        spacing: 10
                     ) {
-                        ForEach(trips) { t in
-                            tripGridCell(t, c: c, isRu: isRu)
+                        ForEach(tripCards) { t in
+                            openable(t) { tripGridCell(t, c: c, isRu: isRu) }
                         }
                     }
                 } else {
-                    ForEach(trips) { t in
-                        recentTripRow(t, c: c, isRu: isRu)
+                    LazyVStack(spacing: 12) {
+                        ForEach(tripCards) { t in
+                            tripCard(t)
+                        }
                     }
                 }
             }
@@ -862,6 +1091,114 @@ struct PublicProfileView: View {
         return head + (isRu ? " · всего \(total)" : " · \(total) total")
     }
 
+    /// The Лента's card itself — author line, title, map, metric strip,
+    /// reactions, comment count.
+    ///
+    /// This screen used to draw a card of its own from the six fields the
+    /// profile endpoint sent, which is why a trip here was a strictly poorer
+    /// object than the identical trip in the feed: no time, no average speed,
+    /// nothing to react to and nothing to open. `/users/:id/profile` now
+    /// builds its trips with the FEED's item builder, so there is nothing left
+    /// to draw differently — and one card means the profile can't drift out of
+    /// sync with the feed the next time the card grows a row.
+    private func tripCard(_ trip: SocialFeedTrip) -> some View {
+        let isOwn = isOwnTrip(trip)
+        return SocialFeedCardView(
+            trip: trip,
+            isOwn: isOwn,
+            onTapCard: { openTrip(trip) },
+            onTapComments: { openTrip(trip, focus: .comments) },
+            // No author tap: this IS that author's page. Pushing it again
+            // would stack a second copy of the screen you are already on.
+            onReport: isOwn ? nil : {
+                // Reporting needs an account — send a guest through sign-in
+                // rather than opening a form that will 401.
+                if auth.isSignedIn { tripPendingReport = trip }
+                else { signInPrompt = .generic }
+            },
+            onLongPress: {
+                guard !isOwn else { return }
+                guard auth.isSignedIn else { signInPrompt = .react; return }
+                reactionPickerTrip = trip
+            },
+            onReact: { emoji in
+                guard !isOwn else { return }
+                guard auth.isSignedIn else { signInPrompt = .react; return }
+                Task { await toggleReaction(trip.id, emoji: emoji) }
+            },
+            onShare: { shareTrip(trip) }
+        )
+    }
+
+    private func isOwnTrip(_ trip: SocialFeedTrip) -> Bool {
+        trip.author.id == TokenStore.shared.accountId
+    }
+
+    /// Optimistic exactly like the feed's: flip the pill now, tell the server,
+    /// put the card back if the server refuses.
+    @MainActor
+    private func toggleReaction(_ tripId: UUID, emoji: String) async {
+        guard let idx = tripCards.firstIndex(where: { $0.id == tripId }) else { return }
+        let before = tripCards[idx]
+        tripCards[idx] = before.togglingReaction(emoji)
+        do {
+            try await SocialReactions.send(
+                tripId: tripId, previous: before.myReaction, emoji: emoji
+            )
+        } catch {
+            // Re-find by id: a refresh can replace the whole array while the
+            // POST is in flight, and the captured index would then stamp this
+            // card over a DIFFERENT trip's slot.
+            if let current = tripCards.firstIndex(where: { $0.id == tripId }) {
+                tripCards[current] = before
+            }
+            profileLog.error("profile react failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Mint a share link, then hand the trip to the same compact sheet the
+    /// feed uses. A refused or unreachable `/social/share` still opens it —
+    /// the sheet degrades to the link-less variant rather than to nothing.
+    private func shareTrip(_ trip: SocialFeedTrip) {
+        Task {
+            var link: String?
+            do {
+                let res: SocialShareResponse = try await APIClient.shared.post(
+                    APIEndpoint.socialShare,
+                    body: SocialShareRequest(tripId: trip.id, expiresInDays: nil)
+                )
+                link = res.shareUrl
+            } catch {
+                profileLog.error("trip share link failed: \(error.localizedDescription)")
+            }
+            let url = link
+            await MainActor.run { tripLinkShare = TripLinkShare(trip: trip, url: url) }
+        }
+    }
+
+    /// «142», «21,5» — a trailing «.0» on a whole number is the thing that
+    /// makes a card look machine-printed.
+    private func distanceText(_ km: Double, isRu: Bool) -> String {
+        GarageFormat.fuel(km, isRu: isRu)
+    }
+
+    /// Wraps a trip tile in a button where a trip can actually be opened, and
+    /// leaves it exactly as it is where it can't — see `canOpenTrips`.
+    @ViewBuilder
+    private func openable<Content: View>(
+        _ trip: SocialFeedTrip, @ViewBuilder content: () -> Content
+    ) -> some View {
+        if canOpenTrips {
+            Button { openTrip(trip) } label: {
+                content().contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("profile_trip_\(trip.id.uuidString.prefix(8))")
+        } else {
+            content()
+        }
+    }
+
     /// Grid ↔ list segmented mini-toggle in the trips header.
     private func layoutToggle(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 2) {
@@ -873,7 +1210,6 @@ struct PublicProfileView: View {
             }
         }
         .padding(2)
-        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func layoutToggleButton(
@@ -884,97 +1220,94 @@ struct PublicProfileView: View {
             action()
         } label: {
             Image(systemName: icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(isOn ? c.text : c.textTertiary)
+                .font(.system(size: 13, weight: .semibold))
+                // Canon draws no plate under either half — the accent alone
+                // says which one is on. A chip behind the active icon made the
+                // pair read as a segmented control the header does not have.
+                .foregroundStyle(isOn ? AppTheme.accent : c.textTertiary)
                 .frame(width: 26, height: 22)
-                .background(isOn ? c.card : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                // 44pt of target without 44pt of layout: the same trick
+                // `NavCircleIcon` documents.
+                .padding(11)
+                .contentShape(Rectangle())
+                .padding(-11)
         }
         .buttonStyle(.plain)
     }
 
-    /// 2-col mini-poster cell (Figma 117:931): cinema route canvas + title
-    /// + distance.
-    private func tripGridCell(_ trip: SocialProfileRecentTrip, c: AppTheme.Colors, isRu: Bool) -> some View {
+    /// 2-col mini-poster cell (Figma 117:931): map, title, «дата · км». Three
+    /// lines and no more — the tile is the COMPACT half of the toggle, and
+    /// time and tallies pushed it into being a small bad card instead of a
+    /// good tile (user call 2026-08-14). The full card is one tap away on the
+    /// list icon.
+    private func tripGridCell(_ trip: SocialFeedTrip, c: AppTheme.Colors, isRu: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            if trip.previewCoordinates.count > 1 {
-                PosterRouteCanvas(
-                    coordinates: trip.previewCoordinates,
-                    speeds: [],
-                    style: .cinema,
-                    showsCar: false
-                )
-                .frame(height: 72)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(c.cardAlt)
-                    .frame(height: 72)
-                    .frame(maxWidth: .infinity)
-                    .overlay {
-                        Image(systemName: "map")
-                            .font(.system(size: 16))
-                            .foregroundStyle(c.textTertiary)
-                    }
-            }
+            gridMap(trip, c: c)
 
-            Text(trip.title ?? shortDate(trip.startDate, isRu: isRu))
+            // `lineLimit(1)` alone still ASKS for the full width of a long
+            // title, and a flexible grid column hands it over — the whole
+            // scroll content grew wider than the screen, which is what made
+            // the stats card's captions change size when the toggle flipped.
+            // Truncation is the answer here, not more width.
+            Text(TripAutoTitle.localized(
+                trip.title, startDate: trip.startDate, language: lang.language
+            ) ?? shortDate(trip.startDate, isRu: isRu))
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
+                .truncationMode(.tail)
+                .minimumScaleFactor(0.8)
 
-            Text("\(GarageFormat.oneDecimal(trip.distanceKm, isRu: isRu)) \(AppStrings.km(lang.language))")
-                .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
-                .foregroundStyle(c.textTertiary)
+            // Date AND distance: the tile used to carry a bare «142.0 km»,
+            // which says nothing about WHEN — the one thing a grid of a
+            // person's drives is read for.
+            HStack(spacing: 4) {
+                // The feed card's own phrasing («14 июн», «Вчера») rather than
+                // the full «14 июн 2026» — canon's tile prints «6 апр · 1 240 км»,
+                // and a year on every tile is four characters of noise on the
+                // narrowest line in the app.
+                Text(RelativeTripDate.string(from: trip.startDate, language: lang.language))
+                    .foregroundStyle(c.textTertiary)
+                Text("·").foregroundStyle(c.textTertiary)
+                Text("\(distanceText(trip.distanceKm, isRu: isRu)) \(AppStrings.km(lang.language))")
+                    .foregroundStyle(c.textSecondary)
+            }
+            .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
         }
         .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .surfaceCard(cornerRadius: 14)
     }
 
-    private func recentTripRow(_ trip: SocialProfileRecentTrip, c: AppTheme.Colors, isRu: Bool) -> some View {
-        HStack(spacing: 12) {
-            if trip.previewCoordinates.count > 1 {
-                MapSnapshotPreview(
-                    coordinates: trip.previewCoordinates,
-                    tripId: trip.id,
-                    height: 52
-                )
-                .frame(width: 80, height: 52)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            } else {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(c.cardAlt)
-                    .frame(width: 80, height: 52)
-                    .overlay {
-                        Image(systemName: "map")
-                            .font(.system(size: 16))
-                            .foregroundStyle(c.textTertiary)
-                    }
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(trip.title ?? shortDate(trip.startDate, isRu: isRu))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                HStack(spacing: 6) {
-                    Text("\(GarageFormat.oneDecimal(trip.distanceKm, isRu: isRu)) \(AppStrings.km(lang.language))")
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(c.textSecondary)
-                    if let region = trip.region, !region.isEmpty {
-                        Text("·").foregroundStyle(c.textTertiary)
-                        Text(region)
-                            .font(.system(size: 11))
-                            .foregroundStyle(c.textTertiary)
-                            .lineLimit(1)
-                    }
+    @ViewBuilder
+    private func gridMap(_ trip: SocialFeedTrip, c: AppTheme.Colors) -> some View {
+        let coords = trip.previewCoordinates
+        if coords.count > 1 {
+            // A real map, same as the list — the stylised canvas drew the
+            // route as a bare stroke on a beige plate, which reads as a trip
+            // whose map failed to load rather than as a poster. `width` is the
+            // tile's own slot, not the feed card's 340: rendering wide and
+            // cropping to a tile is what put the start dot and the finish flag
+            // hard against the edges.
+            MapSnapshotPreview(
+                coordinates: coords, tripId: trip.id, height: 84, width: 168
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: 84)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        } else {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(c.cardAlt)
+                .frame(maxWidth: .infinity)
+                .frame(height: 84)
+                .overlay {
+                    Image(systemName: "map.slash")
+                        .font(.system(size: 16))
+                        .foregroundStyle(c.textTertiary)
                 }
-            }
-
-            Spacer()
         }
-        .padding(10)
-        .surfaceCard(cornerRadius: 12)
     }
 
     private func emptyTripsHint(_ c: AppTheme.Colors, isRu: Bool) -> some View {
@@ -1048,6 +1381,22 @@ struct PublicProfileView: View {
                 return
             }
             profile = p
+            // The author fallback only matters against a server that still
+            // sends the old six-field trip summary — those rows carry no
+            // author of their own, and the one they belong to is this page.
+            let fallbackAuthor = SocialAuthor(
+                id: accountId,
+                displayName: p.displayName,
+                avatarEmoji: p.avatarEmoji,
+                profileLevel: p.profileLevel
+            )
+            tripCards = p.recentTrips.map { $0.feedTrip(fallbackAuthor: fallbackAuthor) }
+            // Trips that arrived without an author came from a server that
+            // still sends the old six-field summary — fetch the real items.
+            let legacy = p.recentTrips.filter { $0.author == nil }
+            if !legacy.isEmpty {
+                Task { @MainActor in await hydrateLegacyTrips(legacy) }
+            }
             countsLog.debug("loadProfile committed id=\(idPrefix, privacy: .public) state.followingCount=\(p.followingCount, privacy: .public)")
         } catch {
             // Cancellation means `refresh()` replaced us with a newer task —
@@ -1057,6 +1406,39 @@ struct PublicProfileView: View {
                 ?? error.localizedDescription
             loadError = msg
             profileLog.error("profile load failed: \(msg)")
+        }
+    }
+
+    /// Fills in what a pre-feed-shape profile endpoint left out.
+    ///
+    /// Such a server sends six fields per trip — no duration, no reactions, no
+    /// comment count — and the card would print «0 мин» over somebody's drive.
+    /// `/social/trip` is that same feed item for ONE id and has been deployed
+    /// far longer, so a handful of small reads make the page whole until the
+    /// profile endpoint itself ships. Against a current server this never runs
+    /// at all: every trip arrives with its author already on it.
+    ///
+    /// Failures are silent and per-trip: a card that can't be re-read keeps
+    /// what it has rather than disappearing.
+    @MainActor
+    private func hydrateLegacyTrips(_ legacy: [SocialProfileRecentTrip]) async {
+        for trip in legacy {
+            if Task.isCancelled { return }
+            do {
+                let res: SocialTripResponse = try await APIClient.shared.post(
+                    APIEndpoint.socialTrip,
+                    body: SocialTripRequest(tripId: trip.id, includeTrack: false),
+                    requiresAuth: AuthService.shared.isSignedIn
+                )
+                // Replace BY ID: a refresh may have rebuilt the array while
+                // this was in flight, and an index captured before the await
+                // could stamp this trip over a different one.
+                if let idx = tripCards.firstIndex(where: { $0.id == res.item.id }) {
+                    tripCards[idx] = res.item
+                }
+            } catch {
+                profileLog.error("legacy trip hydrate failed: \(error.localizedDescription)")
+            }
         }
     }
 

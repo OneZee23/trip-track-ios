@@ -612,9 +612,21 @@ final class AuthService: ObservableObject {
     /// Deletes the account on the server (cascades DB + R2 photo cleanup),
     /// then clears tokens locally. Local CoreData (trips/vehicles/settings) is preserved —
     /// user returns to guest mode and can continue using the app offline.
-    func deleteAccount() async throws {
+    /// Closes the account for good — server first, then this device.
+    ///
+    /// Apple 5.1.1(v) requires an in-app path that deletes the ACCOUNT and its
+    /// server-side data; our own rule adds the second half, because the row
+    /// that calls this says «безвозвратно, везде» and a promise printed on a
+    /// destructive button has to be literally true. `wipeLocalData` is the
+    /// switch for that half — see `LocalDataWipe` for exactly what goes.
+    ///
+    /// The server call comes FIRST and is allowed to throw: erasing the phone
+    /// and then failing to reach the server would leave the account alive with
+    /// no copy of anything left to try again from.
+    func deleteAccount(wipeLocalData: Bool = true) async throws {
         let _: EmptyResponse = try await APIClient.shared.post(
             APIEndpoint.deleteAccount, body: EmptyRequest())
+        if wipeLocalData { LocalDataWipe.run() }
         // Use the shared cleanup so deleteAccount and signOut leave the
         // device in identical post-state. Earlier divergence missed APNs
         // token wipe, in-flight sync cancel, NotificationsInbox clear,

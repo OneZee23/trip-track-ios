@@ -23,7 +23,9 @@ import SwiftUI
 /// the warm bar the plate's corners read as a translucent square frame around
 /// the circle. Neither `contentShape(_:)` nor `contentShape(.contextMenuPreview, _:)`
 /// reshapes it; both were measured frame-by-frame off a screen recording and
-/// changed nothing. Use a `confirmationDialog` instead (see PublicProfileView).
+/// changed nothing. Use `ActionPopoverList` in a `.popover` for an action list,
+/// or `.appConfirm(...)` for a confirmation (see `AppConfirmDialog`) — never a
+/// `Menu` and never a system dialog.
 struct NavCircleIcon: View {
     let systemImage: String
     var glyphSize: CGFloat = 18

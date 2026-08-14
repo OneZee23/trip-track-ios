@@ -66,7 +66,7 @@ final class CompanionsAndReplayTests: XCTestCase {
         profile.tap()
         usleep(3_000_000)
 
-        let row = app.buttons.matching(identifier: "profile_trip_row").firstMatch
+        let row = app.historyTripCells.firstMatch
         var attempts = 0
         while !row.exists && attempts < 6 {
             app.swipeUp(velocity: .slow)

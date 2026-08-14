@@ -5,6 +5,8 @@ import XCTest
 /// Its nav row was hand-built instead of using the app's `CustomNavBar`, so
 /// the controls sat 2pt from a sheet's rounded top edge and read as clipped.
 /// Layout like that is only visible in a picture.
+///
+/// Entry point since 6.1.0: the Гараж section of the «Я» tab, not the gear.
 final class GarageTourTests: XCTestCase {
     private var app: XCUIApplication!
 
@@ -19,22 +21,16 @@ final class GarageTourTests: XCTestCase {
         app.buttons.matching(identifier: "tab_profile").firstMatch.tap()
         usleep(1_500_000)
 
-        // The Garage lives behind the gear, not on the profile itself. The
-        // gear sits inside the header, which owns the identifier, so it is
-        // matched by its glyph label.
-        let gear = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS 'gearshape'")).firstMatch
-        XCTAssertTrue(gear.waitForExistence(timeout: 8), "profile has a settings control")
-        gear.tap()
-        usleep(1_500_000)
-
-        let garage = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS 'Гараж' OR label CONTAINS 'Garage'")).firstMatch
-        for _ in 0..<4 where !garage.exists {
+        // The Гараж is a section of the «Я» screen itself since 6.1.0 — it used
+        // to be a row at the foot of the settings sheet, which is nobody's idea
+        // of a place to walk into. The section header's «Весь транспорт ›» kept
+        // the retired row's identifier, so the tour still has one thing to tap.
+        let garage = app.buttons.matching(identifier: "settings_garage").firstMatch
+        for _ in 0..<5 where !garage.isHittable {
             app.swipeUp()
             usleep(600_000)
         }
-        XCTAssertTrue(garage.waitForExistence(timeout: 4), "settings must offer the Garage")
+        XCTAssertTrue(garage.waitForExistence(timeout: 4), "the Я screen must offer the Garage")
         garage.tap()
         usleep(2_000_000)
 

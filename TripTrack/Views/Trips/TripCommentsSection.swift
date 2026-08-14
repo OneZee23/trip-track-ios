@@ -125,7 +125,7 @@ struct TripCommentsSection: View {
             Color.clear
                 .frame(height: 0)
                 .task(id: RefreshKey(tripId: tripId, token: refreshToken)) {
-                    await store.load(tripId: tripId)
+                    await store.load(tripId: tripId, isOnServer: !isReadOnly)
                 }
         } else {
             content
@@ -254,7 +254,14 @@ struct TripCommentsSection: View {
                     .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
             }
 
-            if isPreview, displayCount > Self.previewLimit {
+            // The way into the full thread, and it shows for ANY non-empty
+            // discussion — not only for one long enough to be truncated. With
+            // the pill gated on `> previewLimit`, a trip with two comments had
+            // no way to open the discussion at all except by tapping the
+            // composer, which opens it with the keyboard up: reading required
+            // starting to write. (An empty thread keeps just the composer —
+            // there is nothing to open.)
+            if isPreview, displayCount > 0 {
                 Button {
                     Haptics.tap()
                     openSheetFocused = false
@@ -277,7 +284,7 @@ struct TripCommentsSection: View {
             }
         }
         .task(id: RefreshKey(tripId: tripId, token: refreshToken)) {
-            await store.load(tripId: tripId)
+            await store.load(tripId: tripId, isOnServer: !isReadOnly)
             await spotlightIfRequested()
         }
         .onChange(of: displayCount, initial: true) { _, count in
@@ -293,39 +300,48 @@ struct TripCommentsSection: View {
             try? await Task.sleep(for: .milliseconds(350))
             composerFocused = true
         }
-        .sheet(isPresented: $showAllComments) {
+        // Re-read the thread on the way back. The sheet is a SECOND
+        // `TripCommentsSection` with a store of its own (one thread per
+        // screen), so anything written in there leaves this teaser holding the
+        // conversation as it stood before — «Обсуждение · 0» over a discussion
+        // the user had just started, with their own message nowhere in it.
+        .sheet(isPresented: $showAllComments, onDismiss: {
+            Task { await store.load(tripId: tripId, isOnServer: !isReadOnly) }
+        }) {
             TripCommentsScreen(
                 tripId: tripId,
                 isTripOwner: isTripOwner,
                 initialCount: displayCount,
                 startFocused: openSheetFocused,
+                isReadOnly: isReadOnly,
                 onError: onError
             )
             .environmentObject(lang)
             .environmentObject(auth)
             .environmentObject(themeManager)
         }
-        .confirmationDialog(
-            AppStrings.deleteCommentConfirm(lang.language),
-            isPresented: Binding(
-                get: { commentToDelete != nil },
-                set: { if !$0 { commentToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.delete(lang.language), role: .destructive) {
-                guard let comment = commentToDelete else { return }
-                commentToDelete = nil
-                Haptics.action()
-                Task {
-                    if let err = await store.delete(
-                        commentId: comment.id, language: lang.language) {
-                        onError(err)
+        // House dialog, never the system's (CLAUDE.md «Dialogs»). Item-driven,
+        // and the comment arrives as an argument: the component clears
+        // `commentToDelete` before it calls the handler, so the old
+        // `guard let comment = commentToDelete` would now always bail.
+        // The destructive kind supplies the taptic the handler used to.
+        .appConfirm(
+            item: $commentToDelete,
+            title: { _ in AppStrings.deleteCommentConfirm(lang.language) },
+            actions: { comment in
+                [
+                    AppDialogAction(AppStrings.delete(lang.language), kind: .destructive) {
+                        Task {
+                            if let err = await store.delete(
+                                commentId: comment.id, language: lang.language) {
+                                onError(err)
+                            }
+                        }
                     }
-                }
-            }
-            Button(AppStrings.cancel(lang.language), role: .cancel) {}
-        }
+                ]
+            },
+            cancelTitle: AppStrings.cancel(lang.language)
+        )
     }
 
     // MARK: - Spotlight

@@ -11,7 +11,7 @@ import CoreData
 ///   as a code path; only this UI was removed. ⚠️ App Store 5.1.1(v) requires
 ///   in-app account deletion — do not ship to the store until resolved.
 /// - F14: the five static explainer info-cards are gone (Figma ground truth);
-///   the legal/privacy copy survives in the GDPR enable-consent alert.
+///   the legal/privacy copy survives in the GDPR enable-consent dialog.
 struct CloudSyncView: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
@@ -23,12 +23,19 @@ struct CloudSyncView: View {
     @ObservedObject private var auth = AuthService.shared
 
     @State private var showSignOutAlert = false
-    @State private var showSignOutPublishedDialog = false
+    /// Public trips on the server when the sign-out row was tapped. Decides
+    /// which question the one dialog asks — see `signOutActions`.
     @State private var publishedAtSignOut = 0
     @State private var showEnableConfirm = false
     @State private var showBlockedList = false
     @State private var showWipeServerConfirm = false
     @State private var isWipingServer = false
+    @State private var showDeleteAccountConfirm = false
+    @State private var isDeletingAccount = false
+    /// Server refused the deletion — shown under the card rather than in a
+    /// second dialog, which the sign-out bug is a reminder not to raise from
+    /// inside the first one's handler.
+    @State private var deleteAccountError: String?
     @State private var showSyncSheet = false
     /// Count from `/social/blocked`; nil = not fetched / fetch failed —
     /// the row stays navigable either way, just without the number.
@@ -59,6 +66,15 @@ struct CloudSyncView: View {
 
                             sectionLabel(AppStrings.sectionAccountLabel(l))
                             accountActionsCard(c: c, l: l)
+
+                            if let deleteAccountError {
+                                Text(deleteAccountError)
+                                    .font(.inter(12))
+                                    .foregroundStyle(AppTheme.red)
+                                    .padding(.top, 8)
+                                    .padding(.horizontal, 4)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
                     .padding(.horizontal, 14)
@@ -83,81 +99,62 @@ struct CloudSyncView: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
                     .presentationCornerRadius(22)
-                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
             // GDPR just-in-time consent — fires on the very first enable only
             // (F12: flow preserved verbatim from pre-6.1.0 CloudSyncView).
-            .alert(
-                AppStrings.syncEnableConfirmTitle(l),
-                isPresented: $showEnableConfirm
-            ) {
-                Button(AppStrings.cancel(l), role: .cancel) {}
-                Button(AppStrings.syncEnableConfirmAction(l)) {
-                    enableCloudSync()
-                }
-            } message: {
-                Text(AppStrings.syncEnableConfirmBody(l))
-            }
-            .alert(
-                AppStrings.signOutConfirmTitle(l),
-                isPresented: $showSignOutAlert
-            ) {
-                Button(AppStrings.cancel(l), role: .cancel) {}
-                Button(AppStrings.signOut(l), role: .destructive) {
-                    // Branch on whether the user has any public trips on the
-                    // server. With public trips → show 3-way confirmation
-                    // (hide vs keep). Without → straight sign-out.
-                    let count = auth.publishedTripCount()
-                    if count > 0 {
-                        publishedAtSignOut = count
-                        showSignOutPublishedDialog = true
-                    } else {
+            .appConfirm(
+                isPresented: $showEnableConfirm,
+                title: AppStrings.syncEnableConfirmTitle(l),
+                message: AppStrings.syncEnableConfirmBody(l),
+                actions: [
+                    AppDialogAction(AppStrings.syncEnableConfirmAction(l)) {
+                        enableCloudSync()
+                    }
+                ]
+            )
+            // ONE dialog, whichever question applies — see `signOutActions`.
+            .appConfirm(
+                isPresented: $showSignOutAlert,
+                title: publishedAtSignOut > 0
+                    ? AppStrings.signOutPublishedTitle(l)
+                    : AppStrings.signOutConfirmTitle(l),
+                message: publishedAtSignOut > 0
+                    ? AppStrings.publishedTripsSignOutMessage(l, count: publishedAtSignOut)
+                    : AppStrings.signOutConfirmMessage(l),
+                actions: signOutActions(l)
+            )
+            // Apple 5.1.1(v): the account must be closable from inside the app,
+            // in as few taps as opening this screen took. One dialog, one
+            // destructive answer, and copy that names everything that goes —
+            // the row promises «везде», so the card has to say what that is.
+            .appConfirm(
+                isPresented: $showDeleteAccountConfirm,
+                title: AppStrings.deleteAccountConfirmTitle(l),
+                message: AppStrings.deleteAccountConfirmBody(l),
+                actions: [
+                    AppDialogAction(
+                        AppStrings.deleteAccountConfirmAction(l),
+                        kind: .destructive,
+                        identifier: "account_delete_confirm"
+                    ) {
+                        Task { await performDeleteAccount() }
+                    }
+                ]
+            )
+            .appConfirm(
+                isPresented: $showWipeServerConfirm,
+                title: AppStrings.wipeServerConfirmTitle(l),
+                message: AppStrings.wipeServerConfirmBody(l),
+                actions: [
+                    AppDialogAction(AppStrings.wipeServerConfirmAction(l), kind: .destructive) {
                         Task {
-                            await auth.signOut()
-                            dismiss()
+                            isWipingServer = true
+                            await auth.wipeServerData()
+                            isWipingServer = false
                         }
                     }
-                }
-            } message: {
-                Text(AppStrings.signOutConfirmMessage(l))
-            }
-            .confirmationDialog(
-                AppStrings.signOutPublishedTitle(l),
-                isPresented: $showSignOutPublishedDialog,
-                titleVisibility: .visible
-            ) {
-                Button(AppStrings.signOutHidePublic(l), role: .destructive) {
-                    Task {
-                        await auth.unpublishAllPublicTrips()
-                        await auth.signOut()
-                        dismiss()
-                    }
-                }
-                Button(AppStrings.signOutKeepPublic(l)) {
-                    Task {
-                        await auth.signOut()
-                        dismiss()
-                    }
-                }
-                Button(AppStrings.cancel(l), role: .cancel) {}
-            } message: {
-                Text(AppStrings.publishedTripsSignOutMessage(l, count: publishedAtSignOut))
-            }
-            .alert(
-                AppStrings.wipeServerConfirmTitle(l),
-                isPresented: $showWipeServerConfirm
-            ) {
-                Button(AppStrings.cancel(l), role: .cancel) {}
-                Button(AppStrings.wipeServerConfirmAction(l), role: .destructive) {
-                    Task {
-                        isWipingServer = true
-                        await auth.wipeServerData()
-                        isWipingServer = false
-                    }
-                }
-            } message: {
-                Text(AppStrings.wipeServerConfirmBody(l))
-            }
+                ]
+            )
             .task {
                 refreshLastSynced()
                 await auth.refreshMe()
@@ -308,24 +305,20 @@ struct CloudSyncView: View {
     /// including the off-but-publishing state (queue can hold ops for
     /// explicitly-public trips while global sync is OFF — edge case #3).
     private func aggregateStatusValue(_ l: LanguageManager.Language) -> String {
-        if !settings.cloudSyncEnabled {
-            return syncQueue.pendingCount > 0
-                ? AppStrings.syncOffPublishing(l, count: syncQueue.pendingCount)
-                : AppStrings.syncOffState(l)
-        }
-        if syncQueue.isSyncing {
-            return syncQueue.batchTotal > 0
-                ? AppStrings.syncingProgress(l, done: syncQueue.batchProcessed, total: syncQueue.batchTotal)
-                : AppStrings.syncingNow(l)
-        }
-        if syncQueue.pendingCount > 0 {
-            return AppStrings.syncQueuedCount(l, count: syncQueue.pendingCount)
-        }
-        return AppStrings.syncAllDone(l)
+        // One state machine, two surfaces: the same `SyncState` drives the
+        // marker on «Настройки → Аккаунт и синхронизация», which is the row
+        // that opens this screen — the two must never disagree.
+        SyncState.current(
+            enabled: settings.cloudSyncEnabled,
+            isSyncing: syncQueue.isSyncing,
+            pending: syncQueue.pendingCount,
+            batchProcessed: syncQueue.batchProcessed,
+            batchTotal: syncQueue.batchTotal
+        ).label(l)
     }
 
     /// Proxy binding for the native Toggle (F10): ON routes through the
-    /// kept-verbatim first-enable GDPR alert, OFF clears the queue — exact
+    /// kept-verbatim first-enable GDPR dialog, OFF clears the queue — exact
     /// semantics of the old chip pair.
     private var cloudSyncBinding: Binding<Bool> {
         Binding(
@@ -334,7 +327,7 @@ struct CloudSyncView: View {
                 Haptics.tap()
                 if newValue {
                     guard !settings.cloudSyncEnabled else { return }
-                    // First time: confirmation alert (GDPR just-in-time
+                    // First time: confirmation dialog (GDPR just-in-time
                     // consent pattern). Subsequent toggles go straight through.
                     if !firstToggleShown {
                         showEnableConfirm = true
@@ -469,11 +462,12 @@ struct CloudSyncView: View {
     // MARK: - АККАУНТ card
 
     private func accountActionsCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        // F1: no «Удалить аккаунт» row and no 8px danger separator here —
-        // the card ends after clear-server with normal r16 corners.
         VStack(spacing: 0) {
             Button {
                 Haptics.tap()
+                // Read the count HERE, not inside the dialog's handler: it
+                // decides which question the one card asks.
+                publishedAtSignOut = auth.publishedTripCount()
                 showSignOutAlert = true
             } label: {
                 AccountSettingsRow(
@@ -511,8 +505,94 @@ struct CloudSyncView: View {
             .buttonStyle(.plain)
             .disabled(isWipingServer)
             .accessibilityIdentifier("account_clear_server_row")
+
+            // Canon's 8pt danger break: the last row is not one more setting,
+            // it is the end of the account, and it does not share a hairline
+            // with the row above it.
+            Rectangle()
+                .fill(c.bg)
+                .frame(height: 8)
+
+            Button {
+                Haptics.tap()
+                showDeleteAccountConfirm = true
+            } label: {
+                AccountSettingsRow(
+                    icon: "nosign",
+                    iconColor: AppTheme.red,
+                    title: AppStrings.deleteAccountTitle(l),
+                    titleColor: AppTheme.red,
+                    subtitle: AppStrings.deleteAccountSubtitle(l)
+                ) {
+                    if isDeletingAccount {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .tint(AppTheme.red)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(isDeletingAccount)
+            .accessibilityIdentifier("account_delete_row")
         }
         .surfaceCard(cornerRadius: 16)
+    }
+
+    // MARK: - Sign out
+
+    /// The answers on the sign-out dialog, which is ONE dialog on purpose.
+    ///
+    /// It used to be two: «точно выйти?» whose confirm opened a second card
+    /// asking what to do with your public trips. `.appConfirm` is a
+    /// window-level cover (see `AppConfirmPresenter` for why it can't be an
+    /// overlay), and presenting a second cover from the first one's handler
+    /// races its dismissal — UIKit dropped it, so the second card never came
+    /// up, no branch ran, and «Выйти» did nothing at all for anyone with a
+    /// public trip. The count is read when the row is TAPPED and drives which
+    /// question this card asks; the second question always implied the first
+    /// anyway, so merging them also removes a tap.
+    private func signOutActions(_ l: LanguageManager.Language) -> [AppDialogAction] {
+        guard publishedAtSignOut > 0 else {
+            return [
+                AppDialogAction(AppStrings.signOut(l), kind: .destructive) {
+                    performSignOut(hidePublic: false)
+                }
+            ]
+        }
+        return [
+            AppDialogAction(AppStrings.signOutHidePublic(l), kind: .destructive) {
+                performSignOut(hidePublic: true)
+            },
+            AppDialogAction(AppStrings.signOutKeepPublic(l), kind: .plain) {
+                performSignOut(hidePublic: false)
+            },
+        ]
+    }
+
+    private func performSignOut(hidePublic: Bool) {
+        Task {
+            if hidePublic { await auth.unpublishAllPublicTrips() }
+            await auth.signOut()
+            dismiss()
+        }
+    }
+
+    // MARK: - Delete account
+
+    /// Server first, device second (see `AuthService.deleteAccount`). A
+    /// refusal keeps the account and says so in place — the screen closes only
+    /// when there is genuinely nothing left on it.
+    private func performDeleteAccount() async {
+        isDeletingAccount = true
+        deleteAccountError = nil
+        defer { isDeletingAccount = false }
+        do {
+            try await auth.deleteAccount()
+            dismiss()
+        } catch {
+            deleteAccountError = AppStrings.deleteAccountFailed(lang.language)
+            Haptics.error()
+        }
     }
 
     // MARK: - Data

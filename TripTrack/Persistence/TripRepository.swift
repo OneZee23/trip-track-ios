@@ -298,6 +298,11 @@ final class CoreDataTripRepository: TripRepository {
     func updateTitle(for tripId: UUID, title: String) {
         guard let entity = fetchEntity(id: tripId) else { return }
         entity.title = title.isEmpty ? nil : title
+        // Everything that reaches this method came out of the editor, so a
+        // non-empty title here is a person's choice — even when they typed the
+        // same date the app would have stamped. Clearing the field puts the
+        // trip back to unnamed.
+        entity.titleIsCustom = !title.isEmpty
         entity.lastModifiedAt = Date()
         // Only flip syncStatus when the change can actually drain. For a
         // private trip at Cloud Sync OFF the per-op gate denies enqueue, so
@@ -735,7 +740,8 @@ final class CoreDataTripRepository: TripRepository {
             id: id, startDate: startDate, endDate: entity.endDate,
             distance: entity.distance, maxSpeed: entity.maxSpeed,
             averageSpeed: entity.averageSpeed, trackPoints: points, photos: photos,
-            title: entity.title, tripDescription: entity.tripDescription,
+            title: entity.title, titleIsCustom: entity.titleIsCustom,
+            tripDescription: entity.tripDescription,
             fuelUsed: entity.fuelUsed, elevation: entity.elevation,
             region: entity.region, isPrivate: entity.isPrivate,
             vehicleId: entity.vehicleId, fuelCurrency: entity.fuelCurrency,

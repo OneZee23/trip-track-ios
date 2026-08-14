@@ -84,6 +84,8 @@ struct NameEditorSheet: View {
                 .autocorrectionDisabled()
                 .submitLabel(.done)
                 .focused($isFocused)
+                    // Stock iOS blue against an all-orange screen.
+                    .tint(AppTheme.accent)
                 .onSubmit { if canSave { commit() } }
                 .onChange(of: text) { _, newValue in
                     // Hard cap — silently truncate paste / over-type so

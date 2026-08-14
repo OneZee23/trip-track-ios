@@ -15,6 +15,9 @@ struct TripCommentsScreen: View {
     /// Opened by tapping the write row rather than the pill — come up with the
     /// keyboard, at .large, ready to type.
     var startFocused: Bool = false
+    /// The trip is not on the server — the thread here is the device's
+    /// archived copy, and asking the server for it can only 404.
+    var isReadOnly: Bool = false
     var onError: (String) -> Void
 
     /// The sheet hugs its content instead of standing at a fixed half-screen.
@@ -57,12 +60,14 @@ struct TripCommentsScreen: View {
         isTripOwner: Bool,
         initialCount: Int = 0,
         startFocused: Bool = false,
+        isReadOnly: Bool = false,
         onError: @escaping (String) -> Void
     ) {
         self.tripId = tripId
         self.isTripOwner = isTripOwner
         self.initialCount = initialCount
         self.startFocused = startFocused
+        self.isReadOnly = isReadOnly
         self.onError = onError
         _count = State(initialValue: initialCount)
     }
@@ -101,6 +106,7 @@ struct TripCommentsScreen: View {
                     // «Не удалось отправить комментарий» by a server that was
                     // never going to accept it.
                     onGuestInputTap: { signInPrompt = .comment },
+                    isReadOnly: isReadOnly,
                     onCountChange: { count = $0 },
                     // Typing needs the room a fitted sheet does not have: at
                     // three messages tall the keyboard would cover the very
@@ -156,7 +162,6 @@ struct TripCommentsScreen: View {
                 )
                 .environmentObject(lang)
                 .environmentObject(themeManager)
-                .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
         .onAppear {

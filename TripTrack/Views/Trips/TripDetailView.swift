@@ -323,9 +323,7 @@ struct TripDetailView: View {
     /// answer `titleBlock` gives, so the bar and the heading under it can't
     /// name the trip differently.
     private func barTitle(for trip: Trip) -> String {
-        let trimmed = trip.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let named = (trimmed.map { !$0.isEmpty } ?? false)
-            && !TripAutoTitle.isAuto(trimmed, startDate: trip.startDate)
+        let named = trip.hasDisplayableName
         if named { return trip.title ?? "" }
         if let region = RegionDisplay.localized(trip.region, language: lang.language),
            !region.isEmpty { return region }
@@ -727,27 +725,28 @@ struct TripDetailView: View {
                 language: lang.language
             )
         }
-        .confirmationDialog(
-            AppStrings.deleteTrip(lang.language),
+        .appConfirm(
             isPresented: $showDeleteConfirm,
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.delete(lang.language), role: .destructive) {
-                mapVM.tripManager.deleteTrip(id: tripId)
-                NotificationCenter.default.post(name: .tripDeleted, object: tripId)
-                dismiss()
-            }
-            Button(AppStrings.cancel(lang.language), role: .cancel) {}
-        }
+            title: AppStrings.deleteTrip(lang.language),
+            actions: [
+                AppDialogAction(AppStrings.delete(lang.language), kind: .destructive) {
+                    mapVM.tripManager.deleteTrip(id: tripId)
+                    NotificationCenter.default.post(name: .tripDeleted, object: tripId)
+                    dismiss()
+                }
+            ]
+        )
         // Fix 3: a companion leaving someone else's trip.
-        .confirmationDialog(
-            AppStrings.companionsLeaveConfirmTitle(lang.language),
+        .appConfirm(
             isPresented: $showLeaveConfirm,
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.companionsLeaveTrip(lang.language), role: .destructive) { leaveTrip() }
-            Button(AppStrings.cancel(lang.language), role: .cancel) {}
-        }
+            title: AppStrings.companionsLeaveConfirmTitle(lang.language),
+            actions: [
+                AppDialogAction(
+                    AppStrings.companionsLeaveTrip(lang.language),
+                    kind: .destructive
+                ) { leaveTrip() }
+            ]
+        )
         .task(id: tripId) {
             if trip == nil {
                 if let local = viewModel.tripDetail(id: tripId) {
@@ -815,7 +814,6 @@ struct TripDetailView: View {
                 pickedImages = images
             }
             .environmentObject(lang)
-            .preferredColorScheme(themeManager.preferredColorScheme)
             // The canon draws a grab handle (117:602). Without one the sheet
             // looked like a pushed screen, and the only way out was «Отмена» —
             // people swiped anyway and could not tell whether it was allowed.
@@ -961,22 +959,20 @@ struct TripDetailView: View {
             // them, because that one IS full-width.
             .padding(.top, safeAreaTop + 8)
         }
-        .confirmationDialog(
-            AppStrings.deletePhoto(lang.language),
-            isPresented: Binding(
-                get: { photoToDelete != nil },
-                set: { if !$0 { photoToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.delete(lang.language), role: .destructive) {
-                if let item = photoToDelete {
-                    Haptics.action()
-                    deleteOwnPhoto(item)
-                }
-                photoToDelete = nil
+        // The subject lives in an optional, so this is the item-driven form —
+        // no separate Bool to keep in step with it. The destructive row plays
+        // `Haptics.action()` itself, which is why the handler no longer does.
+        .appConfirm(
+            item: $photoToDelete,
+            title: { _ in AppStrings.deletePhoto(lang.language) },
+            actions: { item in
+                [
+                    AppDialogAction(AppStrings.delete(lang.language), kind: .destructive) {
+                        deleteOwnPhoto(item)
+                    }
+                ]
             }
-        }
+        )
         .sheet(isPresented: Binding(
             get: { storyShare != nil },
             set: { if !$0 { storyShare = nil } }
@@ -988,7 +984,6 @@ struct TripDetailView: View {
                     .environmentObject(lang)
                     // Sheets are separate presentations — the app-root
                     // preferredColorScheme does not reach them.
-                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
         .sheet(isPresented: $showPublishSheet) {
@@ -999,7 +994,6 @@ struct TripDetailView: View {
                 onPublish: { desc in handlePublishConfirm(descriptionText: desc) }
             )
             .presentationDragIndicator(.visible)
-            .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(item: $reactorsPeek) { peek in
             ReactionsListSheet(
@@ -1022,13 +1016,11 @@ struct TripDetailView: View {
             .environmentObject(lang)
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-            .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(item: $signInPrompt) { action in
             SignInPromptSheet(action: action)
                 .environmentObject(lang)
                 .environmentObject(auth)
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showEditSheet) {
             if let t = trip {
@@ -1052,7 +1044,6 @@ struct TripDetailView: View {
                     }
                 )
                 .environmentObject(lang)
-                .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
         .sheet(isPresented: $showCompanionsPicker) {
@@ -1060,7 +1051,6 @@ struct TripDetailView: View {
                 CompanionsPickerSheet(tripId: t.id)
                     .environmentObject(lang)
                     .environmentObject(themeManager)
-                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
         .sheet(isPresented: $showCompanionsRoster) {
@@ -1071,22 +1061,25 @@ struct TripDetailView: View {
                 )
                 .environmentObject(lang)
                 .environmentObject(themeManager)
-                .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
-        .alert(
-            lang.language == .ru ? "Сделать поездку приватной?" : "Make trip private?",
-            isPresented: $unpublishConfirm
-        ) {
-            Button(AppStrings.cancel(lang.language), role: .cancel) {}
-            Button(lang.language == .ru ? "Сделать приватной" : "Make private") {
-                applyPrivacyChange(isPrivate: true)
-            }
-        } message: {
-            Text(lang.language == .ru
-                 ? "Поездка пропадёт из общей ленты и из профилей других пользователей. Её увидите только Вы.\n\nРеакции и комментарии не сохранятся, если Вы потом снова сделаете её публичной."
-                 : "This trip will disappear from the social feed and from other users' profiles. Only you will see it.\n\nReactions and comments won't be preserved if you make it public again later.")
-        }
+        // Copy kept verbatim from the alert this replaced — including the two
+        // literals, which never went through AppStrings. `makePrivateAction`
+        // is the one string of the three that already had a key with exactly
+        // this wording in both languages.
+        .appConfirm(
+            isPresented: $unpublishConfirm,
+            title: lang.language == .ru ? "Сделать поездку приватной?" : "Make trip private?",
+            message: lang.language == .ru
+                ? "Поездка пропадёт из общей ленты и из профилей других пользователей. Её увидите только Вы.\n\nРеакции и комментарии не сохранятся, если Вы потом снова сделаете её публичной."
+                : "This trip will disappear from the social feed and from other users' profiles. Only you will see it.\n\nReactions and comments won't be preserved if you make it public again later.",
+            actions: [
+                AppDialogAction(
+                    AppStrings.makePrivateAction(lang.language),
+                    kind: .destructive
+                ) { applyPrivacyChange(isPrivate: true) }
+            ]
+        )
     }
 
     // MARK: - Caches
@@ -1461,11 +1454,10 @@ struct TripDetailView: View {
         //   unnamed  → «14 ИЮНЯ» over «Краснодарский край»
         //
         // Either way every line carries something the others do not.
-        // An auto-stamped date is not a name — see `TripAutoTitle.isAuto`.
-        // Treating it as one is what printed the same date three times.
-        let trimmed = trip.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let named = (trimmed.map { !$0.isEmpty } ?? false)
-            && !TripAutoTitle.isAuto(trimmed, startDate: trip.startDate)
+        // An auto-stamped date is not a name — see `Trip.hasDisplayableName`.
+        // Treating it as one is what printed the same date three times; NOT
+        // treating a deliberately typed one as a name is what swallowed it.
+        let named = trip.hasDisplayableName
         let region = RegionDisplay.localized(trip.region, language: lang.language)
         let eyebrow = TripDetailFormat.posterDateLine(
             date: trip.startDate,

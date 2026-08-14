@@ -12,6 +12,19 @@ struct Trip: Identifiable, Codable {
     var photos: [TripPhoto]
 
     var title: String?
+    /// Whether a PERSON put that title there, as opposed to the app stamping
+    /// the start date at save time.
+    ///
+    /// Saving a trip always writes a title («14 Jun, 12:31»), so "has a title"
+    /// never meant "is named". The screens used to tell the two apart by
+    /// re-formatting `startDate` and string-matching it — a guess, and one that
+    /// erased a name the moment someone deliberately typed that exact string.
+    /// Intent is not derivable from the text, so it is stored: false for the
+    /// app's stamp, true for anything saved through the editor. Trips saved
+    /// before the flag existed carry `false`, so they are still classified at
+    /// read time by `TripAutoTitle.isAuto` — see `hasDisplayableName`. Nothing
+    /// guesses about a trip named since.
+    var titleIsCustom: Bool = false
     var tripDescription: String?
     var fuelUsed: Double
     var elevation: Double
@@ -232,7 +245,8 @@ struct Trip: Identifiable, Codable {
     init(id: UUID = UUID(), startDate: Date = Date(), endDate: Date? = nil,
          distance: Double = 0, maxSpeed: Double = 0, averageSpeed: Double = 0,
          trackPoints: [TrackPoint] = [], photos: [TripPhoto] = [],
-         title: String? = nil, tripDescription: String? = nil,
+         title: String? = nil, titleIsCustom: Bool = false,
+         tripDescription: String? = nil,
          fuelUsed: Double = 0, elevation: Double = 0,
          region: String? = nil, isPrivate: Bool = true, vehicleId: UUID? = nil,
          fuelCurrency: String? = nil,
@@ -247,6 +261,7 @@ struct Trip: Identifiable, Codable {
         self.trackPoints = trackPoints
         self.photos = photos
         self.title = title
+        self.titleIsCustom = titleIsCustom
         self.tripDescription = tripDescription
         self.fuelUsed = fuelUsed
         self.elevation = elevation
@@ -263,6 +278,27 @@ struct Trip: Identifiable, Codable {
     var earnedBadges: [Badge] {
         let allBadges = Badge.all
         return earnedBadgeIds.compactMap { id in allBadges.first { $0.id == id } }
+    }
+
+    /// Whether this trip carries a NAME — something to print as a heading —
+    /// rather than just the date the app stamped on it at save time.
+    ///
+    /// Three kinds of title reach this property, and only one of them is not a
+    /// name:
+    ///   • typed by a person in the editor      → a name, whatever it says
+    ///   • written by geocoding («Краснодар → Геленджик») → a name
+    ///   • the start date, stamped when no place could be resolved → NOT a name
+    ///
+    /// `titleIsCustom` settles the first case as a fact, which a string
+    /// comparison never could: someone who deliberately types «14 Jun, 12:31»
+    /// means it, and used to have it silently swallowed. The date check still
+    /// covers the third, because that string is one the app wrote itself.
+    var hasDisplayableName: Bool {
+        guard let t = title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else {
+            return false
+        }
+        if titleIsCustom { return true }
+        return !TripAutoTitle.isAuto(t, startDate: startDate)
     }
 }
 

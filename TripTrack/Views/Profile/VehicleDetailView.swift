@@ -13,7 +13,6 @@ struct VehicleDetailView: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var bluetoothDetector = AutoTripService.shared.bluetoothDetector
     @EnvironmentObject private var lang: LanguageManager
-    @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -133,26 +132,26 @@ struct VehicleDetailView: View {
             .sheet(isPresented: $showEditForm) {
                 VehicleEditFormView(mode: .edit(vehicleId))
                     .environmentObject(lang)
-                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
             .sheet(isPresented: $showAutoRecordSettings) {
                 AutoRecordSettingsView(vehicleId: vehicleId)
                     .environmentObject(lang)
-                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
-            .confirmationDialog(
-                AppStrings.deleteVehicleConfirm(l),
+            // House dialog, never the system's — see «Dialogs» in CLAUDE.md.
+            // The card dismisses itself before the handler runs, so the pop
+            // `performDelete` does happens with nothing left over the screen.
+            .appConfirm(
                 isPresented: $showDeleteConfirm,
-                titleVisibility: .visible
-            ) {
-                Button(AppStrings.deleteVehicle(l), role: .destructive) {
-                    performDelete()
-                }
-                Button(AppStrings.cancel(l), role: .cancel) {}
-            } message: {
+                title: AppStrings.deleteVehicleConfirm(l),
                 // The one thing someone deleting a car is actually afraid of.
-                Text(AppStrings.deleteVehicleBody(l))
-            }
+                message: AppStrings.deleteVehicleBody(l),
+                actions: [
+                    AppDialogAction(AppStrings.deleteVehicle(l), kind: .destructive) {
+                        performDelete()
+                    }
+                ],
+                cancelTitle: AppStrings.cancel(l)
+            )
         }
     }
 

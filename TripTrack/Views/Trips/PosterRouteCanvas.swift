@@ -121,8 +121,19 @@ struct PosterRouteCanvas: View {
         return path
     }
 
+    /// 36pt of margin is the poster's, and it is not a constant: on the 72pt
+    /// grid tile of a public profile the two margins are the whole canvas,
+    /// `BoundingBox` bails on a zero drawing area, and the route vanishes —
+    /// the tile rendered as an empty beige rectangle with no route and not
+    /// even the «no map» glyph, which is drawn on a different branch.
+    /// Anything poster-sized still gets exactly 36.
+    static func routePadding(for size: CGSize) -> CGFloat {
+        min(36, min(size.width, size.height) * 0.18)
+    }
+
     private func drawRoute(context: inout GraphicsContext, size: CGSize) {
-        let projected = Self.project(coordinates, into: size, padding: 36)
+        let pad = Self.routePadding(for: size)
+        let projected = Self.project(coordinates, into: size, padding: pad)
         guard projected.count > 1 else { return }
 
         // Route polyline — grouped into same-speed-zone subpaths so each
@@ -157,7 +168,7 @@ struct PosterRouteCanvas: View {
         // the light cinema surface.
         var headPoint: CGPoint? = nil
         if let playCoord = playbackCoord {
-            headPoint = Self.projectSingle(playCoord, like: coordinates, into: size, padding: 36)
+            headPoint = Self.projectSingle(playCoord, like: coordinates, into: size, padding: pad)
             let lastIdx = min(max(playbackTrailIndex, 0), projected.count - 1)
             var trail = Path()
             trail.move(to: projected[0])
@@ -294,13 +305,15 @@ struct PosterRouteCanvas: View {
 
     /// Public projection helper for overlays that must pin to the same
     /// coordinate space the canvas draws in (replay speed bubble): projects
-    /// `coord` with `route`'s bounding box at the canvas's own 36pt padding.
+    /// `coord` with `route`'s bounding box at the canvas's own padding — the
+    /// same `routePadding(for:)` the canvas used, or the overlay lands off the
+    /// line on any canvas small enough to have scaled its margins down.
     /// Pass the canvas's rendered size.
     static func overlayPoint(
         for coord: CLLocationCoordinate2D,
         route: [CLLocationCoordinate2D],
         in size: CGSize
     ) -> CGPoint? {
-        projectSingle(coord, like: route, into: size, padding: 36)
+        projectSingle(coord, like: route, into: size, padding: routePadding(for: size))
     }
 }

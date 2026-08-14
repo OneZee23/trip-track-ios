@@ -102,17 +102,23 @@ struct PhotoFullScreenView: View {
                 .animation(.easeOut(duration: 0.18), value: chromeHidden)
         }
         .statusBarHidden(chromeHidden)
-        .confirmationDialog(
-            AppStrings.deletePhoto(language),
+        // House dialog, never the system's (CLAUDE.md «Dialogs»). The viewer
+        // takes its language as a value rather than off the environment, so
+        // both titles are resolved from `language` instead of the modifier's
+        // `LanguageManager.currentLanguage` default.
+        .appConfirm(
             isPresented: $confirmingDelete,
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.delete(language), role: .destructive) {
-                guard pages.indices.contains(currentIndex) else { return }
-                onDelete?(pages[currentIndex].id)
-            }
-            Button(AppStrings.cancel(language), role: .cancel) {}
-        }
+            title: AppStrings.deletePhoto(language),
+            actions: [
+                AppDialogAction(AppStrings.delete(language), kind: .destructive) {
+                    guard pages.indices.contains(currentIndex) else { return }
+                    // Hands the page to the OWNER, which closes the viewer —
+                    // the dialog is already gone by the time this runs.
+                    onDelete?(pages[currentIndex].id)
+                }
+            ],
+            cancelTitle: AppStrings.cancel(language)
+        )
         .onChange(of: currentPageID) { _, id in
             // `.scrollPosition` can publish nil while a target is off screen;
             // only a real landing counts as a page turn.

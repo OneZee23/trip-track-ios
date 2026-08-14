@@ -47,6 +47,11 @@ enum APIEndpoint {
     static let socialComments      = "/social/comments"
     static let socialCommentDelete = "/social/comment/delete"
 
+    /// Clubs waitlist — guest-callable, keyed by the device's local user id.
+    static let groupsWaitlist      = "/groups/waitlist"
+    static let groupsWaitlistJoin  = "/groups/waitlist/join"
+    static let groupsWaitlistLeave = "/groups/waitlist/leave"
+
     static let notificationsFeed        = "/notifications/feed"
     static let notificationsUnreadCount = "/notifications/unread-count"
     static let notificationsMarkRead    = "/notifications/mark-read"

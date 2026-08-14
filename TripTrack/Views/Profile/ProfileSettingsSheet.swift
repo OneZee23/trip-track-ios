@@ -1,11 +1,33 @@
 import SwiftUI
+import OSLog
 
-/// «Настройки» sheet (Figma 154:1365) — the gear behind the Я header.
-/// Every row is a feature relocated from the pre-6.1.0 ProfileView body:
-/// nothing is deleted, only re-homed. Forks honored: «Уведомления» is a
-/// chevron row, not a toggle (FK-7 — no master push-toggle exists);
-/// Язык/Тема/Средняя скорость use native confirmation dialogs (FK-8);
-/// «Гараж» lives here (FK-9); «Фон профиля» stays reachable (FK-10).
+private let settingsLog = Logger(subsystem: "com.triptrack", category: "settings")
+
+/// «Настройки» sheet (Figma 580:232, hints 1741:129) — the gear behind the Я
+/// header. Three cards, grouped by what the row is ABOUT rather than by what
+/// kind of control it wears:
+///
+/// 1. **Аккаунт** (signed-in only) — the canonical visibility and notification
+///    switches, plus canon's «Аккаунт и синхронизация» chevron pulled up into
+///    the same card. A one-row card sitting under a card of switches is a gap
+///    pretending to be a group; the two promises about who can see you
+///    («Публичный профиль», «Поездки на глобальной карте») only read together.
+/// 2. **Приложение** — «Язык», «Тема», and one row, «Единицы и формат», that
+///    opens `AppPreferencesView`. Words, then look, then numbers.
+/// 3. **Поддержка** — «Написать автору», «Телеграм-канал», «Отправить логи».
+///    The logs are not a tool: they are an attachment to a letter to the
+///    author, which is the card they belong in and why the row now carries a
+///    subtitle like its two neighbours.
+///
+/// What left this sheet, and where it went: «Страна» → «Мой профиль» (it is
+/// profile data, not app config, and that row already existed); «Добавление в
+/// попутчики» → Входящие → ⚙ (same server field, and the master switch right
+/// above it already served the impulse); «Гараж» → the «Я» screen (a place
+/// people want to walk into, not the bottom of a settings sheet); «Единицы» and
+/// «Средняя скорость» → `AppPreferencesView`, one level down. Earlier passes
+/// had already moved «Входящие» (the Home bell), «Поделиться профилем» (public
+/// profile), «Выйти» (inside «Аккаунт и синхронизация») and «Фон профиля» (→
+/// «Мой профиль»).
 struct ProfileSettingsSheet: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
@@ -15,23 +37,23 @@ struct ProfileSettingsSheet: View {
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
-    @ObservedObject private var notificationsInbox = NotificationsInboxStore.shared
+    /// Feeds the live marker on «Аккаунт и синхронизация» — see `SyncState`.
+    @ObservedObject private var syncQueue = SyncQueue.shared
 
     @AppStorage("distanceUnit") private var distanceUnit: String = "km"
 
-    @State private var showNotificationPrefs = false
-    @State private var showNotificationsInbox = false
-    @State private var showUnits = false
-    @State private var showLanguageDialog = false
-    @State private var showThemeDialog = false
-    @State private var showAvgSpeedDialog = false
-    @State private var showGarage = false
+    /// The «Уведомления» master over the server's notification prefs. Created
+    /// here and owned here — nothing outside this sheet reads it.
+    @StateObject private var notifications = NotificationSwitches()
+
+    @State private var showLanguagePicker = false
+    @State private var showThemePicker = false
+    /// «Единицы и формат» — the once-per-install rows, one level down.
+    @State private var showAppPrefs = false
     @State private var showCloudSync = false
     @State private var showDebugLogs = false
-    @State private var showBackgroundPicker = false
-    @State private var showSignOutAlert = false
-    @State private var showSignOutPublishedDialog = false
-    @State private var publishedAtSignOut = 0
+    /// «Приватность» — the three visibility switches, one level down.
+    @State private var showPrivacy = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -41,13 +63,12 @@ struct ProfileSettingsSheet: View {
             navRow(l)
 
             ScrollView {
-                VStack(spacing: 10) {
+                VStack(spacing: 4) {
                     if auth.isSignedIn {
                         accountGroup(c, l)
                     }
-                    preferencesGroup(c, l)
-                    actionsGroup(c, l)
-                    aboutGroup(c, l)
+                    appGroup(c, l)
+                    supportGroup(c, l)
                     #if DEBUG
                     devGroup(c, l)
                     #endif
@@ -59,233 +80,174 @@ struct ProfileSettingsSheet: View {
             .scrollIndicators(.hidden)
         }
         .background(c.bg)
+        // Draws whichever «?» bubble is open, above every card in the sheet.
+        // Applied at the root because a bubble drawn inside a row is painted
+        // over by the groups below it — see `SettingsHintButton`.
+        .settingsHintLayer()
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .accessibilityIdentifier("settings_sheet")
-        .sheet(isPresented: $showNotificationPrefs) {
-            NotificationPreferencesView()
+        // Keyed on the session: a guest has no account prefs to read, and a
+        // sign-in that lands while this sheet is open must not leave the
+        // switch that just appeared stuck in its loading state.
+        .task(id: auth.isSignedIn) {
+            guard auth.isSignedIn else { return }
+            // Only the notification master is server-backed on THIS screen
+            // now; /auth/me is asked for by «Приватность», which is the one
+            // place that draws a row depending on the answer.
+            await notifications.load()
+        }
+        .sheet(isPresented: $showLanguagePicker) {
+            languagePicker(l)
+        }
+        .sheet(isPresented: $showThemePicker) {
+            themePicker(l)
+        }
+        .sheet(isPresented: $showPrivacy) {
+            // Same instance, not a second one: two loaders would each POST all
+            // five notification flags and overwrite each other. See the type.
+            PrivacySettingsView(notifications: notifications)
                 .environmentObject(lang)
                 .environmentObject(themeManager)
-                // Same single detent as the inbox route — tall enough for
-                // the footer note, and it can't re-resolve on re-render.
-                .presentationDetents([.fraction(0.88)])
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
-        .sheet(isPresented: $showNotificationsInbox) {
-            NotificationsInboxView()
-                .environment(\.navBarInSheet, true)
+        .sheet(isPresented: $showAppPrefs) {
+            AppPreferencesView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
-                .preferredColorScheme(themeManager.preferredColorScheme)
-        }
-        .sheet(isPresented: $showUnits) {
-            UnitsSheetWrapper()
-                .environmentObject(lang)
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-                .preferredColorScheme(themeManager.preferredColorScheme)
-        }
-        .sheet(isPresented: $showGarage) {
-            GarageView()
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showCloudSync) {
             CloudSyncView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .sheet(isPresented: $showDebugLogs) {
             DebugLogsView()
                 .environmentObject(lang)
                 .environmentObject(themeManager)
-                .preferredColorScheme(themeManager.preferredColorScheme)
-        }
-        .sheet(isPresented: $showBackgroundPicker) {
-            ProfileBackgroundPickerSheet()
-                .environmentObject(lang)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .preferredColorScheme(themeManager.preferredColorScheme)
-        }
-        .confirmationDialog(
-            AppStrings.lang(l),
-            isPresented: $showLanguageDialog,
-            titleVisibility: .visible
-        ) {
-            Button("Русский") { lang.language = .ru }
-            Button("English") { lang.language = .en }
-            Button(AppStrings.cancel(l), role: .cancel) {}
-        }
-        .confirmationDialog(
-            AppStrings.theme(l),
-            isPresented: $showThemeDialog,
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.themeSystem(l)) { themeManager.mode = .system }
-            Button(AppStrings.dark(l)) { themeManager.mode = .dark }
-            Button(AppStrings.light(l)) { themeManager.mode = .light }
-            Button(AppStrings.cancel(l), role: .cancel) {}
-        }
-        .confirmationDialog(
-            AppStrings.avgSpeedModeTitle(l),
-            isPresented: $showAvgSpeedDialog,
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.avgSpeedOverall(l)) { settings.avgSpeedMode = .overall }
-            Button(AppStrings.avgSpeedMoving(l)) { settings.avgSpeedMode = .moving }
-            Button(AppStrings.cancel(l), role: .cancel) {}
-        }
-        // Sign-out — same two-step semantics as CloudSyncView: with public
-        // trips on the server → 3-way hide/keep dialog; without → straight
-        // sign-out. Calls AuthService API only.
-        .alert(
-            AppStrings.signOutConfirmTitle(l),
-            isPresented: $showSignOutAlert
-        ) {
-            Button(AppStrings.cancel(l), role: .cancel) {}
-            Button(AppStrings.signOut(l), role: .destructive) {
-                let count = auth.publishedTripCount()
-                if count > 0 {
-                    publishedAtSignOut = count
-                    showSignOutPublishedDialog = true
-                } else {
-                    Task {
-                        await auth.signOut()
-                        dismiss()
-                    }
-                }
-            }
-        } message: {
-            Text(AppStrings.signOutConfirmMessage(l))
-        }
-        .confirmationDialog(
-            AppStrings.signOutPublishedTitle(l),
-            isPresented: $showSignOutPublishedDialog,
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.signOutHidePublic(l), role: .destructive) {
-                Task {
-                    await auth.unpublishAllPublicTrips()
-                    await auth.signOut()
-                    dismiss()
-                }
-            }
-            Button(AppStrings.signOutKeepPublic(l)) {
-                Task {
-                    await auth.signOut()
-                    dismiss()
-                }
-            }
-            Button(AppStrings.cancel(l), role: .cancel) {}
-        } message: {
-            Text(AppStrings.publishedTripsSignOutMessage(l, count: publishedAtSignOut))
         }
     }
 
     // MARK: - Chrome
 
-    /// The shared bar, so this sheet's chrome measures the same as every
-    /// other screen's instead of a hand-sized row of its own. A sheet root has
+    /// The shared bar, so this sheet's chrome measures the same as every other
+    /// screen's instead of a hand-sized row of its own. A sheet root has
     /// nothing to pop — it closes from the trailing side — so the back chevron
     /// is off and «×» is the one control (same shape as Discover). ProfileView
     /// hands the bar `navBarInSheet`, which is what lifts the row clear of the
     /// grabber UIKit draws over the sheet's top edge.
     private func navRow(_ l: LanguageManager.Language) -> some View {
-        CustomNavBar(title: AppStrings.settingsTitle(l), showsBack: false) {
+        // NOT `CustomNavBar`: that bar centres its title and carries the 40pt
+        // white nav circle with a shadow, which is right for a PUSHED screen
+        // sitting over a map. Canon 580:232 heads this SHEET differently —
+        // «Настройки» left-aligned at 22 heavy, and a flat 30pt grey close disc
+        // with no shadow, the same `SheetCloseCircle` the garage sheets use.
+        HStack(alignment: .center) {
+            Text(AppStrings.settingsTitle(l))
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(AppTheme.colors(for: scheme).text)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
             Button {
                 Haptics.tap()
                 dismiss()
             } label: {
-                NavCircleIcon(systemImage: "xmark")
+                SheetCloseCircle()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(AppStrings.closeSheet(l))
         }
+        .padding(.horizontal, 18)
+        // The grabber UIKit draws over the sheet's top edge lands on the first
+        // ~10pt, so the row starts below it.
+        .padding(.top, 18)
+        .padding(.bottom, 12)
     }
 
     private func rowDivider(_ c: AppTheme.Colors) -> some View {
         Rectangle()
             .fill(c.borderBright)
             .frame(height: 1)
-            .padding(.leading, 56) // 14 (px) + 30 (icon) + 12 (gap)
     }
 
-    // MARK: - Group 1 — account (signed-in only)
+    // MARK: - Card A — account (signed-in only)
 
+    /// Who can see you, what reaches you, and where the account itself is
+    /// managed — one card, because they are one subject. The «Аккаунт и
+    /// синхронизация» chevron used to be a card of its own directly underneath
+    /// this one, which drew a 4pt gap between two halves of the same idea.
     private func accountGroup(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         VStack(spacing: 0) {
-            SettingsIconRow(
-                icon: "globe",
-                title: AppStrings.settingsPublicProfile(l)
-            ) {
-                Toggle("", isOn: Binding(
-                    get: { settings.showOnPublicMap },
-                    set: { setShowOnPublicMap($0) }
-                ))
-                .labelsHidden()
-                .tint(AppTheme.accent)
-                .scaleEffect(0.9)
-            }
-            .accessibilityIdentifier("settings_public_profile")
+            // «Публичный профиль», «Поездки на глобальной карте» and
+            // «Добавление в попутчики» all live behind this row now — see
+            // `PrivacySettingsView`. Three switches used to open this sheet,
+            // which made Настройки look like a form.
+            SettingsLinkRow(
+                icon: "hand.raised.fill",
+                title: AppStrings.privacyTitle(l),
+                subtitle: AppStrings.privacyRowSub(l),
+                action: { showPrivacy = true }
+            )
+            .accessibilityIdentifier("settings_privacy")
 
             rowDivider(c)
 
-            // FK-7: chevron row → granular server prefs, NOT a fake master
-            // toggle (no client- or server-side master push switch exists).
-            SettingsIconRow(
+            SettingsToggleRow(
                 icon: "bell.fill",
                 title: AppStrings.settingsNotifications(l),
-                action: { showNotificationPrefs = true }
-            ) {
-                SettingsRowChevron()
-            }
+                hint: AppStrings.settingsHintNotifications(l),
+                isOn: Binding(
+                    get: { notifications.master },
+                    set: { notifications.setMaster($0) }
+                ),
+                isEnabled: notifications.isLoaded
+            )
             .accessibilityIdentifier("settings_notifications")
 
             rowDivider(c)
 
+            // The row carries the state of the thing it opens: «выключена» /
+            // «синхронизировано» / «3 в очереди», live. That marker spent 6.1.0
+            // as a grey line under the name on the «Я» tab, where it was the
+            // second thing on the screen and nothing could be done about it.
             SettingsIconRow(
-                icon: "tray.fill",
-                title: AppStrings.settingsInbox(l),
-                action: { showNotificationsInbox = true }
+                icon: settings.cloudSyncEnabled ? "icloud.fill" : "icloud.slash",
+                title: AppStrings.settingsAccountSync(l),
+                action: { showCloudSync = true }
             ) {
                 HStack(spacing: 8) {
-                    if notificationsInbox.unreadCount > 0 {
-                        Text(notificationsInbox.unreadCount > 99 ? "99+" : "\(notificationsInbox.unreadCount)")
-                            .font(.system(size: 11, weight: .bold).monospacedDigit())
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(AppTheme.accent, in: Capsule())
-                            .fixedSize()
-                    }
+                    SyncStatusMarker(state: syncState, language: l)
                     SettingsRowChevron()
                 }
             }
+            .accessibilityIdentifier("settings_account_sync")
         }
         .surfaceCard(cornerRadius: 16)
+        .animation(.easeInOut(duration: 0.2), value: syncState)
     }
 
-    // MARK: - Group 2 — preferences
+    private var syncState: SyncState {
+        .current(
+            enabled: settings.cloudSyncEnabled,
+            isSyncing: syncQueue.isSyncing,
+            pending: syncQueue.pendingCount,
+            batchProcessed: syncQueue.batchProcessed,
+            batchTotal: syncQueue.batchTotal
+        )
+    }
 
-    private func preferencesGroup(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
+    // MARK: - Card B — the app itself
+
+    /// Words, then look, then numbers. Guests get this card too — nothing in it
+    /// needs a session.
+    private func appGroup(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         let isRu = l == .ru
         return VStack(spacing: 0) {
             SettingsIconRow(
-                icon: "ruler",
-                title: AppStrings.settingsUnits(l),
-                action: { showUnits = true }
-            ) {
-                SettingsRowValue(text: GarageFormat.distanceShort(distanceUnit, isRu: isRu))
-            }
-            .accessibilityIdentifier("settings_units")
-
-            rowDivider(c)
-
-            SettingsIconRow(
                 icon: "character.bubble",
                 title: AppStrings.lang(l),
-                action: { showLanguageDialog = true }
+                action: { showLanguagePicker = true }
             ) {
                 SettingsRowValue(text: isRu ? "Русский" : "English")
             }
@@ -294,183 +256,131 @@ struct ProfileSettingsSheet: View {
             rowDivider(c)
 
             SettingsIconRow(
-                icon: "sun.max.fill",
+                // The icon carries the current mode, same glyph the picker
+                // badges it with — a fixed sun next to the value «Тёмная»
+                // reads as a stale row.
+                icon: themeBadge(themeManager.mode),
                 title: AppStrings.theme(l),
-                action: { showThemeDialog = true }
+                action: { showThemePicker = true }
             ) {
-                SettingsRowValue(text: themeLabel(l))
+                SettingsRowValue(text: themeLabel(themeManager.mode, l))
             }
             .accessibilityIdentifier("settings_theme")
 
             rowDivider(c)
 
+            // «Единицы» and «Средняя скорость» live behind this row now (see
+            // `AppPreferencesView`). The current unit still prints on the right
+            // edge, so «в чём считает?» is answered without opening anything —
+            // which is what makes the nesting a cleanup and not a hiding place.
             SettingsIconRow(
-                icon: "speedometer",
-                title: AppStrings.settingsAvgSpeed(l),
-                action: { showAvgSpeedDialog = true }
+                icon: "ruler",
+                title: AppStrings.settingsAppPrefs(l),
+                action: { showAppPrefs = true }
             ) {
-                SettingsRowValue(text: settings.avgSpeedMode == .overall
-                                 ? AppStrings.avgSpeedOverall(l)
-                                 : AppStrings.avgSpeedMoving(l))
+                HStack(spacing: 6) {
+                    SettingsRowValue(text: GarageFormat.distanceShort(distanceUnit, isRu: isRu))
+                    SettingsRowChevron()
+                }
             }
+            .accessibilityIdentifier("settings_app_prefs")
         }
         .surfaceCard(cornerRadius: 16)
     }
 
-    private func themeLabel(_ l: LanguageManager.Language) -> String {
-        switch themeManager.mode {
+    private func themeLabel(_ mode: ThemeManager.Mode, _ l: LanguageManager.Language) -> String {
+        switch mode {
         case .system: return AppStrings.themeSystem(l)
         case .dark: return AppStrings.dark(l)
         case .light: return AppStrings.light(l)
         }
     }
 
-    // MARK: - Group 3 — actions
+    private func themeBadge(_ mode: ThemeManager.Mode) -> String {
+        switch mode {
+        case .system: return "gearshape.fill"
+        case .dark: return "moon.fill"
+        case .light: return "sun.max.fill"
+        }
+    }
 
-    private func actionsGroup(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
+    // MARK: - Pickers (Figma 1685:119 / 176 / 233)
+
+    private func languagePicker(_ l: LanguageManager.Language) -> some View {
+        // RU first, as canon draws it — `allCases` is alphabetical by case
+        // name and would lead with English on a Russian phone.
+        SettingsOptionPicker(
+            title: AppStrings.lang(l),
+            options: [LanguageManager.Language.ru, .en],
+            selection: l,
+            footnote: AppStrings.languagePickerFootnote(l),
+            badge: { $0 == .ru ? "Ру" : "En" },
+            // Endonyms: every language names itself, in itself. Not copy.
+            label: { $0 == .ru ? "Русский" : "English" },
+            onSelect: { lang.language = $0 },
+            accessibilityPrefix: "settings_language"
+        )
+    }
+
+    private func themePicker(_ l: LanguageManager.Language) -> some View {
+        SettingsOptionPicker(
+            title: AppStrings.theme(l),
+            options: [ThemeManager.Mode.system, .light, .dark],
+            selection: themeManager.mode,
+            footnote: AppStrings.themePickerFootnote(l),
+            badge: { themeBadge($0) },
+            badgeIsSymbol: true,
+            label: { themeLabel($0, l) },
+            onSelect: { themeManager.mode = $0 },
+            accessibilityPrefix: "settings_theme"
+        )
+    }
+
+    // MARK: - Card C — the author, and what to send them
+
+    /// The logs are here and not in a tools card because a log file is not a
+    /// tool: it is the attachment to the letter directly above it. Three rows
+    /// of the same shape, so the one that used to wear a bare chevron now
+    /// carries a subtitle like its neighbours.
+    private func supportGroup(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         VStack(spacing: 0) {
-            SettingsIconRow(
-                icon: "car.2.fill",
-                title: AppStrings.garage(l),
-                action: { showGarage = true }
-            ) {
-                SettingsRowChevron()
-            }
-            .accessibilityIdentifier("settings_garage")
-
-            if auth.isSignedIn {
-                rowDivider(c)
-
-                SettingsIconRow(
-                    icon: settings.cloudSyncEnabled ? "icloud.fill" : "icloud.slash",
-                    title: AppStrings.settingsAccountSync(l),
-                    action: { showCloudSync = true }
-                ) {
-                    SettingsRowChevron()
-                }
-                .accessibilityIdentifier("settings_account_sync")
-
-                rowDivider(c)
-
-                SettingsIconRow(
-                    icon: "square.and.arrow.up",
-                    title: AppStrings.settingsShareProfile(l),
-                    action: { presentShareProfile() }
-                ) {
-                    SettingsRowChevron()
-                }
-            }
+            SettingsLinkRow(
+                icon: "envelope.fill",
+                title: AppStrings.writeAuthor(l),
+                subtitle: AppStrings.settingsWriteToAuthorSub(l),
+                action: { openURL("mailto:\(Self.authorEmail)") }
+            )
+            .accessibilityIdentifier("settings_write_author")
 
             rowDivider(c)
 
-            SettingsIconRow(
+            SettingsLinkRow(
+                icon: "paperplane.fill",
+                assetIcon: "TelegramIcon",
+                title: AppStrings.telegramChannel(l),
+                subtitle: AppStrings.settingsTelegramSub(l),
+                action: { openURL(Self.telegramChannelURL) }
+            )
+            .accessibilityIdentifier("settings_telegram")
+
+            rowDivider(c)
+
+            SettingsLinkRow(
                 icon: "ladybug.fill",
                 title: AppStrings.settingsSendLogs(l),
+                subtitle: AppStrings.settingsSendLogsSub(l),
                 action: { showDebugLogs = true }
-            ) {
-                SettingsRowChevron()
-            }
-
-            #if DEBUG
-            rowDivider(c)
-
-            // Debug builds only. The finish screen is otherwise reachable only
-            // by driving far enough for the trip to survive the junk filter,
-            // which makes every change to it a trip outside.
-            SettingsIconRow(
-                icon: "flag.checkered",
-                title: l == .ru ? "Экран финиша (отладка)" : "Finish screen (debug)",
-                action: {
-                    dismiss()
-                    // After the sheet is gone: the summary is presented from
-                    // the app root and would otherwise queue behind this one.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                        mapVM.debugShowLastTripSummary()
-                    }
-                }
-            ) {
-                SettingsRowChevron()
-            }
-            #endif
-
-            if auth.isSignedIn {
-                rowDivider(c)
-
-                // Neutral (not red) icon square — per Figma.
-                SettingsIconRow(
-                    icon: "rectangle.portrait.and.arrow.right",
-                    iconColor: c.text,
-                    iconBg: c.text.opacity(0.12),
-                    title: AppStrings.signOut(l),
-                    action: { showSignOutAlert = true }
-                ) {
-                    EmptyView()
-                }
-                .accessibilityIdentifier("settings_signout")
-            }
+            )
+            .accessibilityIdentifier("settings_send_logs")
         }
         .surfaceCard(cornerRadius: 16)
     }
 
-    // MARK: - Group 4 — about
-
-    private func aboutGroup(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            AccountSectionLabel(text: AppStrings.about(l))
-                .padding(.leading, 2)
-                .padding(.top, 6)
-
-            VStack(spacing: 0) {
-                SettingsIconRow(
-                    icon: "photo.on.rectangle",
-                    title: AppStrings.settingsProfileBackground(l),
-                    action: { showBackgroundPicker = true }
-                ) {
-                    SettingsRowChevron()
-                }
-
-                rowDivider(c)
-
-                SettingsIconRow(
-                    icon: "paperplane.fill",
-                    assetIcon: "TelegramIcon",
-                    iconColor: Color(red: 0.16, green: 0.57, blue: 0.86),
-                    iconBg: Color(red: 0.16, green: 0.57, blue: 0.86).opacity(0.1),
-                    title: "Telegram",
-                    action: { openURL("https://t.me/onezee_co") }
-                ) {
-                    SettingsRowChevron()
-                }
-
-                rowDivider(c)
-
-                SettingsIconRow(
-                    icon: "play.rectangle.fill",
-                    assetIcon: "YouTubeIcon",
-                    iconColor: Color(red: 1.0, green: 0.0, blue: 0.0),
-                    iconBg: Color(red: 1.0, green: 0.0, blue: 0.0).opacity(0.08),
-                    title: "YouTube",
-                    action: { openURL("https://www.youtube.com/@onezee_dev") }
-                ) {
-                    SettingsRowChevron()
-                }
-
-                rowDivider(c)
-
-                SettingsIconRow(
-                    icon: "chevron.left.forwardslash.chevron.right",
-                    assetIcon: "GitHubIcon",
-                    iconColor: c.text,
-                    iconBg: c.text.opacity(0.08),
-                    title: "GitHub",
-                    action: { openURL("https://github.com/OneZee23/trip-track-ios") }
-                ) {
-                    SettingsRowChevron()
-                }
-            }
-            .surfaceCard(cornerRadius: 16)
-        }
-    }
+    /// The one address the app publishes (privacy policy + terms). Swap it the
+    /// day there is a dedicated feedback inbox — the row's copy already
+    /// promises «отзывы и идеи», not a legal channel.
+    private static let authorEmail = "privacy@trip-track.app"
+    private static let telegramChannelURL = "https://t.me/onezee_co"
 
     // MARK: - Footer
 
@@ -540,8 +450,34 @@ struct ProfileSettingsSheet: View {
                 ) {
                     SettingsRowChevron()
                 }
+
+                rowDivider(c)
+
+                // The finish screen is otherwise reachable only by driving far
+                // enough for the trip to survive the junk filter, which makes
+                // every change to it a trip outside.
+                SettingsIconRow(
+                    icon: "flag.checkered",
+                    iconColor: AppTheme.accent,
+                    iconBg: AppTheme.accentBg,
+                    title: "Экран финиша (отладка)",
+                    action: { showDebugFinishScreen() }
+                ) {
+                    SettingsRowChevron()
+                }
             }
             .surfaceCard(cornerRadius: 16)
+        }
+    }
+
+    private func showDebugFinishScreen() {
+        Haptics.action()
+        dismiss()
+        // After the sheet is gone: the summary is presented from the app root
+        // and would otherwise queue behind this one.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            mapVM.debugShowLastTripSummary()
         }
     }
 
@@ -560,28 +496,6 @@ struct ProfileSettingsSheet: View {
 
     // MARK: - Handlers
 
-    /// Copied verbatim from pre-6.1.0 ProfileView: mutate-then-sync with a
-    /// guard on unchanged values so redundant server syncs never fire.
-    private func setShowOnPublicMap(_ value: Bool) {
-        guard settings.showOnPublicMap != value else { return }
-        settings.showOnPublicMap = value
-        Task { await auth.syncProfileToServer(refreshFeedAfter: false) }
-    }
-
-    private func presentShareProfile() {
-        guard let accountId = TokenStore.shared.accountId else { return }
-        let urlString = "https://trip-track.app/u/\(accountId)"
-        guard let url = URL(string: urlString) else { return }
-        let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        var vc = UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
-            .first
-        while let presented = vc?.presentedViewController {
-            vc = presented
-        }
-        vc?.present(av, animated: true)
-    }
-
     private func openURL(_ string: String) {
         if let u = URL(string: string) {
             UIApplication.shared.open(u)
@@ -589,21 +503,138 @@ struct ProfileSettingsSheet: View {
     }
 }
 
-/// Medium-detent host for the existing `UnitsSettingsCard` (GarageView.swift)
-/// — no dedicated Единицы screen is designed, the card already covers
-/// distance/volume/currency.
-private struct UnitsSheetWrapper: View {
+// MARK: - Rows canon draws that the shared master can't
+
+/// Canon's switch row (580:253). Geometry is `SettingsIconRow`'s to the point
+/// — 30pt icon square, 12pt gap, 14/13 padding, 14.5 semibold label — but the
+/// «?» has to sit immediately after the label, and that component's only
+/// opening is its trailing slot. A hint parked next to the switch stops
+/// reading as a footnote to the label and starts reading as part of the
+/// control, which is the one thing it must not be.
+private struct SettingsToggleRow: View {
+    let icon: String
+    let title: String
+    /// Already-localized hint body; nil = no «?» on this row.
+    var hint: String?
+    let isOn: Binding<Bool>
+    /// False while the server value is still loading — the switch renders
+    /// dimmed rather than inviting a tap that would save a guess.
+    var isEnabled: Bool = true
+
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        ScrollView {
-            UnitsSettingsCard()
-                .padding(.horizontal, 14)
-                .padding(.top, 22)
-                .padding(.bottom, 26)
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(AppTheme.accentBg)
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(AppTheme.accent)
+            }
+            .frame(width: 30, height: 30)
+
+            Text(title)
+                .font(.system(size: 14.5, weight: .semibold))
+                .foregroundStyle(c.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                // The label yields the row's width last: on a 360pt phone
+                // «Поездки на глобальной карте» plus disc plus switch is the
+                // tight case, and it should shrink rather than push the «?» off.
+                .layoutPriority(1)
+
+            if let hint {
+                SettingsHintButton(text: hint)
+            }
+
+            Spacer(minLength: 8)
+
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .tint(AppTheme.accent)
+                // Canon's switch is 46×28 — the system's 51×31 at 0.9.
+                .scaleEffect(0.9)
+                // 28, not 44: `scaleEffect` is a geometry effect and does not
+                // shrink layout size, so a 44 frame made the switch the tallest
+                // thing in the row and every switch row 70pt against canon's 56
+                // — three of them stacked in one card is where that read as a
+                // sparse, unfinished list. The 44pt target is grown back with
+                // padding and pulled out of layout again.
+                .frame(width: 46, height: 28)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+                .padding(.vertical, -8)
+                .disabled(!isEnabled)
         }
-        .scrollIndicators(.hidden)
-        .background(c.bg)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .opacity(isEnabled ? 1 : 0.55)
+        .animation(.easeOut(duration: 0.2), value: isEnabled)
+    }
+}
+
+/// Canon's author link (1691:540): the same row geometry with a second line
+/// under the title. `SettingsIconRow` has one label and lives in a file this
+/// screen doesn't own, so the subtitle variant is built here against the same
+/// constants rather than by widening a component four other screens use.
+private struct SettingsLinkRow: View {
+    let icon: String
+    /// Bundled template asset, when the glyph is a brand mark rather than an
+    /// SF Symbol.
+    var assetIcon: String?
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let c = AppTheme.colors(for: scheme)
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(AppTheme.accentBg)
+                    if let assetIcon {
+                        Image(assetIcon)
+                            .renderingMode(.template)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                            .foregroundStyle(AppTheme.accent)
+                    } else {
+                        Image(systemName: icon)
+                            .font(.system(size: 16))
+                            .foregroundStyle(AppTheme.accent)
+                    }
+                }
+                .frame(width: 30, height: 30)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 14.5, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                SettingsRowChevron()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -25,11 +25,22 @@ enum DebugLogExporter {
     /// subsystem predicate as the export path (shared `logEntries` helper);
     /// `async` because the OSLogStore read is slow — call it off the main
     /// actor and show a loader meanwhile.
+    /// Journal feed: the archive (days of history, survives relaunches) merged
+    /// with whatever this process has said since the last sweep, oldest-first.
+    ///
+    /// The live half alone is what the journal used to show, and it is empty
+    /// two seconds after a relaunch — `OSLogStore` only answers for the
+    /// current process. `LogArchive` is the other half; see it for how the
+    /// lines get there.
     static func recentEntries(hoursBack: Double = 2, limit: Int = 100) async throws -> [LogEntryRow] {
         let window = min(max(hoursBack, 0.25), maxRetentionHours)
-        var rows: [LogEntryRow] = []
+        var rows: [LogEntryRow] = await LogArchive.shared.archivedRows()
+        let archivedUpTo = rows.last?.date ?? .distantPast
         for entry in try logEntries(hoursBack: window) {
             guard let log = entry as? OSLogEntryLog else { continue }
+            // Everything up to the last archived line is already in `rows` —
+            // taking it again would print this session twice.
+            guard log.date > archivedUpTo else { continue }
             rows.append(LogEntryRow(
                 date: log.date,
                 level: log.level,
@@ -37,6 +48,7 @@ enum DebugLogExporter {
                 message: log.composedMessage
             ))
         }
+        rows.sort { $0.date < $1.date }
         if rows.count > limit {
             rows.removeFirst(rows.count - limit)
         }
@@ -67,6 +79,10 @@ enum DebugLogExporter {
         // Clean up any prior exports first — we only ever need the latest.
         purgeOldExports()
 
+        // Sweep first so this session's newest lines are in the archive, then
+        // export archive + anything logged in the last instants.
+        await LogArchive.shared.sweep()
+        let archived = await LogArchive.shared.archivedText()
         let entries = try logEntries(hoursBack: window)
 
         let identity = await MainActor.run { () -> (localUserId: String, accountId: String, signedIn: Bool, syncEnabled: Bool) in
@@ -104,8 +120,19 @@ enum DebugLogExporter {
         let fmt = ISO8601DateFormatter()
         fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
+        // Archived days first (up to a week back, same line format), then this
+        // session's tail. Without the archive an export sent the day AFTER a
+        // bug carried nothing about it: the system store forgets a process the
+        // moment it dies.
+        var lastArchived: Date = .distantPast
+        if !archived.isEmpty {
+            lines.append(archived.trimmingCharacters(in: .newlines))
+            lastArchived = await LogArchive.shared.archivedRows().last?.date ?? .distantPast
+        }
+
         for entry in entries {
             guard let log = entry as? OSLogEntryLog else { continue }
+            guard log.date > lastArchived else { continue }
             let ts = fmt.string(from: log.date)
             let level = shortLevel(log.level)
             lines.append("[\(ts)] [\(level)] [\(log.subsystem)/\(log.category)] \(log.composedMessage)")

@@ -41,9 +41,26 @@ final class TripCommentsStore: ObservableObject {
 
     /// Loads the first page. Safe to call repeatedly (`.task(id:)` re-fires
     /// on structural identity changes) — a same-trip reload just refreshes.
-    func load(tripId: UUID) async {
+    ///
+    /// `isOnServer: false` means the trip has never been uploaded, so there is
+    /// nothing to ask about: every such open used to spend a round-trip to be
+    /// told `TRIP_NOT_FOUND` (a warning per opened trip in the server log, and
+    /// a wasted request for every user with sync off). The device's archived
+    /// copy is still read — a trip can lose its server row while its thread
+    /// lives on here.
+    func load(tripId: UUID, isOnServer: Bool = true) async {
         self.tripId = tripId
         guard !isLoading else { return }
+        guard isOnServer else {
+            let archived = DiscussionArchive.load(for: tripId)
+            comments = archived
+            nextCursor = nil
+            loadFailed = false
+            unavailable = false
+            isArchived = !archived.isEmpty
+            hasLoadedOnce = true
+            return
+        }
         isLoading = true
         defer { isLoading = false; hasLoadedOnce = true }
         do {

@@ -106,6 +106,45 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
 - New views go in the appropriate `Views/` subdirectory by feature
 - New services are singletons with `static let shared`
 
+### Dialogs — always ours, never the system's
+
+**No system modal ever ships in this app.** No `.alert`, no `.confirmationDialog`,
+no `.actionSheet`, no `Menu` used as an action list. They drop UIKit chrome —
+system greys, system type, a plate with its own corner radius — into the middle
+of a screen built from our warm cards, and they read as borrowed from another
+app. Two of them have already shipped broken: a `confirmationDialog` inside a
+custom navigator adapted into a floating plate that lost its own Cancel button,
+and a `Menu` on a circular nav control left a rounded-square plate behind on
+dismissal (see `NavCircleIcon`'s doc comment).
+
+Use the house components instead:
+- **Confirmations** — `AppConfirmDialog` / the `.appConfirm(...)` modifier: a
+  scrim that swallows taps, the question in our type, and the answers stacked
+  with the safe one nearest the thumb.
+- **Action lists** («…» menus) — `ActionPopoverList`.
+- **Pickers** — `SettingsOptionPicker` in a `.contentSizedSheet`.
+- **Transient feedback** — `ToastView`, not an alert.
+
+Rules for any confirmation you build or touch:
+- The scrim must be `.accessibilityHidden(true)` and the card a modal, or
+  VoiceOver's rotor walks straight past it onto the page behind.
+- `AppConfirmDialog` dismisses ITSELF before running each handler, so a handler
+  must NOT clear `isPresented` / the item, and must not read its subject back
+  out of state after dismissal — take it as the closure argument instead.
+  (A hand-rolled overlay does not do this for you: forgetting to dismiss is what
+  made «Закрепить» look like a dead button. That is the reason to use the
+  component rather than to copy it.)
+- A dialog on a TAB-ROOT screen must also `.hideAppTabBar()` while it is up, or
+  the custom tab bar paints over the scrim and stays tappable — the user can
+  switch tabs with a destructive confirmation pending.
+- Attach the dialog at the SCREEN root, never inside a `ScrollView`. An overlay
+  is sized to the view it modifies, so a dialog hung on a section gets a scrim
+  the size of that section, scrolls with the content, and can be clipped
+  off-screen entirely.
+- The destructive action is `AppTheme.red`, the ordinary one `AppTheme.accent`,
+  and Cancel is always present and always last.
+- All copy through `AppStrings`, both languages.
+
 ### What NOT to Do
 - Don't use `AnyView` — it kills SwiftUI diffing performance
 - Don't use `@ObservedObject` for objects the view creates — use `@StateObject`

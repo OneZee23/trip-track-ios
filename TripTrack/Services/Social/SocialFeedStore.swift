@@ -479,55 +479,6 @@ extension Notification.Name {
     static let tripCommentCountChanged = Notification.Name("tripCommentCountChanged")
 }
 
-private extension SocialFeedTrip {
-    /// Rebuild with a new comment count — `commentCountRaw` is a `let` on the
-    /// DTO, so optimistic bumps go through the memberwise init like the
-    /// reaction path below.
-    func with(commentCount: Int) -> SocialFeedTrip {
-        SocialFeedTrip(
-            id: id, author: author, title: title, description: description,
-            startDate: startDate, endDate: endDate,
-            distance: distance, duration: duration,
-            maxSpeed: maxSpeed, elevation: elevation,
-            maxAltitude: maxAltitude, drivingTime: drivingTime, stoppedTime: stoppedTime,
-            region: region, isPrivate: isPrivate,
-            previewPolyline: previewPolyline,
-            photoCount: photoCount, firstPhotoThumbnail: firstPhotoThumbnail,
-            vehicle: vehicle,
-            reactionCount: reactionCount, reactionBreakdown: reactionBreakdown,
-            myReaction: myReaction, badgeIds: badgeIds,
-            commentCountRaw: commentCount
-        )
-    }
-
-    func with(reactionCount: Int, myReaction: String?) -> SocialFeedTrip {
-        // Rebuild breakdown locally to reflect optimistic toggle:
-        // decrement previous myReaction bucket, increment new one.
-        var breakdown = reactionBreakdown.reduce(into: [String: Int]()) { $0[$1.emoji] = $1.count }
-        if let old = self.myReaction {
-            breakdown[old, default: 1] -= 1
-            if (breakdown[old] ?? 0) <= 0 { breakdown.removeValue(forKey: old) }
-        }
-        if let new = myReaction {
-            breakdown[new, default: 0] += 1
-        }
-        let updated = breakdown
-            .map { ReactionTally(emoji: $0.key, count: $0.value) }
-            .sorted { $0.count > $1.count }
-
-        return SocialFeedTrip(
-            id: id, author: author, title: title, description: description,
-            startDate: startDate, endDate: endDate,
-            distance: distance, duration: duration,
-            maxSpeed: maxSpeed, elevation: elevation,
-            maxAltitude: maxAltitude, drivingTime: drivingTime, stoppedTime: stoppedTime,
-            region: region, isPrivate: isPrivate,
-            previewPolyline: previewPolyline,
-            photoCount: photoCount, firstPhotoThumbnail: firstPhotoThumbnail,
-            vehicle: vehicle,
-            reactionCount: reactionCount, reactionBreakdown: updated,
-            myReaction: myReaction, badgeIds: badgeIds,
-            commentCountRaw: commentCountRaw
-        )
-    }
-}
+// The two `with(...)` rebuilds this store used to own privately now live in
+// `SocialReactions.swift` — `PublicProfileView` draws the same card over its
+// own array of trips and needs the identical optimistic bump.

@@ -57,9 +57,21 @@ struct MapSnapshotPreview: View {
             }
 
             if let snapshot {
-                Image(uiImage: snapshot)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                // Drawn as an OVERLAY on a flexible `Color.clear`, not as the
+                // ZStack's own child: `.fill` reports a size larger than the
+                // proposal in one axis (a 340×84 snapshot asks for 340pt of
+                // width at 84pt tall no matter how narrow the slot), and an
+                // overlay never contributes to its host's size. In a
+                // `LazyVGrid` that ideal width was leaking outward and sizing
+                // the COLUMN — two profile tiles laid out at feed-card width
+                // and the row hung off both edges of the screen.
+                Color.clear
+                    .overlay {
+                        Image(uiImage: snapshot)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    }
+                    .clipped()
                     .transition(.opacity)
             }
         }

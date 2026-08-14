@@ -6,6 +6,14 @@ extension Notification.Name {
     static let switchToTrackingTab = Notification.Name("switchToTrackingTab")
     static let openTripDetail = Notification.Name("openTripDetail")
     static let navigateToTrip = Notification.Name("navigateToTrip")
+    /// A profile link was opened from outside the app —
+    /// `https://trip-track.app/u/<id>` (universal link) or its
+    /// `triptrack://profile/<id>` twin. Object is the account `UUID`.
+    /// ContentView switches to the feed tab and re-posts `.navigateToProfile`
+    /// once that tab's stack exists, the same two-phase handoff `.openTripDetail`
+    /// uses.
+    static let openUserProfile = Notification.Name("openUserProfile")
+    static let navigateToProfile = Notification.Name("navigateToProfile")
     static let dismissTripSummary = Notification.Name("dismissTripSummary")
     static let tripDeleted = Notification.Name("tripDeleted")
     static let tripRecordingEnded = Notification.Name("tripRecordingEnded")
@@ -73,10 +81,6 @@ struct ContentView: View {
     @State private var hideTabBar = false
     @Environment(\.colorScheme) private var systemScheme
     @EnvironmentObject private var lang: LanguageManager
-    /// Needed to re-apply the theme override on root-level presentations —
-    /// sheets/covers are separate presentations the app-root
-    /// `preferredColorScheme` does not reach (see ProfileView's note).
-    @EnvironmentObject private var themeManager: ThemeManager
 
     var body: some View {
         let c = AppTheme.colors(for: systemScheme)
@@ -135,7 +139,6 @@ struct ContentView: View {
             RecoveryPromptSheet()
                 .environmentObject(mapVM)
                 .environmentObject(lang)
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         // Trip summary — root-level for the same reason: «Завершить и
         // сохранить» in the recovery prompt finishes a trip from ANY tab;
@@ -175,7 +178,6 @@ struct ContentView: View {
                 }
             )
             .environmentObject(lang)
-            .preferredColorScheme(themeManager.preferredColorScheme)
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToFeedTab)) { _ in
             withAnimation(.easeInOut(duration: 0.3)) {
@@ -233,6 +235,16 @@ struct ContentView: View {
                     try? await Task.sleep(for: .milliseconds(300))
                     NotificationCenter.default.post(name: .navigateToTrip, object: link)
                 }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openUserProfile)) { notification in
+            // Same two-phase handoff as `.openTripDetail`: switch tabs first,
+            // then re-post once the feed's stack has mounted its listener.
+            guard let id = notification.object as? UUID else { return }
+            selectedTab = .home
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                NotificationCenter.default.post(name: .navigateToProfile, object: id)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .dismissTripSummary)) { _ in

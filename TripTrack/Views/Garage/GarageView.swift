@@ -5,7 +5,6 @@ struct GarageView: View {
     /// Sheets are separate presentations — the override applied to the
     /// Garage sheet itself (ProfileView) does not reach a sheet presented
     /// from HERE, so the add-vehicle form must re-apply it.
-    @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
@@ -39,25 +38,31 @@ struct GarageView: View {
             .sheet(isPresented: $showAddVehicle) {
                 VehicleEditFormView(mode: .add)
                     .environmentObject(lang)
-                    .preferredColorScheme(themeManager.preferredColorScheme)
             }
-            .confirmationDialog(
-                AppStrings.deleteVehicleConfirm(l),
+            // House dialog, never the system's — see «Dialogs» in CLAUDE.md.
+            .appConfirm(
                 isPresented: deleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button(AppStrings.deleteVehicle(l), role: .destructive) {
-                    performDelete()
-                }
-                Button(AppStrings.cancel(l), role: .cancel) {
-                    deleteCandidateId = nil
-                }
-            } message: {
-                // Without it the sheet asks to delete and says nothing about
+                title: AppStrings.deleteVehicleConfirm(l),
+                // Without it the dialog asks to delete and says nothing about
                 // what happens to the trips — the one thing worth fearing.
-                Text(AppStrings.deleteVehicleBody(l))
-            }
+                message: AppStrings.deleteVehicleBody(l),
+                actions: deleteActions(l),
+                cancelTitle: AppStrings.cancel(l)
+            )
         }
+    }
+
+    /// The candidate is captured HERE, while the card is on screen, not read
+    /// back inside the handler: the dialog dismisses itself first, and that
+    /// dismissal runs `deleteConfirmation`'s setter, which has already cleared
+    /// `deleteCandidateId` by the time the handler fires.
+    private func deleteActions(_ l: LanguageManager.Language) -> [AppDialogAction] {
+        guard let id = deleteCandidateId else { return [] }
+        return [
+            AppDialogAction(AppStrings.deleteVehicle(l), kind: .destructive) {
+                performDelete(id: id)
+            }
+        ]
     }
 
     private var deleteConfirmation: Binding<Bool> {
@@ -318,113 +323,12 @@ struct GarageView: View {
 
     // MARK: - Actions
 
-    private func performDelete() {
-        guard let id = deleteCandidateId else { return }
+    /// Takes the id rather than reading `deleteCandidateId`: the house dialog
+    /// clears that state on dismissal, which happens BEFORE this runs.
+    private func performDelete(id: UUID) {
         settings.deleteVehicle(id: id)
         if settings.selectedVehicleId == id {
             settings.selectVehicle(id: settings.vehicles.first?.id)
-        }
-        deleteCandidateId = nil
-    }
-}
-
-// MARK: - Units Settings Card
-
-struct UnitsSettingsCard: View {
-    @EnvironmentObject private var lang: LanguageManager
-    @Environment(\.colorScheme) private var scheme
-
-    @AppStorage("distanceUnit") private var distanceUnit: String = "km"
-    @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
-    @AppStorage(FuelCurrency.storageKey) private var currency: String = FuelCurrency.defaultSymbol
-
-    var body: some View {
-        let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
-
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Image(systemName: "ruler.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppTheme.blue)
-                Text(isRu ? "Единицы измерения" : "Units")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(c.text)
-            }
-
-            // Distance
-            unitRow(
-                label: isRu ? "Расстояние" : "Distance",
-                options: DistanceUnit.allCases.map { ($0.rawValue, isRu ? $0.labelFull.ru : $0.labelFull.en) },
-                selected: $distanceUnit,
-                c: c
-            )
-
-            // Volume
-            unitRow(
-                label: isRu ? "Объём" : "Volume",
-                options: VolumeUnit.allCases.map { ($0.rawValue, isRu ? $0.labelFull.ru : $0.labelFull.en) },
-                selected: $volumeUnit,
-                c: c
-            )
-
-            // Currency
-            VStack(alignment: .leading, spacing: 6) {
-                Text(isRu ? "Валюта" : "Currency")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(FuelCurrency.allCases, id: \.self) { cur in
-                            Button {
-                                Haptics.tap()
-                                currency = cur.symbol
-                            } label: {
-                                Text(cur.symbol)
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .frame(width: 40, height: 36)
-                                    .foregroundStyle(currency == cur.symbol ? .white : c.textSecondary)
-                                    .background(
-                                        currency == cur.symbol ? AppTheme.accent : c.cardAlt,
-                                        in: RoundedRectangle(cornerRadius: 10)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .surfaceCard(cornerRadius: 16)
-    }
-
-    private func unitRow(label: String, options: [(value: String, label: String)], selected: Binding<String>, c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-
-            HStack(spacing: 8) {
-                ForEach(options, id: \.value) { option in
-                    Button {
-                        Haptics.tap()
-                        selected.wrappedValue = option.value
-                    } label: {
-                        Text(option.label)
-                            .font(.system(size: 14, weight: .semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .foregroundStyle(selected.wrappedValue == option.value ? .white : c.textSecondary)
-                            .background(
-                                selected.wrappedValue == option.value ? AppTheme.accent : c.cardAlt,
-                                in: RoundedRectangle(cornerRadius: 10)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
         }
     }
 }

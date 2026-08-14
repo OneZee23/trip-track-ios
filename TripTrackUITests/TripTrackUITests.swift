@@ -142,7 +142,7 @@ final class TripTrackUITests: XCTestCase {
         // «Мои» segment was retired for «Подписки».
         let me = app.buttons.matching(identifier: "tab_profile").firstMatch
         if me.waitForExistence(timeout: 5), me.isHittable { me.tap(); sleep(2) }
-        let anyCard = app.descendants(matching: .any).matching(identifier: "profile_trip_row").firstMatch
+        let anyCard = app.anyHistoryTripCells.firstMatch
         if !anyCard.waitForExistence(timeout: 3) {
             // История sits below the hero/moments — scroll until a row shows.
             for _ in 0..<4 {
@@ -150,7 +150,7 @@ final class TripTrackUITests: XCTestCase {
                 if anyCard.exists { break }
             }
         }
-        print("DETSHOT rows=\(app.descendants(matching: .any).matching(identifier: "profile_trip_row").count)")
+        print("DETSHOT rows=\(app.anyHistoryTripCells.count)")
         let mapExpand = app.buttons.matching(identifier: "detail_map_expand").firstMatch
         if anyCard.waitForExistence(timeout: 3) {
             // Tap near the row's top — a partially covered row's geometric
@@ -186,9 +186,14 @@ final class TripTrackUITests: XCTestCase {
         normalizeToHome()
         let me = app.buttons.matching(identifier: "tab_profile").firstMatch
         if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
-        // The garage row sits below the profile fold — scroll until visible.
-        for _ in 0..<4 {
-            if tap("Гараж", timeout: 1) || tap("Garage", timeout: 1) { break }
+        // The Гараж section sits below the profile fold — scroll until its
+        // «Весь транспорт ›» header control is reachable. Matched by identifier,
+        // not by label: «Гараж» is now a section TITLE on this page (a static
+        // text), and the label match used to walk straight past it and shoot
+        // the profile instead of the garage.
+        let garage = app.buttons.matching(identifier: "settings_garage").firstMatch
+        for _ in 0..<5 {
+            if garage.exists, garage.isHittable { garage.tap(); break }
             win.swipeUp(); usleep(600_000)
         }
         sleep(2); snap("100_garage_list")
@@ -254,8 +259,13 @@ final class TripTrackUITests: XCTestCase {
         normalizeToHome()
         let me = app.buttons.matching(identifier: "tab_profile").firstMatch
         if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
+        // Behind the gear, not on the Я page: the journal is a row of the
+        // «Поддержка» card inside the settings sheet.
+        let gear = app.buttons.matching(identifier: "profile_gear").firstMatch
+        if gear.waitForExistence(timeout: 4), gear.isHittable { gear.tap(); sleep(1) }
+        let logs = app.buttons.matching(identifier: "settings_send_logs").firstMatch
         for _ in 0..<5 {
-            if tap("Отправить логи", timeout: 1) || tap("Send debug logs", timeout: 1) { break }
+            if logs.exists, logs.isHittable { logs.tap(); break }
             win.swipeUp(); usleep(600_000)
         }
         sleep(3); snap("120_logs_journal")
@@ -300,11 +310,15 @@ final class TripTrackUITests: XCTestCase {
             sleep(1)
         }
 
-        let wrapped = app.buttons.matching(identifier: "profile_wrapped_cta").firstMatch
-        if wrapped.waitForExistence(timeout: 2), wrapped.isHittable {
-            wrapped.tap(); sleep(2); snap("145_wrapped_story")
-            let close = app.buttons.matching(identifier: "wrapped_close").firstMatch
-            if close.waitForExistence(timeout: 2) { close.tap() } else { pt(0.93, 0.07).tap() }
+        // 6.1.0 replaced the Wrapped hero with «Достижения» — shoot that instead.
+        let achievements = app.buttons.matching(identifier: "profile_achievements_all").firstMatch
+        if achievements.waitForExistence(timeout: 2), achievements.isHittable {
+            achievements.tap(); sleep(2); snap("145_achievements")
+            // Pushed screen with a LEADING back circle — the trailing corner
+            // this used to tap is empty, so the tour stayed on Достижения and
+            // shot the rest of the run from the wrong screen.
+            let back = app.buttons.matching(identifier: "achievements_back").firstMatch
+            if back.waitForExistence(timeout: 2) { back.tap() } else { pt(0.07, 0.07).tap() }
             sleep(1)
         }
     }

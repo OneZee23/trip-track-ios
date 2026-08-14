@@ -240,6 +240,20 @@ struct SocialProfileStats: Codable, Hashable {
     let publicTripCount: Int
 }
 
+/// One trip on somebody's profile.
+///
+/// The server builds these with the FEED's own item builder, so the payload
+/// IS a feed item and the profile renders it with the feed's own card —
+/// author line, metric strip, reactions, comment count. It used to be a
+/// six-field summary (id, title, date, distance, region, polyline), which is
+/// why a trip on a profile was a strictly poorer object than the identical
+/// trip in the feed: no time, no average speed, nothing to react to.
+///
+/// Everything past those six is optional so a server that still sends the old
+/// summary decodes cleanly — `feedTrip(fallbackAuthor:)` fills the author from
+/// the profile the card is standing on and the card simply has no reactions
+/// to show. Without that tolerance one undeployed backend blanks the whole
+/// profile screen, not just its trips.
 struct SocialProfileRecentTrip: Codable, Identifiable, Hashable {
     let id: UUID
     let title: String?
@@ -249,7 +263,73 @@ struct SocialProfileRecentTrip: Codable, Identifiable, Hashable {
     let region: String?
     let previewPolyline: String?
 
+    var author: SocialAuthor? = nil
+    var description: String? = nil
+    var endDate: Date? = nil
+    /// seconds, wall clock — the feed item's own `duration`
+    var duration: Int? = nil
+    /// m/s
+    var maxSpeed: Double? = nil
+    var elevation: Double? = nil
+    var maxAltitude: Double? = nil
+    /// seconds spent moving
+    var drivingTime: Int? = nil
+    var stoppedTime: Int? = nil
+    var isPrivate: Bool? = nil
+    var photoCount: Int? = nil
+    var firstPhotoThumbnail: String? = nil
+    var vehicle: SocialFeedVehicle? = nil
+    var reactionCount: Int? = nil
+    var reactionBreakdown: [ReactionTally]? = nil
+    var myReaction: String? = nil
+    var badgeIds: [String]? = nil
+    var commentCount: Int? = nil
+    /// km/h, and ONLY sent by the pre-feed-shape mapper. The feed item derives
+    /// average speed from distance ÷ duration instead of carrying one.
+    var averageSpeed: Double? = nil
+
     var distanceKm: Double { distance / 1000.0 }
+
+    /// The feed's item for this trip. `fallbackAuthor` is the profile being
+    /// looked at — it only gets used against a server that predates the
+    /// feed-shaped payload, where the trips carry no author of their own.
+    func feedTrip(fallbackAuthor: SocialAuthor) -> SocialFeedTrip {
+        SocialFeedTrip(
+            id: id,
+            author: author ?? fallbackAuthor,
+            title: title,
+            description: description,
+            startDate: startDate,
+            endDate: endDate,
+            distance: distance,
+            duration: duration ?? legacyDurationSeconds,
+            maxSpeed: maxSpeed,
+            elevation: elevation,
+            maxAltitude: maxAltitude,
+            drivingTime: drivingTime,
+            stoppedTime: stoppedTime,
+            region: region,
+            isPrivate: isPrivate,
+            previewPolyline: previewPolyline,
+            photoCount: photoCount ?? 0,
+            firstPhotoThumbnail: firstPhotoThumbnail,
+            vehicle: vehicle,
+            reactionCount: reactionCount ?? 0,
+            reactionBreakdown: reactionBreakdown ?? [],
+            myReaction: myReaction,
+            badgeIds: badgeIds ?? [],
+            commentCountRaw: commentCount
+        )
+    }
+
+    /// Duration for a pre-feed-shape payload: the moving time that mapper
+    /// sent, else start→end. Zero when the server sent neither — the card
+    /// prints «0 мин», which is what a trip with no known duration is.
+    private var legacyDurationSeconds: Int {
+        if let drivingTime, drivingTime > 0 { return drivingTime }
+        guard let endDate else { return 0 }
+        return max(0, Int(endDate.timeIntervalSince(startDate)))
+    }
 }
 
 struct SocialActiveVehicle: Codable, Hashable {

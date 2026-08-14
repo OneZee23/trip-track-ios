@@ -49,8 +49,13 @@ struct DebugLogsView: View {
             // async exporter helper while PixelCarLoader spins.
             do {
                 // Figma frame 3 draws newest-first; the exporter returns
-                // oldest-first (export-file order).
-                entries = Array(try await DebugLogExporter.recentEntries().reversed())
+                // oldest-first (export-file order). The window is the whole
+                // archive now (up to a week), so the cap is generous: a
+                // journal that only remembers the current launch is what
+                // made bug reports arrive empty.
+                entries = Array(
+                    try await DebugLogExporter.recentEntries(hoursBack: 48, limit: 800).reversed()
+                )
             } catch {
                 // A diagnostics screen must not claim "no entries" when the
                 // store READ failed — that misleads the bug-report flow.
@@ -80,7 +85,11 @@ struct DebugLogsView: View {
                 // The old helper tapped haptics for every button it drew; the
                 // canon back button still does, so the export side has to.
                 Haptics.tap()
-                Task { await generate() }
+                // Builds the file AND opens the share sheet. It used to only
+                // build one, leaving the actual sharing to a button at the
+                // BOTTOM of a journal that is now days long — «мне листать
+                // вниз будет очень долго».
+                Task { await generateAndShare() }
             } label: {
                 NavCircleIcon(systemImage: "square.and.arrow.up")
             }
@@ -129,7 +138,9 @@ struct DebugLogsView: View {
 
     private func journalRow(_ row: DebugLogExporter.LogEntryRow, c: AppTheme.Colors) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Text(Self.timeFormatter.string(from: row.date))
+            // Day + time once the journal spans days — a bare «21:03» in a
+            // week of history says nothing about which 21:03 it was.
+            Text(Self.stamp(for: row.date))
                 .font(.inter(11, weight: .medium).monospacedDigit())
                 .foregroundStyle(c.textTertiary)
 
@@ -166,6 +177,20 @@ struct DebugLogsView: View {
         f.dateFormat = "HH:mm:ss"
         return f
     }()
+
+    private static let dayTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "dd.MM HH:mm:ss"
+        return f
+    }()
+
+    /// Today's lines keep the compact time; older ones carry their day.
+    private static func stamp(for date: Date) -> String {
+        Calendar.current.isDateInToday(date)
+            ? timeFormatter.string(from: date)
+            : dayTimeFormatter.string(from: date)
+    }
 
     // MARK: - CTA block
 
@@ -234,5 +259,16 @@ struct DebugLogsView: View {
         } catch {
             errorMessage = "\(error.localizedDescription)"
         }
+    }
+
+    /// What the bar's button does: write the file, then put the share sheet up
+    /// itself. `ShareLinkPresenter` waits for a controller that can actually
+    /// present, which matters here — the journal is a sheet.
+    private func generateAndShare() async {
+        await generate()
+        guard let url = exportURL else { return }
+        await ShareLinkPresenter.present(
+            url: url, title: AppStrings.logsJournalTitle(lang.language)
+        )
     }
 }

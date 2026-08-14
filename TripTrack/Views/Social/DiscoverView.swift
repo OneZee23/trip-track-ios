@@ -26,7 +26,6 @@ struct DiscoverView: View {
     /// Injected by the presenter (FeedView) — needed to re-apply the in-app
     /// theme override on the nested sign-in sheet (nested sheets are separate
     /// presentations; the override on the Discover sheet doesn't reach them).
-    @EnvironmentObject private var themeManager: ThemeManager
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -85,7 +84,6 @@ struct DiscoverView: View {
             SignInPromptSheet(action: action)
                 .environmentObject(lang)
                 .environmentObject(auth)
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
     }
 
@@ -316,7 +314,7 @@ struct DiscoverView: View {
                 // row-content jump on toggle. Pinning width keeps the row
                 // stable between states.
                 .socialActionButton(
-                    isFollowed ? .secondary : .primary, colors: c, width: 122
+                    isFollowed ? .done : .primary, colors: c, width: 122
                 )
         }
         .buttonStyle(.plain)

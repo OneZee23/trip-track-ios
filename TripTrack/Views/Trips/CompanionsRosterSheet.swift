@@ -147,22 +147,28 @@ struct CompanionsRosterSheet: View {
         // then the same rows again a moment later.
         .task(id: tripId) { if isOnServer { await load() } }
         .toast(item: $toastItem)
-        .confirmationDialog(
-            AppStrings.companionsRemoveConfirmTitle(lang.language),
-            isPresented: Binding(
-                get: { companionToRemove != nil },
-                set: { if !$0 { companionToRemove = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button(AppStrings.companionsRemove(lang.language), role: .destructive) { remove() }
-            Button(AppStrings.cancel(lang.language), role: .cancel) {}
-        }
+        // House dialog, never the system's (CLAUDE.md «Dialogs»). Item-driven:
+        // the subject IS the optional, and the component hands it back to the
+        // handler — which matters here, because it clears the optional BEFORE
+        // running the handler, so a handler that read `companionToRemove`
+        // would find it already nil.
+        .appConfirm(
+            item: $companionToRemove,
+            title: { _ in AppStrings.companionsRemoveConfirmTitle(lang.language) },
+            actions: { companion in
+                [
+                    AppDialogAction(
+                        AppStrings.companionsRemove(lang.language),
+                        kind: .destructive
+                    ) { remove(companion) }
+                ]
+            },
+            cancelTitle: AppStrings.cancel(lang.language)
+        )
         .sheet(isPresented: $showPicker) {
             CompanionsPickerSheet(tripId: tripId)
                 .environmentObject(lang)
                 .environmentObject(themeManager)
-                .preferredColorScheme(themeManager.preferredColorScheme)
         }
         // `fullScreenCover` rather than a nested `NavigationStack`, for the
         // documented reason in `ProfileView`: a sheet-hosted NavigationStack
@@ -182,7 +188,6 @@ struct CompanionsRosterSheet: View {
                 )
                 .environmentObject(lang)
                 .environmentObject(themeManager)
-                .preferredColorScheme(themeManager.preferredColorScheme)
             }
         }
         // `.contain` for the same reason the card documents: without it this
@@ -424,10 +429,13 @@ struct CompanionsRosterSheet: View {
         _ = try? await store.list(tripId: tripId, treatTripNotFoundAsEmpty: isOwn)
     }
 
-    private func remove() {
-        guard let target = companionToRemove else { return }
-        companionToRemove = nil
-        Haptics.action()
+    /// Takes its subject as an argument rather than reading
+    /// `companionToRemove`: the dialog clears that binding on its way out,
+    /// before this ever runs.
+    ///
+    /// No `Haptics.action()` here either — `AppDialogAction(kind: .destructive)`
+    /// fires it, and taptic twice in a row reads as a stutter.
+    private func remove(_ target: CompanionItem) {
         Task {
             do {
                 try await store.remove(tripId: tripId, accountId: target.accountId)

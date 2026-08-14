@@ -26,7 +26,6 @@ struct OnboardingView: View {
     /// only ever shows its prompt once, so a button that "asks" again would
     /// silently do nothing.
     @State private var notificationsGranted = false
-    @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     // Initial page can be pinned via launch argument (-onboardingStartPage N)
     // so UI tests / simulator screenshot runs can open any page directly.

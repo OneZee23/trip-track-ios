@@ -24,6 +24,16 @@ struct ContentSizedSheet: ViewModifier {
     var background: Color
     /// Floor, for a sheet that would otherwise be too small to grab.
     var minimum: CGFloat = 0
+    /// Set when the content's own bottom padding already clears the home
+    /// indicator — a caption, say, rather than a button.
+    ///
+    /// The strip below is real estate nothing is allowed to occupy, so a sheet
+    /// that ends in text ends in its own padding PLUS 34pt of untouched ground,
+    /// and on a short sheet that reads as a layout mistake rather than as the
+    /// phone's margin. Passing `true` lets the content draw into the strip and
+    /// drops it from the detent, so the sheet ends where the design says it
+    /// ends. Never pass it for content with anything tappable at the bottom.
+    var contentClearsHomeIndicator: Bool = false
 
     @State private var measured: CGFloat = 0
 
@@ -40,13 +50,20 @@ struct ContentSizedSheet: ViewModifier {
             .onPreferenceChange(ContentSheetHeightKey.self) { measured = $0 }
             // Content sits at the top; the ground runs to the bottom edge.
             .frame(maxHeight: .infinity, alignment: .top)
+            // An empty edge set rather than an `if`: branching here would give
+            // the two cases different view types and reset `measured` on every
+            // flip.
+            .ignoresSafeArea(.container, edges: contentClearsHomeIndicator ? .bottom : [])
             // The SHEET's own ground, not just the content's. A background
             // behind the content stops where the content's frame stops, which
             // leaves the strip above it — the one the grabber sits in — and
             // the strip below showing whatever the system paints a sheet with,
             // read as two pale bands framing the card.
             .presentationBackground(background)
-            .presentationDetents([.height(max(measured, minimum) + Self.bottomInset)])
+            .presentationDetents([
+                .height(max(measured, minimum)
+                        + (contentClearsHomeIndicator ? 0 : Self.bottomInset))
+            ])
     }
 
     /// Looked up rather than laid out: the detent is a number, not a view, so
@@ -67,7 +84,15 @@ private struct ContentSheetHeightKey: PreferenceKey {
 
 extension View {
     /// Sizes this sheet to its content. See `ContentSizedSheet`.
-    func contentSizedSheet(background: Color, minimum: CGFloat = 0) -> some View {
-        modifier(ContentSizedSheet(background: background, minimum: minimum))
+    func contentSizedSheet(
+        background: Color,
+        minimum: CGFloat = 0,
+        contentClearsHomeIndicator: Bool = false
+    ) -> some View {
+        modifier(ContentSizedSheet(
+            background: background,
+            minimum: minimum,
+            contentClearsHomeIndicator: contentClearsHomeIndicator
+        ))
     }
 }

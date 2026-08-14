@@ -187,8 +187,13 @@ struct SharedTripLinkSheet: View {
 
     private func shareLink() {
         guard let shareUrl, let url = URL(string: shareUrl) else { return }
-        let av = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        topPresentedViewController()?.present(av, animated: true)
+        // Same presenter the profile share uses — it declares the item as a
+        // URL, which is what makes the sheet's «Скопировать» copy the link
+        // instead of nothing.
+        let title = TripAutoTitle.localized(
+            trip.title, startDate: trip.startDate, language: lang.language
+        ) ?? subtitle(isRu: lang.language == .ru)
+        Task { await ShareLinkPresenter.present(url: url, title: title) }
     }
 
     private func copyLink() {
