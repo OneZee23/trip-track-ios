@@ -1,0 +1,17 @@
+/* Location permission: when in use */
+"NSLocationWhenInUseUsageDescription" = "TripTrack memakai lokasimu untuk merekam rute perjalanan di peta, menghitung jarak dan kecepatan, serta menyimpan perjalanan ke buku harianmu.";
+
+/* Location permission: always (background) */
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack memakai lokasimu di latar belakang agar rute tetap terekam saat aplikasi tidak di layar, sehingga tidak ada bagian perjalanan yang hilang.";
+
+/* Motion: auto-detect driving */
+"NSMotionUsageDescription" = "TripTrack memakai data gerak untuk mengenali awal perjalanan dan menyalakan perekaman secara otomatis.";
+
+/* Bluetooth: auto-start/stop on car connection */
+"NSBluetoothAlwaysUsageDescription" = "TripTrack mengenali koneksi Bluetooth ke mobilmu untuk memulai dan mengakhiri perekaman perjalanan secara otomatis.";
+
+/* Photo Library: add only — saving share-card to Photos */
+"NSPhotoLibraryAddUsageDescription" = "TripTrack menyimpan gambar perjalanan ke Foto supaya kamu bisa membagikannya sebagai story atau unggahan.";
+
+/* Local network: dev/beta only */
+"NSLocalNetworkUsageDescription" = "TripTrack memakai jaringan lokal untuk terhubung ke server pengembangan atau beta saat pengujian.";

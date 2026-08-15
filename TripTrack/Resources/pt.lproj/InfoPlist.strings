@@ -1,0 +1,17 @@
+/* Location permission: when in use */
+"NSLocationWhenInUseUsageDescription" = "O TripTrack usa sua localização para gravar o trajeto da viagem no mapa, calcular distância e velocidade e salvar a viagem no seu diário.";
+
+/* Location permission: always (background) */
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "O TripTrack usa sua localização em segundo plano para continuar gravando o trajeto enquanto o app não está na tela, para não perder nenhum pedaço da viagem.";
+
+/* Motion: auto-detect driving */
+"NSMotionUsageDescription" = "O TripTrack usa os dados de movimento para perceber o início de uma viagem e começar a gravar automaticamente.";
+
+/* Bluetooth: auto-start/stop on car connection */
+"NSBluetoothAlwaysUsageDescription" = "O TripTrack detecta a conexão Bluetooth com o seu carro para começar e encerrar a gravação da viagem automaticamente.";
+
+/* Photo Library: add only — saving share-card to Photos */
+"NSPhotoLibraryAddUsageDescription" = "O TripTrack salva a imagem da viagem em Fotos para você compartilhar como story ou publicação.";
+
+/* Local network: dev/beta only */
+"NSLocalNetworkUsageDescription" = "O TripTrack usa a rede local para se conectar a um servidor de desenvolvimento ou beta durante os testes.";

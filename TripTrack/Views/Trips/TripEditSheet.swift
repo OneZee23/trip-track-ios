@@ -314,7 +314,7 @@ struct TripEditSheet: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(label.uppercased())
+            Text(label).textCase(.uppercase)
                 .font(.system(size: 11, weight: .semibold))
                 .kerning(0.6)
                 .foregroundStyle(c.textTertiary)
@@ -364,9 +364,7 @@ struct TripAccessPickerSheet: View {
             }
             .padding(.horizontal, 16)
 
-            Text(lang.language == .ru
-                 ? "Публичную поездку видят другие пользователи в общей ленте. Вернуть её в приватные можно в любой момент."
-                 : "A public trip is visible to other people in the shared feed. You can make it private again at any time.")
+            Text(AppStrings.tripEditAPublicTrip(lang.language))
                 .font(.system(size: 12.5))
                 .foregroundStyle(c.textTertiary)
                 .padding(.horizontal, 20)

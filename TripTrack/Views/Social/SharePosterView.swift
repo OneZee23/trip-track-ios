@@ -20,9 +20,9 @@ enum SharePosterFormat: String, CaseIterable, Identifiable {
 
     func title(_ lang: LanguageManager.Language) -> String {
         switch self {
-        case .poster: return lang == .ru ? "Постер" : "Poster"
-        case .story: return lang == .ru ? "Сторис 9:16" : "Story 9:16"
-        case .sticker: return lang == .ru ? "Стикер PNG" : "Sticker PNG"
+        case .poster: return AppStrings.sharePosterPoster(lang)
+        case .story: return AppStrings.sharePosterStory(lang)
+        case .sticker: return AppStrings.sharePosterStickerPng(lang)
         }
     }
 
@@ -82,9 +82,9 @@ enum SharePosterBackground: String, CaseIterable, Identifiable {
     /// this sheet already keeps its own chip copy local.
     func title(_ lang: LanguageManager.Language) -> String {
         switch self {
-        case .photo: return lang == .ru ? "Фото-фон" : "Photo"
-        case .map: return lang == .ru ? "Карта" : "Map"
-        case .minimal: return lang == .ru ? "Минимал" : "Minimal"
+        case .photo: return AppStrings.sharePosterPhoto(lang)
+        case .map: return AppStrings.tabMap(lang)
+        case .minimal: return AppStrings.sharePosterMinimal(lang)
         }
     }
 }

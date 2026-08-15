@@ -606,7 +606,7 @@ struct ProfileView: View {
     /// second line: recording is automatic and needs no account — that's the
     /// product's whole pitch, and the empty state is where it lands.
     private func noTripsCard(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
+        let lng = lang.language
         return VStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(c.cardAlt)
@@ -617,14 +617,12 @@ struct ProfileView: View {
                         .foregroundStyle(c.textTertiary)
                 }
 
-            Text(isRu ? "Здесь появятся ваши поездки" : "Your trips will show up here")
+            Text(AppStrings.profileYourTripsWill(lng))
                 .font(.inter(17, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
 
-            Text(isRu
-                 ? "Запись начнётся автоматически, когда вы поедете. Аккаунт не нужен."
-                 : "Recording starts by itself once you drive. No account needed.")
+            Text(AppStrings.profileRecordingStartsBy(lng))
                 .font(.inter(14))
                 .lineSpacing(4)
                 .foregroundStyle(c.textSecondary)
@@ -1068,7 +1066,7 @@ struct ProfileView: View {
     /// (cachedTripCount == 0). Tap routes to the Tracking tab — the one
     /// action that matters before any data exists.
     private func firstTripWelcomeCard(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
+        let lng = lang.language
         return Button {
             Haptics.tap()
             NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
@@ -1083,12 +1081,10 @@ struct ProfileView: View {
                         .foregroundStyle(AppTheme.accent)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(isRu ? "Запишите первую поездку" : "Record your first trip")
+                    Text(AppStrings.profileRecordYourFirst(lng))
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(c.text)
-                    Text(isRu
-                         ? "Здесь будут Ваши километры, серии и бейджи."
-                         : "Your kilometers, streaks and badges will appear here.")
+                    Text(AppStrings.profileYourKilometersStreaks(lng))
                         .font(.system(size: 12))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

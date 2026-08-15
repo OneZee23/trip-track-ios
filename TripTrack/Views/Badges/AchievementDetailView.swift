@@ -163,7 +163,7 @@ struct AchievementDetailView: View {
         if isSecret {
             chip(
                 icon: "lock.fill",
-                text: AppStrings.achievementsSecretCaption(l).uppercased(),
+                text: AppStrings.achievementsSecretCaption(l).uppercased(l),
                 ink: c.textSecondary,
                 background: c.cardAlt,
                 kerning: 0.48
@@ -172,7 +172,7 @@ struct AchievementDetailView: View {
             let rarity = badge.displayRarity
             chip(
                 icon: "star.fill",
-                text: rarity.title(l).uppercased(),
+                text: rarity.title(l).uppercased(l),
                 ink: rarity.chipText,
                 background: rarity.rowTint,
                 kerning: 0.48

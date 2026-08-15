@@ -12,7 +12,7 @@ struct RoadCollectionView: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
         let filtered = selectedRarity == nil ? roads : roads.filter { $0.rarity == selectedRarity }
 
         NavigationStack {
@@ -24,7 +24,7 @@ struct RoadCollectionView: View {
                             Text("\(roads.count)")
                                 .font(.system(size: 24, weight: .heavy))
                                 .foregroundStyle(c.text)
-                            Text(isRu ? "дорог" : "roads")
+                            Text(AppStrings.roadCollectionRoads(lng))
                                 .font(.system(size: 11))
                                 .foregroundStyle(c.textTertiary)
                         }
@@ -36,7 +36,7 @@ struct RoadCollectionView: View {
                                 Text("\(mastered)")
                                     .font(.system(size: 24, weight: .heavy))
                                     .foregroundStyle(AppTheme.accent)
-                                Text(isRu ? "освоено" : "mastered")
+                                Text(AppStrings.roadCollectionMastered(lng))
                                     .font(.system(size: 11))
                                     .foregroundStyle(c.textTertiary)
                             }
@@ -50,7 +50,7 @@ struct RoadCollectionView: View {
                     // Rarity filter
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
-                            filterPill(label: isRu ? "Все" : "All", isActive: selectedRarity == nil, c: c) {
+                            filterPill(label: AppStrings.all(lng), isActive: selectedRarity == nil, c: c) {
                                 selectedRarity = nil
                             }
                             ForEach(RoadRarity.allCases, id: \.self) { rarity in
@@ -74,9 +74,7 @@ struct RoadCollectionView: View {
                             Image(systemName: "road.lanes")
                                 .font(.system(size: 32))
                                 .foregroundStyle(c.textTertiary)
-                            Text(isRu
-                                ? "Запишите поездку, чтобы открыть дорогу"
-                                : "Record a trip to discover a road")
+                            Text(AppStrings.roadCollectionRecordATrip(lng))
                                 .font(.system(size: 14))
                                 .foregroundStyle(c.textTertiary)
                         }
@@ -91,7 +89,7 @@ struct RoadCollectionView: View {
                 .padding(16)
             }
             .background(c.bg)
-            .navigationTitle(isRu ? "Коллекция дорог" : "Road Collection")
+            .navigationTitle(AppStrings.roadCollectionRoadCollection(lng))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }

@@ -20,12 +20,12 @@ struct SuggestedUsersCarousel: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         VStack(alignment: .leading, spacing: 10) {
             if !users.isEmpty {
                 HStack {
-                    Text(isRu ? "Рекомендуем подписаться" : "Suggested")
+                    Text(AppStrings.suggestedUsersCarouselSuggested(lng))
                         .font(.system(size: 11, weight: .bold))
                         .tracking(0.5)
                         .foregroundStyle(c.textTertiary)
@@ -37,7 +37,7 @@ struct SuggestedUsersCarousel: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(users, id: \.id) { user in
-                            card(user, c: c, isRu: isRu)
+                            card(user, c: c, lng: lng)
                         }
                     }
                     .padding(.horizontal, 4)
@@ -49,7 +49,7 @@ struct SuggestedUsersCarousel: View {
         }
     }
 
-    private func card(_ user: SocialAuthor, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func card(_ user: SocialAuthor, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 10) {
             Circle()
                 .fill(AppTheme.accentBg)
@@ -57,7 +57,7 @@ struct SuggestedUsersCarousel: View {
                 .overlay { Text(user.avatarEmoji ?? "🚗").font(.system(size: 32)) }
 
             VStack(spacing: 2) {
-                Text(user.displayName ?? (isRu ? "Пользователь" : "User"))
+                Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
@@ -66,7 +66,7 @@ struct SuggestedUsersCarousel: View {
                     .foregroundStyle(c.textTertiary)
             }
 
-            followButton(user, c: c, isRu: isRu)
+            followButton(user, c: c, lng: lng)
         }
         .frame(width: 120)
         .padding(.vertical, 10)
@@ -78,7 +78,7 @@ struct SuggestedUsersCarousel: View {
         }
     }
 
-    private func followButton(_ user: SocialAuthor, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func followButton(_ user: SocialAuthor, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         let isFollowed = followed.contains(user.id)
         let isPending = pendingFollow.contains(user.id)
         return Button {
@@ -96,8 +96,8 @@ struct SuggestedUsersCarousel: View {
                         .tint(isFollowed ? c.text : .white)
                 } else {
                     Text(isFollowed
-                         ? (isRu ? "Подписан" : "Following")
-                         : (isRu ? "Подписаться" : "Follow"))
+                         ? (AppStrings.notificationsInboxFollowing(lng))
+                         : (AppStrings.discoverFollow(lng)))
                         .font(.system(size: 11, weight: .semibold))
                 }
             }

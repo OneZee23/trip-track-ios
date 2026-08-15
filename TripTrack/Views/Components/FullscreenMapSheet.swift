@@ -257,9 +257,9 @@ struct FullscreenMapSheet: View {
     private var cameraToggle: some View {
         mapCircleButton(
             systemImage: followsCar ? "map" : "location.fill",
-            label: language == .ru
-                ? (followsCar ? "Показать весь маршрут" : "Следовать за машиной")
-                : (followsCar ? "Show whole route" : "Follow the car"),
+            label: followsCar
+                ? AppStrings.replayShowWholeRoute(language)
+                : AppStrings.replayFollowTheCar(language),
             identifier: "replay_camera_toggle"
         ) {
             withAnimation(.easeInOut(duration: 0.25)) { followsCar.toggle() }
@@ -294,7 +294,7 @@ struct FullscreenMapSheet: View {
         let total = Self.hmm(trackDuration)
         guard distanceMeters > 0 else { return "\(elapsed) / \(total)" }
         let km = distanceMeters * engine.distanceFraction / 1000
-        let covered = GarageFormat.oneDecimal(km, isRu: language == .ru)
+        let covered = GarageFormat.oneDecimal(km, lng: language)
         return "\(elapsed) / \(total) · \(covered) \(AppStrings.km(language))"
     }
 
@@ -411,7 +411,7 @@ struct FullscreenMapSheet: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(language == .ru ? "Убрать воспроизведение" : "Clear playback")
+        .accessibilityLabel(AppStrings.fullscreenMapClearPlayback(language))
         .accessibilityIdentifier("fullscreen_replay_stop")
     }
 
@@ -529,13 +529,13 @@ struct FullscreenMapSheet: View {
     private var zoomControls: some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(spacing: 0) {
-            zoomButton(systemImage: "plus", label: language == .ru ? "Приблизить" : "Zoom in") {
+            zoomButton(systemImage: "plus", label: AppStrings.fullscreenMapZoomIn(language)) {
                 zoomTick += 1
             }
             Rectangle()
                 .fill(c.textTertiary.opacity(0.25))
                 .frame(width: 26, height: 1)
-            zoomButton(systemImage: "minus", label: language == .ru ? "Отдалить" : "Zoom out") {
+            zoomButton(systemImage: "minus", label: AppStrings.fullscreenMapZoomOut(language)) {
                 zoomTick -= 1
             }
         }

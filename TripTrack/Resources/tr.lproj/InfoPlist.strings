@@ -1,0 +1,17 @@
+/* Location permission: when in use */
+"NSLocationWhenInUseUsageDescription" = "TripTrack, gezi rotanı haritaya kaydetmek, mesafe ve hızı hesaplamak ve geziyi günlüğüne eklemek için konumunu kullanır.";
+
+/* Location permission: always (background) */
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack, uygulama arka plandayken rotayı kaydetmeyi sürdürmek için konumunu arka planda kullanır — böylece gezinin hiçbir parçası kaybolmaz.";
+
+/* Motion: auto-detect driving */
+"NSMotionUsageDescription" = "TripTrack, gezinin başladığını anlayıp kaydı kendiliğinden başlatmak için hareket verilerini kullanır.";
+
+/* Bluetooth: auto-start/stop on car connection */
+"NSBluetoothAlwaysUsageDescription" = "TripTrack, gezi kaydını otomatik başlatıp bitirmek için arabanın Bluetooth bağlantısını algılar.";
+
+/* Photo Library: add only — saving share-card to Photos */
+"NSPhotoLibraryAddUsageDescription" = "TripTrack, hikâye ya da gönderi olarak paylaşabilmen için gezi görselini Fotoğraflar'a kaydeder.";
+
+/* Local network: dev/beta only */
+"NSLocalNetworkUsageDescription" = "TripTrack, test sırasında geliştirme ya da beta sunucusuna bağlanmak için yerel ağı kullanır.";

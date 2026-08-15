@@ -40,7 +40,7 @@ struct SyncStatusSheetView: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
-        let isRu = l == .ru
+        let lng = l
         let pending = syncQueue.pending
         let failed = syncQueue.failed
 
@@ -54,7 +54,7 @@ struct SyncStatusSheetView: View {
                     footerRow(c, l: l)
 
                     if let op = syncQueue.currentOperation {
-                        nowSection(op, c: c, isRu: isRu)
+                        nowSection(op, c: c, lng: lng)
                     }
 
                     if !pending.isEmpty {
@@ -64,7 +64,7 @@ struct SyncStatusSheetView: View {
                         ) {
                             VStack(spacing: 8) {
                                 ForEach(pending) { op in
-                                    operationRow(op, isFailed: false, c: c, isRu: isRu)
+                                    operationRow(op, isFailed: false, c: c, lng: lng)
                                 }
                             }
                         }
@@ -77,12 +77,12 @@ struct SyncStatusSheetView: View {
                         ) {
                             VStack(spacing: 8) {
                                 ForEach(failed) { op in
-                                    operationRow(op, isFailed: true, c: c, isRu: isRu)
+                                    operationRow(op, isFailed: true, c: c, lng: lng)
                                 }
                             }
                         }
 
-                        retryButton(c, isRu: isRu)
+                        retryButton(c, lng: lng)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -323,9 +323,9 @@ struct SyncStatusSheetView: View {
 
     // MARK: - Live queue sections (logic untouched)
 
-    private func nowSection(_ op: SyncOperation, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func nowSection(_ op: SyncOperation, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         section(title: AppStrings.syncStatusNowLabel(lang.language), c: c) {
-            operationRow(op, isFailed: false, c: c, isRu: isRu, highlight: true)
+            operationRow(op, isFailed: false, c: c, lng: lng, highlight: true)
         }
     }
 
@@ -336,7 +336,7 @@ struct SyncStatusSheetView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased())
+            Text(title).textCase(.uppercase)
                 .font(.inter(11, weight: .bold).monospacedDigit())
                 .tracking(0.5)
                 .foregroundStyle(c.textTertiary)
@@ -349,7 +349,7 @@ struct SyncStatusSheetView: View {
         _ op: SyncOperation,
         isFailed: Bool,
         c: AppTheme.Colors,
-        isRu: Bool,
+        lng: LanguageManager.Language,
         highlight: Bool = false
     ) -> some View {
         let entity = AppStrings.entityLabel(op.entityType.rawValue, lang.language)
@@ -412,7 +412,7 @@ struct SyncStatusSheetView: View {
         }
     }
 
-    private func retryButton(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func retryButton(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         Button {
             Haptics.tap()
             isRetrying = true

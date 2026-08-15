@@ -37,7 +37,7 @@ struct NotesEditorView: View {
                         Haptics.action()
                         onSave()
                     } label: {
-                        Text(lang.language == .ru ? "Сохранить" : "Save")
+                        Text(AppStrings.save(lang.language))
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(AppTheme.accent)
                     }

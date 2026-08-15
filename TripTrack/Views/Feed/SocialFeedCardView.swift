@@ -40,10 +40,10 @@ struct SocialFeedCardView: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         VStack(alignment: .leading, spacing: 0) {
-            authorRow(c, isRu: isRu)
+            authorRow(c, lng: lng)
                 .padding(.horizontal, 13)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
@@ -110,14 +110,14 @@ struct SocialFeedCardView: View {
 
     // MARK: - Author Row
 
-    private func authorRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func authorRow(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         // Unified author chrome — own and others' trips share the same layout
         // (Strava/Komoot/Garmin convention). Swapping the user's avatar for a
         // vehicle icon on own cards made the user feel like a ghost in their
         // own feed; identity recognition belongs on the avatar slot. The
         // vehicle now lives in the metrics row as metadata, not identity.
         let rawName = trip.author.displayName?.trimmingCharacters(in: .whitespaces) ?? ""
-        let headerName = rawName.isEmpty ? (isRu ? "Без имени" : "No name") : rawName
+        let headerName = rawName.isEmpty ? (AppStrings.companionsNoName(lng)) : rawName
         return HStack(spacing: 10) {
             Circle()
                 .fill(c.cardAlt)
@@ -158,7 +158,7 @@ struct SocialFeedCardView: View {
                         // chrome. NN/g recognition heuristic. `fixedSize`
                         // stops the pill from being squeezed by a long name —
                         // the name truncates first, the pill stays full size.
-                        Text(isRu ? "Вы" : "You")
+                        Text(AppStrings.meGuestName(lng))
                             .font(.inter(10, weight: .bold))
                             .foregroundStyle(AppTheme.accent)
                             .padding(.horizontal, 6)
@@ -167,7 +167,7 @@ struct SocialFeedCardView: View {
                             .fixedSize()
                     }
                 }
-                Text(dateRegionText(isRu: isRu))
+                Text(dateRegionText(lng: lng))
                     .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
                     .lineLimit(1)
@@ -448,7 +448,7 @@ struct SocialFeedCardView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "face.dashed")
                             .font(.system(size: 13, weight: .medium))
-                        Text(lang.language == .ru ? "Пока нет реакций" : "No reactions yet")
+                        Text(AppStrings.socialFeedNoReactionsYet(lang.language))
                             .font(.inter(12, weight: .semibold))
                     }
                     .foregroundStyle(c.textTertiary)
@@ -462,7 +462,7 @@ struct SocialFeedCardView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "face.smiling")
                                 .font(.system(size: 13, weight: .medium))
-                            Text(lang.language == .ru ? "Реакция" : "React")
+                            Text(AppStrings.socialFeedReact(lang.language))
                                 .font(.inter(12, weight: .semibold))
                         }
                         .foregroundStyle(c.textSecondary)
@@ -550,10 +550,9 @@ struct SocialFeedCardView: View {
         String(format: "%.1f", value)
     }
 
-    private func dateRegionText(isRu: Bool) -> String {
-        let lang: LanguageManager.Language = isRu ? .ru : .en
-        var result = RelativeTripDate.string(from: trip.startDate, language: lang)
-        if let r = RegionDisplay.localized(trip.region, language: lang), !r.isEmpty {
+    private func dateRegionText(lng: LanguageManager.Language) -> String {
+        var result = RelativeTripDate.string(from: trip.startDate, language: lng)
+        if let r = RegionDisplay.localized(trip.region, language: lng), !r.isEmpty {
             result += " · \(r)"
         }
         return result

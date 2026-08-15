@@ -36,19 +36,19 @@ struct ReportSheet: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if submitted {
-                        successCard(c, isRu: isRu)
+                        successCard(c, lng: lng)
                             .padding(.top, 40)
                     } else {
-                        intro(c, isRu: isRu)
-                        reasonList(c, isRu: isRu)
-                        notesField(c, isRu: isRu)
-                        submitButton(c, isRu: isRu)
+                        intro(c, lng: lng)
+                        reasonList(c, lng: lng)
+                        notesField(c, lng: lng)
+                        submitButton(c, lng: lng)
                         Text(AppStrings.reportAnonymousNote(lang.language))
                             .font(.system(size: 12))
                             .foregroundStyle(c.textTertiary)
@@ -64,7 +64,7 @@ struct ReportSheet: View {
                 .padding(16)
             }
             .background(c.bg)
-            .navigationTitle(isRu ? "Пожаловаться" : "Report")
+            .navigationTitle(AppStrings.reportProfileAction(lng))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
@@ -74,16 +74,14 @@ struct ReportSheet: View {
 
     // MARK: - Sections
 
-    private func intro(_ c: AppTheme.Colors, isRu: Bool) -> some View {
-        Text(isRu
-             ? "Мы рассматриваем жалобы на недопустимый контент в течение 24 часов и можем удалить контент или заблокировать пользователя-нарушителя."
-             : "We review reports of objectionable content within 24 hours and may remove content or suspend offending accounts.")
+    private func intro(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
+        Text(AppStrings.reportWeReviewReports(lng))
             .font(.system(size: 13))
             .foregroundStyle(c.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func reasonList(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func reasonList(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         // Single menu card (Figma 117:2335): rows p 14, 18pt radio icons,
         // hairline separators, radius 18.
         VStack(spacing: 0) {
@@ -117,9 +115,9 @@ struct ReportSheet: View {
         .surfaceCard(cornerRadius: 18)
     }
 
-    private func notesField(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func notesField(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(isRu ? "Комментарий (необязательно)" : "Additional details (optional)")
+            Text(AppStrings.reportAdditionalDetailsOptional(lng))
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.5)
                 .foregroundStyle(c.textTertiary)
@@ -132,7 +130,7 @@ struct ReportSheet: View {
         }
     }
 
-    private func submitButton(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func submitButton(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         Button {
             Haptics.action()
             Task { await submit() }
@@ -141,7 +139,7 @@ struct ReportSheet: View {
                 if isSending {
                     ProgressView().tint(.white)
                 } else {
-                    Text(isRu ? "Отправить" : "Submit")
+                    Text(AppStrings.reportSubmit(lng))
                         .font(.system(size: 15, weight: .semibold))
                 }
             }
@@ -158,17 +156,15 @@ struct ReportSheet: View {
         .disabled(selectedReason == nil || isSending)
     }
 
-    private func successCard(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func successCard(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 14) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 44))
                 .foregroundStyle(.green)
-            Text(isRu ? "Жалоба отправлена" : "Report sent")
+            Text(AppStrings.reportReportSent(lng))
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(c.text)
-            Text(isRu
-                 ? "Спасибо. Мы рассмотрим её в ближайшие 24 часа."
-                 : "Thank you. We'll review it within 24 hours.")
+            Text(AppStrings.reportThankYouWe(lng))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textSecondary)
                 .multilineTextAlignment(.center)
@@ -176,7 +172,7 @@ struct ReportSheet: View {
                 Haptics.tap()
                 dismiss()
             } label: {
-                Text(isRu ? "Готово" : "Done")
+                Text(AppStrings.done(lng))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)

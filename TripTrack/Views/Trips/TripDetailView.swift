@@ -349,7 +349,7 @@ struct TripDetailView: View {
                         .fill(Color(red: 0xF4/255, green: 0xF2/255, blue: 0xEE/255))
                         .frame(width: 28, height: 28)
                         .overlay { Text(author.avatarEmoji ?? "🚗").font(.system(size: 16)) }
-                    Text(author.displayName ?? (lang.language == .ru ? "Без имени" : "No name"))
+                    Text(author.displayName ?? (AppStrings.companionsNoName(lang.language)))
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
@@ -1069,10 +1069,8 @@ struct TripDetailView: View {
         // this wording in both languages.
         .appConfirm(
             isPresented: $unpublishConfirm,
-            title: lang.language == .ru ? "Сделать поездку приватной?" : "Make trip private?",
-            message: lang.language == .ru
-                ? "Поездка пропадёт из общей ленты и из профилей других пользователей. Её увидите только Вы.\n\nРеакции и комментарии не сохранятся, если Вы потом снова сделаете её публичной."
-                : "This trip will disappear from the social feed and from other users' profiles. Only you will see it.\n\nReactions and comments won't be preserved if you make it public again later.",
+            title: AppStrings.tripDetailMakeTripPrivate(lang.language),
+            message: AppStrings.tripDetailThisTripWill(lang.language),
             actions: [
                 AppDialogAction(
                     AppStrings.makePrivateAction(lang.language),
@@ -1358,7 +1356,7 @@ struct TripDetailView: View {
         defer { isGeneratingShare = false }
 
         let authorName = AuthService.shared.userName
-            ?? (lang.language == .ru ? "Моя поездка" : "My trip")
+            ?? (AppStrings.tripDetailMyTrip(lang.language))
         let authorEmoji = settings.avatarEmoji
         let data = StoryShareData.from(trip, authorName: authorName, authorEmoji: authorEmoji, lang: lang.language)
 
@@ -2184,7 +2182,7 @@ struct TripDetailView: View {
     /// «Реакции · N» — one card: breakdown chips row, then reactor rows
     /// (avatar / name / LVL / their emoji / chevron → profile).
     private func reactionsCard(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
+        let lng = lang.language
         // Group by CANONICAL key so legacy prod reactions (❤️ 🏎️ 🗺️) fold
         // into the drawn icon that replaced them instead of spawning a
         // twin chip next to it.
@@ -2255,7 +2253,7 @@ struct TripDetailView: View {
                         .fill(c.border)
                         .frame(height: 1)
                         .padding(.leading, idx == 0 ? 0 : 14)
-                    reactionRow(entry, c: c, isRu: isRu)
+                    reactionRow(entry, c: c, lng: lng)
                 }
             }
         }
@@ -2266,7 +2264,7 @@ struct TripDetailView: View {
         }
     }
 
-    private func reactionRow(_ entry: SocialReactionEntry, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func reactionRow(_ entry: SocialReactionEntry, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         Button {
             Haptics.tap()
             if let pushPath {
@@ -2281,7 +2279,7 @@ struct TripDetailView: View {
                     .frame(width: 36, height: 36)
                     .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.system(size: 18)) }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.user.displayName ?? (isRu ? "Пользователь" : "User"))
+                    Text(entry.user.displayName ?? (AppStrings.blockedListUser(lng)))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
@@ -2371,7 +2369,7 @@ struct TripDetailView: View {
     /// the same notification + first-publish toast behavior, and so the
     /// publish-confirmation flow has a single commit point.
     private func applyPrivacyChange(isPrivate newValue: Bool, suppressSuccessToast: Bool = false) {
-        let isRu = lang.language == .ru
+        let lng = lang.language
         mapVM.tripManager.updatePrivacy(for: tripId, isPrivate: newValue)
         // Re-read from the database only if that is where this trip came from.
         // A trip opened from the feed has no local row, so the fetch returns
@@ -2401,9 +2399,7 @@ struct TripDetailView: View {
             UserDefaults.standard.set(true, forKey: firstPublishKey)
             toastItem = ToastItem(
                 type: .success,
-                message: isRu
-                    ? "Первая публичная поездка! Поездки с фото получают больше реакций"
-                    : "Your first public trip! Trips with photos get more reactions")
+                message: AppStrings.tripDetailYourFirstPublic(lng))
         }
     }
 
@@ -2413,21 +2409,10 @@ struct TripDetailView: View {
     /// Body of the "Publish trip?" confirmation sheet. Extracted so the
     /// sheet closure stays type-checker friendly.
     private var publishConfirmMessage: String {
-        let isRu = lang.language == .ru
-        let baseCopy: String
-        if isRu {
-            baseCopy = "Поездка появится в общей ленте — её увидят другие пользователи. Вы всегда сможете вернуть её в приватные."
-        } else {
-            baseCopy = "The trip will appear in the public feed — other users will see it. You can switch it back to private anytime."
-        }
+        let lng = lang.language
+        let baseCopy = AppStrings.publishConfirmBody(lng)
         if settings.cloudSyncEnabled { return baseCopy }
-        let cloudOff: String
-        if isRu {
-            cloudOff = "\n\nОблачная синхронизация выключена — на сервер уйдёт только эта поездка, остальные останутся локально."
-        } else {
-            cloudOff = "\n\nCloud sync is off — only this trip will be sent to our server, every other trip stays on your device."
-        }
-        return baseCopy + cloudOff
+        return baseCopy + "\n\n" + AppStrings.publishConfirmCloudOff(lng)
     }
 
     // MARK: - Stats grid («Детали»)
@@ -2533,7 +2518,7 @@ struct TripDetailView: View {
 
         let volumeUnit = UserDefaults.standard.string(forKey: "volumeUnit") ?? "liters"
         let currency = trip.fuelCurrency ?? FuelCurrency.current
-        let volShort = volumeUnit == "gallons" ? (lang.language == .ru ? "гал" : "gal") : (lang.language == .ru ? "л" : "L")
+        let volShort = volumeUnit == "gallons" ? (AppStrings.unitGallonsShort(lang.language)) : (AppStrings.unitLitresShort(lang.language))
 
         let volume: Double
         if volumeUnit == "gallons" {
@@ -2828,15 +2813,7 @@ struct TripDetailView: View {
 
     // MARK: - Helpers
 
-    private static let dateTimeFormatters: (ru: DateFormatter, en: DateFormatter) = {
-        let ru = DateFormatter()
-        ru.locale = Locale(identifier: "ru_RU")
-        ru.dateFormat = "d MMM, HH:mm"
-        let en = DateFormatter()
-        en.locale = Locale(identifier: "en_US")
-        en.dateFormat = "d MMM, HH:mm"
-        return (ru, en)
-    }()
+    private static let dateTimeFormatters = LocalizedDateFormatter.patterns("d MMM, HH:mm")
 
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -2844,19 +2821,10 @@ struct TripDetailView: View {
         return f
     }()
 
-    private static let dayMonthFormatters: (ru: DateFormatter, en: DateFormatter) = {
-        let ru = DateFormatter()
-        ru.locale = Locale(identifier: "ru_RU")
-        ru.dateFormat = "d MMMM"
-        let en = DateFormatter()
-        en.locale = Locale(identifier: "en_US")
-        en.dateFormat = "d MMMM"
-        return (ru, en)
-    }()
+    private static let dayMonthFormatters = LocalizedDateFormatter.patterns("d MMMM")
 
     private func formattedDateFallback(_ date: Date) -> String {
-        let fmts = Self.dateTimeFormatters
-        return (lang.language == .ru ? fmts.ru : fmts.en).string(from: date)
+        return Self.dateTimeFormatters[lang.language]?.string(from: date) ?? ""
     }
 
     /// «12:31 – 13:18», and «22:00 – 15 июня, 05:00» when the drive crosses
@@ -2869,8 +2837,7 @@ struct TripDetailView: View {
         guard !Calendar.current.isDate(trip.startDate, inSameDayAs: end) else {
             return "\(start) – \(endTime)"
         }
-        let fmts = Self.dayMonthFormatters
-        let day = (lang.language == .ru ? fmts.ru : fmts.en).string(from: end)
+        let day = Self.dayMonthFormatters[lang.language]?.string(from: end) ?? ""
         return "\(start) – \(day), \(endTime)"
     }
 

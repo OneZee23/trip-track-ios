@@ -54,15 +54,15 @@ struct NotificationsInboxView: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
-                header(c: c, isRu: isRu)
+                header(c: c, lng: lng)
                 if !store.items.isEmpty {
                     chipsRow(c: c)
                 }
-                content(c: c, isRu: isRu)
+                content(c: c, lng: lng)
             }
                 .background(c.bg)
                 // Custom header above owns the chrome (Figma 117:1841 draws
@@ -117,7 +117,7 @@ struct NotificationsInboxView: View {
 
     // MARK: - Header (Figma 117:1841)
 
-    private func header(c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func header(c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         // Close sits on the RIGHT here like on every other sheet in the app
         // (Discover, settings): it used to be the only screen with the X on
         // the left, which read as a different kind of screen. Settings keeps
@@ -241,11 +241,11 @@ struct NotificationsInboxView: View {
     // MARK: - Content
 
     @ViewBuilder
-    private func content(c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func content(c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         if store.isLoading && store.items.isEmpty {
             VStack { Spacer(); PixelCarLoader(label: nil, height: 80); Spacer() }
         } else if store.items.isEmpty {
-            emptyState(c: c, isRu: isRu)
+            emptyState(c: c, lng: lng)
         } else {
             let items = filteredItems
             let today = items.filter { Calendar.current.isDateInToday($0.createdAt) }
@@ -265,7 +265,7 @@ struct NotificationsInboxView: View {
                         dateHeader(AppStrings.today(lang.language), c: c)
                     }
                     ForEach(today) { item in
-                        row(item, c: c, isRu: isRu)
+                        row(item, c: c, lng: lng)
                             .onAppear {
                                 store.noteSeen(item)
                                 Task { await store.loadMoreIfNeeded(currentItem: pagingTrigger(for: item, in: items)) }
@@ -275,7 +275,7 @@ struct NotificationsInboxView: View {
                         dateHeader(AppStrings.earlier(lang.language), c: c)
                     }
                     ForEach(earlier) { item in
-                        row(item, c: c, isRu: isRu)
+                        row(item, c: c, lng: lng)
                             .onAppear {
                                 store.noteSeen(item)
                                 Task { await store.loadMoreIfNeeded(currentItem: pagingTrigger(for: item, in: items)) }
@@ -293,7 +293,7 @@ struct NotificationsInboxView: View {
     /// Same endpoint/optimistic pattern as DiscoverView.toggleFollow, in
     /// the follow direction only. Reverts the local mark on failure so the
     /// button reappears.
-    private func followToggle(for userId: UUID, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func followToggle(for userId: UUID, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         let isFollowed = followedBack.contains(userId)
         return Button {
             Haptics.selection()
@@ -301,7 +301,7 @@ struct NotificationsInboxView: View {
             Task { await setFollow(userId, follow: !isFollowed) }
         } label: {
             Text(isFollowed
-                 ? (isRu ? "Подписан" : "Following")
+                 ? (AppStrings.notificationsInboxFollowing(lng))
                  : AppStrings.followBack(lang.language))
                 // Pinned to the wider of the two labels: canon (117:1883)
                 // hugs «В ответ» at 89pt, but «Подписан» is wider and the row
@@ -347,17 +347,17 @@ struct NotificationsInboxView: View {
     /// decision card (`decisionRow`) instead of the shared tap-to-open
     /// row — see `NotificationInviteRowModel.presentation`.
     @ViewBuilder
-    private func row(_ item: NotificationItem, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func row(_ item: NotificationItem, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         switch rowPresentation(for: item) {
         case .decision(let preview):
-            decisionRow(item, preview: preview, c: c, isRu: isRu)
+            decisionRow(item, preview: preview, c: c, lng: lng)
         case .info:
-            infoRow(item, c: c, isRu: isRu)
+            infoRow(item, c: c, lng: lng)
         }
     }
 
     @ViewBuilder
-    private func infoRow(_ item: NotificationItem, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func infoRow(_ item: NotificationItem, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         Button {
             Haptics.tap()
             handleTap(item)
@@ -373,12 +373,12 @@ struct NotificationsInboxView: View {
                 avatar(item, c: c)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(actorName(item, isRu: isRu))
+                    Text(actorName(item, lng: lng))
                         .font(.inter(14, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
 
-                    Text(actionLine(item, isRu: isRu))
+                    Text(actionLine(item, lng: lng))
                         .font(.inter(13))
                         .foregroundStyle(c.textSecondary)
                         .lineLimit(2)
@@ -396,7 +396,7 @@ struct NotificationsInboxView: View {
                 // a «Подписан» toggle (canon). It used to just fade away,
                 // which read as "did that even work?" and left no way back.
                 if item.typedKind == .follow, let actor = item.actor {
-                    followToggle(for: actor.id, c: c, isRu: isRu)
+                    followToggle(for: actor.id, c: c, lng: lng)
                 }
 
                 // Fix 11: an accepted invite's tap can page through up to
@@ -444,13 +444,13 @@ struct NotificationsInboxView: View {
     @ViewBuilder
     private func decisionRow(
         _ item: NotificationItem, preview: NotificationInviteRowModel.PreviewState,
-        c: AppTheme.Colors, isRu: Bool
+        c: AppTheme.Colors, lng: LanguageManager.Language
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 11) {
                 avatar(item, c: c)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(actorName(item, isRu: isRu))
+                    Text(actorName(item, lng: lng))
                         .font(.inter(14, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
@@ -796,13 +796,13 @@ struct NotificationsInboxView: View {
             .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
     }
 
-    private func actorName(_ item: NotificationItem, isRu: Bool) -> String {
+    private func actorName(_ item: NotificationItem, lng: LanguageManager.Language) -> String {
         // A badge unlock has no actor by nature — nobody did it to the
         // user — so the generic «Кто-то» fallback below would name a
         // person who doesn't exist. The row is signed by the app instead.
         if item.typedKind == .achievement { return AppStrings.activityAchievementActor }
         return item.actor?.displayName?.trimmingCharacters(in: .whitespaces).nilIfEmpty
-            ?? (isRu ? "Кто-то" : "Someone")
+            ?? (AppStrings.notificationsInboxSomeone(lng))
     }
 
     /// Localized title of the unlocked badge. `badgeId` resolves against
@@ -821,7 +821,7 @@ struct NotificationsInboxView: View {
 
     /// Line two — the action, written as a plain phrase with the object in
     /// quotes so the eye can find it without parsing the whole row.
-    private func actionLine(_ item: NotificationItem, isRu: Bool) -> String {
+    private func actionLine(_ item: NotificationItem, lng: LanguageManager.Language) -> String {
         let trip = item.tripTitle?.trimmingCharacters(in: .whitespaces).nilIfEmpty
             ?? AppStrings.activityYourTrip(lang.language)
         switch item.typedKind {
@@ -919,17 +919,15 @@ struct NotificationsInboxView: View {
     }
 
     @ViewBuilder
-    private func emptyState(c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func emptyState(c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 14) {
             Image(systemName: "bell")
                 .font(.system(size: 44, weight: .light))
                 .foregroundStyle(c.textTertiary)
-            Text(isRu ? "Здесь пока пусто" : "Nothing yet")
+            Text(AppStrings.notificationsInboxNothingYet(lng))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
-            Text(isRu
-                 ? "Когда кто-то отреагирует на Вашу поездку или подпишется — увидите здесь."
-                 : "When someone reacts to your trip or follows you, it'll show up here.")
+            Text(AppStrings.notificationsInboxWhenSomeoneReacts(lng))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)

@@ -242,14 +242,14 @@ struct ProfileSettingsSheet: View {
     /// Words, then look, then numbers. Guests get this card too — nothing in it
     /// needs a session.
     private func appGroup(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
-        let isRu = l == .ru
+        let lng = l
         return VStack(spacing: 0) {
             SettingsIconRow(
                 icon: "character.bubble",
                 title: AppStrings.lang(l),
                 action: { showLanguagePicker = true }
             ) {
-                SettingsRowValue(text: isRu ? "Русский" : "English")
+                SettingsRowValue(text: l.endonym)
             }
             .accessibilityIdentifier("settings_language")
 
@@ -279,7 +279,7 @@ struct ProfileSettingsSheet: View {
                 action: { showAppPrefs = true }
             ) {
                 HStack(spacing: 6) {
-                    SettingsRowValue(text: GarageFormat.distanceShort(distanceUnit, isRu: isRu))
+                    SettingsRowValue(text: GarageFormat.distanceShort(distanceUnit, lng: lng))
                     SettingsRowChevron()
                 }
             }
@@ -307,16 +307,17 @@ struct ProfileSettingsSheet: View {
     // MARK: - Pickers (Figma 1685:119 / 176 / 233)
 
     private func languagePicker(_ l: LanguageManager.Language) -> some View {
-        // RU first, as canon draws it — `allCases` is alphabetical by case
-        // name and would lead with English on a Russian phone.
+        // RU first, as canon draws it, then EN, then the five added in 0.6.1
+        // — `Language.displayOrder`, not `allCases`, which is declaration
+        // order and would lead with English on a Russian phone.
         SettingsOptionPicker(
             title: AppStrings.lang(l),
-            options: [LanguageManager.Language.ru, .en],
+            options: LanguageManager.Language.displayOrder,
             selection: l,
             footnote: AppStrings.languagePickerFootnote(l),
-            badge: { $0 == .ru ? "Ру" : "En" },
+            badge: { $0.badge },
             // Endonyms: every language names itself, in itself. Not copy.
-            label: { $0 == .ru ? "Русский" : "English" },
+            label: { $0.endonym },
             onSelect: { lang.language = $0 },
             accessibilityPrefix: "settings_language"
         )

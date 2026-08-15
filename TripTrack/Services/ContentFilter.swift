@@ -73,27 +73,23 @@ enum ContentFilter {
     /// enforces anti-abuse rules: mixed-script tokens (homoglyph attacks),
     /// repeated-character runs, and punctuation floods.
     static func validate(_ text: String, field: Field, language: LanguageManager.Language) -> String? {
-        let isRu = language == .ru
+        let lng = language
         let cleaned = sanitize(text)
         guard !cleaned.isEmpty else { return nil }
 
         if cleaned.count > field.maxLength {
-            return isRu
-                ? "Слишком длинный текст (максимум \(field.maxLength))"
-                : "Too long (max \(field.maxLength) characters)"
+            return AppStrings.contentFilterTooLong(lng, max: field.maxLength)
         }
 
         if containsObjectionable(cleaned) {
-            return isRu
-                ? "Содержит недопустимые выражения"
-                : "Contains inappropriate language"
+            return AppStrings.contentFilterContainsInappropriateLanguage(lng)
         }
 
         // Display-name-specific anti-abuse. Other fields (trip titles,
         // notes) accept arbitrary mixed-script / punctuation because they
         // describe a thing, not an identity.
         if field == .displayName {
-            if let err = validateDisplayNameAbuse(cleaned, isRu: isRu) {
+            if let err = validateDisplayNameAbuse(cleaned, lng: lng) {
                 return err
             }
         }
@@ -103,7 +99,7 @@ enum ContentFilter {
 
     /// Display-name-only checks. All applied AFTER `sanitize` so we don't
     /// trip on whitespace artefacts the user didn't author.
-    private static func validateDisplayNameAbuse(_ text: String, isRu: Bool) -> String? {
+    private static func validateDisplayNameAbuse(_ text: String, lng: LanguageManager.Language) -> String? {
         // Must contain at least one letter — pure punctuation/digit names
         // ("123", "....", "!@#$") are rejected as identity-free.
         let hasLetter = text.unicodeScalars.contains { scalar in
@@ -114,21 +110,17 @@ enum ContentFilter {
             scalar.properties.generalCategory == .modifierLetter
         }
         if !hasLetter {
-            return isRu ? "Должно быть хотя бы одно слово" : "Must contain at least one letter"
+            return AppStrings.contentFilterMustContainAt(lng)
         }
 
         // 5+ identical characters in a row — `aaaaaa` spam pattern.
         if hasRepeatedRun(text, threshold: 5) {
-            return isRu
-                ? "Слишком много повторов одного символа"
-                : "Too many repeated characters"
+            return AppStrings.contentFilterTooManyRepeated(lng)
         }
 
         // 4+ non-letter non-digit chars in a row — `....!@#$` punctuation flood.
         if hasPunctuationFlood(text, threshold: 4) {
-            return isRu
-                ? "Слишком много знаков подряд"
-                : "Too many symbols in a row"
+            return AppStrings.contentFilterTooManySymbols(lng)
         }
 
         // Homoglyph guard — Latin and Cyrillic letters in the same name
@@ -139,9 +131,7 @@ enum ContentFilter {
         let tokens = text.components(separatedBy: separators).filter { !$0.isEmpty }
         for token in tokens {
             if hasMixedScript(token) {
-                return isRu
-                    ? "Латиница и кириллица в одном слове недопустимы"
-                    : "Mixing Latin and Cyrillic in one word isn't allowed"
+                return AppStrings.contentFilterMixingLatinAnd(lng)
             }
         }
 

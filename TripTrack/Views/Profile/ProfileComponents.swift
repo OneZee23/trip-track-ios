@@ -290,44 +290,32 @@ struct SettingsRowValue: View {
 // MARK: - Shared date formatting
 
 enum ProfileDateFormat {
-    private static let ruDayMonth: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "d MMM"
-        // ICU's RU abbreviated months carry a trailing period («апр.») —
-        // the canon (Figma 150:1329) and the Статистика chart labels are
-        // dotless, so strip it from the symbols the "MMM" field reads.
-        f.shortMonthSymbols = f.shortMonthSymbols.map {
-            $0.replacingOccurrences(of: ".", with: "")
+    // A template, not a pattern: «14 апр» and "Apr 14" put the day on
+    // opposite sides, and each language has its own answer.
+    //
+    // ICU's abbreviated months carry a trailing period in several languages
+    // («апр.», „Apr."); the canon (Figma 150:1329) and the Статистика chart
+    // labels are dotless, so it is stripped from the symbols the "MMM" field
+    // reads rather than from the formatted result — the day number must keep
+    // any period of its own («14.» in German).
+    private static let dayMonth: [LanguageManager.Language: DateFormatter] = {
+        var map = LocalizedDateFormatter.templates("dMMM")
+        for f in map.values {
+            f.shortMonthSymbols = f.shortMonthSymbols.map {
+                $0.replacingOccurrences(of: ".", with: "")
+            }
         }
-        return f
+        return map
     }()
-    private static let enDayMonth: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "MMM d"
-        return f
-    }()
-    private static let ruMonth: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "LLLL"
-        return f
-    }()
-    private static let enMonth: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "LLLL"
-        return f
-    }()
+    private static let month = LocalizedDateFormatter.patterns("LLLL")
 
     /// «14 апр» / "Apr 14" — same convention as StatsView.computeRecords.
     static func dayMonth(_ date: Date, lang: LanguageManager.Language) -> String {
-        (lang == .ru ? ruDayMonth : enDayMonth).string(from: date)
+        dayMonth[lang]?.string(from: date) ?? ""
     }
 
     /// «Апрель» / "April" — capitalized standalone month name.
     static func monthName(_ date: Date, lang: LanguageManager.Language) -> String {
-        (lang == .ru ? ruMonth : enMonth).string(from: date).capitalized
+        (month[lang]?.string(from: date) ?? "").capitalized
     }
 }

@@ -36,10 +36,10 @@ enum VehicleType: String, Codable, CaseIterable, Identifiable, Sendable {
 
     func label(_ lang: LanguageManager.Language) -> String {
         switch self {
-        case .car:     return lang == .ru ? "Авто" : "Car"
-        case .moto:    return lang == .ru ? "Мото" : "Moto"
-        case .moped:   return lang == .ru ? "Мопед" : "Moped"
-        case .bicycle: return lang == .ru ? "Вело" : "Bike"
+        case .car:     return AppStrings.vehicleTypeCar(lang)
+        case .moto:    return AppStrings.vehicleTypeMoto(lang)
+        case .moped:   return AppStrings.vehicleTypeMoped(lang)
+        case .bicycle: return AppStrings.vehicleTypeBike(lang)
         }
     }
 

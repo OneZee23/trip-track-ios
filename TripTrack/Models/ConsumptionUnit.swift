@@ -53,7 +53,7 @@ enum ConsumptionUnit: String, CaseIterable, Identifiable {
     /// The short label the segmented control shows.
     func segmentLabel(_ lang: LanguageManager.Language) -> String {
         switch self {
-        case .per100: return lang == .ru ? "л/100" : "L/100"
+        case .per100: return AppStrings.unitLPer100(lang)
         case .mpg:    return "mpg"
         }
     }
@@ -62,11 +62,11 @@ enum ConsumptionUnit: String, CaseIterable, Identifiable {
     /// volume/distance settings — «л/100 км», "gal/100mi" — because that pair
     /// is a real, converted unit; mpg is its own thing and reads the same in
     /// both languages.
-    func valueUnit(volumeRaw: String, distanceRaw: String, isRu: Bool) -> String {
+    func valueUnit(volumeRaw: String, distanceRaw: String, lng: LanguageManager.Language) -> String {
         switch self {
         case .per100:
             return GarageFormat.consumptionUnit(
-                volumeRaw: volumeRaw, distanceRaw: distanceRaw, isRu: isRu)
+                volumeRaw: volumeRaw, distanceRaw: distanceRaw, lng: lng)
         case .mpg:
             return "mpg"
         }

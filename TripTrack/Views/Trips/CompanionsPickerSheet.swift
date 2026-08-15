@@ -316,7 +316,7 @@ struct CompanionsPickerSheet: View {
                     .overlay { Text(row.candidate.avatarEmoji ?? "🙂").font(.system(size: 18)) }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.candidate.displayName ?? (lang.language == .ru ? "Без имени" : "No name"))
+                    Text(row.candidate.displayName ?? (AppStrings.companionsNoName(lang.language)))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)

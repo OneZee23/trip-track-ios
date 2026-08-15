@@ -52,21 +52,19 @@ struct NotificationPreferencesView: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    intro(c: c, isRu: isRu)
+                    intro(c: c, lng: lng)
 
                     VStack(spacing: 0) {
                         toggleRow(
                             icon: "heart.fill",
                             iconTint: .red,
-                            title: isRu ? "Реакции" : "Reactions",
-                            subtitle: isRu
-                                ? "Когда кто-то отреагирует на Вашу публичную поездку"
-                                : "When someone reacts to your public trip",
+                            title: AppStrings.chipReactions(lng),
+                            subtitle: AppStrings.notificationPreferencesWhenSomeoneReacts(lng),
                             isOn: $notifyReactions,
                             c: c,
                         )
@@ -74,10 +72,8 @@ struct NotificationPreferencesView: View {
                         toggleRow(
                             icon: "person.fill.checkmark",
                             iconTint: AppTheme.accent,
-                            title: isRu ? "Подписки" : "Follows",
-                            subtitle: isRu
-                                ? "Когда кто-то подписывается на Ваш профиль"
-                                : "When someone follows your profile",
+                            title: AppStrings.chipFollows(lng),
+                            subtitle: AppStrings.notificationPreferencesWhenSomeoneFollows(lng),
                             isOn: $notifyFollows,
                             c: c,
                         )
@@ -85,10 +81,8 @@ struct NotificationPreferencesView: View {
                         toggleRow(
                             icon: "text.bubble.fill",
                             iconTint: AppTheme.green,
-                            title: isRu ? "Комментарии" : "Comments",
-                            subtitle: isRu
-                                ? "Когда кто-то комментирует Вашу публичную поездку"
-                                : "When someone comments on your public trip",
+                            title: AppStrings.notificationPreferencesComments(lng),
+                            subtitle: AppStrings.notificationPreferencesWhenSomeoneComments(lng),
                             isOn: $notifyComments,
                             c: c,
                         )
@@ -96,10 +90,8 @@ struct NotificationPreferencesView: View {
                         toggleRow(
                             icon: "calendar.badge.clock",
                             iconTint: AppTheme.blue,
-                            title: isRu ? "Итоги недели" : "Weekly recap",
-                            subtitle: isRu
-                                ? "Каждый понедельник — сколько Вы проехали за прошлую неделю"
-                                : "Every Monday — how much you drove last week",
+                            title: AppStrings.notificationPreferencesWeeklyRecap(lng),
+                            subtitle: AppStrings.notificationPreferencesEveryMondayHow(lng),
                             isOn: $notifyWeeklyRecap,
                             c: c,
                         )
@@ -115,14 +107,14 @@ struct NotificationPreferencesView: View {
                     }
                     .surfaceCard(cornerRadius: 14)
 
-                    footer(c: c, isRu: isRu)
+                    footer(c: c, lng: lng)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, 32)
             }
             .background(c.bg)
-            .navigationTitle(isRu ? "Уведомления" : "Notifications")
+            .navigationTitle(AppStrings.settingsNotifications(lng))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
@@ -131,14 +123,12 @@ struct NotificationPreferencesView: View {
         }
     }
 
-    private func intro(c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func intro(c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(isRu ? "Что Вас уведомлять" : "What to notify you about")
+            Text(AppStrings.notificationPreferencesWhatToNotify(lng))
                 .font(.system(size: 20, weight: .heavy))
                 .foregroundStyle(c.text)
-            Text(isRu
-                 ? "Здесь вы выбираете, о чём приходит уведомление — и в push'ах, и в ленте уведомлений внутри приложения. Системные настройки iOS остаются под Вашим контролем отдельно."
-                 : "Pick what you want to hear about — both in push notifications and in the in-app inbox. System-level iOS notification settings remain separate.")
+            Text(AppStrings.notificationPreferencesPickWhatYou(lng))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -198,10 +188,8 @@ struct NotificationPreferencesView: View {
         .padding(14)
     }
 
-    private func footer(c: AppTheme.Colors, isRu: Bool) -> some View {
-        Text(isRu
-             ? "Уведомления, которые Вы выключите, не будут приходить ни на телефон, ни в приложение. Включить обратно можно в любой момент."
-             : "Notifications you turn off won't reach your phone OR the in-app inbox. You can turn them back on any time.")
+    private func footer(c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
+        Text(AppStrings.notificationPreferencesNotificationsYouTurn(lng))
             .font(.system(size: 11))
             .foregroundStyle(c.textTertiary)
             .fixedSize(horizontal: false, vertical: true)

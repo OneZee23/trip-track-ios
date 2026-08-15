@@ -403,7 +403,7 @@ struct StatsScreenView: View {
     /// live here. Reported for a follow-up move into `AppStrings`.
     private func comparisonPeriod(_ l: LanguageManager.Language) -> String {
         range == .year
-            ? (l == .ru ? "году" : "year")
+            ? (AppStrings.statsYear(l))
             : StatsPeriodFormat.monthPrepositional(anchor, l)
     }
 
@@ -593,7 +593,7 @@ struct StatsScreenView: View {
         switch range {
         case .month: return StatsPeriodFormat.monthLower(anchor, l)
         case .year: return String(cal.component(.year, from: anchor))
-        case .all: return AppStrings.statsRangeAll(l).lowercased()
+        case .all: return AppStrings.statsRangeAll(l).lowercased(l)
         }
     }
 
@@ -1068,25 +1068,15 @@ enum StatsPeriodFormat {
     // language, built once. These run inside `body` — the stepper label
     // re-renders on every tap — and constructing a `DateFormatter` each time
     // is the expensive half of the call.
-    private static let ruStandalone = make("LLLL", "ru_RU")
-    private static let enStandalone = make("LLLL", "en_US")
-    private static let ruGenitive = make("MMMM", "ru_RU")
-    private static let ruMonthYear = make("MMMM yyyy", "ru_RU")
-    private static let enMonthYear = make("MMMM yyyy", "en_US")
-    private static let ruDayMonth = make("d MMMM", "ru_RU")
-    private static let enDayMonth = make("MMMM d", "en_US")
-    private static let ruLocale = Locale(identifier: "ru_RU")
-
-    private static func make(_ pattern: String, _ identifier: String) -> DateFormatter {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: identifier)
-        f.dateFormat = pattern
-        return f
-    }
+    private static let standaloneMonths = LocalizedDateFormatter.patterns("LLLL")
+    private static let genitiveMonths = LocalizedDateFormatter.patterns("MMMM")
+    private static let monthYearInlineFmt = LocalizedDateFormatter.templates("MMMMyyyy")
+    private static let dayMonthFmt = LocalizedDateFormatter.templates("dMMMM")
+    private static let ruLocale = LanguageManager.Language.ru.locale
 
     /// ICU's standalone (nominative) month — «Июнь», "June".
     private static func standalone(_ date: Date, _ l: LanguageManager.Language) -> String {
-        (l == .ru ? ruStandalone : enStandalone).string(from: date)
+        standaloneMonths[l]?.string(from: date) ?? ""
     }
 
     private static func yearText(_ date: Date) -> String {
@@ -1101,7 +1091,7 @@ enum StatsPeriodFormat {
     /// «марта 2024» / "March 2024" — mid-sentence, so RU takes the genitive
     /// form ICU gives `MMMM` in a format context.
     static func monthYearInline(_ date: Date, _ l: LanguageManager.Language) -> String {
-        (l == .ru ? ruMonthYear : enMonthYear).string(from: date)
+        monthYearInlineFmt[l]?.string(from: date) ?? ""
     }
 
     /// «июнь 2025» / "June 2025" — the chart's reference-rule label.
@@ -1122,19 +1112,19 @@ enum StatsPeriodFormat {
         // Genitive → prepositional: «января» → «январе», «мая» → «мае». The
         // final -а/-я becomes -е for all twelve, so the case comes out of ICU
         // plus one rule instead of a table of month names written in Swift.
-        let genitive = ruGenitive.string(from: date).lowercased(with: ruLocale)
+        let genitive = (genitiveMonths[.ru]?.string(from: date) ?? "").lowercased(with: ruLocale)
         guard let last = genitive.last, last == "а" || last == "я" else { return genitive }
         return String(genitive.dropLast()) + "е"
     }
 
     /// «12 октября» / "October 12" — the best-day record's subject.
     static func dayMonth(_ date: Date, _ l: LanguageManager.Language) -> String {
-        (l == .ru ? ruDayMonth : enDayMonth).string(from: date)
+        dayMonthFmt[l]?.string(from: date) ?? ""
     }
 
     /// «Сентябрь» / "September" for a bare 0-based column index.
     static func monthName(_ index: Int, _ l: LanguageManager.Language) -> String {
-        let symbols = (l == .ru ? ruStandalone : enStandalone).standaloneMonthSymbols ?? []
+        let symbols = standaloneMonths[l]?.standaloneMonthSymbols ?? []
         guard symbols.indices.contains(index) else { return "" }
         return symbols[index].capitalized
     }
@@ -1145,7 +1135,7 @@ enum StatsPeriodFormat {
     /// neither of which belongs on an axis. The first three letters of the
     /// nominative name are the canon spelling in both languages.
     static func shortMonths(_ l: LanguageManager.Language) -> [String] {
-        let symbols = (l == .ru ? ruStandalone : enStandalone).standaloneMonthSymbols ?? []
+        let symbols = standaloneMonths[l]?.standaloneMonthSymbols ?? []
         guard symbols.count == 12 else {
             return ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]

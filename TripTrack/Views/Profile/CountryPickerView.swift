@@ -31,8 +31,14 @@ enum CountryChoice {
         /// static, so touching it does not load the 35 000-vertex atlas.
         var flag: String { RegionAtlas.flag(for: code) }
 
+        /// Foundation carries country names in all seven languages, so this
+        /// asks it rather than growing the tables by 65 rows per language. The
+        /// hand-written pair stays as the fallback for the rows that are not
+        /// real regions («Весь мир», the neutral flag) and for a locale that
+        /// has no name for a code.
         func name(_ lang: LanguageManager.Language) -> String {
-            lang == .ru ? nameRu : nameEn
+            lang.locale.localizedString(forRegionCode: code)
+                ?? (lang == .ru ? nameRu : nameEn)
         }
     }
 

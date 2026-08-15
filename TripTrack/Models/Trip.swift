@@ -231,15 +231,18 @@ struct Trip: Identifiable, Codable {
         let secs = totalSeconds % 60
         // A zero component is noise, not precision: «4 мин 0 сек» and «2 ч 0
         // мин» both spend a word saying nothing.
+        let h = AppStrings.hoursUnitShort(lang)
+        let m = AppStrings.minutesUnitShort(lang)
+        let s = AppStrings.secondsUnitShort(lang)
         if hours > 0 {
-            if minutes == 0 { return lang == .ru ? "\(hours) ч" : "\(hours) h" }
-            return lang == .ru ? "\(hours) ч \(minutes) мин" : "\(hours) h \(minutes) min"
+            if minutes == 0 { return "\(hours) \(h)" }
+            return "\(hours) \(h) \(minutes) \(m)"
         }
         if minutes > 0 {
-            if secs == 0 { return lang == .ru ? "\(minutes) мин" : "\(minutes) min" }
-            return lang == .ru ? "\(minutes) мин \(secs) сек" : "\(minutes) min \(secs) sec"
+            if secs == 0 { return "\(minutes) \(m)" }
+            return "\(minutes) \(m) \(secs) \(s)"
         }
-        return lang == .ru ? "\(secs) сек" : "\(secs) sec"
+        return "\(secs) \(s)"
     }
 
     init(id: UUID = UUID(), startDate: Date = Date(), endDate: Date? = nil,

@@ -64,6 +64,13 @@ struct TripTrackApp: App {
                     .environment(\.managedObjectContext, persistenceController.container.viewContext)
                     .environmentObject(themeManager)
                     .environmentObject(languageManager)
+                    // SwiftUI reads `.textCase(.uppercase)`, date pickers and
+                    // every system formatter off the environment locale. It
+                    // defaults to the DEVICE language, which is not what the
+                    // user picked in «Язык» — and on Turkish the difference is
+                    // visible: `.uppercase` on the device locale turns «i»
+                    // into «I» instead of «İ».
+                    .environment(\.locale, languageManager.language.locale)
                     // The theme is painted onto the WINDOW, not handed down as
                     // `preferredColorScheme` — see `ThemeManager.paint` for why
                     // the environment could not carry it. `init` runs before
@@ -96,6 +103,7 @@ struct TripTrackApp: App {
                 OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
                     .environmentObject(themeManager)
                     .environmentObject(languageManager)
+                    .environment(\.locale, languageManager.language.locale)
                     .onAppear { themeManager.applyToWindows() }
             }
         }

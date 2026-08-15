@@ -29,16 +29,16 @@ struct ReactionsListSheet: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         VStack(spacing: 0) {
-            header(c, isRu: isRu)
+            header(c, lng: lng)
 
             if !tallies.isEmpty {
-                chips(c, isRu: isRu)
+                chips(c, lng: lng)
             }
 
-            content(c, isRu: isRu)
+            content(c, lng: lng)
         }
         .background(c.bg)
         .accessibilityIdentifier("reactions_list_sheet")
@@ -50,9 +50,9 @@ struct ReactionsListSheet: View {
 
     // MARK: - Header
 
-    private func header(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func header(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         HStack(spacing: 8) {
-            Text(isRu ? "Реакции" : "Reactions")
+            Text(AppStrings.chipReactions(lng))
                 .font(.inter(22, weight: .heavy))
                 .tracking(-0.22)
                 .foregroundStyle(c.text)
@@ -89,11 +89,11 @@ struct ReactionsListSheet: View {
         )
     }
 
-    private func chips(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func chips(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 chip(
-                    label: { Text(isRu ? "Все" : "All").font(.inter(13, weight: .bold)) },
+                    label: { Text(AppStrings.all(lng)).font(.inter(13, weight: .bold)) },
                     count: entries.count,
                     isSelected: selectedEmoji == nil,
                     c: c
@@ -161,7 +161,7 @@ struct ReactionsListSheet: View {
     }
 
     @ViewBuilder
-    private func content(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func content(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         if isLoading {
             PixelCarLoader(label: nil, height: 90)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -169,26 +169,22 @@ struct ReactionsListSheet: View {
         } else if loadFailed {
             emptyState(
                 icon: "wifi.slash",
-                title: isRu ? "Не удалось загрузить" : "Couldn't load",
-                subtitle: isRu
-                    ? "Проверьте соединение и потяните вниз, чтобы обновить."
-                    : "Check your connection and pull to refresh.",
+                title: AppStrings.reactionsListCouldnTLoad(lng),
+                subtitle: AppStrings.reactionsListCheckYourConnection(lng),
                 c: c
             )
         } else if visibleEntries.isEmpty {
             emptyState(
                 icon: "hand.thumbsup",
-                title: isRu ? "Пока никто не отреагировал" : "No reactions yet",
-                subtitle: isRu
-                    ? "Будьте первым — реакции появятся здесь."
-                    : "Be the first — reactions show up here.",
+                title: AppStrings.noReactionsYet(lng),
+                subtitle: AppStrings.reactionsListBeTheFirst(lng),
                 c: c
             )
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(visibleEntries) { entry in
-                        row(entry, c: c, isRu: isRu)
+                        row(entry, c: c, lng: lng)
                         if entry.id != visibleEntries.last?.id {
                             Divider()
                                 .overlay(c.border)
@@ -203,7 +199,7 @@ struct ReactionsListSheet: View {
     }
 
     private func row(
-        _ entry: SocialReactionEntry, c: AppTheme.Colors, isRu: Bool
+        _ entry: SocialReactionEntry, c: AppTheme.Colors, lng: LanguageManager.Language
     ) -> some View {
         Button {
             Haptics.tap()
@@ -216,7 +212,7 @@ struct ReactionsListSheet: View {
                     .overlay { Text(entry.user.avatarEmoji ?? "🚗").font(.system(size: 18)) }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.user.displayName ?? (isRu ? "Пользователь" : "User"))
+                    Text(entry.user.displayName ?? (AppStrings.blockedListUser(lng)))
                         .font(.inter(14, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)

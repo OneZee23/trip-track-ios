@@ -1,0 +1,17 @@
+/* Location permission: when in use */
+"NSLocationWhenInUseUsageDescription" = "TripTrack сапар бағытын картаға жазу, қашықтық пен жылдамдықты есептеу және сапарды күнделікке сақтау үшін геолокацияны пайдаланады.";
+
+/* Location permission: always (background) */
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack қолданба жиналғанда да бағытты жазуды жалғастыру үшін геолокацияны фондық режимде пайдаланады — сонда сапардың бірде-бір бөлігі жоғалмайды.";
+
+/* Motion: auto-detect driving */
+"NSMotionUsageDescription" = "TripTrack сапардың басталғанын анықтап, жазуды автоматты қосу үшін қозғалыс деректерін пайдаланады.";
+
+/* Bluetooth: auto-start/stop on car connection */
+"NSBluetoothAlwaysUsageDescription" = "TripTrack сапар жазуын автоматты бастау және аяқтау үшін көліктің Bluetooth байланысын анықтайды.";
+
+/* Photo Library: add only — saving share-card to Photos */
+"NSPhotoLibraryAddUsageDescription" = "TripTrack сапар суретін Фотоға сақтайды, сонда оны сторис немесе жазба ретінде бөлісе аласыз.";
+
+/* Local network: dev/beta only */
+"NSLocalNetworkUsageDescription" = "TripTrack тестілеу кезінде әзірлеу немесе бета серверіне қосылу үшін жергілікті желіні пайдаланады.";

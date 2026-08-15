@@ -1,0 +1,17 @@
+/* Location permission: when in use */
+"NSLocationWhenInUseUsageDescription" = "TripTrack використовує геолокацію, щоб записувати маршрут поїздки на карті, обчислювати відстань і швидкість та зберігати поїздку в щоденнику подорожей.";
+
+/* Location permission: always (background) */
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack використовує геолокацію у фоновому режимі, щоб продовжувати запис маршруту, поки застосунок згорнутий, і не втратити жодної ділянки поїздки.";
+
+/* Motion: auto-detect driving */
+"NSMotionUsageDescription" = "TripTrack використовує дані руху, щоб автоматично визначити початок поїздки й увімкнути запис.";
+
+/* Bluetooth: auto-start/stop on car connection */
+"NSBluetoothAlwaysUsageDescription" = "TripTrack визначає підключення до Bluetooth-пристрою автомобіля, щоб автоматично почати й завершити запис поїздки.";
+
+/* Photo Library: add only — saving share-card to Photos */
+"NSPhotoLibraryAddUsageDescription" = "TripTrack зберігає картинку поїздки у Фото, щоб Ви могли опублікувати її в сторіс.";
+
+/* Local network: dev/beta only */
+"NSLocalNetworkUsageDescription" = "TripTrack використовує локальну мережу для підключення до dev- або бета-сервера під час тестування.";

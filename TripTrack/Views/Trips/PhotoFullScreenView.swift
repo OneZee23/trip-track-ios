@@ -338,21 +338,13 @@ struct PhotoFullScreenView: View {
             .allowsHitTesting(false)
     }
 
-    private static let captionFormatters: (ru: DateFormatter, en: DateFormatter) = {
-        let ru = DateFormatter()
-        ru.locale = Locale(identifier: "ru_RU")
-        ru.dateFormat = "d MMM, HH:mm"
-        let en = DateFormatter()
-        en.locale = Locale(identifier: "en_US")
-        en.dateFormat = "d MMM, HH:mm"
-        return (ru, en)
-    }()
+    private static let captionFormatters = LocalizedDateFormatter.patterns("d MMM, HH:mm")
 
     /// «14 апр, 10:40 · Тверская обл.» — photo timestamp + trip region.
     private var captionLine: String? {
         guard pages.indices.contains(currentIndex) else { return nil }
-        let f = language == .ru ? Self.captionFormatters.ru : Self.captionFormatters.en
-        var line = f.string(from: pages[currentIndex].timestamp)
+        let f = Self.captionFormatters[language]
+        var line = f?.string(from: pages[currentIndex].timestamp) ?? ""
         if let region, !region.isEmpty {
             line += " · \(region)"
         }

@@ -441,12 +441,18 @@ struct ProfileHistoryCalendar: View {
 
     // MARK: - Date helpers
 
-    private static let weekdaySymbolsRu = rotatedShortWeekdays(
-        "ru_RU", fallback: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-    )
-    private static let weekdaySymbolsEn = rotatedShortWeekdays(
-        "en_US", fallback: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    )
+    /// One row of symbols per language — ICU knows them all, so there is
+    /// nothing to translate here.
+    private static let weekdaySymbols: [LanguageManager.Language: [String]] = {
+        var map: [LanguageManager.Language: [String]] = [:]
+        for lang in LanguageManager.Language.allCases {
+            map[lang] = rotatedShortWeekdays(
+                lang.locale.identifier,
+                fallback: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            )
+        }
+        return map
+    }()
 
     /// ICU hands the symbols back Sunday-first, so the head rotates to the tail
     /// to line up with the Monday-first grid. RU ships them lowercase («пн»).
@@ -458,7 +464,7 @@ struct ProfileHistoryCalendar: View {
     }
 
     private var weekdaySymbols: [String] {
-        lang.language == .ru ? Self.weekdaySymbolsRu : Self.weekdaySymbolsEn
+        Self.weekdaySymbols[lang.language] ?? []
     }
 
     private func currentWeekDays() -> [Date] {

@@ -20,7 +20,7 @@ struct ProfileBackgroundPickerSheet: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
         let current = ProfileBackground.from(settings.profileBackground)
 
         NavigationStack {
@@ -63,7 +63,7 @@ struct ProfileBackgroundPickerSheet: View {
                 }
             }
             .background(c.bg)
-            .navigationTitle(isRu ? "Фон профиля" : "Profile background")
+            .navigationTitle(AppStrings.settingsProfileBackground(lng))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }

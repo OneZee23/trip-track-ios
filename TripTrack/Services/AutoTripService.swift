@@ -720,7 +720,8 @@ final class AutoTripService: ObservableObject {
                 LiveActivityManager.shared.startActivity(
                     tripId: vm.tripManager.activeTrip?.id ?? UUID(),
                     startDate: vm.tripManager.activeTrip?.startDate ?? Date(),
-                    vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
+                    vehicleName: vehicle?.name
+                        ?? AppStrings.vehicleTypeCar(LanguageManager.Language(rawValue: lang) ?? .en),
                     vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
                 )
             }

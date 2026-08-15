@@ -1,0 +1,17 @@
+/* Location permission: when in use */
+"NSLocationWhenInUseUsageDescription" = "TripTrack nutzt deinen Standort, um deine Fahrtroute auf der Karte aufzuzeichnen, Strecke und Geschwindigkeit zu berechnen und die Fahrt in deinem Fahrtenbuch zu sichern.";
+
+/* Location permission: always (background) */
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "TripTrack nutzt deinen Standort im Hintergrund, um die Route weiter aufzuzeichnen, während die App nicht im Vordergrund ist — damit kein Teil der Fahrt verloren geht.";
+
+/* Motion: auto-detect driving */
+"NSMotionUsageDescription" = "TripTrack nutzt Bewegungsdaten, um den Beginn einer Fahrt zu erkennen und die Aufnahme automatisch zu starten.";
+
+/* Bluetooth: auto-start/stop on car connection */
+"NSBluetoothAlwaysUsageDescription" = "TripTrack erkennt die Bluetooth-Verbindung zu deinem Auto, um die Aufnahme automatisch zu starten und zu beenden.";
+
+/* Photo Library: add only — saving share-card to Photos */
+"NSPhotoLibraryAddUsageDescription" = "TripTrack sichert das Bild deiner Fahrt in Fotos, damit du es als Story oder Beitrag teilen kannst.";
+
+/* Local network: dev/beta only */
+"NSLocalNetworkUsageDescription" = "TripTrack nutzt das lokale Netzwerk, um sich beim Testen mit einem Entwicklungs- oder Beta-Server zu verbinden.";

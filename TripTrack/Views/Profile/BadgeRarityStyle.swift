@@ -124,6 +124,6 @@ extension Badge {
     static func unlockShareText(_ value: Double, _ lang: LanguageManager.Language) -> String {
         var s = String(format: "%.1f", value)
         if s.hasSuffix(".0") { s.removeLast(2) }
-        return lang == .ru ? s.replacingOccurrences(of: ".", with: ",") : s
+        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lang))
     }
 }

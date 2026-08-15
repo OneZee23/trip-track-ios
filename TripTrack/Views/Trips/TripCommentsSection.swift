@@ -389,7 +389,7 @@ struct TripCommentsSection: View {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     profileTapTarget(comment.user) {
                         Text(comment.user.displayName
-                             ?? (lang.language == .ru ? "Без имени" : "No name"))
+                             ?? (AppStrings.companionsNoName(lang.language)))
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
@@ -586,7 +586,7 @@ struct TripCommentsSection: View {
                 .foregroundStyle(AppTheme.accent)
             Text(AppStrings.commentReplyingTo(
                 lang.language,
-                target.user.displayName ?? (lang.language == .ru ? "Пользователь" : "User")
+                target.user.displayName ?? (AppStrings.blockedListUser(lang.language))
             ))
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(c.textSecondary)

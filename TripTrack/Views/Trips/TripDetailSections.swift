@@ -82,39 +82,34 @@ enum TripDetailFormat {
         let total = max(0, Int(seconds))
         let h = total / 3600
         let m = (total % 3600) / 60
-        let ru = lang == .ru
+        let hourUnit = AppStrings.hoursUnitShort(lang)
+        let minuteUnit = AppStrings.minutesUnitShort(lang)
         if h > 0 {
-            let hourPart = DetailStatCard.Segment(value: "\(h)", unit: ru ? "ч" : "h")
+            let hourPart = DetailStatCard.Segment(value: "\(h)", unit: hourUnit)
             // «4 ч» alone, not «4 ч 0 мин» — a zero component is noise.
             guard m > 0 else { return [hourPart] }
-            return [hourPart, DetailStatCard.Segment(value: "\(m)", unit: ru ? "мин" : "min")]
+            return [hourPart, DetailStatCard.Segment(value: "\(m)", unit: minuteUnit)]
         }
         if m > 0 {
-            return [DetailStatCard.Segment(value: "\(m)", unit: ru ? "мин" : "min")]
+            return [DetailStatCard.Segment(value: "\(m)", unit: minuteUnit)]
         }
         // Under a minute — seconds, so a two-minute test drive isn't «0 мин».
-        return [DetailStatCard.Segment(value: "\(total)", unit: ru ? "сек" : "s")]
+        return [DetailStatCard.Segment(
+            value: "\(total)", unit: AppStrings.secondsUnitShort(lang))]
     }
 
-    private static let posterDateFormatters: (ru: DateFormatter, en: DateFormatter) = {
-        let ru = DateFormatter()
-        ru.locale = Locale(identifier: "ru_RU")
-        ru.dateFormat = "d MMMM"
-        let en = DateFormatter()
-        en.locale = Locale(identifier: "en_US")
-        en.dateFormat = "MMMM d"
-        return (ru, en)
-    }()
+    // A template, not a pattern: the day and the month swap places between
+    // «14 апреля» and "April 14", and German wants „14. April".
+    private static let posterDateFormatters = LocalizedDateFormatter.templates("dMMMM")
 
     /// Pixel-font hero line — «14 АПРЕЛЯ · ТВЕРСКАЯ ОБЛ.» Region omitted
     /// when the trip has none (geocode pending / disabled).
     static func posterDateLine(date: Date, region: String?, lang: LanguageManager.Language) -> String {
-        let f = lang == .ru ? posterDateFormatters.ru : posterDateFormatters.en
-        var line = f.string(from: date).uppercased()
+        var line = (posterDateFormatters[lang]?.string(from: date) ?? "").uppercased(lang)
         // Region follows the APP language (stored raw geocoder string may
         // be in either) — same rule as the feed card meta line.
         if let region = RegionDisplay.localized(region, language: lang), !region.isEmpty {
-            line += " · \(region.uppercased())"
+            line += " · \(region.uppercased(lang))"
         }
         return line
     }

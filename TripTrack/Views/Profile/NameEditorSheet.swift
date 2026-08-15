@@ -20,7 +20,7 @@ struct NameEditorSheet: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let canSave = !trimmed.isEmpty && trimmed != initialName.trimmingCharacters(in: .whitespacesAndNewlines)
                       && validationError == nil
@@ -75,7 +75,7 @@ struct NameEditorSheet: View {
             // Input — white card, 1.5pt accent border, trailing clear-X.
             HStack(spacing: 8) {
                 TextField(
-                    isRu ? "Например, Иван" : "e.g., Alex",
+                    AppStrings.nameEditorEGAlex(lng),
                     text: $text,
                 )
                 .font(.system(size: 17, weight: .semibold))
@@ -179,9 +179,9 @@ struct NameEditorSheet: View {
 
     private func validate(_ value: String) -> String? {
         let sanitized = ContentFilter.sanitize(value)
-        let isRu = lang.language == .ru
+        let lng = lang.language
         if sanitized.count < 2 && !sanitized.isEmpty {
-            return isRu ? "Слишком коротко" : "Too short"
+            return AppStrings.usernameTooShort(lng)
         }
         // Reuse the same content filter the rest of the app validates with
         // (profanity / mixed-script / repeats / punctuation flood). Keeping

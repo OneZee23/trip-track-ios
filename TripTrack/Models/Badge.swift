@@ -28,7 +28,7 @@ enum BadgeCategory: String, CaseIterable {
     }
 
     func title(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? titleRu() : titleEn()
+        AppStrings.tr(lang, "badgeCategory.\(rawValue)", ru: titleRu(), en: titleEn())
     }
 }
 
@@ -94,7 +94,7 @@ enum BadgeRarity: Int, CaseIterable, Comparable {
     }
 
     func title(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? titleRu() : titleEn()
+        AppStrings.tr(lang, "badgeRarity.\(self)", ru: titleRu(), en: titleEn())
     }
 }
 
@@ -178,12 +178,16 @@ struct Badge: Identifiable {
         self.checkUnlocked = checkUnlocked
     }
 
+    /// The Russian and English wording stays inline in `BadgeDefinitions`,
+    /// next to the rule that unlocks the badge — the other five languages come
+    /// from the tables, keyed by the badge id. `TranslationsCoverageTests`
+    /// checks that every id in `BadgeDefinitions` has a row.
     func title(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? titleRu : titleEn
+        AppStrings.tr(lang, "badge.\(id).title", ru: titleRu, en: titleEn)
     }
 
     func description(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? descriptionRu : descriptionEn
+        AppStrings.tr(lang, "badge.\(id).desc", ru: descriptionRu, en: descriptionEn)
     }
 
     // MARK: - Personal record
@@ -249,7 +253,7 @@ struct Badge: Identifiable {
     /// device's — a device on en_US showing the RU card still owes «47,3».
     private static func oneDecimal(_ value: Double, _ lang: LanguageManager.Language) -> String {
         let s = String(format: "%.1f", value)
-        return lang == .ru ? s.replacingOccurrences(of: ".", with: ",") : s
+        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lang))
     }
 
     private static func metres(_ value: Double, _ lang: LanguageManager.Language) -> String {

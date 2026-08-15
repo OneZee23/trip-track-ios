@@ -96,9 +96,9 @@ struct TripTrackLiveActivity: Widget {
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                     } else {
                         statBlock(
-                            caption: context.state.isRu ? "СКОРОСТЬ" : "SPEED",
+                            caption: LiveActivityStrings.speedCaption(context.state.language),
                             value: "\(Int(context.state.speedKmh))",
-                            unit: context.state.isRu ? "км/ч" : "km/h",
+                            unit: LiveActivityStrings.kmh(context.state.language),
                             alignment: .leading
                         )
                     }
@@ -106,9 +106,9 @@ struct TripTrackLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.trailing) {
                     if !context.state.isFinished {
                         statBlock(
-                            caption: context.state.isRu ? "ПРОЙДЕНО" : "DISTANCE",
+                            caption: LiveActivityStrings.distanceCaption(context.state.language),
                             value: fmtDist(context.state.distanceKm),
-                            unit: context.state.isRu ? "км" : "km",
+                            unit: LiveActivityStrings.km(context.state.language),
                             alignment: .trailing
                         )
                     }
@@ -169,8 +169,8 @@ struct TripTrackLiveActivity: Widget {
                                         Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
                                             .font(.system(size: 13, weight: .bold))
                                         Text(context.state.isPaused
-                                             ? (context.state.isRu ? "Продолжить" : "Resume")
-                                             : (context.state.isRu ? "Пауза" : "Pause"))
+                                             ? (LiveActivityStrings.resume(context.state.language))
+                                             : (LiveActivityStrings.pause(context.state.language)))
                                             .font(.system(size: 13, weight: .bold))
                                             .lineLimit(1)
                                     }
@@ -192,7 +192,7 @@ struct TripTrackLiveActivity: Widget {
                                 // takes the same warm red it took there: the
                                 // word plus a colour that says what it does.
                                 Button(intent: StopTripIntent()) {
-                                    Text(context.state.isRu ? "Завершить" : "Finish")
+                                    Text(LiveActivityStrings.finish(context.state.language))
                                         .font(.system(size: 13, weight: .bold))
                                         .foregroundStyle(accentRed)
                                         .lineLimit(1)
@@ -246,7 +246,7 @@ struct TripTrackLiveActivity: Widget {
                 }
             } compactTrailing: {
                 if context.state.isFinished {
-                    Text(fmtDist(context.state.distanceKm) + (context.state.isRu ? " км" : " km")).font(.caption)
+                    Text(fmtDist(context.state.distanceKm) + (" " + LiveActivityStrings.km(context.state.language))).font(.caption)
                 } else {
                     // Figma 03b: elapsed time on the trailing side — frozen
                     // rather than ticking while paused (`timerText` handles
@@ -337,7 +337,7 @@ struct TripTrackLiveActivity: Widget {
 
 private struct LiveLockScreenView: View {
     let context: ActivityViewContext<TripActivityAttributes>
-    private var isRu: Bool { context.state.isRu }
+    private var lng: String { context.state.language }
     private var isPixel: Bool { context.attributes.vehicleAvatar.hasPrefix("pixel_car_") }
     private var c: WidgetColors { .from(isDark: context.state.isDarkMode) }
 
@@ -363,8 +363,8 @@ private struct LiveLockScreenView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
                         Text(context.state.isPaused
-                             ? (context.state.isRu ? "На паузе" : "Paused")
-                             : (context.state.isRu ? "Запись маршрута" : "Recording"))
+                             ? (LiveActivityStrings.paused(context.state.language))
+                             : (LiveActivityStrings.recording(context.state.language)))
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
@@ -392,18 +392,18 @@ private struct LiveLockScreenView: View {
             // Row 2: Stats
             HStack(spacing: 8) {
                 statCell(
-                    label: isRu ? "ВРЕМЯ В ПУТИ" : "TIME",
+                    label: LiveActivityStrings.timeCaption(lng),
                     value: { timerValue }
                 )
                 statCell(
-                    label: isRu ? "ПРОЙДЕНО" : "DIST",
+                    label: LiveActivityStrings.distanceCaptionShort(lng),
                     value: {
                         HStack(alignment: .lastTextBaseline, spacing: 2) {
                             Text(fmtDist(context.state.distanceKm))
                                 .font(.system(size: 20, weight: .bold, design: .rounded))
                                 .monospacedDigit()
                                 .foregroundStyle(c.text)
-                            Text(context.state.isRu ? "км" : "km")
+                            Text(LiveActivityStrings.km(context.state.language))
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(c.textSecondary)
                         }
@@ -423,7 +423,7 @@ private struct LiveLockScreenView: View {
                 // «this ends the recording». Red says what it does; small and
                 // left still says «not by accident».
                 Button(intent: StopTripIntent()) {
-                    Text(context.state.isRu ? "Завершить" : "End")
+                    Text(LiveActivityStrings.end(context.state.language))
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(accentRed)
                         .frame(width: 90)
@@ -444,8 +444,8 @@ private struct LiveLockScreenView: View {
                         Image(systemName: context.state.isPaused ? "play.fill" : "pause.fill")
                             .font(.system(size: 13, weight: .bold))
                         Text(context.state.isPaused
-                             ? (context.state.isRu ? "Продолжить" : "Resume")
-                             : (context.state.isRu ? "Пауза" : "Pause"))
+                             ? (LiveActivityStrings.resume(context.state.language))
+                             : (LiveActivityStrings.pause(context.state.language)))
                             .font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundStyle(context.state.isPaused ? .white : c.text)
@@ -516,7 +516,7 @@ private let gradientEnd = Color(red: 1.0, green: 0.63, blue: 0.31)
 
 private struct FinishedLockScreenView: View {
     let context: ActivityViewContext<TripActivityAttributes>
-    private var isRu: Bool { context.state.isRu }
+    private var lng: String { context.state.language }
     private var isPixel: Bool { context.attributes.vehicleAvatar.hasPrefix("pixel_car_") }
 
     var body: some View {
@@ -540,7 +540,7 @@ private struct FinishedLockScreenView: View {
 
                 // Center: title + subtitle
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isRu ? "Маршрут сохранен" : "Route saved")
+                    Text(LiveActivityStrings.routeSaved(lng))
                         .font(.system(size: 18, weight: .black))
                         .foregroundStyle(Color.black.opacity(0.8))
                         .lineLimit(1)
@@ -561,7 +561,7 @@ private struct FinishedLockScreenView: View {
             .padding(.bottom, 12)
 
             // Row 2: Glass CTA button
-            Text(isRu ? "Открыть автодневник" : "Open trip diary")
+            Text(LiveActivityStrings.openDiary(lng))
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color.black.opacity(0.6))
                 .frame(maxWidth: .infinity)
@@ -585,7 +585,7 @@ private struct FinishedLockScreenView: View {
         let d = context.state.distanceKm < 10
             ? String(format: "%.1f", context.state.distanceKm)
             : String(format: "%.0f", context.state.distanceKm)
-        let u = isRu ? "км" : "km"
+        let u = LiveActivityStrings.km(lng)
         return "\(context.attributes.vehicleName) • \(d) \(u) • \(context.state.finalDuration ?? "--:--")"
     }
 }

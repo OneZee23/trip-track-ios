@@ -27,7 +27,7 @@ enum RelativeTripDate {
         let secondsAgo = max(0, Int(now.timeIntervalSince(date)))
 
         if secondsAgo < 60 {
-            return language == .ru ? "только что" : "just now"
+            return AppStrings.relativeTripDateJustNow(language)
         }
 
         // `Calendar.isDateInToday`/`isDateInYesterday` compare to the
@@ -40,20 +40,14 @@ enum RelativeTripDate {
         if calendar.isDate(date, inSameDayAs: now) {
             if secondsAgo < 3600 {
                 let m = secondsAgo / 60
-                return language == .ru
-                    ? "\(m) мин назад"
-                    : (m == 1 ? "1 min ago" : "\(m) min ago")
+                return AppStrings.relTimeMinutesAgo(language, m)
             }
-            return language == .ru
-                ? "Сегодня в \(timeString(date, language: language))"
-                : "Today at \(timeString(date, language: language))"
+            return AppStrings.relTimeTodayAt(language, timeString(date, language: language))
         }
 
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
            calendar.isDate(date, inSameDayAs: yesterday) {
-            return language == .ru
-                ? "Вчера в \(timeString(date, language: language))"
-                : "Yesterday at \(timeString(date, language: language))"
+            return AppStrings.relTimeYesterdayAt(language, timeString(date, language: language))
         }
 
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date),
@@ -65,33 +59,14 @@ enum RelativeTripDate {
         return absoluteDate(date, now: now, language: language, calendar: calendar)
     }
 
+    /// Plural agreement lives in `AppStrings.nounDays` now, so «2 дня назад»
+    /// and „vor 2 Tagen" come from the same table as every other counted day.
     private static func daysAgo(_ days: Int, language: LanguageManager.Language) -> String {
-        if language == .ru {
-            // Russian plural agreement: 1 → "день", 2-4 → "дня", 5-20 → "дней",
-            // 21 → "день", 22-24 → "дня", 25-30 → "дней", etc. Days here is
-            // always 2-6 so only the "дня" form fires, but keep the full
-            // table so future callers (e.g. weeks/months) follow the rule.
-            let mod10 = days % 10
-            let mod100 = days % 100
-            let word: String
-            if mod100 >= 11 && mod100 <= 14 {
-                word = "дней"
-            } else if mod10 == 1 {
-                word = "день"
-            } else if (2...4).contains(mod10) {
-                word = "дня"
-            } else {
-                word = "дней"
-            }
-            return "\(days) \(word) назад"
-        } else {
-            return days == 1 ? "1 day ago" : "\(days) days ago"
-        }
+        AppStrings.relTimeDaysAgo(language, days)
     }
 
     private static func timeString(_ date: Date, language: LanguageManager.Language) -> String {
-        let f = language == .ru ? Self.ruTime : Self.enTime
-        return f.string(from: date)
+        timeFormatters[language]?.string(from: date) ?? ""
     }
 
     private static func absoluteDate(
@@ -100,55 +75,31 @@ enum RelativeTripDate {
         calendar: Calendar
     ) -> String {
         let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
-        let f: DateFormatter
-        switch (language, sameYear) {
-        case (.ru, true):  f = ruDateNoYear
-        case (.ru, false): f = ruDateFull
-        case (.en, true):  f = enDateNoYear
-        case (.en, false): f = enDateFull
-        }
-        let s = f.string(from: date)
+        let table = sameYear ? dateNoYearFormatters : dateFullFormatters
+        let s = table[language]?.string(from: date) ?? ""
         // ru_RU "MMM" renders «апр.» — the Figma meta canon is dotless
         // («12 апр · Карелия»).
         return language == .ru ? s.replacingOccurrences(of: ".", with: "") : s
     }
 
     // MARK: - Cached formatters
+    //
+    // One per language rather than a pair of hand-written ru/en ones: a
+    // `DateFormatter` is expensive to build and these are hit once per feed
+    // card. Built from `Language.locale`, so a new language needs no code here.
 
-    private static let ruTime: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "HH:mm"
-        return f
-    }()
-    private static let enTime: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "HH:mm"
-        return f
-    }()
-    private static let ruDateNoYear: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "d MMM"
-        return f
-    }()
-    private static let ruDateFull: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "d MMM yyyy"
-        return f
-    }()
-    private static let enDateNoYear: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "d MMM"
-        return f
-    }()
-    private static let enDateFull: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "d MMM yyyy"
-        return f
-    }()
+    private static let timeFormatters = formatters(pattern: "HH:mm")
+    private static let dateNoYearFormatters = formatters(pattern: "d MMM")
+    private static let dateFullFormatters = formatters(pattern: "d MMM yyyy")
+
+    private static func formatters(pattern: String) -> [LanguageManager.Language: DateFormatter] {
+        var map: [LanguageManager.Language: DateFormatter] = [:]
+        for lang in LanguageManager.Language.allCases {
+            let f = DateFormatter()
+            f.locale = lang.locale
+            f.dateFormat = pattern
+            map[lang] = f
+        }
+        return map
+    }
 }

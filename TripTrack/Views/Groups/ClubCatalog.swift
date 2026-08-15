@@ -17,8 +17,12 @@ struct Club: Identifiable, Hashable {
     let blurbEn: String
     let tint: Color
 
-    func name(_ lang: LanguageManager.Language) -> String { lang == .ru ? nameRu : nameEn }
-    func blurb(_ lang: LanguageManager.Language) -> String { lang == .ru ? blurbRu : blurbEn }
+    func name(_ lang: LanguageManager.Language) -> String {
+        AppStrings.tr(lang, "club.\(id).name", ru: nameRu, en: nameEn)
+    }
+    func blurb(_ lang: LanguageManager.Language) -> String {
+        AppStrings.tr(lang, "club.\(id).blurb", ru: blurbRu, en: blurbEn)
+    }
 
     static func == (lhs: Club, rhs: Club) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -80,18 +84,13 @@ extension Club {
     /// The three lines a club page promises. The same for every club: they are
     /// the FEATURE's promises, not one community's.
     static func perks(_ lang: LanguageManager.Language) -> [ClubPerk] {
-        lang == .ru
-            ? [
-                ClubPerk(icon: "list.bullet.rectangle", text: "Общая лента поездок клуба"),
-                ClubPerk(icon: "trophy", text: "Рейтинг и достижения участников"),
-                ClubPerk(icon: "calendar", text: "Совместные встречи и покатушки"),
-            ]
-            : [
-                ClubPerk(icon: "list.bullet.rectangle", text: "A shared feed of the club's drives"),
-                ClubPerk(icon: "trophy", text: "Member leaderboard and achievements"),
-                ClubPerk(icon: "calendar", text: "Meetups and group drives"),
-            ]
+        [
+            ClubPerk(icon: "list.bullet.rectangle", text: AppStrings.clubPerkFeed(lang)),
+            ClubPerk(icon: "trophy", text: AppStrings.clubPerkLeaderboard(lang)),
+            ClubPerk(icon: "calendar", text: AppStrings.clubPerkMeetups(lang)),
+        ]
     }
+
 }
 
 struct ClubPerk: Identifiable {

@@ -36,7 +36,7 @@ struct StoryShareData {
 extension StoryShareData {
     static func from(_ trip: SocialFeedTrip, lang: LanguageManager.Language) -> StoryShareData {
         let df = DateFormatter()
-        df.locale = Locale(identifier: lang == .ru ? "ru_RU" : "en_US")
+        df.locale = lang.locale
         df.dateFormat = "d MMM yyyy"
         return StoryShareData(
             tripId: trip.id,
@@ -50,7 +50,7 @@ extension StoryShareData {
             region: trip.region,
             coordinates: trip.previewCoordinates,
             authorEmoji: trip.author.avatarEmoji ?? "🚗",
-            authorName: trip.author.displayName ?? (lang == .ru ? "Пользователь" : "User"),
+            authorName: trip.author.displayName ?? (AppStrings.blockedListUser(lang)),
             // `photoCount`, not `firstPhotoThumbnail`: the thumbnail can still
             // be presigning while the count is already right, and the chip
             // should offer itself for any trip that has a photo at all.
@@ -64,7 +64,7 @@ extension StoryShareData {
     /// Build share data from a local `Trip` (own trip from TripDetail).
     static func from(_ trip: Trip, authorName: String, authorEmoji: String, lang: LanguageManager.Language) -> StoryShareData {
         let df = DateFormatter()
-        df.locale = Locale(identifier: lang == .ru ? "ru_RU" : "en_US")
+        df.locale = lang.locale
         df.dateFormat = "d MMM yyyy"
         return StoryShareData(
             tripId: trip.id,
@@ -127,7 +127,7 @@ struct StoryShareSheet: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         VStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -150,10 +150,10 @@ struct StoryShareSheet: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
 
-                    actionButtons(c, isRu: isRu)
+                    actionButtons(c, lng: lng)
 
                     if let shareUrl {
-                        linkRow(shareUrl, c: c, isRu: isRu)
+                        linkRow(shareUrl, c: c, lng: lng)
                     }
                 }
                 .padding(.top, 12)
@@ -367,7 +367,7 @@ struct StoryShareSheet: View {
 
     // MARK: - Buttons
 
-    private func actionButtons(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func actionButtons(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         HStack(spacing: 10) {
             Button {
                 Haptics.tap()
@@ -395,7 +395,7 @@ struct StoryShareSheet: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(savedToPhotos ? AppTheme.green : c.text)
                     Text(savedToPhotos
-                         ? (isRu ? "Сохранено" : "Saved")
+                         ? (AppStrings.storyShareSaved(lng))
                          : AppStrings.save(lang.language))
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(c.text)
@@ -410,7 +410,7 @@ struct StoryShareSheet: View {
         .padding(.horizontal, 16)
     }
 
-    private func linkRow(_ url: String, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func linkRow(_ url: String, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "link")
                 .font(.system(size: 13, weight: .semibold))
@@ -426,7 +426,7 @@ struct StoryShareSheet: View {
                 copyLink()
             } label: {
                 Text(linkCopied
-                     ? (isRu ? "Скопировано" : "Copied")
+                     ? (AppStrings.sharedTripLinkCopied(lng))
                      : AppStrings.shareCopyLink(lang.language))
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(linkCopied ? AppTheme.green : AppTheme.accent)

@@ -77,7 +77,7 @@ struct ClubDetailView: View {
 
     private func perksCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(AppStrings.clubPerksTitle(l).uppercased())
+            Text(AppStrings.clubPerksTitle(l).uppercased(l))
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.44)
                 .foregroundStyle(c.textTertiary)

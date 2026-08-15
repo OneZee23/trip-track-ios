@@ -21,7 +21,5 @@ struct TripActivityAttributes: ActivityAttributes {
         var language: String = "en"
         /// Dynamic — follows map dark mode (sun-based)
         var isDarkMode: Bool = false
-
-        var isRu: Bool { language == "ru" }
     }
 }

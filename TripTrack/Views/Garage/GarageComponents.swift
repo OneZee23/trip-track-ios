@@ -160,7 +160,7 @@ struct GarageSectionLabel: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        Text(text.uppercased())
+        Text(text).textCase(.uppercase)
             .font(.system(size: size, weight: .bold))
             .tracking(tracking)
             .foregroundStyle(color ?? c.textTertiary)
@@ -186,38 +186,38 @@ enum GarageFormat {
 
     /// Retired FuelSettingsCard's proven display format: integral values drop
     /// the fraction, others keep one decimal; RU uses a decimal comma.
-    static func fuel(_ value: Double, isRu: Bool) -> String {
+    static func fuel(_ value: Double, lng: LanguageManager.Language) -> String {
         let s = value == Double(Int(value))
             ? String(format: "%.0f", value)
             : String(format: "%.1f", value)
-        return isRu ? s.replacingOccurrences(of: ".", with: ",") : s
+        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lng))
     }
 
     /// Always-one-decimal variant (avg-consumption stat card).
-    static func oneDecimal(_ value: Double, isRu: Bool) -> String {
+    static func oneDecimal(_ value: Double, lng: LanguageManager.Language) -> String {
         let s = String(format: "%.1f", value)
-        return isRu ? s.replacingOccurrences(of: ".", with: ",") : s
+        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lng))
     }
 
     /// Localized short volume unit ("л"/"L", "гал"/"gal") — carried over from
     /// the retired FuelSettingsCard so price units keep their RU spelling.
-    static func volumeShort(_ rawUnit: String, isRu: Bool) -> String {
+    static func volumeShort(_ rawUnit: String, lng: LanguageManager.Language) -> String {
         rawUnit == VolumeUnit.gallons.rawValue
-            ? (isRu ? "гал" : "gal")
-            : (isRu ? "л" : "L")
+            ? AppStrings.unitGallonsShort(lng)
+            : AppStrings.unitLitresShort(lng)
     }
 
-    static func distanceShort(_ rawUnit: String, isRu: Bool) -> String {
+    static func distanceShort(_ rawUnit: String, lng: LanguageManager.Language) -> String {
         rawUnit == DistanceUnit.miles.rawValue
-            ? (isRu ? "миль" : "mi")
-            : (isRu ? "км" : "km")
+            ? AppStrings.unitMilesShort(lng)
+            : AppStrings.km(lng)
     }
 
     /// Per-100 consumption unit («л/100км» / "gal/100mi") — the stored
     /// values are ALWAYS metric-style per-100 consumption; "mpg" would be
     /// both unconverted and inverse-scaled (higher = better), so the label
     /// must stay a per-100 unit regardless of the volume setting.
-    static func consumptionUnit(volumeRaw: String, distanceRaw: String, isRu: Bool) -> String {
-        "\(volumeShort(volumeRaw, isRu: isRu))/100\(distanceShort(distanceRaw, isRu: isRu))"
+    static func consumptionUnit(volumeRaw: String, distanceRaw: String, lng: LanguageManager.Language) -> String {
+        "\(volumeShort(volumeRaw, lng: lng))/100\(distanceShort(distanceRaw, lng: lng))"
     }
 }

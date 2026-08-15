@@ -172,7 +172,7 @@ struct MyMapSheet: View {
     }
 
     private func regionRowSubtitle(_ region: MapRegionStat) -> String {
-        let km = "\(AppStrings.groupedNumber(Int(region.km.rounded()), lang.language)) \(lang.language == .ru ? "км" : "km")"
+        let km = "\(AppStrings.groupedNumber(Int(region.km.rounded()), lang.language)) \(AppStrings.km(lang.language))"
         let trips = "\(region.tripCount) \(AppStrings.tripsGenitive(lang.language, count: region.tripCount))"
         guard region.totalCities > 0 else { return "\(km) · \(trips)" }
         let cities = AppStrings.mapCitiesOfTotal(
@@ -569,7 +569,7 @@ struct MyMapSheet: View {
             MapTripThumb(trip: trip, size: 40)
             VStack(alignment: .leading, spacing: 3) {
                 Text(TripAutoTitle.localized(trip.title, startDate: trip.startDate, language: lang.language)
-                     ?? (lang.language == .ru ? "Поездка" : "Trip"))
+                     ?? (AppStrings.tripTitle(lang.language)))
                     .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
@@ -590,8 +590,9 @@ struct MyMapSheet: View {
 
     private func tripSubtitle(_ trip: MapTripPin) -> String {
         let when = RelativeTripDate.string(from: trip.startDate, language: lang.language)
-        let km = String(format: lang.language == .ru ? "%.1f км" : "%.1f km", trip.distanceKm)
-            .replacingOccurrences(of: ".", with: lang.language == .ru ? "," : ".")
+        let km = String(format: "%.1f", trip.distanceKm)
+            .replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lang.language))
+            + " " + AppStrings.km(lang.language)
         return "\(when) · \(km)"
     }
 
@@ -676,7 +677,7 @@ struct MyMapSheet: View {
             MapTripThumb(trip: trip, size: 56)
             VStack(alignment: .leading, spacing: 4) {
                 Text(TripAutoTitle.localized(trip.title, startDate: trip.startDate, language: lang.language)
-                     ?? (lang.language == .ru ? "Поездка" : "Trip"))
+                     ?? (AppStrings.tripTitle(lang.language)))
                     .font(.inter(16, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
@@ -713,15 +714,15 @@ struct MyMapSheet: View {
 
     private func tripHeadline(_ trip: MapTripPin) -> String {
         let when = RelativeTripDate.string(from: trip.startDate, language: lang.language)
-        let km = String(format: lang.language == .ru ? "%.0f км" : "%.0f km", trip.distanceKm)
+        let km = String(format: "%.0f", trip.distanceKm) + " " + AppStrings.km(lang.language)
         let time = Trip.formattedTimeHuman(trip.duration, lang: lang.language)
         return "\(when) · \(km) · \(time)"
     }
 
     private func tripSpeeds(_ trip: MapTripPin) -> String {
-        let unit = lang.language == .ru ? "км/ч" : "km/h"
-        let avg = lang.language == .ru ? "ср." : "avg"
-        let max = lang.language == .ru ? "макс." : "max"
+        let unit = AppStrings.kmh(lang.language)
+        let avg = AppStrings.myMapAvg(lang.language)
+        let max = AppStrings.myMapMax(lang.language)
         return "\(avg) \(Int(trip.avgSpeedKmh.rounded())) \(unit) · \(max) \(Int(trip.maxSpeedKmh.rounded())) \(unit)"
     }
 

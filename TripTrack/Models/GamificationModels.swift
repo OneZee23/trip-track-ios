@@ -13,10 +13,10 @@ enum DistanceUnit: String, CaseIterable {
         }
     }
 
-    var labelFull: (ru: String, en: String) {
+    func labelFull(_ lang: LanguageManager.Language) -> String {
         switch self {
-        case .km: return ("Километры", "Kilometers")
-        case .miles: return ("Мили", "Miles")
+        case .km: return AppStrings.tr(lang, "unitKilometersFull", ru: "Километры", en: "Kilometers")
+        case .miles: return AppStrings.tr(lang, "unitMilesFull", ru: "Мили", en: "Miles")
         }
     }
 }
@@ -32,10 +32,10 @@ enum VolumeUnit: String, CaseIterable {
         }
     }
 
-    var labelFull: (ru: String, en: String) {
+    func labelFull(_ lang: LanguageManager.Language) -> String {
         switch self {
-        case .liters: return ("Литры", "Liters")
-        case .gallons: return ("Галлоны", "Gallons")
+        case .liters: return AppStrings.tr(lang, "unitLitersFull", ru: "Литры", en: "Liters")
+        case .gallons: return AppStrings.tr(lang, "unitGallonsFull", ru: "Галлоны", en: "Gallons")
         }
     }
 
@@ -84,22 +84,12 @@ enum FuelCurrency: String, CaseIterable {
         }
     }
 
+    /// Foundation already carries every currency's name in every language we
+    /// ship, so this is one line instead of twelve names × seven languages
+    /// hand-written into the translation tables — and it stays right when a
+    /// currency is added. The ISO code is the fallback if a locale has no name.
     func name(_ lang: LanguageManager.Language) -> String {
-        let isRu = lang == .ru
-        switch self {
-        case .rub:     return isRu ? "Российский рубль" : "Russian ruble"
-        case .usd:     return isRu ? "Доллар США" : "US dollar"
-        case .eur:     return isRu ? "Евро" : "Euro"
-        case .kzt:     return isRu ? "Тенге" : "Tenge"
-        case .gel:     return isRu ? "Лари" : "Lari"
-        case .tryLira: return isRu ? "Лира" : "Lira"
-        case .cny:     return isRu ? "Юань" : "Yuan"
-        case .byn:     return isRu ? "Белорусский рубль" : "Belarusian ruble"
-        case .gbp:     return isRu ? "Фунт стерлингов" : "Pound sterling"
-        case .uah:     return isRu ? "Гривна" : "Hryvnia"
-        case .inr:     return isRu ? "Индийская рупия" : "Indian rupee"
-        case .brl:     return isRu ? "Бразильский реал" : "Brazilian real"
-        }
+        lang.locale.localizedString(forCurrencyCode: code) ?? code
     }
 
     static let storageKey = "fuelCurrency"
@@ -227,7 +217,7 @@ enum DriverRank: String, CaseIterable {
     }
 
     func title(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? titleRu() : titleEn()
+        AppStrings.tr(lang, "driverRank.\(self)", ru: titleRu(), en: titleEn())
     }
 
     static func from(level: Int) -> DriverRank {
@@ -455,6 +445,10 @@ enum VehicleSticker: String, CaseIterable, Codable {
         case .winter:        return "Snowflake"
         }
     }
+
+    func title(_ lang: LanguageManager.Language) -> String {
+        AppStrings.tr(lang, "vehicleSticker.\(self)", ru: titleRu(), en: titleEn())
+    }
 }
 
 // MARK: - Road Rarity
@@ -497,7 +491,7 @@ enum RoadRarity: String, CaseIterable, Codable {
     }
 
     func title(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? titleRu() : titleEn()
+        AppStrings.tr(lang, "roadRarity.\(self)", ru: titleRu(), en: titleEn())
     }
 
     static func from(distanceKm: Double) -> RoadRarity {
@@ -561,7 +555,7 @@ enum RoadLevel: Int, CaseIterable {
     }
 
     func title(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? titleRu() : titleEn()
+        AppStrings.tr(lang, "roadLevel.\(self)", ru: titleRu(), en: titleEn())
     }
 
     static func from(timesDriven: Int) -> RoadLevel {
@@ -714,7 +708,7 @@ enum ZoneStatus: String, CaseIterable {
     }
 
     func title(_ lang: LanguageManager.Language) -> String {
-        lang == .ru ? titleRu() : titleEn()
+        AppStrings.tr(lang, "zoneStatus.\(self)", ru: titleRu(), en: titleEn())
     }
 }
 

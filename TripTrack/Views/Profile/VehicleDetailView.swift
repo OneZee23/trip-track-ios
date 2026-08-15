@@ -280,7 +280,7 @@ struct VehicleDetailView: View {
             // bicycle drops it too — the odometer card then takes the row.
             if vehicle.type.burnsFuel {
                 statCard(
-                    value: GarageFormat.oneDecimal(avg, isRu: l == .ru),
+                    value: GarageFormat.oneDecimal(avg, lng: l),
                     valueColor: AppTheme.green,
                     unit: consumptionUnitLabel(l),
                     label: AppStrings.avgConsumptionLabel(l),
@@ -472,13 +472,13 @@ struct VehicleDetailView: View {
     // MARK: - Fuel Section
 
     private func fuelSection(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        let isRu = l == .ru
+        let lng = l
         let consumptionUnit = consumptionUnitLabel(l)
         // Per litre or per gallon by the same choice that picks л/100 vs mpg —
         // and the number converts with it. The vehicle currency, not the
         // app-wide one: each vehicle owns its price.
         let priceUnit = "\(vehicle.fuelCurrency)/"
-            + GarageFormat.volumeShort(shownConsumptionUnit.volumeUnit.rawValue, isRu: isRu)
+            + GarageFormat.volumeShort(shownConsumptionUnit.volumeUnit.rawValue, lng: lng)
 
         return VStack(alignment: .leading, spacing: 8) {
             // Canon (499:193) keeps this one at the in-card 10/0.5, but on the
@@ -488,19 +488,19 @@ struct VehicleDetailView: View {
             VStack(spacing: 0) {
                 fuelRow(
                     title: AppStrings.fuelCityRow(l),
-                    value: "\(GarageFormat.fuel(shownConsumption(vehicle.cityConsumption), isRu: isRu)) \(consumptionUnit)",
+                    value: "\(GarageFormat.fuel(shownConsumption(vehicle.cityConsumption), lng: lng)) \(consumptionUnit)",
                     c: c
                 )
                 fuelDivider(c: c)
                 fuelRow(
                     title: AppStrings.fuelHighwayRow(l),
-                    value: "\(GarageFormat.fuel(shownConsumption(vehicle.highwayConsumption), isRu: isRu)) \(consumptionUnit)",
+                    value: "\(GarageFormat.fuel(shownConsumption(vehicle.highwayConsumption), lng: lng)) \(consumptionUnit)",
                     c: c
                 )
                 fuelDivider(c: c)
                 fuelRow(
                     title: AppStrings.fuelPriceRow(l),
-                    value: "\(GarageFormat.fuel(shownConsumptionUnit.displayPrice(fromPerLitre: vehicle.fuelPrice), isRu: isRu)) \(priceUnit)",
+                    value: "\(GarageFormat.fuel(shownConsumptionUnit.displayPrice(fromPerLitre: vehicle.fuelPrice), lng: lng)) \(priceUnit)",
                     c: c
                 )
             }
@@ -557,7 +557,7 @@ struct VehicleDetailView: View {
 
     private func consumptionUnitLabel(_ l: LanguageManager.Language) -> String {
         shownConsumptionUnit.valueUnit(
-            volumeRaw: volumeUnit, distanceRaw: distanceUnit, isRu: l == .ru)
+            volumeRaw: volumeUnit, distanceRaw: distanceUnit, lng: l)
     }
 
     /// A stored per-100 figure, expressed in whatever unit is on screen.

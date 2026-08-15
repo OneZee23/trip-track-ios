@@ -576,7 +576,8 @@ final class MapViewModel: ObservableObject {
         LiveActivityManager.shared.startActivity(
             tripId: tripId,
             startDate: startDate,
-            vehicleName: vehicle?.name ?? (lang == "ru" ? "Авто" : "Car"),
+            vehicleName: vehicle?.name
+                        ?? AppStrings.vehicleTypeCar(LanguageManager.Language(rawValue: lang) ?? .en),
             vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
         )
     }

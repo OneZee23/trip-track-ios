@@ -59,13 +59,13 @@ enum SyncState: Equatable {
     func shortLabel(_ l: LanguageManager.Language) -> String {
         switch self {
         case .off:
-            return l == .ru ? "Выкл." : "Off"
+            return AppStrings.syncStatusMarkerOff(l)
         case .offPublishing(let count), .queued(let count):
             return AppStrings.syncQueuedCount(l, count: count)
         case .syncing(let done, let total):
-            return total > 0 ? "\(done)/\(total)" : (l == .ru ? "…" : "…")
+            return total > 0 ? "\(done)/\(total)" : "…"
         case .done:
-            return l == .ru ? "Готово" : "Synced"
+            return AppStrings.syncStatusMarkerSynced(l)
         }
     }
 

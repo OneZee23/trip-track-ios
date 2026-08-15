@@ -134,8 +134,7 @@ struct IdleHUDView: View {
     }()
 
     private func formatKmWithSeparator(_ km: Double) -> String {
-        let formatter = lang.language == .ru ? Self.ruKmFormatter : Self.enKmFormatter
-        return formatter.string(from: NSNumber(value: km)) ?? "\(Int(km))"
+        AppStrings.groupedNumber(Int(km.rounded()), lang.language)
     }
 
 }

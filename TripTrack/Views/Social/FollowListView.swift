@@ -55,7 +55,7 @@ struct FollowListView: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         ScrollView {
             VStack(spacing: 10) {
@@ -66,12 +66,12 @@ struct FollowListView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 40)
                 } else if let err = loadError, users.isEmpty {
-                    errorState(err, c: c, isRu: isRu)
+                    errorState(err, c: c, lng: lng)
                 } else if users.isEmpty {
-                    emptyState(c, isRu: isRu)
+                    emptyState(c, lng: lng)
                 } else {
                     ForEach(users, id: \.id) { user in
-                        userRow(user, c: c, isRu: isRu)
+                        userRow(user, c: c, lng: lng)
                     }
                     // Depth-cap footnote — only meaningful in the navigator
                     // context where `cappedAppend` actually enforces it.
@@ -91,7 +91,7 @@ struct FollowListView: View {
         .background(c.bg)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top, spacing: 0) {
-            CustomNavBar(title: titleString(isRu: isRu)) {
+            CustomNavBar(title: titleString(lng: lng)) {
                 if let onClose {
                     Button {
                         Haptics.tap()
@@ -135,9 +135,9 @@ struct FollowListView: View {
     private func segmentHeader(_ c: AppTheme.Colors) -> some View {
         let l = lang.language
         let followersLabel = counts.map { AppStrings.followersCount(l, n: $0.followers) }
-            ?? (l == .ru ? "Подписчики" : "Followers")
+            ?? (AppStrings.followListFollowers(l))
         let followingLabel = counts.map { AppStrings.followingCountLabel(l, n: $0.following) }
-            ?? (l == .ru ? "Подписки" : "Following")
+            ?? (AppStrings.feedSegmentFollowing(l))
 
         return HStack(spacing: 0) {
             segmentChip(label: followersLabel, mode: .followers, c: c)
@@ -177,22 +177,22 @@ struct FollowListView: View {
         .buttonStyle(.plain)
     }
 
-    private func titleString(isRu: Bool) -> String {
+    private func titleString(lng: LanguageManager.Language) -> String {
         // Figma titles the screen with the account's name; the mode word
         // would just duplicate the segment chip right below it.
         if let accountName, !accountName.isEmpty { return accountName }
         switch currentMode {
-        case .followers: return isRu ? "Подписчики" : "Followers"
-        case .following: return isRu ? "Подписки" : "Following"
+        case .followers: return AppStrings.followListFollowers(lng)
+        case .following: return AppStrings.feedSegmentFollowing(lng)
         }
     }
 
-    private func emptyState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func emptyState(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "person.2")
                 .font(.system(size: 32))
                 .foregroundStyle(c.textTertiary)
-            Text(emptyMessage(isRu: isRu))
+            Text(emptyMessage(lng: lng))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
@@ -201,26 +201,26 @@ struct FollowListView: View {
         .padding(.vertical, 60)
     }
 
-    private func emptyMessage(isRu: Bool) -> String {
+    private func emptyMessage(lng: LanguageManager.Language) -> String {
         switch currentMode {
-        case .followers: return isRu ? "Пока никто не подписался" : "No followers yet"
-        case .following: return isRu ? "Пока ни на кого не подписаны" : "Not following anyone yet"
+        case .followers: return AppStrings.followListNoFollowersYet(lng)
+        case .following: return AppStrings.followListNotFollowingAnyone(lng)
         }
     }
 
-    private func errorState(_ msg: String, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func errorState(_ msg: String, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 28))
                 .foregroundStyle(.red)
-            Text(isRu ? "Не удалось загрузить список" : "Couldn't load list")
+            Text(AppStrings.followListCouldnTLoad(lng))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
             Text(msg)
                 .font(.system(size: 11))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
-            Button(isRu ? "Повторить" : "Retry") {
+            Button(AppStrings.retry(lng)) {
                 Haptics.tap()
                 Task { await load() }
             }
@@ -237,7 +237,7 @@ struct FollowListView: View {
     // No follow/unfollow button — the list DTO carries no per-user follow
     // state, so a button would fabricate it; follow lives one tap deeper on
     // the profile itself.
-    private func userRow(_ user: SocialAuthor, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func userRow(_ user: SocialAuthor, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         Button {
             Haptics.tap()
             if let pushPath {
@@ -253,7 +253,7 @@ struct FollowListView: View {
                     .overlay { Text(user.avatarEmoji ?? "🚗").font(.system(size: 19)) }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(user.displayName ?? (isRu ? "Пользователь" : "User"))
+                    Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
                         .font(.system(size: 13.5, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)

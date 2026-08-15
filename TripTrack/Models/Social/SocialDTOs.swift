@@ -139,9 +139,9 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
         if hours > 0 {
-            return lang == .ru ? "\(hours)ч \(minutes)м" : "\(hours)h \(minutes)m"
+            return "\(hours)\(AppStrings.hoursUnitCompact(lang)) \(minutes)\(AppStrings.minutesUnitCompact(lang))"
         }
-        return lang == .ru ? "\(minutes)м" : "\(minutes)m"
+        return "\(minutes)\(AppStrings.minutesUnitCompact(lang))"
     }
     func formattedDrivingTimeHuman(_ lang: LanguageManager.Language) -> String? {
         guard let s = drivingTime, s > 0 else { return nil }
@@ -579,23 +579,23 @@ enum ReportReason: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     func label(_ lang: LanguageManager.Language) -> String {
-        switch (self, lang) {
-        case (.spam, .ru): return "Спам / реклама"
-        case (.spam, .en): return "Spam or advertising"
-        case (.harassment, .ru): return "Домогательства / травля"
-        case (.harassment, .en): return "Harassment or bullying"
-        case (.hate, .ru): return "Разжигание ненависти"
-        case (.hate, .en): return "Hate speech"
-        case (.nudity, .ru): return "Обнажённость / сексуальный контент"
-        case (.nudity, .en): return "Nudity or sexual content"
-        case (.violence, .ru): return "Насилие или угрозы"
-        case (.violence, .en): return "Violence or threats"
-        case (.illegal, .ru): return "Незаконные действия"
-        case (.illegal, .en): return "Illegal activity"
-        case (.impersonation, .ru): return "Выдаёт себя за другое лицо"
-        case (.impersonation, .en): return "Impersonation"
-        case (.other, .ru): return "Другое"
-        case (.other, .en): return "Something else"
+        switch self {
+        case .spam:
+            return AppStrings.reportReasonSpam(lang)
+        case .harassment:
+            return AppStrings.reportReasonHarassment(lang)
+        case .hate:
+            return AppStrings.reportReasonHate(lang)
+        case .nudity:
+            return AppStrings.reportReasonNudity(lang)
+        case .violence:
+            return AppStrings.reportReasonViolence(lang)
+        case .illegal:
+            return AppStrings.reportReasonIllegal(lang)
+        case .impersonation:
+            return AppStrings.reportReasonImpersonation(lang)
+        case .other:
+            return AppStrings.reportReasonOther(lang)
         }
     }
 }

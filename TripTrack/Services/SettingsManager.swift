@@ -339,8 +339,8 @@ final class SettingsManager: ObservableObject {
         request.fetchLimit = 1
 
         guard let entity = try? context.fetch(request).first else { return }
-        let savedLang = UserDefaults.standard.string(forKey: "appLanguage")
-        entity.name = savedLang == "ru" ? "Ваша машина" : "Your car"
+        let lang = LanguageManager.currentLanguage
+        entity.name = AppStrings.defaultVehicleName(lang)
         persistenceController.save()
         loadVehicles()
     }

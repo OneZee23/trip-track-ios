@@ -19,7 +19,7 @@ struct BadgeDetailOverlay: View {
 
     var body: some View {
         let c = AppTheme.colors(for: colorScheme)
-        let isRu = language == .ru
+        let lng = language
 
         ZStack {
             Color.black.opacity(appear ? 0.4 : 0)
@@ -71,7 +71,7 @@ struct BadgeDetailOverlay: View {
 
                 Text(isUnlocked || !badge.isHidden
                     ? badge.description(language)
-                    : (isRu ? "Скрытое достижение" : "Hidden achievement"))
+                    : (AppStrings.badgeDetailHiddenAchievement(lng)))
                     .font(.system(size: 14))
                     .foregroundStyle(c.textSecondary)
                     .multilineTextAlignment(.center)
@@ -84,7 +84,7 @@ struct BadgeDetailOverlay: View {
                 if !isUnlocked {
                     HStack(spacing: 5) {
                         Image(systemName: "lock.fill")
-                        Text(isRu ? "Не получено" : "Locked")
+                        Text(AppStrings.badgeDetailLocked(lng))
                             .font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundStyle(c.textTertiary)

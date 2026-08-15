@@ -19,7 +19,7 @@ struct BlockedListView: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         ScrollView {
             VStack(spacing: 10) {
@@ -31,12 +31,12 @@ struct BlockedListView: View {
                     // Failed ≠ empty: an offline fetch must not positively
                     // claim «Вы никого не блокировали» (same rule as
                     // DebugLogsView's loadFailed treatment).
-                    errorState(c, isRu: isRu)
+                    errorState(c, lng: lng)
                 } else if users.isEmpty {
-                    emptyState(c, isRu: isRu)
+                    emptyState(c, lng: lng)
                 } else {
                     ForEach(users, id: \.id) { user in
-                        userRow(user, c: c, isRu: isRu)
+                        userRow(user, c: c, lng: lng)
                     }
                 }
             }
@@ -54,12 +54,12 @@ struct BlockedListView: View {
         .refreshable { await load() }
     }
 
-    private func emptyState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func emptyState(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "hand.raised.slash")
                 .font(.system(size: 32))
                 .foregroundStyle(c.textTertiary)
-            Text(isRu ? "Вы никого не блокировали" : "You haven't blocked anyone")
+            Text(AppStrings.blockedListYouHavenT(lng))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)
         }
@@ -67,7 +67,7 @@ struct BlockedListView: View {
         .padding(.vertical, 60)
     }
 
-    private func errorState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func errorState(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 12) {
             Image(systemName: "wifi.exclamationmark")
                 .font(.system(size: 32))
@@ -94,7 +94,7 @@ struct BlockedListView: View {
         .accessibilityIdentifier("blocked_error_state")
     }
 
-    private func userRow(_ user: BlockedUser, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func userRow(_ user: BlockedUser, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         HStack(spacing: 12) {
             Circle()
                 .fill(c.cardAlt)
@@ -102,7 +102,7 @@ struct BlockedListView: View {
                 .overlay { Text(user.avatarEmoji ?? "🚗").font(.system(size: 22)) }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(user.displayName ?? (isRu ? "Пользователь" : "User"))
+                Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
@@ -130,7 +130,7 @@ struct BlockedListView: View {
                         .scaleEffect(0.7)
                         .frame(width: 90, height: 30)
                 } else {
-                    Text(isRu ? "Разблокировать" : "Unblock")
+                    Text(AppStrings.blockProfileUnblock(lng))
                         .font(.system(size: 12, weight: .semibold))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
@@ -148,18 +148,7 @@ struct BlockedListView: View {
 
     // MARK: - blockedAt parsing (decode-safe against old prod)
 
-    private static let ruDate: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "d MMM yyyy"
-        return f
-    }()
-    private static let enDate: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "d MMM yyyy"
-        return f
-    }()
+    private static let blockedDate = LocalizedDateFormatter.patterns("d MMM yyyy")
 
     private func blockedSinceText(_ user: BlockedUser) -> String? {
         // ISODate, not ISO8601DateFormatter — the latter is the exact
@@ -169,7 +158,7 @@ struct BlockedListView: View {
               let date = ISODate.parse(raw)
         else { return nil }
         let l = lang.language
-        let formatted = (l == .ru ? Self.ruDate : Self.enDate).string(from: date)
+        let formatted = Self.blockedDate[l]?.string(from: date) ?? ""
         return AppStrings.blockedSince(l, formatted)
     }
 

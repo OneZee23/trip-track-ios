@@ -63,7 +63,7 @@ struct VehicleEditFormView: View {
 
     init(mode: Mode) {
         self.mode = mode
-        let isRu = LanguageManager.currentLanguage == .ru
+        let lng = LanguageManager.currentLanguage
         // The fields hold what a person reads, which may be mpg; storage
         // is always per-100. Read the preference straight from defaults —
         // @AppStorage is not available yet at init time.
@@ -80,11 +80,11 @@ struct VehicleEditFormView: View {
             _selectedAvatar = State(initialValue: vehicle.avatarEmoji)
             _currencySymbol = State(initialValue: vehicle.fuelCurrency)
             _city = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: vehicle.cityConsumption), isRu: isRu))
+                shownUnit.display(fromPer100: vehicle.cityConsumption), lng: lng))
             _highway = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: vehicle.highwayConsumption), isRu: isRu))
+                shownUnit.display(fromPer100: vehicle.highwayConsumption), lng: lng))
             _price = State(initialValue: GarageFormat.fuel(
-                shownUnit.displayPrice(fromPerLitre: vehicle.fuelPrice), isRu: isRu))
+                shownUnit.displayPrice(fromPerLitre: vehicle.fuelPrice), lng: lng))
         } else {
             editedVehicle = nil
             let defaults = Vehicle()
@@ -97,11 +97,11 @@ struct VehicleEditFormView: View {
             _selectedAvatar = State(initialValue: Vehicle.pixelCarAssets.first ?? "🚗")
             _currencySymbol = State(initialValue: FuelCurrency.current)
             _city = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: defaults.cityConsumption), isRu: isRu))
+                shownUnit.display(fromPer100: defaults.cityConsumption), lng: lng))
             _highway = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: defaults.highwayConsumption), isRu: isRu))
+                shownUnit.display(fromPer100: defaults.highwayConsumption), lng: lng))
             _price = State(initialValue: GarageFormat.fuel(
-                shownUnit.displayPrice(fromPerLitre: defaults.fuelPrice), isRu: isRu))
+                shownUnit.displayPrice(fromPerLitre: defaults.fuelPrice), lng: lng))
         }
         _initialCity = State(initialValue: _city.wrappedValue)
         _initialHighway = State(initialValue: _highway.wrappedValue)
@@ -442,15 +442,15 @@ struct VehicleEditFormView: View {
     /// Re-expresses whatever is typed right now in the new unit, going through
     /// the stored per-100 value so the round trip cannot drift.
     private func convertFuelFields(to unit: ConsumptionUnit) {
-        let isRu = lang.language == .ru
+        let lng = lang.language
         for field in [$city, $highway] {
             guard let shown = parsed(field.wrappedValue) else { continue }
             let stored = consumptionUnit.toPer100(shown)
-            field.wrappedValue = GarageFormat.fuel(unit.display(fromPer100: stored), isRu: isRu)
+            field.wrappedValue = GarageFormat.fuel(unit.display(fromPer100: stored), lng: lng)
         }
         if let shownPrice = parsed(price) {
             let perLitre = consumptionUnit.priceToPerLitre(shownPrice)
-            price = GarageFormat.fuel(unit.displayPrice(fromPerLitre: perLitre), isRu: isRu)
+            price = GarageFormat.fuel(unit.displayPrice(fromPerLitre: perLitre), lng: lng)
         }
         // One setting, not two. The trip screen prints fuel volume from this
         // key, so leaving it behind would have a trip say gallons while the
@@ -464,7 +464,7 @@ struct VehicleEditFormView: View {
         // the wrong one now that each vehicle owns its currency.
         // The segment above owns this too: mpg means gallons, so the row
         // reads «Цена за галлон» and the number is converted, not relabelled.
-        let unit = GarageFormat.volumeShort(consumptionUnit.volumeUnit.rawValue, isRu: l == .ru)
+        let unit = GarageFormat.volumeShort(consumptionUnit.volumeUnit.rawValue, lng: l)
         return VStack(alignment: .leading, spacing: 10) {
             GarageSectionLabel(text: AppStrings.fuelPriceSection(l), color: c.textSecondary)
             fuelInputRow(
@@ -517,7 +517,7 @@ struct VehicleEditFormView: View {
         c: AppTheme.Colors,
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
-        let isRu = lang.language == .ru
+        let lng = lang.language
         return HStack(spacing: 10) {
             Text(label)
                 .font(.system(size: 15, weight: .medium))
@@ -535,7 +535,7 @@ struct VehicleEditFormView: View {
                         // Parse and clamp
                         let normalized = filtered.replacingOccurrences(of: ",", with: ".")
                         if let val = Double(normalized), val > maxValue {
-                            text.wrappedValue = GarageFormat.fuel(maxValue, isRu: isRu)
+                            text.wrappedValue = GarageFormat.fuel(maxValue, lng: lng)
                         } else {
                             text.wrappedValue = filtered
                         }
@@ -751,6 +751,6 @@ struct VehicleEditFormView: View {
 
     private func consumptionUnitLabel(_ l: LanguageManager.Language) -> String {
         consumptionUnit.valueUnit(
-            volumeRaw: volumeUnit, distanceRaw: distanceUnit, isRu: l == .ru)
+            volumeRaw: volumeUnit, distanceRaw: distanceUnit, lng: l)
     }
 }

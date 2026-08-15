@@ -1,0 +1,17 @@
+/* Location permission: when in use */
+"NSLocationWhenInUseUsageDescription" = "Ginagamit ng TripTrack ang lokasyon mo para i-record ang ruta ng biyahe sa mapa, kuwentahin ang distansya at bilis, at i-save ang biyahe sa talaarawan mo.";
+
+/* Location permission: always (background) */
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Ginagamit ng TripTrack ang lokasyon mo sa background para ipagpatuloy ang pag-record ng ruta habang wala sa screen ang app, kaya walang bahagi ng biyahe ang mawawala.";
+
+/* Motion: auto-detect driving */
+"NSMotionUsageDescription" = "Ginagamit ng TripTrack ang datos ng galaw para matukoy ang simula ng biyahe at kusang simulan ang pag-record.";
+
+/* Bluetooth: auto-start/stop on car connection */
+"NSBluetoothAlwaysUsageDescription" = "Natutukoy ng TripTrack ang koneksyon sa Bluetooth ng kotse mo para awtomatikong simulan at tapusin ang pag-record ng biyahe.";
+
+/* Photo Library: add only — saving share-card to Photos */
+"NSPhotoLibraryAddUsageDescription" = "Sine-save ng TripTrack ang larawan ng biyahe sa Photos para maibahagi mo ito bilang story o post.";
+
+/* Local network: dev/beta only */
+"NSLocalNetworkUsageDescription" = "Ginagamit ng TripTrack ang lokal na network para kumonekta sa development o beta server habang nagte-test.";

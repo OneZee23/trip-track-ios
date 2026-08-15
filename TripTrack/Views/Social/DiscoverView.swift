@@ -29,19 +29,19 @@ struct DiscoverView: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         NavigationStack(path: $authorPath) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    searchField(c, isRu: isRu)
+                    searchField(c, lng: lng)
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
 
                     if query.trimmingCharacters(in: .whitespaces).isEmpty {
-                        suggestedSection(c, isRu: isRu)
+                        suggestedSection(c, lng: lng)
                     } else {
-                        resultsSection(c, isRu: isRu)
+                        resultsSection(c, lng: lng)
                     }
                 }
                 .padding(.bottom, 32)
@@ -89,7 +89,7 @@ struct DiscoverView: View {
 
     // MARK: - Search field
 
-    private func searchField(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func searchField(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18))
@@ -98,7 +98,7 @@ struct DiscoverView: View {
                 text: $query,
                 // «Поиск по имени» per Figma 117:287 («Имя пользователя» was
                 // both off-canon and wrong — the app has no usernames).
-                prompt: Text(isRu ? "Поиск по имени" : "Search by name")
+                prompt: Text(AppStrings.discoverSearchByName(lng))
                     .foregroundStyle(c.textTertiary)
             ) {
                 Text(AppStrings.findPeople(lang.language))
@@ -132,7 +132,7 @@ struct DiscoverView: View {
     // MARK: - Suggested
 
     @ViewBuilder
-    private func suggestedSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func suggestedSection(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(
                 title: AppStrings.suggestedByRegions(lang.language),
@@ -146,17 +146,15 @@ struct DiscoverView: View {
             } else if suggested.isEmpty {
                 emptyStateCard(
                     icon: "person.2.wave.2",
-                    title: isRu ? "Пока некого рекомендовать" : "No suggestions yet",
-                    subtitle: isRu
-                        ? "Когда в приложении появятся новые водители — увидите их здесь."
-                        : "When new drivers join, they'll show up here.",
+                    title: AppStrings.discoverNoSuggestionsYet(lng),
+                    subtitle: AppStrings.discoverWhenNewDrivers(lng),
                     c: c
                 )
             } else {
                 VStack(spacing: 8) {
                     ForEach(suggested, id: \.id) { user in
                         userRow(
-                            user.author, c: c, isRu: isRu,
+                            user.author, c: c, lng: lng,
                             reason: user.reason, totalKm: user.totalKm
                         )
                     }
@@ -169,10 +167,10 @@ struct DiscoverView: View {
     // MARK: - Results
 
     @ViewBuilder
-    private func resultsSection(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func resultsSection(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(
-                title: isRu ? "Результаты" : "Results",
+                title: AppStrings.discoverResults(lng),
                 c: c
             )
 
@@ -183,16 +181,14 @@ struct DiscoverView: View {
             } else if results.isEmpty {
                 emptyStateCard(
                     icon: "magnifyingglass",
-                    title: isRu ? "Никого не нашли" : "No users found",
-                    subtitle: isRu
-                        ? "Попробуйте другое имя или проверьте раскладку."
-                        : "Try a different name or check your spelling.",
+                    title: AppStrings.discoverNoUsersFound(lng),
+                    subtitle: AppStrings.discoverTryADifferent(lng),
                     c: c
                 )
             } else {
                 VStack(spacing: 8) {
                     ForEach(results, id: \.id) { user in
-                        userRow(user, c: c, isRu: isRu)
+                        userRow(user, c: c, lng: lng)
                     }
                 }
             }
@@ -235,7 +231,7 @@ struct DiscoverView: View {
     /// search results pass neither and the row collapses back to the
     /// name + level it has always drawn.
     private func userRow(
-        _ user: SocialAuthor, c: AppTheme.Colors, isRu: Bool,
+        _ user: SocialAuthor, c: AppTheme.Colors, lng: LanguageManager.Language,
         reason: SuggestionMatchReason? = nil, totalKm: Double? = nil
     ) -> some View {
         Button {
@@ -249,7 +245,7 @@ struct DiscoverView: View {
                     .overlay { Text(user.avatarEmoji ?? "🚗").font(.system(size: 19)) }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(user.displayName ?? (isRu ? "Пользователь" : "User"))
+                    Text(user.displayName ?? (AppStrings.blockedListUser(lng)))
                         .font(.system(size: 13.5, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
@@ -279,7 +275,7 @@ struct DiscoverView: View {
                 // Following (different label widths).
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                followButton(for: user, c: c, isRu: isRu)
+                followButton(for: user, c: c, lng: lng)
             }
             .padding(12)
             .surfaceCard(cornerRadius: 16)
@@ -296,7 +292,7 @@ struct DiscoverView: View {
         return "\(head) · \(GarageFormat.odometer(km)) \(AppStrings.km(lang.language))"
     }
 
-    private func followButton(for user: SocialAuthor, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func followButton(for user: SocialAuthor, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         let isFollowed = followedIds.contains(user.id)
         return Button {
             Haptics.selection()
@@ -307,8 +303,8 @@ struct DiscoverView: View {
             Task { await toggleFollow(for: user.id) }
         } label: {
             Text(isFollowed
-                 ? (isRu ? "Подписан" : "Following")
-                 : (isRu ? "Подписаться" : "Follow"))
+                 ? (AppStrings.notificationsInboxFollowing(lng))
+                 : (AppStrings.discoverFollow(lng)))
                 // Fixed footprint (canon 117:298 draws 122pt) — "Подписаться"
                 // (11 chars) vs "Подписан" (8 chars) caused visible
                 // row-content jump on toggle. Pinning width keeps the row

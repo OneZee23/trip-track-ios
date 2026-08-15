@@ -533,12 +533,14 @@ struct TripCompleteSummaryView: View {
         let total = Int(trip.duration)
         let hours = total / 3600
         let minutes = (total % 3600) / 60
+        let h = AppStrings.hoursUnitShort(lang)
+        let m = AppStrings.minutesUnitShort(lang)
         if hours > 0 {
-            if minutes == 0 { return lang == .ru ? "\(hours) ч" : "\(hours) h" }
-            return lang == .ru ? "\(hours) ч \(minutes) мин" : "\(hours) h \(minutes) min"
+            if minutes == 0 { return "\(hours) \(h)" }
+            return "\(hours) \(h) \(minutes) \(m)"
         }
-        if minutes > 0 { return lang == .ru ? "\(minutes) мин" : "\(minutes) min" }
-        return lang == .ru ? "\(total) сек" : "\(total) sec"
+        if minutes > 0 { return "\(minutes) \(m)" }
+        return "\(total) \(AppStrings.secondsUnitShort(lang))"
     }
 
     private func summaryStatCard(value: String, unit: String, label: String, color: Color, c: AppTheme.Colors) -> some View {

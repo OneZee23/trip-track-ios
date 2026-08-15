@@ -83,18 +83,9 @@ struct TripShareCardView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private static let dateFormatters: (ru: DateFormatter, en: DateFormatter) = {
-        let ru = DateFormatter()
-        ru.locale = Locale(identifier: "ru_RU")
-        ru.dateFormat = "d MMM yyyy"
-        let en = DateFormatter()
-        en.locale = Locale(identifier: "en_US")
-        en.dateFormat = "d MMM yyyy"
-        return (ru, en)
-    }()
+    private static let dateFormatters = LocalizedDateFormatter.patterns("d MMM yyyy")
 
     private var formattedDate: String {
-        let fmts = Self.dateFormatters
-        return (lang.language == .ru ? fmts.ru : fmts.en).string(from: trip.startDate)
+        Self.dateFormatters[lang.language]?.string(from: trip.startDate) ?? ""
     }
 }

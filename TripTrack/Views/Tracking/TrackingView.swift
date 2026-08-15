@@ -219,7 +219,7 @@ struct TrackingView: View {
                         .foregroundStyle(speedDimmed ? mapDimmedText : AppTheme.accent)
                         .contentTransition(.numericText())
                         .animation(.easeInOut(duration: 0.2), value: speedText)
-                    Text(AppStrings.kmh(lang.language).uppercased())
+                    Text(AppStrings.kmh(lang.language).uppercased(lang.language))
                         .font(.inter(13, weight: .medium))
                         .kerning(0.78)
                         .foregroundStyle(mapSecondaryText)
@@ -479,7 +479,7 @@ struct TrackingView: View {
     /// Recorded distance with the separator the language actually uses.
     private var confirmDistanceText: String {
         let s = String(format: "%.1f", viewModel.distance)
-        let n = lang.language == .ru ? s.replacingOccurrences(of: ".", with: ",") : s
+        let n = s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lang.language))
         return "\(n) \(AppStrings.km(lang.language))"
     }
 
@@ -727,7 +727,7 @@ struct TrackingView: View {
                     .foregroundStyle(.white)
                     .contentTransition(.numericText())
                 if let unit {
-                    Text(unit.uppercased())
+                    Text(unit).textCase(.uppercase)
                         .font(.inter(11))
                         .foregroundStyle(.white.opacity(0.5))
                 }

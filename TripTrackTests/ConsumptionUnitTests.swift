@@ -72,10 +72,10 @@ final class ConsumptionUnitTests: XCTestCase {
     /// mpg is a fixed word.
     func testValueUnitFollowsTheOtherSettings() {
         XCTAssertEqual(
-            ConsumptionUnit.per100.valueUnit(volumeRaw: "liters", distanceRaw: "km", isRu: true),
+            ConsumptionUnit.per100.valueUnit(volumeRaw: "liters", distanceRaw: "km", lng: .ru),
             "л/100км")
         XCTAssertEqual(
-            ConsumptionUnit.mpg.valueUnit(volumeRaw: "liters", distanceRaw: "km", isRu: true),
+            ConsumptionUnit.mpg.valueUnit(volumeRaw: "liters", distanceRaw: "km", lng: .ru),
             "mpg")
     }
 

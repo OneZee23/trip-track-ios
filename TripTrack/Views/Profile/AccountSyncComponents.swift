@@ -14,7 +14,7 @@ struct AccountSectionLabel: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        Text(text.uppercased())
+        Text(text).textCase(.uppercase)
             .font(.inter(12, weight: .bold))
             .tracking(0.36)
             .foregroundStyle(c.textTertiary)

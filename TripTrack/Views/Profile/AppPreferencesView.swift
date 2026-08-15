@@ -99,14 +99,14 @@ struct AppPreferencesView: View {
     // MARK: - Card
 
     private func card(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
-        let isRu = l == .ru
+        let lng = l
         return VStack(spacing: 0) {
             SettingsIconRow(
                 icon: "ruler",
                 title: AppStrings.settingsUnits(l),
                 action: { showUnitsPicker = true }
             ) {
-                SettingsRowValue(text: GarageFormat.distanceShort(distanceUnit, isRu: isRu))
+                SettingsRowValue(text: GarageFormat.distanceShort(distanceUnit, lng: lng))
             }
             .accessibilityIdentifier("settings_units")
 
@@ -151,7 +151,7 @@ struct AppPreferencesView: View {
             // four glyphs do not fit a 32pt badge. The row's own value below
             // still uses the localized word, as canon draws it.
             badge: { $0 == .miles ? "mi" : "km" },
-            label: { l == .ru ? $0.labelFull.ru : $0.labelFull.en },
+            label: { $0.labelFull(l) },
             onSelect: { distanceUnit = $0.rawValue },
             accessibilityPrefix: "settings_units"
         )

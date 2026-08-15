@@ -216,11 +216,11 @@ struct PublicProfileView: View {
     /// `displayName` is null because SIWA only returned a name on their
     /// very first sign-in.
     private var resolvedDisplayName: String {
-        let isRu = lang.language == .ru
+        let lng = lang.language
         if let p = profile?.displayName, !p.isEmpty { return p }
         if let p = preloaded?.displayName, !p.isEmpty { return p }
         if isOwnProfile, let n = auth.userName, !n.isEmpty { return n }
-        return isRu ? "Водитель" : "Driver"
+        return AppStrings.publicProfileDriver(lng)
     }
 
     /// Canon titles the bar «@alexandr» (580:444). The handle is device-local
@@ -265,7 +265,7 @@ struct PublicProfileView: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         ScrollView {
             VStack(spacing: 0) {
@@ -298,13 +298,13 @@ struct PublicProfileView: View {
                             heroSection(c)
                                 .padding(.top, 6)
 
-                            statsGrid(c, isRu: isRu)
+                            statsGrid(c, lng: lng)
                                 .padding(.horizontal, 16)
 
                             achievementsSection(c)
                                 .padding(.horizontal, 16)
 
-                            recentTrips(c, isRu: isRu)
+                            recentTrips(c, lng: lng)
                                 .padding(.horizontal, 16)
                         }
                         .transition(.opacity)
@@ -655,12 +655,12 @@ struct PublicProfileView: View {
             // on non-nil alone hid the primary Figma CTA (117:931) — and
             // its sign-in funnel — from every signed-out viewer. The
             // button's own guard routes guests to the sign-in prompt.
-            followButton(c, isRu: lang.language == .ru)
+            followButton(c, lng: lang.language)
         }
     }
 
     @ViewBuilder
-    private func followButton(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func followButton(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         let isFollowing = profile?.isFollowing ?? false
         Button {
             Haptics.action()
@@ -679,8 +679,8 @@ struct PublicProfileView: View {
                         .tint(isFollowing ? AppTheme.accent : .white)
                 }
                 Text(isFollowing
-                     ? (isRu ? "Подписан" : "Following")
-                     : (isRu ? "Подписаться" : "Follow"))
+                     ? (AppStrings.notificationsInboxFollowing(lng))
+                     : (AppStrings.discoverFollow(lng)))
                 // Canon 1635:145 puts the tick AFTER the word and draws no
                 // glyph at all on the offer — a leading «+» made «Подписаться»
                 // read as «add», which is a different promise.
@@ -716,7 +716,7 @@ struct PublicProfileView: View {
         return tripCount == 0 && (p.profileLevel > 1 || p.currentStreak > 0 || p.bestStreak > 0)
     }
 
-    private func statsGrid(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func statsGrid(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         let stats = profile?.stats
         let privacy = isPrivacyMode
         let dots = "•••"
@@ -769,9 +769,7 @@ struct PublicProfileView: View {
                     Image(systemName: "lock.fill")
                         .font(.system(size: 10))
                         .foregroundStyle(c.textTertiary)
-                    Text(isRu
-                         ? "Тайные дороги — водитель оставил поездки приватными"
-                         : "Hidden roads — this driver keeps their trips private")
+                    Text(AppStrings.publicProfileHiddenRoadsThis(lng))
                         .font(.system(size: 12))
                         .foregroundStyle(c.textTertiary)
                         .multilineTextAlignment(.leading)
@@ -1039,14 +1037,14 @@ struct PublicProfileView: View {
     // MARK: - Recent trips
 
     @ViewBuilder
-    private func recentTrips(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func recentTrips(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         if !tripCards.isEmpty {
             let publicCount = profile?.stats.publicTripCount ?? tripCards.count
             let totalCount = profile?.stats.tripCount ?? tripCards.count
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     sectionHeader(
-                        tripsHeaderTitle(public: publicCount, total: totalCount, isRu: isRu),
+                        tripsHeaderTitle(public: publicCount, total: totalCount, lng: lng),
                         c: c
                     )
                     layoutToggle(c)
@@ -1058,7 +1056,7 @@ struct PublicProfileView: View {
                         spacing: 10
                     ) {
                         ForEach(tripCards) { t in
-                            openable(t) { tripGridCell(t, c: c, isRu: isRu) }
+                            openable(t) { tripGridCell(t, c: c, lng: lng) }
                         }
                     }
                 } else {
@@ -1073,9 +1071,9 @@ struct PublicProfileView: View {
             // Error takes priority over the empty state so a failed refresh
             // of an already-loaded profile doesn't silently fall back to
             // "No public trips yet" — user needs to know the fetch failed.
-            errorRow(err, c: c, isRu: isRu)
+            errorRow(err, c: c, lng: lng)
         } else if profile != nil {
-            emptyTripsHint(c, isRu: isRu)
+            emptyTripsHint(c, lng: lng)
         } else if isLoading {
             skeleton()
         }
@@ -1085,10 +1083,10 @@ struct PublicProfileView: View {
     /// sizes — canon (117:1339) writes the counts into the header line itself.
     /// The «всего» tail only appears when the owner is holding trips back, so
     /// the public number doesn't read as their whole road history.
-    private func tripsHeaderTitle(public publicCount: Int, total: Int, isRu: Bool) -> String {
-        let head = isRu ? "Поездки · \(publicCount)" : "Trips · \(publicCount)"
+    private func tripsHeaderTitle(public publicCount: Int, total: Int, lng: LanguageManager.Language) -> String {
+        let head = "\(AppStrings.tripsTab(lng)) · \(publicCount)"
         guard total > publicCount else { return head }
-        return head + (isRu ? " · всего \(total)" : " · \(total) total")
+        return head + " · " + AppStrings.publicProfileTripsTotal(lng, total: total)
     }
 
     /// The Лента's card itself — author line, title, map, metric strip,
@@ -1178,8 +1176,8 @@ struct PublicProfileView: View {
 
     /// «142», «21,5» — a trailing «.0» on a whole number is the thing that
     /// makes a card look machine-printed.
-    private func distanceText(_ km: Double, isRu: Bool) -> String {
-        GarageFormat.fuel(km, isRu: isRu)
+    private func distanceText(_ km: Double, lng: LanguageManager.Language) -> String {
+        GarageFormat.fuel(km, lng: lng)
     }
 
     /// Wraps a trip tile in a button where a trip can actually be opened, and
@@ -1240,7 +1238,7 @@ struct PublicProfileView: View {
     /// time and tallies pushed it into being a small bad card instead of a
     /// good tile (user call 2026-08-14). The full card is one tap away on the
     /// list icon.
-    private func tripGridCell(_ trip: SocialFeedTrip, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func tripGridCell(_ trip: SocialFeedTrip, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             gridMap(trip, c: c)
 
@@ -1251,7 +1249,7 @@ struct PublicProfileView: View {
             // Truncation is the answer here, not more width.
             Text(TripAutoTitle.localized(
                 trip.title, startDate: trip.startDate, language: lang.language
-            ) ?? shortDate(trip.startDate, isRu: isRu))
+            ) ?? shortDate(trip.startDate, lng: lng))
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
@@ -1269,7 +1267,7 @@ struct PublicProfileView: View {
                 Text(RelativeTripDate.string(from: trip.startDate, language: lang.language))
                     .foregroundStyle(c.textTertiary)
                 Text("·").foregroundStyle(c.textTertiary)
-                Text("\(distanceText(trip.distanceKm, isRu: isRu)) \(AppStrings.km(lang.language))")
+                Text("\(distanceText(trip.distanceKm, lng: lng)) \(AppStrings.km(lang.language))")
                     .foregroundStyle(c.textSecondary)
             }
             .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
@@ -1310,12 +1308,12 @@ struct PublicProfileView: View {
         }
     }
 
-    private func emptyTripsHint(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func emptyTripsHint(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 6) {
             Image(systemName: "car.fill")
                 .font(.system(size: 24))
                 .foregroundStyle(c.textTertiary)
-            Text(isRu ? "Пока нет публичных поездок" : "No public trips yet")
+            Text(AppStrings.publicProfileNoPublicTrips(lng))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)
         }
@@ -1329,12 +1327,12 @@ struct PublicProfileView: View {
             .padding(.vertical, 20)
     }
 
-    private func errorRow(_ msg: String, c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func errorRow(_ msg: String, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 22))
                 .foregroundStyle(.red)
-            Text(isRu ? "Не удалось загрузить профиль" : "Couldn't load profile")
+            Text(AppStrings.publicProfileCouldnTLoad(lng))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
             Text(msg)
@@ -1501,9 +1499,9 @@ struct PublicProfileView: View {
         await refresh()
     }
 
-    private func shortDate(_ date: Date, isRu: Bool) -> String {
+    private func shortDate(_ date: Date, lng: LanguageManager.Language) -> String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: isRu ? "ru_RU" : "en_US")
+        f.locale = lng.locale
         f.dateFormat = "d MMM yyyy"
         return f.string(from: date)
     }

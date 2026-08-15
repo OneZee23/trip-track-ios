@@ -36,19 +36,21 @@ final class FeedViewModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
-    // Cached DateFormatters for section titles (separate per locale+format for thread safety)
-    private static let sectionMonthRu: DateFormatter = {
-        let f = DateFormatter(); f.locale = Locale(identifier: "ru_RU"); f.dateFormat = "LLLL"; return f
-    }()
-    private static let sectionMonthEn: DateFormatter = {
-        let f = DateFormatter(); f.locale = Locale(identifier: "en_US"); f.dateFormat = "LLLL"; return f
-    }()
-    private static let sectionMonthYearRu: DateFormatter = {
-        let f = DateFormatter(); f.locale = Locale(identifier: "ru_RU"); f.dateFormat = "LLLL yyyy"; return f
-    }()
-    private static let sectionMonthYearEn: DateFormatter = {
-        let f = DateFormatter(); f.locale = Locale(identifier: "en_US"); f.dateFormat = "LLLL yyyy"; return f
-    }()
+    // Cached DateFormatters for section titles — one per language and format,
+    // built once (a DateFormatter is expensive and these run per section).
+    private static let sectionMonth = monthFormatters(pattern: "LLLL")
+    private static let sectionMonthYear = monthFormatters(pattern: "LLLL yyyy")
+
+    private static func monthFormatters(pattern: String) -> [LanguageManager.Language: DateFormatter] {
+        var map: [LanguageManager.Language: DateFormatter] = [:]
+        for lang in LanguageManager.Language.allCases {
+            let f = DateFormatter()
+            f.locale = lang.locale
+            f.dateFormat = pattern
+            map[lang] = f
+        }
+        return map
+    }
 
     /// App-scoped instance. The 5-tab skeleton destroys FeedView on every
     /// tab switch — a view-owned @StateObject would rebuild from scratch
@@ -329,25 +331,19 @@ final class FeedViewModel: ObservableObject {
     }
 
     private func sectionTitle(for date: Date, now: Date, calendar: Calendar) -> String {
-        let isRu = language == .ru
+        let lng = language
 
         if calendar.isDate(date, equalTo: now, toGranularity: .month) {
-            return isRu ? "Этот месяц" : "This month"
+            return AppStrings.feedViewModelThisMonth(lng)
         }
 
         let lastMonth = calendar.date(byAdding: .month, value: -1, to: now) ?? now
         if calendar.isDate(date, equalTo: lastMonth, toGranularity: .month) {
-            return isRu ? "Прошлый месяц" : "Last month"
+            return AppStrings.feedViewModelLastMonth(lng)
         }
 
         let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
-        let formatter: DateFormatter
-        switch (isRu, sameYear) {
-        case (true, true):   formatter = Self.sectionMonthRu
-        case (true, false):  formatter = Self.sectionMonthYearRu
-        case (false, true):  formatter = Self.sectionMonthEn
-        case (false, false): formatter = Self.sectionMonthYearEn
-        }
-        return formatter.string(from: date).capitalized
+        let table = sameYear ? Self.sectionMonth : Self.sectionMonthYear
+        return (table[lng]?.string(from: date) ?? "").capitalized
     }
 }

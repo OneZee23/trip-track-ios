@@ -11,21 +11,12 @@ import Foundation
 ///     of the known auto formats. Real user-typed titles can never match a
 ///     full formatted date string, so they pass through untouched.
 enum TripAutoTitle {
-    private static let enFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "d MMM, HH:mm"
-        return f
-    }()
-    private static let ruFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ru_RU")
-        f.dateFormat = "d MMM, HH:mm"
-        return f
-    }()
+    private static let formatters = LocalizedDateFormatter.patterns("d MMM, HH:mm")
+    private static var enFormatter: DateFormatter { formatters[.en]! }
+    private static var ruFormatter: DateFormatter { formatters[.ru]! }
 
     static func generate(for date: Date?, language: LanguageManager.Language) -> String {
-        guard let date else { return language == .ru ? "Поездка" : "Trip" }
+        guard let date else { return AppStrings.tripTitle(language) }
         return string(from: date, language: language)
     }
 
@@ -40,26 +31,33 @@ enum TripAutoTitle {
     /// `localized` already recognises.
     static func isAuto(_ title: String?, startDate: Date) -> Bool {
         guard let title, !title.isEmpty else { return false }
-        let en = enFormatter.string(from: startDate)
-        let ruDotted = ruFormatter.string(from: startDate)
-        let ru = ruDotted.replacingOccurrences(of: ".", with: "")
-        return title == en || title == ru || title == ruDotted
+        return autoForms(startDate).contains(title)
+    }
+
+    /// Every string the app could have stamped on a trip started at this
+    /// moment — one per language, plus the dotted form the abbreviated months
+    /// carry before `string(from:)` strips the period.
+    private static func autoForms(_ startDate: Date) -> Set<String> {
+        var forms: Set<String> = []
+        for lang in LanguageManager.Language.allCases {
+            guard let dotted = formatters[lang]?.string(from: startDate) else { continue }
+            forms.insert(dotted)
+            forms.insert(dotted.replacingOccurrences(of: ".", with: ""))
+        }
+        return forms
     }
 
     static func localized(_ title: String?, startDate: Date, language: LanguageManager.Language) -> String? {
         guard let title, !title.isEmpty else { return title }
-        let en = enFormatter.string(from: startDate)
-        let ruDotted = ruFormatter.string(from: startDate)
-        let ru = ruDotted.replacingOccurrences(of: ".", with: "")
-        guard title == en || title == ru || title == ruDotted else { return title }
+        guard autoForms(startDate).contains(title) else { return title }
         return string(from: startDate, language: language)
     }
 
     private static func string(from date: Date, language: LanguageManager.Language) -> String {
-        if language == .ru {
-            // ru_RU "MMM" renders «авг.» — the canon is dotless.
-            return ruFormatter.string(from: date).replacingOccurrences(of: ".", with: "")
-        }
-        return enFormatter.string(from: date)
+        let raw = formatters[language]?.string(from: date) ?? ""
+        // ru_RU "MMM" renders «авг.» — the canon is dotless. Other languages
+        // abbreviate with a period too («14 Aug.»), and the same rule reads
+        // right there, so it is applied to all of them rather than to RU alone.
+        return raw.replacingOccurrences(of: ".", with: "")
     }
 }

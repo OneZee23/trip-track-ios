@@ -728,7 +728,7 @@ struct FeedView: View {
     private func socialFeedContent(
         _ c: AppTheme.Colors, store: SocialFeedStore, isFollowing: Bool
     ) -> some View {
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         // Suggested-users carousel moved out of the feed into DiscoverView
         // (search tab) — keeps the feed focused on activity and avoids
@@ -736,17 +736,17 @@ struct FeedView: View {
 
         if store.isLoading, store.trips.isEmpty {
             PixelCarLoader(
-                label: isRu ? "Загружаем ленту…" : "Loading feed…"
+                label: AppStrings.feedLoadingFeed(lng)
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 40)
         } else if store.lastError != nil, store.trips.isEmpty {
-            socialErrorState(c, isRu: isRu, store: store)
+            socialErrorState(c, lng: lng, store: store)
         } else if store.trips.isEmpty {
             if isFollowing {
                 followingEmptyState(c)
             } else {
-                socialEmptyState(c, isRu: isRu)
+                socialEmptyState(c, lng: lng)
             }
         } else {
             ForEach(store.trips) { trip in
@@ -972,20 +972,16 @@ struct FeedView: View {
 
     private func bannerTitle(isNetworkDown: Bool) -> String {
         if isNetworkDown {
-            return lang.language == .ru ? "Нет связи с сервером" : "Server unreachable"
+            return AppStrings.feedServerUnreachable(lang.language)
         }
-        return lang.language == .ru ? "Не всё синхронизировано" : "Sync incomplete"
+        return AppStrings.feedSyncIncomplete(lang.language)
     }
 
     private func bannerSubtitle(isNetworkDown: Bool) -> String {
         if isNetworkDown {
-            return lang.language == .ru
-                ? "Попробуйте сменить сеть или подождите — мы повторим автоматически."
-                : "Try a different network or wait — we'll retry automatically."
+            return AppStrings.feedTryADifferent(lang.language)
         }
-        return lang.language == .ru
-            ? "Несколько операций не загрузились на сервер. Мы повторим автоматически — также можно нажать «Повторить» в настройках синхронизации."
-            : "A few items didn't upload. We'll retry automatically — or tap Retry in sync settings."
+        return AppStrings.feedAFewItems(lang.language)
     }
 
     /// Compact "Sign in to follow & react" pill at the top of the public feed
@@ -1021,13 +1017,12 @@ struct FeedView: View {
 
     /// «Нет сети · поездки сохраняются локально» (Figma «Лента · Офлайн»).
     private func offlineStrip(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
+        let lng = lang.language
         return HStack(spacing: 8) {
             Image(systemName: "airplane")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(AppTheme.accent)
-            Text(isRu ? "Нет сети · поездки сохраняются локально"
-                      : "Offline · trips are saved on your phone")
+            Text(AppStrings.feedOfflineTripsAre(lng))
                 .font(.inter(12, weight: .semibold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
@@ -1046,19 +1041,17 @@ struct FeedView: View {
     /// Canon «Лента · Ошибка сети»: the same ring the empty state uses, in a
     /// neutral tint, then title / explanation / retry. It used to be a bare
     /// red glyph, which read as a crash rather than as "no signal".
-    private func socialErrorState(_ c: AppTheme.Colors, isRu: Bool, store: SocialFeedStore) -> some View {
+    private func socialErrorState(_ c: AppTheme.Colors, lng: LanguageManager.Language, store: SocialFeedStore) -> some View {
         VStack(spacing: 14) {
             FeedStateRing(systemImage: "wifi.slash")
                 .padding(.top, 40)
 
-            Text(isRu ? "Не удалось загрузить ленту" : "Couldn't load feed")
+            Text(AppStrings.feedCouldnTLoad(lng))
                 .font(.inter(19, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
 
-            Text(isRu
-                 ? "Проверьте подключение к интернету и попробуйте ещё раз."
-                 : "Check your internet connection and try again.")
+            Text(AppStrings.feedCheckYourInternet(lng))
                 .font(.inter(14))
                 .lineSpacing(6)
                 .foregroundStyle(c.textSecondary)
@@ -1072,7 +1065,7 @@ struct FeedView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 16, weight: .semibold))
-                    Text(isRu ? "Попробовать снова" : "Try again")
+                    Text(AppStrings.tryAgain(lng))
                         .font(.inter(14, weight: .bold))
                 }
                 .foregroundStyle(.white)
@@ -1098,7 +1091,7 @@ struct FeedView: View {
     ///      "follow someone" — but a user who already has trips can
     ///      seed the feed themselves by publishing one.
     @ViewBuilder
-    private func socialEmptyState(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func socialEmptyState(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         // `hasAnyPrivateTrip` is cached in `@State` and refreshed on
         // `.task` + on `tripRecordingEnded`. Reading it here is a
         // plain @State read — no CoreData fetch during body, so no
@@ -1154,9 +1147,7 @@ struct FeedView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "globe")
                             .font(.system(size: 13, weight: .semibold))
-                        Text(isRu
-                             ? "Опубликовать свою поездку"
-                             : "Publish one of your trips")
+                        Text(AppStrings.feedPublishOneOf(lng))
                             .font(.inter(14, weight: .semibold))
                     }
                     .foregroundStyle(AppTheme.accent)

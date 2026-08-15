@@ -23,7 +23,7 @@ struct SharedTripLinkSheet: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        let isRu = lang.language == .ru
+        let lng = lang.language
 
         VStack(spacing: 0) {
             HStack(spacing: 8) {
@@ -44,7 +44,7 @@ struct SharedTripLinkSheet: View {
             .padding(.top, 16)
             .padding(.bottom, 12)
 
-            tripRow(c, isRu: isRu)
+            tripRow(c, lng: lng)
                 .padding(.horizontal, 16)
 
             HStack(spacing: 10) {
@@ -74,8 +74,8 @@ struct SharedTripLinkSheet: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(linkCopied ? AppTheme.green : c.text)
                         Text(linkCopied
-                             ? (isRu ? "Скопировано" : "Copied")
-                             : (isRu ? "Скопировать" : "Copy"))
+                             ? (AppStrings.sharedTripLinkCopied(lng))
+                             : (AppStrings.sharedTripLinkCopy(lng)))
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(c.text)
                     }
@@ -128,7 +128,7 @@ struct SharedTripLinkSheet: View {
         return contentBottom + 8
     }
 
-    private func tripRow(_ c: AppTheme.Colors, isRu: Bool) -> some View {
+    private func tripRow(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         HStack(spacing: 12) {
             // Route thumbnail — the same vector art the poster uses, so the
             // sheet shows the trip you're passing on, not a generic icon.
@@ -152,12 +152,12 @@ struct SharedTripLinkSheet: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(TripAutoTitle.localized(
                     trip.title, startDate: trip.startDate, language: lang.language
-                ) ?? (isRu ? "Поездка" : "Trip"))
+                ) ?? (AppStrings.tripTitle(lng)))
                     .font(.inter(15, weight: .bold))
                     .foregroundStyle(c.text)
                     .lineLimit(2)
 
-                Text(subtitle(isRu: isRu))
+                Text(subtitle(lng: lng))
                     .font(.inter(12))
                     .foregroundStyle(c.textTertiary)
                     .lineLimit(1)
@@ -178,9 +178,9 @@ struct SharedTripLinkSheet: View {
         .shadow(color: .black.opacity(0.04), radius: 3, y: 1)
     }
 
-    private func subtitle(isRu: Bool) -> String {
+    private func subtitle(lng: LanguageManager.Language) -> String {
         let raw = trip.author.displayName?.trimmingCharacters(in: .whitespaces) ?? ""
-        let name = raw.isEmpty ? (isRu ? "Водитель" : "Driver") : raw
+        let name = raw.isEmpty ? (AppStrings.publicProfileDriver(lng)) : raw
         let when = RelativeTripDate.string(from: trip.startDate, language: lang.language)
         return "\(name) · \(when)"
     }
@@ -192,7 +192,7 @@ struct SharedTripLinkSheet: View {
         // instead of nothing.
         let title = TripAutoTitle.localized(
             trip.title, startDate: trip.startDate, language: lang.language
-        ) ?? subtitle(isRu: lang.language == .ru)
+        ) ?? subtitle(lng: lang.language)
         Task { await ShareLinkPresenter.present(url: url, title: title) }
     }
 

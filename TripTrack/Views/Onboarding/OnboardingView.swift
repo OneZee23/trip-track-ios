@@ -250,10 +250,10 @@ struct OnboardingView: View {
     }
 
     private func mockTripCard(_ c: AppTheme.Colors) -> some View {
-        let isRu = lang.language == .ru
+        let lng = lang.language
         return VStack(spacing: 0) {
             mockMapArea
-            mockStatsArea(isRu: isRu)
+            mockStatsArea(lng: lng)
         }
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.12), radius: 24, y: 8)
@@ -368,17 +368,17 @@ struct OnboardingView: View {
     private var realTripTitle: String? {
         guard let realTrip else { return nil }
         let df = DateFormatter()
-        df.locale = Locale(identifier: lang.language == .ru ? "ru_RU" : "en_US")
+        df.locale = lang.language.locale
         df.setLocalizedDateFormatFromTemplate("d MMMM")
-        let prefix = lang.language == .ru ? "Поездка" : "Trip"
+        let prefix = AppStrings.tripTitle(lang.language)
         return "\(prefix) · \(df.string(from: realTrip.startDate))"
     }
 
     /// RU writes decimals with a comma; the canned values already did, so the
     /// real ones must too or the card changes typography mid-flow.
-    private static func number(_ value: Double, decimals: Int, isRu: Bool) -> String {
+    private static func number(_ value: Double, decimals: Int, lng: LanguageManager.Language) -> String {
         let s = String(format: "%.\(decimals)f", value)
-        return isRu ? s.replacingOccurrences(of: ".", with: ",") : s
+        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lng))
     }
 
     private func mockEndpointDot(_ color: Color) -> some View {
@@ -390,7 +390,7 @@ struct OnboardingView: View {
 
     /// White card bottom: trip title + 2×3 metrics grid with hairline
     /// dividers. Values are static mock data (RU uses decimal comma).
-    private func mockStatsArea(isRu: Bool) -> some View {
+    private func mockStatsArea(lng: LanguageManager.Language) -> some View {
         let l = lang.language
         // Real numbers whenever there's a real trip behind the card; the
         // canned set only fills in for a first-ever launch, where there is
@@ -400,16 +400,16 @@ struct OnboardingView: View {
                 let fuel = trip.distanceKm > 0 ? trip.fuelUsed / trip.distanceKm * 100 : 0
                 return [
                     ("point.topleft.down.curvedto.point.bottomright.up",
-                     Self.number(trip.distanceKm, decimals: trip.distanceKm < 100 ? 1 : 0, isRu: isRu),
+                     Self.number(trip.distanceKm, decimals: trip.distanceKm < 100 ? 1 : 0, lng: lng),
                      AppStrings.km(l), AppTheme.green, AppStrings.distance(l)),
                     ("clock", trip.formattedDuration, "", AppTheme.accent, AppStrings.duration(l)),
-                    ("gauge", Self.number(trip.averageSpeedKmh, decimals: 0, isRu: isRu),
+                    ("gauge", Self.number(trip.averageSpeedKmh, decimals: 0, lng: lng),
                      AppStrings.kmh(l), AppTheme.blue, AppStrings.onboardingStatAvg(l)),
-                    ("bolt.fill", Self.number(trip.maxSpeedKmh, decimals: 0, isRu: isRu),
+                    ("bolt.fill", Self.number(trip.maxSpeedKmh, decimals: 0, lng: lng),
                      AppStrings.kmh(l), AppTheme.red, AppStrings.onboardingStatMax(l)),
-                    ("drop", Self.number(fuel, decimals: 1, isRu: isRu),
+                    ("drop", Self.number(fuel, decimals: 1, lng: lng),
                      AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
-                    ("mountain.2", Self.number(trip.elevation, decimals: 0, isRu: isRu),
+                    ("mountain.2", Self.number(trip.elevation, decimals: 0, lng: lng),
                      AppStrings.unitMeters(l), AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
                 ]
             } ?? [
@@ -417,7 +417,7 @@ struct OnboardingView: View {
             ("clock", "2:59", "", AppTheme.accent, AppStrings.duration(l)),
             ("gauge", "82", AppStrings.kmh(l), AppTheme.blue, AppStrings.onboardingStatAvg(l)),
             ("bolt.fill", "150", AppStrings.kmh(l), AppTheme.red, AppStrings.onboardingStatMax(l)),
-            ("drop", isRu ? "7,4" : "7.4", AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
+            ("drop", Self.number(7.4, decimals: 1, lng: l), AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
             ("mountain.2", "340", AppStrings.unitMeters(l), AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
         ]
         let hairline = Color.black.opacity(0.05)
@@ -464,7 +464,7 @@ struct OnboardingView: View {
                                 .foregroundStyle(Color(red: 100/255, green: 100/255, blue: 110/255))
                         }
                     }
-                    Text(m.label.uppercased())
+                    Text(m.label).textCase(.uppercase)
                         .font(.inter(8, weight: .bold))
                         .tracking(0.32)
                         .foregroundStyle(Color(red: 155/255, green: 155/255, blue: 165/255))
