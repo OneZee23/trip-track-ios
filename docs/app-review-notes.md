@@ -4,7 +4,93 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.6.0 — redesign + companions (current submission)
+## v0.6.1 — twelve more languages (current submission)
+
+A localization-only release on top of 0.6.0, plus two small interface fixes.
+Nothing about behaviour, data handling, permissions or account deletion changed
+— the 0.6.0 notes below still describe the app accurately. Paste **this**
+section, then the English 0.6.0 section under it.
+
+### English
+
+```
+TripTrack 0.6.1 — Reviewer Notes
+
+WHAT CHANGED
+0.6.1 takes the app from two interface languages to thirteen: English, Russian,
+German, Spanish, French, Italian, Polish, Turkish, Indonesian, Ukrainian,
+Brazilian Portuguese, Kazakh and Filipino. That is essentially the whole
+release — no new features, no new permissions, no change to what data is
+collected or where it goes.
+
+Two interface fixes ride along: the «Public profile» switch on the Privacy
+screen no longer disappears when the server cannot be reached (it stays,
+disabled, and says why), and the «Send logs» button now sits above the log
+instead of below several hundred entries.
+
+HOW TO SEE IT
+Me (last tab) → the gear in the header → Language. Thirteen options, each named
+in its own language and script. The interface switches immediately; no restart,
+no re-login.
+
+On a fresh install the app picks a language from the phone's preferred-language
+list, so a Turkish device opens in Turkish without touching the setting.
+
+The system permission prompts (location, motion, Bluetooth, Photos) are
+localized through InfoPlist.strings and follow the DEVICE language, not the
+in-app one — to see a Turkish prompt, the device itself has to be set to
+Turkish.
+
+STILL TRUE FROM 0.6.0
+• Account deletion is in the app: Me → Account & sync → Delete account. It
+  removes the server account and everything on it, and erases the trips and
+  photos on the device.
+• The app works fully offline and without an account; signing in with Apple is
+  optional and only enables cloud sync and the social side.
+• Trips are private until the user publishes them. Public trips carry reactions
+  and comments, with report and block available from the card, the profile and
+  the trip.
+• The Groups tab is still a preview of clubs that do not exist yet, with a
+  waitlist and no user content.
+```
+
+### Русский
+
+```
+TripTrack 0.6.1 — заметки для ревьюера
+
+ЧТО ИЗМЕНИЛОСЬ
+0.6.1 переводит приложение с двух языков интерфейса на тринадцать: английский,
+русский, немецкий, испанский, французский, итальянский, польский, турецкий,
+индонезийский, украинский, португальский (Бразилия), казахский и филиппинский.
+Это практически весь релиз: никаких новых функций, никаких новых разрешений,
+никаких изменений в том, какие данные собираются и куда уходят.
+
+Заодно два интерфейсных фикса: переключатель «Публичный профиль» на экране
+«Приватность» больше не исчезает при недоступном сервере, а кнопка «Отправить
+логи» переехала на верх экрана журнала.
+
+КАК ПОСМОТРЕТЬ
+«Я» (последняя вкладка) → шестерёнка в шапке → «Язык». Тринадцать вариантов,
+каждый назван на своём языке и в своём алфавите. Интерфейс переключается сразу.
+
+При первой установке приложение выбирает язык по списку предпочтений телефона.
+
+Системные запросы разрешений переведены через InfoPlist.strings и следуют языку
+УСТРОЙСТВА, а не выбранному в приложении.
+
+ОСТАЁТСЯ В СИЛЕ С 0.6.0
+• Удаление аккаунта внутри приложения: «Я» → «Аккаунт и синхронизация» →
+  «Удалить аккаунт». Стирает и серверный аккаунт, и данные на устройстве.
+• Приложение полностью работает офлайн и без аккаунта.
+• Поездки приватны, пока пользователь их не опубликует; у публичных есть жалоба
+  и блокировка.
+• Вкладка «Группы» — превью несуществующих клубов со списком ожидания.
+```
+
+---
+
+## v0.6.0 — redesign + companions (previous submission)
 
 ### English
 

@@ -3,7 +3,7 @@
 > Google Photos для дорог. Записывает маршруты, помнит за тебя.
 
 **Platform:** iOS (iPhone)
-**Status:** v0.6.0 (redesign + companions) · v0.5.8 in App Store | **Started:** Jan 2026
+**Status:** v0.6.1 (thirteen languages) · v0.5.8 in App Store | **Started:** Jan 2026
 
 ---
 
@@ -11,7 +11,7 @@
 
 Нажал "Запись" -- поехал -- нажал "Стоп". Приложение автоматически назовет поездку по геокодингу, сохранит маршрут, скорость, высоту. Через месяц откроешь ленту -- а там все твои дороги. Scratch-карта покажет, где уже был.
 
-Без регистрации. Без подписки. Русский и English. Готовится серверный синк.
+Без регистрации. Без подписки. Тринадцать языков: русский, English, Deutsch, Español, Français, Italiano, Polski, Türkçe, Bahasa Indonesia, Українська, Português, Қазақша, Filipino. Готовится серверный синк.
 
 ---
 
@@ -110,7 +110,7 @@ TripTrack заполняет эту нишу: минимальный effort пр
 
 ### Настройки
 - Тема: системная / светлая / темная
-- Язык: русский / английский -- переключается на лету
+- Язык: тринадцать языков -- переключается на лету
 - Dev mode: виртуальный джойстик для тестирования без GPS
 - Версия и номер сборки
 
@@ -143,7 +143,7 @@ Deps:        Zero (100% native)
 TripTrack/
 ├── App/                        -- @main entry point
 ├── Models/                     -- Trip, TrackPoint, Badge, Vehicle, TripPhoto, GamificationModels
-├── Localization/               -- LanguageManager, AppStrings (RU/EN)
+├── Localization/               -- LanguageManager, AppStrings, Translations/ (13 языков)
 ├── Services/
 │   ├── TripManager.swift       -- CRUD, геокодинг, батчинг, фото
 │   ├── LocationManager.swift   -- dual-mode: real GPS + simulated
@@ -250,7 +250,7 @@ xcodebuild test -scheme TripTrack -configuration Debug -destination 'platform=iO
 - [x] Scratch-карта территорий (fog of war, geohash)
 - [x] Геймификация: 30+ бейджей, XP, уровни, ранги
 - [x] CoreData persistence с batch saves
-- [x] Тема (system/light/dark) и язык (RU/EN)
+- [x] Тема (system/light/dark) и язык (13 языков)
 
 ### v0.2.0 Fog of War 2.0 (done)
 
@@ -343,6 +343,16 @@ xcodebuild test -scheme TripTrack -configuration Debug -destination 'platform=iO
 - [x] **Удаление аккаунта** «безвозвратно, везде» (Apple 5.1.1(v)); экран «Приватность»
 - [x] Лента «Все» строго по дате — без приоритета подписок и трендового подмешивания
 - [x] Журнал логов переживает перезапуск (архив 7 дней) + шеринг из шапки
+
+### v0.6.1 — тринадцать языков (готов, не выложен)
+
+- [x] Немецкий, испанский, французский, итальянский, польский, турецкий, индонезийский, украинский, португальский (Бразилия), казахский, филиппинский — весь интерфейс, включая достижения, Live Activity и запросы разрешений
+- [x] Турецкий регистр (`İ`/`ı`) — локале-зависимый `uppercased`, `\.locale` в окружении SwiftUI
+- [x] Плюрализация CLDR: славянская тройка (ru/uk), польская своя, «ноль как единственное» (fr/fil/pt), отсутствие форм (id)
+- [x] Даты, числа, валюты, страны и дни недели — по локали, а не по зашитым `ru_RU`/`en_US`
+- [x] 205 строк, живших инлайном во вьюхах, вынесены в `AppStrings`
+- [x] Фикс: переключатель «Публичный профиль» больше не исчезает при недоступном сервере
+- [x] Фикс: кнопка «Отправить логи» закреплена над журналом
 
 ### Future (ideas)
 

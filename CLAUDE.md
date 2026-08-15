@@ -59,9 +59,48 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
 
 ## Localization & Theming
 
-- **Languages**: RU/EN via `LanguageManager` + `AppStrings` enum (all UI strings)
+- **Languages**: thirteen — `en, ru, de, es, fr, it, pl, id, tr, fil, uk, kk, pt` — via `LanguageManager.Language` + the `AppStrings` enum (all UI strings)
 - **Themes**: dark/light/system via `ThemeManager`, colors in `AppTheme`
 - Add new strings to `AppStrings.swift`, never hardcode UI text
+
+### Adding a string
+
+Write it as a function that takes the language and calls `tr`:
+
+```swift
+static func myThing(_ lang: LanguageManager.Language) -> String {
+    tr(lang, "myThing", ru: "Моя штука", en: "My thing")
+}
+```
+
+Russian and English live inline, next to the doc comment that explains the
+copy. The other eleven come from `Localization/Translations/Translations+XX.swift`,
+keyed by the same function name. A key with no row falls back to **English**, so
+an untranslated string shows English rather than `myThing` — which is why
+`LocalizationTests` exists: nothing else notices a key that drifted.
+
+Rules that are easy to get wrong:
+- **Never** `lang == .ru ? "…" : "…"` inline in a view. That is invisible to the
+  tables and stays English on a German phone; 0.6.1 spent a day pulling 205 of
+  them back out.
+- Counted nouns go through `AppStrings.plural` / `nounTrips` / `nounDays` … —
+  CLDR rules, not `if .ru`. Russian and Ukrainian share the three-form rule;
+  Polish has its own and parts with them at 21; French, Filipino and Portuguese
+  count 0 as singular; Indonesian has no plural at all.
+- **Never** call `uppercased()` / `lowercased()` on copy without a language.
+  Turkish writes `İ` for capital «i» and `ı` for lowercase «I», so the bare
+  call corrupts every section header. Use `String.uppercased(_ lang:)`, or
+  SwiftUI's `.textCase(.uppercase)` — the environment locale is set from the
+  chosen language in `TripTrackApp`.
+- Dates and numbers take their locale from `lang.locale`, never from a literal
+  `"ru_RU"`. For formatters use `LocalizedDateFormatter.patterns/templates`,
+  which build one per language.
+- Permission prompts live in `TripTrack/Resources/<lang>.lproj/InfoPlist.strings`
+  and follow the DEVICE language, not the in-app one. A new language needs a new
+  `.lproj` **and** an entry in `knownRegions` in `project.yml`.
+- The Live Activity and the widget cannot see `AppStrings` (it reaches into
+  half the app). Their words are in `TripTrackShared/LiveActivityStrings.swift`,
+  keyed by the raw language code.
 
 ## Tech Constraints
 
