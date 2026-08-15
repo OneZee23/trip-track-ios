@@ -106,10 +106,16 @@ struct PrivacySettingsView: View {
             // F2 gating, same as CloudSyncView's copy of this toggle: OPERABLE
             // only after a successful /auth/me. An old server silently drops
             // unknown profile-update fields, so an ungated switch would
-            // fake-succeed on the one thing nobody may be wrong about. While
-            // the question is out it renders inert instead of absent, so the
-            // card can't grow a row after it is already on screen.
-            if auth.isPublicProfile != nil || probing {
+            // fake-succeed on the one thing nobody may be wrong about.
+            //
+            // The row's PRESENCE keys off being signed in, not off the answer.
+            // It used to key off `isPublicProfile != nil || probing`, which
+            // holds while the request is in flight and stops holding the
+            // moment it fails — so on a bad connection the switch appeared,
+            // sat there for a second, and vanished under the user's finger.
+            // A row that disappears reads as a bug in the app, not as a
+            // failed request; inert-with-a-reason is the honest version.
+            if auth.isSignedIn {
                 PrivacyToggleRow(
                     icon: "globe",
                     tint: AppTheme.accent,
@@ -119,6 +125,18 @@ struct PrivacySettingsView: View {
                     isEnabled: auth.isPublicProfile != nil
                 )
                 .accessibilityIdentifier("settings_public_profile")
+
+                // Inert and unexplained is the other half of the old bug: the
+                // switch looked broken rather than unanswered. Only shown once
+                // the request has actually come back empty-handed.
+                if auth.isPublicProfile == nil && !probing {
+                    Text(AppStrings.privacyProfileUnavailable(l))
+                        .font(.inter(12))
+                        .foregroundStyle(c.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                }
 
                 rowDivider(c)
             }

@@ -22,22 +22,29 @@ struct DebugLogsView: View {
 
         VStack(spacing: 0) {
             navRow(l: l)
-            ScrollView {
-                VStack(spacing: 16) {
-                    journalCard(c: c, l: l)
 
-                    ctaBlock(c: c, l: l)
+            // The whole point of this screen is sending the file, so the
+            // button does not live at the bottom of the journal: a week of
+            // entries is up to 800 rows, and reaching the CTA meant scrolling
+            // past all of them. It sits above the scroll view and stays put.
+            VStack(spacing: 16) {
+                ctaBlock(c: c, l: l)
 
-                    if let err = errorMessage {
-                        Text(err)
-                            .font(.inter(13))
-                            .foregroundStyle(AppTheme.red)
-                            .multilineTextAlignment(.center)
-                    }
+                if let err = errorMessage {
+                    Text(err)
+                        .font(.inter(13))
+                        .foregroundStyle(AppTheme.red)
+                        .multilineTextAlignment(.center)
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 4)
-                .padding(.bottom, 96)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 4)
+            .padding(.bottom, 14)
+
+            ScrollView {
+                journalCard(c: c, l: l)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 96)
             }
             .scrollIndicators(.hidden)
         }
