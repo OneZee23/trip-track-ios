@@ -69,6 +69,13 @@ protocol TripRepository {
     func flushPendingApplies()
     func applyRemoteSettings(_ payload: SettingsSyncPayload)
     func deleteTripHard(id: UUID)
+    /// Tombstone-safe delete — see the implementation for why an unmirrored
+    /// trip must survive a server tombstone.
+    @discardableResult
+    func deleteTripHardIfMirrored(id: UUID) -> Bool
+    func tripId(forPhoto id: UUID) -> UUID?
+    /// Library size, not sync progress. See the implementation.
+    func countLiveTrips() -> Int
     func deleteVehicleHard(id: UUID)
     func deletePhotoHard(id: UUID)
     func markPhotoUploaded(photoId: UUID, remoteURL: String?, thumbnailURL: String, uploadStatus: PhotoUploadStatus)
@@ -794,8 +801,14 @@ final class CoreDataTripRepository: TripRepository {
 
     func applyRemoteTrip(_ p: TripSyncPayload) {
         let entity = fetchEntity(id: p.id) ?? TripEntity(context: context)
+        // `pendingDelete` belongs in this guard as much as `pendingUpload`.
+        // 0.6.1 forces one full pull on every device, and on a full pull a
+        // soft-deleted trip is still a live server row — without this it would
+        // be rewritten to `.synced` and the user's deliberate deletion undone
+        // by the upgrade itself.
         if entity.id != nil,
-           entity.syncStatus == SyncStatus.pendingUpload.rawValue,
+           entity.syncStatus == SyncStatus.pendingUpload.rawValue
+            || entity.syncStatus == SyncStatus.pendingDelete.rawValue,
            Int(entity.conflictVersion) >= p.conflictVersion {
             return
         }
@@ -818,6 +831,13 @@ final class CoreDataTripRepository: TripRepository {
         entity.xpEarned = Int32(p.xpEarned ?? 0)
         entity.conflictVersion = Int32(p.conflictVersion)
         entity.lastModifiedAt = p.lastModifiedAt
+        // "This local row mirrors a server row" — the fact the tombstone guard
+        // in `PullApplier` reads. Set once and never overwritten: an older
+        // server omits the field, and `markUnpublished` clears it on purpose,
+        // so a later pull must not quietly re-assert what the user unpublished.
+        if entity.serverCreatedAt == nil {
+            entity.serverCreatedAt = p.serverCreatedAt ?? p.lastModifiedAt
+        }
         entity.syncStatus = SyncStatus.synced.rawValue
 
         // Only replace track points when server actually sent them (detail/push).
@@ -906,27 +926,55 @@ final class CoreDataTripRepository: TripRepository {
         // Save deferred — see flushPendingApplies().
     }
 
+    /// The server is authoritative for preferences but NOT for progress.
+    ///
+    /// Two facts make the naive "assign everything" version dangerous. The
+    /// backend applies its `last_modified_at > since` filter only `if (since)`,
+    /// so a FULL pull always carries the settings row — and 0.6.1 forces one
+    /// full pull on every device when the store-identity stamp finds no match.
+    /// And the local row is routinely AHEAD of the server with no pending
+    /// marker: `GamificationManager` only arms a five-second in-memory timer,
+    /// which dies with the process, and `recoverPendingEntities` looks for
+    /// `pendingUpload`, so it never resurrects the settings row.
+    ///
+    /// Progress is therefore merged monotonically — XP, level and best streak
+    /// only ever go up — and preferences follow `lastModifiedAt`. Without this
+    /// the 0.6.1 upgrade would have zeroed the whole fleet's level in one day,
+    /// which is the same failure the release exists to fix, pointed the other
+    /// way.
     func applyRemoteSettings(_ p: SettingsSyncPayload) {
         let req: NSFetchRequest<UserSettingsEntity> = UserSettingsEntity.fetchRequest()
         req.fetchLimit = 1
-        let entity = (try? context.fetch(req).first) ?? UserSettingsEntity(context: context)
-        entity.id = p.id
-        entity.avatarEmoji = p.avatarEmoji
-        entity.themeMode = p.themeMode
-        entity.language = p.language
-        entity.distanceUnit = p.distanceUnit
-        entity.volumeUnit = p.volumeUnit
-        entity.fuelConsumption = p.fuelConsumption
-        entity.fuelPrice = p.fuelPrice
-        entity.fuelCurrency = p.fuelCurrency
-        entity.selectedVehicleId = p.selectedVehicleId
-        entity.profileLevel = Int32(p.profileLevel)
-        entity.profileXP = Int64(p.profileXp)
-        entity.currentStreak = Int32(p.currentStreak)
-        entity.bestStreak = Int32(p.bestStreak)
-        entity.lastTripDate = p.lastTripDate
+        let existing = try? context.fetch(req).first
+        let entity = existing ?? UserSettingsEntity(context: context)
+
+        // Progress never decreases. A server that has not heard from this
+        // phone since before the last drive is behind, not right.
+        entity.profileXP = max(entity.profileXP, Int64(p.profileXp))
+        entity.profileLevel = max(entity.profileLevel, Int32(p.profileLevel))
+        entity.bestStreak = max(entity.bestStreak, Int32(p.bestStreak))
+
+        // Preferences and the fields that are mutable by nature: newest wins.
+        // `id` lives in here on purpose — rewriting it from a STALE row
+        // re-points `localUserId`, the identity every entity is stamped with.
+        let localStamp = entity.lastModifiedAt ?? .distantPast
+        if existing == nil || p.lastModifiedAt >= localStamp {
+            entity.id = p.id
+            entity.avatarEmoji = p.avatarEmoji
+            entity.themeMode = p.themeMode
+            entity.language = p.language
+            entity.distanceUnit = p.distanceUnit
+            entity.volumeUnit = p.volumeUnit
+            entity.fuelConsumption = p.fuelConsumption
+            entity.fuelPrice = p.fuelPrice
+            entity.fuelCurrency = p.fuelCurrency
+            entity.selectedVehicleId = p.selectedVehicleId
+            entity.currentStreak = Int32(p.currentStreak)
+            entity.lastTripDate = p.lastTripDate
+            entity.lastModifiedAt = p.lastModifiedAt
+        }
+
         entity.conflictVersion = Int32(p.conflictVersion)
-        entity.lastModifiedAt = p.lastModifiedAt
         entity.syncStatus = SyncStatus.synced.rawValue
         // Save deferred — see flushPendingApplies().
     }
@@ -943,6 +991,54 @@ final class CoreDataTripRepository: TripRepository {
             context.delete(e)
             saveIfNeeded()
         }
+    }
+
+    /// Applies a server tombstone, but only to a trip this device actually
+    /// mirrors from the server.
+    ///
+    /// `serverCreatedAt == nil` means one of two things, and both forbid the
+    /// delete: the trip only ever existed on this phone, or the user
+    /// un-published it — `markUnpublished` clears the column on purpose, and
+    /// "gone from the server, kept here" is precisely what un-publishing means.
+    /// Without this guard a tombstone meant for the server's copy destroys the
+    /// local original, which is how a privacy migration could take a library
+    /// with it.
+    /// - Returns: true when the trip was actually deleted.
+    @discardableResult
+    func deleteTripHardIfMirrored(id: UUID) -> Bool {
+        guard let entity = fetchEntity(id: id) else { return false }
+        guard entity.serverCreatedAt != nil else {
+            Logger(subsystem: "com.triptrack", category: "core-data")
+                .notice("tombstone ignored — trip is not mirrored from the server")
+            return false
+        }
+        context.delete(entity)
+        saveIfNeeded()
+        return true
+    }
+
+    /// The trip a photo belongs to, so `PullApplier` can skip a photo tombstone
+    /// whose parent trip it just refused to delete.
+    func tripId(forPhoto id: UUID) -> UUID? {
+        let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        return (try? context.fetch(req).first)?.trip?.id
+    }
+
+    /// Every trip row that exists, whatever its sync status — including
+    /// `pendingDelete`, which still mirrors a live server row.
+    ///
+    /// This measures LIBRARY SIZE, not sync progress, and the distinction is
+    /// load-bearing: `markAllPendingUpload()` flips every trip to
+    /// `pendingUpload` during first sign-in and when Cloud Sync is switched on,
+    /// and both then run a pull. A heal detector counting `synced` rows would
+    /// read "server has everything, I have nothing" at exactly that moment and
+    /// start healing the device against itself.
+    func countLiveTrips() -> Int {
+        let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "endDate != nil")
+        return (try? context.count(for: req)) ?? 0
     }
 
     func deleteVehicleHard(id: UUID) {

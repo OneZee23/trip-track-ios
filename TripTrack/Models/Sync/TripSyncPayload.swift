@@ -35,6 +35,16 @@ struct TripSyncPayload: Codable {
     let xpEarned: Int?
     let conflictVersion: Int
     let lastModifiedAt: Date
+    /// When the server first accepted this trip.
+    ///
+    /// The backend has always sent it — `serializeTrip` emits it on
+    /// `/sync/pull` and `/trips/detail` — and the client simply never decoded
+    /// it, so every trip that arrived by pull carried a nil `serverCreatedAt`
+    /// locally. That nil is what made deleting a pulled trip take the "it was
+    /// never on the server" short-circuit, leaving the row alive server-side
+    /// forever. Optional because an older server omits it and because locally
+    /// built upload payloads have nothing to put here yet.
+    let serverCreatedAt: Date?
     // Optional: server omits track points in sync/pull responses (delta sync returns metadata only).
     // Present on upload (client → server) and on /trips/detail response.
     let trackPoints: [TrackPointPayload]?
@@ -76,6 +86,7 @@ extension TripSyncPayload {
         self.xpEarned = Int(entity.xpEarned)
         self.conflictVersion = Int(entity.conflictVersion)
         self.lastModifiedAt = entity.lastModifiedAt ?? Date()
+        self.serverCreatedAt = entity.serverCreatedAt
         self.trackPoints = trip.trackPoints.map(TrackPointPayload.init)
         self.photos = (entity.photos?.array as? [TripPhotoEntity])?.compactMap { pe in
             guard let pid = pe.id, let fn = pe.filename, let ts = pe.timestamp else { return nil }
