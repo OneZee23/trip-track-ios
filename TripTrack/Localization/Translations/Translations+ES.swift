@@ -1040,6 +1040,12 @@ extension Translations {
         "badge.early_tester.desc": "Estuviste aquí antes de la 1.0.0. ¡Gracias!",
         "badge.veteran_2026.title": "Veterano 2026",
         "badge.veteran_2026.desc": "Gracias por acompañarnos todo 2026",
+        "storeRecoveryTitle": "No pudimos abrir tus datos",
+        "storeRecoveryBody": "Tus viajes siguen ahí — la app simplemente no pudo acceder a ellos. Suele ser temporal: inténtalo de nuevo.",
+        "storeRecoveryFileKept": "El archivo de datos antiguo se queda en tu teléfono — no lo borramos.",
+        "storeRecoveryRetry": "Intentar de nuevo",
+        "storeRecoveryStartFresh": "Continuar sin los datos antiguos",
+        "storeRecoveryStartFreshConfirm": "La app se abrirá vacía. El archivo antiguo se queda en tu teléfono — escríbenos y te ayudamos a recuperarlo. Si la sincronización en la nube estaba activada, tus viajes volverán del servidor.",
     ]
 
 }

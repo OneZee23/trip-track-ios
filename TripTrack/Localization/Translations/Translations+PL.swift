@@ -1040,6 +1040,12 @@ extension Translations {
         "badge.early_tester.desc": "Byłeś z nami przed 1.0.0. Dziękujemy!",
         "badge.veteran_2026.title": "Weteran 2026",
         "badge.veteran_2026.desc": "Dziękujemy, że jechałeś z nami przez cały 2026 rok",
+        "storeRecoveryTitle": "Nie udało się otworzyć twoich danych",
+        "storeRecoveryBody": "Twoje trasy nadal tam są — aplikacja po prostu nie mogła do nich dotrzeć. Zwykle to chwilowe: spróbuj jeszcze raz.",
+        "storeRecoveryFileKept": "Stary plik z danymi zostaje w telefonie — nie usuwamy go.",
+        "storeRecoveryRetry": "Spróbuj ponownie",
+        "storeRecoveryStartFresh": "Kontynuuj bez starych danych",
+        "storeRecoveryStartFreshConfirm": "Aplikacja otworzy się pusta. Stary plik zostaje w telefonie — napisz do nas, pomożemy go odzyskać. Jeśli synchronizacja w chmurze była włączona, trasy wrócą z serwera.",
     ]
 
 }

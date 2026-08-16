@@ -6,6 +6,9 @@ struct TripTrackApp: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var themeManager = ThemeManager()
     @StateObject private var languageManager = LanguageManager()
+    /// Gates the whole window. See `StoreHealth` — the app must not draw a
+    /// library it could not open.
+    @StateObject private var storeHealth = StoreHealth.shared
     @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
     /// AppDelegate adapter — only purpose is receiving APNs device-token
     /// callbacks, which SwiftUI's `App` doesn't expose directly.
@@ -45,21 +48,35 @@ struct TripTrackApp: App {
         // Persisted cold-launch counter feeds the rating-prompt eligibility
         // check ("only ask after a real engaged session, not on day 1").
         RatingPromptService.recordLaunch()
-        // Handle background relaunch by significant location change
-        // iOS relaunches the app after force-quit when cell tower changes
-        AutoTripService.shared.handleBackgroundLaunch()
-        SyncQueue.shared.configure(transport: APISyncTransport.shared)
-        SyncCoordinator.shared.start()
-        // Diagnostic — verifies our ISO date parser produces UTC-correct
-        // dates. Output goes to OSLog under subsystem `com.triptrack`,
-        // category `iso-date`. Single call per cold launch.
-        ISODate.runSelfTest()
-        StartupTrace.mark("app init done (services started)")
+        // The services below write to CoreData on the way up — auto-trip
+        // recovery, the sync queue, and (through SyncCoordinator →
+        // recoverPendingEntities → SettingsManager) the settings row itself.
+        // Starting them against a store that failed to open is precisely what
+        // recreated a real user's settings row and left his level reading
+        // zero, so they wait until the store is actually attached.
+        // `StoreRecoveryView` drives the retry that releases them.
+        if StoreHealth.shared.isOpen {
+            AppBootstrap.startServicesOnce()
+            StartupTrace.mark("app init done (services started)")
+        } else {
+            StartupTrace.mark("app init done — STORE NOT OPEN, services held")
+        }
     }
 
     var body: some Scene {
         WindowGroup {
-            if hasCompletedOnboarding {
+            if !storeHealth.isOpen {
+                // Deliberately the FIRST branch: onboarding, the feed and every
+                // screen behind them read CoreData, and an empty-looking app is
+                // the bug this release exists to remove. The screen depends on
+                // ThemeManager, LanguageManager, AppStrings and AppTheme only —
+                // all UserDefaults-backed — so it cannot itself touch the store.
+                StoreRecoveryView()
+                    .environmentObject(themeManager)
+                    .environmentObject(languageManager)
+                    .environment(\.locale, languageManager.language.locale)
+                    .onAppear { themeManager.applyToWindows() }
+            } else if hasCompletedOnboarding {
                 ContentView()
                     .environment(\.managedObjectContext, persistenceController.container.viewContext)
                     .environmentObject(themeManager)

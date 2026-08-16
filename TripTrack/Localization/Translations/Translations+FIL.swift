@@ -1040,6 +1040,12 @@ extension Translations {
         "badge.early_tester.desc": "Nandito ka na bago pa ang 1.0.0. Salamat!",
         "badge.veteran_2026.title": "Beterano ng 2026",
         "badge.veteran_2026.desc": "Salamat sa pagsama sa amin sa buong 2026",
+        "storeRecoveryTitle": "Hindi namin mabuksan ang data mo",
+        "storeRecoveryBody": "Nandiyan pa rin ang mga biyahe mo — hindi lang sila naabot ng app. Madalas pansamantala lang ito: subukan ulit.",
+        "storeRecoveryFileKept": "Nananatili sa telepono mo ang lumang data file — hindi namin ito binubura.",
+        "storeRecoveryRetry": "Subukan ulit",
+        "storeRecoveryStartFresh": "Magpatuloy nang walang lumang data",
+        "storeRecoveryStartFreshConfirm": "Bubukas na walang laman ang app. Nananatili sa telepono ang lumang file — mag-message sa amin, tutulungan ka naming bawiin ito. Kung naka-on ang Cloud Sync, babalik ang mga biyahe mo mula sa server.",
     ]
 
 }

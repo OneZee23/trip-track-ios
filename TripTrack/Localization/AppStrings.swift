@@ -5106,4 +5106,52 @@ enum AppStrings {
            ru: "Не удалось спросить сервер — переключатель недоступен. Проверьте связь и откройте экран заново.",
            en: "Couldn't reach the server — the switch is unavailable. Check your connection and reopen this screen.")
     }
+    // MARK: - Store recovery (0.6.1)
+
+    /// «Не смогли открыть твои данные» — the CoreData store failed to load.
+    /// Deliberately not «повреждены»: the likeliest cause is transient (the
+    /// device has not been unlocked since boot, so the encrypted store is not
+    /// readable yet), and the old code's guess that any failure meant
+    /// corruption is exactly what destroyed a real user's library.
+    static func storeRecoveryTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "storeRecoveryTitle",
+           ru: "Не смогли открыть твои данные",
+           en: "We couldn't open your data")
+    }
+
+    static func storeRecoveryBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "storeRecoveryBody",
+           ru: "Поездки на месте — приложение просто не смогло до них добраться. Чаще всего это временно: попробуй ещё раз.",
+           en: "Your trips are still there — the app just couldn't reach them. This is usually temporary: try again.")
+    }
+
+    /// The sentence that makes the destructive button honest. It is true only
+    /// because `PersistenceController.setAsideStoreAndStartFresh` moves the
+    /// journal WITH the database — do not soften it if that ever changes.
+    static func storeRecoveryFileKept(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "storeRecoveryFileKept",
+           ru: "Старый файл с данными останется на телефоне — мы его не удаляем.",
+           en: "The old data file stays on your phone — we don't delete it.")
+    }
+
+    static func storeRecoveryRetry(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "storeRecoveryRetry",
+           ru: "Попробовать снова", en: "Try again")
+    }
+
+    static func storeRecoveryStartFresh(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "storeRecoveryStartFresh",
+           ru: "Продолжить без старых данных",
+           en: "Continue without the old data")
+    }
+
+    /// NOT «поездки вернутся из облака»: `cloudSyncEnabled` defaults to false
+    /// (privacy opt-in) and `runFullSync` returns before `runPull` when it is
+    /// off, so for the default population nothing would come back, ever. The
+    /// conditional is the honest form.
+    static func storeRecoveryStartFreshConfirm(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "storeRecoveryStartFreshConfirm",
+           ru: "Приложение откроется пустым. Старый файл останется на телефоне — напиши нам, поможем достать. Если Облачная синхронизация была включена, поездки подтянутся с сервера.",
+           en: "The app will start empty. The old file stays on your phone — write to us and we'll help recover it. If Cloud Sync was on, your trips will come back from the server.")
+    }
 }

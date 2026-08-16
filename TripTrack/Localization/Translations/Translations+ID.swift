@@ -1040,6 +1040,12 @@ extension Translations {
         "badge.early_tester.desc": "Kamu sudah bersama kami sebelum 1.0.0. Terima kasih!",
         "badge.veteran_2026.title": "Veteran 2026",
         "badge.veteran_2026.desc": "Terima kasih sudah menemani kami sepanjang 2026",
+        "storeRecoveryTitle": "Kami tidak bisa membuka datamu",
+        "storeRecoveryBody": "Perjalananmu masih ada — aplikasi hanya tidak bisa menjangkaunya. Biasanya ini sementara: coba lagi.",
+        "storeRecoveryFileKept": "Berkas data lama tetap ada di ponselmu — kami tidak menghapusnya.",
+        "storeRecoveryRetry": "Coba lagi",
+        "storeRecoveryStartFresh": "Lanjutkan tanpa data lama",
+        "storeRecoveryStartFreshConfirm": "Aplikasi akan terbuka kosong. Berkas lama tetap ada di ponselmu — hubungi kami, kami bantu memulihkannya. Kalau Sinkronisasi Cloud aktif, perjalananmu akan kembali dari server.",
     ]
 
 }

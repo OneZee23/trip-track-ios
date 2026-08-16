@@ -1040,6 +1040,12 @@ extension Translations {
         "badge.early_tester.desc": "1.0.0'dan önce bizimleydin. Teşekkürler!",
         "badge.veteran_2026.title": "2026 gazisi",
         "badge.veteran_2026.desc": "2026 boyunca bizimle yol aldığın için teşekkürler",
+        "storeRecoveryTitle": "Verilerini açamadık",
+        "storeRecoveryBody": "Yolculukların hâlâ yerinde — uygulama sadece onlara ulaşamadı. Bu genelde geçicidir: tekrar dene.",
+        "storeRecoveryFileKept": "Eski veri dosyası telefonunda kalıyor — onu silmiyoruz.",
+        "storeRecoveryRetry": "Tekrar dene",
+        "storeRecoveryStartFresh": "Eski veriler olmadan devam et",
+        "storeRecoveryStartFreshConfirm": "Uygulama boş açılacak. Eski dosya telefonunda kalır — bize yaz, kurtarmana yardım edelim. Bulut Eşitleme açıksa yolculukların sunucudan geri gelir.",
     ]
 
 }
