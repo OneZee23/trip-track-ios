@@ -6,6 +6,14 @@ options:
   xcodeVersion: "16.0"
   generateEmptyDirectories: true
 
+# Visible in the navigator, but NOT a source or resource of any target. The
+# StoreKit configuration lives here rather than inside `TripTrack/` on purpose:
+# that target takes `path: TripTrack` wholesale and excludes only `*.xcassets`
+# and `Info.plist`, so a `.storekit` dropped in there would be bundled as a
+# resource and ship inside the Release app.
+fileGroups:
+  - Config
+
 # The languages the app ships in. This is what the App Store lists under
 # «Languages» and what iOS matches a phone's system language against when it
 # picks an `InfoPlist.strings` for the permission prompts. The IN-APP language
@@ -241,6 +249,11 @@ schemes:
         # TripTrackWatch: all
     run:
       config: Debug
+      # Local StoreKit testing: purchases resolve against this file instead of
+      # Apple's servers, so the tip-jar probe needs no App Store Connect record
+      # and no Paid Applications agreement. Applies to Run only — `archive`
+      # below is Release and is untouched by it.
+      storeKitConfiguration: Config/TripTrack.storekit
     test:
       config: Debug
       targets:

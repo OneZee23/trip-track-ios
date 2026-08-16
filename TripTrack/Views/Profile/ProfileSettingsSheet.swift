@@ -54,6 +54,9 @@ struct ProfileSettingsSheet: View {
     @State private var showDebugLogs = false
     /// «Приватность» — the three visibility switches, one level down.
     @State private var showPrivacy = false
+    #if DEBUG
+    @State private var showTipJar = false
+    #endif
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -125,6 +128,11 @@ struct ProfileSettingsSheet: View {
                 .environmentObject(lang)
                 .environmentObject(themeManager)
         }
+        #if DEBUG
+        .sheet(isPresented: $showTipJar) {
+            TipJarDebugView()
+        }
+        #endif
     }
 
     // MARK: - Chrome
@@ -463,6 +471,25 @@ struct ProfileSettingsSheet: View {
                     iconBg: AppTheme.accentBg,
                     title: "Экран финиша (отладка)",
                     action: { showDebugFinishScreen() }
+                ) {
+                    SettingsRowChevron()
+                }
+
+                rowDivider(c)
+
+                // The money-tract probe. Answers «does a purchase complete and
+                // what does Apple hand back», not «can we take donations» —
+                // see TipJarService for why a green result here proves less
+                // than it looks like it does.
+                SettingsIconRow(
+                    icon: "cup.and.saucer.fill",
+                    iconColor: AppTheme.accent,
+                    iconBg: AppTheme.accentBg,
+                    title: "Проба доната (StoreKit)",
+                    action: {
+                        Haptics.tap()
+                        showTipJar = true
+                    }
                 ) {
                     SettingsRowChevron()
                 }

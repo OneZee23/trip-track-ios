@@ -1,0 +1,46 @@
+{
+  "identifier" : "B7F1C0E2-3A64-4E19-9C0B-2D5A7F4E1188",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "5C2A9D71-8E43-42B6-A0F7-61D3B8C90A24",
+      "localizations" : [
+        {
+          "description" : "Спасибо, что поддерживаете разработку",
+          "displayName" : "Кофе автору",
+          "locale" : "ru"
+        },
+        {
+          "description" : "Thanks for supporting the development",
+          "displayName" : "Coffee for the author",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.onezee.TripTrack.tip.small",
+      "referenceName" : "Tip Small",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "0",
+    "_developerTeamID" : "0",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "ru_RU",
+    "_storefront" : "GEO",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
