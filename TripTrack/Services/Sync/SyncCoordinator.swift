@@ -111,10 +111,80 @@ final class SyncCoordinator {
             // client stays the source of truth — "better than Google Timeline".
             if let counts = res.ownedCounts {
                 await reconcileAfterPull(counts: counts)
+                await healIfLibraryIsShort(counts: counts, accountId: accountId)
             }
             NotificationCenter.default.post(name: .syncPullCompleted, object: nil)
         } catch {
             coordinatorLog.debug("pull failed: \(error)")
+        }
+    }
+
+    // MARK: - Client data-loss healing
+
+    private static let healLatchKey = "com.triptrack.sync.healedForStore"
+
+    /// "Is this store SHORT?" — the question the store-identity stamp cannot
+    /// answer, because in this case the identity never changed: the rows went
+    /// missing inside a store that is still the same one.
+    ///
+    /// Latched per store, so a payload that fails to apply costs exactly one
+    /// extra full pull and then stops. A new store (a wipe, a reinstall) is a
+    /// new latch, so a second loss is not silently written off.
+    nonisolated static func shouldHeal(
+        serverTrips: Int, localTrips: Int,
+        latchedStoreIdentity: String?, currentStoreIdentity: String?
+    ) -> Bool {
+        guard let currentStoreIdentity else { return false }
+        guard serverTrips > localTrips else { return false }
+        return latchedStoreIdentity != currentStoreIdentity
+    }
+
+    /// The server has reported `ownedCounts` on every single pull, and the
+    /// client only ever looked at it the other way round — for "the server lost
+    /// data, re-push". The number that would have said "this phone is missing
+    /// 107 trips" was already on the wire and thrown away.
+    ///
+    /// Known and accepted: a user who deliberately deleted trips back when
+    /// those trips carried no `serverCreatedAt` never sent the delete to the
+    /// server, so those rows are still live in `ownedCounts` and this heal
+    /// brings them back — once. The client cannot tell that case from real loss,
+    /// because no record survives either way; that is the same missing record
+    /// the whole release is about. A returning trip is one tap to delete again
+    /// (and after the `serverCreatedAt` stamp the delete finally propagates);
+    /// 107 lost trips are not recoverable at all.
+    private func healIfLibraryIsShort(
+        counts: SyncPullResponse.OwnedCounts, accountId: UUID
+    ) async {
+        let identity = PersistenceController.shared.storeIdentity
+        let latched = UserDefaults.standard.string(forKey: Self.healLatchKey)
+        let local = CoreDataTripRepository().countLiveTrips()
+
+        guard Self.shouldHeal(
+            serverTrips: counts.trips, localTrips: local,
+            latchedStoreIdentity: latched, currentStoreIdentity: identity
+        ) else { return }
+
+        coordinatorLog.warning(
+            "library short — server=\(counts.trips) local=\(local); resetting cursor for one full pull")
+        // Latch BEFORE the request: a pull that fails must not leave the door
+        // open for an unbounded retry on every subsequent sync.
+        UserDefaults.standard.set(identity, forKey: Self.healLatchKey)
+        LastSyncedAtStore.reset(for: accountId)
+
+        // Trips, vehicles and photos only. A full pull always carries the
+        // settings row — `applyRemoteSettings` merges monotonically now, so it
+        // would be survivable, but there is no reason to ask for it here.
+        let req = SyncPullRequest(lastSyncedAt: nil, entityTypes: ["trip", "vehicle", "photo"])
+        do {
+            let res: SyncPullResponse = try await client.post(APIEndpoint.syncPull, body: req)
+            pullApplier.apply(res)
+            if let serverTime = ISODate.parse(res.serverTime) {
+                LastSyncedAtStore.set(serverTime, for: accountId)
+            }
+            coordinatorLog.warning("heal applied trips=\(res.trips.upserted.count)")
+            NotificationCenter.default.post(name: .syncPullCompleted, object: nil)
+        } catch {
+            coordinatorLog.error("heal pull failed: \(error.localizedDescription)")
         }
     }
 
