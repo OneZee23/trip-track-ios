@@ -3,10 +3,16 @@ import CoreData
 
 final class GamificationManager {
     private let persistenceController: PersistenceController
-    private static let backfillKey = "gamification_backfill_done"
+    /// Internal, not private: `BackfillLatchTests` asserts on it directly —
+    /// the latch closing at the wrong moment is the whole failure mode.
+    static let backfillKey = "gamification_backfill_done"
 
-    init(persistenceController: PersistenceController = .shared) {
+    private let defaults: UserDefaults
+
+    init(persistenceController: PersistenceController = .shared,
+         defaults: UserDefaults = .standard) {
         self.persistenceController = persistenceController
+        self.defaults = defaults
     }
 
     // MARK: - XP Calculation
@@ -248,14 +254,19 @@ final class GamificationManager {
     // MARK: - Backfill
 
     func backfillIfNeeded(trips: [Trip], settingsEntity: UserSettingsEntity?) {
-        guard !UserDefaults.standard.bool(forKey: Self.backfillKey),
+        guard !defaults.bool(forKey: Self.backfillKey),
               let entity = settingsEntity else { return }
 
-        // Only backfill if profile has no XP yet
-        guard entity.profileXP == 0, !trips.isEmpty else {
-            UserDefaults.standard.set(true, forKey: Self.backfillKey)
-            return
-        }
+        // Only back-fill a profile that has no XP yet — and DO NOT latch when
+        // there is nothing to count.
+        //
+        // Latching on "I found nothing" records an accident as a decision. On
+        // the launch that lost a real user's library all three back-fills ran
+        // against zero rows, concluded there was nothing to do, and wrote their
+        // flags. Even once his trips came home, level, badges and fog would
+        // have stayed at zero permanently: the flags said the work was
+        // finished and nothing ever reconsiders.
+        guard entity.profileXP == 0, !trips.isEmpty else { return }
 
         var totalXP = 0
         let sortedTrips = trips.sorted { $0.startDate < $1.startDate }
@@ -286,7 +297,9 @@ final class GamificationManager {
         backfillVehicleOdometers(trips: sortedTrips)
 
         persistenceController.save()
-        UserDefaults.standard.set(true, forKey: Self.backfillKey)
+        // Latch only after real work — this is the line the guard above used
+        // to reach without doing any.
+        defaults.set(true, forKey: Self.backfillKey)
     }
 
     private func backfillVehicleOdometers(trips: [Trip]) {

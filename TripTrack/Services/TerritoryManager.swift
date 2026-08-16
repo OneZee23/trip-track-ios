@@ -7,10 +7,15 @@ final class TerritoryManager: ObservableObject {
 
     private let persistenceController: PersistenceController
     private var visitedCache: Set<String> = []
-    private static let backfillKey = "territory_backfill_done"
+    /// Internal, not private — see `BackfillLatchTests`.
+    static let backfillKey = "territory_backfill_done"
 
-    init(persistenceController: PersistenceController = .shared) {
+    private let defaults: UserDefaults
+
+    init(persistenceController: PersistenceController = .shared,
+         defaults: UserDefaults = .standard) {
         self.persistenceController = persistenceController
+        self.defaults = defaults
         loadCache()
     }
 
@@ -255,17 +260,18 @@ final class TerritoryManager: ObservableObject {
     // MARK: - Backfill from existing trips
 
     func backfillIfNeeded() {
-        guard !UserDefaults.standard.bool(forKey: Self.backfillKey) else { return }
+        guard !defaults.bool(forKey: Self.backfillKey) else { return }
 
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<TrackPointEntity> = TrackPointEntity.fetchRequest()
         request.fetchBatchSize = 500
         request.propertiesToFetch = ["latitude", "longitude", "timestamp"]
 
-        guard let points = try? context.fetch(request), !points.isEmpty else {
-            UserDefaults.standard.set(true, forKey: Self.backfillKey)
-            return
-        }
+        // No points is not "nothing to do" — on the launch that lost a user's
+        // store it meant "the data has not come back yet", and latching there
+        // would have kept the fog empty forever. Leave the flag open and let a
+        // later launch, after a heal, actually do the work.
+        guard let points = try? context.fetch(request), !points.isEmpty else { return }
 
         var newHashes: [(String, Date)] = []
         for point in points {
@@ -294,7 +300,8 @@ final class TerritoryManager: ObservableObject {
         }
 
         visitedTileCount = visitedCache.count
-        UserDefaults.standard.set(true, forKey: Self.backfillKey)
+        // Latch only after real work.
+        defaults.set(true, forKey: Self.backfillKey)
     }
 
     // MARK: - Stats
