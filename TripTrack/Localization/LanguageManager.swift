@@ -7,7 +7,7 @@ final class LanguageManager: ObservableObject {
     /// phone that upgraded from 0.6.0 loses its choice.
     enum Language: String, CaseIterable {
         case en, ru, de, es, fr, it, pl
-        // 0.6.2. `fil` and `pt` are the LANGUAGE subtags iOS reports for
+        // 0.6.1. `fil` and `pt` are the LANGUAGE subtags iOS reports for
         // Filipino and Brazilian Portuguese («fil-PH», «pt-BR»), which is what
         // `detect(from:)` matches on — the region lives in `locale` instead.
         case id, tr, fil, uk, kk, pt
