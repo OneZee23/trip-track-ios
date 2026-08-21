@@ -109,16 +109,43 @@ final class TipJarService: ObservableObject {
 
     // MARK: - Buy
 
+    /// Which options a purchase carries. Pure and separated from `buy()` so the
+    /// rule can be tested without StoreKit.
+    ///
+    /// `appAccountToken` is written into the signed transaction and is
+    /// readable later through the App Store Server API, so it is the one
+    /// chance to tie a payment to an account in our backend — and it cannot be
+    /// added retroactively. Purchases made without it stay anonymous forever.
+    ///
+    /// It is stamped ONLY when signed in. The tempting fallback,
+    /// `SettingsManager.localUserId`, is the id of a CoreData row: it is minted
+    /// afresh whenever the store is lost, which we watched happen twice to one
+    /// real user inside two weeks. Writing an identifier that resets into a
+    /// field that never changes would produce receipts pointing at identities
+    /// that no longer exist. `TokenStore.accountId` lives in the Keychain and
+    /// survives both a store wipe and a reinstall.
+    ///
+    /// Signed out therefore means an anonymous purchase, which is honest.
+    /// Demanding a sign-in before accepting a tip would not be.
+    nonisolated static func purchaseOptions(accountId: UUID?) -> Set<Product.PurchaseOption> {
+        guard let accountId else { return [] }
+        return [.appAccountToken(accountId)]
+    }
+
     func buy() async {
         guard let product else {
             phase = .failed("Нечего покупать — сначала загрузите продукт")
             return
         }
         phase = .purchasing
-        tipLog.notice("purchase begin id=\(product.id, privacy: .public)")
+        let options = Self.purchaseOptions(accountId: TokenStore.shared.accountId)
+        tipLog.notice("""
+            purchase begin id=\(product.id, privacy: .public) \
+            accountToken=\(TokenStore.shared.accountId?.uuidString ?? "—", privacy: .public)
+            """)
 
         do {
-            switch try await product.purchase() {
+            switch try await product.purchase(options: options) {
             case .success(let verification):
                 await apply(verification, source: "purchase")
 
@@ -153,7 +180,8 @@ final class TipJarService: ObservableObject {
             tipLog.notice("""
                 tx verified source=\(source, privacy: .public) \
                 id=\(String(transaction.id), privacy: .public) \
-                env=\(transaction.environment.rawValue, privacy: .public)
+                env=\(transaction.environment.rawValue, privacy: .public) \
+                accountToken=\(transaction.appAccountToken?.uuidString ?? "—", privacy: .public)
                 """)
             // A consumable that is never finished is redelivered forever.
             await transaction.finish()
@@ -193,7 +221,7 @@ final class TipJarService: ObservableObject {
         productID:        \(t.productID)
         purchaseDate:     \(t.purchaseDate.formatted(.iso8601))
         ownershipType:    \(t.ownershipType.rawValue)
-        appAccountToken:  \(t.appAccountToken?.uuidString ?? "—")
+        appAccountToken:  \(t.appAccountToken?.uuidString ?? "— (покупка анонимна: не вошёл)")
         """
     }
 
