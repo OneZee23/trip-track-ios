@@ -356,6 +356,7 @@ final class APISyncTransport: SyncTransport {
             conflictVersion: Int(entity.conflictVersion),
             lastModifiedAt: entity.lastModifiedAt ?? Date(),
             vehicleType: vehicle.type.rawValue,
+            avatarStyle: vehicle.avatarStyle,
             plate: vehicle.plate,
             plateVisible: vehicle.plateVisible,
             visibleToOthers: vehicle.visibleToOthers,

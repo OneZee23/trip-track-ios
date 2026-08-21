@@ -351,6 +351,7 @@ final class SettingsManager: ObservableObject {
     func addVehicle(
         name: String,
         emoji: String,
+        avatarStyle: String = VehicleAvatar.defaultStyle,
         type: VehicleType = .car,
         plate: String = "",
         plateVisible: Bool = false,
@@ -362,6 +363,7 @@ final class SettingsManager: ObservableObject {
         entity.id = vehicleId
         entity.name = name
         entity.avatarEmoji = emoji
+        entity.avatarStyle = avatarStyle
         entity.vehicleType = type.rawValue
         entity.plate = plate
         entity.plateVisible = plateVisible
@@ -407,6 +409,7 @@ final class SettingsManager: ObservableObject {
             id: id,
             name: entity.name ?? "",
             avatarEmoji: entity.avatarEmoji ?? "🏎️",
+            avatarStyle: entity.avatarStyle ?? VehicleAvatar.defaultStyle,
             type: VehicleType(storage: entity.vehicleType),
             plate: entity.plate ?? "",
             plateVisible: entity.plateVisible,
@@ -436,7 +439,8 @@ final class SettingsManager: ObservableObject {
         type: VehicleType,
         plate: String,
         plateVisible: Bool,
-        visibleToOthers: Bool
+        visibleToOthers: Bool,
+        avatarStyle: String = VehicleAvatar.defaultStyle
     ) {
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
@@ -444,6 +448,7 @@ final class SettingsManager: ObservableObject {
         guard let entity = try? context.fetch(request).first else { return }
         entity.name = name
         entity.avatarEmoji = emoji
+        entity.avatarStyle = avatarStyle
         entity.vehicleType = type.rawValue
         // A type that cannot carry a plate keeps none: switching a car to a
         // bicycle must not leave a hidden plate behind in the database.

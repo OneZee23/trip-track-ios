@@ -291,8 +291,8 @@ struct TripEditSheet: View {
         ZStack {
             Circle().fill(c.cardAlt).frame(width: 34, height: 34)
             if let v = selectedVehicle {
-                if v.isPixelAvatar {
-                    Image(v.avatarEmoji)
+                if let asset = v.avatarImageName {
+                    Image(asset)
                         .resizable()
                         .interpolation(.none)
                         .scaledToFit()

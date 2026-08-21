@@ -15,11 +15,20 @@ struct SocialAuthor: Codable, Hashable {
 struct SocialFeedVehicle: Codable, Hashable {
     let name: String
     let avatarEmoji: String
+    /// The silhouette, when the server knows it. Absent means «car», which is
+    /// what every vehicle was before the garage grew a second axis — and is
+    /// also what a build that has never heard of this style must draw.
+    let avatarStyle: String?
 
     /// True when `avatarEmoji` is a `pixel_car_*` asset name rather than a
     /// real emoji glyph — caller must render the bundled PNG instead of
     /// drawing the asset name as text.
-    var isPixelAvatar: Bool { avatarEmoji.hasPrefix("pixel_car_") }
+    var isPixelAvatar: Bool { VehicleAvatar.isAsset(avatarEmoji) }
+
+    /// The sprite to draw, silhouette and colour resolved together.
+    var avatarAssetName: String? {
+        VehicleAvatar.assetName(style: avatarStyle, avatar: avatarEmoji)
+    }
 }
 
 // MARK: - Feed
@@ -339,10 +348,16 @@ struct SocialActiveVehicle: Codable, Hashable {
     /// km
     let odometerKm: Double
     let avatarEmoji: String
+    /// See `SocialFeedVehicle.avatarStyle`.
+    let avatarStyle: String?
 
     /// Mirrors `Vehicle.isPixelAvatar` so the client can render the PNG instead
     /// of drawing the asset name as text.
-    var isPixelAvatar: Bool { avatarEmoji.hasPrefix("pixel_car_") }
+    var isPixelAvatar: Bool { VehicleAvatar.isAsset(avatarEmoji) }
+
+    var avatarAssetName: String? {
+        VehicleAvatar.assetName(style: avatarStyle, avatar: avatarEmoji)
+    }
 }
 
 struct SocialProfile: Codable, Hashable {

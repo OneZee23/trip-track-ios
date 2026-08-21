@@ -34,7 +34,10 @@ struct VehicleEditFormView: View {
     /// vehicle's emoji. It used to be optional to keep an unpicked pixel avatar
     /// from being clobbered by a grid that offered emoji only; the grid offers
     /// the pixel cars themselves now, so the selection can say what it means.
+    /// Holds the COLOUR, and stays a legacy-drawable name. The silhouette
+    /// lives beside it rather than inside it — see `VehicleAvatar`.
     @State private var selectedAvatar: String
+    @State private var selectedAvatarStyle: String
     @State private var city: String
     @State private var highway: String
     @State private var price: String
@@ -78,6 +81,9 @@ struct VehicleEditFormView: View {
             _plateVisible = State(initialValue: vehicle.plateVisible)
             _visibleToOthers = State(initialValue: vehicle.visibleToOthers)
             _selectedAvatar = State(initialValue: vehicle.avatarEmoji)
+            _selectedAvatarStyle = State(
+                initialValue: VehicleAvatar.resolveStyle(vehicle.avatarStyle, forType: vehicle.type.rawValue)
+            )
             _currencySymbol = State(initialValue: vehicle.fuelCurrency)
             _city = State(initialValue: GarageFormat.fuel(
                 shownUnit.display(fromPer100: vehicle.cityConsumption), lng: lng))
@@ -94,7 +100,8 @@ struct VehicleEditFormView: View {
             _plateVisible = State(initialValue: false)
             _visibleToOthers = State(initialValue: true)
             // Canon draws the FIRST grid cell selected by default.
-            _selectedAvatar = State(initialValue: Vehicle.pixelCarAssets.first ?? "🚗")
+            _selectedAvatar = State(initialValue: VehicleAvatar.legacyName(color: VehicleAvatar.defaultColor))
+            _selectedAvatarStyle = State(initialValue: VehicleAvatar.defaultStyle)
             _currencySymbol = State(initialValue: FuelCurrency.current)
             _city = State(initialValue: GarageFormat.fuel(
                 shownUnit.display(fromPer100: defaults.cityConsumption), lng: lng))
@@ -232,6 +239,10 @@ struct VehicleEditFormView: View {
         return Button {
             Haptics.selection()
             selectedType = type
+            // The silhouette follows the type it belongs to. Without this,
+            // calling a vehicle a motorcycle leaves a saloon sitting in the
+            // preview — which is exactly what it did on the first build.
+            selectedAvatarStyle = VehicleAvatar.resolveStyle(selectedAvatarStyle, forType: type.rawValue)
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: type.icon)
@@ -311,39 +322,159 @@ struct VehicleEditFormView: View {
 
     // MARK: - Avatar
 
+    /// Two axes, not one grid. The old picker offered eight finished pictures,
+    /// which meant every new colour was a drawing and every new silhouette was
+    /// eight drawings. Splitting the choice into «what it is» and «what colour
+    /// it is» makes the two sides independent: a colour costs a ramp, a
+    /// silhouette costs one sprite.
+    ///
+    /// The hero on top is the whole point of the arrangement — at swatch size
+    /// nobody can see what they picked, so the selection is shown once, large,
+    /// and the rows below are just controls.
     private func avatarCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             GarageSectionLabel(text: AppStrings.avatarSection(l), color: c.textSecondary)
-            LazyVGrid(columns: Self.avatarColumns, spacing: 8) {
-                // A vehicle saved before the pixel cars replaced the emoji set
-                // keeps its emoji as a leading ninth cell: without it, opening
-                // the form would silently restyle every old vehicle.
-                if let legacy = legacyAvatar {
-                    avatarCell(isSelected: selectedAvatar == legacy, c: c) {
-                        selectedAvatar = legacy
-                    } content: {
-                        Text(legacy)
-                            .font(.system(size: 26))
-                    }
-                }
-                ForEach(Vehicle.pixelCarAssets, id: \.self) { asset in
-                    avatarCell(isSelected: selectedAvatar == asset, c: c) {
-                        selectedAvatar = asset
-                    } content: {
-                        // The assets are 254×188 — the TILE is square, the car
-                        // is not, so it fits inside rather than filling.
-                        Image(asset)
-                            .resizable()
-                            .interpolation(.none)
-                            .scaledToFit()
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 10)
+
+            HStack {
+                Spacer(minLength: 0)
+                avatarHero(c: c)
+                Spacer(minLength: 0)
+            }
+
+            // Hidden while only one silhouette exists: a row holding a single
+            // tile reads as a choice that has been taken away.
+            let stylesForType = VehicleAvatar.styles(forType: selectedType.rawValue)
+            if stylesForType.count > 1 {
+                GarageSectionLabel(text: AppStrings.avatarStyleSection(l), color: c.textSecondary)
+                LazyVGrid(columns: Self.avatarColumns, spacing: 8) {
+                    ForEach(stylesForType, id: \.self) { style in
+                        avatarCell(isSelected: selectedStyle == style, c: c) {
+                            selectedAvatarStyle = style
+                        } content: {
+                            // Drawn in the colour that is currently chosen, so
+                            // the row shows shapes rather than a paint chart.
+                            Image(VehicleAvatar.compose(style: style, color: selectedColor))
+                                .resizable()
+                                .interpolation(.none)
+                                .scaledToFit()
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 10)
+                        }
+                        // The tile is a picture; VoiceOver has nothing to read
+                        // without this and announces seven identical buttons.
+                        .accessibilityLabel(AppStrings.avatarStyleName(l, style: style))
                     }
                 }
             }
+
+            GarageSectionLabel(text: AppStrings.avatarColorSection(l), color: c.textSecondary)
+            colorRow(c: c)
         }
         .padding(14)
         .surfaceCard(cornerRadius: 16)
+        .animation(.easeInOut(duration: 0.15), value: selectedAvatar)
+        .animation(.easeInOut(duration: 0.15), value: selectedAvatarStyle)
+    }
+
+    @ViewBuilder
+    private func avatarHero(c: AppTheme.Colors) -> some View {
+        if let asset = previewAssetName {
+            Image(asset)
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(width: 132, height: 88)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(LinearGradient(
+                            colors: [AppTheme.spritePlateTop, AppTheme.spritePlateBottom],
+                            startPoint: .top, endPoint: .bottom
+                        ))
+                )
+        } else {
+            // A vehicle saved before the sprites replaced the emoji set.
+            Text(selectedAvatar)
+                .font(.system(size: 56))
+                .frame(height: 88)
+        }
+    }
+
+    private func colorRow(c: AppTheme.Colors) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                // The old emoji keeps a seat at the front rather than being
+                // dropped: opening the form must never silently restyle a
+                // vehicle somebody chose on purpose.
+                if let legacy = legacyAvatar {
+                    swatchButton(isSelected: selectedAvatar == legacy, c: c) {
+                        selectedAvatar = legacy
+                    } fill: {
+                        Circle()
+                            .fill(c.cardAlt)
+                            .overlay(Text(legacy).font(.system(size: 17)))
+                    }
+                }
+                ForEach(VehicleAvatar.colors, id: \.self) { color in
+                    let rgb = VehicleAvatar.swatch(color)
+                    swatchButton(isSelected: selectedColor == color && VehicleAvatar.isAsset(selectedAvatar), c: c) {
+                        selectedAvatar = VehicleAvatar.legacyName(color: color)
+                    } fill: {
+                        Circle()
+                            .fill(Color(red: rgb.r, green: rgb.g, blue: rgb.b))
+                            .overlay(
+                                Circle().stroke(
+                                    VehicleAvatar.swatchNeedsBorder(color) ? c.textTertiary.opacity(0.35) : .clear,
+                                    lineWidth: 1
+                                )
+                            )
+                    }
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 4)
+        }
+    }
+
+    /// 34 pt of paint inside a 44 pt target — the ring sits outside the dot
+    /// with a gap so the selected colour is never squeezed by its own marker.
+    private func swatchButton<Fill: View>(
+        isSelected: Bool,
+        c: AppTheme.Colors,
+        onTap: @escaping () -> Void,
+        @ViewBuilder fill: () -> Fill
+    ) -> some View {
+        Button {
+            Haptics.tap()
+            onTap()
+        } label: {
+            fill()
+                .frame(width: 34, height: 34)
+                .overlay(
+                    Circle()
+                        .stroke(isSelected ? AppTheme.accent : .clear, lineWidth: 2)
+                        .padding(-4)
+                )
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Which silhouette and which colour the current selection decomposes to.
+    /// A legacy emoji parses to neither, so both fall back to the defaults —
+    /// which is what makes the first tap on any swatch move the vehicle onto
+    /// the sprite set instead of doing nothing.
+    private var selectedStyle: String { selectedAvatarStyle }
+
+    private var selectedColor: String {
+        VehicleAvatar.color(of: selectedAvatar)
+    }
+
+    /// What the hero and the style tiles actually draw.
+    private var previewAssetName: String? {
+        VehicleAvatar.assetName(style: selectedAvatarStyle, avatar: selectedAvatar)
     }
 
     /// The emoji an existing vehicle was created with, when it is not one of the
@@ -367,8 +498,19 @@ struct VehicleEditFormView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
                 .background(
+                    // The tile holds a sprite, so it takes the sprite's ground
+                    // rather than the card's — otherwise the white and silver
+                    // bodies vanish out of the picker in the light theme, which
+                    // is the one place a person is deliberately comparing them.
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(isSelected ? AppTheme.accent.opacity(0.12) : c.cardAlt)
+                        .fill(LinearGradient(
+                            colors: [AppTheme.spritePlateTop, AppTheme.spritePlateBottom],
+                            startPoint: .top, endPoint: .bottom
+                        ))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(isSelected ? AppTheme.accent.opacity(0.14) : .clear)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
@@ -662,6 +804,7 @@ struct VehicleEditFormView: View {
             let newId = settings.addVehicle(
                 name: trimmed,
                 emoji: selectedAvatar,
+                avatarStyle: selectedAvatarStyle,
                 type: selectedType,
                 plate: plateToStore,
                 plateVisible: showPlate,
@@ -692,6 +835,10 @@ struct VehicleEditFormView: View {
             // change costs one sync operation instead of three.
             let identityChanged = trimmed != original.name
                 || selectedAvatar != original.avatarEmoji
+                // Without this, changing only the silhouette saves nothing —
+                // the colour string is identical and the form closes as if the
+                // choice had been taken.
+                || selectedAvatarStyle != original.avatarStyle
                 || selectedType != original.type
                 || plateToStore != original.plate
                 || showPlate != original.plateVisible
@@ -704,7 +851,8 @@ struct VehicleEditFormView: View {
                     type: selectedType,
                     plate: plateToStore,
                     plateVisible: showPlate,
-                    visibleToOthers: visibleToOthers
+                    visibleToOthers: visibleToOthers,
+                    avatarStyle: selectedAvatarStyle
                 )
             }
             // Fuel figures belong to a type that burns fuel; a vehicle turned

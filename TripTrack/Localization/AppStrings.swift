@@ -2175,6 +2175,35 @@ enum AppStrings {
     static func avatarSection(_ lang: LanguageManager.Language) -> String {
         tr(lang, "avatarSection", ru: "Аватар", en: "Avatar")
     }
+
+    /// Which silhouette — the shape of the thing, not its paint. Sits above the
+    /// colour row in the vehicle form, and is hidden entirely while only one
+    /// silhouette exists, so a single tile never poses as a choice.
+    static func avatarStyleSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "avatarStyleSection", ru: "Тип", en: "Type")
+    }
+
+    /// Which paint. Separate from the silhouette so that adding a colour never
+    /// costs a drawing and adding a drawing never costs the colours.
+    static func avatarColorSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "avatarColorSection", ru: "Цвет", en: "Color")
+    }
+
+    /// Names for the silhouettes. Nothing draws these as visible text — the
+    /// tiles are pictures — but VoiceOver has no picture to read, so without
+    /// them the whole row announces as seven identical buttons.
+    static func avatarStyleName(_ lang: LanguageManager.Language, style: String) -> String {
+        switch style {
+        case "car":         return tr(lang, "avatarStyle_car", ru: "Седан", en: "Sedan")
+        case "hatchback":         return tr(lang, "avatarStyle_hatchback", ru: "Хэтчбек", en: "Hatchback")
+        case "crossover":         return tr(lang, "avatarStyle_crossover", ru: "Кроссовер", en: "Crossover")
+        case "pickup":         return tr(lang, "avatarStyle_pickup", ru: "Пикап", en: "Pickup")
+        case "van":         return tr(lang, "avatarStyle_van", ru: "Фургон", en: "Van")
+        case "convertible":         return tr(lang, "avatarStyle_convertible", ru: "Кабриолет", en: "Convertible")
+        case "sports":         return tr(lang, "avatarStyle_sports", ru: "Спорткар", en: "Sports car")
+        default:            return tr(lang, "avatarStyle_car", ru: "Седан", en: "Sedan")
+        }
+    }
     static func fuelCity(_ lang: LanguageManager.Language) -> String {
         tr(lang, "fuelCity", ru: "Город", en: "City")
     }

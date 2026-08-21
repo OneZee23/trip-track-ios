@@ -173,11 +173,15 @@ struct VehiclePickerSheet: View {
         } label: {
             HStack(spacing: 12) {
                 ZStack {
+                    // Dark ground, same reason as every other sprite site: a
+                    // white car on the light theme's card is invisible. The
+                    // «no vehicle» row above keeps the card colour — it holds a
+                    // glyph, not a sprite.
                     Circle()
-                        .fill(c.cardAlt)
+                        .fill(AppTheme.spritePlate)
                         .frame(width: 42, height: 42)
-                    if vehicle.isPixelAvatar {
-                        Image(vehicle.avatarEmoji)
+                    if let asset = vehicle.avatarImageName {
+                        Image(asset)
                             .resizable()
                             // Nearest-neighbour: the pixel cars are drawn at
                             // asset resolution and smoothing turns them to mush.

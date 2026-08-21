@@ -17,6 +17,12 @@ struct VehicleSyncPayload: Codable {
     /// omits them, and the vehicle decodes as a plated car, which is what every
     /// vehicle written before this was.
     let vehicleType: String?
+    /// The silhouette. Optional for the same reason the fields above are: a
+    /// server without the column omits it and the vehicle decodes as a car,
+    /// which every vehicle written before this was. Deliberately NOT folded
+    /// into `avatarEmoji` — that string has to stay drawable by builds that
+    /// shipped before this style existed. See `VehicleAvatar`.
+    let avatarStyle: String?
     let plate: String?
     /// The server is the one that must honour this. When false the plate has to
     /// be withheld from public responses at the source — a client-side blank is
@@ -38,6 +44,7 @@ struct VehicleSyncPayload: Codable {
         conflictVersion: Int,
         lastModifiedAt: Date,
         vehicleType: String? = nil,
+        avatarStyle: String? = nil,
         plate: String? = nil,
         plateVisible: Bool? = nil,
         visibleToOthers: Bool? = nil,
@@ -55,6 +62,7 @@ struct VehicleSyncPayload: Codable {
         self.conflictVersion = conflictVersion
         self.lastModifiedAt = lastModifiedAt
         self.vehicleType = vehicleType
+        self.avatarStyle = avatarStyle
         self.plate = plate
         self.plateVisible = plateVisible
         self.visibleToOthers = visibleToOthers

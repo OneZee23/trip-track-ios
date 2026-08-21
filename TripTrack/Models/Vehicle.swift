@@ -4,7 +4,12 @@ import SwiftUI
 struct Vehicle: Identifiable, Codable {
     let id: UUID
     var name: String
+    /// Carries the COLOUR, and stays a name every shipped build can draw.
     var avatarEmoji: String
+    /// Carries the SILHOUETTE. Separate from `avatarEmoji` so that a build
+    /// which has never heard of this style still renders a car — see
+    /// `VehicleAvatar`.
+    var avatarStyle: String
     var type: VehicleType
     /// Free text, empty when the owner did not give one — the field is
     /// optional by design. See `VehiclePlate`.
@@ -31,6 +36,7 @@ struct Vehicle: Identifiable, Codable {
     var fuelCurrency: String
 
     init(id: UUID = UUID(), name: String = "", avatarEmoji: String = "🏎️",
+         avatarStyle: String = VehicleAvatar.defaultStyle,
          type: VehicleType = .car, plate: String = "", plateVisible: Bool = false,
          visibleToOthers: Bool = true,
          odometerKm: Double = 0, level: Int = 1, stickers: [VehicleSticker] = [],
@@ -40,6 +46,7 @@ struct Vehicle: Identifiable, Codable {
         self.id = id
         self.name = name
         self.avatarEmoji = avatarEmoji
+        self.avatarStyle = avatarStyle
         self.type = type
         self.plate = plate
         self.plateVisible = plateVisible
@@ -61,6 +68,11 @@ struct Vehicle: Identifiable, Codable {
         id = try c.decode(UUID.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
         avatarEmoji = try c.decode(String.self, forKey: .avatarEmoji)
+        // Absent from every payload written before the silhouette became its
+        // own axis, and absent from any server that has not shipped the column
+        // — both mean «a car», which is what those vehicles always were.
+        avatarStyle = try c.decodeIfPresent(String.self, forKey: .avatarStyle)
+            ?? VehicleAvatar.defaultStyle
         type = try c.decodeIfPresent(VehicleType.self, forKey: .type) ?? .car
         plate = try c.decodeIfPresent(String.self, forKey: .plate) ?? ""
         plateVisible = try c.decodeIfPresent(Bool.self, forKey: .plateVisible) ?? false
@@ -90,27 +102,32 @@ struct Vehicle: Identifiable, Codable {
     /// draws on the map and in the poster. They used to be reserved for the
     /// auto-created default vehicle while the picker offered emoji, which meant
     /// the one avatar nobody chose was the only one that matched the app.
-    static let pixelCarAssets = [
-        "pixel_car_orange", "pixel_car_red", "pixel_car_blue", "pixel_car_green",
-        "pixel_car_gray", "pixel_car_black", "pixel_car_white", "pixel_car_silver"
-    ]
+    /// Composed from the two axes rather than listed by hand: a hand-written
+    /// matrix of silhouettes times colours drifts the moment a sprite is added
+    /// on one side and forgotten on the other.
+    static let pixelCarAssets = VehicleAvatar.allAssets
 
     /// Emoji avatars are no longer offered, but vehicles created before the
     /// switch still carry one and must keep rendering.
     static let legacyEmojiAvatars = ["🏎️", "🚗", "🏍️", "🚙", "🛻", "🏁", "🗺️", "⛽"]
 
     var isPixelAvatar: Bool {
-        avatarEmoji.hasPrefix("pixel_car_")
+        VehicleAvatar.isAsset(avatarEmoji)
     }
 
     /// Emoji for inline text display — a car glyph stands in for pixel-car avatars
     /// (whose `avatarEmoji` holds an asset name, not an emoji).
     var displayEmoji: String {
-        isPixelAvatar ? "🚗" : avatarEmoji
+        isPixelAvatar ? VehicleAvatar.textFallback : avatarEmoji
     }
 
     var avatarImageName: String? {
-        isPixelAvatar ? avatarEmoji : nil
+        // Resolved against the type rather than trusted as stored: a payload
+        // can arrive with a saloon on a bicycle — from an older client, or
+        // from a type that was changed on another device — and drawing that
+        // pair faithfully would just show the bug to the user.
+        let style = VehicleAvatar.resolveStyle(avatarStyle, forType: type.rawValue)
+        return VehicleAvatar.assetName(style: style, avatar: avatarEmoji)
     }
 
     // MARK: - Plate
@@ -147,6 +164,13 @@ struct Vehicle: Identifiable, Codable {
         if let imageName = avatarImageName {
             Image(imageName)
                 .resizable()
+                // Nearest-neighbour, and after `resizable()` — `resizable()`
+                // rebuilds the Image, so a hint set before it is not
+                // guaranteed to survive. This was the only pixel-art call
+                // site in the app missing it, which left the owner's own car
+                // the one blurry sprite on screen: 44 pt in the garage row,
+                // 30 pt in the profile and 64 pt on the vehicle detail.
+                .interpolation(.none)
                 .scaledToFit()
                 .frame(width: size, height: size)
         } else {

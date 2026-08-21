@@ -338,7 +338,7 @@ struct TripTrackLiveActivity: Widget {
 private struct LiveLockScreenView: View {
     let context: ActivityViewContext<TripActivityAttributes>
     private var lng: String { context.state.language }
-    private var isPixel: Bool { context.attributes.vehicleAvatar.hasPrefix("pixel_car_") }
+    private var isPixel: Bool { VehicleAvatar.isAsset(context.attributes.vehicleAvatar) }
     private var c: WidgetColors { .from(isDark: context.state.isDarkMode) }
 
     var body: some View {
@@ -517,7 +517,7 @@ private let gradientEnd = Color(red: 1.0, green: 0.63, blue: 0.31)
 private struct FinishedLockScreenView: View {
     let context: ActivityViewContext<TripActivityAttributes>
     private var lng: String { context.state.language }
-    private var isPixel: Bool { context.attributes.vehicleAvatar.hasPrefix("pixel_car_") }
+    private var isPixel: Bool { VehicleAvatar.isAsset(context.attributes.vehicleAvatar) }
 
     var body: some View {
         VStack(spacing: 0) {

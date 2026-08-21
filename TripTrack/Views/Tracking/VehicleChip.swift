@@ -90,8 +90,8 @@ struct VehicleChip: View {
 
     @ViewBuilder
     private func vehicleLabel(_ vehicle: Vehicle) -> some View {
-        if vehicle.isPixelAvatar {
-            Image(vehicle.avatarEmoji)
+        if let asset = vehicle.avatarImageName {
+            Image(asset)
                 .resizable()
                 // Nearest-neighbour: the pixel cars are drawn at asset
                 // resolution and smoothing turns them to mush at 16pt.
