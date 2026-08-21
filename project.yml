@@ -84,8 +84,8 @@ targets:
         # the custom grid, and it is why the app asks for read access only.
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "TripTrack shows your photo library so you can attach photos to a trip. Photos stay on your device unless you publish the trip yourself."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        MARKETING_VERSION: "0.6.1"
-        CURRENT_PROJECT_VERSION: "52"
+        MARKETING_VERSION: "0.6.2"
+        CURRENT_PROJECT_VERSION: "53"
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.dev
@@ -152,8 +152,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Live"
-        MARKETING_VERSION: "0.6.1"
-        CURRENT_PROJECT_VERSION: "52"
+        MARKETING_VERSION: "0.6.2"
+        CURRENT_PROJECT_VERSION: "53"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         APP_INTENTS_DEPLOYMENT_POSTPROCESSING: NO
@@ -188,8 +188,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
         INFOPLIST_KEY_WKApplication: YES
-        MARKETING_VERSION: "0.6.1"
-        CURRENT_PROJECT_VERSION: "52"
+        MARKETING_VERSION: "0.6.2"
+        CURRENT_PROJECT_VERSION: "53"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "4"
       configs:

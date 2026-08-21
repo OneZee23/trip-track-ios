@@ -75,7 +75,15 @@ FIL: talaarawan ng biyahe,ruta,gps,kilometro,bilis,kotse,kalsada,biyahe,mapa,dri
 
 ## 2. What's New
 
-Одна тема на весь релиз, поэтому текст короткий. В каждую локализацию — свой.
+**Обновлено 16.08.2026: релиз перестал быть только про языки.** В 0.6.1 вошла
+работа по сохранности данных — после реального случая, когда у пользователя
+пропала вся библиотека, а 131 поездка всё это время лежала на сервере. Текст
+ниже это отражает; старая версия, где были только языки, была бы неполной.
+
+**В сторе существуют только две локализации карточки — English (U.S.) и
+Russian.** Их и надо вписать. Одиннадцать блоков ниже по файлу написаны под
+локали, которых в App Store Connect нет; если будешь их заводить (id / de / fr —
+см. `docs/aso-live.md`), в них надо добавить тот же второй раздел про данные.
 
 ### English
 ```
@@ -84,13 +92,29 @@ Russian, German, Spanish, French, Italian, Polish, Turkish, Indonesian,
 Ukrainian, Brazilian Portuguese, Kazakh and Filipino.
 
 Everything is translated — screens, empty states, errors, notifications, all 53
-achievements, and the card on your lock screen.
-
-Pick yours in Settings → Language. On a fresh install the app follows your
-phone's language list, so it usually picks the right one by itself.
+achievements, and the card on your lock screen. Pick yours in Settings →
+Language. On a fresh install the app follows your phone's language list, so it
+usually picks the right one by itself.
 
 Dates, numbers and units follow the language you chose, and counted words get
 their plural right in every one of the thirteen — including the awkward ones.
+
+YOUR TRIPS COME BACK
+If your library ever went missing, this version goes and finds it. When the app
+notices your phone is holding fewer trips than your account actually has, it
+fetches the rest — once, by itself, without you having to ask.
+
+And it can no longer lose them that way again. The app used to replace a
+database it failed to open with an empty one, silently, even when the failure
+was momentary. Now it never discards your data: it says what happened, tries
+again, and keeps the old file whatever you decide.
+
+Levels, achievements and your map of visited roads rebuild themselves once the
+trips are home.
+
+Also fixed: the "Public profile" switch no longer vanishes when the server is
+slow to answer, and the button that sends logs sits above the journal instead
+of underneath a week of it.
 ```
 
 ### Русский
@@ -100,13 +124,29 @@ TripTrack заговорил ещё на одиннадцати языках. Т
 индонезийский, украинский, португальский, казахский и филиппинский.
 
 Переведено всё — экраны, пустые состояния, ошибки, уведомления, 53 достижения
-и карточка на экране блокировки.
-
-Свой выбирается в «Настройки → Язык». На свежей установке приложение смотрит на
-список языков телефона и обычно угадывает само.
+и карточка на экране блокировки. Свой выбирается в «Настройки → Язык». На
+свежей установке приложение смотрит на список языков телефона и обычно
+угадывает само.
 
 Даты, числа и единицы следуют выбранному языку, а счётные слова склоняются
 правильно во всех тринадцати — включая неудобные.
+
+ПОЕЗДКИ ВОЗВРАЩАЮТСЯ
+Если библиотека когда-то пропала — эта версия идёт и находит её. Заметив, что
+на телефоне поездок меньше, чем в аккаунте, приложение забирает остальные
+само, один раз, без напоминаний.
+
+И потерять их тем же способом больше не может. Раньше, не сумев открыть базу,
+приложение молча подменяло её пустой — даже если сбой был секундным. Теперь
+оно не выбрасывает ваши данные: говорит, что случилось, пробует снова и в
+любом случае сохраняет старый файл.
+
+Уровни, достижения и карта проеханных дорог пересчитываются сами, как только
+поездки вернулись.
+
+Ещё починили: переключатель «Публичный профиль» больше не исчезает, когда
+сервер отвечает медленно, а кнопка отправки логов стоит над журналом, а не под
+неделей записей.
 ```
 
 ### Deutsch
