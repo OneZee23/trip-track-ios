@@ -181,6 +181,11 @@ final class SyncCoordinator {
             if let serverTime = ISODate.parse(res.serverTime) {
                 LastSyncedAtStore.set(serverTime, for: accountId)
             }
+            // The garage has to follow the library home. Odometers are derived
+            // from trips, and the trips just changed wholesale — without this
+            // the user gets his drives back and a garage still reading the
+            // mileage it had before the loss.
+            CoreDataTripRepository().recomputeAllVehicleOdometers()
             coordinatorLog.warning("heal applied trips=\(res.trips.upserted.count)")
             NotificationCenter.default.post(name: .syncPullCompleted, object: nil)
         } catch {

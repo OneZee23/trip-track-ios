@@ -76,6 +76,11 @@ protocol TripRepository {
     func tripId(forPhoto id: UUID) -> UUID?
     /// Library size, not sync progress. See the implementation.
     func countLiveTrips() -> Int
+    /// Derives the odometer from the trips assigned to each vehicle. See the
+    /// implementation for why it is derived rather than accumulated.
+    func recomputeOdometers(forVehicles vehicleIds: [UUID])
+    /// Whole-garage version, for when the library changes wholesale.
+    func recomputeAllVehicleOdometers()
     func deleteVehicleHard(id: UUID)
     func deletePhotoHard(id: UUID)
     func markPhotoUploaded(photoId: UUID, remoteURL: String?, thumbnailURL: String, uploadStatus: PhotoUploadStatus)
@@ -279,8 +284,12 @@ final class CoreDataTripRepository: TripRepository {
             deleteTripHard(id: id)
             return
         }
+        let vehicleId = entity.vehicleId
         entity.syncStatus = SyncStatus.pendingDelete.rawValue
         entity.lastModifiedAt = Date()
+        // A trip the user deleted stops counting towards the car's mileage at
+        // the same moment it disappears from the feed, not at some later sync.
+        if let vehicleId { recomputeOdometers(forVehicles: [vehicleId]) }
         persistenceController.save()
         Task { @MainActor in
             SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: id, action: .delete))
@@ -338,11 +347,17 @@ final class CoreDataTripRepository: TripRepository {
     /// existing sync payload, so no transport change is needed.
     func updateVehicle(for tripId: UUID, vehicleId: UUID?) {
         guard let entity = fetchEntity(id: tripId) else { return }
+        // Both cars have to be recomputed, not just the new one: the odometer
+        // is derived from the trips pointing at it, so moving a trip has to
+        // take its kilometres OFF the old car as well as put them on the new.
+        // Capture the previous owner before overwriting it.
+        let previousVehicleId = entity.vehicleId
         entity.vehicleId = vehicleId
         entity.lastModifiedAt = Date()
         if Self.shouldFlipPendingUpload(for: entity) {
             entity.syncStatus = SyncStatus.pendingUpload.rawValue
         }
+        recomputeOdometers(forVehicles: [previousVehicleId, vehicleId].compactMap { $0 })
         persistenceController.save()
     }
 
@@ -886,6 +901,11 @@ final class CoreDataTripRepository: TripRepository {
         entity.id = p.id
         entity.name = p.name
         entity.avatarEmoji = p.avatarEmoji
+        // A server that has not shipped the column sends nothing, which means
+        // «car» — and leaving the local value alone would be wrong here: the
+        // remote row is the authority, and a silently kept local silhouette is
+        // how two devices end up drawing different vehicles for the same car.
+        entity.avatarStyle = p.avatarStyle ?? VehicleAvatar.defaultStyle
         entity.odometerKm = p.odometerKm
         entity.vehicleLevel = Int32(p.level)
         entity.stickersJSON = p.stickersJson
@@ -988,7 +1008,9 @@ final class CoreDataTripRepository: TripRepository {
 
     func deleteTripHard(id: UUID) {
         if let e = fetchEntity(id: id) {
+            let vehicleId = e.vehicleId
             context.delete(e)
+            if let vehicleId { recomputeOdometers(forVehicles: [vehicleId]) }
             saveIfNeeded()
         }
     }
@@ -1024,6 +1046,53 @@ final class CoreDataTripRepository: TripRepository {
         req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         req.fetchLimit = 1
         return (try? context.fetch(req).first)?.trip?.id
+    }
+
+    /// Recomputes the odometer of the named vehicles from the trips assigned
+    /// to them, and their level from the result.
+    ///
+    /// The odometer used to be a pure accumulator — `+= trip.distanceKm` once,
+    /// when a trip finished, and never revisited. Everything that can change
+    /// the trips underneath it therefore drifted it: moving a trip to another
+    /// car left the kilometres behind, deleting a trip left them credited, and
+    /// a library restored from the server never reached the garage at all. A
+    /// real user reported the first of those and was sitting on all three.
+    ///
+    /// Deriving it instead of accumulating it makes every one of those correct
+    /// by construction. Soft-deleted trips are excluded, because from the
+    /// user's point of view they are gone.
+    func recomputeOdometers(forVehicles vehicleIds: [UUID]) {
+        for vehicleId in Set(vehicleIds) {
+            let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+            req.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                completedTripPredicate,
+                NSPredicate(format: "vehicleId == %@", vehicleId as CVarArg),
+            ])
+            let metres = (try? context.fetch(req))?.reduce(0.0) { $0 + $1.distance } ?? 0
+            let km = metres / 1000
+
+            let vReq: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+            vReq.predicate = NSPredicate(format: "id == %@", vehicleId as CVarArg)
+            vReq.fetchLimit = 1
+            guard let vehicle = try? context.fetch(vReq).first else { continue }
+            vehicle.odometerKm = km
+            vehicle.vehicleLevel = Int32(VehicleLevelSystem.level(for: km))
+        }
+    }
+
+    /// Recomputes every vehicle — used after the library changes wholesale,
+    /// i.e. once trips come home from the server.
+    ///
+    /// Refuses to run on an empty library. With no trips the odometers are not
+    /// evidence of drift, they are the only surviving record of the mileage —
+    /// zeroing them there would repeat exactly the mistake this release exists
+    /// to fix.
+    func recomputeAllVehicleOdometers() {
+        guard countLiveTrips() > 0 else { return }
+        let req: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        let ids = ((try? context.fetch(req)) ?? []).compactMap { $0.id }
+        recomputeOdometers(forVehicles: ids)
+        saveIfNeeded()
     }
 
     /// Every trip row that exists, whatever its sync status — including
