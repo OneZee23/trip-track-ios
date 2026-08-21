@@ -128,7 +128,18 @@ struct ClubAvatar: View {
         Circle()
             .fill(club.tint)
             .frame(width: size, height: size)
-            .overlay { Text(club.emoji).font(.system(size: emojiSize)) }
+            .overlay {
+                if let asset = club.asset {
+                    Image(asset)
+                        .resizable()
+                        // After `resizable()`, as everywhere else.
+                        .interpolation(.none)
+                        .scaledToFit()
+                        .padding(size * 0.16)
+                } else {
+                    Text(club.emoji).font(.system(size: emojiSize))
+                }
+            }
     }
 }
 

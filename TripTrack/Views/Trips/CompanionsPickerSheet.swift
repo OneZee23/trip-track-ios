@@ -236,9 +236,7 @@ struct CompanionsPickerSheet: View {
     private func errorState(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 10) {
             Spacer()
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 28))
-                .foregroundStyle(AppTheme.red)
+            EmptyStateIllustration(name: "error_generic", size: 140)
             Text(AppStrings.companionsCandidatesLoadFailed(lang.language))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
@@ -264,9 +262,7 @@ struct CompanionsPickerSheet: View {
     private func emptyFollowState(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 8) {
             Spacer()
-            Image(systemName: "person.2.slash")
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(c.textTertiary)
+            EmptyStateIllustration(name: "empty_companions", size: 148)
             Text(AppStrings.companionsCandidatesEmptyTitle(lang.language))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(c.textSecondary)

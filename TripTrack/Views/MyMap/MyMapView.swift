@@ -161,9 +161,7 @@ struct MyMapView: View {
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            ZigzagTrailIcon()
-                .stroke(.white.opacity(0.3), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                .frame(width: 48, height: 20)
+            EmptyStateIllustration(name: "empty_map", size: 148)
             Text(AppStrings.emptyMapTitle(lang.language))
                 .font(.inter(18, weight: .heavy))
                 .foregroundStyle(.white)

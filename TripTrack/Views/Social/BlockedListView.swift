@@ -56,9 +56,7 @@ struct BlockedListView: View {
 
     private func emptyState(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: "hand.raised.slash")
-                .font(.system(size: 32))
-                .foregroundStyle(c.textTertiary)
+            EmptyStateIllustration(name: "empty_followers", size: 148)
             Text(AppStrings.blockedListYouHavenT(lng))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)
@@ -69,9 +67,7 @@ struct BlockedListView: View {
 
     private func errorState(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 12) {
-            Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 32))
-                .foregroundStyle(c.textTertiary)
+            EmptyStateIllustration(name: "empty_offline", size: 148)
             Text(AppStrings.blockedListLoadFailed(lang.language))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)

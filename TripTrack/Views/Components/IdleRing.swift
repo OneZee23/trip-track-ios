@@ -22,10 +22,11 @@ struct IdleRing: View {
                 Image("PixelCar")
                     .resizable()
                     .interpolation(.none)
-                    // The sprite asset is non-square — without fit it
-                    // squeezes into the 46×46 box.
+                    // The asset is cropped to the car and is wider than it is
+                    // tall, so the box is sized to the car's proportions —
+                    // a square box spent a third of its height on nothing.
                     .scaledToFit()
-                    .frame(width: 46, height: 46)
+                    .frame(width: 52, height: 32)
             }
             .frame(width: 82, height: 82)
         }

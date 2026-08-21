@@ -71,9 +71,7 @@ struct RoadCollectionView: View {
                     // Road cards
                     if filtered.isEmpty {
                         VStack(spacing: 8) {
-                            Image(systemName: "road.lanes")
-                                .font(.system(size: 32))
-                                .foregroundStyle(c.textTertiary)
+                            EmptyStateIllustration(name: "empty_roads", size: 148)
                             Text(AppStrings.roadCollectionRecordATrip(lng))
                                 .font(.system(size: 14))
                                 .foregroundStyle(c.textTertiary)

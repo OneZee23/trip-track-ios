@@ -279,7 +279,10 @@ struct MapViewRepresentable: UIViewRepresentable {
                 ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
 
             view.annotation = annotation
-            view.markerTintColor = .systemBlue
+            // Was MapKit's stock blue. On a screen whose whole surface is a
+            // map, the one saturated object on it was the one thing in the app
+            // wearing somebody else's colour.
+            view.markerTintColor = UIColor(AppTheme.accent)
             view.glyphImage = UIImage(systemName: "mappin")
             view.canShowCallout = true
             return view

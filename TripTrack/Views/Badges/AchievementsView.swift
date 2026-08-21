@@ -221,7 +221,8 @@ struct AchievementsView: View {
     }
 
     private func emptyState(_ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 10) {
+            EmptyStateIllustration(name: "empty_achievements", size: 148)
             Text(AppStrings.achievementsEmpty(lang.language))
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(c.text)

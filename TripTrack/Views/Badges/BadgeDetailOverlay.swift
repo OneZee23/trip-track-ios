@@ -41,9 +41,10 @@ struct BadgeDetailOverlay: View {
                             .font(.system(size: 48))
                             .foregroundStyle(badge.color)
                     } else if badge.isHidden {
-                        Image(systemName: "questionmark")
-                            .font(.system(size: 32, weight: .medium))
-                            .foregroundStyle(c.textTertiary)
+                        // A padlock on a folded map, not a bare question
+                        // mark: a hidden achievement is something waiting to be
+                        // opened, and the glyph read as a missing asset.
+                        EmptyStateIllustration(name: "badge_locked", size: 132)
                     } else {
                         Image(systemName: badge.icon)
                             .font(.system(size: 48))

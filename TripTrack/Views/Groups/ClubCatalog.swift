@@ -9,7 +9,15 @@ import SwiftUI
 struct Club: Identifiable, Hashable {
     /// Wire key — must match `CLUB_KEYS` on the server, which validates it.
     let id: String
+    /// Kept as the fallback for a club whose mark has not been drawn — the
+    /// catalogue is seeded here but the server validates the keys, so a key
+    /// can arrive before its artwork does.
     let emoji: String
+    /// Asset name of the drawn mark. The marks are deliberately generic —
+    /// a roadster, a gear, a truck — because a recognisable Miata or Impreza
+    /// silhouette is somebody else's registered trade dress, and these ship
+    /// inside an App Store binary.
+    var asset: String? { "club_\(id)" }
     /// Brand names stay in Latin in both languages.
     let nameRu: String
     let nameEn: String

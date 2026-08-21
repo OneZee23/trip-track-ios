@@ -193,12 +193,13 @@ struct VehicleDetailView: View {
     /// added to the garage, which for an eight-year-old Polo reads as a lie.
     private func heroCard(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(c.cardAlt)
-                    .frame(width: 96, height: 96)
-                vehicle.avatarView(size: 64)
-            }
+            VehicleSpritePlate(
+                assetName: vehicle.avatarImageName,
+                fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
+                plateSize: 96,
+                spriteSize: 64,
+                cornerRadius: 18
+            )
 
             VStack(spacing: 3) {
                 Text(displayName(vehicle, l))

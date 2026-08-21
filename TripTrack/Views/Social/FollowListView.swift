@@ -189,9 +189,7 @@ struct FollowListView: View {
 
     private func emptyState(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: "person.2")
-                .font(.system(size: 32))
-                .foregroundStyle(c.textTertiary)
+            EmptyStateIllustration(name: "empty_followers", size: 148)
             Text(emptyMessage(lng: lng))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textTertiary)
@@ -210,9 +208,7 @@ struct FollowListView: View {
 
     private func errorState(_ msg: String, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 28))
-                .foregroundStyle(.red)
+            EmptyStateIllustration(name: "error_generic", size: 140)
             Text(AppStrings.followListCouldnTLoad(lng))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(c.textSecondary)

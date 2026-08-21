@@ -44,7 +44,7 @@ struct IdleHUDView: View {
                     .resizable()
                     .interpolation(.none)
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 46, height: 46)
+                    .frame(width: 52, height: 32)
             }
             // Figma's card rhythm (574:129): ring at 22, then a steady 14 pt
             // between every block down to the slider, 22 pt under it.

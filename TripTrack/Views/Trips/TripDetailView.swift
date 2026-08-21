@@ -1685,8 +1685,8 @@ struct TripDetailView: View {
                 DetailChipSurface {
                     // A pixel avatar is an asset name, not a glyph — drawn as
                     // text it reads «pixel_car_white».
-                    if v.isPixelAvatar {
-                        Image(v.avatarEmoji)
+                    if let asset = v.avatarAssetName {
+                        Image(asset)
                             .resizable()
                             .interpolation(.none)
                             .scaledToFit()

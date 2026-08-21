@@ -921,9 +921,7 @@ struct NotificationsInboxView: View {
     @ViewBuilder
     private func emptyState(c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 14) {
-            Image(systemName: "bell")
-                .font(.system(size: 44, weight: .light))
-                .foregroundStyle(c.textTertiary)
+            EmptyStateIllustration(name: "empty_notifications")
             Text(AppStrings.notificationsInboxNothingYet(lng))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(c.textSecondary)

@@ -181,6 +181,7 @@ struct DiscoverView: View {
             } else if results.isEmpty {
                 emptyStateCard(
                     icon: "magnifyingglass",
+                    illustration: "empty_search",
                     title: AppStrings.discoverNoUsersFound(lng),
                     subtitle: AppStrings.discoverTryADifferent(lng),
                     c: c
@@ -206,13 +207,21 @@ struct DiscoverView: View {
 
     // MARK: - User row
 
+    /// `illustration` wins when there is one; `icon` is the system fallback for
+    /// the states whose scene has not been drawn yet, so the screen degrades to
+    /// what it looked like before rather than to a blank.
     private func emptyStateCard(
-        icon: String, title: String, subtitle: String, c: AppTheme.Colors,
+        icon: String, illustration: String? = nil,
+        title: String, subtitle: String, c: AppTheme.Colors,
     ) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(c.textTertiary)
+            if let illustration {
+                EmptyStateIllustration(name: illustration, size: 132)
+            } else {
+                Image(systemName: icon)
+                    .font(.system(size: 30, weight: .light))
+                    .foregroundStyle(c.textTertiary)
+            }
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(c.textSecondary)

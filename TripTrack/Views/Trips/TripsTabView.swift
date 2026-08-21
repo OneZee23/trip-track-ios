@@ -51,9 +51,7 @@ struct TripsTabView: View {
     private var emptyState: some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(spacing: 12) {
-            Image(systemName: "car.side")
-                .font(.system(size: 48))
-                .foregroundStyle(c.textTertiary)
+            EmptyStateIllustration(name: "empty_trips")
 
             Text(AppStrings.noTrips(lang.language))
                 .font(.system(size: 18, weight: .semibold))

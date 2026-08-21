@@ -28,9 +28,11 @@ struct StoreRecoveryView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 24)
 
-            Image(systemName: "externaldrive.badge.questionmark")
-                .font(.system(size: 52, weight: .light))
-                .foregroundStyle(AppTheme.accent)
+            // A drive open on a bench with a screwdriver beside it and its
+            // light still on. The screen says «we could not open your data,
+            // and we kept your file» — a question-mark glyph says neither half
+            // of that, and the half it does imply is the frightening one.
+            EmptyStateIllustration(name: "empty_data", size: 176)
                 .padding(.bottom, 22)
 
             Text(AppStrings.storeRecoveryTitle(l))

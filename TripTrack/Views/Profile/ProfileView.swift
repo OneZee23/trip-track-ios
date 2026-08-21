@@ -748,12 +748,13 @@ struct ProfileView: View {
             showGarage = true
         } label: {
             HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(c.cardAlt)
-                        .frame(width: 44, height: 44)
-                    vehicle.avatarView(size: 30)
-                }
+                VehicleSpritePlate(
+                    assetName: vehicle.avatarImageName,
+                    fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
+                    plateSize: 44,
+                    spriteSize: 30,
+                    cornerRadius: 10
+                )
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {

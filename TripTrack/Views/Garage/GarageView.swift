@@ -145,12 +145,10 @@ struct GarageView: View {
             detailVehicleId = vehicle.id
         } label: {
             HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(c.cardAlt)
-                        .frame(width: 64, height: 64)
-                    vehicle.avatarView(size: 44)
-                }
+                VehicleSpritePlate(
+                    assetName: vehicle.avatarImageName,
+                    fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji
+                )
 
                 VStack(alignment: .leading, spacing: 6) {
                     nameRow(vehicle, isMain: isMain, c: c, l: l)
@@ -277,16 +275,12 @@ struct GarageView: View {
 
     private func emptyState(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(spacing: 14) {
-            // The asset is 254×188; a square frame would letterbox it, so only
-            // the width is pinned. `.interpolation` sits after `.resizable()`
-            // like every other pixel-art call site in the app — `resizable()`
-            // rebuilds the Image, and a nearest-neighbour hint set before it
-            // is not guaranteed to survive that.
-            Image("pixel_car_orange")
-                .resizable()
-                .interpolation(.none)
-                .scaledToFit()
-                .frame(width: 96)
+            // A drawn scene rather than the orange car that used to stand in
+            // here: an empty carport reads as «nothing parked yet», where a
+            // car reads as «here is a car», which is the opposite of what the
+            // screen is saying. Sizing and framing live in the shared
+            // component so every empty screen stays the same size as the rest.
+            EmptyStateIllustration(name: "empty_garage", size: 148)
 
             VStack(spacing: 8) {
                 Text(AppStrings.garageEmptyTitle(l))

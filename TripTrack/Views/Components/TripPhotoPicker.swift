@@ -182,9 +182,7 @@ struct TripPhotoPicker: View {
     private func deniedState(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 12) {
             Spacer()
-            Image(systemName: "photo.on.rectangle.angled")
-                .font(.system(size: 34))
-                .foregroundStyle(c.textTertiary)
+            EmptyStateIllustration(name: "empty_photos", size: 148)
             Text(AppStrings.photoAccessDenied(lang.language))
                 .font(.system(size: 14))
                 .foregroundStyle(c.textSecondary)

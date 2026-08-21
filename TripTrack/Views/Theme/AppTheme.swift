@@ -20,6 +20,26 @@ enum AppTheme {
 
     // Gold — Me-tab LVL pill (0.6.0). Bg is adaptive: warm cream in light,
     // translucent gold in dark.
+    /// The ground the vehicle sprites stand on. One value in both themes.
+    ///
+    /// Light, and that is the whole trick. What makes a sprite legible here is
+    /// its 1 px outline, not its paint: measured against this plate the
+    /// outline sits at 9.5:1, so every body colour reads by its edge — a white
+    /// car included, whose fill against this plate is barely 1.5:1 and does
+    /// not need to be more.
+    ///
+    /// The two obvious alternatives were measured and both fail. Brand navy
+    /// puts the outline at 1.04:1 — the edge disappears and legibility falls
+    /// to the fill alone, which leaves a black car at 1.27:1, invisible. A
+    /// mid-grey rescues white and black but collides with red and blue, which
+    /// happen to land on the same luminance. Light is the only band where one
+    /// plate serves all nine colours.
+    static let spritePlateTop = Color(red: 0xE4/255, green: 0xDD/255, blue: 0xD1/255)
+    static let spritePlateBottom = Color(red: 0xD2/255, green: 0xC9/255, blue: 0xBA/255)
+
+    /// The gradient as a single fill, for callers that just want a colour.
+    static let spritePlate = Color(red: 0xDB/255, green: 0xD3/255, blue: 0xC6/255)
+
     static let gold = Color(red: 206/255, green: 154/255, blue: 46/255)
     static let goldBg = Color(UIColor { tc in
         tc.userInterfaceStyle == .dark

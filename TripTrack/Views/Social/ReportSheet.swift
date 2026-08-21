@@ -158,9 +158,7 @@ struct ReportSheet: View {
 
     private func successCard(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         VStack(spacing: 14) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 44))
-                .foregroundStyle(.green)
+            EmptyStateIllustration(name: "success_sent", size: 132)
             Text(AppStrings.reportReportSent(lng))
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(c.text)

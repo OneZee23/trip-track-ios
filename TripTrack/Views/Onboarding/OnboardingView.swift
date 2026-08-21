@@ -91,6 +91,33 @@ struct OnboardingView: View {
     }
 
     /// 96pt hero badge: accent-tinted disc with an accent glyph.
+    /// The illustration at the top of a page, sized as artwork rather than as
+    /// an icon.
+    ///
+    /// The scenes are authored on brand navy, and onboarding is cream. Dropped
+    /// in at icon size that reads as a dark square somebody forgot to style —
+    /// which is exactly what it looked like on the first build. At full width
+    /// the same dark panel reads as a picture, the way a photograph would, and
+    /// the drawing inside it becomes legible: at 128 pt the fog, the roads and
+    /// the two pins were all a smudge.
+    ///
+    /// Filled and cropped rather than fitted: every scene keeps its subject in
+    /// the middle 60%, so trimming the square down to a landscape band costs
+    /// nothing and avoids a 330 pt tall block on a 760 pt screen.
+    private func onboardingHero(_ name: String) -> some View {
+        Image(name)
+            .resizable()
+            // After `resizable()`, as at every other pixel-art call site.
+            .interpolation(.none)
+            .scaledToFill()
+            .frame(height: 200)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .padding(.horizontal, 24)
+            // Decoration; the heading under it carries the meaning.
+            .accessibilityHidden(true)
+    }
+
     private func heroBadge(@ViewBuilder glyph: () -> some View) -> some View {
         ZStack {
             Circle()
@@ -146,8 +173,11 @@ struct OnboardingView: View {
                 Image("PixelCar")
                     .resizable()
                     .interpolation(.none)
+                    // The sprite is cropped to the car and wider than tall; a
+                    // square box spent a third of its height on empty pixels
+                    // and drew a car two thirds the size it looked in code.
                     .scaledToFit()
-                    .frame(width: 46, height: 46)
+                    .frame(width: 58, height: 36)
             }
             .padding(.top, 61)
 
@@ -200,16 +230,11 @@ struct OnboardingView: View {
         // the ~700pt content stack exceeds the screen (667pt SE class).
         return ScrollView(showsIndicators: false) {
             VStack(spacing: 0) {
-                heroBadge {
-                    // Photo-with-sparkle glyph (Figma node 229:2): memories icon.
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 40, weight: .regular))
-                        Image(systemName: "sparkle")
-                            .font(.system(size: 14, weight: .semibold))
-                            .offset(x: 8, y: -8)
-                    }
-                }
+                // A drawn album of maps rather than the system photo glyph:
+                // this page answers «what do I get?», and the answer is the
+                // artefact, not an icon standing for one.
+                onboardingHero("onboard_memory")
+                    .padding(.top, 56)
 
                 Text(AppStrings.onboardingValueTitle(lang.language))
                     .font(.inter(24, weight: .heavy))
@@ -219,7 +244,7 @@ struct OnboardingView: View {
                     // 49, like every other hero page: at 24 this title sat
                     // 25pt higher than its neighbours (y≈183 vs the canon
                     // y=208), so the headline jumped on every swipe.
-                    .padding(.top, 49)
+                    .padding(.top, 36)
 
                 mockTripCard(c)
                     .padding(.horizontal, 28)
@@ -482,17 +507,17 @@ struct OnboardingView: View {
     private var locationPage: some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(spacing: 0) {
-            heroBadge {
-                MapPinGlyph()
-                    .frame(width: 44, height: 44)
-            }
+            // The fog pulling back off a map says what the permission is FOR,
+            // where a pin only says «location».
+            onboardingHero("onboard_fog")
+                .padding(.top, 56)
 
             Text(AppStrings.onboardingLocation(lang.language))
                 .font(.inter(24, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-                .padding(.top, 49)
+                .padding(.top, 36)
 
             bodyText(AppStrings.onboardingLocationSub(lang.language), c)
                 .padding(.top, 12)
@@ -548,19 +573,17 @@ struct OnboardingView: View {
     private var autoRecordPage: some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(spacing: 0) {
-            heroBadge {
-                // Symmetric Wi-Fi fan opening up with the dot below — matches
-                // the Figma broadcast glyph orientation.
-                Image(systemName: "wifi")
-                    .font(.system(size: 42, weight: .regular))
-            }
+            // A phone on a dashboard drawing its own route — the thing this
+            // permission actually enables, rather than a broadcast symbol.
+            onboardingHero("onboard_track")
+                .padding(.top, 56)
 
             Text(AppStrings.onboardingBackgroundTitle(lang.language))
                 .font(.inter(24, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-                .padding(.top, 49)
+                .padding(.top, 36)
 
             // Canon copy: says exactly what breaks with «While Using», which
             // is the only argument that makes «Always» reasonable to grant.
@@ -606,17 +629,18 @@ struct OnboardingView: View {
     private var notificationsPage: some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(spacing: 0) {
-            heroBadge {
-                Image(systemName: "bell.fill")
-                    .font(.system(size: 38, weight: .regular))
-            }
+            // The fourth page was the only one still on a system glyph while
+            // the three before it had scenes — which read as an unfinished
+            // screen rather than a different kind of screen.
+            onboardingHero("onboard_notify")
+                .padding(.top, 56)
 
             Text(AppStrings.onboardingNotificationsTitle(lang.language))
                 .font(.inter(24, weight: .heavy))
                 .foregroundStyle(c.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-                .padding(.top, 49)
+                .padding(.top, 36)
 
             bodyText(AppStrings.onboardingNotificationsSub(lang.language), c)
                 .padding(.top, 12)
