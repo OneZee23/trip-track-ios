@@ -62,6 +62,8 @@ ASSETS = {
     "club-trucking":       ("club_trucking", 256),
     "club-offroad":        ("club_offroad", 256),
     "club-subaru":         ("club_subaru", 256),
+    # The loading scene, shown inline in lists as well as full screen
+    "loading-road":        ("loading_road", 384),
 }
 
 CONTENTS = {

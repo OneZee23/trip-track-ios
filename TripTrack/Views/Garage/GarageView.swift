@@ -147,7 +147,8 @@ struct GarageView: View {
             HStack(spacing: 14) {
                 VehicleSpritePlate(
                     assetName: vehicle.avatarImageName,
-                    fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji
+                    fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
+                    uniformHeight: true
                 )
 
                 VStack(alignment: .leading, spacing: 6) {

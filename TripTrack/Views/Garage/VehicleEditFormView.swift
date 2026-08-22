@@ -357,8 +357,8 @@ struct VehicleEditFormView: View {
                                 .resizable()
                                 .interpolation(.none)
                                 .scaledToFit()
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 10)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 7)
                         }
                         // The tile is a picture; VoiceOver has nothing to read
                         // without this and announces seven identical buttons.
@@ -383,11 +383,11 @@ struct VehicleEditFormView: View {
                 .resizable()
                 .interpolation(.none)
                 .scaledToFit()
-                .frame(width: 132, height: 88)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
+                .frame(width: 168, height: 106)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
                 .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(LinearGradient(
                             colors: [AppTheme.spritePlateTop, AppTheme.spritePlateBottom],
                             startPoint: .top, endPoint: .bottom
@@ -496,21 +496,21 @@ struct VehicleEditFormView: View {
         } label: {
             content()
                 .frame(maxWidth: .infinity)
-                .frame(height: 56)
+                // Taller since the sprites lost their empty margin: the car
+                // fills the tile now instead of floating in a third of it,
+                // which is what made them look small in a picker whose whole
+                // job is comparing them.
+                .frame(height: 68)
                 .background(
-                    // The tile holds a sprite, so it takes the sprite's ground
-                    // rather than the card's — otherwise the white and silver
-                    // bodies vanish out of the picker in the light theme, which
-                    // is the one place a person is deliberately comparing them.
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(LinearGradient(
                             colors: [AppTheme.spritePlateTop, AppTheme.spritePlateBottom],
                             startPoint: .top, endPoint: .bottom
                         ))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(isSelected ? AppTheme.accent.opacity(0.14) : .clear)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(isSelected ? AppTheme.accent.opacity(0.16) : .clear)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)

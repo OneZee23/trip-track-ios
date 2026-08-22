@@ -22,23 +22,22 @@ enum AppTheme {
     // translucent gold in dark.
     /// The ground the vehicle sprites stand on. One value in both themes.
     ///
-    /// Light, and that is the whole trick. What makes a sprite legible here is
-    /// its 1 px outline, not its paint: measured against this plate the
-    /// outline sits at 9.5:1, so every body colour reads by its edge — a white
-    /// car included, whose fill against this plate is barely 1.5:1 and does
-    /// not need to be more.
+    /// Brand navy, and it took a wrong turn to get here. Measured on contrast
+    /// alone a light plate wins: the sprites' 1 px outline reads at 9.5:1
+    /// against it, where navy puts the same outline at 1.04:1. So the plate was
+    /// light for a while — and every car on it looked bleached, because outline
+    /// contrast is not what makes a painted body read. Saturated paint needs a
+    /// dark ground to hold its colour, and the black car is carried by its
+    /// glass, wheels and highlights rather than by its panels.
     ///
-    /// The two obvious alternatives were measured and both fail. Brand navy
-    /// puts the outline at 1.04:1 — the edge disappears and legibility falls
-    /// to the fill alone, which leaves a black car at 1.27:1, invisible. A
-    /// mid-grey rescues white and black but collides with red and blue, which
-    /// happen to land on the same luminance. Light is the only band where one
-    /// plate serves all nine colours.
-    static let spritePlateTop = Color(red: 0xE4/255, green: 0xDD/255, blue: 0xD1/255)
-    static let spritePlateBottom = Color(red: 0xD2/255, green: 0xC9/255, blue: 0xBA/255)
+    /// Rendered side by side there was nothing to argue about. Keeping the
+    /// measurement here because it is right about what it measures, and wrong
+    /// about what to do.
+    static let spritePlateTop = Color(red: 0x29/255, green: 0x36/255, blue: 0x4F/255)
+    static let spritePlateBottom = Color(red: 0x16/255, green: 0x1B/255, blue: 0x2C/255)
 
     /// The gradient as a single fill, for callers that just want a colour.
-    static let spritePlate = Color(red: 0xDB/255, green: 0xD3/255, blue: 0xC6/255)
+    static let spritePlate = Color(red: 0x1F/255, green: 0x27/255, blue: 0x3D/255)
 
     static let gold = Color(red: 206/255, green: 154/255, blue: 46/255)
     static let goldBg = Color(UIColor { tc in

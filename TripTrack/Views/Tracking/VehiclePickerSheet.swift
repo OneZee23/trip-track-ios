@@ -173,12 +173,16 @@ struct VehiclePickerSheet: View {
         } label: {
             HStack(spacing: 12) {
                 ZStack {
-                    // Dark ground, same reason as every other sprite site: a
-                    // white car on the light theme's card is invisible. The
-                    // «no vehicle» row above keeps the card colour — it holds a
-                    // glyph, not a sprite.
+                    // The sprite's ground with no edge to it — a filled dark
+                    // disc in a light row is the same sticker problem the
+                    // square plate had, just rounder. The «no vehicle» row
+                    // above keeps the card colour: it holds a glyph, not a
+                    // sprite, and has nothing to stand on.
                     Circle()
-                        .fill(AppTheme.spritePlate)
+                        .fill(LinearGradient(
+                            colors: [AppTheme.spritePlateTop, AppTheme.spritePlateBottom],
+                            startPoint: .top, endPoint: .bottom
+                        ))
                         .frame(width: 42, height: 42)
                     if let asset = vehicle.avatarImageName {
                         Image(asset)

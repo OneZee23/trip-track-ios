@@ -57,3 +57,6 @@ design/
 design_handoff_triptrack_v0.6/
 
 crashes/
+
+# Python bytecode from the asset tooling
+Tools/__pycache__/

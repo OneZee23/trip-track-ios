@@ -192,41 +192,54 @@ struct VehicleDetailView: View {
     /// the year was never a fact about the car — `createdAt` is when it was
     /// added to the garage, which for an eight-year-old Polo reads as a lie.
     private func heroCard(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
+            // The car is the subject of the screen, so it gets the room. It
+            // used to sit in a 96 pt tile above an 18 pt name and a full-width
+            // level bar, and the bar — the widest, heaviest object on the card
+            // — read as the headline. The order of weight is the car, then its
+            // name, then everything else.
+            // Landscape, not a square. The car is wide, and a square plate
+            // big enough to show it properly turns into a wall of navy on a
+            // light screen — which is what «too dark, too heavy» actually was.
+            // Cropped to the car's own proportions the dark area roughly
+            // halves and the sprite is framed rather than floated.
             VehicleSpritePlate(
                 assetName: vehicle.avatarImageName,
                 fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
-                plateSize: 96,
-                spriteSize: 64,
-                cornerRadius: 18
+                plateSize: heroPlateWidth,
+                cornerRadius: 20
             )
+            .padding(.top, 4)
 
-            VStack(spacing: 3) {
-                Text(displayName(vehicle, l))
-                    .font(.system(size: 18, weight: .heavy))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .minimumScaleFactor(0.7)
+            Text(displayName(vehicle, l))
+                .font(.system(size: 26, weight: .heavy))
+                .foregroundStyle(c.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .minimumScaleFactor(0.6)
+                .padding(.top, 16)
 
-                if vehicle.hasPlate {
-                    // The owner always sees their own plate here. `plateVisible`
-                    // is about OTHER people (see `Vehicle.publicPlate`) — hiding
-                    // it from the person who typed it in would be theatre.
-                    // The chip carries 3pt of its own vertical padding, so 2
-                    // more on each side lands on canon's ~6pt gaps.
-                    VehiclePlateChip(plate: vehicle.plate)
-                        .padding(.vertical, 2)
-                }
-
+            if vehicle.hasPlate {
+                // The owner always sees their own plate here. `plateVisible`
+                // is about OTHER people (see `Vehicle.publicPlate`) — hiding
+                // it from the person who typed it in would be theatre.
+                VehiclePlateChip(plate: vehicle.plate)
+                    .padding(.top, 8)
             }
 
             levelRow(vehicle, c: c)
+                .padding(.top, 18)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 20)
-        .surfaceCard(cornerRadius: 16)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 22)
+        .surfaceCard(cornerRadius: 20)
+    }
+
+    /// Sized off the screen rather than pinned, so the car stays the biggest
+    /// thing on the card on an SE and does not swallow the fold on a Max.
+    private var heroPlateWidth: CGFloat {
+        min(max(UIScreen.main.bounds.width * 0.62, 210), 280)
     }
 
     // MARK: - Level Row
@@ -243,8 +256,13 @@ struct VehicleDetailView: View {
             showLevelInfo = true
         } label: {
             HStack(spacing: 8) {
-                VehicleXPBar(progress: vehicle.progressToNextLevel, tint: vehicle.levelColor)
                 VehicleLevelPill(level: vehicle.level)
+                // Thinner and no longer full-bleed. Stretched across the card
+                // it was the widest, heaviest object on a screen whose subject
+                // is the car — the progress towards the next level is a
+                // footnote about the car, not the headline above it.
+                VehicleXPBar(progress: vehicle.progressToNextLevel, tint: vehicle.levelColor, height: 4)
+                    .frame(maxWidth: 140)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(c.textTertiary)

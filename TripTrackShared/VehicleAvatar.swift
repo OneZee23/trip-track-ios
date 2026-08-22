@@ -129,16 +129,16 @@ public enum VehicleAvatar {
     /// sprite it selects is a bug nobody reports, they just pick another one.
     public static func swatch(_ color: String) -> (r: Double, g: Double, b: Double) {
         switch color {
-        case "white":  return (0xEB / 255, 0xED / 255, 0xF2 / 255)
+        case "white":  return (0xD4 / 255, 0xD9 / 255, 0xE3 / 255)
         case "black":  return (0x2A / 255, 0x2C / 255, 0x33 / 255)
-        case "silver": return (0xB6 / 255, 0xBA / 255, 0xC2 / 255)
+        case "silver": return (0xA2 / 255, 0xA8 / 255, 0xB4 / 255)
         case "gray":   return (0x70 / 255, 0x75 / 255, 0x80 / 255)
         case "red":    return (0xE0 / 255, 0x3B / 255, 0x2C / 255)
         case "blue":   return (0x3B / 255, 0x7D / 255, 0xD8 / 255)
-        case "orange": return (0xF5 / 255, 0x9E / 255, 0x19 / 255)
+        case "orange": return (0xEB / 255, 0x57 / 255, 0x1E / 255)
         case "yellow": return (0xF2 / 255, 0xC4 / 255, 0x1B / 255)
         case "green":  return (0x4C / 255, 0xAF / 255, 0x50 / 255)
-        default:       return (0xF5 / 255, 0x9E / 255, 0x19 / 255)
+        default:       return (0xEB / 255, 0x57 / 255, 0x1E / 255)
         }
     }
 
@@ -160,6 +160,12 @@ public enum VehicleAvatar {
         guard let (_, color) = decompose(avatar) else { return nil }
         let resolved = style.flatMap { styles.contains($0) ? $0 : nil } ?? defaultStyle
         return compose(style: resolved, color: color)
+    }
+
+    /// The silhouette half of a composed asset name, for layout code that has
+    /// only the name and needs the sprite's metrics.
+    public static func style(ofAsset asset: String) -> String {
+        decompose(asset)?.style ?? defaultStyle
     }
 
     /// The colour half of an avatar name, for the picker's swatch selection.

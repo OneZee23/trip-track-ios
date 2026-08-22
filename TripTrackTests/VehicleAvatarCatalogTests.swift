@@ -271,3 +271,58 @@ final class BrandAssetReferenceTests: XCTestCase {
         }
     }
 }
+
+/// The sprite metrics are generated from the installed art, and layout depends
+/// on them being true. A stale table is a silent layout bug: the car simply
+/// sits wrong on its plate, which is what «huge empty space above the car»
+/// looked like before the table existed.
+final class VehicleSpriteMetricsTests: XCTestCase {
+
+    func testEveryStyleHasRealMetrics() {
+        for style in VehicleAvatar.styles {
+            let b = VehicleSpriteMetrics.inkBounds(style: style)
+            XCTAssertTrue(
+                b.top >= 0 && b.bottom <= 1 && b.bottom > b.top,
+                "\(style) has nonsense bounds \(b) — is the table generated?"
+            )
+            XCTAssertNotEqual(
+                b.top, 0.0, accuracy: 0.0001,
+                "\(style) fell through to the default branch, so it is missing from the table"
+            )
+        }
+    }
+
+    /// The set shares a ground line, so every silhouette must end at the same
+    /// place. If one drifts, the vehicles stop standing on the same floor.
+    func testEverySilhouetteSharesTheGroundLine() {
+        let bottoms = VehicleAvatar.styles.map { VehicleSpriteMetrics.inkBounds(style: $0).bottom }
+        let lo = bottoms.min() ?? 0
+        let hi = bottoms.max() ?? 0
+        XCTAssertLessThan(
+            hi - lo, 0.02,
+            "silhouettes end at different heights (\(lo)…\(hi)) — the set is no longer normalised"
+        )
+    }
+
+    /// Taller vehicles must still measure taller, or the crop has flattened the
+    /// proportions that tell the silhouettes apart.
+    func testAVanIsTallerThanAHatchback() {
+        XCTAssertGreaterThan(
+            VehicleSpriteMetrics.inkHeight(style: "van"),
+            VehicleSpriteMetrics.inkHeight(style: "hatchback")
+        )
+        XCTAssertGreaterThan(
+            VehicleSpriteMetrics.inkHeight(style: "crossover"),
+            VehicleSpriteMetrics.inkHeight(style: "car")
+        )
+    }
+
+    /// An unknown style must land on a neutral full-frame reading rather than
+    /// on some other silhouette's offsets.
+    func testUnknownStyleGetsTheIdentityBounds() {
+        let b = VehicleSpriteMetrics.inkBounds(style: "hovercraft")
+        XCTAssertEqual(b.top, 0.0, accuracy: 0.0001)
+        XCTAssertEqual(b.bottom, 1.0, accuracy: 0.0001)
+        XCTAssertEqual(VehicleSpriteMetrics.centeringOffset(style: "hovercraft"), 0.0, accuracy: 0.0001)
+    }
+}
