@@ -163,7 +163,7 @@ struct ReactionsListSheet: View {
     @ViewBuilder
     private func content(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         if isLoading {
-            PixelCarLoader(label: nil, height: 90)
+            SkeletonPlaceholder(shape: .row, count: 5)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .padding(.top, 30)
         } else if loadFailed {

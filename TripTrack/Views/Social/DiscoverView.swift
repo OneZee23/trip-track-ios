@@ -140,9 +140,9 @@ struct DiscoverView: View {
             )
 
             if isLoadingSuggested, suggested.isEmpty {
-                PixelCarLoader(label: nil, height: 80)
+                SkeletonPlaceholder(shape: .row, count: 5)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
+                    .padding(.top, 8)
             } else if suggested.isEmpty {
                 emptyStateCard(
                     icon: "person.2.wave.2",
@@ -175,9 +175,9 @@ struct DiscoverView: View {
             )
 
             if isSearching, results.isEmpty {
-                PixelCarLoader(label: nil, height: 80)
+                SkeletonPlaceholder(shape: .row, count: 5)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
+                    .padding(.top, 8)
             } else if results.isEmpty {
                 emptyStateCard(
                     icon: "magnifyingglass",

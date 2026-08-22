@@ -1,57 +1,54 @@
 import SwiftUI
 
-/// Pixel-car loader: the brand icon parked on a dashed road. Used as a
-/// calm empty-state placeholder on social screens. Used to slide across
-/// the frame — got rid of the animation because the motion kept drawing
-/// the eye away from the accompanying label every time the list refetched.
+/// What a screen shows while it is fetching.
+///
+/// It used to be a small car sprite floating over a dashed hairline on a bare
+/// cream background — the one branded surface in the app still speaking a
+/// different visual language from the drawn scenes everywhere else, and the
+/// orange body washed out against the warm page it stood on.
+///
+/// It is a scene now, from the same family: the road is IN the picture, so the
+/// drawn line went away with it. The car is on its way somewhere, which is what
+/// waiting for a fetch is.
+///
+/// The breathing is deliberate and deliberately small. A completely still
+/// indicator is indistinguishable from a screen that has hung, and the previous
+/// version's answer — sliding the car across the frame — was removed because
+/// the motion pulled the eye off the label every time a list refetched. Opacity
+/// alone reads as alive without asking to be watched.
 struct PixelCarLoader: View {
     var label: String?
+    /// Height available for the artwork. Call sites pass anything from 80 for
+    /// an inline row to 120 for a full screen, so the scene is fitted to what
+    /// it is given rather than to a number chosen here.
     var height: CGFloat = 120
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var breathing = false
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
+        let side = min(height, 132)
 
         VStack(spacing: 14) {
-            GeometryReader { geo in
-                let roadY = geo.size.height * 0.7
-                ZStack {
-                    Path { p in
-                        p.move(to: CGPoint(x: 0, y: roadY))
-                        p.addLine(to: CGPoint(x: geo.size.width, y: roadY))
-                    }
-                    .stroke(
-                        // Was 0.35 and read as a hairline the car floated over.
-                        // The road is the other half of this picture.
-                        c.textTertiary.opacity(0.55),
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [9, 8])
-                    )
-
-                    // The sprite used to be a square canvas whose car filled
-                    // just over half the height, so a 34 pt frame drew an 18 pt
-                    // car — small and washed out on a cream background. The
-                    // asset is cropped to the car now; the frame is the car.
-                    let carHeight = min(52, geo.size.height * 0.42)
-
-                    // A shadow on the road, not under a floating object: it is
-                    // what makes the car read as standing on the dashes rather
-                    // than hovering over them.
-                    Ellipse()
-                        .fill(Color.black.opacity(0.14))
-                        .frame(width: carHeight * 1.5, height: carHeight * 0.2)
-                        .blur(radius: carHeight * 0.09)
-                        .position(x: geo.size.width / 2, y: roadY)
-
-                    Image("PixelCar")
-                        .resizable()
-                        .interpolation(.none)
-                        .scaledToFit()
-                        .frame(height: carHeight)
-                        .position(x: geo.size.width / 2, y: roadY - carHeight / 2 + 2)
-                }
-            }
-            .frame(height: height)
+            Image("loading_road")
+                .resizable()
+                // After `resizable()`, as at every other pixel-art call site.
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(width: side, height: side)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .opacity(breathing ? 1.0 : 0.72)
+                .animation(
+                    reduceMotion
+                        ? nil
+                        : .easeInOut(duration: 1.1).repeatForever(autoreverses: true),
+                    value: breathing
+                )
+                .onAppear { breathing = true }
+                // The label says what is happening; the picture is decoration.
+                .accessibilityHidden(true)
 
             if let label {
                 Text(label)

@@ -62,9 +62,9 @@ struct FollowListView: View {
                 segmentHeader(c)
 
                 if isLoading, users.isEmpty {
-                    PixelCarLoader(label: nil, height: 100)
+                    SkeletonPlaceholder(shape: .row, count: 6)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
+                        .padding(.top, 12)
                 } else if let err = loadError, users.isEmpty {
                     errorState(err, c: c, lng: lng)
                 } else if users.isEmpty {

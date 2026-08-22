@@ -735,11 +735,12 @@ struct FeedView: View {
         // empty-state awkwardness when there are no recommendations.
 
         if store.isLoading, store.trips.isEmpty {
-            PixelCarLoader(
-                label: AppStrings.feedLoadingFeed(lng)
-            )
-            .padding(.horizontal, 16)
-            .padding(.vertical, 40)
+            // Card-shaped, because that is what is about to appear. A
+            // picture here means the layout is built twice and the jump is
+            // the part that feels slow.
+            SkeletonPlaceholder(shape: .card, count: 3)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
         } else if store.lastError != nil, store.trips.isEmpty {
             socialErrorState(c, lng: lng, store: store)
         } else if store.trips.isEmpty {
@@ -1043,7 +1044,7 @@ struct FeedView: View {
     /// red glyph, which read as a crash rather than as "no signal".
     private func socialErrorState(_ c: AppTheme.Colors, lng: LanguageManager.Language, store: SocialFeedStore) -> some View {
         VStack(spacing: 14) {
-            FeedStateRing(systemImage: "wifi.slash")
+            EmptyStateIllustration(name: "empty_offline", size: 148)
                 .padding(.top, 40)
 
             Text(AppStrings.feedCouldnTLoad(lng))

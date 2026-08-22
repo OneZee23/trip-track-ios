@@ -24,9 +24,9 @@ struct BlockedListView: View {
         ScrollView {
             VStack(spacing: 10) {
                 if isLoading, users.isEmpty {
-                    PixelCarLoader(label: nil, height: 100)
+                    SkeletonPlaceholder(shape: .row, count: 4)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
+                        .padding(.top, 12)
                 } else if loadFailed, users.isEmpty {
                     // Failed ≠ empty: an offline fetch must not positively
                     // claim «Вы никого не блокировали» (same rule as

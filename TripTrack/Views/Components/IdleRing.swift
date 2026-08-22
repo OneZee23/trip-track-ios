@@ -13,10 +13,21 @@ struct IdleRing: View {
                 .stroke(AppTheme.accent.opacity(0.25), lineWidth: 2)
                 .frame(width: 100, height: 100)
             ZStack {
-                // `accentBg` (8%) washed out against the card behind it at
-                // this diameter — canon 114:153 fills the disc at ~15%.
+                // The disc used to be accent at 15%, which is a warm pale
+                // wash — and a warm orange car on a warm pale wash has almost
+                // no contrast, so the sprite read as bleached. It takes the
+                // sprite plate now, the same ground every other vehicle in the
+                // app stands on. The accent stays as the ring around it, where
+                // it separates the hero from the card instead of competing
+                // with the thing inside it.
                 Circle()
-                    .fill(AppTheme.accent.opacity(0.15))
+                    .fill(
+                        LinearGradient(
+                            colors: [AppTheme.spritePlateTop, AppTheme.spritePlateBottom],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
                 Circle()
                     .stroke(AppTheme.accent, lineWidth: 2.5)
                 Image("PixelCar")

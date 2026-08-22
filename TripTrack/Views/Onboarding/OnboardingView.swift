@@ -160,26 +160,13 @@ struct OnboardingView: View {
     private var welcomePage: some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(spacing: 0) {
-            // IdleRing hero: pale outer ring + 2pt accent ring on a peach
-            // disc, pixel car centered (same art the Record screen uses).
-            ZStack {
-                Circle()
-                    .stroke(AppTheme.accent.opacity(0.2), lineWidth: 1)
-                    .frame(width: 100, height: 100)
-                Circle()
-                    .fill(Color(red: 245/255, green: 228/255, blue: 218/255))
-                    .overlay(Circle().stroke(AppTheme.accent, lineWidth: 2))
-                    .frame(width: 82, height: 82)
-                Image("PixelCar")
-                    .resizable()
-                    .interpolation(.none)
-                    // The sprite is cropped to the car and wider than tall; a
-                    // square box spent a third of its height on empty pixels
-                    // and drew a car two thirds the size it looked in code.
-                    .scaledToFit()
-                    .frame(width: 58, height: 36)
-            }
-            .padding(.top, 61)
+            // The first screen leads with the same wide scene as the four
+            // after it. It used to be a small car in a ring — a device that
+            // reads as a placeholder avatar rather than an opening statement,
+            // and one that left page one looking like a different app from
+            // pages two through five.
+            onboardingHero("loading_road")
+                .padding(.top, 56)
 
             VStack(spacing: 2) {
                 Text(AppStrings.onboardingWelcomeTitle1(lang.language))

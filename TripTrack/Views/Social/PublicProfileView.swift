@@ -1322,9 +1322,9 @@ struct PublicProfileView: View {
     }
 
     private func skeleton() -> some View {
-        PixelCarLoader(label: nil, height: 80)
+        SkeletonPlaceholder(shape: .card, count: 2)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
+            .padding(.vertical, 12)
     }
 
     private func errorRow(_ msg: String, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {

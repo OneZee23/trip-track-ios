@@ -176,19 +176,28 @@ fileprivate struct SignInIdleRing: View {
                 .stroke(AppTheme.accent.opacity(0.25), lineWidth: 2)
                 .frame(width: 98, height: 98)
             ZStack {
+                // Was a pale accent wash, which bleached the orange car on it.
+                // The sprite plate is the ground every vehicle in the app
+                // stands on; the accent stays as the ring.
                 Circle()
-                    .fill(AppTheme.accent.opacity(0.18))
+                    .fill(
+                        LinearGradient(
+                            colors: [AppTheme.spritePlateTop, AppTheme.spritePlateBottom],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
                 Circle()
                     .stroke(AppTheme.accent, lineWidth: 2.5)
                 Image("PixelCar")
                     .resizable()
                     .interpolation(.none)
-                    // Non-square sprite — fit, don't squash.
+                    // The sprite is cropped to the car and wider than tall; a
+                    // square box spends a third of its height on nothing.
                     .scaledToFit()
-                    .frame(width: 46, height: 46)
+                    .frame(width: 56, height: 34)
             }
             .frame(width: 82, height: 82)
-            .opacity(0.85)
         }
         .frame(width: 100, height: 100)
     }

@@ -137,9 +137,9 @@ struct DebugLogsView: View {
                 .surfaceCard(cornerRadius: 16)
             }
         } else {
-            PixelCarLoader(label: nil, height: 100)
+            SkeletonPlaceholder(shape: .row, count: 6)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 40)
+                .padding(.top, 12)
         }
     }
 

@@ -64,7 +64,10 @@ struct GroupsComingSoonView: View {
                 // Shared Figma 114:151 hero (accent-tinted outer ring + peach
                 // accentBg disc) — same component instance the frame places
                 // here (117:2280).
-                IdleRing()
+                // A generic car in a ring told you nothing about clubs. The
+                // marks themselves do, and they are the thing the screen is
+                // promising.
+                ClubMarkCluster()
 
                 Text(AppStrings.groupsComingTitle(l))
                     .font(.inter(21, weight: .heavy))
@@ -106,27 +109,43 @@ struct GroupsComingSoonView: View {
 
     /// Example clubs (Figma order). Two fixed rows so the wrap matches the
     /// frame on every device width. Miata/VAG names stay untranslated.
+    /// The chips name real clubs from the catalogue rather than four hardcoded
+    /// strings, so the marks and the names cannot drift apart — and the emoji
+    /// they used to carry were the last system glyphs on this screen.
     private func chipRows(c: AppTheme.Colors) -> some View {
-        VStack(spacing: 7) {
-            HStack(spacing: 7) {
-                chip("🏎 Miata Club", c: c)
-                chip("⚙️ VAG", c: c)
-            }
-            HStack(spacing: 7) {
-                chip(AppStrings.groupsChipTrucking(lang.language), c: c)
-                chip(AppStrings.groupsChipOffroad(lang.language), c: c)
+        let clubs = Array(Club.all.prefix(4))
+        return VStack(spacing: 7) {
+            ForEach(Array(stride(from: 0, to: clubs.count, by: 2)), id: \.self) { i in
+                HStack(spacing: 7) {
+                    ForEach(clubs[i..<min(i + 2, clubs.count)]) { club in
+                        chip(club, c: c)
+                    }
+                }
             }
         }
     }
 
-    private func chip(_ text: String, c: AppTheme.Colors) -> some View {
-        Text(text)
-            .font(.inter(13, weight: .semibold))
-            .foregroundStyle(c.text)
-            .padding(.horizontal, 13)
-            .padding(.vertical, 8)
-            .background(c.card, in: Capsule())
-            .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+    private func chip(_ club: Club, c: AppTheme.Colors) -> some View {
+        HStack(spacing: 7) {
+            if let asset = club.asset {
+                Image(asset)
+                    .resizable()
+                    // After `resizable()`, as at every pixel-art call site.
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+            } else {
+                Text(club.emoji).font(.system(size: 13))
+            }
+            Text(club.name(lang.language))
+                .font(.inter(13, weight: .semibold))
+                .foregroundStyle(c.text)
+        }
+        .padding(.leading, 9)
+        .padding(.trailing, 13)
+        .padding(.vertical, 7)
+        .background(c.card, in: Capsule())
+        .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
     }
 
     // MARK: - CTAs

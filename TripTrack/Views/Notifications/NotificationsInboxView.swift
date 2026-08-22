@@ -243,7 +243,16 @@ struct NotificationsInboxView: View {
     @ViewBuilder
     private func content(c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
         if store.isLoading && store.items.isEmpty {
-            VStack { Spacer(); PixelCarLoader(label: nil, height: 80); Spacer() }
+            // The skeleton is content-sized, so it has to be told to claim the
+            // sheet the way the loaded list does — without this the sheet
+            // shrinks to the height of six grey rows and floats mid-screen.
+            VStack(spacing: 0) {
+                SkeletonPlaceholder(shape: .row, count: 6)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if store.items.isEmpty {
             emptyState(c: c, lng: lng)
         } else {
