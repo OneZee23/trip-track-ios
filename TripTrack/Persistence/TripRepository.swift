@@ -768,6 +768,7 @@ final class CoreDataTripRepository: TripRepository {
             region: entity.region, isPrivate: entity.isPrivate,
             vehicleId: entity.vehicleId, fuelCurrency: entity.fuelCurrency,
             previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds,
+            xpEarned: Int(entity.xpEarned),
             companions: companions, isOnServer: entity.serverCreatedAt != nil
         )
     }

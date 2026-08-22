@@ -745,6 +745,7 @@ extension Translations {
         "languagePickerFootnote": "Arayüz seçtiğin dilde yeniden yüklenir.",
         "themePickerFootnote": "Sistem, iPhone'unun ayarını izler.",
         "loadingTrips": "Geziler yükleniyor",
+        "loadingGeneric": "Yükleniyor",
         "avgSpeedPickerFootnote": "Genel, mesafeyi molalar dâhil tüm geziye böler. Hareket hâlinde ise yalnızca gerçekten sürdüğün süreyi sayar.",
         "statsYearAgoToday": "BİR YIL ÖNCE BUGÜN",
         "statsHoursOnRoad": "sa yolda",

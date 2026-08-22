@@ -745,6 +745,7 @@ extension Translations {
         "languagePickerFootnote": "Antarmuka dimuat ulang dalam bahasa yang dipilih.",
         "themePickerFootnote": "Sistem mengikuti pengaturan iPhone-mu.",
         "loadingTrips": "Memuat perjalanan",
+        "loadingGeneric": "Memuat",
         "avgSpeedPickerFootnote": "Keseluruhan membagi jarak dengan seluruh waktu perjalanan, termasuk berhenti. Saat bergerak hanya menghitung waktu kamu benar-benar berkendara.",
         "statsYearAgoToday": "SETAHUN LALU HARI INI",
         "statsHoursOnRoad": "j di jalan",

@@ -745,6 +745,7 @@ extension Translations {
         "languagePickerFootnote": "Интерфейс таңдалған тілде қайта жүктеледі.",
         "themePickerFootnote": "Жүйелік — iPhone параметріне сүйенеді.",
         "loadingTrips": "Сапарлар жүктелуде",
+        "loadingGeneric": "Жүктелуде",
         "avgSpeedPickerFootnote": "Жалпы — қашықтықты аялдамаларымен қоса бүкіл сапар уақытына бөледі. Қозғалыста — тек шынымен жүрген уақытты санайды.",
         "statsYearAgoToday": "БІР ЖЫЛ БҰРЫН ОСЫ КҮНІ",
         "statsHoursOnRoad": "сағ жолда",

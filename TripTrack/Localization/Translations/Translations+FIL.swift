@@ -745,6 +745,7 @@ extension Translations {
         "languagePickerFootnote": "Magre-reload ang interface sa napiling wika.",
         "themePickerFootnote": "Sinusunod ng System ang setting ng iPhone mo.",
         "loadingTrips": "Nilo-load ang mga biyahe",
+        "loadingGeneric": "Naglo-load",
         "avgSpeedPickerFootnote": "Hinahati ng Pangkalahatan ang distansya sa buong biyahe, kasama ang mga hinto. Ang Habang umaandar ay ang oras lang na talagang nagmamaneho ka.",
         "statsYearAgoToday": "ISANG TAON NA ANG NAKARAAN, NGAYONG ARAW",
         "statsHoursOnRoad": "o sa biyahe",

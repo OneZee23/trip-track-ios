@@ -10,9 +10,10 @@ import SwiftUI
 /// "map failed to load" look the user rejected on the feed (2026-08-06).
 struct ProfileTripCardView: View {
     let trip: Trip
-    let authorName: String
-    let authorAvatar: String   // emoji
     let level: Int
+    /// The vehicle this trip was driven in, when it still exists in the garage.
+    /// Nil for trips recorded without one, and for a vehicle since deleted.
+    var vehicle: Vehicle? = nil
     let onTap: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
@@ -71,43 +72,54 @@ struct ProfileTripCardView: View {
 
     // MARK: - Author Row
 
+    /// One line: the level held when this was driven, the date and place, and
+    /// what it was driven in. No avatar and no name.
+    ///
+    /// This card is a port of the FeedCard master, where that chrome tells you
+    /// about a stranger. In your OWN history it tells you who you are, which
+    /// you know — a tester put it exactly that way. The level survives only
+    /// because it is now the level held AT THE TIME: a drive from two years ago
+    /// says LVL 3 while yesterday says LVL 9. That is a fact about the drive
+    /// rather than about the account, and reading down the list is the one
+    /// place the app shows growth as a shape instead of a number.
     private func authorRow(_ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(c.cardAlt)
-                .frame(width: 36, height: 36)
-                .overlay {
-                    Text(authorAvatar)
-                        .font(.system(size: 19))
-                }
+        HStack(spacing: 7) {
+            Text("LVL \(level)")
+                // fixedSize twice over: the FONT must not rescale with Dynamic
+                // Type (custom faces do, the SF chrome beside them does not),
+                // and the LAYOUT must not compress — the line truncates on the
+                // place name before the tag gives up a point.
+                .font(.custom("Handjet-Black", fixedSize: 13))
+                .foregroundStyle(AppTheme.gold)
+                .fixedSize()
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    Text(authorName)
-                        .font(.inter(14, weight: .bold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+            Text(dateRegionText)
+                .font(.inter(11))
+                .foregroundStyle(c.textTertiary)
+                .lineLimit(1)
 
-                    Text("LVL \(level)")
-                        // fixedSize twice over: the FONT must not rescale with
-                        // Dynamic Type (custom faces do, the SF chrome next to
-                        // them doesn't), and the LAYOUT must not compress — a
-                        // long name has to truncate before the tag gives up a
-                        // single point.
-                        .font(.custom("Handjet-Black", fixedSize: 13))
-                        .foregroundStyle(AppTheme.gold)
-                        .fixedSize()
-                }
-
-                Text(dateRegionText)
+            if let vehicle, let asset = vehicle.avatarImageName {
+                // «Which car was this?» is a caption-weight fact, so it rides
+                // on this line rather than growing the card a row of its own.
+                Text("·")
                     .font(.inter(11))
                     .foregroundStyle(c.textTertiary)
+                    .fixedSize()
+                Image(asset)
+                    .resizable()
+                    // After `resizable()`, as at every pixel-art call site.
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .frame(width: 22, height: 14)
+                    .fixedSize()
+                Text(vehicleLabel(vehicle))
+                    .font(.inter(11, weight: .semibold))
+                    .foregroundStyle(c.textSecondary)
                     .lineLimit(1)
+                    .layoutPriority(1)
             }
-            // Claim the leftover width so the trailing glyph sits flush right
-            // regardless of how short the name is.
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer(minLength: 6)
 
             // Canon hangs a «⋯» menu off this slot. Everything that menu opens
             // on the feed (edit / share / make private / delete) is either
@@ -117,11 +129,11 @@ struct ProfileTripCardView: View {
             // replaces showed and that would otherwise be lost from История.
             if trip.isPrivate {
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .foregroundStyle(c.textTertiary)
             } else {
                 Image(systemName: "globe")
-                    .font(.system(size: 15))
+                    .font(.system(size: 14))
                     .foregroundStyle(AppTheme.green)
             }
         }
@@ -181,6 +193,14 @@ struct ProfileTripCardView: View {
                 c: c
             )
         }
+    }
+
+    /// The garage name, or the silhouette's own word when the vehicle was
+    /// never named — «Кроссовер» beats an empty gap.
+    private func vehicleLabel(_ vehicle: Vehicle) -> String {
+        let name = vehicle.name.trimmingCharacters(in: .whitespaces)
+        guard name.isEmpty else { return name }
+        return AppStrings.avatarStyleName(lang.language, style: vehicle.avatarStyle)
     }
 
     /// Inter ExtraBold, not SF Heavy: nominally the same 800 weight, visibly

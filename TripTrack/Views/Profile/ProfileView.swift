@@ -590,18 +590,6 @@ struct ProfileView: View {
         return trimmed
     }
 
-    /// The author name printed on every История card. Same source as the header
-    /// once a real name exists, but a nameless account falls back to «Вы» —
-    /// a card captioned «Добавьте имя · 8 км» reads as the trip's title and
-    /// advertises an unfinished profile back at its own owner.
-    private var cardAuthorName: String {
-        let trimmed = auth.userName?.trimmingCharacters(in: .whitespaces) ?? ""
-        guard auth.isSignedIn, !trimmed.isEmpty else {
-            return AppStrings.meGuestName(lang.language)
-        }
-        return trimmed
-    }
-
     /// «Здесь появятся ваши поездки» (canon). The point of the copy is the
     /// second line: recording is automatic and needs no account — that's the
     /// product's whole pitch, and the empty state is where it lands.
@@ -752,7 +740,7 @@ struct ProfileView: View {
                     assetName: vehicle.avatarImageName,
                     fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
                     plateSize: 44,
-                    spriteSize: 30,
+                    uniformHeight: true,
                     cornerRadius: 10
                 )
 
@@ -888,13 +876,16 @@ struct ProfileView: View {
                 // carries a 4pt top pad.
                 .padding(.bottom, 12)
             case .list:
+                // The level shown is the one held WHEN each trip was driven,
+                // not today's. Same number on every card told the owner what
+                // they already knew; this way the list shows them growing.
+                let historicalLevels = TripLevelHistory.levels(for: trips)
                 LazyVStack(spacing: 12) {
                     ForEach(trips) { trip in
                         ProfileTripCardView(
                             trip: trip,
-                            authorName: cardAuthorName,
-                            authorAvatar: settings.avatarEmoji,
-                            level: settings.profileLevel,
+                            level: historicalLevels?[trip.id] ?? settings.profileLevel,
+                            vehicle: settings.vehicles.first { $0.id == trip.vehicleId },
                             onTap: { push(.trip(trip.id)) }
                         )
                     }

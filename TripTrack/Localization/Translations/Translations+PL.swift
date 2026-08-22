@@ -745,6 +745,7 @@ extension Translations {
         "languagePickerFootnote": "Interfejs przeładuje się w wybranym języku.",
         "themePickerFootnote": "Systemowy podąża za ustawieniem iPhone'a.",
         "loadingTrips": "Wczytywanie tras",
+        "loadingGeneric": "Ładowanie",
         "avgSpeedPickerFootnote": "Ogólna dzieli dystans przez cały czas trasy, razem z postojami. W ruchu liczy tylko czas, kiedy naprawdę jechałeś.",
         "statsYearAgoToday": "ROK TEMU TEGO DNIA",
         "statsHoursOnRoad": "godz. w trasie",

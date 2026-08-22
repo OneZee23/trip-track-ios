@@ -745,6 +745,7 @@ extension Translations {
         "languagePickerFootnote": "Інтерфейс перезавантажиться обраною мовою.",
         "themePickerFootnote": "Системна слідує налаштуванням iPhone.",
         "loadingTrips": "Завантажуємо поїздки",
+        "loadingGeneric": "Завантаження",
         "avgSpeedPickerFootnote": "Загальна ділить відстань на весь час поїздки, разом зі стоянками. У русі рахує тільки той час, коли ви їхали.",
         "statsYearAgoToday": "РІК ТОМУ ЦЬОГО ДНЯ",
         "statsHoursOnRoad": "год у дорозі",

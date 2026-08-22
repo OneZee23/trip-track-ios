@@ -745,6 +745,7 @@ extension Translations {
         "languagePickerFootnote": "L'interface se recharge dans la langue choisie.",
         "themePickerFootnote": "Système suit le réglage de votre iPhone.",
         "loadingTrips": "Chargement des trajets",
+        "loadingGeneric": "Chargement",
         "avgSpeedPickerFootnote": "Globale divise la distance par la durée totale du trajet, arrêts compris. En mouvement ne compte que le temps où vous rouliez.",
         "statsYearAgoToday": "IL Y A UN AN JOUR POUR JOUR",
         "statsHoursOnRoad": "h sur la route",

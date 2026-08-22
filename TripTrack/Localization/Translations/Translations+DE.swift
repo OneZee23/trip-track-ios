@@ -745,6 +745,7 @@ extension Translations {
         "languagePickerFootnote": "Die Oberfläche lädt in der gewählten Sprache neu.",
         "themePickerFootnote": "System folgt der Einstellung deines iPhones.",
         "loadingTrips": "Fahrten werden geladen",
+        "loadingGeneric": "Wird geladen",
         "avgSpeedPickerFootnote": "Gesamt teilt die Strecke durch die ganze Fahrt, Stopps eingeschlossen. In Bewegung zählt nur die Zeit, in der du tatsächlich gefahren bist.",
         "statsYearAgoToday": "HEUTE VOR EINEM JAHR",
         "statsHoursOnRoad": "Std. unterwegs",

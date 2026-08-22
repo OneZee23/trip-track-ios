@@ -34,6 +34,14 @@ struct Trip: Identifiable, Codable {
     var fuelCurrency: String?
     var previewPolyline: Data?
     var earnedBadgeIds: [String]
+    /// XP this single trip was worth, stamped when it finished.
+    ///
+    /// Kept on the trip rather than only summed into the profile because it is
+    /// the only way to answer «what level was I when I drove this?» — the
+    /// profile stores one running total and cannot be rewound. Zero for trips
+    /// written before the field existed and for anything restored from a
+    /// server that does not send it.
+    var xpEarned: Int
     /// Offline CACHE of the server's companion roster, for the viewer's OWN
     /// trips only — see `TripCompanion`. Not the source of truth
     /// (`/companions/list` via `CompanionsStore` is); this is what lets the
@@ -254,6 +262,7 @@ struct Trip: Identifiable, Codable {
          region: String? = nil, isPrivate: Bool = true, vehicleId: UUID? = nil,
          fuelCurrency: String? = nil,
          previewPolyline: Data? = nil, earnedBadgeIds: [String] = [],
+         xpEarned: Int = 0,
          companions: [TripCompanion] = [], isOnServer: Bool = false) {
         self.id = id
         self.startDate = startDate
@@ -274,6 +283,7 @@ struct Trip: Identifiable, Codable {
         self.fuelCurrency = fuelCurrency
         self.previewPolyline = previewPolyline
         self.earnedBadgeIds = earnedBadgeIds
+        self.xpEarned = xpEarned
         self.companions = companions
         self.isOnServer = isOnServer
     }

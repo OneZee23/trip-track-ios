@@ -4308,6 +4308,12 @@ enum AppStrings {
         tr(lang, "loadingTrips", ru: "Загружаем поездки", en: "Loading trips")
     }
 
+    /// Spoken for a skeleton block. The grey shapes mean nothing to a screen
+    /// reader, and a dozen unlabelled rectangles are worse than one sentence.
+    static func loadingGeneric(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "loadingGeneric", ru: "Загружаем", en: "Loading")
+    }
+
     static func avgSpeedPickerFootnote(_ lang: LanguageManager.Language) -> String {
         tr(lang, "avgSpeedPickerFootnote",
            ru: "Общая делит расстояние на всё время поездки, вместе со стоянками. В движении считает только то время, когда вы ехали.",

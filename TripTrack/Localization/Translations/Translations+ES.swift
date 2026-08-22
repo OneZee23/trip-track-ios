@@ -745,6 +745,7 @@ extension Translations {
         "languagePickerFootnote": "La interfaz se recarga en el idioma elegido.",
         "themePickerFootnote": "Sistema sigue el ajuste de tu iPhone.",
         "loadingTrips": "Cargando viajes",
+        "loadingGeneric": "Cargando",
         "avgSpeedPickerFootnote": "Total divide la distancia entre todo el viaje, paradas incluidas. En movimiento cuenta solo el tiempo en que ibas conduciendo.",
         "statsYearAgoToday": "HOY HACE UN AÑO",
         "statsHoursOnRoad": "h en ruta",
