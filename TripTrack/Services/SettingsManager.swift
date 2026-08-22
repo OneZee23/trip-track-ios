@@ -440,7 +440,12 @@ final class SettingsManager: ObservableObject {
         plate: String,
         plateVisible: Bool,
         visibleToOthers: Bool,
-        avatarStyle: String = VehicleAvatar.defaultStyle
+        // No default. A caller that says nothing about the silhouette is not
+        // asking for a saloon, but the assignment below cannot tell the
+        // difference — and a defaulted argument makes that a silent data loss
+        // the compiler is happy with. Required, so forgetting it is an error
+        // rather than a vehicle quietly turning back into a car.
+        avatarStyle: String
     ) {
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()

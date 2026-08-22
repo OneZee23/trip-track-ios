@@ -902,11 +902,14 @@ final class CoreDataTripRepository: TripRepository {
         entity.id = p.id
         entity.name = p.name
         entity.avatarEmoji = p.avatarEmoji
-        // A server that has not shipped the column sends nothing, which means
-        // «car» — and leaving the local value alone would be wrong here: the
-        // remote row is the authority, and a silently kept local silhouette is
-        // how two devices end up drawing different vehicles for the same car.
-        entity.avatarStyle = p.avatarStyle ?? VehicleAvatar.defaultStyle
+        // Absent is not «car» — it is the server declining to have an opinion,
+        // and the two have to be told apart the same way the five optional
+        // fields below tell them apart. Reading absence as «car» meant every
+        // pull reset the silhouette this device had just set, including the
+        // pull that immediately follows uploading it: pick a scooter, sync,
+        // watch it turn back into a saloon. No backend has the column yet, so
+        // that was every pull for every signed-in person.
+        if let style = p.avatarStyle { entity.avatarStyle = style }
         entity.odometerKm = p.odometerKm
         entity.vehicleLevel = Int32(p.level)
         entity.stickersJSON = p.stickersJson
