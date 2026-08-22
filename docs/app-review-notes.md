@@ -4,7 +4,106 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.6.1 — twelve more languages (current submission)
+## v0.6.2 — vehicles and illustrations (current submission)
+
+A cosmetic release on top of 0.6.1. No new permissions, no change to what data
+is collected, stored or transmitted, no change to accounts or deletion. The
+0.6.0 notes further down still describe the app accurately. Paste **this**
+section, then the English 0.6.0 section under it.
+
+### English
+
+```
+TripTrack 0.6.2 — Reviewer Notes
+
+WHAT CHANGED
+This release is about how the app looks. The garage previously offered one car
+silhouette in eight colours; it now offers ten — saloon, hatchback, crossover,
+pickup, van, convertible, sports car, motorcycle, scooter and bicycle — in nine
+colours, with the shape and the colour picked on separate axes. The motorcycle,
+moped and bicycle vehicle types already existed and were all drawn as a car.
+
+Alongside that, the empty states, error states and onboarding pages now use
+illustrations drawn for this app instead of system symbols, and lists show a
+placeholder outline while loading instead of a spinner.
+
+All artwork is original, drawn for TripTrack. None of the vehicle silhouettes
+depicts a real make or model.
+
+One bug fix: a vehicle's mileage is now derived from its trips rather than
+accumulated once, so reassigning or deleting a trip updates the number.
+
+HOW TO SEE IT
+Me (last tab) → Garage → any vehicle, or «Add vehicle». The type picker is the
+top row, the colour picker below it. Changing the type of an existing vehicle
+between «Car» and «Motorcycle» switches the available silhouettes.
+
+NO NEW PERMISSIONS
+The permission set is unchanged from 0.6.0: location (including background),
+motion, Bluetooth and Photos, each requested at the point of use and each
+optional.
+
+STILL TRUE FROM 0.6.0
+• Account deletion is in the app: Me → Account & sync → Delete account. It
+  removes the server account and everything on it, and erases the trips and
+  photos on the device.
+• The app works fully offline and without an account; signing in with Apple is
+  optional and only enables cloud sync and the social side.
+• Trips are private until the user publishes them. Public trips carry reactions
+  and comments, with report and block available from the card, the profile and
+  the trip.
+• The Groups tab is still a preview of clubs that do not exist yet, with a
+  waitlist and no user content.
+```
+
+### Русский
+
+```
+TripTrack 0.6.2 — заметки для ревьюера
+
+ЧТО ИЗМЕНИЛОСЬ
+Релиз про внешний вид. Раньше в гараже был один силуэт машины в восьми цветах,
+теперь их десять — седан, хэтчбек, кроссовер, пикап, фургон, кабриолет,
+спорткар, мотоцикл, скутер и велосипед — в девяти цветах, причём тип и цвет
+выбираются отдельно. Типы «мотоцикл», «мопед» и «велосипед» в приложении уже
+были и все три рисовались легковой машиной.
+
+Вместе с этим пустые состояния, экраны ошибок и онбординг получили рисованные
+иллюстрации вместо системных значков, а списки при загрузке показывают контур
+списка вместо крутящегося индикатора.
+
+Вся графика оригинальная, нарисована для TripTrack. Ни один силуэт не
+изображает реальную марку или модель.
+
+Один баг-фикс: пробег машины теперь выводится из её поездок, а не
+накапливается один раз, поэтому перенос или удаление поездки обновляет число.
+
+ГДЕ ПОСМОТРЕТЬ
+«Я» (последняя вкладка) → Гараж → любая машина или «Добавить». Верхний ряд —
+выбор типа, под ним — выбор цвета. Смена типа с «Машина» на «Мотоцикл» меняет
+доступные силуэты.
+
+НОВЫХ РАЗРЕШЕНИЙ НЕТ
+Набор разрешений не изменился с 0.6.0: геопозиция (в том числе фоновая),
+движение, Bluetooth и Фото — каждое запрашивается в момент использования и
+каждое необязательное.
+
+ОСТАЁТСЯ ВЕРНЫМ С 0.6.0
+• Удаление аккаунта есть в приложении: «Я» → «Аккаунт и синхронизация» →
+  «Удалить аккаунт». Оно стирает серверный аккаунт со всем содержимым и
+  удаляет поездки и фотографии на устройстве.
+• Приложение полностью работает офлайн и без аккаунта; вход через Apple —
+  необязательный и включает только облачную синхронизацию и социальную часть.
+• Поездки приватны, пока пользователь не опубликует их. У публичных есть
+  реакции и комментарии, жалоба и блокировка доступны с карточки, из профиля
+  и из поездки.
+• Вкладка «Группы» — по-прежнему превью несуществующих клубов с листом
+  ожидания и без пользовательского контента.
+```
+
+---
+
+## v0.6.1 — twelve more languages (previous submission)
 
 A localization-only release on top of 0.6.0, plus two small interface fixes.
 Nothing about behaviour, data handling, permissions or account deletion changed
