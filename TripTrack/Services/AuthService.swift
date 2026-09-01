@@ -21,6 +21,14 @@ final class AuthService: ObservableObject {
     @Published private(set) var isPublicProfile: Bool?
     private(set) var userIdentifier: String?
 
+    /// True when the server definitively rejected our refresh token and the
+    /// session needs a fresh SIWA sign-in. Unlike a sign-out, ALL local
+    /// state survives (trips, pending sync ops, Cloud Sync consent, display
+    /// name) — the user chose nothing; the session just died under them.
+    /// Persisted to Keychain so a relaunch still shows the re-login prompt.
+    /// Cleared by the next successful sign-in or an explicit sign-out.
+    @Published private(set) var needsReauth: Bool = false
+
     @Published private(set) var isAuthenticating = false
     @Published var lastAuthError: APIError?
     /// Handle to the post-sign-in sync chain (performFirstSync + profile +
@@ -36,6 +44,7 @@ final class AuthService: ObservableObject {
         static let userEmail = "com.triptrack.auth.userEmail"
         static let identityToken = "com.triptrack.auth.identityToken"
         static let isSignedIn = "com.triptrack.auth.isSignedIn"
+        static let sessionExpired = "com.triptrack.auth.sessionExpired"
     }
 
     private init() {
@@ -79,6 +88,11 @@ final class AuthService: ObservableObject {
         let userId = credential.user
         authLog.debug("credential.user=\(userId) tokenSize=\(credential.identityToken?.count ?? -1)")
 
+        // A DIFFERENT Apple ID than the one whose state this device
+        // preserved (soft expiry keeps queue/consent/identity) must not
+        // inherit any of it — purge BEFORE adopting the new identity.
+        prepareForIdentity(userId)
+
         try? KeychainHelper.saveString(userId, for: Keys.userIdentifier)
         userIdentifier = userId
 
@@ -94,9 +108,14 @@ final class AuthService: ObservableObject {
         //   4. Random road-trip-themed fallback — only when no other source
         //      had anything.
         if let fullName = credential.fullName {
-            let name = [fullName.givenName, fullName.familyName]
-                .compactMap { $0 }
-                .joined(separator: " ")
+            // Clamp to what the server will accept. `displayName` is capped at
+            // 30 there and the pipe rejects the WHOLE request on overflow —
+            // with the launch retry in place an over-long Apple name would
+            // mean a refused push on every cold start, forever.
+            let name = ContentFilter.clampedDisplayName(
+                [fullName.givenName, fullName.familyName]
+                    .compactMap { $0 }
+                    .joined(separator: " "))
             if !name.isEmpty {
                 try? KeychainHelper.saveString(name, for: Keys.userName)
                 userName = name
@@ -139,9 +158,16 @@ final class AuthService: ObservableObject {
             // hydrate path on next launch.
             try? KeychainHelper.save(tokenData, for: Keys.identityToken)
             try? KeychainHelper.saveString("true", for: Keys.isSignedIn)
+            // New session begins — kill any in-flight refresh / recovery
+            // loop of the previous (dead) session BEFORE storing the new
+            // pair, so a stale result can't clobber it.
+            APIClient.shared.sessionBoundaryCrossed()
             TokenStore.shared.set(accessToken: response.accessToken, refreshToken: response.refreshToken)
             TokenStore.shared.setAccountId(response.account.id)
             isSignedIn = true
+            // A fresh session settles any earlier soft expiry.
+            KeychainHelper.delete(key: Keys.sessionExpired)
+            needsReauth = false
             // Stamp anon account id on Sentry scope — group events per
             // user without revealing identity (no email, no name).
             SentryService.setAccount(id: response.account.id.uuidString)
@@ -409,26 +435,54 @@ final class AuthService: ObservableObject {
         // flight with USER_NOT_AUTH and trigger a second forceSignOut.
         postSignInSyncTask?.cancel()
         postSignInSyncTask = nil
+        // Kill the old session's in-flight refresh + recovery loop so a
+        // stale result can't land on whatever session comes next.
+        APIClient.shared.sessionBoundaryCrossed()
 
         TokenStore.shared.clear()
         KeychainHelper.delete(key: Keys.identityToken)
         KeychainHelper.delete(key: Keys.isSignedIn)
+        // A deliberate sign-out settles any pending soft expiry — the user
+        // should not land on a "session expired" prompt they didn't cause.
+        KeychainHelper.delete(key: Keys.sessionExpired)
+        needsReauth = false
+        // The Apple user id goes too — a real sign-out drops the identity
+        // entirely (name/email are wiped inside purgeAccountScopedState).
+        KeychainHelper.delete(key: Keys.userIdentifier)
+
+        isSignedIn = false
+        // Identity-shaped state (name/email keychain + memory) and the
+        // account-scoped caches share cleanup with the cross-account
+        // sign-in path — see purgeAccountScopedState.
+        SentryService.setAccount(id: nil)
+        userIdentifier = nil
+        purgeAccountScopedState()
+    }
+
+    /// Everything on this device that belongs to the ACCOUNT rather than the
+    /// device: pending sync ops, Cloud Sync consent, display identity,
+    /// social/inbox/companions caches, APNs token, pending-public trips.
+    /// Called from `clearLocalIdentity` (sign-out / delete) and from
+    /// `prepareForIdentity` when a DIFFERENT Apple ID signs in after a soft
+    /// session expiry — which preserves all of this for the SAME user, so a
+    /// different user must not inherit it.
+    @MainActor
+    private func purgeAccountScopedState() {
         // Wipe identity-shaped Keychain entries. Without this, signing out
         // User A and signing in User B on the same physical device had
         // `loadFromKeychain` replay User A's name onto User B's account.
-        KeychainHelper.delete(key: Keys.userIdentifier)
         KeychainHelper.delete(key: Keys.userName)
         KeychainHelper.delete(key: Keys.userEmail)
-
-        isSignedIn = false
         userName = nil
         userEmail = nil
+        // The next Apple ID on this phone has pushed nothing yet. Leaving the
+        // previous account's «confirmed» behind would swallow its first push
+        // and leave it nameless — the very failure this latch exists to catch.
+        ProfileSyncLatch.reset()
         // Server-flag mirror back to "unknown" — the next account must not
         // inherit the previous account's privacy-toggle state, and the gate
         // re-verifies endpoint availability via refreshMe() after sign-in.
         isPublicProfile = nil
-        SentryService.setAccount(id: nil)
-        userIdentifier = nil
         // Reset the website-globe opt-in mirror so account A's toggle doesn't
         // visually leak onto account B on the same device before B's login
         // read-back seeds the real value. (Server state is per-account; this is
@@ -473,6 +527,22 @@ final class AuthService: ObservableObject {
         // choice; clear the GDPR-shown marker so the dialog re-fires.
         SettingsManager.shared.cloudSyncEnabled = false
         UserDefaults.standard.set(false, forKey: "com.triptrack.sync.firstToggleShown")
+    }
+
+    /// Cross-account guard for sign-in. Soft session expiry deliberately
+    /// preserves the previous user's sync queue, Cloud Sync consent, and
+    /// identity so the SAME user re-signing in loses nothing — but that
+    /// makes it load-bearing to purge all of it when a DIFFERENT Apple ID
+    /// signs in on this device, or user B would inherit user A's pending
+    /// uploads, consent, and display name. No-op when the identity matches
+    /// or nothing was preserved.
+    func prepareForIdentity(_ userId: String) {
+        let previous = userIdentifier ?? KeychainHelper.loadString(key: Keys.userIdentifier)
+        guard let previous, previous != userId else { return }
+        authLog.notice("[auth.cross_account] purging state of previous identity before sign-in")
+        postSignInSyncTask?.cancel()
+        postSignInSyncTask = nil
+        purgeAccountScopedState()
     }
 
     /// User-set display name. Apple Sign In delivers `fullName` only on the
@@ -523,6 +593,11 @@ final class AuthService: ObservableObject {
         do {
             let _: EmptyResponse = try await APIClient.shared.post(
                 APIEndpoint.profileUpdate, body: req)
+            // Only record against a session that is still ours. A sign-out
+            // that lands while this is in flight has already cleared the
+            // latch; writing "confirmed" afterwards would suppress the NEXT
+            // account's first push and leave IT nameless.
+            if isSignedIn { ProfileSyncLatch.markConfirmed() }
             authLog.log("profile synced to server")
             // Feed cards cache `displayName` from `/social/feed`; without a
             // refresh after the profile push, an account that just got a
@@ -534,7 +609,37 @@ final class AuthService: ObservableObject {
                 await SocialFeedStore.shared.refresh()
             }
         } catch {
+            // Reopen the latch so the next launch retries. The server
+            // validates the DTO as a whole, so a single unhappy field (an
+            // over-long Apple name, a future field) rejects the name too —
+            // and without this the rejection was permanent. Scoped to a live
+            // session for the same reason as the success branch.
+            if isSignedIn { ProfileSyncLatch.markUnconfirmed() }
             authLog.error("profile sync failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Launch backfill for a name the server never acknowledged. Pushes the
+    /// NAME ALONE — see `ProfileUpdateRequest.nameOnly`: the rest of
+    /// `syncProfileToServer`'s payload mirrors THIS device, and a second phone
+    /// opened for the first time after an update would otherwise roll the
+    /// account back to its stale mirror (name, globe opt-in, level, streaks).
+    ///
+    /// Deliberately does NOT refresh the social feed afterwards: this runs
+    /// from `loadFromKeychain`, i.e. cold launch, before the feed has loaded
+    /// at all — a refresh here only cancels and duplicates that first fetch.
+    private func pushDisplayNameToServer() async {
+        guard isSignedIn else { return }
+        let name = (userName ?? "").trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        do {
+            let _: EmptyResponse = try await APIClient.shared.post(
+                APIEndpoint.profileUpdate, body: ProfileUpdateRequest.nameOnly(name))
+            if isSignedIn { ProfileSyncLatch.markConfirmed() }
+            authLog.log("display name backfilled to server")
+        } catch {
+            if isSignedIn { ProfileSyncLatch.markUnconfirmed() }
+            authLog.error("display name backfill failed: \(error.localizedDescription)")
         }
     }
 
@@ -636,17 +741,44 @@ final class AuthService: ObservableObject {
         authLog.log("Account deleted, returned to guest mode")
     }
 
-    // MARK: - Force Sign Out (sync wrapper for APIClient fallback)
+    // MARK: - Session Expiry (called by APIClient when the session is dead)
 
-    func forceSignOut() {
-        // Once already signed out (or mid-signout) there is nothing to do —
-        // spawning another signOut here is what looped logout requests.
+    /// SOFT expiry for a definitively dead session (refresh token rejected).
+    /// Replaces the old destructive `forceSignOut`, which ran the full
+    /// sign-out cascade: it cleared the sync queue, demoted pending trips,
+    /// disabled Cloud Sync, and wiped the display name — so a session that
+    /// died through no fault of the user (the 2026-08-23 lost-rotation
+    /// incident) also stranded their freshly-recorded trip on the phone.
+    ///
+    /// This path drops ONLY what is already dead — the token pair and the
+    /// signed-in marker — and raises `needsReauth` so the UI offers a
+    /// re-login. Everything else (CoreData, pending sync ops, Cloud Sync
+    /// consent, identity for SIWA prefill, feeds, notifications) survives:
+    /// after the next sign-in `performFirstSync` re-uploads whatever the
+    /// dead session failed to push.
+    func sessionExpired() {
+        // Once already expired (or mid-signout) there is nothing to do —
+        // repeated triggers arrive in bursts when several in-flight calls
+        // fail together (the incident log shows three within one second).
         guard isSignedIn || TokenStore.shared.accessToken != nil, !signOutInProgress else {
-            authLog.notice("[auth.signout.skip] reason=force_sign_out_noop")
+            authLog.notice("[auth.session_expired.skip] reason=already_expired_or_signing_out")
             return
         }
-        authLog.notice("[auth.signout_trigger] reason=force_sign_out_called_by_api_client")
-        Task { await signOut() }
+        authLog.error("[auth.session_expired] keeping local data, requesting re-login")
+        // Cancel the post-sign-in chain for the same reason signOut does:
+        // its calls would fail with USER_NOT_AUTH and re-trigger this path.
+        postSignInSyncTask?.cancel()
+        postSignInSyncTask = nil
+        // Kill in-flight refresh + armed recovery of the dead session so a
+        // stale result can't resurrect or re-expire a future session.
+        APIClient.shared.sessionBoundaryCrossed()
+
+        TokenStore.shared.clear()
+        KeychainHelper.delete(key: Keys.isSignedIn)
+        try? KeychainHelper.saveString("true", for: Keys.sessionExpired)
+
+        isSignedIn = false
+        needsReauth = true
     }
 
     // MARK: - Auth Status Check (called on app launch)
@@ -663,8 +795,18 @@ final class AuthService: ObservableObject {
                 switch state {
                 case .authorized:
                     authLog.notice("[auth.credential_state] state=authorized")
-                    if self?.isSignedIn != true { self?.isSignedIn = true }
-                    if let accountId = TokenStore.shared.accountId {
+                    // CONFIRM a session, never create one: the SIWA
+                    // credential being fine says nothing about the server
+                    // session. If a soft expiry landed while this async
+                    // callback was in flight (marker gone, tokens cleared,
+                    // needsReauth up), resurrecting isSignedIn here would
+                    // hide the re-login card and re-open the sync gate with
+                    // no tokens to sync with.
+                    let sessionStillLive = self?.needsReauth != true
+                        && KeychainHelper.loadString(key: Keys.isSignedIn) != nil
+                        && TokenStore.shared.accessToken != nil
+                    if sessionStillLive, self?.isSignedIn != true { self?.isSignedIn = true }
+                    if sessionStillLive, let accountId = TokenStore.shared.accountId {
                         SentryService.setAccount(id: accountId.uuidString)
                     }
                 case .revoked:
@@ -715,28 +857,53 @@ final class AuthService: ObservableObject {
         let hasUserId = userIdentifier != nil
         let hasTokens = TokenStore.shared.accessToken != nil && TokenStore.shared.refreshToken != nil
         isSignedIn = hasMarker && hasUserId && hasTokens
-        authLog.notice("hydrate isSignedIn=\(self.isSignedIn) marker=\(hasMarker) userId=\(hasUserId) tokens=\(hasTokens)")
+        // Restore a soft session expiry across relaunches: the flag is set by
+        // sessionExpired() and cleared by the next sign-in or sign-out.
+        needsReauth = !isSignedIn && hasUserId
+            && KeychainHelper.loadString(key: Keys.sessionExpired) != nil
+        authLog.notice("hydrate isSignedIn=\(self.isSignedIn) marker=\(hasMarker) userId=\(hasUserId) tokens=\(hasTokens) needsReauth=\(self.needsReauth)")
         if hasMarker && hasUserId && !hasTokens {
-            // Marker present but tokens missing — clean up the lie so future
-            // launches start in the signed-out state cleanly.
-            authLog.error("inconsistent auth state: marker+userId present, tokens missing — clearing marker")
+            // Marker present but tokens missing — the session died without
+            // going through sessionExpired() (crash mid-signout, keychain
+            // partial wipe). Convert the lie into the same soft-expiry state
+            // instead of silently degrading to guest: data is intact, the
+            // user just needs a fresh sign-in.
+            authLog.error("inconsistent auth state: marker+userId present, tokens missing — converting to soft expiry")
             KeychainHelper.delete(key: Keys.isSignedIn)
+            try? KeychainHelper.saveString("true", for: Keys.sessionExpired)
+            needsReauth = true
+        }
+        if isSignedIn {
+            // A live session means any stale expiry flag is a leftover.
+            KeychainHelper.delete(key: Keys.sessionExpired)
+            needsReauth = false
         }
 
-        // Backfill for accounts created before the random-name fallback
-        // existed: signed-in with no name (Apple Sign In didn't redeliver
-        // it after delete-account → re-sign-in) — generate one and push to
-        // the server. New accounts hit the same code in `handleAuthorization`
-        // before reaching login; this branch only fires on app launch.
+        // Two reasons to push the profile on launch, and the second one is why
+        // this branch got rewritten:
+        //
+        //  - No name anywhere. Apple Sign In delivers `fullName` only on the
+        //    very first authorization, so a re-sign-in after delete-account
+        //    arrives without one — generate it here. New accounts hit the same
+        //    code in `handleAuthorization` before reaching login.
+        //  - A name on this phone that the SERVER never acknowledged. The push
+        //    is fire-and-forget and the server validates the whole DTO, so one
+        //    rejected field takes the name down with it. That used to be
+        //    permanent: the old gate asked only whether the Keychain had a
+        //    name, and for exactly these users it did. See `ProfileSyncLatch`.
         //
         // Deferred to the next runloop tick so the @Published `userName`
         // write doesn't happen inside the `.shared` lazy-init path that
         // SwiftUI triggers from the first body that reads
         // `@ObservedObject auth = AuthService.shared` — synchronous writes
         // there cause an AttributeGraph cycle on cold launch.
-        if isSignedIn, (userName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) {
-            let generated = RandomDisplayName.generate(language: LanguageManager.currentLanguage)
-            try? KeychainHelper.saveString(generated, for: Keys.userName)
+        if ProfileSyncLatch.needsPush(isSignedIn: isSignedIn, localName: userName) {
+            let generated = (userName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
+                ? RandomDisplayName.generate(language: LanguageManager.currentLanguage)
+                : nil
+            if let generated {
+                try? KeychainHelper.saveString(generated, for: Keys.userName)
+            }
             // Wrapping the @Published `userName` write in a fresh
             // `Task { @MainActor ... }` escapes the synchronous lazy-
             // init call chain that SwiftUI triggers when the first
@@ -747,8 +914,8 @@ final class AuthService: ObservableObject {
             // rather than DispatchQueue.main.async.
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.userName = generated
-                await self.syncProfileToServer()
+                if let generated { self.userName = generated }
+                await self.pushDisplayNameToServer()
             }
         }
     }

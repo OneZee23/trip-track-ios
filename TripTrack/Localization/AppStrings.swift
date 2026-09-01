@@ -2101,6 +2101,24 @@ enum AppStrings {
     static func signInWithApple(_ lang: LanguageManager.Language) -> String {
         tr(lang, "signInWithApple", ru: "Войти через Apple", en: "Sign in with Apple")
     }
+    /// Soft session expiry (AuthService.needsReauth): the server rejected our
+    /// refresh token, nothing was wiped, the user just needs a fresh SIWA
+    /// pass. Copy must reassure — the 2026-08 incident read as "the app
+    /// logged me out and lost my trip", when the data was intact all along.
+    static func sessionExpiredTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "sessionExpiredTitle",
+           ru: "Нужно войти снова",
+           en: "Please sign in again")
+    }
+    static func sessionExpiredBody(_ lang: LanguageManager.Language) -> String {
+        // Location-neutral on purpose: on a freshly-restored second device
+        // the trips live on the SERVER, and this card can render right under
+        // the «no trips yet» empty state — "safe on this phone" would be
+        // contradicted on the same screen.
+        tr(lang, "sessionExpiredBody",
+           ru: "Сессия истекла — такое бывает после долгого офлайна. Ничего не потерялось: войдите — и синхронизация продолжится сама.",
+           en: "Your session expired — this can happen after a long time offline. Nothing was lost: sign in and sync will pick up where it left off.")
+    }
 
     // MARK: - Entity / action labels (used by sync status sheet)
 

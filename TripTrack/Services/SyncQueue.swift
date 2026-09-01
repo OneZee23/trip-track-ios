@@ -89,6 +89,14 @@ final class SyncQueue: ObservableObject {
     private var failedQueue: [SyncOperation] = []
     private var cancellables = Set<AnyCancellable>()
     private var transport: SyncTransport?
+    /// Auth gate for draining. The 2026-08-23 incident log showed
+    /// trips/upsert + settings/upsert still firing MID sign-out (each one
+    /// re-triggering a doomed refresh) because processQueue had no auth
+    /// check at all. Injected as a closure so unit tests can bypass it.
+    var isAuthorizedToSync: @MainActor () -> Bool = { AuthService.shared.isSignedIn }
+    /// Bumped by `clearAll` so an in-flight `retryFailed` backoff sleep can
+    /// detect the wipe and NOT resurrect its pre-sleep snapshot of ops.
+    private var clearGeneration = 0
     /// Auto-retry cap. After this many failures, an op stays in `failedQueue`
     /// but `retryFailed` (the auto-retry path) skips it — only `retryFailedNow`
     /// (user-initiated) can revive it. Previously ops were *silently dropped*
@@ -147,6 +155,7 @@ final class SyncQueue: ObservableObject {
     func processQueue() async {
         guard !isSyncing else { return }
         guard let activeTransport = transport else { return }
+        guard isAuthorizedToSync() else { return }
         guard !CacheManager.shared.isOffline else { return }
         guard !queue.isEmpty else { return }
 
@@ -200,6 +209,10 @@ final class SyncQueue: ObservableObject {
 
         while !queue.isEmpty {
             guard !CacheManager.shared.isOffline else { break }
+            // Re-check per op: session expiry is typically discovered BY the
+            // drain (op 1 fails → soft expiry). break, not return, so the
+            // remaining ops stay pristine in `queue` for after re-login.
+            guard isAuthorizedToSync() else { break }
 
             var operation = queue.removeFirst()
             currentOperation = operation
@@ -239,7 +252,13 @@ final class SyncQueue: ObservableObject {
 
         let maxRetryCount = eligible.map(\.retryCount).max() ?? 0
         let batchDelay = pow(2.0, Double(maxRetryCount))
+        let generationAtSleep = clearGeneration
         try? await Task.sleep(for: .seconds(batchDelay))
+        // A clearAll (sign-out) landed while we slept — the snapshot in
+        // `eligible` refers to ops the user's session no longer owns. Dropping
+        // them here is what stops the wiped queue from resurrecting and
+        // POSTing with dead tokens (observed in the incident log).
+        guard clearGeneration == generationAtSleep else { return }
 
         failedQueue.removeAll { op in eligible.contains(where: { $0.id == op.id }) }
         queue.append(contentsOf: eligible)
@@ -266,6 +285,7 @@ final class SyncQueue: ObservableObject {
 
     /// Clear all queued operations (e.g., on logout).
     func clearAll() {
+        clearGeneration += 1
         queue.removeAll()
         failedQueue.removeAll()
         updatePendingCount()

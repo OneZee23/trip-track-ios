@@ -6,10 +6,11 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ## v0.6.2 — vehicles and illustrations (current submission)
 
-A cosmetic release on top of 0.6.1. No new permissions, no change to what data
-is collected, stored or transmitted, no change to accounts or deletion. The
-0.6.0 notes further down still describe the app accurately. Paste **this**
-section, then the English 0.6.0 section under it.
+A cosmetic release on top of 0.6.1, plus a sign-in stability fix. No new
+permissions, no change to what data is collected, stored or transmitted, no
+change to accounts or deletion. The 0.6.0 notes further down still describe
+the app accurately. Paste **this** section, then the English 0.6.0 section
+under it.
 
 ### English
 
@@ -30,8 +31,14 @@ placeholder outline while loading instead of a spinner.
 All artwork is original, drawn for TripTrack. None of the vehicle silhouettes
 depicts a real make or model.
 
-One bug fix: a vehicle's mileage is now derived from its trips rather than
-accumulated once, so reassigning or deleting a trip updates the number.
+Two bug fixes. A vehicle's mileage is now derived from its trips rather than
+accumulated once, so reassigning or deleting a trip updates the number. And a
+network drop during a background token refresh no longer signs the user out:
+the app retries the refresh on its own, and if the session has genuinely
+expired it keeps everything on the device — trips, settings, display name —
+and shows a "please sign in again" card instead of wiping state. This changes
+no permissions and no data handling; it only makes an existing sign-in more
+resilient.
 
 HOW TO SEE IT
 Me (last tab) → Garage → any vehicle, or «Add vehicle». The type picker is the
@@ -75,8 +82,13 @@ TripTrack 0.6.2 — заметки для ревьюера
 Вся графика оригинальная, нарисована для TripTrack. Ни один силуэт не
 изображает реальную марку или модель.
 
-Один баг-фикс: пробег машины теперь выводится из её поездок, а не
+Два баг-фикса. Пробег машины теперь выводится из её поездок, а не
 накапливается один раз, поэтому перенос или удаление поездки обновляет число.
+И обрыв сети во время фонового обновления токена больше не разлогинивает:
+приложение само повторяет обновление, а если сессия действительно истекла —
+сохраняет всё на устройстве (поездки, настройки, имя) и показывает карточку
+«войдите снова» вместо стирания состояния. Разрешения и обращение с данными
+не меняются — существующий вход просто стал устойчивее.
 
 ГДЕ ПОСМОТРЕТЬ
 «Я» (последняя вкладка) → Гараж → любая машина или «Добавить». Верхний ряд —

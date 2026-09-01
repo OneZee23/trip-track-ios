@@ -405,6 +405,8 @@ extension Translations {
         "signInFailedTitle": "No se pudo iniciar sesión",
         "ok": "OK",
         "guestFeedBanner": "Inicia sesión para seguir y reaccionar",
+        "sessionExpiredTitle": "Vuelve a iniciar sesión",
+        "sessionExpiredBody": "Tu sesión ha caducado; puede pasar tras mucho tiempo sin conexión. No se ha perdido nada: inicia sesión y la sincronización seguirá donde se quedó.",
         "syncCardKicker": "SINCRONIZACIÓN",
         "syncCardTitle": "Tus viajes en todos tus dispositivos",
         "syncCardBody": "Inicia sesión para ver tu historial en tus otros dispositivos. Todos tus viajes ya están aquí.",

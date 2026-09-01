@@ -405,6 +405,8 @@ extension Translations {
         "signInFailedTitle": "Accesso non riuscito",
         "ok": "OK",
         "guestFeedBanner": "Accedi per seguire e reagire",
+        "sessionExpiredTitle": "Accedi di nuovo",
+        "sessionExpiredBody": "La sessione è scaduta: può succedere dopo molto tempo offline. Non è andato perso nulla: accedi e la sincronizzazione riprenderà da dove si era fermata.",
         "syncCardKicker": "SINCRONIZZAZIONE",
         "syncCardTitle": "I tuoi viaggi su ogni dispositivo",
         "syncCardBody": "Accedi per ritrovare la tua cronologia sugli altri dispositivi. Tutti i viaggi sono già qui.",

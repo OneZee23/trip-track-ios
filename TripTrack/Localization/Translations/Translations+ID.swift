@@ -405,6 +405,8 @@ extension Translations {
         "signInFailedTitle": "Gagal masuk",
         "ok": "OK",
         "guestFeedBanner": "Masuk untuk mengikuti dan bereaksi",
+        "sessionExpiredTitle": "Silakan masuk lagi",
+        "sessionExpiredBody": "Sesi kamu berakhir — ini bisa terjadi setelah lama offline. Tidak ada yang hilang: masuk lagi dan sinkronisasi akan lanjut dari titik terakhir.",
         "syncCardKicker": "SINKRONISASI",
         "syncCardTitle": "Perjalananmu di semua perangkat",
         "syncCardBody": "Masuk untuk melihat riwayatmu di perangkat lain. Semua perjalananmu sudah ada di sini.",

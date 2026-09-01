@@ -405,6 +405,8 @@ extension Translations {
         "signInFailedTitle": "Anmeldung fehlgeschlagen",
         "ok": "OK",
         "guestFeedBanner": "Melde dich an, um zu folgen und zu reagieren",
+        "sessionExpiredTitle": "Bitte erneut anmelden",
+        "sessionExpiredBody": "Deine Sitzung ist abgelaufen — das kann nach längerer Offline-Zeit passieren. Nichts ist verloren: melde dich an, und die Synchronisierung macht dort weiter, wo sie aufgehört hat.",
         "syncCardKicker": "SYNC",
         "syncCardTitle": "Deine Fahrten auf jedem Gerät",
         "syncCardBody": "Melde dich an, um deine Historie auf deinen anderen Geräten zu sehen. Alle Fahrten sind schon hier.",

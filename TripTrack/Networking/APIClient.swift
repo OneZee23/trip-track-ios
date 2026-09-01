@@ -14,6 +14,43 @@ final class APIClient {
     private let logger = APILogger()
     private var refreshTask: Task<Void, Error>?
 
+    /// Invoked when the session is definitively dead: the refresh token was
+    /// rejected, the keychain has no refresh token, or a freshly-refreshed
+    /// access token still bounces. Injected so tests can observe session
+    /// death without triggering the real flow. The default is the SOFT
+    /// expiry — `AuthService.sessionExpired()` keeps every byte of local
+    /// data (trips, sync queue, Cloud Sync consent, display name) and asks
+    /// for a fresh SIWA sign-in, unlike the old destructive `forceSignOut`
+    /// that wiped the queue and stranded never-uploaded trips.
+    var sessionDeathHandler: @MainActor () -> Void = { AuthService.shared.sessionExpired() }
+
+    /// Backoff schedule for the background refresh recovery armed after a
+    /// TRANSIENT refresh failure (timeout / connection loss). Internal so
+    /// tests can shrink the delays. See `scheduleRefreshRecovery`.
+    var refreshRecoveryDelays: [Duration] = [.seconds(5), .seconds(30), .seconds(120)]
+    private var refreshRecoveryTask: Task<Void, Never>?
+    /// Bumped on every successful refresh — an armed recovery loop compares
+    /// it against the value captured at arm time and stands down when some
+    /// other path already fixed the session.
+    private var refreshSuccessEpoch = 0
+    /// Bumped by `sessionBoundaryCrossed()` on sign-out, soft expiry, and
+    /// sign-in. A refresh (or recovery attempt) started before the boundary
+    /// must not apply its result after it: a stale in-flight refresh
+    /// resolving after a sign-out + fresh sign-in would otherwise clobber
+    /// the NEW session's tokens or soft-expire the new session.
+    private var sessionGeneration = 0
+
+    /// Called by AuthService whenever the session identity changes hands
+    /// (sign-out, soft expiry, successful sign-in). Invalidates every
+    /// in-flight refresh and armed recovery loop of the previous session.
+    func sessionBoundaryCrossed() {
+        sessionGeneration += 1
+        refreshTask?.cancel()
+        refreshTask = nil
+        refreshRecoveryTask?.cancel()
+        refreshRecoveryTask = nil
+    }
+
     init(session: URLSession = .shared, tokenStore: TokenStore = .shared) {
         // iOS picks HTTP/3 automatically via Alt-Svc header from server
         // (Cloudflare advertises `alt-svc: h3=":443"`). On flaky RU networks
@@ -222,10 +259,10 @@ final class APIClient {
             // Post-refresh USER_NOT_AUTH means our freshly-rotated access
             // token is itself invalid (server-side JWT secret rotation,
             // race with a concurrent revoke). No more refresh attempts —
-            // sign out so SIWA can re-establish a clean session.
+            // soft-expire the session so SIWA can re-establish it.
             if code == "USER_NOT_AUTH", requiresAuth, isRetry {
-                apiAuthLog.error("POST \(path, privacy: .public) USER_NOT_AUTH after refresh — forcing signout")
-                AuthService.shared.forceSignOut()
+                apiAuthLog.error("POST \(path, privacy: .public) USER_NOT_AUTH after refresh — session dead")
+                sessionDeathHandler()
             }
             // UNKNOWN_SERVER_ERROR is the catch-all when the backend's
             // JsonRpcExceptionFilter sees a non-AppError exception (DB
@@ -298,8 +335,8 @@ final class APIClient {
             }
             // Mirrors performPost: post-refresh USER_NOT_AUTH = dead session.
             if code == "USER_NOT_AUTH", requiresAuth, isRetry {
-                apiAuthLog.error("GET \(path, privacy: .public) USER_NOT_AUTH after refresh — forcing signout")
-                AuthService.shared.forceSignOut()
+                apiAuthLog.error("GET \(path, privacy: .public) USER_NOT_AUTH after refresh — session dead")
+                sessionDeathHandler()
             }
             // See performPost: retry-once on transient server errors.
             if code == "UNKNOWN_SERVER_ERROR", !isRetry {
@@ -362,8 +399,8 @@ final class APIClient {
             }
             // Mirrors performPost: post-refresh USER_NOT_AUTH = dead session.
             if code == "USER_NOT_AUTH", isRetry {
-                apiAuthLog.error("MULTIPART \(path, privacy: .public) USER_NOT_AUTH after refresh — forcing signout")
-                AuthService.shared.forceSignOut()
+                apiAuthLog.error("MULTIPART \(path, privacy: .public) USER_NOT_AUTH after refresh — session dead")
+                sessionDeathHandler()
             }
             // See performPost: retry-once on transient server errors.
             if code == "UNKNOWN_SERVER_ERROR", !isRetry {
@@ -485,9 +522,13 @@ final class APIClient {
         let task = Task<Void, Error> { [weak self] in
             guard let self else { return }
             defer { Task { @MainActor in self.refreshTask = nil } }
+            // Everything below applies its outcome (token store, session
+            // death, recovery arming) ONLY while the session it started for
+            // is still the current one.
+            let generation = self.sessionGeneration
             guard let refresh = self.tokenStore.refreshToken else {
-                apiAuthLog.error("refresh: no refresh token in keychain — forcing signout")
-                AuthService.shared.forceSignOut()
+                apiAuthLog.error("refresh: no refresh token in keychain — session dead")
+                self.sessionDeathHandler()
                 throw APIError.invalidRefreshToken
             }
             apiAuthLog.notice("refresh: posting /auth/refresh")
@@ -522,20 +563,32 @@ final class APIClient {
                     try? await Task.sleep(for: .seconds(1))
                     res = try await postRefresh()
                 }
+                guard self.sessionGeneration == generation else {
+                    apiAuthLog.notice("refresh: stale result dropped — session boundary crossed")
+                    throw APIError.transport("stale refresh dropped")
+                }
                 self.tokenStore.set(accessToken: res.accessToken, refreshToken: res.refreshToken)
+                self.refreshSuccessEpoch += 1
                 apiAuthLog.notice("refresh: succeeded, new tokens stored")
             } catch APIError.network(let urlErr) {
-                // Transient network failure — keep session. The next user
-                // action will trigger another refresh; the refresh token in
-                // keychain is still valid as far as we know.
-                apiAuthLog.notice("refresh: network failure code=\(urlErr.code.rawValue) — keeping session")
+                // Transient network failure — keep session AND arm a
+                // background recovery retry. Waiting for "the next authed
+                // call" is not enough: during a trip recording there is no
+                // authed traffic at all, so a refresh that died at drive
+                // start (rotation committed server-side, response lost)
+                // used to sit unrepaired until trip end — long past the
+                // backend's rotation grace — and the session died with it.
+                // The recovery loop replays the refresh in seconds instead.
+                apiAuthLog.notice("refresh: network failure code=\(urlErr.code.rawValue) — keeping session, arming recovery")
+                if self.sessionGeneration == generation { self.scheduleRefreshRecovery() }
                 throw APIError.network(urlErr)
             } catch let error as APIError {
-                // Whitelist of transient APIError cases that should NOT sign
-                // the user out. Everything else (including unknown server
-                // codes the backend may add later) → forceSignOut. Inverting
-                // the default this way prevents zombie sessions from new
-                // server error codes that no one updated this switch for.
+                // Whitelist of transient APIError cases that should NOT kill
+                // the session. Everything else (including unknown server
+                // codes the backend may add later) → sessionDeathHandler
+                // (soft expiry). Inverting the default this way prevents
+                // zombie sessions from new server error codes that no one
+                // updated this switch for.
                 let isTransient: Bool
                 switch error {
                 case .network, .decoding, .transport, .unknownServer, .tooManyRequests:
@@ -554,11 +607,16 @@ final class APIClient {
                 default:
                     isTransient = false
                 }
+                guard self.sessionGeneration == generation else {
+                    apiAuthLog.notice("refresh: stale failure ignored — session boundary crossed")
+                    throw error
+                }
                 if isTransient {
-                    apiAuthLog.notice("refresh: transient (\(String(describing: error), privacy: .public)) — keeping session")
+                    apiAuthLog.notice("refresh: transient (\(String(describing: error), privacy: .public)) — keeping session, arming recovery")
+                    self.scheduleRefreshRecovery()
                 } else {
-                    apiAuthLog.error("refresh: rejected (\(String(describing: error), privacy: .public)) — forcing signout")
-                    AuthService.shared.forceSignOut()
+                    apiAuthLog.error("refresh: rejected (\(String(describing: error), privacy: .public)) — session dead")
+                    self.sessionDeathHandler()
                 }
                 throw error
             } catch {
@@ -568,5 +626,55 @@ final class APIClient {
         }
         refreshTask = task
         try await task.value
+    }
+
+    /// Arms a background loop that re-posts `/auth/refresh` on a short
+    /// backoff after a TRANSIENT refresh failure, instead of waiting for the
+    /// next authed call (which, mid-recording, never comes). This is the
+    /// client half of the lost-rotation fix: the backend keeps a rotated
+    /// token replayable while its successor was never used, and this loop
+    /// makes the client actually catch up within seconds.
+    ///
+    /// Stands down when: a refresh succeeded through any path (epoch moved),
+    /// the session died (no refresh token left), or all attempts are spent —
+    /// after which the next natural authed call re-arms it, so a fully
+    /// offline stretch can't spin forever.
+    private func scheduleRefreshRecovery() {
+        guard refreshRecoveryTask == nil else { return }
+        guard !refreshRecoveryDelays.isEmpty else { return }
+        let epochAtArm = refreshSuccessEpoch
+        let generationAtArm = sessionGeneration
+        apiAuthLog.notice("refresh: recovery armed (\(self.refreshRecoveryDelays.count) attempts)")
+        refreshRecoveryTask = Task { [weak self] in
+            guard let self else { return }
+            defer { Task { @MainActor in self.refreshRecoveryTask = nil } }
+            for delay in self.refreshRecoveryDelays {
+                try? await Task.sleep(for: delay)
+                if Task.isCancelled { return }
+                guard self.sessionGeneration == generationAtArm else {
+                    apiAuthLog.notice("refresh: recovery standing down — session boundary crossed")
+                    return
+                }
+                guard self.refreshSuccessEpoch == epochAtArm else {
+                    apiAuthLog.notice("refresh: recovery standing down — already recovered elsewhere")
+                    return
+                }
+                guard self.tokenStore.refreshToken != nil else {
+                    apiAuthLog.notice("refresh: recovery standing down — session gone")
+                    return
+                }
+                do {
+                    try await self.refreshIfNeeded()
+                    apiAuthLog.notice("refresh: recovery succeeded")
+                    return
+                } catch {
+                    // Transient again → next delay. A definitive rejection
+                    // clears the keychain via sessionDeathHandler, so the
+                    // token guard above ends the loop on the next pass.
+                    apiAuthLog.notice("refresh: recovery attempt failed — \(String(describing: error), privacy: .public)")
+                }
+            }
+            apiAuthLog.notice("refresh: recovery exhausted — next authed call re-arms")
+        }
     }
 }

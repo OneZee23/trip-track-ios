@@ -215,3 +215,22 @@ enum ContentFilter {
         }
     }
 }
+
+extension ContentFilter {
+    /// Sanitize a raw display name and hard-clamp it to the length the server
+    /// will actually accept.
+    ///
+    /// Apple hands us `fullName` on the very first authorization and we store
+    /// it verbatim — but `ProfileUpdateRequestDto.displayName` is capped at 30
+    /// on the server, and the pipe rejects the WHOLE request when it overflows,
+    /// taking the name down with it. Since the launch backfill now retries, an
+    /// over-long name would otherwise mean a refused request on every cold
+    /// start for the life of the install.
+    ///
+    /// Sanitizing first is deliberate: invisible padding must not spend the
+    /// budget. `prefix` operates on grapheme clusters, so a clamp can't split
+    /// a family emoji or leave a dangling joiner.
+    static func clampedDisplayName(_ raw: String) -> String {
+        String(sanitize(raw).prefix(Field.displayName.maxLength))
+    }
+}

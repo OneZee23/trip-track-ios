@@ -5,6 +5,9 @@ import XCTest
 private final class MockSyncTransport: SyncTransport {
     var executedOperations: [SyncOperation] = []
     var shouldFail = false
+    /// Side-effect hook fired on every execute — lets a test flip external
+    /// state (e.g. the auth gate) from inside the drain.
+    var onExecute: ((SyncOperation) -> Void)?
     /// Ops handed to the batch fast-path (empty if the batch was never invoked).
     var batchedOps: [SyncOperation] = []
     /// entityIds the batch reports as fully handled — the queue removes exactly
@@ -12,6 +15,7 @@ private final class MockSyncTransport: SyncTransport {
     var batchHandled: Set<UUID> = []
 
     func execute(_ operation: SyncOperation) async throws {
+        defer { onExecute?(operation) }
         if shouldFail {
             throw NSError(domain: "SyncTest", code: 1)
         }
@@ -85,6 +89,7 @@ final class SyncQueueTests: XCTestCase {
         let queue = SyncQueue()
         let mock = MockSyncTransport()
         queue.configure(transport: mock)
+        queue.isAuthorizedToSync = { true }
 
         let id1 = UUID(), id2 = UUID(), id3 = UUID()
         queue.enqueue(SyncOperation(entityType: .trip, entityId: id1, action: .upload))
@@ -107,6 +112,7 @@ final class SyncQueueTests: XCTestCase {
         let queue = SyncQueue()
         let mock = MockSyncTransport()
         queue.configure(transport: mock)
+        queue.isAuthorizedToSync = { true }
 
         let id1 = UUID()
         queue.enqueue(SyncOperation(entityType: .trip, entityId: id1, action: .upload))
@@ -124,6 +130,7 @@ final class SyncQueueTests: XCTestCase {
         let queue = SyncQueue()
         let mock = MockSyncTransport()
         queue.configure(transport: mock)
+        queue.isAuthorizedToSync = { true }
 
         let t1 = UUID(), t2 = UUID(), v1 = UUID(), p1 = UUID()
         queue.enqueue(SyncOperation(entityType: .trip, entityId: t1, action: .upload))
@@ -138,6 +145,73 @@ final class SyncQueueTests: XCTestCase {
                        "Only trip .upload ops go to the batch")
         XCTAssertEqual(Set(mock.executedOperations.map(\.entityId)), [v1, p1],
                        "Vehicle + photo drain per-op; batched trips do not")
+        XCTAssertEqual(queue.pendingCount, 0)
+    }
+
+    // MARK: - Auth gating + sign-out races (2026-08-23 incident hardening)
+
+    /// The incident log showed trips/upsert + settings/upsert still firing MID
+    /// sign-out: processQueue had no auth gate at all. A drain must not start
+    /// when the session is gone.
+    func testProcessQueueSkipsWhenNotAuthorized() async throws {
+        try XCTSkipIf(CacheManager.shared.isOffline, "processQueue bails when offline")
+        let queue = SyncQueue()
+        let mock = MockSyncTransport()
+        queue.configure(transport: mock)
+        queue.isAuthorizedToSync = { false }
+
+        queue.enqueue(SyncOperation(entityType: .trip, entityId: UUID(), action: .upload))
+        await queue.processQueue()
+
+        XCTAssertTrue(mock.executedOperations.isEmpty, "no ops may execute without a session")
+        XCTAssertEqual(queue.pendingCount, 1, "ops stay queued for after re-login")
+    }
+
+    /// Review finding: the gate must also hold MID-drain. Session expiry is
+    /// typically discovered BY the drain (op 1 fails → soft expiry), and the
+    /// remaining ops used to fire token-less anyway, burning retry budget.
+    func testProcessQueueStopsMidDrainWhenAuthorizationDrops() async throws {
+        try XCTSkipIf(CacheManager.shared.isOffline, "processQueue bails when offline")
+        let queue = SyncQueue()
+        let mock = MockSyncTransport()
+        queue.configure(transport: mock)
+
+        final class GateBox: @unchecked Sendable { var open = true }
+        let gate = GateBox()
+        queue.isAuthorizedToSync = { gate.open }
+        mock.onExecute = { _ in gate.open = false } // op 1 discovers the dead session
+
+        queue.enqueue(SyncOperation(entityType: .vehicle, entityId: UUID(), action: .upload))
+        queue.enqueue(SyncOperation(entityType: .vehicle, entityId: UUID(), action: .upload))
+        queue.enqueue(SyncOperation(entityType: .vehicle, entityId: UUID(), action: .upload))
+
+        await queue.processQueue()
+
+        XCTAssertEqual(mock.executedOperations.count, 1, "drain must stop after authorization drops")
+        XCTAssertEqual(queue.pendingCount, 2, "remaining ops stay pristine for after re-login")
+    }
+
+    /// `retryFailed` snapshots eligible ops, sleeps its backoff, then re-appends
+    /// them. If sign-out's clearAll lands during that sleep, the snapshot used
+    /// to resurrect the wiped ops and POST them with dead tokens.
+    func testRetryFailedDoesNotResurrectOpsClearedDuringBackoff() async throws {
+        try XCTSkipIf(CacheManager.shared.isOffline, "retryFailed bails when offline")
+        let queue = SyncQueue()
+        let mock = MockSyncTransport()
+        queue.configure(transport: mock)
+        queue.isAuthorizedToSync = { true }
+
+        mock.shouldFail = true
+        queue.enqueue(SyncOperation(entityType: .settings, entityId: UUID(), action: .upload))
+        await queue.processQueue() // parks the op in failedQueue with retryCount=1
+
+        mock.shouldFail = false
+        let retryTask = Task { await queue.retryFailed() } // sleeps 2^1 = 2s
+        try await Task.sleep(for: .milliseconds(300))
+        queue.clearAll() // sign-out lands mid-backoff
+        await retryTask.value
+
+        XCTAssertTrue(mock.executedOperations.isEmpty, "cleared ops must not be resurrected")
         XCTAssertEqual(queue.pendingCount, 0)
     }
 

@@ -405,6 +405,8 @@ extension Translations {
         "signInFailedTitle": "Giriş yapılamadı",
         "ok": "Tamam",
         "guestFeedBanner": "Takip etmek ve tepki vermek için giriş yap",
+        "sessionExpiredTitle": "Lütfen yeniden giriş yap",
+        "sessionExpiredBody": "Oturumun süresi doldu — uzun süre çevrimdışı kaldıktan sonra olabilir. Hiçbir şey kaybolmadı: giriş yap, senkronizasyon kaldığı yerden devam eder.",
         "syncCardKicker": "EŞİTLEME",
         "syncCardTitle": "Gezilerin her cihazında",
         "syncCardBody": "Geçmişini diğer cihazlarında görmek için giriş yap. Bütün gezilerin zaten burada.",

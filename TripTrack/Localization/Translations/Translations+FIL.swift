@@ -405,6 +405,8 @@ extension Translations {
         "signInFailedTitle": "Hindi naka-sign in",
         "ok": "OK",
         "guestFeedBanner": "Mag-sign in para maka-follow at maka-react",
+        "sessionExpiredTitle": "Mag-sign in ulit",
+        "sessionExpiredBody": "Nag-expire ang session mo — nangyayari ito pagkatapos ng matagal na offline. Walang nawala: mag-sign in at magpapatuloy ang sync kung saan ito huminto.",
         "syncCardKicker": "SYNC",
         "syncCardTitle": "Ang mga biyahe mo sa bawat device",
         "syncCardBody": "Mag-sign in para makita ang kasaysayan mo sa ibang device. Nandito na ang lahat ng biyahe mo.",

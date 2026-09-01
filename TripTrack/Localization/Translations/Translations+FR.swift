@@ -405,6 +405,8 @@ extension Translations {
         "signInFailedTitle": "Connexion impossible",
         "ok": "OK",
         "guestFeedBanner": "Connectez-vous pour suivre et réagir",
+        "sessionExpiredTitle": "Reconnectez-vous",
+        "sessionExpiredBody": "Votre session a expiré — cela peut arriver après une longue période hors ligne. Rien n'est perdu : connectez-vous et la synchronisation reprendra là où elle s'était arrêtée.",
         "syncCardKicker": "SYNCHRONISATION",
         "syncCardTitle": "Vos trajets sur tous vos appareils",
         "syncCardBody": "Connectez-vous pour retrouver votre historique sur vos autres appareils. Tous vos trajets sont déjà là.",

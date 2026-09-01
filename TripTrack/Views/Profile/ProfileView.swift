@@ -584,8 +584,14 @@ struct ProfileView: View {
     /// The name in the header. When a signed-in account has no name yet this is
     /// a PROMPT, not a name — which is why the cards don't reuse it.
     private var headerDisplayName: String {
-        guard auth.isSignedIn else { return AppStrings.meGuestName(lang.language) }
         let trimmed = auth.userName?.trimmingCharacters(in: .whitespaces) ?? ""
+        guard auth.isSignedIn else {
+            // Soft session expiry preserves the display name on purpose —
+            // demoting the hero to «Гость» right above a card saying
+            // "nothing was lost" would contradict the card. Keep the name.
+            if auth.needsReauth, !trimmed.isEmpty { return trimmed }
+            return AppStrings.meGuestName(lang.language)
+        }
         guard !trimmed.isEmpty else { return AppStrings.meAddYourName(lang.language) }
         return trimmed
     }
@@ -999,7 +1005,11 @@ struct ProfileView: View {
     /// Apple button — no sheet hop. The footnote is the "можно позже"
     /// affordance; the card just stays.
     private func guestSignInCard(_ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 12) {
+        // Soft session expiry wears the same card with different words: the
+        // user did nothing wrong and lost nothing — the copy must say so
+        // instead of re-pitching Cloud Sync to someone who already opted in.
+        let expired = auth.needsReauth
+        return VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 // Figma 424:130 — the cloud sits on a 30×30 pale-peach
                 // rounded-square tile (same treatment as SettingsIconRow),
@@ -1007,7 +1017,7 @@ struct ProfileView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(AppTheme.accentBg)
-                    Image(systemName: "icloud.fill")
+                    Image(systemName: expired ? "person.crop.circle.badge.exclamationmark" : "icloud.fill")
                         .font(.system(size: 16))
                         .foregroundStyle(AppTheme.accent)
                 }
@@ -1017,10 +1027,14 @@ struct ProfileView: View {
                         .font(.system(size: 11, weight: .bold))
                         .kerning(0.22)
                         .foregroundStyle(c.textTertiary)
-                    Text(AppStrings.syncCardTitle(lang.language))
+                    Text(expired
+                         ? AppStrings.sessionExpiredTitle(lang.language)
+                         : AppStrings.syncCardTitle(lang.language))
                         .font(.system(size: 15, weight: .heavy))
                         .foregroundStyle(c.text)
-                    Text(AppStrings.syncCardBody(lang.language))
+                    Text(expired
+                         ? AppStrings.sessionExpiredBody(lang.language)
+                         : AppStrings.syncCardBody(lang.language))
                         .font(.system(size: 12.5))
                         .foregroundStyle(c.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1042,9 +1056,13 @@ struct ProfileView: View {
                 }
             )
 
-            Text(AppStrings.syncCardLater(lang.language))
-                .font(.system(size: 11))
-                .foregroundStyle(c.textTertiary)
+            // "You can do it later" is a first-pitch line; after a session
+            // expiry it reads as permission to ignore a broken sync.
+            if !expired {
+                Text(AppStrings.syncCardLater(lang.language))
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+            }
         }
         .padding(14)
         .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 16))

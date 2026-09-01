@@ -751,3 +751,22 @@ struct SocialTripPhoto: Codable, Identifiable, Hashable {
 struct SocialTripPhotosResponse: Codable {
     let photos: [SocialTripPhoto]
 }
+
+extension ProfileUpdateRequest {
+    /// Launch-backfill payload: the display name and NOTHING else.
+    ///
+    /// Every other field of `syncProfileToServer`'s payload is a mirror of THIS
+    /// device, and nothing re-reads them from the server after login — the
+    /// globe opt-in is seeded only from `/auth/login`, and the name lives in a
+    /// `ThisDeviceOnly`, non-syncing Keychain item. Pushing the full snapshot
+    /// from a second phone that has not been opened in a while would roll the
+    /// account back to that phone's stale mirror. Omitted fields are dropped by
+    /// `encodeIfPresent`, and the server reads absent as "leave unchanged".
+    static func nameOnly(_ displayName: String) -> ProfileUpdateRequest {
+        ProfileUpdateRequest(
+            displayName: displayName, avatarEmoji: nil, profileBackground: nil,
+            profileLevel: nil, profileXp: nil, currentStreak: nil,
+            bestStreak: nil, activeVehicleId: nil, language: nil,
+            showOnPublicMap: nil)
+    }
+}

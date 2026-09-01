@@ -405,6 +405,8 @@ extension Translations {
         "signInFailedTitle": "Não foi possível entrar",
         "ok": "OK",
         "guestFeedBanner": "Faça login para seguir e reagir",
+        "sessionExpiredTitle": "Entre novamente",
+        "sessionExpiredBody": "Sua sessão expirou — isso pode acontecer depois de muito tempo offline. Nada foi perdido: entre e a sincronização continua de onde parou.",
         "syncCardKicker": "SINCRONIZAÇÃO",
         "syncCardTitle": "Suas viagens em todos os aparelhos",
         "syncCardBody": "Faça login para ver seu histórico nos seus outros aparelhos. Todas as suas viagens já estão aqui.",

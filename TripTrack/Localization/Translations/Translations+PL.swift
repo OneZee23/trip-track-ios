@@ -405,6 +405,8 @@ extension Translations {
         "signInFailedTitle": "Nie udało się zalogować",
         "ok": "OK",
         "guestFeedBanner": "Zaloguj się, aby obserwować i reagować",
+        "sessionExpiredTitle": "Zaloguj się ponownie",
+        "sessionExpiredBody": "Sesja wygasła — może się to zdarzyć po długim czasie offline. Nic nie przepadło: zaloguj się, a synchronizacja ruszy od miejsca, w którym się zatrzymała.",
         "syncCardKicker": "SYNCHRONIZACJA",
         "syncCardTitle": "Twoje trasy na każdym urządzeniu",
         "syncCardBody": "Zaloguj się, żeby zobaczyć swoją historię na innych urządzeniach. Wszystkie trasy już tu są.",
