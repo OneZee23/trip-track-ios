@@ -23,8 +23,13 @@ WHAT'S NEW IN 0.6.3
   map of the trips they chose to make public. Both are the same screens the user
   already has for their own data; only the source of the trips differs.
 • "What others see" — four switches (basic counters, full statistics, map,
-  achievements). A switch that is off hides that block from everyone else, and the
-  server stops returning the data rather than trusting the app to hide it.
+  achievements). A switch that is off hides that block from everyone else. Basic
+  counters, achievements and vehicle visibility are enforced on the server, which
+  stops returning the data. Statistics and the map are drawn from the same set of
+  the user's already-public trips, so the server stops returning that set when BOTH
+  are off; with one of the two still on, the remaining screen is the one hidden by
+  the app. Nothing private is involved either way: these are trips the user chose
+  to publish, and they are visible in the feed regardless.
 • Vehicle visibility is now enforced on the server: a car the owner marked private
   no longer appears on their profile or on feed cards.
 • Odometer split in two — the dashboard reading the owner types in, and the distance
