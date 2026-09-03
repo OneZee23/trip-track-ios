@@ -17,7 +17,7 @@ struct TripEditSheet: View {
     let trip: Trip
     /// Cars to choose from — the garage, in its own order.
     let vehicles: [Vehicle]
-    let onSave: (_ title: String, _ description: String, _ vehicleId: UUID?, _ isPrivate: Bool) -> Void
+    let onSave: (_ title: String, _ description: String, _ vehicleId: UUID?, _ isPrivate: Bool, _ isTransfer: Bool) -> Void
 
     /// The server's own limit for a trip note.
     private static let notesLimit = 500
@@ -29,6 +29,9 @@ struct TripEditSheet: View {
     @State private var title: String = ""
     @State private var notes: String = ""
     @State private var vehicleId: UUID?
+    /// Поездка пассажиром. Живёт рядом с `vehicleId`, потому что это две
+    /// стороны одного выбора: у трансфера машины нет по определению.
+    @State private var isTransfer = false
     @State private var isPrivate: Bool = true
     @State private var showVehiclePicker = false
     @State private var showAccessPicker = false
@@ -112,7 +115,9 @@ struct TripEditSheet: View {
                         } label: {
                             HStack(spacing: 12) {
                                 vehicleAvatar(c: c)
-                                Text(selectedVehicle?.name ?? AppStrings.noVehicle(lang.language))
+                                Text(isTransfer
+                                     ? AppStrings.tripTransferTitle(lang.language)
+                                     : (selectedVehicle?.name ?? AppStrings.noVehicle(lang.language)))
                                     .font(.system(size: 16, weight: .semibold))
                                     .foregroundStyle(c.text)
                                 Spacer(minLength: 0)
@@ -188,8 +193,22 @@ struct TripEditSheet: View {
         .presentationDetents([.height(sheetHeight)])
         .presentationDragIndicator(.hidden)
         .sheet(isPresented: $showVehiclePicker) {
-            VehiclePickerSheet { picked in vehicleId = picked }
-                .environmentObject(lang)
+            VehiclePickerSheet(
+                persistsSelection: false,
+                onPick: { picked in
+                    vehicleId = picked
+                    // Выбрали машину — значит за рулём был человек сам.
+                    isTransfer = false
+                },
+                showsTransferOption: true,
+                isTransferSelected: isTransfer,
+                onPickTransfer: {
+                    isTransfer = true
+                    // У трансфера машины нет по определению.
+                    vehicleId = nil
+                }
+            )
+            .environmentObject(lang)
         }
         .sheet(isPresented: $showAccessPicker) {
             TripAccessPickerSheet(isPrivate: $isPrivate)
@@ -206,6 +225,7 @@ struct TripEditSheet: View {
             title = trip.hasDisplayableName ? (trip.title ?? "") : ""
             notes = trip.tripDescription ?? ""
             vehicleId = trip.vehicleId
+            isTransfer = trip.isTransfer
             isPrivate = trip.isPrivate
         }
     }
@@ -245,7 +265,8 @@ struct TripEditSheet: View {
                         title.trimmingCharacters(in: .whitespacesAndNewlines),
                         notes.trimmingCharacters(in: .whitespacesAndNewlines),
                         vehicleId,
-                        isPrivate
+                        isPrivate,
+                        isTransfer
                     )
                     dismiss()
                 } label: {

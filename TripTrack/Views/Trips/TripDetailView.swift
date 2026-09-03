@@ -1027,10 +1027,10 @@ struct TripDetailView: View {
                 TripEditSheet(
                     trip: t,
                     vehicles: settings.vehicles,
-                    onSave: { newTitle, newNotes, newVehicleId, newIsPrivate in
+                    onSave: { newTitle, newNotes, newVehicleId, newIsPrivate, newIsTransfer in
                         let saved = applyEdits(
                             title: newTitle, notes: newNotes,
-                            vehicleId: newVehicleId, to: t
+                            vehicleId: newVehicleId, isTransfer: newIsTransfer, to: t
                         )
                         // Access last, and only once the text is safely written:
                         // publishing and hiding both raise a confirmation, and
@@ -1749,7 +1749,9 @@ struct TripDetailView: View {
     /// Returns false when the content filter rejected the name or the note, so
     /// the caller knows not to carry on to the access change.
     @discardableResult
-    private func applyEdits(title: String, notes: String, vehicleId: UUID?, to t: Trip) -> Bool {
+    private func applyEdits(
+        title: String, notes: String, vehicleId: UUID?, isTransfer: Bool, to t: Trip
+    ) -> Bool {
         // The inline editors this sheet replaced ran everything through
         // `ContentFilter` first — a published trip's name and description are
         // shown to strangers. Saving straight from the sheet would have been a
@@ -1774,6 +1776,11 @@ struct TripDetailView: View {
         }
         if vehicleId != t.vehicleId {
             mapVM.tripManager.updateVehicle(for: tripId, vehicleId: vehicleId)
+        }
+        // Трансфер применяется ПОСЛЕ машины: он снимает её с поездки, и
+        // обратный порядок вернул бы машину на место.
+        if isTransfer != t.isTransfer {
+            mapVM.tripManager.setTransfer(for: tripId, isTransfer: isTransfer)
         }
         // Same reason as in `applyPrivacyChange`: only a local trip has a row
         // to re-read. Editing is owner-only, so in practice this always finds

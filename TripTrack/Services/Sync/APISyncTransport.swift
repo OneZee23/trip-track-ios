@@ -348,6 +348,7 @@ final class APISyncTransport: SyncTransport {
             name: vehicle.name,
             avatarEmoji: vehicle.avatarEmoji,
             odometerKm: vehicle.odometerKm,
+            manualOdometerKm: vehicle.manualOdometerKm,
             level: vehicle.level,
             stickersJson: entity.stickersJSON,
             cityConsumption: vehicle.cityConsumption,

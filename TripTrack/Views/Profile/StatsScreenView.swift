@@ -10,6 +10,13 @@ import CoreLocation
 /// The old `StatsView` sheet (Feed) is untouched (fork FK-12).
 struct StatsScreenView: View {
     let tripManager: TripManager
+    /// Откуда брать поездки. `nil` — своя библиотека из CoreData (сегодняшнее
+    /// поведение). Непустой источник делает экран ЧУЖИМ (0.6.3): те же секции,
+    /// та же арифметика, другой массив на входе.
+    var source: TripSource?
+    /// Имя владельца профиля под заголовком. Только для чужого экрана —
+    /// на своём и так понятно, чьи это числа.
+    var ownerName: String?
     /// How a tapped trip opens. Set by a host that has a nav path of its own
     /// (`MeDest.trip`); when it is nil the app-wide `.openTripDetail` channel
     /// takes over, which lands on the Home tab instead of pushing in place.
@@ -35,14 +42,45 @@ struct StatsScreenView: View {
     /// Column the user tapped in the bar chart (0…11) — canon 1821:6866.
     @State private var pickedMonth: Int?
 
+    /// Чужой экран. Две секции при нём отсутствуют, и обе по своей причине:
+    ///  - «В этот день год назад» — личный крючок памяти, у постороннего он
+    ///    бессмысленный;
+    ///  - «Дорога-чемпион» и половина «Новых мест» про новые дороги —
+    ///    `RoadEntity` живёт только локально, на сервере её нет вовсе, так что
+    ///    у чужого `roads` всегда пуст.
+    private var isRemote: Bool { source != nil }
+
+    /// Чужая статистика не загрузилась. Пустой экран и отказ — разные вещи.
+    @State private var remoteFailed = false
+    /// Поколение загрузки: обе кнопки «Повторить» плодят независимые задачи, и
+    /// без гейта обогнавшая старая перезаписала бы результат новой урезанным.
+    @State private var loadGeneration = 0
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
 
         ScrollView {
             VStack(spacing: 10) {
-                if let agg {
-                    if agg.tripCount == 0 {
+                if agg == nil, isRemote {
+                    // До двадцати последовательных страниц: пустой экран всё
+                    // это время выглядит как сломанный. Карта показывает
+                    // загрузку — статистика обязана тоже.
+                    CarLoadingView()
+                        .padding(.top, 80)
+                } else if isRemote, remoteFailed, (agg?.tripCount ?? 0) == 0 {
+                    remoteFailedState(c, l)
+                } else if let agg {
+                    // Частичная загрузка: числа ниже — правда, но НЕ вся.
+                    // Молча показать их как полные значит соврать точной цифрой.
+                    if isRemote, remoteFailed {
+                        partialDataBanner(c, l)
+                    }
+                    // У чужого пустого экрана не может быть призыва «запиши
+                    // первую поездку»: кнопка уводит на СВОЮ вкладку записи.
+                    if agg.tripCount == 0, isRemote {
+                        remoteEmptyState(c, l)
+                    } else if agg.tripCount == 0 {
                         emptyState(c, l)
                     } else {
                         content(agg, c, l)
@@ -74,7 +112,7 @@ struct StatsScreenView: View {
         let current = slice(agg, range: range, anchor: anchor, calendar: cal)
         let previous = previousSlice(agg, range: range, anchor: anchor, calendar: cal)
 
-        if let trip = agg.yearAgoTrip {
+        if !isRemote, let trip = agg.yearAgoTrip {
             memoryCard(trip, c, l)
         }
 
@@ -104,7 +142,90 @@ struct StatsScreenView: View {
 
         hallOfFame(agg, c, l)
 
-        archiveCard(agg, c, l)
+        // Архив считает фото и заметки, а `PublicTripDTO` не возит ни того, ни
+        // другого — у чужого плашка всегда писала бы «фото и заметки в 0
+        // поездках». Это утверждение о другом человеке, которого мы не
+        // проверяли, поэтому её просто нет.
+        if !isRemote {
+            archiveCard(agg, c, l)
+        }
+    }
+
+    /// Часть страниц не доехала. Полоска, а не пустой экран: то, что уже
+    /// посчитано, — правда, просто неполная, и человек имеет право знать, что
+    /// смотрит на нижнюю границу.
+    private func partialDataBanner(
+        _ c: AppTheme.Colors, _ l: LanguageManager.Language
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(AppTheme.accent)
+            Text(AppStrings.publicDataPartial(l))
+                .font(.system(size: 11.5))
+                .foregroundStyle(c.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button { Task { await load() } } label: {
+                Text(AppStrings.retry(l))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppTheme.accent)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .background(AppTheme.accentBg, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityIdentifier("stats_partial_banner")
+    }
+
+    /// Отказ загрузки у чужого экрана. Отдельно от пустого состояния: писать
+    /// «человек ничего не опубликовал», когда на самом деле отвалилась сеть, —
+    /// это утверждение о другом человеке, которого мы не проверяли.
+    private func remoteFailedState(
+        _ c: AppTheme.Colors, _ l: LanguageManager.Language
+    ) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(c.textTertiary)
+            Text(AppStrings.publicDataLoadFailed(l))
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(c.text)
+            Button { Task { await load() } } label: {
+                Text(AppStrings.retry(l))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(AppTheme.accent)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.top, 60)
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("stats_remote_failed")
+    }
+
+    /// Пусто у ЧУЖОГО экрана: человек либо ничего не опубликовал, либо
+    /// спрятал статистику. Ни того, ни другого посторонний не исправит, так что
+    /// никаких кнопок — только объяснение.
+    private func remoteEmptyState(
+        _ c: AppTheme.Colors, _ l: LanguageManager.Language
+    ) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: "chart.bar")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(c.textTertiary)
+            Text(AppStrings.publicMapEmptyTitle(l))
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(c.text)
+            Text(AppStrings.publicMapEmptyBody(l))
+                .font(.system(size: 12))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(c.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, 60)
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("stats_remote_empty")
     }
 
     // MARK: - Nav row
@@ -121,7 +242,10 @@ struct StatsScreenView: View {
     /// NavigationStack (`MeDest.stats`), so there is no grabber above it — and
     /// sheet clearance on a pushed screen sinks the row 10pt too low.
     private func navRow(_ l: LanguageManager.Language) -> some View {
-        CustomNavBar(title: AppStrings.stats(l), largeTitle: true)
+        // На чужом экране под заголовком стоит имя владельца: без него две
+        // одинаковые «Статистики» — своя и чужая — неотличимы, а это ровно тот
+        // разрыв, из которого вырос P0 «своё превью с чужими данными».
+        CustomNavBar(title: AppStrings.stats(l), largeTitle: true, subtitle: ownerName)
             // The screenshot tour walks back out of Статистика by this id. The
             // back button is shared code now, so the id rides on the bar — it
             // is the only button in there.
@@ -726,7 +850,10 @@ struct StatsScreenView: View {
         .surfaceCard(cornerRadius: 16)
 
         return Group {
-            if let tripId = row.tripId {
+            // У чужого экрана строка НЕ тапабельна: `openTrip` шлёт
+            // `.openTripDetail`, а тот ищет поездку в ЛОКАЛЬНОЙ базе. С чужим
+            // UUID это прыжок на «Дом» и пустой экран вместо поездки.
+            if let tripId = row.tripId, !isRemote {
                 Button { openTrip(tripId) } label: { card.contentShape(Rectangle()) }
                     .buttonStyle(.plain)
             } else {
@@ -947,7 +1074,19 @@ struct StatsScreenView: View {
         let count = tripManager.fetchTripCount()
         let lastDate = tripManager.fetchLastTripDate()
         let trips: [Trip]
-        if let cached = StatsCache.tripsIfValid(currentCount: count, currentLastDate: lastDate) {
+        loadGeneration += 1
+        let generation = loadGeneration
+        if let source {
+            // ЧУЖОЙ экран. `StatsCache` — кэш библиотеки ВЛАДЕЛЬЦА, ключ у него
+            // «сколько поездок и когда последняя», и на чужом аккаунте он бы
+            // совпал случайно и подсунул чужому профилю свои поездки. Ровно тот
+            // класс ошибки, который аудит профиля занёс в P0, поэтому здесь
+            // кэша нет вовсе.
+            let result = await source.load()
+            guard generation == loadGeneration else { return }
+            trips = result.trips
+            remoteFailed = result.failed
+        } else if let cached = StatsCache.tripsIfValid(currentCount: count, currentLastDate: lastDate) {
             trips = cached
         } else {
             trips = tripManager.fetchTrips()
@@ -955,7 +1094,8 @@ struct StatsScreenView: View {
         }
         // Small table, main-actor viewContext — the same way RouteMapView
         // reads territory. Crossing into the detached pass as plain values.
-        let roads = RoadCollectionManager().fetchRoads()
+        // У чужого экрана дорог нет и быть не может: RoadEntity локальная.
+        let roads = isRemote ? [] : RoadCollectionManager().fetchRoads()
 
         let computed = await Task.detached(priority: .userInitiated) {
             MeAggregates.compute(
@@ -963,12 +1103,12 @@ struct StatsScreenView: View {
                 now: Date(), calendar: Calendar.current
             )
         }.value
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, generation == loadGeneration else { return }
         agg = computed
         // Park on the newest month that holds a trip, not on an empty «now».
         if let last = computed.lastTripDate { anchor = last }
 
-        await loadPlaces(trips: trips, count: count, lastDate: lastDate)
+        await loadPlaces(trips: trips, count: count, lastDate: lastDate, generation: generation)
     }
 
     /// «Всего: N городов · N регионов». Cities exist only as atlas coverage —
@@ -976,16 +1116,26 @@ struct StatsScreenView: View {
     /// come from the same build Моя карта uses, or the two screens would
     /// disagree. Cached against the library fingerprint: this is the slowest
     /// thing on the screen and it does not move between range changes.
-    private func loadPlaces(trips: [Trip], count: Int, lastDate: Date?) async {
-        if let cached = StatsPlacesCache.value(count: count, lastDate: lastDate) {
+    private func loadPlaces(trips: [Trip], count: Int, lastDate: Date?, generation: Int) async {
+        if !isRemote, let cached = StatsPlacesCache.value(count: count, lastDate: lastDate) {
             places = cached
             return
         }
         guard !trips.isEmpty else { return }
         await RegionAtlas.shared.loadIfNeeded()
-        let hashes = TerritoryManager().visitedGeohashes
+        // Таблица владельца читается здесь (main-actor viewContext), а вот
+        // ЧУЖОЙ туман считается уже в detached: у человека с сотнями публичных
+        // поездок это сотни декодов полилиний плюс геохеш на каждые 300 м
+        // пути — на главном акторе это многосекундная заморозка. `MyMapViewModel`
+        // делает ровно то же внутри detached, и расхождение было случайным.
+        let ownHashes = isRemote ? nil : TerritoryManager().visitedGeohashes
+        let remote = isRemote
         let atlas = RegionAtlas.shared
         let built = await Task.detached(priority: .utility) { () -> StatsPlaces in
+            let hashes = remote
+                ? TerritoryManager.geohashes(
+                    fromTrips: trips.map { $0.previewCoordinates }, precision: 6)
+                : (ownHashes ?? [])
             let exploration = MapExploration.build(
                 trips: trips, visitedHashes: hashes, atlas: atlas
             )
@@ -994,8 +1144,10 @@ struct StatsScreenView: View {
                 regions: exploration.regions.count
             )
         }.value
-        guard !Task.isCancelled else { return }
-        StatsPlacesCache.store(built, count: count, lastDate: lastDate)
+        // Тот же гейт, что у `agg`: обогнавший старый прогон иначе накрыл бы
+        // свежие города и регионы урезанными.
+        guard !Task.isCancelled, generation == loadGeneration else { return }
+        if !isRemote { StatsPlacesCache.store(built, count: count, lastDate: lastDate) }
         places = built
     }
 }

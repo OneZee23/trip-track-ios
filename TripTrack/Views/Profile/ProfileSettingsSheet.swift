@@ -29,6 +29,15 @@ private let settingsLog = Logger(subsystem: "com.triptrack", category: "settings
 /// profile), «Выйти» (inside «Аккаунт и синхронизация») and «Фон профиля» (→
 /// «Мой профиль»).
 struct ProfileSettingsSheet: View {
+    /// Открыть «Приватность» сразу при появлении (0.6.3).
+    ///
+    /// Нужно разовой карточке про видимость: её кнопка «Настроить» обязана
+    /// приводить к тумблерам, а не к списку, где их ещё надо найти. Через флаг,
+    /// а не через второй `PrivacySettingsView`: два экземпляра завели бы два
+    /// загрузчика уведомлений, и каждый POST'ил бы все пять флагов поверх
+    /// другого — см. комментарий на самом листе.
+    var opensPrivacy: Bool = false
+
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var mapVM: MapViewModel
@@ -54,6 +63,7 @@ struct ProfileSettingsSheet: View {
     @State private var showDebugLogs = false
     /// «Приватность» — the three visibility switches, one level down.
     @State private var showPrivacy = false
+    @State private var didOpenPrivacy = false
     #if DEBUG
     @State private var showTipJar = false
     #endif
@@ -105,6 +115,24 @@ struct ProfileSettingsSheet: View {
         }
         .sheet(isPresented: $showThemePicker) {
             themePicker(l)
+        }
+        // Через `task` с паузой, а не из `onAppear`: вложенный лист, поднятый
+        // посреди анимации показа родителя, UIKit молча роняет — и повторить
+        // некому, флаг уже взведён.
+        .onAppear {
+            guard opensPrivacy, !didOpenPrivacy else { return }
+            didOpenPrivacy = true
+            // Неструктурированная `Task`, а НЕ `.task`: та привязана к времени
+            // жизни вью и отменяется на первой же перерисовке — а перерисовка
+            // здесь гарантирована, лист только что появился. Отменённая задача
+            // молча не открывала «Приватность», и кнопка «Настроить» приводила
+            // просто в список настроек.
+            Task { @MainActor in
+                // Пауза на анимацию показа родителя: вложенный лист, поднятый
+                // посреди неё, UIKit роняет.
+                try? await Task.sleep(for: .milliseconds(450))
+                showPrivacy = true
+            }
         }
         .sheet(isPresented: $showPrivacy) {
             // Same instance, not a second one: two loaders would each POST all

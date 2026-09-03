@@ -5,7 +5,7 @@ import UIKit
 
 enum AppTheme {
     // MARK: - Accent — warm orange, road-trip feel
-    static let accent = Color(red: 235/255, green: 87/255, blue: 30/255)       // warm road orange
+    static let accent = Color(red: 194/255, green: 69/255, blue: 43/255)       // #C2452B — terracotta
     static let accentBg = accent.opacity(0.08)
 
     static let green = Color(red: 46/255, green: 174/255, blue: 80/255)        // earthy green

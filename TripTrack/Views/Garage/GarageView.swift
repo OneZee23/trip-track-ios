@@ -121,7 +121,7 @@ struct GarageView: View {
 
     @ViewBuilder
     private func vehicleList(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        let sorted = settings.vehicles.sorted { $0.odometerKm > $1.odometerKm }
+        let sorted = settings.vehicles.sorted { $0.displayOdometerKm > $1.displayOdometerKm }
         ForEach(sorted) { vehicle in
             vehicleCard(vehicle, c: c, l: l)
         }
@@ -266,7 +266,7 @@ struct GarageView: View {
             // about what everyone else may see.
             VehiclePlateChip(plate: vehicle.plate)
         } else {
-            Text("\(GarageFormat.odometer(vehicle.odometerKm)) \(AppStrings.km(l))")
+            Text("\(GarageFormat.odometer(vehicle.displayOdometerKm)) \(AppStrings.km(l))")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(c.textTertiary)
         }

@@ -38,6 +38,11 @@ struct ProfileView: View {
     /// Typed destinations for the Я stack.
     private enum MeDest: Hashable {
         case stats
+        /// Чужая статистика и чужая карта (0.6.3). Те же экраны, что и свои,
+        /// с другим источником поездок; имя владельца едет с ними, чтобы
+        /// шапка отличала одну «Статистику» от другой.
+        case publicStats(UUID, String?)
+        case publicMap(UUID, String?)
         /// «Мой профиль» — the hub behind the header (avatar + name/handle/bio
         /// /level/stats rows). Its five row editors are NOT cases here: four
         /// of them are sheets this view presents, and the fifth is Статистика,
@@ -94,7 +99,14 @@ struct ProfileView: View {
     }
 
     @State private var mePath: [MeDest] = []
+    /// Разовая карточка «профиль теперь показывает больше» (0.6.3).
+    /// Пересчитывается на каждый вход/выход: вычисленное один раз в
+    /// инициализаторе значение означало бы, что гость, вошедший в этой же
+    /// сессии, узнает о новой видимости только после перезапуска.
+    @State private var showsVisibilityNotice = false
     @State private var showSettings = false
+    /// Разовая карточка ведёт прямо в «Приватность», а не в общий список.
+    @State private var opensPrivacyFromNotice = false
     @State private var showGarage = false
     /// Presented here rather than from «Мой профиль» itself, for the same
     /// reason the three field editors are: one host owns every presentation
@@ -151,6 +163,10 @@ struct ProfileView: View {
                             guestSignInCard(c)
                                 .padding(.horizontal, 16)
                                 .padding(.bottom, 12)
+                        } else if showsVisibilityNotice {
+                            visibilityNoticeCard(c)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
                         }
                         // Zero trips does not mean zero cars: the Гараж is
                         // where a new user names the thing they drive, and
@@ -160,6 +176,10 @@ struct ProfileView: View {
                     } else {
                         if !auth.isSignedIn {
                             guestSignInCard(c)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, 12)
+                        } else if showsVisibilityNotice {
+                            visibilityNoticeCard(c)
                                 .padding(.horizontal, 16)
                                 .padding(.bottom, 12)
                         }
@@ -285,6 +305,16 @@ struct ProfileView: View {
                 case .followList(let id, let mode):
                     FollowListView(accountId: id, mode: mode, pushPath: socialPath)
                         .hideAppTabBar()
+                case .publicStats(let id, let name):
+                    StatsScreenView(
+                        tripManager: mapVM.tripManager,
+                        source: RemoteTripSource(accountId: id),
+                        ownerName: name
+                    )
+                    .hideAppTabBar()
+                case .publicMap(let id, let name):
+                    PublicMapView(accountId: id, ownerName: name)
+                        .hideAppTabBar()
                 case .trip(let id):
                     // Same construction FeedView uses; TripDetailView manages
                     // its own chrome and hides the tab bar itself.
@@ -357,8 +387,28 @@ struct ProfileView: View {
             // mount, then re-posted.
             showGarage = true
         }
-        .sheet(isPresented: $showSettings) {
-            ProfileSettingsSheet()
+        // Настройки видимости просят показать превью. Лист к этому моменту
+        // уже закрылся сам — иначе push ушёл бы под него.
+        .onChange(of: auth.isSignedIn) { _, _ in refreshVisibilityNotice() }
+        // `isPublicProfile` приезжает из `/auth/me` уже после появления экрана,
+        // поэтому карточка ждёт ответа, а не решает по пустому значению.
+        .onChange(of: auth.isPublicProfile) { _, _ in refreshVisibilityNotice() }
+        .task { await primeVisibilityState() }
+        .onReceive(NotificationCenter.default.publisher(for: .openOwnProfilePreview)) { _ in
+            guard let accountId = TokenStore.shared.accountId else { return }
+            showSettings = false
+            // Пауза на закрытие листа: push под ещё не уехавшим листом
+            // выполняется, но остаётся невидимым. `Task`, а не
+            // `DispatchQueue.main.asyncAfter` — правило дома.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                push(.publicProfile(accountId, nil))
+            }
+        }
+        // Одноразовый флаг: без сброса КАЖДОЕ следующее открытие настроек до
+        // конца сессии само прыгало бы в «Приватность».
+        .sheet(isPresented: $showSettings, onDismiss: { opensPrivacyFromNotice = false }) {
+            ProfileSettingsSheet(opensPrivacy: opensPrivacyFromNotice)
                 .environmentObject(lang)
                 .environment(\.navBarInSheet, true)
                 .environmentObject(themeManager)
@@ -499,6 +549,8 @@ struct ProfileView: View {
         switch dest {
         case .publicProfile(let id, let author): return .profile(id, author)
         case .followList(let id, let mode): return .followList(id, mode)
+        case .publicStats(let id, let name): return .publicStats(id, name)
+        case .publicMap(let id, let name): return .publicMap(id, name)
         case .stats, .myProfile, .levels, .country, .achievements,
              .achievement, .trip, .companionTrip:
             return nil
@@ -515,6 +567,8 @@ struct ProfileView: View {
         case .followList(let id, let mode): return .followList(id, mode)
         case .trip(let id, _): return .trip(id)
         case .socialTrip(let trip, _): return .companionTrip(trip)
+        case .publicStats(let id, let name): return .publicStats(id, name)
+        case .publicMap(let id, let name): return .publicMap(id, name)
         }
     }
 
@@ -775,7 +829,7 @@ struct ProfileView: View {
                         }
                     }
 
-                    Text("\(GarageFormat.odometer(vehicle.odometerKm)) \(AppStrings.km(l))")
+                    Text("\(GarageFormat.odometer(vehicle.displayOdometerKm)) \(AppStrings.km(l))")
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
@@ -1004,6 +1058,97 @@ struct ProfileView: View {
     /// Guest sync card: explains sync and signs in DIRECTLY via the shared
     /// Apple button — no sheet hop. The footnote is the "можно позже"
     /// affordance; the card just stays.
+    /// Разовая карточка про новую видимость (0.6.3).
+    ///
+    /// 0.6.3 включил пер-блочную видимость с дефолтом «всё открыто». Дефолт
+    /// выбран сознательно, иначе фича родилась бы мёртвой — но у существующих
+    /// аккаунтов наружу поехало то, на что они не подписывались, и единственное,
+    /// что делает такой дефолт честным, это сказать о нём один раз и тут же
+    /// дать настройку. Обе кнопки закрывают карточку навсегда: человек либо
+    /// пошёл настраивать, либо решил, что его всё устраивает.
+    private func visibilityNoticeCard(_ c: AppTheme.Colors) -> some View {
+        let l = lang.language
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(AppTheme.accentBg)
+                    Image(systemName: "eye.fill")
+                        .font(.system(size: 15))
+                        .foregroundStyle(AppTheme.accent)
+                }
+                .frame(width: 30, height: 30)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(AppStrings.visibilityNoticeTitle(l))
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(c.text)
+                    Text(AppStrings.visibilityNoticeBody(l))
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    dismissVisibilityNotice()
+                    // Флаг ВЫСТАВЛЯЕТСЯ РАНЬШЕ показа и отдельным тиком:
+                    // замыкание `.sheet` читает его в момент презентации, и
+                    // выставленный в той же транзакции он мог приехать туда
+                    // ещё false — лист открывался бы без перехода в приватность.
+                    opensPrivacyFromNotice = true
+                    Task { @MainActor in showSettings = true }
+                } label: {
+                    Text(AppStrings.visibilityNoticeConfigure(l))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(c.card)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    dismissVisibilityNotice()
+                } label: {
+                    Text(AppStrings.visibilityNoticeDismiss(l))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(c.text)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(c.card, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .background(AppTheme.accentBg, in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityIdentifier("visibility_notice_card")
+    }
+
+    /// `isPublicProfile` заполняет только `/auth/me`, а звали его лишь
+    /// «Облачная синхронизация» и «Приватность». Без этого вызова флаг на
+    /// холодном старте всегда nil — и разовая карточка, и гейт тумблеров
+    /// видимости не срабатывали бы, пока человек сам не зайдёт в приватность.
+    /// То есть ровно наоборот их назначению.
+    private func primeVisibilityState() async {
+        if auth.isSignedIn, auth.isPublicProfile == nil {
+            await auth.refreshMe()
+        }
+        refreshVisibilityNotice()
+    }
+
+    private func refreshVisibilityNotice() {
+        showsVisibilityNotice = VisibilityNoticeLatch.needsShow(
+            isSignedIn: auth.isSignedIn, isPublicProfile: auth.isPublicProfile)
+    }
+
+    private func dismissVisibilityNotice() {
+        VisibilityNoticeLatch.markShown()
+        withAnimation(.easeOut(duration: 0.2)) { showsVisibilityNotice = false }
+    }
+
     private func guestSignInCard(_ c: AppTheme.Colors) -> some View {
         // Soft session expiry wears the same card with different words: the
         // user did nothing wrong and lost nothing — the copy must say so

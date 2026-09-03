@@ -304,13 +304,9 @@ final class GamificationManager {
 
     private func backfillVehicleOdometers(trips: [Trip]) {
         let context = persistenceController.container.viewContext
-        var odometerMap: [UUID: Double] = [:]
-
-        for trip in trips {
-            if let vid = trip.vehicleId {
-                odometerMap[vid, default: 0] += trip.distanceKm
-            }
-        }
+        // Правило «что считать» живёт в `VehicleOdometer` и покрыто тестами:
+        // трансферы сюда не попадают.
+        let odometerMap = VehicleOdometer.trackedByVehicle(from: trips)
 
         for (vehicleId, km) in odometerMap {
             let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()

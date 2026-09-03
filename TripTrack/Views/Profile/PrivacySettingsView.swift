@@ -34,6 +34,8 @@ struct PrivacySettingsView: View {
     @State private var publicProfileDraft: Bool?
     /// True while /auth/me is in flight — the row draws inert rather than
     /// absent for that moment. See the F2 note on the row itself.
+    @State private var visibilityDrafts: [ProfileVisibilityBlock: Bool] = [:]
+    @State private var visibilityGenerations: [ProfileVisibilityBlock: Int] = [:]
     @State private var probing = false
 
     var body: some View {
@@ -159,6 +161,98 @@ struct PrivacySettingsView: View {
 
             rowDivider(c)
 
+            // Кто что видит внутри ОТКРЫТОГО профиля (0.6.3). Стоят под
+            // «Публичным профилем» намеренно: тот решает, виден ли профиль
+            // вообще, эти — что именно в нём видно, и порядок читается как
+            // сужение, а не как второй независимый список.
+            if auth.isSignedIn {
+                // Заголовок и вступление: четыре тумблера, приехавшие без
+                // объяснения в общий список приватности, читаются как ещё
+                // четыре независимых переключателя, а не как одна ось «что
+                // видно внутри открытого профиля».
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(AppStrings.visibilityTitle(l))
+                        .font(.system(size: 11, weight: .bold))
+                        .kerning(0.22)
+                        .foregroundStyle(c.textTertiary)
+                        .textCase(.uppercase)
+                    Text(AppStrings.visibilityIntro(l))
+                        .font(.inter(11.5))
+                        .foregroundStyle(c.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
+
+                ForEach(ProfileVisibilityBlock.allCases, id: \.self) { block in
+                    PrivacyToggleRow(
+                        icon: Self.icon(for: block),
+                        tint: Self.tint(for: block),
+                        title: Self.title(for: block, l),
+                        subtitle: Self.subtitle(for: block, l),
+                        isOn: visibilityBinding(block),
+                        isEnabled: auth.visibility != nil
+                    )
+                    .accessibilityIdentifier("settings_visibility_\(String(describing: block))")
+
+                    rowDivider(c)
+                }
+
+                if auth.visibility == nil {
+                    // Инертный переключатель без причины читается как баг в
+                    // приложении, а не как незавершённый деплой.
+                    Text(AppStrings.visibilityUnavailable(l))
+                        .font(.inter(12))
+                        .foregroundStyle(c.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                }
+
+                Text(AppStrings.visibilityFootnote(l))
+                    .font(.inter(11))
+                    .foregroundStyle(c.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+
+                rowDivider(c)
+
+                // Единственный способ проверить тумблеры — посмотреть
+                // результат. Экран превью уже существует (он же чужой профиль
+                // с isOwnProfile), и с 0.6.3 он честно скрывает выключенные
+                // блоки, так что это действительно проверка, а не витрина.
+                Button {
+                    dismiss()
+                    NotificationCenter.default.post(
+                        name: .openOwnProfilePreview, object: nil)
+                } label: {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(AppStrings.visibilityPreviewLink(l))
+                                .font(.system(size: 13.5, weight: .semibold))
+                                .foregroundStyle(AppTheme.accent)
+                            Text(AppStrings.visibilityPreviewSub(l))
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(c.textTertiary)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(AppTheme.accent)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings_visibility_preview")
+
+                rowDivider(c)
+            }
+
             PrivacyToggleRow(
                 icon: "person.2.fill",
                 tint: AppTheme.purple,
@@ -215,6 +309,70 @@ struct PrivacySettingsView: View {
                 }
             }
         )
+    }
+
+    // MARK: - Видимость блоков (0.6.3)
+
+    /// Оптимистичный тумблер с откатом: сервер — источник истины, но ждать
+    /// круговой ответ, чтобы переключатель сдвинулся, читается как залипание.
+    private func visibilityBinding(_ block: ProfileVisibilityBlock) -> Binding<Bool> {
+        Binding(
+            get: { visibilityDrafts[block] ?? auth.visibility?.value(block) ?? true },
+            set: { newValue in
+                visibilityDrafts[block] = newValue
+                // Поколение на блок: медленный ПРЕДЫДУЩИЙ запрос, вернувшись
+                // после нового переключения, снимал бы чужой драфт — и тумблер
+                // отскакивал бы к устаревшему значению под пальцем.
+                visibilityGenerations[block, default: 0] += 1
+                let generation = visibilityGenerations[block]
+                Task {
+                    let ok = await auth.setVisibility(block, newValue)
+                    if !ok { Haptics.error() }
+                    guard visibilityGenerations[block] == generation else { return }
+                    visibilityDrafts[block] = nil
+                }
+            }
+        )
+    }
+
+    private static func icon(for block: ProfileVisibilityBlock) -> String {
+        switch block {
+        case .counters: return "number"
+        case .stats: return "chart.bar.fill"
+        case .map: return "map.fill"
+        case .achievements: return "rosette"
+        }
+    }
+
+    private static func tint(for block: ProfileVisibilityBlock) -> Color {
+        switch block {
+        case .counters: return AppTheme.blue
+        case .stats: return AppTheme.accent
+        case .map: return AppTheme.green
+        case .achievements: return AppTheme.yellow
+        }
+    }
+
+    private static func title(
+        for block: ProfileVisibilityBlock, _ l: LanguageManager.Language
+    ) -> String {
+        switch block {
+        case .counters: return AppStrings.visibilityCounters(l)
+        case .stats: return AppStrings.visibilityStats(l)
+        case .map: return AppStrings.visibilityMap(l)
+        case .achievements: return AppStrings.visibilityAchievements(l)
+        }
+    }
+
+    private static func subtitle(
+        for block: ProfileVisibilityBlock, _ l: LanguageManager.Language
+    ) -> String {
+        switch block {
+        case .counters: return AppStrings.visibilityCountersSub(l)
+        case .stats: return AppStrings.visibilityStatsSub(l)
+        case .map: return AppStrings.visibilityMapSub(l)
+        case .achievements: return AppStrings.visibilityAchievementsSub(l)
+        }
     }
 
     /// Mutate-then-sync with a guard on unchanged values so redundant server

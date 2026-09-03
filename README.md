@@ -3,7 +3,7 @@
 > Google Photos для дорог. Записывает маршруты, помнит за тебя.
 
 **Platform:** iOS (iPhone)
-**Status:** v0.6.2 (branding, vehicle set, auth resilience) · v0.6.1 in App Store | **Started:** Jan 2026
+**Status:** v0.6.3 (public profile: stats + map + visibility) · v0.6.2 submitted | **Started:** Jan 2026
 
 ---
 

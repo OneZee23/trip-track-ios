@@ -4,8 +4,24 @@ import MapKit
 /// Lightweight route preview using Canvas instead of MKMapView.
 /// Much faster to render in feed cards — no UIKit overhead.
 struct LightRoutePreview: View {
-    let coordinates: [CLLocationCoordinate2D]
+    /// Один или несколько маршрутов в общей рамке.
+    ///
+    /// Несколько нужны карточке-входу «Карта» в чужом профиле (0.6.3): там это
+    /// тизер всей карты, а не одной поездки. Реализация одна, потому что общая
+    /// рамка, масштаб и упрощение у них ровно те же — форк дал бы два места,
+    /// где маршрут рисуется по-разному.
+    let routes: [[CLLocationCoordinate2D]]
     var accentColor: Color = .orange
+
+    init(coordinates: [CLLocationCoordinate2D], accentColor: Color = .orange) {
+        self.routes = [coordinates]
+        self.accentColor = accentColor
+    }
+
+    init(routes: [[CLLocationCoordinate2D]], accentColor: Color = .orange) {
+        self.routes = routes.filter { $0.count >= 2 }
+        self.accentColor = accentColor
+    }
 
     @Environment(\.colorScheme) private var scheme
 
@@ -13,23 +29,22 @@ struct LightRoutePreview: View {
         let c = AppTheme.colors(for: scheme)
 
         Canvas { context, size in
-            guard coordinates.count >= 2 else { return }
-
             // Skip RDP if already simplified (e.g. previewCoordinates from feed cards ~20 points)
-            let simplified: [CLLocationCoordinate2D]
-            if coordinates.count > 30 {
-                simplified = GeometryUtils.simplifyRDP(coordinates, epsilon: 0.00003)
-            } else {
-                simplified = coordinates
+            let simplifiedRoutes: [[CLLocationCoordinate2D]] = routes.compactMap { coordinates in
+                guard coordinates.count >= 2 else { return nil }
+                let s = coordinates.count > 30
+                    ? GeometryUtils.simplifyRDP(coordinates, epsilon: 0.00003)
+                    : coordinates
+                return s.count >= 2 ? s : nil
             }
-            guard simplified.count >= 2 else { return }
+            guard let first = simplifiedRoutes.first?.first else { return }
 
-            // Compute bounding box
-            var minLat = simplified[0].latitude
-            var maxLat = simplified[0].latitude
-            var minLon = simplified[0].longitude
-            var maxLon = simplified[0].longitude
-            for coord in simplified {
+            // Compute bounding box across EVERY route, so they share one frame
+            var minLat = first.latitude
+            var maxLat = first.latitude
+            var minLon = first.longitude
+            var maxLon = first.longitude
+            for coord in simplifiedRoutes.flatMap({ $0 }) {
                 minLat = min(minLat, coord.latitude)
                 maxLat = max(maxLat, coord.latitude)
                 minLon = min(minLon, coord.longitude)
@@ -61,18 +76,24 @@ struct LightRoutePreview: View {
                 return CGPoint(x: x, y: y)
             }
 
-            // Draw route path
-            var path = Path()
-            path.move(to: toPoint(simplified[0]))
-            for i in 1..<simplified.count {
-                path.addLine(to: toPoint(simplified[i]))
+            // Draw every route inside the shared frame
+            for simplified in simplifiedRoutes {
+                var path = Path()
+                path.move(to: toPoint(simplified[0]))
+                for i in 1..<simplified.count {
+                    path.addLine(to: toPoint(simplified[i]))
+                }
+                context.stroke(
+                    path,
+                    with: .color(accentColor.opacity(0.7)),
+                    style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
+                )
             }
 
-            context.stroke(
-                path,
-                with: .color(accentColor.opacity(0.7)),
-                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
-            )
+            // Концевые точки — только у ОДИНОЧНОГО маршрута. На десятке
+            // маршрутов двадцать разноцветных точек читаются как сыпь, а не как
+            // старт и финиш.
+            guard simplifiedRoutes.count == 1, let simplified = simplifiedRoutes.first else { return }
 
             // Start dot (green)
             let startPt = toPoint(simplified[0])

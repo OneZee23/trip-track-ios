@@ -77,9 +77,8 @@ struct TrackingView: View {
                     .transition(.opacity)
             }
 
-            // Shared top bar — always the same position. Left slot: back
-            // chevron while idle (the tab bar is hidden here, so the chevron
-            // is the only way out), the car chip while recording.
+            // Shared top bar — always the same position. Слева шеврон выхода
+            // (в записи рядом с ним встаёт чип машины), справа GPS.
             //
             // That slot used to hold a «REC · 0:34:12» pill. The canon rules
             // it out — «БЕЗ отдельного REC-индикатора — запись очевидна из
@@ -93,11 +92,21 @@ struct TrackingView: View {
             // which still draws the pill: the chip stays, the pill does not
             // come back.
             VStack(spacing: 10) {
-                HStack {
+                HStack(spacing: 8) {
+                    // Шеврон стоит ВСЕГДА, и в простое, и в записи.
+                    //
+                    // Канон рисует верхний ряд как «чип слева + GPS справа», но
+                    // из этого следовало, что во время записи выхода с экрана
+                    // нет вообще: в простое слот занимал шеврон, а на старте
+                    // записи его подменял чип. Решение владельца (02.09):
+                    // выход важнее правила. Побочно ряд стал СТАБИЛЬНЕЕ —
+                    // шеврон больше не прыгает, чип просто встаёт рядом.
+                    //
+                    // Запись живёт в фоне (фоновая геолокация + Live Activity),
+                    // так что уход на другой экран её не обрывает.
+                    backButton
                     if viewModel.isRecording {
                         VehicleChip(compact: true) { showVehiclePicker = true }
-                    } else {
-                        backButton
                     }
                     Spacer()
                     if !(viewModel.locationDenied && !viewModel.isRecording) {
@@ -155,11 +164,14 @@ struct TrackingView: View {
             // it was stamped with at start — picking a different one has to
             // reach the trip in flight, or the drive lands on the wrong car
             // while the chip claims otherwise.
-            VehiclePickerSheet { picked in
+            // Метка `onPick:` обязательна: после появления `onPickTransfer`
+            // хвостовое замыкание без метки всё ещё связывается верно, но
+            // компилятор ругается на устаревшее обратное сопоставление.
+            VehiclePickerSheet(onPick: { picked in
                 guard viewModel.isRecording,
                       let tripId = viewModel.tripManager.activeTrip?.id else { return }
                 viewModel.tripManager.updateVehicle(for: tripId, vehicleId: picked)
-            }
+            })
             .environmentObject(lang)
         }
         .overlay {

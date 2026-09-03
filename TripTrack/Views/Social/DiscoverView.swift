@@ -5,6 +5,7 @@ private let discoverLog = Logger(subsystem: "com.triptrack", category: "social.d
 
 struct DiscoverView: View {
     @EnvironmentObject private var lang: LanguageManager
+    @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
@@ -72,6 +73,14 @@ struct DiscoverView: View {
                     PublicProfileView(accountId: id, preloaded: author, pushPath: $authorPath)
                 case .followList(let id, let mode):
                     FollowListView(accountId: id, mode: mode, pushPath: $authorPath)
+                case .publicStats(let id, let name):
+                    StatsScreenView(
+                        tripManager: mapVM.tripManager,
+                        source: RemoteTripSource(accountId: id),
+                        ownerName: name
+                    )
+                case .publicMap(let id, let name):
+                    PublicMapView(accountId: id, ownerName: name)
                 case .trip, .socialTrip:
                     // Discover never pushes trip destinations; render empty if
                     // the path somehow gets one to stay type-exhaustive.

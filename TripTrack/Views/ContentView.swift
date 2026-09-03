@@ -13,6 +13,13 @@ extension Notification.Name {
     /// once that tab's stack exists, the same two-phase handoff `.openTripDetail`
     /// uses.
     static let openUserProfile = Notification.Name("openUserProfile")
+    /// «Посмотреть, как видят другие» из настроек видимости (0.6.3).
+    ///
+    /// Превью живёт в стеке таба «Я», а настройки — в листе внутри листа.
+    /// Через канал, а не прямой навигацией: второй `PublicProfileView`,
+    /// открытый поверх настроек, был бы вторым экраном той же личности с
+    /// собственным загрузчиком.
+    static let openOwnProfilePreview = Notification.Name("openOwnProfilePreview")
     static let navigateToProfile = Notification.Name("navigateToProfile")
     static let dismissTripSummary = Notification.Name("dismissTripSummary")
     static let tripDeleted = Notification.Name("tripDeleted")

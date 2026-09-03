@@ -22,6 +22,18 @@ struct VehiclePickerSheet: View {
     /// the editor uses it to set the field. Both sides already take `UUID?` —
     /// a trip with no vehicle is a valid trip, all the way down.
     var onPick: ((UUID?) -> Void)?
+    /// Показывать ли строку «Ехал пассажиром» (0.6.3).
+    ///
+    /// Это свойство КОНКРЕТНОЙ поездки, а не выбор машины «на будущее»,
+    /// поэтому строка появляется только там, где редактируют одну поездку.
+    /// На экране записи её нет: там выбирают, на чём поедешь, а не кем ехал.
+    var showsTransferOption: Bool = false
+    /// Помечена ли редактируемая поездка трансфером — для галочки.
+    var isTransferSelected: Bool = false
+    /// Выбран трансфер. Отдельный колбэк, а не `onPick(nil)`: «без транспорта»
+    /// значит «не указал машину», а трансфер — «ехал не за рулём», и путать
+    /// их нельзя, иначе километры молча останутся на чьём-то одометре.
+    var onPickTransfer: (() -> Void)?
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -109,6 +121,9 @@ struct VehiclePickerSheet: View {
         // be. Fixed content is what makes the measurement above possible.
         VStack(spacing: Self.rowSpacing) {
             noVehicleRow(c: c)
+            if showsTransferOption {
+                transferRow(c: c)
+            }
             ForEach(settings.vehicles) { vehicle in
                 vehicleRow(vehicle, c: c)
             }
@@ -119,6 +134,47 @@ struct VehiclePickerSheet: View {
     /// «Без транспорта» — the trip still records, it just has no vehicle to
     /// bill the fuel, mileage and level to. A neutral glyph rather than a car:
     /// a car with a slash through it would read as an error state.
+    /// «Ехал пассажиром» — такси, автобус, чужая машина.
+    ///
+    /// Стоит рядом с «Без транспорта» намеренно: обе строки означают «машины у
+    /// этой поездки нет», но по разным причинам, и разница видна в пробеге.
+    private func transferRow(c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.selection()
+            onPickTransfer?()
+            dismiss()
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(isTransferSelected ? AppTheme.accentBg : c.cardAlt)
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(isTransferSelected ? AppTheme.accent : c.textTertiary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AppStrings.tripTransferTitle(lang.language))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    Text(AppStrings.tripTransferHint(lang.language))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(c.textTertiary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                if isTransferSelected {
+                    selectedCheck
+                }
+            }
+            .modifier(PickerRowChrome(selected: isTransferSelected))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("vehicle_picker_transfer")
+    }
+
     private func noVehicleRow(c: AppTheme.Colors) -> some View {
         // Checked whenever the selection resolves to nothing, not only when the
         // id is literally nil: deleting the selected vehicle can leave a
@@ -209,7 +265,7 @@ struct VehiclePickerSheet: View {
                             VehiclePlateChip(plate: vehicle.plate, size: 10)
                         }
                     }
-                    Text("\(GarageFormat.odometer(vehicle.odometerKm)) \(AppStrings.km(lang.language))")
+                    Text("\(GarageFormat.odometer(vehicle.displayOdometerKm)) \(AppStrings.km(lang.language))")
                         .font(.system(size: 12))
                         .foregroundStyle(c.textTertiary)
                 }

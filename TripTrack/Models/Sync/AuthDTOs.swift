@@ -47,6 +47,12 @@ struct RefreshResponse: Codable {
 /// `CloudSyncView` — prod without `/auth/me` would silently fake-accept an
 /// `isPublic` profile-update).
 struct MeResponse: Codable {
+    /// Видимость блоков публичного профиля (0.6.3). Опциональны: старый
+    /// сервер этих ключей не шлёт, и их отсутствие означает «всё открыто».
+    let countersPublic: Bool?
+    let statsPublic: Bool?
+    let mapPublic: Bool?
+    let achievementsPublic: Bool?
     let id: UUID?
     let email: String?
     let displayName: String?

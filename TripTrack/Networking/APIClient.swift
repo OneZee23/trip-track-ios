@@ -290,8 +290,33 @@ final class APIClient {
         }
     }
 
+    /// Собирает URL из базы и пути, КОРРЕКТНО обрабатывая query-строку.
+    ///
+    /// `URL.appendingPathComponent` считает весь аргумент одним сегментом пути:
+    /// он кодирует `?` в `%3F` и повторно кодирует `%` в `%25`. До 0.6.3 это
+    /// сходило с рук, потому что ни один эндпоинт не носил query-строку;
+    /// `/users/:id/trips?cursor=…` — первый, и с наивной склейкой каждая
+    /// вторая страница уходила бы в несуществующий путь. Отказ при этом
+    /// невидим: пагинация просто останавливается, и чужая карта показывает
+    /// первую сотню поездок как всё, что есть.
+    nonisolated static func url(base: URL, path: String) -> URL? {
+        guard let separator = path.firstIndex(of: "?") else {
+            return base.appendingPathComponent(path)
+        }
+        let pathPart = String(path[path.startIndex..<separator])
+        let queryPart = String(path[path.index(after: separator)...])
+        var components = URLComponents(
+            url: base.appendingPathComponent(pathPart), resolvingAgainstBaseURL: false)
+        // Именно `percentEncodedQuery`: значение уже экранировано вызывающим,
+        // и `query` закодировало бы его во второй раз.
+        components?.percentEncodedQuery = queryPart
+        return components?.url
+    }
+
     private func performGet<Res: Decodable>(path: String, requiresAuth: Bool, isRetry: Bool) async throws -> Res {
-        let url = AppConfig.apiBaseURL.appendingPathComponent(path)
+        guard let url = Self.url(base: AppConfig.apiBaseURL, path: path) else {
+            throw APIError.transport("bad url for \(path)")
+        }
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         if requiresAuth, let token = tokenStore.accessToken {

@@ -166,7 +166,7 @@ enum DriverRank: String, CaseIterable {
         case .traveler:     return Color(red: 0.808, green: 0.604, blue: 0.180)
         case .explorer:     return Color(red: 0.882, green: 0.627, blue: 0.090)
         case .navigator:    return Color(red: 0.933, green: 0.506, blue: 0.129)
-        case .trucker:      return Color(red: 0.922, green: 0.353, blue: 0.118)
+        case .trucker:      return Color(red: 0.761, green: 0.271, blue: 0.169)
         case .legend:       return Color(red: 0.847, green: 0.243, blue: 0.082)
         case .pioneer:      return Color(red: 0.784, green: 0.180, blue: 0.106)
         case .nomad:        return Color(red: 0.706, green: 0.129, blue: 0.129)
@@ -360,7 +360,7 @@ enum VehicleLevelSystem {
     private static let decadeColors: [Color] = [
         Color(red: 155/255, green: 155/255, blue: 165/255),  // 1–9    #9B9BA5 grey, still new
         Color(red: 160/255, green: 113/255, blue: 61/255),   // 10–19  #A0713D bronze
-        AppTheme.accent,                                     // 20–29  #EB571E brand orange
+        AppTheme.accent,                                     // 20–29  #C2452B brand terracotta
         Color(red: 217/255, green: 58/255,  blue: 30/255),   // 30–39  #D93A1E
         Color(red: 180/255, green: 35/255,  blue: 24/255),   // 40–49  #B42318
         Color(red: 155/255, green: 30/255,  blue: 60/255),   // 50–59  #9B1E3C

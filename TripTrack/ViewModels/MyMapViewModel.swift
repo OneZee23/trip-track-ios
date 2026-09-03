@@ -64,7 +64,63 @@ final class MyMapViewModel: ObservableObject {
     private weak var tripManagerRef: TripManager?
     private weak var territoryRef: TerritoryManager?
 
+    /// Источник поездок для ЧУЖОЙ карты. `nil` у карты владельца — она ходит
+    /// в CoreData через `reload(tripManager:territory:)`, как и раньше.
+    private let remoteSource: TripSource?
+    /// Загрузка чужой карты отвалилась. Отличает «нет публичных поездок» от
+    /// «не удалось загрузить» — экран пишет разное.
+    @Published private(set) var remoteFailed = false
+
+    /// Чужая карта (0.6.3). Обычный init, а НЕ `.shared`: синглтон переживает
+    /// переключение табов и держит состояние карты владельца — чужой аккаунт,
+    /// заехавший в него, стёр бы её.
+    init(source: TripSource) {
+        self.remoteSource = source
+    }
+
+    /// Строит чужую карту из публичных поездок аккаунта.
+    ///
+    /// Тот же `MapExploration.build`, что и у своей карты, — форка рендера нет.
+    /// Разница ровно в двух местах: поездки приезжают из источника, а туман
+    /// считается из тех же координат ЧИСТОЙ функцией и живёт только в памяти.
+    /// Ни одна строка отсюда не попадает в `VisitedGeohashEntity`.
+    func loadRemote() async {
+        guard let remoteSource else { return }
+        loadGeneration += 1
+        let generation = loadGeneration
+        if exploration.isEmpty { isLoading = true }
+
+        await RegionAtlas.shared.loadIfNeeded()
+
+        let result = await remoteSource.load()
+        let trips = result.trips
+        let atlas = RegionAtlas.shared
+
+        let built = await Task.detached(priority: .userInitiated) {
+            let hashes = TerritoryManager.geohashes(
+                fromTrips: trips.map { $0.previewCoordinates }, precision: 6)
+            let exploration = MapExploration.build(
+                trips: trips, visitedHashes: hashes, atlas: atlas)
+            let fog = exploration.fog.isEmpty ? nil : RoadFogOverlay(fog: exploration.fog)
+            return (exploration, fog)
+        }.value
+
+        guard generation == loadGeneration else { return }
+
+        // Под тем же гейтом, что и всё остальное: обогнавшая устаревшая
+        // загрузка иначе накрыла бы свежие маршруты сообщением об отказе.
+        remoteFailed = result.failed
+        exploration = built.0
+        fogOverlay = built.1
+        fogVeil = built.1.map { FogOfWarOverlay(fog: $0) }
+        routeCache.removeAll()
+        routeCacheOrder.removeAll()
+        loaded = true
+        isLoading = false
+    }
+
     init() {
+        self.remoteSource = nil
         // Data changes invalidate the map. When the tab is off-screen the
         // reload happens here directly (the view can't); loadIfNeeded also
         // rechecks `stale` on the next appearance as a belt-and-braces.
@@ -332,6 +388,11 @@ final class MyMapViewModel: ObservableObject {
 
     /// Figma speed→color stops (My-Map-local palette; thresholds shared with
     /// `SpeedColorScale` so the semantics stay consistent app-wide).
+    ///
+    /// Третья ступень намеренно осталась ярко-оранжевой (#EB571E) и НЕ поехала
+    /// за брендом в терракоту: это шкала данных, а не акцент. Приглушённый
+    /// кирпич схлопнулся бы с красной ступенью, и «быстро» перестало бы
+    /// отличаться от «очень быстро».
     private nonisolated static func color(forSpeedKmh v: Double) -> UIColor {
         switch v {
         case ..<50:   return UIColor(red: 0x30/255, green: 0xD1/255, blue: 0x58/255, alpha: 1)

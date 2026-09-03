@@ -88,6 +88,7 @@ struct VehicleDetailView: View {
                     VStack(spacing: 12) {
                         heroCard(vehicle, c: c, l: l)
                         statGrid(vehicle, c: c, l: l)
+                        odometerBreakdown(vehicle, c: c, l: l)
                         // A bicycle pairs with no stereo, so auto-record has
                         // nothing to key off — the rows are absent, not
                         // disabled (canon: hidden means gone).
@@ -281,6 +282,31 @@ struct VehicleDetailView: View {
 
     // MARK: - Stat Grid
 
+    /// Вторая строка одометра: сколько из показанного числа приложение видело
+    /// само, и сколько прошло мимо записи. Ради этого разрыва одометр и
+    /// раздвоили — он и есть повод дотрекать.
+    @ViewBuilder
+    private func odometerBreakdown(
+        _ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language
+    ) -> some View {
+        if vehicle.manualOdometerKm != nil {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(AppStrings.odometerTrackedLine(
+                    l, km: "\(GarageFormat.odometer(vehicle.odometerKm)) \(AppStrings.km(l))"))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(c.textTertiary)
+                if let gap = vehicle.untrackedKm {
+                    Text(AppStrings.odometerUntrackedLine(
+                        l, km: "\(GarageFormat.odometer(gap)) \(AppStrings.km(l))"))
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("vehicle_odometer_breakdown")
+        }
+    }
+
     private func statGrid(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         // No measured consumption exists — mean of city/highway settings (fork F10).
         // Averaged BEFORE conversion: mpg is a reciprocal, so the mean of
@@ -289,10 +315,14 @@ struct VehicleDetailView: View {
 
         return HStack(spacing: 10) {
             statCard(
-                value: GarageFormat.odometer(vehicle.odometerKm),
+                // Главный — реальный, если введён (решение владельца 02.09).
+                // Именно он живёт на приборке, и именно его человек сверяет.
+                value: GarageFormat.odometer(vehicle.displayOdometerKm),
                 valueColor: c.text,
                 unit: AppStrings.km(l),
-                label: AppStrings.odometerLabel(l),
+                label: vehicle.manualOdometerKm == nil
+                    ? AppStrings.odometerLabel(l)
+                    : AppStrings.odometerRealLabel(l),
                 c: c
             )
             // Consumption is a fuel figure like the ones below it, so a

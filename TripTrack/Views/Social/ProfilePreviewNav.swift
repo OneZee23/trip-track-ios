@@ -44,6 +44,11 @@ enum ProfilePreviewDest: Hashable {
     case followList(UUID, FollowListMode)
     case trip(UUID, focus: TripFocus)
     case socialTrip(SocialFeedTrip, focus: TripFocus)
+    /// Чужая статистика и чужая карта (0.6.3). Несут имя владельца, потому что
+    /// оба экрана — те же самые, что у себя, и без подписи в шапке две страницы
+    /// с разными числами выглядят одинаково.
+    case publicStats(UUID, String?)
+    case publicMap(UUID, String?)
 
     /// Plain-open shorthands — every existing `.trip(id)` / `.socialTrip(t)`
     /// call site keeps working and means "open at the top".

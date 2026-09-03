@@ -68,4 +68,18 @@ enum APIEndpoint {
     static let companionsMyTrips       = "/companions/my-trips"
 
     static func userProfile(_ id: String) -> String { "/users/\(id)/profile" }
+    /// Все публичные поездки аккаунта с геометрией — источник чужой карты (0.6.3).
+    /// Курсор по формату совпадает с лентой: `${startDate.toISOString()}|${id}`,
+    /// поэтому его надо процентно экранировать (в нём есть `|` и `:`).
+    static func userTrips(_ id: String, cursor: String? = nil, limit: Int? = nil) -> String {
+        var query: [String] = []
+        if let limit { query.append("limit=\(limit)") }
+        if let cursor, !cursor.isEmpty {
+            let escaped = cursor.addingPercentEncoding(
+                withAllowedCharacters: .alphanumerics) ?? cursor
+            query.append("cursor=\(escaped)")
+        }
+        let base = "/users/\(id)/trips"
+        return query.isEmpty ? base : "\(base)?\(query.joined(separator: "&"))"
+    }
 }

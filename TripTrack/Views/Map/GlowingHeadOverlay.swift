@@ -40,7 +40,7 @@ final class GlowingHeadRenderer: MKOverlayRenderer {
             path.addLine(to: point(for: MKMapPoint(coords[i])))
         }
 
-        let accentColor = UIColor(red: 235/255, green: 87/255, blue: 30/255, alpha: 1)
+        let accentColor = UIColor(red: 194/255, green: 69/255, blue: 43/255, alpha: 1)
 
         // Outer glow (wider, semi-transparent)
         context.saveGState()

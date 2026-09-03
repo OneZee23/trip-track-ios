@@ -5207,4 +5207,213 @@ enum AppStrings {
            ru: "Приложение откроется пустым. Старый файл останется на телефоне — напиши нам, поможем достать. Если Облачная синхронизация была включена, поездки подтянутся с сервера.",
            en: "The app will start empty. The old file stays on your phone — write to us and we'll help recover it. If Cloud Sync was on, your trips will come back from the server.")
     }
+
+    // MARK: - Публичный профиль 0.6.3
+
+    /// Подзаголовок карточки-входа в чужую статистику. Перечисляет секции,
+    /// которые человек там увидит, — иначе «Статистика» ничем не отличается
+    /// от счётчиков, стоящих строкой выше.
+    static func profileStatsEntrySubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileStatsEntrySubtitle",
+           ru: "ритм · рекорды · новые места",
+           en: "rhythm · records · new places")
+    }
+    static func profileMapEntryTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileMapEntryTitle", ru: "Карта", en: "Map")
+    }
+    static func profileMapEntrySubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileMapEntrySubtitle",
+           ru: "где человек был за всё время",
+           en: "everywhere they have been")
+    }
+    /// Рамка под чужой картой и в её нижнем листе.
+    ///
+    /// Обязательна. Счётчики профиля считаются по ВСЕМ поездкам, включая
+    /// приватные, а карта физически рисует только публичные — «47 поездок» и
+    /// карта с двенадцатью маршрутами оказываются на расстоянии одного тапа.
+    /// Без этой подписи расхождение читается как баг.
+    static func publicRoutesCaption(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicRoutesCaption", ru: "публичные маршруты", en: "public routes")
+    }
+    /// Через `tr` с плейсхолдером, а НЕ инлайновым `switch lang`: инлайн
+    /// невидим для одиннадцати таблиц и для `LocalizationTests`, и на немецком
+    /// телефоне навсегда остался бы английским. Правило дома, нарушенное здесь
+    /// при первом заходе.
+    static func publicRoutesExplainer(_ lang: LanguageManager.Language, name: String) -> String {
+        tr(lang, "publicRoutesExplainer",
+           ru: "Здесь только те поездки, которые {name} сделал публичными. Приватные на карту не попадают.",
+           en: "Only the trips {name} made public are drawn here. Private ones never reach the map.")
+            .replacingOccurrences(of: "{name}", with: name)
+    }
+    static func publicMapEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicMapEmptyTitle", ru: "Пока нечего показать", en: "Nothing to show yet")
+    }
+    static func publicMapEmptyBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicMapEmptyBody",
+           ru: "Ни одна поездка ещё не опубликована. Как только появится — она будет здесь.",
+           en: "No trip has been made public yet. As soon as one is, it shows up here.")
+    }
+
+    // MARK: - Кто что видит (настройки видимости)
+
+    static func visibilityTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityTitle", ru: "Кто что видит", en: "What others see")
+    }
+    static func visibilityIntro(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityIntro",
+           ru: "Профиль открыт по умолчанию. Выключите то, что не хотите показывать, — остальное останется видно.",
+           en: "Your profile is open by default. Switch off what you would rather keep to yourself; the rest stays visible.")
+    }
+    static func visibilityCounters(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityCounters", ru: "Базовые счётчики", en: "Basic counters")
+    }
+    static func visibilityCountersSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityCountersSub",
+           ru: "Поездки, километры и регионы в шапке профиля",
+           en: "Trips, kilometres and regions in the profile header")
+    }
+    static func visibilityStats(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityStats", ru: "Расширенная статистика", en: "Full statistics")
+    }
+    static func visibilityStatsSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityStatsSub",
+           ru: "Ритм, доска почёта, новые места",
+           en: "Rhythm, records board, new places")
+    }
+    static func visibilityMap(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityMap", ru: "Карта", en: "Map")
+    }
+    static func visibilityMapSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityMapSub",
+           ru: "Публичные маршруты на карте",
+           en: "Your public routes on the map")
+    }
+    static func visibilityAchievements(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityAchievements", ru: "Достижения", en: "Achievements")
+    }
+    static func visibilityAchievementsSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityAchievementsSub", ru: "Значки и прогресс", en: "Badges and progress")
+    }
+    /// Объясняет, что «скрыто» здесь означает буквально: сервер не отдаёт
+    /// данные, а не клиент их прячет.
+    static func visibilityFootnote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityFootnote",
+           ru: "Скрытый блок не появляется у других вовсе — без плашки «скрыто». Счётчики и достижения сервер при этом не отдаёт совсем; статистика и карта считаются из одних и тех же публичных поездок, поэтому перестают приходить, когда выключены обе.",
+           en: "A hidden block simply is not there for others — no «hidden» placeholder. Counters and achievements are withheld by the server outright; statistics and the map are computed from the same public trips, so the data stops being sent once both are off.")
+    }
+    static func visibilityPreviewLink(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityPreviewLink", ru: "Посмотреть, как видят другие", en: "See what others see")
+    }
+    static func visibilityPreviewSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityPreviewSub", ru: "Свой профиль чужими глазами", en: "Your profile through their eyes")
+    }
+
+    // MARK: - Разовая карточка про opt-out
+
+    static func visibilityNoticeTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityNoticeTitle",
+           ru: "Профиль теперь показывает больше",
+           en: "Your profile now shows more")
+    }
+    static func visibilityNoticeBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityNoticeBody",
+           ru: "Ваша статистика и карта публичных поездок стали видны другим. Ничего не публиковалось заново — выключить можно в одно касание.",
+           en: "Your statistics and the map of your public trips are now visible to others. Nothing was published anew, and you can switch any of it off in one tap.")
+    }
+    static func visibilityNoticeConfigure(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityNoticeConfigure", ru: "Настроить", en: "Adjust")
+    }
+    static func visibilityNoticeDismiss(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityNoticeDismiss", ru: "Понятно", en: "Got it")
+    }
+
+    // MARK: - Закрытый профиль
+
+    static func closedProfileTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "closedProfileTitle", ru: "Закрытый профиль", en: "Private profile")
+    }
+    static func closedProfileBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "closedProfileBody",
+           ru: "Статистика, карта и поездки видны только подписчикам.",
+           en: "Statistics, map and trips are visible to followers only.")
+    }
+    /// Экран по ПРЯМОЙ ссылке. Сервер отвечает `UserNotFound`, чтобы скрыть
+    /// само существование аккаунта, поэтому здесь нет ни имени, ни аватара, и
+    /// текст не подтверждает, что аккаунт есть.
+    /// Отказ загрузки чужой статистики или карты. Отдельно от пустого
+    /// состояния: «человек ничего не опубликовал» — утверждение о другом
+    /// человеке, и говорить его из-за обрыва связи нельзя.
+    static func publicDataLoadFailed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicDataLoadFailed",
+           ru: "Не удалось загрузить",
+           en: "Couldn't load this")
+    }
+    /// Часть страниц не доехала: числа верны, но это нижняя граница.
+    static func publicDataPartial(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicDataPartial",
+           ru: "Загрузилось не всё — числа могут быть занижены",
+           en: "Not everything loaded — these numbers may be low")
+    }
+    /// Сервер этого аккаунта ещё не умеет пер-блочную видимость. Инертный
+    /// тумблер без объяснения выглядит сломанным — тот же урок, что с
+    /// «Публичным профилем».
+    static func visibilityUnavailable(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityUnavailable",
+           ru: "Пока недоступно — обновление ещё не дошло до сервера",
+           en: "Not available yet — the server update hasn't landed")
+    }
+    /// Подпись плашки-тизера на карточке «Статистика» в чужом профиле.
+    /// Оба факта берутся из уже приехавшего профиля — ни одного лишнего
+    /// запроса, и ни одного числа, которого мы не можем подтвердить.
+    static func profileTeaserLastTrip(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileTeaserLastTrip", ru: "последняя поездка", en: "last drive")
+    }
+    static func profileTeaserStreak(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileTeaserStreak", ru: "серия подряд", en: "current streak")
+    }
+    // MARK: - Одометр и трансфер (0.6.3)
+
+    /// Крупное число в карточке машины, когда реальный пробег введён.
+    static func odometerRealLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "odometerRealLabel", ru: "Пробег", en: "Odometer")
+    }
+    /// Вторая строка: сколько из него приложение видело своими глазами.
+    static func odometerTrackedLine(_ lang: LanguageManager.Language, km: String) -> String {
+        tr(lang, "odometerTrackedLine",
+           ru: "из них затрекано {km}",
+           en: "{km} of it tracked")
+            .replacingOccurrences(of: "{km}", with: km)
+    }
+    /// Разрыв — то, ради чего одометр и раздваивался.
+    static func odometerUntrackedLine(_ lang: LanguageManager.Language, km: String) -> String {
+        tr(lang, "odometerUntrackedLine",
+           ru: "{km} прошло мимо записи",
+           en: "{km} never made it into a trip")
+            .replacingOccurrences(of: "{km}", with: km)
+    }
+    static func odometerEditTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "odometerEditTitle", ru: "Пробег с приборки", en: "Odometer reading")
+    }
+    static func odometerEditHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "odometerEditHint",
+           ru: "Спишите число с панели. Уровень машины считается по записанным поездкам и от этого не изменится.",
+           en: "Copy the number from your dashboard. The vehicle level is earned from recorded trips and will not change.")
+    }
+    /// Поездка пассажиром.
+    static func tripTransferTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tripTransferTitle", ru: "Ехал пассажиром", en: "I was a passenger")
+    }
+    static func tripTransferHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tripTransferHint",
+           ru: "Такси, автобус, чужая машина. Километры останутся в вашей статистике, но не пойдут в пробег машины.",
+           en: "Taxi, bus, someone else's car. The kilometres stay in your statistics but never reach a vehicle's odometer.")
+    }
+    static func profileUnavailableTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileUnavailableTitle", ru: "Профиль недоступен", en: "Profile unavailable")
+    }
+    static func profileUnavailableBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileUnavailableBody",
+           ru: "Ссылка устарела, профиль закрыт или его владелец вас заблокировал. Мы не показываем, какой именно случай — иначе по ссылке можно было бы проверять, существует ли аккаунт.",
+           en: "The link is stale, the profile is private, or its owner blocked you. We do not say which — otherwise a link could be used to check whether an account exists.")
+    }
 }

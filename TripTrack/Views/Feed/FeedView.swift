@@ -218,6 +218,18 @@ struct FeedView: View {
                     )
                 case .followList(let id, let mode):
                     FollowListView(accountId: id, mode: mode, pushPath: $authorPath)
+                case .publicStats(let id, let name):
+                    StatsScreenView(
+                        tripManager: feedVM.tripManager,
+                        source: RemoteTripSource(accountId: id),
+                        ownerName: name
+                    )
+                case .publicMap(let id, let name):
+                    // Карта полноэкранная, и её нижний лист живёт там же, где
+                    // таб-бар: без этого бар красится поверх сводки и остаётся
+                    // тапабельным.
+                    PublicMapView(accountId: id, ownerName: name)
+                        .hideAppTabBar()
                 case .trip(let id, let focus):
                     TripDetailView(
                         tripId: id,

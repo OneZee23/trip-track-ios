@@ -19,6 +19,16 @@ final class AuthService: ObservableObject {
     /// when this is non-nil, because an old server silently ignores unknown
     /// profile-update fields and the toggle would fake-succeed).
     @Published private(set) var isPublicProfile: Bool?
+    /// Пер-блочная видимость публичного профиля (0.6.3). `nil` — сервер ещё не
+    /// ответил или не умеет этих флагов; UI тогда рисует «всё открыто», как и
+    /// ведёт себя такой сервер на самом деле.
+    @Published private(set) var visibility: ProfileVisibilityFlags?
+    /// Поколение на каждый блок видимости — см. `setVisibility`.
+    private var visibilityGeneration: [ProfileVisibilityBlock: Int] = [:]
+    /// Последний запрос по каждому блоку. Два быстрых переключения одного
+    /// тумблера иначе уходят параллельно, и сервер может обработать их в
+    /// обратном порядке — экран показал бы «скрыто», а блок остался публичным.
+    private var visibilityInFlight: [ProfileVisibilityBlock: Task<Void, Never>] = [:]
     private(set) var userIdentifier: String?
 
     /// True when the server definitively rejected our refresh token and the
@@ -479,10 +489,14 @@ final class AuthService: ObservableObject {
         // previous account's «confirmed» behind would swallow its first push
         // and leave it nameless — the very failure this latch exists to catch.
         ProfileSyncLatch.reset()
+        // Следующий Apple ID на этом телефоне — другой человек с другим
+        // публичным профилем; он тоже имеет право узнать, что о нём видно.
+        VisibilityNoticeLatch.reset()
         // Server-flag mirror back to "unknown" — the next account must not
         // inherit the previous account's privacy-toggle state, and the gate
         // re-verifies endpoint availability via refreshMe() after sign-in.
         isPublicProfile = nil
+        visibility = nil
         // Reset the website-globe opt-in mirror so account A's toggle doesn't
         // visually leak onto account B on the same device before B's login
         // read-back seeds the real value. (Server state is per-account; this is
@@ -661,11 +675,23 @@ final class AuthService: ObservableObject {
     func refreshMe() async {
         guard isSignedIn else { return }
         let gen = publicProfileGeneration
+        // Снимок поколений ПО БЛОКАМ. `setVisibility` намеренно не трогает
+        // общий счётчик (иначе он отменял бы запись «Публичного профиля»), так
+        // что от устаревшего ответа блоки надо защищать отдельно: иначе
+        // тумблер, переключённый во время этого запроса, отскочит назад, хотя
+        // сервер сохранил новое значение.
+        let blockGens = visibilityGeneration
         do {
             let res: MeResponse = try await APIClient.shared.post(
                 APIEndpoint.authMe, body: EmptyRequest())
             if gen == publicProfileGeneration {
                 isPublicProfile = res.isPublic
+                // nil, если сервер не знает этих флагов — тумблеры тогда
+                // остаются неактивными, а не притворяются работающими.
+                let fresh = ProfileVisibilityFlags(res)
+                visibility = Self.merged(
+                    incoming: fresh, current: visibility,
+                    generationsAtRequest: blockGens, generationsNow: visibilityGeneration)
             }
             if userEmail == nil, let email = res.email,
                !email.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -674,6 +700,88 @@ final class AuthService: ObservableObject {
             }
         } catch {
             authLog.error("refreshMe failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Явный пуш одного тумблера видимости (0.6.3).
+    ///
+    /// Payload несёт РОВНО одно поле — как и `setPublicProfile`. Причина та же:
+    /// сервер валидирует DTO целиком, и лишнее поле в этом же запросе уронило
+    /// бы вместе с собой всё остальное. Возвращает false, чтобы UI откатил
+    /// оптимистично переключённый тумблер.
+    /// Слить ответ `/auth/me` с локальным зеркалом, не затирая блоки, по
+    /// которым за время запроса прошла запись.
+    ///
+    /// Ответ мог уйти ДО того, как человек тронул тумблер: он вернётся со
+    /// старым значением и, если применить его целиком, снимет только что
+    /// сохранённое. Побитовое сравнение поколений оставляет такие блоки как
+    /// есть, а остальные обновляет.
+    nonisolated static func merged(
+        incoming: ProfileVisibilityFlags?,
+        current: ProfileVisibilityFlags?,
+        generationsAtRequest: [ProfileVisibilityBlock: Int],
+        generationsNow: [ProfileVisibilityBlock: Int]
+    ) -> ProfileVisibilityFlags? {
+        guard let incoming else { return current }
+        guard let current else { return incoming }
+        var result = incoming
+        for block in ProfileVisibilityBlock.allCases
+        where generationsAtRequest[block] != generationsNow[block] {
+            result.set(block, current.value(block))
+        }
+        return result
+    }
+
+    /// Переключить видимость блока.
+    ///
+    /// Запросы ПО ОДНОМУ блоку выстраиваются в цепочку: два быстрых нажатия на
+    /// один тумблер иначе уходят параллельно, сервер вправе обработать их в
+    /// обратном порядке, и экран показал бы «скрыто», пока блок остаётся
+    /// публичным. Разные блоки по-прежнему идут независимо.
+    func setVisibility(_ block: ProfileVisibilityBlock, _ isOn: Bool) async -> Bool {
+        let previous = visibilityInFlight[block]
+        let work = Task<Bool, Never> { [weak self] in
+            await previous?.value
+            guard let self else { return false }
+            return await self.performSetVisibility(block, isOn)
+        }
+        visibilityInFlight[block] = Task { _ = await work.value }
+        return await work.value
+    }
+
+    private func performSetVisibility(_ block: ProfileVisibilityBlock, _ isOn: Bool) async -> Bool {
+        var req = ProfileUpdateRequest(
+            displayName: nil, avatarEmoji: nil, profileBackground: nil,
+            profileLevel: nil, profileXp: nil, currentStreak: nil,
+            bestStreak: nil, activeVehicleId: nil, language: nil,
+            showOnPublicMap: nil)
+        switch block {
+        case .counters: req.countersPublic = isOn
+        case .stats: req.statsPublic = isOn
+        case .map: req.mapPublic = isOn
+        case .achievements: req.achievementsPublic = isOn
+        }
+        // Поколение НА БЛОК, а не одно на все четыре: с общим счётчиком
+        // быстрое переключение второго тумблера отменяло бы запись первого —
+        // сервер сохранил, зеркало не обновилось, переключатель отскочил.
+        //
+        // Общий `publicProfileGeneration` здесь НЕ трогаем: он принадлежит
+        // тумблеру «Публичный профиль», и его инкремент отсюда отменял бы
+        // запись того, ни в чём не повинного, запроса.
+        visibilityGeneration[block, default: 0] += 1
+        let blockGen = visibilityGeneration[block]
+        do {
+            let _: EmptyResponse = try await APIClient.shared.post(
+                APIEndpoint.profileUpdate, body: req)
+            guard blockGen == visibilityGeneration[block] else { return true }
+            var current = visibility ?? .open
+            current.set(block, isOn)
+            visibility = current
+            authLog.log("visibility \(String(describing: block)) set to \(isOn)")
+            return true
+        } catch {
+            authLog.error("setVisibility failed: \(String(describing: error), privacy: .public)")
+            return false
         }
     }
 

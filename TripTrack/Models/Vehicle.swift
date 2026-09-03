@@ -24,7 +24,15 @@ struct Vehicle: Identifiable, Codable {
     /// ride; the trips still publish, just without saying what they were made
     /// in. Separate from `plateVisible`, which hides only the number.
     var visibleToOthers: Bool
+    /// Пробег, который приложение ЗАСЧИТАЛО само: сумма поездок на этой
+    /// машине. Точный, но всегда неполный — записано не всё.
     var odometerKm: Double
+    /// Пробег с приборной панели, введённый руками. `nil` — не вводили.
+    ///
+    /// Опциональный, а не «ноль по умолчанию»: ноль — законное значение для
+    /// новой машины, и отличить его от «не заполнено» иначе нечем. Разрыв
+    /// между этим числом и `odometerKm` — и есть то, что хочется дотрекать.
+    var manualOdometerKm: Double?
     var level: Int
     var stickers: [VehicleSticker]
     var createdAt: Date
@@ -39,7 +47,7 @@ struct Vehicle: Identifiable, Codable {
          avatarStyle: String = VehicleAvatar.defaultStyle,
          type: VehicleType = .car, plate: String = "", plateVisible: Bool = false,
          visibleToOthers: Bool = true,
-         odometerKm: Double = 0, level: Int = 1, stickers: [VehicleSticker] = [],
+         odometerKm: Double = 0, manualOdometerKm: Double? = nil, level: Int = 1, stickers: [VehicleSticker] = [],
          createdAt: Date = Date(),
          cityConsumption: Double = 10.0, highwayConsumption: Double = 6.0,
          fuelPrice: Double = 56.0, fuelCurrency: String = FuelCurrency.current) {
@@ -52,6 +60,7 @@ struct Vehicle: Identifiable, Codable {
         self.plateVisible = plateVisible
         self.visibleToOthers = visibleToOthers
         self.odometerKm = odometerKm
+        self.manualOdometerKm = manualOdometerKm
         self.level = level
         self.stickers = stickers
         self.createdAt = createdAt
@@ -78,6 +87,9 @@ struct Vehicle: Identifiable, Codable {
         plateVisible = try c.decodeIfPresent(Bool.self, forKey: .plateVisible) ?? false
         visibleToOthers = try c.decodeIfPresent(Bool.self, forKey: .visibleToOthers) ?? true
         odometerKm = try c.decode(Double.self, forKey: .odometerKm)
+        // Сервер без этой колонки ключа не шлёт — старый бэкенд обязан
+        // декодироваться, а не ронять весь гараж.
+        manualOdometerKm = try c.decodeIfPresent(Double.self, forKey: .manualOdometerKm)
         level = try c.decode(Int.self, forKey: .level)
         stickers = try c.decodeIfPresent([VehicleSticker].self, forKey: .stickers) ?? []
         createdAt = try c.decode(Date.self, forKey: .createdAt)
@@ -143,6 +155,27 @@ struct Vehicle: Identifiable, Codable {
         guard visibleToOthers, hasPlate, plateVisible else { return nil }
         return plate
     }
+
+    // MARK: - Одометр
+
+    /// Что показывать крупно: реальный, если введён, иначе треканный.
+    /// Решение владельца — главным идёт то, что на приборке.
+    var displayOdometerKm: Double {
+        manualOdometerKm ?? odometerKm
+    }
+
+    /// Сколько машина проехала МИМО приложения. `nil`, когда реальный не
+    /// введён либо когда треканный его обогнал: отрицательный «недотрекано»
+    /// показывать бессмысленно, а обогнать он может запросто — число ввели
+    /// месяц назад и не обновили.
+    var untrackedKm: Double? {
+        guard let manual = manualOdometerKm, manual > odometerKm else { return nil }
+        return manual - odometerKm
+    }
+
+    /// От какого числа считается уровень. ВСЕГДА треканный: уровень — награда
+    /// за то, что приложение видело своими глазами, а не за цифру с клавиатуры.
+    var levelSourceKm: Double { odometerKm }
 
     // MARK: - Level
 

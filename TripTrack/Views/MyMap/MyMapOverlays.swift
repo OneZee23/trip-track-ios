@@ -3,8 +3,8 @@ import MapKit
 // MARK: - Palette
 
 enum MyMapPalette {
-    static let accent = UIColor(red: 0xEB/255, green: 0x57/255, blue: 0x1E/255, alpha: 1)
-    static let accentBright = UIColor(red: 0xFF/255, green: 0x6A/255, blue: 0x2B/255, alpha: 1)
+    static let accent = UIColor(red: 0xC2/255, green: 0x45/255, blue: 0x2B/255, alpha: 1)
+    static let accentBright = UIColor(red: 0xE0/255, green: 0x5A/255, blue: 0x38/255, alpha: 1)
     static let ink = UIColor(red: 0x14/255, green: 0x14/255, blue: 0x1A/255, alpha: 1)
 }
 

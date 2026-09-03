@@ -30,6 +30,12 @@ struct Trip: Identifiable, Codable {
     var elevation: Double
     var region: String?
     var isPrivate: Bool
+    /// Поездка, где человек был ПАССАЖИРОМ: такси, автобус, чужая машина.
+    ///
+    /// Отдельная сущность от «Без транспорта»: то означает «не указал машину»,
+    /// а это — «ехал не за рулём». Разница видна в пробеге: такие километры
+    /// идут в статистику (человек там был), но не наматывают ничью машину.
+    var isTransfer: Bool = false
     var vehicleId: UUID?
     var fuelCurrency: String?
     var previewPolyline: Data?
@@ -259,7 +265,8 @@ struct Trip: Identifiable, Codable {
          title: String? = nil, titleIsCustom: Bool = false,
          tripDescription: String? = nil,
          fuelUsed: Double = 0, elevation: Double = 0,
-         region: String? = nil, isPrivate: Bool = true, vehicleId: UUID? = nil,
+         region: String? = nil, isPrivate: Bool = true,
+         isTransfer: Bool = false, vehicleId: UUID? = nil,
          fuelCurrency: String? = nil,
          previewPolyline: Data? = nil, earnedBadgeIds: [String] = [],
          xpEarned: Int = 0,
@@ -279,6 +286,7 @@ struct Trip: Identifiable, Codable {
         self.elevation = elevation
         self.region = region
         self.isPrivate = isPrivate
+        self.isTransfer = isTransfer
         self.vehicleId = vehicleId
         self.fuelCurrency = fuelCurrency
         self.previewPolyline = previewPolyline

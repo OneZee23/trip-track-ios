@@ -24,6 +24,8 @@ protocol TripRepository {
     func updateTitle(for tripId: UUID, title: String)
     func updateNotes(for tripId: UUID, notes: String)
     func updatePrivacy(for tripId: UUID, isPrivate: Bool)
+    /// Пометить поездку трансфером (человек ехал пассажиром) или снять метку.
+    func updateTransfer(for tripId: UUID, isTransfer: Bool)
     /// Photos whose only copy is the server's — see the implementation.
     func serverOnlyPhotoIds(tripId: UUID) -> [UUID]
     func adoptRescuedPhoto(id: UUID, filename: String)
@@ -345,6 +347,24 @@ final class CoreDataTripRepository: TripRepository {
     /// like updateTitle/updateNotes — it does NOT rebalance vehicle odometers or
     /// stats (those accumulate at record time). `vehicleId` already rides the
     /// existing sync payload, so no transport change is needed.
+    /// Трансфер: человек ехал пассажиром — такси, автобус, чужая машина.
+    ///
+    /// Снимает машину с поездки: держать её было бы враньём — она никуда не
+    /// ехала. Пробег машины пересчитывается там же, где и при обычной смене
+    /// машины, поэтому километры трансфера уходят с её одометра.
+    func updateTransfer(for tripId: UUID, isTransfer: Bool) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        let previousVehicleId = entity.vehicleId
+        entity.isTransfer = isTransfer
+        if isTransfer { entity.vehicleId = nil }
+        entity.lastModifiedAt = Date()
+        if Self.shouldFlipPendingUpload(for: entity) {
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        }
+        recomputeOdometers(forVehicles: [previousVehicleId].compactMap { $0 })
+        persistenceController.save()
+    }
+
     func updateVehicle(for tripId: UUID, vehicleId: UUID?) {
         guard let entity = fetchEntity(id: tripId) else { return }
         // Both cars have to be recomputed, not just the new one: the odometer
@@ -766,6 +786,7 @@ final class CoreDataTripRepository: TripRepository {
             tripDescription: entity.tripDescription,
             fuelUsed: entity.fuelUsed, elevation: entity.elevation,
             region: entity.region, isPrivate: entity.isPrivate,
+            isTransfer: entity.isTransfer,
             vehicleId: entity.vehicleId, fuelCurrency: entity.fuelCurrency,
             previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds,
             xpEarned: Int(entity.xpEarned),
@@ -841,6 +862,11 @@ final class CoreDataTripRepository: TripRepository {
         entity.region = p.region
         entity.isPrivate = p.isPrivate
         entity.vehicleId = p.vehicleId
+        // ТОЛЬКО когда сервер прислал ключ. `?? false` читал отсутствие поля
+        // как явное «не трансфер», и пул со старого бэкенда молча откатывал
+        // пометку «ехал пассажиром» — машина при этом уже снята, и поездка
+        // оставалась без того и без другого.
+        if let remoteTransfer = p.isTransfer { entity.isTransfer = remoteTransfer }
         entity.fuelCurrency = p.fuelCurrency
         entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
         entity.badgesJSON = p.badgesJson
@@ -911,6 +937,15 @@ final class CoreDataTripRepository: TripRepository {
         // that was every pull for every signed-in person.
         if let style = p.avatarStyle { entity.avatarStyle = style }
         entity.odometerKm = p.odometerKm
+        // Только когда ключ пришёл: сервер без колонки его не шлёт, и `?? nil`
+        // стёр бы введённое человеком число. Без этой строки ручной пробег
+        // уезжал на сервер и не возвращался — терялся при переустановке и не
+        // доезжал на второй телефон.
+        if p.manualOdometerKnown {
+            // Ключ пришёл: значение ИЛИ явный null. Второе — это очистка,
+            // сделанная на другом устройстве, и её надо применить.
+            entity.manualOdometerKm = p.manualOdometerKm.map { NSNumber(value: $0) }
+        }
         entity.vehicleLevel = Int32(p.level)
         entity.stickersJSON = p.stickersJson
         entity.cityConsumption = p.cityConsumption
@@ -1068,9 +1103,15 @@ final class CoreDataTripRepository: TripRepository {
     func recomputeOdometers(forVehicles vehicleIds: [UUID]) {
         for vehicleId in Set(vehicleIds) {
             let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+            // Трансферы не наматывают машину — то же правило, что в
+            // `VehicleOdometer`. Два места, считающие ОДНО число по разным
+            // правилам, однажды разойдутся молча: сюда можно попасть из
+            // `applyRemoteTrip`, который ставит `vehicleId` и `isTransfer`
+            // независимо друг от друга.
             req.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
                 completedTripPredicate,
                 NSPredicate(format: "vehicleId == %@", vehicleId as CVarArg),
+                NSPredicate(format: "isTransfer == NO"),
             ])
             let metres = (try? context.fetch(req))?.reduce(0.0) { $0 + $1.distance } ?? 0
             let km = metres / 1000

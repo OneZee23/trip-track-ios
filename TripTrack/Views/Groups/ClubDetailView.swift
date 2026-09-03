@@ -69,6 +69,11 @@ struct ClubDetailView: View {
             }
             .scrollIndicators(.hidden)
         }
+        // См. PublicProfileView: скролл обязан доходить до физического низа,
+        // иначе к 120pt отступа прибавляется домашний индикатор, а плавающий
+        // таб-бар безопасную зону игнорирует — под последней строкой остаётся
+        // пустая полоса.
+        .ignoresSafeArea(edges: .bottom)
         .background(c.bg.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .accessibilityIdentifier("club_detail")

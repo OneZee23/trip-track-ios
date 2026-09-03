@@ -1039,6 +1039,17 @@ final class TripManager: ObservableObject {
         }
     }
 
+    /// Пометить поездку трансфером — человек ехал пассажиром.
+    ///
+    /// Снимает машину: держать её было бы враньём, она никуда не ехала.
+    /// Километры остаются в статистике, но уходят с одометра машины.
+    func setTransfer(for tripId: UUID, isTransfer: Bool) {
+        repository.updateTransfer(for: tripId, isTransfer: isTransfer)
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+        }
+    }
+
     /// Local-only, so no sync enqueue — see `updateCompanions` in the repo.
     ///
     /// NOTE: `CompanionsStore` — the actual writer of this cache after Task

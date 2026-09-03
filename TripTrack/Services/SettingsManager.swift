@@ -415,6 +415,9 @@ final class SettingsManager: ObservableObject {
             plateVisible: entity.plateVisible,
             visibleToOthers: entity.visibleToOthers,
             odometerKm: entity.odometerKm,
+            // NSNumber, а не Double: колонка опциональна, и «не заполнено»
+            // должно отличаться от «ноль» (ноль — законный пробег новой машины).
+            manualOdometerKm: entity.manualOdometerKm?.doubleValue,
             // Derived, not read. The stored column was written by the old
             // ten-rung curve, so every vehicle that existed before this change
             // carries a number that no longer means anything — and the level
@@ -428,6 +431,28 @@ final class SettingsManager: ObservableObject {
             fuelPrice: entity.fuelPrice,
             fuelCurrency: entity.fuelCurrency ?? FuelCurrency.current
         )
+    }
+
+    /// Записать пробег с приборной панели. `nil` стирает значение и возвращает
+    /// карточку к треканному числу.
+    ///
+    /// Уровень машины НЕ пересчитывается: он считается от треканного пробега,
+    /// иначе уровни раздавались бы за цифру, набранную на клавиатуре.
+    func setManualOdometer(vehicleId: UUID, km: Double?) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", vehicleId as CVarArg)
+        guard let entity = try? context.fetch(request).first else { return }
+        entity.manualOdometerKm = km.map { NSNumber(value: max(0, $0)) }
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        // Как у остальных мутаторов машины: без этого значение уезжало бы
+        // только на следующем запуске, через восстановление зависших сущностей.
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(
+                SyncOperation(entityType: .vehicle, entityId: vehicleId, action: .update))
+        }
+        loadVehicles()
     }
 
     /// The identity half of the form: everything the person typed or picked

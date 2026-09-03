@@ -28,6 +28,8 @@ struct VehicleEditFormView: View {
     /// plate is enough to look up the owner's name and address, so showing it
     /// has to be its own deliberate answer.
     @State private var plateVisible: Bool
+    /// Пробег с приборки, строкой — поле ввода. Пустая строка = не задан.
+    @State private var manualOdometer: String = ""
     @State private var visibleToOthers: Bool
     /// Always a real avatar — either a `pixel_car_*` asset name or, for a
     /// vehicle created before the pixel cars replaced the emoji set, that
@@ -79,6 +81,10 @@ struct VehicleEditFormView: View {
             _selectedType = State(initialValue: vehicle.type)
             _plate = State(initialValue: vehicle.plate)
             _plateVisible = State(initialValue: vehicle.plateVisible)
+            // Пустая строка, если реальный пробег ещё не вводили — так поле
+            // показывает «—», а не выдуманный ноль.
+            _manualOdometer = State(initialValue: vehicle.manualOdometerKm
+                .map { String(Int($0.rounded())) } ?? "")
             _visibleToOthers = State(initialValue: vehicle.visibleToOthers)
             _selectedAvatar = State(initialValue: vehicle.avatarEmoji)
             _selectedAvatarStyle = State(
@@ -744,6 +750,11 @@ struct VehicleEditFormView: View {
         VStack(alignment: .leading, spacing: 6) {
             GarageSectionLabel(text: AppStrings.mileageSection(l), color: c.textSecondary)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
+                // Здесь СОЗНАТЕЛЬНО треканное число, а не `displayOdometerKm`:
+                // подпись под ним говорит «начисляется автоматически по
+                // поездкам», и показывать под ней введённое руками значило бы
+                // подписать чужое число чужим объяснением. Поле ручного
+                // пробега стоит отдельной строкой ниже.
                 Text(GarageFormat.odometer(vehicle.odometerKm))
                     .font(.system(size: 22, weight: .heavy).monospacedDigit())
                     .foregroundStyle(c.text)
@@ -754,6 +765,47 @@ struct VehicleEditFormView: View {
             Text(AppStrings.mileageAutoHint(l))
                 .font(.system(size: 12))
                 .foregroundStyle(c.textTertiary)
+
+            Divider().padding(.vertical, 4)
+
+            // Реальный пробег с панели. Отдельно от треканного и НЕ влияет на
+            // уровень: уровень — награда за записанные поездки, а не за цифру
+            // с клавиатуры.
+            HStack(spacing: 10) {
+                Text(AppStrings.odometerEditTitle(l))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(c.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 4) {
+                    TextField("—", text: Binding(
+                        get: { manualOdometer },
+                        // Именно ASCII-цифры, а не `isNumber`: тот пропускает
+                        // арабо-индийские цифры и «½», а `Double(_:)` их потом
+                        // отвергает — и сохранение молча стирало бы значение.
+                        set: { manualOdometer = String($0.unicodeScalars
+                            .filter { CharacterSet.decimalDigits.contains($0) && $0.isASCII }
+                            .prefix(7)) }
+                    ))
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(c.text)
+                    .tint(AppTheme.accent)
+                    .frame(width: 80)
+                    .accessibilityIdentifier("vehicle_manual_odometer")
+                    Text(AppStrings.km(l))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(c.textSecondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 10))
+            }
+
+            Text(AppStrings.odometerEditHint(l))
+                .font(.system(size: 12))
+                .foregroundStyle(c.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -831,6 +883,13 @@ struct VehicleEditFormView: View {
 
         case .edit(let id):
             guard let original = editedVehicle else { break }
+            // Реальный пробег живёт отдельной записью: он не часть «личности»
+            // машины и не должен тащить за собой её sync-операцию, когда
+            // менялось только число на приборке.
+            let typedOdometer = Double(manualOdometer.trimmingCharacters(in: .whitespaces))
+            if typedOdometer != original.manualOdometerKm {
+                settings.setManualOdometer(vehicleId: id, km: typedOdometer)
+            }
             // One write for the whole identity half, so a type + plate + name
             // change costs one sync operation instead of three.
             let identityChanged = trimmed != original.name
