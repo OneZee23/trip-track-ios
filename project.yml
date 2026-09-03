@@ -213,6 +213,10 @@ targets:
       # geometry test silently skips itself.
       - path: TripTrack/Resources/MapRegions.json
         buildPhase: resources
+      # То же и с каталогом марок: `VehicleCatalogTests` читает его из бандла,
+      # а без этой строки тест молча проходит на пустом каталоге.
+      - path: TripTrack/Resources/VehicleCatalog.json
+        buildPhase: resources
     dependencies:
       - target: TripTrack
     settings:

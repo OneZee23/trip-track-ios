@@ -1,0 +1,1108 @@
+{
+  "version": 2,
+  "makes": [
+    {
+      "name": "Lada",
+      "aliases": ["Лада", "ВАЗ"],
+      "models": [
+        { "name": "Granta", "bodies": ["car", "hatchback"], "aliases": ["Гранта"] },
+        { "name": "Vesta", "bodies": ["car", "hatchback"], "aliases": ["Веста"] },
+        { "name": "Niva Legend", "bodies": ["crossover"], "aliases": ["Нива"] },
+        { "name": "Niva Travel", "bodies": ["crossover"], "aliases": ["Нива", "Шевинива"] },
+        { "name": "Largus", "bodies": ["van"], "aliases": ["Ларгус"] },
+        { "name": "XRAY", "bodies": ["hatchback"] },
+        { "name": "Kalina", "bodies": ["hatchback"], "aliases": ["Калина"] },
+        { "name": "Priora", "bodies": ["car"], "aliases": ["Приора"] },
+        { "name": "Samara", "bodies": ["hatchback"], "aliases": ["Самара"] },
+        { "name": "2107", "bodies": ["car"] },
+        { "name": "2114", "bodies": ["hatchback"] },
+        { "name": "Iskra", "bodies": ["car"], "aliases": ["Искра"] }
+      ]
+    },
+    {
+      "name": "UAZ",
+      "aliases": ["УАЗ"],
+      "models": [
+        { "name": "Patriot", "bodies": ["crossover"], "aliases": ["Патриот"] },
+        { "name": "Hunter", "bodies": ["crossover"], "aliases": ["Хантер"] },
+        { "name": "Pickup", "bodies": ["pickup"] },
+        { "name": "3909", "bodies": ["van"], "aliases": ["Буханка", "Bukhanka", "Buhanka"] },
+        { "name": "Profi", "bodies": ["van"] },
+        { "name": "469", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "GAZ",
+      "aliases": ["ГАЗ"],
+      "models": [
+        { "name": "GAZelle Next", "bodies": ["van"], "aliases": ["ГАЗель", "Газель", "Gazelle"] },
+        { "name": "GAZelle Business", "bodies": ["van"], "aliases": ["ГАЗель", "Газель", "Gazelle"] },
+        { "name": "Sobol", "bodies": ["van"], "aliases": ["Соболь"] },
+        { "name": "Volga 3110", "bodies": ["car"], "aliases": ["Волга"] },
+        { "name": "Volga 31105", "bodies": ["car"], "aliases": ["Волга"] }
+      ]
+    },
+    {
+      "name": "Moskvich",
+      "aliases": ["Москвич"],
+      "models": [
+        { "name": "3", "bodies": ["crossover"] },
+        { "name": "3e", "bodies": ["crossover"] },
+        { "name": "6", "bodies": ["car"] },
+        { "name": "8", "bodies": ["crossover"] },
+        { "name": "2141", "bodies": ["hatchback"] },
+        { "name": "2140", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Datsun",
+      "aliases": ["Датсун"],
+      "models": [
+        { "name": "on-DO", "bodies": ["car"] },
+        { "name": "mi-DO", "bodies": ["hatchback"] }
+      ]
+    },
+    {
+      "name": "Ravon",
+      "aliases": ["Равон"],
+      "models": [
+        { "name": "Nexia R3", "bodies": ["car"] },
+        { "name": "R2", "bodies": ["hatchback"] },
+        { "name": "Gentra", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Daewoo",
+      "aliases": ["Дэу", "Дэо"],
+      "models": [
+        { "name": "Nexia", "bodies": ["car"] },
+        { "name": "Matiz", "bodies": ["hatchback"] },
+        { "name": "Lanos", "bodies": ["car"] },
+        { "name": "Espero", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "IZh",
+      "aliases": ["ИЖ", "Izh"],
+      "models": [
+        { "name": "Planeta 5", "bodies": ["motorcycle"], "aliases": ["Планета"] },
+        { "name": "Jupiter 5", "bodies": ["motorcycle"], "aliases": ["Юпитер", "Jupiter"] },
+        { "name": "Oda", "bodies": ["hatchback"], "aliases": ["Ода"] }
+      ]
+    },
+    {
+      "name": "Ural",
+      "aliases": ["Урал"],
+      "models": [
+        { "name": "Gear Up", "bodies": ["motorcycle"] },
+        { "name": "Retro", "bodies": ["motorcycle"] },
+        { "name": "M70", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Minsk",
+      "aliases": ["Минск"],
+      "models": [
+        { "name": "M1NSK C4", "bodies": ["motorcycle"] },
+        { "name": "M1NSK X250", "bodies": ["motorcycle"] },
+        { "name": "D4 125", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Aist",
+      "aliases": ["Аист"],
+      "models": [
+        { "name": "Cross", "bodies": ["bicycle"] },
+        { "name": "Rocket", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Toyota",
+      "aliases": ["Тойота"],
+      "models": [
+        { "name": "Camry", "bodies": ["car"] },
+        { "name": "Corolla", "bodies": ["car", "hatchback"] },
+        { "name": "RAV4", "bodies": ["crossover"] },
+        { "name": "Land Cruiser 200", "bodies": ["crossover"] },
+        { "name": "Land Cruiser 300", "bodies": ["crossover"] },
+        { "name": "Land Cruiser Prado", "bodies": ["crossover"] },
+        { "name": "Highlander", "bodies": ["crossover"] },
+        { "name": "Avensis", "bodies": ["car"] },
+        { "name": "Yaris", "bodies": ["hatchback"] },
+        { "name": "Hilux", "bodies": ["pickup"] },
+        { "name": "C-HR", "bodies": ["crossover"] },
+        { "name": "Fortuner", "bodies": ["crossover"] },
+        { "name": "Alphard", "bodies": ["van"] },
+        { "name": "Vitz", "bodies": ["hatchback"] },
+        { "name": "Mark II", "bodies": ["car"] },
+        { "name": "Chaser", "bodies": ["car"] },
+        { "name": "Supra", "bodies": ["sports"] },
+        { "name": "Prius", "bodies": ["hatchback"] },
+        { "name": "Harrier", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Honda",
+      "aliases": ["Хонда"],
+      "models": [
+        { "name": "Civic", "bodies": ["car", "hatchback"] },
+        { "name": "Accord", "bodies": ["car"] },
+        { "name": "CR-V", "bodies": ["crossover"] },
+        { "name": "Fit", "bodies": ["hatchback"] },
+        { "name": "Pilot", "bodies": ["crossover"] },
+        { "name": "HR-V", "bodies": ["crossover"] },
+        { "name": "Stepwgn", "bodies": ["van"] },
+        { "name": "Odyssey", "bodies": ["van"] },
+        { "name": "S2000", "bodies": ["convertible"] },
+        { "name": "CB400", "bodies": ["motorcycle"] },
+        { "name": "CBR600RR", "bodies": ["motorcycle"] },
+        { "name": "CB500X", "bodies": ["motorcycle"] },
+        { "name": "Africa Twin", "bodies": ["motorcycle"] },
+        { "name": "Rebel 500", "bodies": ["motorcycle"] },
+        { "name": "Gold Wing", "bodies": ["motorcycle"] },
+        { "name": "Dio", "bodies": ["scooter"] },
+        { "name": "Lead", "bodies": ["scooter"] },
+        { "name": "Forza", "bodies": ["scooter"] },
+        { "name": "PCX", "bodies": ["scooter"] }
+      ]
+    },
+    {
+      "name": "Nissan",
+      "aliases": ["Ниссан", "Нисан"],
+      "models": [
+        { "name": "Qashqai", "bodies": ["crossover"] },
+        { "name": "X-Trail", "bodies": ["crossover"] },
+        { "name": "Almera", "bodies": ["car"] },
+        { "name": "Juke", "bodies": ["crossover"] },
+        { "name": "Murano", "bodies": ["crossover"] },
+        { "name": "Patrol", "bodies": ["crossover"] },
+        { "name": "Terrano", "bodies": ["crossover"] },
+        { "name": "Note", "bodies": ["hatchback"] },
+        { "name": "Teana", "bodies": ["car"] },
+        { "name": "Skyline", "bodies": ["car"] },
+        { "name": "Pathfinder", "bodies": ["crossover"] },
+        { "name": "Navara", "bodies": ["pickup"] },
+        { "name": "GT-R", "bodies": ["sports"] },
+        { "name": "Silvia", "bodies": ["sports"] },
+        { "name": "Serena", "bodies": ["van"] }
+      ]
+    },
+    {
+      "name": "Mazda",
+      "aliases": ["Мазда"],
+      "models": [
+        { "name": "3", "bodies": ["car", "hatchback"] },
+        { "name": "6", "bodies": ["car"] },
+        { "name": "CX-5", "bodies": ["crossover"] },
+        { "name": "CX-7", "bodies": ["crossover"] },
+        { "name": "CX-9", "bodies": ["crossover"] },
+        { "name": "CX-30", "bodies": ["crossover"] },
+        { "name": "2", "bodies": ["hatchback"] },
+        { "name": "MX-5", "bodies": ["convertible"] },
+        { "name": "Demio", "bodies": ["hatchback"] },
+        { "name": "RX-8", "bodies": ["sports"] }
+      ]
+    },
+    {
+      "name": "Mitsubishi",
+      "aliases": ["Мицубиси", "Митсубиши"],
+      "models": [
+        { "name": "Lancer", "bodies": ["car"] },
+        { "name": "Outlander", "bodies": ["crossover"] },
+        { "name": "Pajero", "bodies": ["crossover"] },
+        { "name": "Pajero Sport", "bodies": ["crossover"] },
+        { "name": "ASX", "bodies": ["crossover"] },
+        { "name": "L200", "bodies": ["pickup"] },
+        { "name": "Eclipse Cross", "bodies": ["crossover"] },
+        { "name": "Delica", "bodies": ["van"] },
+        { "name": "Galant", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Subaru",
+      "aliases": ["Субару"],
+      "models": [
+        { "name": "Forester", "bodies": ["crossover"] },
+        { "name": "Outback", "bodies": ["crossover"] },
+        { "name": "Impreza", "bodies": ["hatchback", "car"] },
+        { "name": "XV", "bodies": ["crossover"] },
+        { "name": "Legacy", "bodies": ["car"] },
+        { "name": "WRX", "bodies": ["car"] },
+        { "name": "BRZ", "bodies": ["sports"] }
+      ]
+    },
+    {
+      "name": "Suzuki",
+      "aliases": ["Сузуки", "Судзуки"],
+      "models": [
+        { "name": "Grand Vitara", "bodies": ["crossover"] },
+        { "name": "Vitara", "bodies": ["crossover"] },
+        { "name": "SX4", "bodies": ["crossover"] },
+        { "name": "Jimny", "bodies": ["crossover"] },
+        { "name": "Swift", "bodies": ["hatchback"] },
+        { "name": "Escudo", "bodies": ["crossover"] },
+        { "name": "GSX-R750", "bodies": ["motorcycle"] },
+        { "name": "SV650", "bodies": ["motorcycle"] },
+        { "name": "V-Strom 650", "bodies": ["motorcycle"] },
+        { "name": "Bandit 400", "bodies": ["motorcycle"] },
+        { "name": "Boulevard M109R", "bodies": ["motorcycle"] },
+        { "name": "Address", "bodies": ["scooter"] },
+        { "name": "Burgman", "bodies": ["scooter"] }
+      ]
+    },
+    {
+      "name": "Lexus",
+      "aliases": ["Лексус"],
+      "models": [
+        { "name": "RX", "bodies": ["crossover"] },
+        { "name": "NX", "bodies": ["crossover"] },
+        { "name": "LX", "bodies": ["crossover"] },
+        { "name": "GX", "bodies": ["crossover"] },
+        { "name": "ES", "bodies": ["car"] },
+        { "name": "IS", "bodies": ["car"] },
+        { "name": "LS", "bodies": ["car"] },
+        { "name": "UX", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Infiniti",
+      "aliases": ["Инфинити"],
+      "models": [
+        { "name": "FX", "bodies": ["crossover"] },
+        { "name": "QX56", "bodies": ["crossover"] },
+        { "name": "QX60", "bodies": ["crossover"] },
+        { "name": "QX80", "bodies": ["crossover"] },
+        { "name": "Q50", "bodies": ["car"] },
+        { "name": "G35", "bodies": ["car"] },
+        { "name": "EX", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Acura",
+      "aliases": ["Акура"],
+      "models": [
+        { "name": "MDX", "bodies": ["crossover"] },
+        { "name": "RDX", "bodies": ["crossover"] },
+        { "name": "TL", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Yamaha",
+      "aliases": ["Ямаха"],
+      "models": [
+        { "name": "MT-07", "bodies": ["motorcycle"] },
+        { "name": "MT-09", "bodies": ["motorcycle"] },
+        { "name": "YZF-R1", "bodies": ["motorcycle"] },
+        { "name": "YZF-R6", "bodies": ["motorcycle"] },
+        { "name": "FZ6", "bodies": ["motorcycle"] },
+        { "name": "XT660", "bodies": ["motorcycle"] },
+        { "name": "Tenere 700", "bodies": ["motorcycle"] },
+        { "name": "Jog", "bodies": ["scooter"] },
+        { "name": "Aerox", "bodies": ["scooter"] },
+        { "name": "Vino", "bodies": ["scooter"] }
+      ]
+    },
+    {
+      "name": "Kawasaki",
+      "aliases": ["Кавасаки"],
+      "models": [
+        { "name": "Ninja 400", "bodies": ["motorcycle"] },
+        { "name": "Z650", "bodies": ["motorcycle"] },
+        { "name": "Z900", "bodies": ["motorcycle"] },
+        { "name": "Versys 650", "bodies": ["motorcycle"] },
+        { "name": "Vulcan S", "bodies": ["motorcycle"] },
+        { "name": "ZZR400", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Kia",
+      "aliases": ["Киа", "Кия"],
+      "models": [
+        { "name": "Rio", "bodies": ["car", "hatchback"] },
+        { "name": "Sportage", "bodies": ["crossover"] },
+        { "name": "Ceed", "bodies": ["hatchback"] },
+        { "name": "Optima", "bodies": ["car"] },
+        { "name": "K5", "bodies": ["car"] },
+        { "name": "Sorento", "bodies": ["crossover"] },
+        { "name": "Soul", "bodies": ["crossover"] },
+        { "name": "Cerato", "bodies": ["car"] },
+        { "name": "Picanto", "bodies": ["hatchback"] },
+        { "name": "Seltos", "bodies": ["crossover"] },
+        { "name": "Carnival", "bodies": ["van"] },
+        { "name": "Mohave", "bodies": ["crossover"] },
+        { "name": "Stinger", "bodies": ["car"] },
+        { "name": "Spectra", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Hyundai",
+      "aliases": ["Хендай", "Хундай", "Хёндэ"],
+      "models": [
+        { "name": "Solaris", "bodies": ["car"] },
+        { "name": "Creta", "bodies": ["crossover"] },
+        { "name": "Tucson", "bodies": ["crossover"] },
+        { "name": "Santa Fe", "bodies": ["crossover"] },
+        { "name": "Elantra", "bodies": ["car"] },
+        { "name": "Sonata", "bodies": ["car"] },
+        { "name": "Accent", "bodies": ["car"] },
+        { "name": "i30", "bodies": ["hatchback"] },
+        { "name": "Getz", "bodies": ["hatchback"] },
+        { "name": "Palisade", "bodies": ["crossover"] },
+        { "name": "Starex", "bodies": ["van"] },
+        { "name": "ix35", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Genesis",
+      "aliases": ["Генезис"],
+      "models": [
+        { "name": "G70", "bodies": ["car"] },
+        { "name": "G80", "bodies": ["car"] },
+        { "name": "GV70", "bodies": ["crossover"] },
+        { "name": "GV80", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "SsangYong",
+      "aliases": ["СангЙонг", "Ссангйонг"],
+      "models": [
+        { "name": "Kyron", "bodies": ["crossover"] },
+        { "name": "Actyon", "bodies": ["crossover"] },
+        { "name": "Rexton", "bodies": ["crossover"] },
+        { "name": "Korando", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Volkswagen",
+      "aliases": ["Фольксваген", "VW", "Вольксваген"],
+      "models": [
+        { "name": "Polo", "bodies": ["car", "hatchback"] },
+        { "name": "Golf", "bodies": ["hatchback"] },
+        { "name": "Tiguan", "bodies": ["crossover"] },
+        { "name": "Passat", "bodies": ["car"] },
+        { "name": "Touareg", "bodies": ["crossover"] },
+        { "name": "Jetta", "bodies": ["car"] },
+        { "name": "Teramont", "bodies": ["crossover"] },
+        { "name": "Transporter", "bodies": ["van"] },
+        { "name": "Caddy", "bodies": ["van"] },
+        { "name": "Amarok", "bodies": ["pickup"] },
+        { "name": "Multivan", "bodies": ["van"] },
+        { "name": "Touran", "bodies": ["van"] }
+      ]
+    },
+    {
+      "name": "Skoda",
+      "aliases": ["Шкода", "Škoda"],
+      "models": [
+        { "name": "Octavia", "bodies": ["car", "hatchback"] },
+        { "name": "Rapid", "bodies": ["car"] },
+        { "name": "Kodiaq", "bodies": ["crossover"] },
+        { "name": "Karoq", "bodies": ["crossover"] },
+        { "name": "Superb", "bodies": ["car"] },
+        { "name": "Fabia", "bodies": ["hatchback"] },
+        { "name": "Yeti", "bodies": ["crossover"] },
+        { "name": "Kamiq", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Mercedes-Benz",
+      "aliases": ["Мерседес", "Мерс", "Mercedes"],
+      "models": [
+        { "name": "C-Class", "bodies": ["car"] },
+        { "name": "E-Class", "bodies": ["car"] },
+        { "name": "S-Class", "bodies": ["car"] },
+        { "name": "GLC", "bodies": ["crossover"] },
+        { "name": "GLE", "bodies": ["crossover"] },
+        { "name": "GLS", "bodies": ["crossover"] },
+        { "name": "G-Class", "bodies": ["crossover"] },
+        { "name": "A-Class", "bodies": ["hatchback"] },
+        { "name": "Vito", "bodies": ["van"] },
+        { "name": "Sprinter", "bodies": ["van"] },
+        { "name": "CLA", "bodies": ["car"] },
+        { "name": "ML", "bodies": ["crossover"] },
+        { "name": "Viano", "bodies": ["van"] }
+      ]
+    },
+    {
+      "name": "BMW",
+      "aliases": ["БМВ"],
+      "models": [
+        { "name": "3 Series", "bodies": ["car"] },
+        { "name": "5 Series", "bodies": ["car"] },
+        { "name": "7 Series", "bodies": ["car"] },
+        { "name": "X1", "bodies": ["crossover"] },
+        { "name": "X3", "bodies": ["crossover"] },
+        { "name": "X5", "bodies": ["crossover"] },
+        { "name": "X6", "bodies": ["crossover"] },
+        { "name": "X7", "bodies": ["crossover"] },
+        { "name": "1 Series", "bodies": ["hatchback"] },
+        { "name": "Z4", "bodies": ["convertible"] },
+        { "name": "M3", "bodies": ["car"] },
+        { "name": "M5", "bodies": ["car"] },
+        { "name": "R 1250 GS", "bodies": ["motorcycle"] },
+        { "name": "F 800 GS", "bodies": ["motorcycle"] },
+        { "name": "S 1000 RR", "bodies": ["motorcycle"] },
+        { "name": "R nineT", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Audi",
+      "aliases": ["Ауди"],
+      "models": [
+        { "name": "A3", "bodies": ["hatchback"] },
+        { "name": "A4", "bodies": ["car"] },
+        { "name": "A6", "bodies": ["car"] },
+        { "name": "A8", "bodies": ["car"] },
+        { "name": "Q3", "bodies": ["crossover"] },
+        { "name": "Q5", "bodies": ["crossover"] },
+        { "name": "Q7", "bodies": ["crossover"] },
+        { "name": "Q8", "bodies": ["crossover"] },
+        { "name": "TT", "bodies": ["sports"] },
+        { "name": "RS6", "bodies": ["car"] },
+        { "name": "A5", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Opel",
+      "aliases": ["Опель"],
+      "models": [
+        { "name": "Astra", "bodies": ["hatchback"] },
+        { "name": "Insignia", "bodies": ["car"] },
+        { "name": "Zafira", "bodies": ["van"] },
+        { "name": "Corsa", "bodies": ["hatchback"] },
+        { "name": "Mokka", "bodies": ["crossover"] },
+        { "name": "Vectra", "bodies": ["car"] },
+        { "name": "Antara", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Porsche",
+      "aliases": ["Порше", "Порш"],
+      "models": [
+        { "name": "Cayenne", "bodies": ["crossover"] },
+        { "name": "Macan", "bodies": ["crossover"] },
+        { "name": "911", "bodies": ["sports"] },
+        { "name": "Panamera", "bodies": ["car"] },
+        { "name": "Boxster", "bodies": ["convertible"] },
+        { "name": "Taycan", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Mini",
+      "aliases": ["Мини"],
+      "models": [
+        { "name": "Cooper", "bodies": ["hatchback"] },
+        { "name": "Countryman", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Renault",
+      "aliases": ["Рено"],
+      "models": [
+        { "name": "Logan", "bodies": ["car"] },
+        { "name": "Duster", "bodies": ["crossover"] },
+        { "name": "Sandero", "bodies": ["hatchback"] },
+        { "name": "Kaptur", "bodies": ["crossover"] },
+        { "name": "Arkana", "bodies": ["crossover"] },
+        { "name": "Megane", "bodies": ["hatchback"] },
+        { "name": "Fluence", "bodies": ["car"] },
+        { "name": "Koleos", "bodies": ["crossover"] },
+        { "name": "Dokker", "bodies": ["van"] },
+        { "name": "Master", "bodies": ["van"] }
+      ]
+    },
+    {
+      "name": "Peugeot",
+      "aliases": ["Пежо"],
+      "models": [
+        { "name": "308", "bodies": ["hatchback"] },
+        { "name": "408", "bodies": ["car"] },
+        { "name": "3008", "bodies": ["crossover"] },
+        { "name": "2008", "bodies": ["crossover"] },
+        { "name": "206", "bodies": ["hatchback"] },
+        { "name": "Partner", "bodies": ["van"] },
+        { "name": "Boxer", "bodies": ["van"] },
+        { "name": "5008", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Citroen",
+      "aliases": ["Ситроен", "Citroën"],
+      "models": [
+        { "name": "C4", "bodies": ["hatchback"] },
+        { "name": "C5", "bodies": ["car"] },
+        { "name": "C3", "bodies": ["hatchback"] },
+        { "name": "Berlingo", "bodies": ["van"] },
+        { "name": "Jumper", "bodies": ["van"] },
+        { "name": "C5 Aircross", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Fiat",
+      "aliases": ["Фиат"],
+      "models": [
+        { "name": "Ducato", "bodies": ["van"] },
+        { "name": "Doblo", "bodies": ["van"] },
+        { "name": "500", "bodies": ["hatchback"] },
+        { "name": "Albea", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Iveco",
+      "aliases": ["Ивеко"],
+      "models": [
+        { "name": "Daily", "bodies": ["van"] }
+      ]
+    },
+    {
+      "name": "Volvo",
+      "aliases": ["Вольво"],
+      "models": [
+        { "name": "XC60", "bodies": ["crossover"] },
+        { "name": "XC90", "bodies": ["crossover"] },
+        { "name": "XC40", "bodies": ["crossover"] },
+        { "name": "S60", "bodies": ["car"] },
+        { "name": "S80", "bodies": ["car"] },
+        { "name": "V70", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Land Rover",
+      "aliases": ["Ленд", "Ровер", "Лендровер", "Рендж", "Ровер"],
+      "models": [
+        { "name": "Discovery", "bodies": ["crossover"] },
+        { "name": "Range Rover", "bodies": ["crossover"] },
+        { "name": "Range Rover Sport", "bodies": ["crossover"] },
+        { "name": "Range Rover Evoque", "bodies": ["crossover"] },
+        { "name": "Defender", "bodies": ["crossover"] },
+        { "name": "Freelander", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Ducati",
+      "aliases": ["Дукати"],
+      "models": [
+        { "name": "Monster", "bodies": ["motorcycle"] },
+        { "name": "Panigale V4", "bodies": ["motorcycle"] },
+        { "name": "Multistrada", "bodies": ["motorcycle"] },
+        { "name": "Scrambler", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Aprilia",
+      "aliases": ["Априлия"],
+      "models": [
+        { "name": "RS 660", "bodies": ["motorcycle"] },
+        { "name": "Tuono", "bodies": ["motorcycle"] },
+        { "name": "SR", "bodies": ["scooter"] }
+      ]
+    },
+    {
+      "name": "Vespa",
+      "aliases": ["Веспа"],
+      "models": [
+        { "name": "Primavera", "bodies": ["scooter"] },
+        { "name": "Sprint", "bodies": ["scooter"] },
+        { "name": "GTS", "bodies": ["scooter"] }
+      ]
+    },
+    {
+      "name": "Piaggio",
+      "aliases": ["Пьяджо"],
+      "models": [
+        { "name": "Liberty", "bodies": ["scooter"] },
+        { "name": "Zip", "bodies": ["scooter"] },
+        { "name": "Beverly", "bodies": ["scooter"] }
+      ]
+    },
+    {
+      "name": "Triumph",
+      "aliases": ["Триумф"],
+      "models": [
+        { "name": "Street Triple", "bodies": ["motorcycle"] },
+        { "name": "Tiger 800", "bodies": ["motorcycle"] },
+        { "name": "Bonneville", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "KTM",
+      "aliases": ["КТМ"],
+      "models": [
+        { "name": "Duke 390", "bodies": ["motorcycle"] },
+        { "name": "Duke 790", "bodies": ["motorcycle"] },
+        { "name": "1290 Super Adventure", "bodies": ["motorcycle"] },
+        { "name": "EXC 300", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Seat",
+      "aliases": ["Сеат", "Сиат"],
+      "models": [
+        { "name": "Leon", "bodies": ["hatchback"] },
+        { "name": "Ibiza", "bodies": ["hatchback"] },
+        { "name": "Ateca", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Ford",
+      "aliases": ["Форд"],
+      "models": [
+        { "name": "Focus", "bodies": ["hatchback", "car"] },
+        { "name": "Mondeo", "bodies": ["car"] },
+        { "name": "Kuga", "bodies": ["crossover"] },
+        { "name": "Explorer", "bodies": ["crossover"] },
+        { "name": "Transit", "bodies": ["van"] },
+        { "name": "Ranger", "bodies": ["pickup"] },
+        { "name": "Fiesta", "bodies": ["hatchback"] },
+        { "name": "EcoSport", "bodies": ["crossover"] },
+        { "name": "Mustang", "bodies": ["sports"] },
+        { "name": "F-150", "bodies": ["pickup"] }
+      ]
+    },
+    {
+      "name": "Chevrolet",
+      "aliases": ["Шевроле", "Шеви"],
+      "models": [
+        { "name": "Niva", "bodies": ["crossover"] },
+        { "name": "Cruze", "bodies": ["car"] },
+        { "name": "Lacetti", "bodies": ["car", "hatchback"] },
+        { "name": "Aveo", "bodies": ["car", "hatchback"] },
+        { "name": "Captiva", "bodies": ["crossover"] },
+        { "name": "Cobalt", "bodies": ["car"] },
+        { "name": "Tahoe", "bodies": ["crossover"] },
+        { "name": "Camaro", "bodies": ["sports"] },
+        { "name": "Spark", "bodies": ["hatchback"] },
+        { "name": "Lanos", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Jeep",
+      "aliases": ["Джип"],
+      "models": [
+        { "name": "Grand Cherokee", "bodies": ["crossover"] },
+        { "name": "Wrangler", "bodies": ["crossover"] },
+        { "name": "Compass", "bodies": ["crossover"] },
+        { "name": "Cherokee", "bodies": ["crossover"] },
+        { "name": "Renegade", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Cadillac",
+      "aliases": ["Кадиллак"],
+      "models": [
+        { "name": "Escalade", "bodies": ["crossover"] },
+        { "name": "CTS", "bodies": ["car"] },
+        { "name": "SRX", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Dodge",
+      "aliases": ["Додж"],
+      "models": [
+        { "name": "Ram", "bodies": ["pickup"] },
+        { "name": "Charger", "bodies": ["car"] },
+        { "name": "Challenger", "bodies": ["sports"] }
+      ]
+    },
+    {
+      "name": "Chrysler",
+      "aliases": ["Крайслер"],
+      "models": [
+        { "name": "300C", "bodies": ["car"] },
+        { "name": "Voyager", "bodies": ["van"] }
+      ]
+    },
+    {
+      "name": "Tesla",
+      "aliases": ["Тесла"],
+      "models": [
+        { "name": "Model 3", "bodies": ["car"] },
+        { "name": "Model Y", "bodies": ["crossover"] },
+        { "name": "Model S", "bodies": ["car"] },
+        { "name": "Model X", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Harley-Davidson",
+      "aliases": ["Харлей", "Харлей-Дэвидсон", "Harley"],
+      "models": [
+        { "name": "Sportster 883", "bodies": ["motorcycle"] },
+        { "name": "Fat Boy", "bodies": ["motorcycle"] },
+        { "name": "Street Glide", "bodies": ["motorcycle"] },
+        { "name": "Iron 883", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Chery",
+      "aliases": ["Чери"],
+      "models": [
+        { "name": "Tiggo 4", "bodies": ["crossover"] },
+        { "name": "Tiggo 7 Pro", "bodies": ["crossover"] },
+        { "name": "Tiggo 8 Pro", "bodies": ["crossover"] },
+        { "name": "Tiggo 8 Pro Max", "bodies": ["crossover"] },
+        { "name": "Arrizo 8", "bodies": ["car"] },
+        { "name": "Tiggo 2", "bodies": ["crossover"] },
+        { "name": "Amulet", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Haval",
+      "aliases": ["Хавал", "Хавейл"],
+      "models": [
+        { "name": "Jolion", "bodies": ["crossover"] },
+        { "name": "F7", "bodies": ["crossover"] },
+        { "name": "F7x", "bodies": ["crossover"] },
+        { "name": "Dargo", "bodies": ["crossover"] },
+        { "name": "H9", "bodies": ["crossover"] },
+        { "name": "H5", "bodies": ["crossover"] },
+        { "name": "M6", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Geely",
+      "aliases": ["Джили"],
+      "models": [
+        { "name": "Coolray", "bodies": ["crossover"] },
+        { "name": "Atlas", "bodies": ["crossover"] },
+        { "name": "Tugella", "bodies": ["crossover"] },
+        { "name": "Monjaro", "bodies": ["crossover"] },
+        { "name": "Emgrand", "bodies": ["car"] },
+        { "name": "Okavango", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Exeed",
+      "aliases": ["Эксид"],
+      "models": [
+        { "name": "TXL", "bodies": ["crossover"] },
+        { "name": "LX", "bodies": ["crossover"] },
+        { "name": "VX", "bodies": ["crossover"] },
+        { "name": "RX", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Omoda",
+      "aliases": ["Омода"],
+      "models": [
+        { "name": "C5", "bodies": ["crossover"] },
+        { "name": "S5", "bodies": ["car"] },
+        { "name": "C7", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Jetour",
+      "aliases": ["Джетур"],
+      "models": [
+        { "name": "X70 Plus", "bodies": ["crossover"] },
+        { "name": "Dashing", "bodies": ["crossover"] },
+        { "name": "T2", "bodies": ["crossover"] },
+        { "name": "X90 Plus", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Changan",
+      "aliases": ["Чанган"],
+      "models": [
+        { "name": "CS35 Plus", "bodies": ["crossover"] },
+        { "name": "CS55 Plus", "bodies": ["crossover"] },
+        { "name": "CS75 Plus", "bodies": ["crossover"] },
+        { "name": "UNI-K", "bodies": ["crossover"] },
+        { "name": "UNI-V", "bodies": ["car"] },
+        { "name": "Alsvin", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Great Wall",
+      "aliases": ["Грейт", "Вол", "Грейтвол", "GWM"],
+      "models": [
+        { "name": "Hover", "bodies": ["crossover"] },
+        { "name": "Wingle", "bodies": ["pickup"] },
+        { "name": "Poer", "bodies": ["pickup"] }
+      ]
+    },
+    {
+      "name": "Belgee",
+      "aliases": ["Белджи"],
+      "models": [
+        { "name": "X50", "bodies": ["crossover"] },
+        { "name": "X70", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Tank",
+      "aliases": ["Танк"],
+      "models": [
+        { "name": "300", "bodies": ["crossover"] },
+        { "name": "500", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Li Auto",
+      "aliases": ["Ли", "Авто", "Лисян"],
+      "models": [
+        { "name": "L7", "bodies": ["crossover"] },
+        { "name": "L9", "bodies": ["crossover"] },
+        { "name": "L6", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Zeekr",
+      "aliases": ["Зикр"],
+      "models": [
+        { "name": "001", "bodies": ["car"] },
+        { "name": "007", "bodies": ["car"] },
+        { "name": "X", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Voyah",
+      "aliases": ["Воях"],
+      "models": [
+        { "name": "Free", "bodies": ["crossover"] },
+        { "name": "Dream", "bodies": ["van"] },
+        { "name": "Passion", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "BYD",
+      "aliases": ["БИД"],
+      "models": [
+        { "name": "Song Plus", "bodies": ["crossover"] },
+        { "name": "Han", "bodies": ["car"] },
+        { "name": "Seal", "bodies": ["car"] },
+        { "name": "Tang", "bodies": ["crossover"] },
+        { "name": "Qin", "bodies": ["car"] }
+      ]
+    },
+    {
+      "name": "Hongqi",
+      "aliases": ["Хончи"],
+      "models": [
+        { "name": "HS5", "bodies": ["crossover"] },
+        { "name": "H9", "bodies": ["car"] },
+        { "name": "E-HS9", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "JAC",
+      "aliases": ["ДЖАК"],
+      "models": [
+        { "name": "JS6", "bodies": ["crossover"] },
+        { "name": "T6", "bodies": ["pickup"] },
+        { "name": "S3", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "FAW",
+      "aliases": ["ФАВ"],
+      "models": [
+        { "name": "Bestune T77", "bodies": ["crossover"] },
+        { "name": "Bestune T99", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Dongfeng",
+      "aliases": ["Дунфэн", "Донгфенг"],
+      "models": [
+        { "name": "580", "bodies": ["crossover"] },
+        { "name": "Shine Max", "bodies": ["crossover"] },
+        { "name": "AX7", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Kaiyi",
+      "aliases": ["Кайи"],
+      "models": [
+        { "name": "E5", "bodies": ["car"] },
+        { "name": "X3", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Livan",
+      "aliases": ["Ливан"],
+      "models": [
+        { "name": "X3 Pro", "bodies": ["crossover"] },
+        { "name": "S6 Pro", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Jaecoo",
+      "aliases": ["Джейку"],
+      "models": [
+        { "name": "J7", "bodies": ["crossover"] },
+        { "name": "J8", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "BAIC",
+      "aliases": ["БАИК"],
+      "models": [
+        { "name": "U5 Plus", "bodies": ["car"] },
+        { "name": "X35", "bodies": ["crossover"] },
+        { "name": "BJ40", "bodies": ["crossover"] }
+      ]
+    },
+    {
+      "name": "Lifan",
+      "aliases": ["Лифан"],
+      "models": [
+        { "name": "X60", "bodies": ["crossover"] },
+        { "name": "Solano", "bodies": ["car"] },
+        { "name": "Smily", "bodies": ["hatchback"] }
+      ]
+    },
+    {
+      "name": "CFMOTO",
+      "aliases": ["ЦФМОТО", "СФМОТО"],
+      "models": [
+        { "name": "650NK", "bodies": ["motorcycle"] },
+        { "name": "700CL-X", "bodies": ["motorcycle"] },
+        { "name": "450SR", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Voge",
+      "aliases": ["Воге"],
+      "models": [
+        { "name": "300 Rally", "bodies": ["motorcycle"] },
+        { "name": "500DS", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Racer",
+      "aliases": ["Рейсер"],
+      "models": [
+        { "name": "Panther", "bodies": ["motorcycle"] },
+        { "name": "Nitro", "bodies": ["motorcycle"] },
+        { "name": "Ranger", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Regulmoto",
+      "aliases": ["Регулмото"],
+      "models": [
+        { "name": "Sport-003", "bodies": ["motorcycle"] },
+        { "name": "ZR", "bodies": ["motorcycle"] }
+      ]
+    },
+    {
+      "name": "Stels",
+      "aliases": ["Стелс"],
+      "models": [
+        { "name": "600 Benelli", "bodies": ["motorcycle"] },
+        { "name": "Flex", "bodies": ["scooter"] },
+        { "name": "Navigator 500", "bodies": ["bicycle"] },
+        { "name": "Navigator 900", "bodies": ["bicycle"] },
+        { "name": "Miss 6000", "bodies": ["bicycle"] },
+        { "name": "Pilot 350", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Forward",
+      "aliases": ["Форвард"],
+      "models": [
+        { "name": "Apache", "bodies": ["bicycle"] },
+        { "name": "Sporting", "bodies": ["bicycle"] },
+        { "name": "Dortmund", "bodies": ["bicycle"] },
+        { "name": "Twister", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Merida",
+      "aliases": ["Мерида"],
+      "models": [
+        { "name": "Big.Nine", "bodies": ["bicycle"] },
+        { "name": "Scultura", "bodies": ["bicycle"] },
+        { "name": "Crossway", "bodies": ["bicycle"] },
+        { "name": "Reacto", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Giant",
+      "aliases": ["Джайант"],
+      "models": [
+        { "name": "Talon", "bodies": ["bicycle"] },
+        { "name": "Escape", "bodies": ["bicycle"] },
+        { "name": "TCR", "bodies": ["bicycle"] },
+        { "name": "ATX", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Trek",
+      "aliases": ["Трек"],
+      "models": [
+        { "name": "Marlin", "bodies": ["bicycle"] },
+        { "name": "FX", "bodies": ["bicycle"] },
+        { "name": "Domane", "bodies": ["bicycle"] },
+        { "name": "X-Caliber", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Specialized",
+      "aliases": ["Спешелайзд"],
+      "models": [
+        { "name": "Rockhopper", "bodies": ["bicycle"] },
+        { "name": "Sirrus", "bodies": ["bicycle"] },
+        { "name": "Allez", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Cube",
+      "aliases": ["Кубе"],
+      "models": [
+        { "name": "Aim", "bodies": ["bicycle"] },
+        { "name": "Attention", "bodies": ["bicycle"] },
+        { "name": "Nature", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Author",
+      "aliases": ["Аутор"],
+      "models": [
+        { "name": "Solution", "bodies": ["bicycle"] },
+        { "name": "Traction", "bodies": ["bicycle"] },
+        { "name": "Rapid", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Format",
+      "aliases": ["Формат"],
+      "models": [
+        { "name": "1213", "bodies": ["bicycle"] },
+        { "name": "5342", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Altair",
+      "aliases": ["Альтаир"],
+      "models": [
+        { "name": "MTB HT", "bodies": ["bicycle"] },
+        { "name": "City", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Cannondale",
+      "aliases": ["Каннондейл"],
+      "models": [
+        { "name": "Trail", "bodies": ["bicycle"] },
+        { "name": "Topstone", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Scott",
+      "aliases": ["Скотт"],
+      "models": [
+        { "name": "Aspect", "bodies": ["bicycle"] },
+        { "name": "Sub Cross", "bodies": ["bicycle"] }
+      ]
+    },
+    {
+      "name": "Shulz",
+      "aliases": ["Шульц"],
+      "models": [
+        { "name": "Krabi", "bodies": ["bicycle"] },
+        { "name": "Goa", "bodies": ["bicycle"] }
+      ]
+    }
+  ]
+}
