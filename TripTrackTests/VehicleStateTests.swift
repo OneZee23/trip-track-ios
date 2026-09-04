@@ -381,3 +381,62 @@ final class VehiclePhotoVisibilityAskTests: XCTestCase {
         XCTAssertFalse(VehiclePhotoVisibilityAsk.wasAsked(id, defaults))
     }
 }
+
+/// Разовое выключение карты у машин, заведённых до 0.6.4.
+///
+/// Обещание дано в журнале изменений, во всех двенадцати текстах магазина и в
+/// заметках ревьюеру. Выполнял его только бэкенд, и то вхолостую: сырой UPDATE
+/// не трогает `updated_at`, инкрементный пул это вниз не отдаёт, а следующий
+/// апсерт возвращает локальное `true` обратно.
+final class VehicleMapOptInMigrationTests: XCTestCase {
+
+    private let key = "com.triptrack.settings.vehicleMapOptInV1"
+
+    func testExistingVehiclesLoseTheirRouteMapOnce() throws {
+        UserDefaults.standard.removeObject(forKey: key)
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+
+        let pc = PersistenceController(inMemory: true)
+        // Машина, заведённая ДО обновления: карта включена, как её оставила схема.
+        let context = pc.container.viewContext
+        let before = VehicleEntity(context: context)
+        before.id = UUID()
+        before.name = "Старая"
+        before.mapVisible = true
+        before.syncStatus = SyncStatus.synced.rawValue
+        try context.save()
+
+        // Первый запуск после обновления.
+        _ = SettingsManager(persistenceController: pc)
+
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        let after = try context.fetch(request).first
+        XCTAssertEqual(after?.mapVisible, false,
+                       "маршруты старой машины опубликовались бы без ведома владельца")
+        XCTAssertEqual(after?.syncStatus, SyncStatus.pendingUpload.rawValue,
+                       "выключение обязано уехать на сервер, иначе на втором телефоне карта останется")
+    }
+
+    /// Второй запуск ничего не трогает: иначе человек, включивший карту
+    /// осознанно, терял бы её при каждом старте.
+    func testTheMigrationDoesNotRunTwice() throws {
+        UserDefaults.standard.removeObject(forKey: key)
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+
+        let pc = PersistenceController(inMemory: true)
+        let context = pc.container.viewContext
+        let v = VehicleEntity(context: context)
+        v.id = UUID()
+        v.name = "Машина"
+        v.mapVisible = true
+        try context.save()
+
+        _ = SettingsManager(persistenceController: pc)
+        // Человек включил карту обратно, руками.
+        v.mapVisible = true
+        try context.save()
+        _ = SettingsManager(persistenceController: pc)
+
+        XCTAssertTrue(v.mapVisible, "миграция отработала один раз и больше не вмешивается")
+    }
+}

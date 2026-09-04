@@ -142,6 +142,7 @@ final class SettingsManager: ObservableObject {
         self.persistenceController = persistenceController
         migrateCloudSyncToOptIn()
         migrateTripsToPrivateByDefault()
+        migrateVehicleMapToOptIn()
         loadAutoRecordSettings()
         loadSettings()
         persistenceController.migrateUserIdIfNeeded(userId: localUserId)
@@ -159,6 +160,40 @@ final class SettingsManager: ObservableObject {
     /// init time `AuthService` may not have hydrated yet, so we persist the
     /// IDs and let `AuthService.drainPendingPrivateMigrationUnpublish()`
     /// flush them after sign-in instead of firing a doomed enqueue here.
+    /// Карта маршрутов у машин, заведённых ДО 0.6.4, выключается один раз.
+    ///
+    /// Обещание дано и в журнале изменений, и во всех двенадцати текстах
+    /// магазина, и заметках ревьюеру — а выполнял его только бэкенд, и то
+    /// вхолостую: сырой `UPDATE` не трогает `updated_at`, поэтому инкрементный
+    /// пул это изменение вниз не отдаёт, а следующий апсерт с телефона
+    /// возвращает локальное `true` обратно. То есть на устройстве флаг
+    /// оставался включённым, и текст магазина описывал поведение, которое
+    /// приложение само же и отменяло.
+    ///
+    /// Чинится там, где живёт правда для устройства: локально и один раз.
+    /// Машины, заведённые ПОСЛЕ обновления, получают карту включённой — их
+    /// заводят в версии, где переключатель на виду.
+    ///
+    /// `syncStatus` намеренно ставится в `pendingUpload`: выключенная карта
+    /// должна уехать на сервер, иначе на другом устройстве она останется
+    /// включённой, и обещание выполнится только наполовину.
+    private func migrateVehicleMapToOptIn() {
+        let key = "com.triptrack.settings.vehicleMapOptInV1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "mapVisible == YES")
+        if let rows = try? context.fetch(request), !rows.isEmpty {
+            for row in rows {
+                row.mapVisible = false
+                row.lastModifiedAt = Date()
+                row.syncStatus = SyncStatus.pendingUpload.rawValue
+            }
+            persistenceController.save()
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     private func migrateTripsToPrivateByDefault() {
         let key = "com.triptrack.settings.privateByDefaultMigrationV1"
         guard !UserDefaults.standard.bool(forKey: key) else { return }

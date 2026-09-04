@@ -27,6 +27,7 @@ enum APIEndpoint {
     static let vehiclePhotoUpload = "/vehicles/photos/upload"
     static let vehiclePhotoDelete = "/vehicles/photos/delete"
     static let vehiclePhotoMain   = "/vehicles/photos/main"
+    static let vehiclePhotoList   = "/vehicles/photos/list"
 
     static let syncPull = "/sync/pull"
     static let syncPush = "/sync/push"

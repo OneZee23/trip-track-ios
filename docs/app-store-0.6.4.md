@@ -32,7 +32,7 @@ matter — trips, regions, days on the road. Below them, a map of everywhere tha
 car has been, its own records, and its trips as a screen of their own.
 
 Add photos: the pinned one becomes the car's face, in your garage and in
-anyone else's view of it. They sync, so they survive a new phone.
+anyone else's view of it. With Cloud Sync on they are backed up and come back on a new phone; with it off they never leave the device.
 
 I'M A PASSENGER
 
@@ -74,8 +74,8 @@ FIXED
 её поездки отдельным экраном.
 
 Добавьте фотографии: закреплённая становится лицом машины — и в вашем гараже,
-и у тех, кто на неё смотрит. Снимки синхронизируются, поэтому переживают смену
-телефона.
+и у тех, кто на неё смотрит. При включённой синхронизации снимки
+возвращаются на новом телефоне; при выключенной — не покидают устройство.
 
 Я ПАССАЖИР
 
@@ -115,8 +115,8 @@ Modell und Baujahr, Kennzeichen, Level und drei Zahlen, die zählen — Fahrten,
 Regionen, Tage unterwegs. Darunter eine Karte von allem, wo dieses Auto war,
 seine eigenen Rekorde und seine Fahrten als eigener Bildschirm.
 
-Füge Fotos hinzu: das angeheftete wird zum Gesicht des Autos. Sie werden
-synchronisiert und überleben ein neues Telefon.
+Füge Fotos hinzu: das angeheftete wird zum Gesicht des Autos. Mit aktivierter Cloud-Synchronisierung
+kommen sie auf einem neuen Telefon zurück; ohne sie verlassen sie das Gerät nicht.
 
 ICH BIN BEIFAHRER
 
@@ -152,8 +152,8 @@ año, matrícula, nivel y tres números que importan — viajes, regiones, días
 carretera. Debajo, un mapa de todo lo que ha recorrido, sus récords y sus
 viajes en una pantalla propia.
 
-Añade fotos: la fijada se convierte en la cara del coche. Se sincronizan, así
-que sobreviven a un teléfono nuevo.
+Añade fotos: la fijada se convierte en la cara del coche. Con la sincronización activada vuelven en un
+teléfono nuevo; con ella desactivada no salen del dispositivo.
 
 VOY DE PASAJERO
 
@@ -188,7 +188,7 @@ régions, jours sur la route. En dessous, une carte de tout ce que cette voiture
 a parcouru, ses records et ses trajets sur un écran à part.
 
 Ajoutez des photos : celle qui est épinglée devient le visage de la voiture.
-Elles se synchronisent et survivent à un changement de téléphone.
+Avec la synchronisation activée, elles reviennent sur un nouveau téléphone ; sans elle, elles ne quittent pas l'appareil.
 
 JE SUIS PASSAGER
 
@@ -223,8 +223,8 @@ targa, livello e tre numeri che contano — viaggi, regioni, giorni in strada.
 Sotto, una mappa di tutto ciò che quest'auto ha percorso, i suoi record e i
 suoi viaggi in una schermata dedicata.
 
-Aggiungi foto: quella fissata diventa il volto dell'auto. Si sincronizzano,
-quindi sopravvivono a un telefono nuovo.
+Aggiungi foto: quella fissata diventa il volto dell'auto. Con la sincronizzazione attiva tornano su un
+telefono nuovo; senza, non lasciano il dispositivo.
 
 SONO PASSEGGERO
 
@@ -259,8 +259,8 @@ poziom i trzy liczby, które mają znaczenie — przejazdy, regiony, dni w drodz
 Niżej mapa wszystkiego, co ten samochód przejechał, jego rekordy i jego
 przejazdy na osobnym ekranie.
 
-Dodaj zdjęcia: przypięte staje się twarzą auta. Synchronizują się, więc
-przetrwają zmianę telefonu.
+Dodaj zdjęcia: przypięte staje się twarzą auta. Przy włączonej synchronizacji wracają na nowym
+telefonie; przy wyłączonej nie opuszczają urządzenia.
 
 JESTEM PASAŻEREM
 
@@ -294,8 +294,8 @@ tahun, pelat, level, dan tiga angka yang berarti — perjalanan, wilayah, hari d
 jalan. Di bawahnya, peta semua yang pernah dilalui mobil itu, rekornya, dan
 daftar perjalanannya di layar tersendiri.
 
-Tambahkan foto: yang disematkan menjadi wajah mobil. Foto tersinkronisasi, jadi
-tetap ada saat ganti ponsel.
+Tambahkan foto: yang disematkan menjadi wajah mobil. Dengan Cloud Sync aktif, foto kembali di ponsel
+baru; tanpa itu, foto tidak meninggalkan perangkat.
 
 SAYA PENUMPANG
 
@@ -328,8 +328,8 @@ seviye ve önemli üç sayı — yolculuklar, bölgeler, yolda geçen günler. A
 bu arabanın gittiği her yerin haritası, kendi rekorları ve yolculukları ayrı
 bir ekranda.
 
-Fotoğraf ekle: sabitlenen fotoğraf arabanın yüzü olur. Eşitlenir, yani yeni
-telefonda da durur.
+Fotoğraf ekle: sabitlenen fotoğraf arabanın yüzü olur. Bulut eşitleme açıkken yeni telefonda geri gelir;
+kapalıyken cihazdan hiç çıkmaz.
 
 YOLCUYUM
 
@@ -361,8 +361,8 @@ DÜZELTİLDİ: satıştan sonra bir sonraki yolculuk yine o arabaya yazılıyord
 рівень і три числа, що мають значення — поїздки, регіони, дні в дорозі. Нижче —
 карта всього, що ця машина проїхала, її рекорди та її поїздки окремим екраном.
 
-Додайте фотографії: закріплена стає обличчям машини. Знімки синхронізуються,
-тож переживають зміну телефона.
+Додайте фотографії: закріплена стає обличчям машини. З увімкненою синхронізацією вони повертаються на
+новому телефоні; з вимкненою — не залишають пристрій.
 
 Я ПАСАЖИР
 
@@ -399,7 +399,7 @@ rehiyon, araw sa daan. Sa ibaba, mapa ng lahat ng nalakbay nito, mga rekord
 nito, at ang mga biyahe nito sa sariling screen.
 
 Magdagdag ng larawan: ang naka-pin ang nagiging mukha ng sasakyan.
-Nagsi-sync ito, kaya hindi nawawala kapag nagpalit ka ng telepono.
+Kapag naka-on ang Cloud Sync, bumabalik ang mga ito sa bagong telepono; kapag naka-off, hindi ito umaalis sa device.
 
 PASAHERO AKO
 
@@ -432,8 +432,8 @@ placa, nível e três números que importam — viagens, regiões, dias na estra
 Abaixo, um mapa de tudo o que esse carro percorreu, seus recordes e suas
 viagens em uma tela própria.
 
-Adicione fotos: a fixada vira o rosto do carro. Elas sincronizam, então
-sobrevivem à troca de telefone.
+Adicione fotos: a fixada vira o rosto do carro. Com a sincronização ligada voltam num telefone
+novo; com ela desligada não saem do dispositivo.
 
 VOU DE PASSAGEIRO
 

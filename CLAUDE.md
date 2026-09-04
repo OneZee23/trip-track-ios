@@ -38,9 +38,13 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
 
 **Location tracking** uses Provider pattern: `LocationProvider` protocol → `RealGPSProvider` (CoreLocation) + `SimulatedLocationProvider` (dev joystick). LocationManager switches between them.
 
-## CoreData Schema (8 entities, versioned)
+## CoreData Schema (versioned, v9 — 0.6.4)
 
-`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `VehicleEntity`, `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v2 = current with sync fields).
+`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v9 = current).
+
+**Внимание:** `VehiclePhotoEntity` связи с машиной НЕ имеет — `vehicleId` это
+обычный атрибут. Значит каскад её не заберёт: удаление машины и стирание
+аккаунта обязаны называть её явно (см. `LocalDataWipe` и `deleteVehicle`).
 
 **Sync-readiness fields (v2):** `userId`, `serverCreatedAt`, `conflictVersion` on TripEntity; `remoteURL`, `uploadStatus` on TripPhotoEntity; `userId` on VehicleEntity. All models (`Trip`, `TrackPoint`, `TripPhoto`, `Vehicle`) are `Codable` for JSON API serialization.
 
@@ -56,6 +60,29 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
 - **Soft delete**: `SyncStatus.pendingDelete` hides trips from UI; physical delete after server confirms
 - **User identity**: `SettingsManager.localUserId` (UUID) stamped on all entities, prepared for Sign in with Apple
 - **UI modifiers**: `.surfaceCard()`, `.glassBackground()`, `.glassPill()` for consistent card styling
+
+### На какую машину пишется поездка (0.6.4)
+
+Один вопрос — один ответ, и он живёт в `SettingsManager`:
+
+- `vehicles` — **весь** гараж, включая архивные и проданные. Не фильтровать
+  НИКОГДА: через него четыре экрана достают машину СТАРОЙ поездки, и фильтр
+  там стирает историю («Транспорт удалён» у живой машины).
+- `recordableVehicles` — на что можно писать сейчас (не в архиве, не продана).
+  Сюда же придёт лимит бесплатного тарифа в 0.6.5 — одной строкой.
+- `activeRecordableVehicleId` — на что уйдёт СЛЕДУЮЩАЯ поездка. Это читают
+  гараж, паспорт и чип на экране записи, чтобы не расходиться в показаниях.
+  `nil` значит «Без транспорта» — законный выбор человека, не поломка.
+- `recordableVehicleId(_:)` — последний рубеж перед штампом. Спрашивает
+  ХРАНИЛИЩЕ, а не список в памяти: снимок обновляется только когда его кто-то
+  перечитает, и однажды кто-то этого не сделает (так синк уже проносил архивную
+  машину мимо проверки).
+
+Правило, которое всё это держит: **архивная или проданная машина не принимает
+новых поездок нигде** — ни на экране записи, ни через автозапись по магнитоле,
+ни через «Команды». Уже записанные поездки остаются при своих машинах: архив
+про будущее, а не про переписывание истории. Автоматически в архив не уезжает
+никто и никогда.
 
 ## Localization & Theming
 

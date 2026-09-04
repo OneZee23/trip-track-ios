@@ -131,7 +131,12 @@ final class CoreDataV9MigrationTests: XCTestCase {
         // паспорт наполовину пуст.
         XCTAssertEqual(v.value(forKey: "photosVisible") as? Bool, false,
                        "фотографии не могут открыться сами при обновлении")
-        XCTAssertEqual(v.value(forKey: "mapVisible") as? Bool, true)
+        // Схема отдаёт `true` — это верно для машин, заведённых ПОСЛЕ 0.6.4.
+        // Существующим машинам карту гасит отдельная разовая миграция
+        // (`SettingsManager.migrateVehicleMapToOptIn`), а не умолчание модели:
+        // умолчание не умеет отличить старую строку от новой.
+        XCTAssertEqual(v.value(forKey: "mapVisible") as? Bool, true,
+                       "умолчание схемы — для НОВЫХ машин; старые гасит миграция")
         XCTAssertEqual(v.value(forKey: "isArchived") as? Bool, false,
                        "существующая машина не должна уехать в архив при обновлении")
         XCTAssertNil(v.value(forKey: "soldAt"), "и тем более не должна оказаться проданной")

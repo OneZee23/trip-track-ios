@@ -37,7 +37,8 @@ USER-GENERATED CONTENT AND MODERATION
 owner-controlled:
 • Free text — the vehicle's name, an optional one-line "about", and make/model
   chosen from a built-in catalogue or typed.
-• Photos of the vehicle.
+• Photos of the vehicle. They are uploaded to our storage only when Cloud Sync
+  is enabled, which is OFF by default; with it off they never leave the device.
 • An optional registration plate, hidden by default and shown only if the owner
   turns it on.
 Each is covered by the existing report-and-block flow: any vehicle or vehicle
@@ -49,7 +50,8 @@ PRIVACY DEFAULTS ON UPGRADE
 • Vehicles that existed before this release have their route map switched OFF by
   the upgrade migration. A vehicle's map is effectively "where its owner lives",
   and the axis did not exist before 0.6.4, so no consent to it was ever given.
-  Newly created vehicles default to on and the switch is visible when creating one.
+  Newly created vehicles default to on; the switches live on the vehicle's own
+  "Who can see" screen, two taps after it is created.
 • Plates are hidden by default; photos are hidden by default for existing vehicles.
 • All four axes (vehicle, map, photos, plate) are enforced on the SERVER: hidden
   data is not returned to another user's device at all, rather than being returned

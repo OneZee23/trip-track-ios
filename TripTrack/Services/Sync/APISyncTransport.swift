@@ -476,12 +476,18 @@ final class APISyncTransport: SyncTransport {
         let needThumbnail = entity.value(forKey: "thumbnailURL") == nil
         let needOriginal = entity.value(forKey: "remoteURL") == nil
 
-        guard needThumbnail || needOriginal,
-              let variants = await Self.encodePhotoVariants(
+        // Оба размера уже на сервере — грузить нечего, но операция могла быть
+        // не про байты: «сделать главной» едет тем же путём. Раньше здесь был
+        // просто `return`, и смена лица машины не доезжала никогда.
+        if !needThumbnail && !needOriginal {
+            if isMain { try await setVehiclePhotoMain(vehicleId: vehicleId, photoId: id) }
+            return
+        }
+
+        guard let variants = await Self.encodePhotoVariants(
                 originalData: originalData,
                 makeThumbnail: needThumbnail,
                 makeOriginal: needOriginal) else {
-            if !needThumbnail && !needOriginal { return }
             entity.setValue(PhotoUploadStatus.failed.rawValue, forKey: "uploadStatus")
             try? ctx.save()
             return
@@ -507,6 +513,14 @@ final class APISyncTransport: SyncTransport {
             entity.setValue(SyncStatus.synced.rawValue, forKey: "syncStatus")
             try? ctx.save()
         }
+    }
+
+    /// «Эта фотография — лицо машины». Отдельный вызов: сама загрузка байтов
+    /// могла случиться месяц назад, а главной снимок делают сегодня.
+    private func setVehiclePhotoMain(vehicleId: UUID, photoId: UUID) async throws {
+        struct MainReq: Encodable { let vehicleId: UUID; let photoId: UUID }
+        let _: EmptyResponse = try await client.post(
+            APIEndpoint.vehiclePhotoMain, body: MainReq(vehicleId: vehicleId, photoId: photoId))
     }
 
     private func deleteVehiclePhoto(id: UUID) async throws {
