@@ -385,9 +385,10 @@ DÜZELTİLDİ: satıştan sonra bir sonraki yolculuk yine o arabaya yazılıyord
 «повернути з проданих» ніколи не доїжджало до сервера.
 ```
 
-### Finnish
+### Filipino (Tagalog)
 
-Filipino (Tagalog) в карточке приходит под этим слотом — так же, как в 0.6.3.
+В карточке App Store этот язык исторически лежит в слоте «Finnish» — так же,
+как в 0.6.3. Слот не переименовывается, текст кладётся филиппинский.
 
 ```
 MAY PASAPORTE NA ANG SASAKYAN MO

@@ -152,7 +152,14 @@ struct VehicleDetailView: View {
                         // A bicycle pairs with no stereo, so auto-record has
                         // nothing to key off — the rows are absent, not
                         // disabled (canon: hidden means gone).
-                        if vehicle.type.supportsAutoRecord {
+                        // На проданную и архивную машину не записывается
+                        // ничего — значит и предлагать ей автозапись нельзя.
+                        // Паспорт проданной машины показывал «Привязать
+                        // магнитолу» и «Автозапись · Вкл» прямо под строкой
+                        // «Продана в сентябре»: обещание, которое приложение
+                        // выполнить уже не может, — воткнёшь магнитолу и
+                        // получишь тишину.
+                        if vehicle.type.supportsAutoRecord, !vehicle.isSold, !vehicle.isArchived {
                             // Always present, never conditional. It used to
                             // appear only when Bluetooth was off AND
                             // auto-record was armed, which meant its silence
@@ -300,10 +307,11 @@ struct VehicleDetailView: View {
                 // Канон рисует героем ФОТОГРАФИЮ. Пока её нет — спрайт, но
                 // тап ведёт в одно и то же место: «у машины должно быть лицо»
                 // — единственное, что мы взяли у drive2 без поворота.
-                if let photo = mainPhoto, let ui = VehiclePhotoStore.image(photo) {
-                    Image(uiImage: ui)
-                        .resizable()
-                        .scaledToFill()
+                if let photo = mainPhoto {
+                    // Уменьшенная копия, а не оригинал с камеры: герой ровно
+                    // 180 точек высотой, и декодировать ради него десять
+                    // мегапикселей на каждой отрисовке экрана незачем.
+                    VehiclePhotoImage(photo: photo, maxSize: 400)
                         .frame(height: 180)
                         .frame(maxWidth: .infinity)
                         .clipShape(RoundedRectangle(cornerRadius: 20))
@@ -500,6 +508,13 @@ struct VehicleDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .surfaceCard(cornerRadius: 16)
+        // Одометр открывает ввод реального пробега — того самого числа, ради
+        // которого он и показан двумя строками. Раньше карточка не делала
+        // ничего, а поле пряталось за «…» → «Редактировать» → прокрутить.
+        .contentShape(Rectangle())
+        .onTapGesture { Haptics.tap(); showEditForm = true }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(AppStrings.odometerLabel(l))
     }
 
     private func statGrid(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
@@ -650,6 +665,10 @@ struct VehicleDetailView: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { Haptics.tap(); showMap = true }
+                // Жест сам по себе не элемент управления: VoiceOver его не
+                // назовёт, а Switch Control до него не доберётся вовсе.
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
                 // Настоящая карта, а не набросок: `LightRoutePreview` без
                 // подложки читался как две закорючки в пустоте. Здесь
                 // MapKit-снимок с маршрутами машины.
@@ -692,15 +711,28 @@ struct VehicleDetailView: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { Haptics.tap(); showTrips = true }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
                 ForEach(0..<p.recent.count, id: \.self) { idx in
                     let trip = p.recent[idx]
                     if idx > 0 { Divider().overlay(c.border) }
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(TripRowText.title(trip, l))
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(c.text)
-                                .lineLimit(1)
+                            HStack(spacing: 5) {
+                                // Замок и здесь: человек, проверяющий, что из
+                                // его гаража видно другим, смотрит именно на
+                                // ЭТУ карточку, а полный список — на тап глубже.
+                                // Без замка ответ на его вопрос был неверным.
+                                if trip.isPrivate {
+                                    Image(systemName: "lock.fill")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(c.textTertiary)
+                                }
+                                Text(TripRowText.title(trip, l))
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(c.text)
+                                    .lineLimit(1)
+                            }
                             Text(TripRowText.when(trip, l))
                                 .font(.system(size: 11))
                                 .foregroundStyle(c.textTertiary)
@@ -713,6 +745,8 @@ struct VehicleDetailView: View {
                     .frame(minHeight: 38)
                     .contentShape(Rectangle())
                     .onTapGesture { Haptics.tap(); openTripId = trip.id }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isButton)
                 }
             }
             .padding(14)
@@ -736,7 +770,8 @@ struct VehicleDetailView: View {
                 VStack(spacing: 0) {
                     recordRow(AppStrings.recordLongest(l),
                               agg.longestTripTitle ?? agg.longestTripRegion ?? "—",
-                              kmValue(agg.longestTripKm, l), c: c)
+                              kmValue(agg.longestTripKm, l), c: c,
+                              opens: agg.longestTripId)
 
                     if let peak = passport?.highest, peak.meters > 0 {
                         rowDivider(c)
@@ -749,6 +784,18 @@ struct VehicleDetailView: View {
                         recordRow(AppStrings.statsRecordBestDay(l),
                                   agg.longestTripDate.map { Self.dayFormatter(l).string(from: $0) } ?? "—",
                                   kmValue(agg.maxDayKm, l), c: c)
+                    }
+
+                    // `maxDayDuration` считался с самого начала, а показать его
+                    // было негде — как и строку `recordLongestDay`, которая
+                    // лежала переведённой на тринадцать языков без единого
+                    // вызова. Километры и часы — разные рекорды: день из шести
+                    // часов в пробке не тот же, что день из шестисот километров.
+                    if agg.maxDayDuration > 0 {
+                        rowDivider(c)
+                        recordRow(AppStrings.recordLongestDay(l),
+                                  AppStrings.recordLongestDaySubtitle(l),
+                                  Trip.formattedTimeHuman(agg.maxDayDuration, lang: l), c: c)
                     }
                 }
                 .padding(.horizontal, 14)
@@ -771,9 +818,12 @@ struct VehicleDetailView: View {
         GarageFormat.odometer(m, lng: l) + " " + AppStrings.unitMeters(l)
     }
 
+    /// `opens` — поездка, о которой рекорд. Строка «самая длинная» без
+    /// возможности её открыть заставляет искать ту же поездку руками в списке.
+    @ViewBuilder
     private func recordRow(_ label: String, _ subtitle: String, _ value: String,
-                           c: AppTheme.Colors) -> some View {
-        HStack(spacing: 10) {
+                           c: AppTheme.Colors, opens tripId: UUID? = nil) -> some View {
+        let row = HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
                     .font(.system(size: 11))
@@ -791,6 +841,18 @@ struct VehicleDetailView: View {
             }
         }
         .frame(minHeight: 46)
+
+        if let tripId {
+            Button {
+                Haptics.tap()
+                openTripId = tripId
+            } label: {
+                row.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            row
+        }
     }
 
     private static func dayFormatter(_ l: LanguageManager.Language) -> DateFormatter {

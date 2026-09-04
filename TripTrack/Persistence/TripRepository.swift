@@ -924,7 +924,13 @@ final class CoreDataTripRepository: TripRepository {
         let req: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
         req.predicate = NSPredicate(format: "id == %@", p.id as CVarArg)
         req.fetchLimit = 1
-        let entity = (try? context.fetch(req).first) ?? VehicleEntity(context: context)
+        let existing = try? context.fetch(req).first
+        let entity = existing ?? VehicleEntity(context: context)
+        // Есть ли на этом устройстве правки, которые ещё не уехали. Считается
+        // ДО присваиваний и только для уже существующей строки: у новой
+        // `syncStatus` равен нулю (`pendingUpload`) по умолчанию, и без этой
+        // оговорки ни одна приехавшая машина не применилась бы вовсе.
+        let hasLocalEdits = existing?.syncStatus == SyncStatus.pendingUpload.rawValue
         entity.id = p.id
         entity.name = p.name
         entity.avatarEmoji = p.avatarEmoji
@@ -955,8 +961,15 @@ final class CoreDataTripRepository: TripRepository {
         // is not "reset to default" — keep whatever this device already knows.
         if let type = p.vehicleType { entity.vehicleType = type }
         if let plate = p.plate { entity.plate = plate }
-        if let plateVisible = p.plateVisible { entity.plateVisible = plateVisible }
-        if let visible = p.visibleToOthers { entity.visibleToOthers = visible }
+        // Четыре оси видимости — единственные поля, где ответ сервера НЕ
+        // главнее локального. Человек мог выключить показ машины в самолёте
+        // или в момент, когда очередь стоит в бэкоффе; следующий пул возвращал
+        // флаг обратно, а экран честно показывал возвращённое значение — то
+        // есть приватное решение отменялось молча и без следа. Пока правка не
+        // уехала, побеждает она. Остальные поля этой оговорки не получают:
+        // вернувшееся название машины — досада, вернувшаяся видимость — утечка.
+        if !hasLocalEdits, let plateVisible = p.plateVisible { entity.plateVisible = plateVisible }
+        if !hasLocalEdits, let visible = p.visibleToOthers { entity.visibleToOthers = visible }
         if let currency = p.fuelCurrency { entity.fuelCurrency = currency }
         // Паспорт (0.6.4) — по тому же правилу: ключ пришёл, значит сервер
         // имеет мнение; не пришёл — молчит, и локальное трогать нельзя.
@@ -965,8 +978,8 @@ final class CoreDataTripRepository: TripRepository {
         if let model = p.model { entity.model = model }
         if let year = p.year { entity.year = Int32(year) }
         if let body = p.bodyType { entity.bodyType = body }
-        if let mapVisible = p.mapVisible { entity.mapVisible = mapVisible }
-        if let photosVisible = p.photosVisible { entity.photosVisible = photosVisible }
+        if !hasLocalEdits, let mapVisible = p.mapVisible { entity.mapVisible = mapVisible }
+        if !hasLocalEdits, let photosVisible = p.photosVisible { entity.photosVisible = photosVisible }
         if let archived = p.isArchived { entity.isArchived = archived }
         // `soldAt` — исключение: здесь nil ЗНАЧИМ, это «продажу отменили».
         // Отличаем по наличию КЛЮЧА, а не по значению: старый сервер про поле

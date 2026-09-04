@@ -1,5 +1,6 @@
 import UIKit
 import CoreData
+import ImageIO
 
 /// Фотографии машины: файлы на диске, строки в CoreData, одна «главная».
 ///
@@ -55,6 +56,40 @@ enum VehiclePhotoStore {
         photos(of: vehicleId).first
     }
 
+    /// Уменьшенная копия снимка — то, что нужно показать почти везде.
+    ///
+    /// Фотографии пишутся с камеры (десяток мегапикселей), а показываются
+    /// плитками по сто точек. Раньше каждая плитка декодировала ОРИГИНАЛ, и
+    /// делала это прямо в теле вью — то есть заново на каждую перерисовку,
+    /// включая анимацию диалога. На экране, который существует ради того,
+    /// чтобы держать много снимков, это подвисания и реальный шанс быть
+    /// убитым по памяти на старом телефоне.
+    ///
+    /// Кэш в памяти, потому что ключ — имя файла, а файл неизменяем: снимок
+    /// либо есть, либо удалён вместе со строкой.
+    private static let thumbCache = NSCache<NSString, UIImage>()
+
+    static func thumbnail(_ photo: VehiclePhoto, maxSize: CGFloat) async -> UIImage? {
+        let key = "\(photo.filename)@\(Int(maxSize))" as NSString
+        if let cached = thumbCache.object(forKey: key) { return cached }
+        let url = directory.appendingPathComponent(photo.filename)
+        let scale = await MainActor.run { UIScreen.main.scale }
+        return await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+            let options: [CFString: Any] = [
+                kCGImageSourceThumbnailMaxPixelSize: maxSize * scale,
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+            ]
+            guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+            else { return nil }
+            let image = UIImage(cgImage: cg)
+            thumbCache.setObject(image, forKey: key)
+            return image
+        }.value
+    }
+
+    /// Полный размер — только там, где снимок действительно смотрят целиком.
     static func image(_ photo: VehiclePhoto) -> UIImage? {
         UIImage(contentsOfFile: directory.appendingPathComponent(photo.filename).path)
     }

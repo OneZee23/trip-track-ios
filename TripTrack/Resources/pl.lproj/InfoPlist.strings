@@ -13,5 +13,8 @@
 /* Photo Library: add only — saving share-card to Photos */
 "NSPhotoLibraryAddUsageDescription" = "TripTrack zapisuje obrazek trasy w Zdjęciach, żebyś mógł udostępnić go jako relację albo post.";
 
+/* Photo Library: read — attaching photos to a trip or a vehicle (0.6.4) */
+"NSPhotoLibraryUsageDescription" = "TripTrack pokazuje Twoją bibliotekę zdjęć, abyś mógł dodać zdjęcia do przejazdu lub do pojazdu w garażu. Zdjęcia zostają na urządzeniu, dopóki sam nie opublikujesz przejazdu albo nie udostępnisz zdjęć pojazdu innym.";
+
 /* Local network: dev/beta only */
 "NSLocalNetworkUsageDescription" = "TripTrack korzysta z sieci lokalnej, aby połączyć się z serwerem deweloperskim lub beta podczas testów.";

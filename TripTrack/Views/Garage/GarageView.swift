@@ -292,6 +292,15 @@ struct GarageView: View {
             // отсюда же, а диалог на обратимое действие — это шум.
             // Проданную из архива не поднимаем: снятие «продана» — отдельный
             // шаг, иначе случайный тап переписал бы историю машины.
+            // У проданной машины выход из архива один — снять продажу, и он
+            // лежал в четырёх тапах внутри формы. Здесь же, рядом.
+            if vehicle.isSold {
+                Button {
+                    settings.setVehicleSold(id: vehicle.id, soldAt: nil)
+                } label: {
+                    Label(AppStrings.vehicleUnsell(l), systemImage: "arrow.uturn.backward")
+                }
+            }
             if !vehicle.isSold {
                 Button {
                     settings.setVehicleArchived(id: vehicle.id, archived: !vehicle.isArchived)
@@ -330,6 +339,18 @@ struct GarageView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
                     .accessibilityLabel(AppStrings.vehicleHiddenFromOthers(l))
+            }
+
+            // Проданная и убранная в архив выглядели в списке одинаково, а
+            // «Архив» их и объединяет: без пометки понять, почему одну машину
+            // нельзя вернуть тем же жестом, что другую, было неоткуда.
+            if vehicle.isSold {
+                Text(AppStrings.vehicleSoldBadge(l))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(c.textTertiary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(c.cardAlt, in: Capsule())
             }
 
             Spacer(minLength: 8)

@@ -2261,6 +2261,10 @@ enum AppStrings {
     static func vehicleUnsell(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehicleUnsell", ru: "Вернуть из проданных", en: "Undo «sold»")
     }
+    /// Метка на карточке в гараже. Короткая: место в строке с именем.
+    static func vehicleSoldBadge(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleSoldBadge", ru: "Продана", en: "Sold")
+    }
     static func vehicleSoldState(_ lang: LanguageManager.Language, when: String) -> String {
         switch lang {
         case .ru:  return "Продана в \(when) · биография закрыта"
@@ -4843,6 +4847,11 @@ enum AppStrings {
     }
     static func statsRecordBestDay(_ lang: LanguageManager.Language) -> String {
         tr(lang, "statsRecordBestDay", ru: "Лучший день по км", en: "Best day by km")
+    }
+    /// Подпись к рекорду «дольше всего за рулём»: сам рекорд — часы, и надо
+    /// сказать, за какой отрезок они набраны.
+    static func recordLongestDaySubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "recordLongestDaySubtitle", ru: "За один день", en: "In a single day")
     }
     static func statsRecordMostPhotos(_ lang: LanguageManager.Language) -> String {
         tr(lang, "statsRecordMostPhotos", ru: "Больше всего фото", en: "Most photos")

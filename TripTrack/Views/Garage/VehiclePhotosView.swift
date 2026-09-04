@@ -154,7 +154,7 @@ struct VehiclePhotosView: View {
     private func hero(_ photo: VehiclePhoto, c: AppTheme.Colors,
                       l: LanguageManager.Language) -> some View {
         ZStack(alignment: .topLeading) {
-            image(photo)
+            image(photo, maxSize: 400)
                 .frame(height: 180)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -185,7 +185,7 @@ struct VehiclePhotosView: View {
                         Haptics.tap()
                         viewerIndex = photos.firstIndex(where: { $0.id == photo.id })
                     } label: {
-                        image(photo)
+                        image(photo, maxSize: 140)
                             .frame(height: 104)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .contentShape(Rectangle())
@@ -196,16 +196,11 @@ struct VehiclePhotosView: View {
         }
     }
 
-    @ViewBuilder
-    private func image(_ photo: VehiclePhoto) -> some View {
-        if let ui = VehiclePhotoStore.image(photo) {
-            Image(uiImage: ui).resizable().scaledToFill().clipped()
-        } else {
-            // Файл исчез, а строка осталась — показываем заглушку, а не пустоту:
-            // пустой прямоугольник читается как «грузится» и никогда не грузится.
-            Rectangle().fill(Color.gray.opacity(0.2))
-                .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
-        }
+    /// Размер передаётся тот, в котором снимок и покажут: герой во всю ширину
+    /// и плитка в сто точек — разные картинки, и грузить для плитки герой
+    /// незачем.
+    private func image(_ photo: VehiclePhoto, maxSize: CGFloat) -> some View {
+        VehiclePhotoImage(photo: photo, maxSize: maxSize)
     }
 
     private func hint(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {

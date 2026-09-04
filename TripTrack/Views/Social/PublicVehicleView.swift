@@ -29,6 +29,10 @@ struct PublicVehicleView: View {
     @State private var cityCount = 0
     @State private var routes: [[CLLocationCoordinate2D]] = []
     @State private var failed = false
+    /// Машины для нас больше нет — спрятали, удалили или заблокировали.
+    /// Отдельно от `failed`: «не смогли спросить» и «ответ получен, машины
+    /// нет» — разные слова и разные кнопки.
+    @State private var gone = false
     @State private var showActions = false
     @State private var showReport = false
     /// Жалоба на КОНКРЕТНЫЙ снимок. Отдельно от жалобы на машину: модерации
@@ -85,7 +89,7 @@ struct PublicVehicleView: View {
                                 .foregroundStyle(c.textTertiary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                    } else if failed {
+                    } else if failed || gone {
                         unavailable(c: c, l: l)
                     } else {
                         CarLoadingView().padding(.top, 60)
@@ -237,10 +241,13 @@ struct PublicVehicleView: View {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(c.textSecondary)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 44, height: 44)
                         .background(c.cardAlt, in: Circle())
                 }
                 .buttonStyle(.plain)
+                // Единственная дорога к жалобе на чужую машину — и до этой
+                // подписи VoiceOver читал её просто «кнопка».
+                .accessibilityLabel(AppStrings.moreActions(lang.language))
             }
             .padding(.top, 12)
         }
@@ -452,22 +459,55 @@ struct PublicVehicleView: View {
         async let full = loadVehicle()
         async let biography = loadTrips()
         let (v, bio) = await (full, biography)
-        if let v { vehicle = v } else if vehicle == nil { failed = true }
+        switch v {
+        case .loaded(let fresh):
+            vehicle = fresh
+        case .gone:
+            // Машину спрятали, удалили или нас заблокировали, пока экран был
+            // открыт. Раньше при заранее переданной строке этот ответ просто
+            // проглатывался: экран продолжал показывать спрятанную машину
+            // целиком, потому что «данные уже есть». Приватное решение
+            // человека не должно проигрывать нашему кэшу.
+            vehicle = nil
+            failed = false
+            gone = true
+        case .failure:
+            // Сеть отвалилась — это не событие приватности. Показываем то, с
+            // чем пришли, и говорим, что обновить не вышло.
+            if vehicle == nil { failed = true }
+        }
         if let bio {
             trips = bio.trips
             agg = bio.agg
             regionCount = bio.regions
             cityCount = bio.cities
             routes = bio.routes
-        } else if v?.mapVisible == true {
+        } else if case .loaded(let fresh) = v, fresh.mapVisible == true {
             failed = true
         }
     }
 
-    private func loadVehicle() async -> PublicVehicle? {
-        try? await APIClient.shared.get(
-            APIEndpoint.userVehicle(accountId.uuidString, vehicleId.uuidString),
-            requiresAuth: AuthService.shared.isSignedIn)
+    /// Три разных ответа, которые нельзя путать: приехала машина, машины для
+    /// нас больше нет, не удалось спросить.
+    private enum VehicleFetch {
+        case loaded(PublicVehicle)
+        case gone
+        case failure
+    }
+
+    private func loadVehicle() async -> VehicleFetch {
+        do {
+            let v: PublicVehicle = try await APIClient.shared.get(
+                APIEndpoint.userVehicle(accountId.uuidString, vehicleId.uuidString),
+                requiresAuth: AuthService.shared.isSignedIn)
+            return .loaded(v)
+        } catch APIError.unknownServer(let code, _) where code == "USER_NOT_FOUND" {
+            return .gone
+        } catch APIError.vehicleNotFound {
+            return .gone
+        } catch {
+            return .failure
+        }
     }
 
     private struct Biography {

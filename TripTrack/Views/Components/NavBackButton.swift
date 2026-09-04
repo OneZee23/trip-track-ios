@@ -27,5 +27,8 @@ struct NavBackButton: View {
             // inverted against the design and unpaired with the trailing «…».
             NavCircleIcon(systemImage: "chevron.backward")
         }
+        // Иконка без текста: без подписи VoiceOver говорит просто «кнопка», а
+        // это кнопка «назад» на каждом втором экране приложения.
+        .accessibilityLabel(AppStrings.back(LanguageManager.currentLanguage))
     }
 }

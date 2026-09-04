@@ -13,5 +13,8 @@
 /* Photo Library: add only — saving share-card to Photos */
 "NSPhotoLibraryAddUsageDescription" = "TripTrack, hikâye ya da gönderi olarak paylaşabilmen için gezi görselini Fotoğraflar'a kaydeder.";
 
+/* Photo Library: read — attaching photos to a trip or a vehicle (0.6.4) */
+"NSPhotoLibraryUsageDescription" = "TripTrack, bir yolculuğa ya da garajındaki bir araca fotoğraf eklemen için fotoğraf kitaplığını gösterir. Yolculuğu yayımlamadığın ya da araç fotoğraflarını başkalarına kendin açmadığın sürece fotoğraflar cihazında kalır.";
+
 /* Local network: dev/beta only */
 "NSLocalNetworkUsageDescription" = "TripTrack, test sırasında geliştirme ya da beta sunucusuna bağlanmak için yerel ağı kullanır.";
