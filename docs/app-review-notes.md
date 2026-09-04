@@ -4,7 +4,81 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.6.3 — public profile (current submission)
+## v0.6.4 — vehicle passport (current submission)
+
+Self-contained: paste the **English** block below into App Store Connect →
+App Review Information → Notes. It replaces the 0.6.3 notes entirely.
+
+### English
+
+TripTrack 0.6.4 — Reviewer Notes
+
+TripTrack is a road-trip diary: it records a drive with GPS and keeps it as a map,
+a track and photos. This release gives each vehicle a page of its own and adds
+user-controlled visibility for everything on it.
+
+WHAT'S NEW IN 0.6.4
+• Vehicle passport — a screen per vehicle: make, model, year, an optional
+  registration plate, a level derived from distance driven, three counters
+  (trips, regions, days on the road), a map of that vehicle's own trips, its
+  records, and its trips as a separate list.
+• Vehicle photos — the user picks images from their library; one is pinned as the
+  vehicle's main photo. They are uploaded to our storage only when Cloud Sync is
+  enabled, which is off by default.
+• Public garage — from another user's profile you can open the vehicles they have
+  chosen to make visible, and the passport of each.
+• "I'm a passenger" — a one-tap state before recording starts, for a taxi, a bus
+  or someone else's car. The trip is recorded without a vehicle attached.
+• Archive — a vehicle can be archived by the user; new trips are never recorded
+  onto an archived or sold vehicle. Nothing is archived automatically.
+
+USER-GENERATED CONTENT AND MODERATION
+0.6.4 adds three new stranger-visible surfaces, all optional and all off or
+owner-controlled:
+• Free text — the vehicle's name, an optional one-line "about", and make/model
+  chosen from a built-in catalogue or typed.
+• Photos of the vehicle.
+• An optional registration plate, hidden by default and shown only if the owner
+  turns it on.
+Each is covered by the existing report-and-block flow: any vehicle or vehicle
+photo can be reported from the same menu as a trip or a profile, and blocking a
+user hides their garage entirely, in both directions. Reports reach the same
+queue as the existing ones and are actioned within 24 hours, per 1.2.
+
+PRIVACY DEFAULTS ON UPGRADE
+• Vehicles that existed before this release have their route map switched OFF by
+  the upgrade migration. A vehicle's map is effectively "where its owner lives",
+  and the axis did not exist before 0.6.4, so no consent to it was ever given.
+  Newly created vehicles default to on and the switch is visible when creating one.
+• Plates are hidden by default; photos are hidden by default for existing vehicles.
+• All four axes (vehicle, map, photos, plate) are enforced on the SERVER: hidden
+  data is not returned to another user's device at all, rather than being returned
+  and hidden by the app.
+
+DATA DELETION
+"Delete account" erases the account and its server data, and also erases every
+trip, track point, photo, vehicle and vehicle photo held on the device. The
+separate "Erase my server data" removes trips, photos and the garage from the
+server while leaving the local copy in place.
+
+HOW TO REVIEW
+No special account is required; sign-in with Apple is optional and the app is
+fully usable signed out. To see the garage: Profile ("Я") → Garage → "+" to add a
+vehicle → open it. To see the passenger state: Record tab → the "I'm a passenger"
+button next to the vehicle chip. Location permission is requested only when the
+user starts a recording.
+
+### Русский (для себя, не для вставки)
+
+То же самое своими словами: паспорт машины, фотографии, чужой гараж, «я
+пассажир», архив. Три новых поверхности с пользовательским контентом — имя и
+описание машины, фотографии, номер, — все закрываются переключателями, и все
+проверяются на сервере. У машин, заведённых до релиза, карта маршрутов выключена
+миграцией: согласия на эту ось никто не давал, потому что до 0.6.4 её не было.
+
+---
+
+## v0.6.3 — public profile (previous submission)
 
 Self-contained: paste the **English** block below into App Store Connect →
 App Review Information → Notes. It replaces the 0.6.0/0.6.2 notes entirely —
