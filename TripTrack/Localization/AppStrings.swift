@@ -2547,6 +2547,25 @@ enum AppStrings {
     /// Names for the silhouettes. Nothing draws these as visible text — the
     /// tiles are pictures — but VoiceOver has no picture to read, so without
     /// them the whole row announces as seven identical buttons.
+    /// Название цвета — для VoiceOver.
+    ///
+    /// Восемь кружков в ряд отличаются ТОЛЬКО цветом, а трое из них —
+    /// соседние оттенки серого. Незрячему человеку это восемь одинаковых
+    /// кнопок без имени, то есть выбрать цвет машины он не может вовсе.
+    static func avatarColorName(_ lang: LanguageManager.Language, color: String) -> String {
+        switch color {
+        case "white":  return tr(lang, "avatarColor_white", ru: "Белый", en: "White")
+        case "black":  return tr(lang, "avatarColor_black", ru: "Чёрный", en: "Black")
+        case "silver": return tr(lang, "avatarColor_silver", ru: "Серебристый", en: "Silver")
+        case "gray":   return tr(lang, "avatarColor_gray", ru: "Серый", en: "Gray")
+        case "red":    return tr(lang, "avatarColor_red", ru: "Красный", en: "Red")
+        case "blue":   return tr(lang, "avatarColor_blue", ru: "Синий", en: "Blue")
+        case "orange": return tr(lang, "avatarColor_orange", ru: "Оранжевый", en: "Orange")
+        case "green":  return tr(lang, "avatarColor_green", ru: "Зелёный", en: "Green")
+        default:       return color
+        }
+    }
+
     static func avatarStyleName(_ lang: LanguageManager.Language, style: String) -> String {
         switch style {
         case "car":         return tr(lang, "avatarStyle_car", ru: "Седан", en: "Sedan")

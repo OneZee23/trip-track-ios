@@ -325,6 +325,9 @@ struct VehicleDetailView: View {
                 }
             }
             .buttonStyle(.plain)
+            // Спрайт и фотография для VoiceOver скрыты как декорация, значит
+            // имя кнопке нужно своё: это вход в фотографии машины.
+            .accessibilityLabel(AppStrings.vehiclePhotos(l))
             .padding(.top, 4)
 
             Text(displayName(vehicle, l))

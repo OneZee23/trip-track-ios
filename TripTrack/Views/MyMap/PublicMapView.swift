@@ -14,16 +14,21 @@ import SwiftUI
 struct PublicMapView: View {
     let accountId: UUID
     let ownerName: String?
+    /// Ограничить карту одной машиной (0.6.4). `nil` — весь публичный след
+    /// человека, как было в 0.6.3. Фильтр честный: сервер сам проверяет, что
+    /// машина открыта и её карта не выключена.
+    let vehicleId: UUID?
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @StateObject private var vm: MyMapViewModel
 
-    init(accountId: UUID, ownerName: String?) {
+    init(accountId: UUID, ownerName: String?, vehicleId: UUID? = nil) {
         self.accountId = accountId
         self.ownerName = ownerName
+        self.vehicleId = vehicleId
         _vm = StateObject(wrappedValue: MyMapViewModel(
-            source: RemoteTripSource(accountId: accountId)))
+            source: RemoteTripSource(accountId: accountId, vehicleId: vehicleId)))
     }
 
     var body: some View {

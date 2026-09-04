@@ -579,6 +579,7 @@ struct VehicleEditFormView: View {
                         // The tile is a picture; VoiceOver has nothing to read
                         // without this and announces seven identical buttons.
                         .accessibilityLabel(AppStrings.avatarStyleName(l, style: style))
+                        .accessibilityAddTraits(selectedStyle == style ? [.isSelected] : [])
                     }
                 }
             }
@@ -624,7 +625,8 @@ struct VehicleEditFormView: View {
                 // dropped: opening the form must never silently restyle a
                 // vehicle somebody chose on purpose.
                 if let legacy = legacyAvatar {
-                    swatchButton(isSelected: selectedAvatar == legacy, c: c) {
+                    swatchButton(isSelected: selectedAvatar == legacy,
+                                 label: legacy, c: c) {
                         selectedAvatar = legacy
                     } fill: {
                         Circle()
@@ -634,7 +636,9 @@ struct VehicleEditFormView: View {
                 }
                 ForEach(VehicleAvatar.colors, id: \.self) { color in
                     let rgb = VehicleAvatar.swatch(color)
-                    swatchButton(isSelected: selectedColor == color && VehicleAvatar.isAsset(selectedAvatar), c: c) {
+                    swatchButton(isSelected: selectedColor == color && VehicleAvatar.isAsset(selectedAvatar),
+                                 label: AppStrings.avatarColorName(lang.language, color: color),
+                                 c: c) {
                         selectedAvatar = VehicleAvatar.legacyName(color: color)
                     } fill: {
                         Circle()
@@ -657,6 +661,7 @@ struct VehicleEditFormView: View {
     /// with a gap so the selected colour is never squeezed by its own marker.
     private func swatchButton<Fill: View>(
         isSelected: Bool,
+        label: String,
         c: AppTheme.Colors,
         onTap: @escaping () -> Void,
         @ViewBuilder fill: () -> Fill
@@ -676,6 +681,12 @@ struct VehicleEditFormView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        // Кружок — это только цвет: без имени VoiceOver читает восемь
+        // одинаковых кнопок, а три из них ещё и соседние оттенки серого.
+        .accessibilityLabel(label)
+        // Без этого признака непонятно, какой цвет сейчас выбран: кольцо
+        // вокруг кружка — чисто зрительная подсказка.
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     /// Which silhouette and which colour the current selection decomposes to.

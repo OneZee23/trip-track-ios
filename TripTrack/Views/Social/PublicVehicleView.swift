@@ -40,6 +40,7 @@ struct PublicVehicleView: View {
     /// одной фотографии — это заявка, по которой непонятно, что делать.
     @State private var reportPhoto: ReportedPhoto?
     @State private var viewerStart: ViewerStart?
+    @State private var showMap = false
 
     private struct ViewerStart: Identifiable { let index: Int; var id: Int { index } }
 
@@ -110,6 +111,12 @@ struct PublicVehicleView: View {
         .sheet(isPresented: $showActions) {
             ActionPopoverList(items: actionItems(l))
                 .presentationDetents([.height(140)])
+        }
+        .navigationDestination(isPresented: $showMap) {
+            // Тот же экран, что показывает публичную карту человека, но
+            // суженный до одной машины: фильтр по `vehicleId` проверяет сервер.
+            PublicMapView(accountId: accountId, ownerName: ownerName, vehicleId: vehicleId)
+                .environmentObject(lang)
         }
         .fullScreenCover(item: $viewerStart) { start in
             // Чужие снимки удалять и назначать главными нельзя — обе кнопки
@@ -379,6 +386,13 @@ struct PublicVehicleView: View {
         }
         .padding(14)
         .surfaceCard(cornerRadius: 16)
+        // Карточка открывает карту целиком — ровно как на своём паспорте.
+        // Единственное, ради чего в чужой паспорт заходят, и оно не
+        // открывалось: снимок 130 точек высотой и всё.
+        .contentShape(Rectangle())
+        .onTapGesture { Haptics.tap(); showMap = true }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
     }
 
     private func placesLine(_ l: LanguageManager.Language) -> String {

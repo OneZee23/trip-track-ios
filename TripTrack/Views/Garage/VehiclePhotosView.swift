@@ -203,14 +203,41 @@ struct VehiclePhotosView: View {
         VehiclePhotoImage(photo: photo, maxSize: maxSize)
     }
 
+    @ViewBuilder
     private func hint(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        Text(photos.isEmpty
-             ? AppStrings.vehiclePhotosEmpty(l)
-             : AppStrings.vehiclePhotosHint(l))
-            .font(.system(size: 11))
-            .foregroundStyle(c.textTertiary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 2)
+        if photos.isEmpty {
+            // Пустой экран был строкой мелкого серого текста под пустотой, и
+            // добавить снимок можно было только «плюсом» в углу шапки — то
+            // есть единственное действие экрана пряталось там, куда не
+            // смотрят. Настоящее пустое состояние: рисунок, слова и кнопка.
+            VStack(spacing: 14) {
+                EmptyStateIllustration(name: "empty_garage", size: 120)
+                Text(AppStrings.vehiclePhotosEmpty(l))
+                    .font(.system(size: 14))
+                    .foregroundStyle(c.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                PhotosPicker(selection: $picking, maxSelectionCount: 10,
+                             matching: .images, photoLibrary: .shared()) {
+                    Text(AppStrings.addPhotos(l))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(AppTheme.accent, in: Capsule())
+                }
+                .disabled(isSaving)
+                .accessibilityIdentifier("vehicle_photos_empty_add")
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 40)
+        } else {
+            Text(AppStrings.vehiclePhotosHint(l))
+                .font(.system(size: 11))
+                .foregroundStyle(c.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 2)
+        }
     }
 
     // MARK: - Действия

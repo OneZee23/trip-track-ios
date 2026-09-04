@@ -87,5 +87,9 @@ struct VehicleSpritePlate: View {
             }
         }
         .frame(width: plateSize, height: plateHeight)
+        // Картинка декоративная: рядом всегда стоит имя машины, а VoiceOver
+        // без этого зачитывает имя ассета — «pixel car white». Подпись, если
+        // она нужна, ставит вызывающий: он знает, что за машина.
+        .accessibilityHidden(true)
     }
 }

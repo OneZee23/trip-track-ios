@@ -30,6 +30,9 @@ struct VehiclePhotoImage: View {
                 Rectangle().fill(Color.gray.opacity(0.12))
             }
         }
+        // Сама картинка для VoiceOver декоративна: имя даёт кнопка, внутри
+        // которой она лежит.
+        .accessibilityHidden(true)
         .task(id: photo.filename) {
             let loaded = await VehiclePhotoStore.thumbnail(photo, maxSize: maxSize)
             image = loaded

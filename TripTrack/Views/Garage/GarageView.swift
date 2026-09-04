@@ -425,7 +425,26 @@ struct GarageView: View {
         // Dead centre of the remaining space sits low once the nav row has
         // taken the top of the sheet, so the block is lifted a notch.
         .padding(.bottom, 48)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+        // На крупном системном шрифте картинка, заголовок, абзац и кнопка
+        // перестают помещаться в экран, и первым за край уходит именно
+        // «Добавить машину» — единственное действие пустого гаража. Внутри
+        // прокрутки блок по-прежнему стоит по центру, пока места хватает, и
+        // прокручивается, когда перестаёт.
+        .modifier(ScrollableWhenTall())
+    }
+
+    /// Центрирует, пока помещается, и прокручивает, когда нет.
+    private struct ScrollableWhenTall: ViewModifier {
+        func body(content: Content) -> some View {
+            GeometryReader { proxy in
+                ScrollView {
+                    content.frame(minHeight: proxy.size.height)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollIndicators(.hidden)
+            }
+        }
     }
 
     // MARK: - Actions
