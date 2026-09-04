@@ -483,6 +483,7 @@ final class SettingsManager: ObservableObject {
             // фотографии удалённой машины оставались в Documents навсегда, и
             // добраться до них было уже нечем.
             VehiclePhotoStore.deleteAll(of: id)
+            VehiclePhotoVisibilityAsk.forget(id)
             persistenceController.save()
             loadVehicles()
             // Удалённая не может остаться выбранной — иначе следующая поездка

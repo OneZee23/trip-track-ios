@@ -35,6 +35,9 @@ struct PublicVehicleView: View {
     /// нужно знать, что именно смотреть, а «пожаловаться на машину» из-за
     /// одной фотографии — это заявка, по которой непонятно, что делать.
     @State private var reportPhoto: ReportedPhoto?
+    @State private var viewerStart: ViewerStart?
+
+    private struct ViewerStart: Identifiable { let index: Int; var id: Int { index } }
 
     /// Обёртка вместо расширения `UUID: Identifiable`: такое расширение
     /// подцепилось бы ко всему проекту и однажды выстрелило бы в чужом месте.
@@ -103,6 +106,19 @@ struct PublicVehicleView: View {
         .sheet(isPresented: $showActions) {
             ActionPopoverList(items: actionItems(l))
                 .presentationDetents([.height(140)])
+        }
+        .fullScreenCover(item: $viewerStart) { start in
+            // Чужие снимки удалять и назначать главными нельзя — обе кнопки
+            // просто не передаются, и просмотрщик их не рисует.
+            PhotoFullScreenView(
+                pages: (vehicle?.photos ?? []).map {
+                    .init(id: $0.id, source: .remote(url: $0.url ?? $0.thumbUrl),
+                          timestamp: Date())
+                },
+                initialIndex: start.index,
+                language: lang.language,
+                onDismiss: { viewerStart = nil }
+            )
         }
         .sheet(item: $reportPhoto) { shot in
             ReportSheet(target: .vehiclePhoto(shot.id))
@@ -269,6 +285,10 @@ struct PublicVehicleView: View {
                 if let main = shots.first(where: { $0.isMain }) ?? shots.first {
                     remoteImage(main.best, height: 190, corner: 16)
                         .contextMenu { reportItem(main.id, l) }
+                        .onTapGesture {
+                            Haptics.tap()
+                            viewerStart = ViewerStart(index: shots.firstIndex(of: main) ?? 0)
+                        }
                 }
                 let rest = shots.filter { $0.id != (shots.first(where: { $0.isMain }) ?? shots[0]).id }
                 if !rest.isEmpty {
@@ -278,6 +298,10 @@ struct PublicVehicleView: View {
                                 remoteImage(shot.thumb, height: 84, corner: 12)
                                     .frame(width: 110)
                                     .contextMenu { reportItem(shot.id, l) }
+                                    .onTapGesture {
+                                        Haptics.tap()
+                                        viewerStart = ViewerStart(index: shots.firstIndex(of: shot) ?? 0)
+                                    }
                             }
                         }
                     }

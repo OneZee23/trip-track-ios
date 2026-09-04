@@ -123,6 +123,8 @@ struct TripDetailView: View {
     @State private var isLeavingTrip = false
     /// «Редактировать поездку» — name, description, car, access in one sheet.
     @State private var showEditSheet = false
+    /// Паспорт машины, открытый с чипа поездки (0.6.4).
+    @State private var openVehicleId: UUID?
     /// Task 3's candidate picker, opened from `TripCompanionsSection`'s
     /// empty-state «Позвать» affordance via `openCompanionsPicker`. Once a
     /// roster exists, inviting happens inside `CompanionsRosterSheet`
@@ -1022,6 +1024,13 @@ struct TripDetailView: View {
                 .environmentObject(lang)
                 .environmentObject(auth)
         }
+        // Паспорт машины пушится в тот же стек, что и всё остальное с этого
+        // экрана: «а что ещё она видела» — продолжение поездки, а не шторка
+        // поверх неё.
+        .navigationDestination(item: $openVehicleId) { id in
+            VehicleDetailView(vehicleId: id)
+                .environmentObject(lang)
+        }
         .sheet(isPresented: $showEditSheet) {
             if let t = trip {
                 TripEditSheet(
@@ -1702,17 +1711,39 @@ struct TripDetailView: View {
         }
     }
 
-    /// Which car this was, stated and nothing more — reassignment lives in the
-    /// edit sheet, next to the name and the description, where the canon puts
-    /// it (Figma 543:119 «Машина для поездки»).
+    /// Какая это была машина — и вход в её паспорт (0.6.4).
+    ///
+    /// Переназначение по-прежнему живёт в форме редактирования, рядом с именем
+    /// и заметкой: чип не должен молча менять машину. А вот ОТКРЫТЬ машину
+    /// отсюда — ровно то, чего ждёшь: «а что ещё она видела».
+    @ViewBuilder
     private func ownVehicleChip(trip: Trip, c: AppTheme.Colors) -> some View {
+        if let v = tripVehicle {
+            Button {
+                Haptics.tap()
+                openVehicleId = v.id
+            } label: {
+                DetailChipSurface {
+                    Text(v.displayEmoji)
+                        .font(.system(size: 12))
+                    Text(v.name)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .opacity(0.5)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(AppStrings.garage(lang.language))
+        } else {
+            deadVehicleChip(trip: trip, c: c)
+        }
+    }
+
+    /// Машина, которой больше нет, — открывать нечего.
+    private func deadVehicleChip(trip: Trip, c: AppTheme.Colors) -> some View {
         DetailChipSurface {
-            if let v = tripVehicle {
-                Text(v.displayEmoji)
-                    .font(.system(size: 12))
-                Text(v.name)
-                    .lineLimit(1)
-            } else if trip.vehicleId != nil {
+            if trip.vehicleId != nil {
                 // The trip names a vehicle the garage no longer holds. That is
                 // not the same fact as «recorded without one», and saying so
                 // keeps deleting transport honest: the trip survived, its car

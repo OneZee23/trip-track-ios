@@ -18,6 +18,16 @@ struct VehiclePhotosView: View {
     @State private var picking: [PhotosPickerItem] = []
     @State private var isSaving = false
     @State private var actionTarget: VehiclePhoto?
+    /// Открытый во весь экран снимок. Тап теперь открывает СНИМОК, а не список
+    /// действий: список был временной заплаткой на то, что смотреть было негде,
+    /// а «сделать главной» и «удалить» переехали в саму открытую фотографию —
+    /// туда, где на неё смотрят целиком.
+    @State private var viewerIndex: Int?
+    /// Разовый вопрос «показывать ли эти снимки другим», который задаётся ровно
+    /// в тот момент, когда он впервые осмыслен: у машины появилась первая
+    /// фотография. Ось выключена по умолчанию, и без вопроса человек добавил бы
+    /// снимки и не понял, почему их никто не видит.
+    @State private var askVisibility = false
 
     private static let columns = Array(
         repeating: GridItem(.flexible(), spacing: 8), count: 3)
@@ -51,6 +61,40 @@ struct VehiclePhotosView: View {
             guard !items.isEmpty else { return }
             Task { await save(items) }
         }
+        .fullScreenCover(item: Binding(
+            get: { viewerIndex.map { ViewerStart(index: $0) } },
+            set: { if $0 == nil { viewerIndex = nil } }
+        )) { start in
+            PhotoFullScreenView(
+                pages: photos.map {
+                    .init(id: $0.id, source: .vehicle(filename: $0.filename),
+                          timestamp: $0.timestamp)
+                },
+                initialIndex: start.index,
+                language: lang.language,
+                onDelete: { id in
+                    VehiclePhotoStore.delete(id, of: vehicleId)
+                    reload()
+                },
+                onSetMain: { id in
+                    VehiclePhotoStore.makeMain(id, of: vehicleId)
+                    reload()
+                },
+                isMain: { id in photos.first(where: { $0.id == id })?.isMain ?? false },
+                onDismiss: { viewerIndex = nil }
+            )
+        }
+        .appConfirm(
+            isPresented: $askVisibility,
+            title: AppStrings.vehiclePhotoAskTitle(l),
+            message: AppStrings.vehiclePhotoAskBody(l),
+            actions: [
+                AppDialogAction(AppStrings.vehiclePhotoAskShow(l)) {
+                    setPhotosVisible(true)
+                }
+            ],
+            cancelTitle: AppStrings.vehiclePhotoAskKeep(l)
+        )
         .appConfirm(
             isPresented: Binding(
                 get: { actionTarget != nil },
@@ -62,6 +106,10 @@ struct VehiclePhotosView: View {
             cancelTitle: AppStrings.cancel(l)
         )
     }
+
+    /// Обёртка ради `fullScreenCover(item:)`: индекс сам по себе не
+    /// `Identifiable`, а расширять `Int` на весь проект — плохая мена.
+    private struct ViewerStart: Identifiable { let index: Int; var id: Int { index } }
 
     // MARK: - Шапка
 
@@ -122,7 +170,7 @@ struct VehiclePhotosView: View {
         // Обычный тап, а не долгий: раньше тап по снимку не делал ВООБЩЕ
         // ничего, а единственное действие пряталось за жестом, о котором можно
         // было узнать только из подписи внизу экрана.
-        .onTapGesture { Haptics.tap(); actionTarget = photo }
+        .onTapGesture { Haptics.tap(); viewerIndex = 0 }
     }
 
     // MARK: - Сетка
@@ -135,7 +183,7 @@ struct VehiclePhotosView: View {
                 ForEach(rest) { photo in
                     Button {
                         Haptics.tap()
-                        actionTarget = photo
+                        viewerIndex = photos.firstIndex(where: { $0.id == photo.id })
                     } label: {
                         image(photo)
                             .frame(height: 104)
@@ -188,11 +236,31 @@ struct VehiclePhotosView: View {
         return actions
     }
 
+    /// Спрашивать ли: только у машины, которой этот вопрос ещё не задавали, и
+    /// только когда снимок действительно первый.
+    private func askVisibilityIfFirstPhoto(hadNone: Bool) {
+        guard hadNone, !photos.isEmpty,
+              !VehiclePhotoVisibilityAsk.wasAsked(vehicleId) else { return }
+        VehiclePhotoVisibilityAsk.markAsked(vehicleId)
+        askVisibility = true
+    }
+
+    private func setPhotosVisible(_ visible: Bool) {
+        guard let v = SettingsManager.shared.vehicle(for: vehicleId) else { return }
+        SettingsManager.shared.updateVehicleVisibility(
+            id: vehicleId,
+            visibleToOthers: v.visibleToOthers,
+            plateVisible: v.plateVisible,
+            mapVisible: v.mapVisible,
+            photosVisible: visible)
+    }
+
     private func reload() {
         photos = VehiclePhotoStore.photos(of: vehicleId)
     }
 
     private func save(_ items: [PhotosPickerItem]) async {
+        let hadNone = photos.isEmpty
         isSaving = true
         for item in items {
             guard let data = try? await item.loadTransferable(type: Data.self),
@@ -202,5 +270,6 @@ struct VehiclePhotosView: View {
         picking = []
         isSaving = false
         reload()
+        askVisibilityIfFirstPhoto(hadNone: hadNone)
     }
 }

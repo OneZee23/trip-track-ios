@@ -2302,6 +2302,28 @@ enum AppStrings {
            ru: "Отдельно от самой машины: во дворе виден и номер, и дом.",
            en: "Separate from the vehicle itself: a photo in your yard shows both the plate and the building.")
     }
+    /// Разовый вопрос в момент, когда у машины появляется ПЕРВЫЙ снимок.
+    ///
+    /// Ось «фотографии» выключена по умолчанию, и без этого вопроса человек
+    /// узнавал бы о ней только случайно — то есть добавил бы снимки и не понял,
+    /// почему их никто не видит. Спрашиваем ровно один раз на машину и ровно
+    /// тогда, когда вопрос осмыслен: показывать пока нечего — нечего и решать.
+    static func vehiclePhotoAskTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoAskTitle",
+           ru: "Показывать фотографии этой машины другим?",
+           en: "Show this vehicle's photos to others?")
+    }
+    static func vehiclePhotoAskBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoAskBody",
+           ru: "Во дворе на снимке виден и номер, и дом. Решение меняется в любой момент — «Кого пускать» в редактировании машины.",
+           en: "A photo in your yard shows both the plate and the building. You can change this at any time — «Who can see» in the vehicle's settings.")
+    }
+    static func vehiclePhotoAskShow(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoAskShow", ru: "Показывать", en: "Show them")
+    }
+    static func vehiclePhotoAskKeep(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoAskKeep", ru: "Оставить при себе", en: "Keep private")
+    }
     static func vehiclePlateHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehiclePlateHint",
            ru: "По номеру находят имя и адрес владельца — поэтому выключено по умолчанию.",
@@ -2455,8 +2477,8 @@ enum AppStrings {
     }
     static func vehiclePhotosHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehiclePhotosHint",
-           ru: "Тап по снимку — сделать главной или удалить. Главная стоит на карточке машины.",
-           en: "Tap a photo to make it the main one or delete it. The main photo is the car's face.")
+           ru: "Тап открывает снимок — там же можно сделать его главным или удалить. Главный стоит на карточке машины.",
+           en: "Tap to open a photo — from there you can make it the main one or delete it. The main photo is the car's face.")
     }
     static func vehiclePhotosEmpty(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehiclePhotosEmpty",

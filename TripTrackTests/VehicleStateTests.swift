@@ -345,3 +345,39 @@ final class VehicleSoldWireTests: XCTestCase {
         XCTAssertNil(p.soldAt)
     }
 }
+
+/// Разовый вопрос о видимости фотографий.
+final class VehiclePhotoVisibilityAskTests: XCTestCase {
+
+    private var defaults: UserDefaults!
+
+    override func setUp() {
+        super.setUp()
+        defaults = UserDefaults(suiteName: "photo-ask-\(UUID().uuidString)")
+    }
+
+    func testAVehicleIsAskedOnlyOnce() {
+        let id = UUID()
+        XCTAssertFalse(VehiclePhotoVisibilityAsk.wasAsked(id, defaults))
+        VehiclePhotoVisibilityAsk.markAsked(id, defaults)
+        XCTAssertTrue(VehiclePhotoVisibilityAsk.wasAsked(id, defaults))
+    }
+
+    /// Решение принимается ПРО МАШИНУ: у одной снимки безобидные, у другой во
+    /// дворе номер и подъезд.
+    func testEachVehicleIsAskedSeparately() {
+        let a = UUID(), b = UUID()
+        VehiclePhotoVisibilityAsk.markAsked(a, defaults)
+        XCTAssertTrue(VehiclePhotoVisibilityAsk.wasAsked(a, defaults))
+        XCTAssertFalse(VehiclePhotoVisibilityAsk.wasAsked(b, defaults))
+    }
+
+    /// Машину удалили — вопрос забывается, иначе машина с тем же
+    /// идентификатором (восстановление, синк) не спросит ничего.
+    func testDeletingAVehicleForgetsTheQuestion() {
+        let id = UUID()
+        VehiclePhotoVisibilityAsk.markAsked(id, defaults)
+        VehiclePhotoVisibilityAsk.forget(id, defaults)
+        XCTAssertFalse(VehiclePhotoVisibilityAsk.wasAsked(id, defaults))
+    }
+}
