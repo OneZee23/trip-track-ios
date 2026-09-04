@@ -71,6 +71,12 @@ final class APISyncTransport: SyncTransport {
             try await deletePhoto(id: operation.entityId)
         case (.photo, .unpublish):
             break  // photo unpublish rides along with the parent trip's unpublish
+        case (.vehiclePhoto, .upload), (.vehiclePhoto, .update):
+            try await uploadVehiclePhoto(id: operation.entityId)
+        case (.vehiclePhoto, .delete):
+            try await deleteVehiclePhoto(id: operation.entityId)
+        case (.vehiclePhoto, .unpublish):
+            break  // у фотографии машины нет публичности отдельно от машины
         case (.settings, .upload), (.settings, .update):
             try await uploadSettings()
         case (.settings, .delete), (.settings, .unpublish):
@@ -361,7 +367,16 @@ final class APISyncTransport: SyncTransport {
             plate: vehicle.plate,
             plateVisible: vehicle.plateVisible,
             visibleToOthers: vehicle.visibleToOthers,
-            fuelCurrency: vehicle.fuelCurrency
+            fuelCurrency: vehicle.fuelCurrency,
+            about: vehicle.about,
+            make: vehicle.make,
+            model: vehicle.model,
+            year: vehicle.year,
+            bodyType: vehicle.bodyType,
+            mapVisible: vehicle.mapVisible,
+            photosVisible: vehicle.photosVisible,
+            isArchived: vehicle.isArchived,
+            soldAt: vehicle.soldAt
         )
         do {
             let res: VehicleUpsertResponse = try await client.post(APIEndpoint.vehicleUpsert, body: payload)
@@ -425,6 +440,80 @@ final class APISyncTransport: SyncTransport {
     }
 
     // MARK: Photo
+
+    /// Фотография машины на сервер (0.6.4).
+    ///
+    /// До этого снимки машины НИКУДА не уезжали: каталог исключён из бэкапа
+    /// (договор «данные не покидают устройство без синхронизации»), а пути
+    /// наверх не было вовсе — значит смена телефона стирала их насовсем, и
+    /// чужой паспорт машины не мог показать ни одного снимка, хотя весь макет
+    /// фичи построен вокруг фотогероя.
+    ///
+    /// Два размера, как у поездок: сперва миниатюра (она нужна карточке в
+    /// гараже и списку), потом оригинал. Между ними состояние сохраняется,
+    /// поэтому обрыв связи посреди загрузки оставляет годную миниатюру, а не
+    /// половину снимка.
+    private func uploadVehiclePhoto(id: UUID) async throws {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req = NSFetchRequest<NSManagedObject>(entityName: "VehiclePhotoEntity")
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        guard let entity = try? ctx.fetch(req).first,
+              let vehicleId = entity.value(forKey: "vehicleId") as? UUID,
+              let filename = entity.value(forKey: "filename") as? String else { return }
+
+        let fileURL = VehiclePhotoStore.directory.appendingPathComponent(filename)
+        guard let originalData = try? Data(contentsOf: fileURL) else {
+            // Файл исчез, а строка осталась. Помечаем провалом, чтобы очередь
+            // не билась об него вечно, — прибирает эту пару отдельный проход.
+            entity.setValue(PhotoUploadStatus.failed.rawValue, forKey: "uploadStatus")
+            try? ctx.save()
+            return
+        }
+
+        let isMain = (entity.value(forKey: "isMain") as? Bool) ?? false
+        let takenAt = (entity.value(forKey: "timestamp") as? Date) ?? Date()
+        let needThumbnail = entity.value(forKey: "thumbnailURL") == nil
+        let needOriginal = entity.value(forKey: "remoteURL") == nil
+
+        guard needThumbnail || needOriginal,
+              let variants = await Self.encodePhotoVariants(
+                originalData: originalData,
+                makeThumbnail: needThumbnail,
+                makeOriginal: needOriginal) else {
+            if !needThumbnail && !needOriginal { return }
+            entity.setValue(PhotoUploadStatus.failed.rawValue, forKey: "uploadStatus")
+            try? ctx.save()
+            return
+        }
+
+        if needThumbnail, let thumbData = variants.thumbnail {
+            let r = try await photos.uploadVehiclePhotoPart(
+                vehicleId: vehicleId, photoId: id, type: .thumbnail,
+                data: thumbData, isMain: isMain, takenAt: takenAt,
+                metadataAlreadyClean: true)
+            entity.setValue(r.url, forKey: "thumbnailURL")
+            entity.setValue(PhotoUploadStatus.uploading.rawValue, forKey: "uploadStatus")
+            try? ctx.save()
+        }
+
+        if needOriginal, let originalUpload = variants.original {
+            let r = try await photos.uploadVehiclePhotoPart(
+                vehicleId: vehicleId, photoId: id, type: .original,
+                data: originalUpload, isMain: isMain, takenAt: takenAt,
+                metadataAlreadyClean: true)
+            entity.setValue(r.url, forKey: "remoteURL")
+            entity.setValue(PhotoUploadStatus.uploaded.rawValue, forKey: "uploadStatus")
+            entity.setValue(SyncStatus.synced.rawValue, forKey: "syncStatus")
+            try? ctx.save()
+        }
+    }
+
+    private func deleteVehiclePhoto(id: UUID) async throws {
+        struct DeleteReq: Encodable { let photoId: UUID }
+        let _: EmptyResponse = try await client.post(
+            APIEndpoint.vehiclePhotoDelete, body: DeleteReq(photoId: id))
+    }
 
     private func uploadPhoto(id: UUID) async throws {
         let ctx = PersistenceController.shared.container.viewContext

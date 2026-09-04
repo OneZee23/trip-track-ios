@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 /// Vehicle detail (Figma 499:119 canon). Pushed inside GarageView's
 /// NavigationStack — it carries no NavigationStack of its own (nesting stacks
@@ -13,11 +14,44 @@ struct VehicleDetailView: View {
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var bluetoothDetector = AutoTripService.shared.bluetoothDetector
     @EnvironmentObject private var lang: LanguageManager
+    @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
     @State private var showEditForm = false
+    @State private var showPhotos = false
+    @State private var showTrips = false
+    @State private var showMap = false
+    @State private var openTripId: UUID?
+    /// Главная фотография машины — она же герой экрана, как в каноне.
+    @State private var mainPhoto: VehiclePhoto?
+
+    /// Биография машины: три числа и рекорды, посчитанные из ЕЁ поездок.
+    ///
+    /// Считается один раз в `.task` и держится здесь, а не пересчитывается в
+    /// `body`: у человека с сотнями поездок это разбор полилиний на каждую
+    /// перерисовку экрана.
+    @State private var passport: Passport?
+
+    private struct Passport {
+        var tripCount = 0
+        var regionCount = 0
+        var daysOnRoad = 0
+        var agg: MeAggregates?
+        /// Первые строки списка «Поездки этой машины». Держим ровно столько,
+        /// сколько показываем: полный список — отдельный экран.
+        var recent: [Trip] = []
+        /// Полилинии для мини-карты «Где была». Хранятся упрощёнными
+        /// (`previewCoordinates`) — рисовать полный трек в карточке 130pt
+        /// высотой незачем.
+        var routes: [[CLLocationCoordinate2D]] = []
+        var cityCount = 0
+        /// «Выше всего поднималась» — рекорд из `Trip.elevation`. В
+        /// `MeAggregates` его нет, поэтому считается здесь же, по тем же
+        /// поездкам, чтобы не заводить второй проход по массиву.
+        var highest: (title: String, meters: Double)?
+    }
     /// «…» popover on the vehicle header.
     @State private var showVehicleActions = false
     @State private var showAutoRecordSettings = false
@@ -38,7 +72,7 @@ struct VehicleDetailView: View {
     }
 
     private var isMain: Bool {
-        vehicleId == (settings.selectedVehicleId ?? settings.vehicles.first?.id)
+        vehicleId == settings.activeRecordableVehicleId
     }
 
     /// Popover rows. Each closes first, then acts — presenting a sheet or
@@ -60,13 +94,34 @@ struct VehicleDetailView: View {
                 run { showEditForm = true }
             },
         ]
-        if !isMain {
+        // Не просто «не активная», а «может стать активной»: у проданной или
+        // архивной этот пункт молча уводил в никуда — выбор записывался, а
+        // потом отфильтровывался обратно, и человек оставался вообще без
+        // активной машины, без единого сообщения. В гараже такая же кнопка
+        // уже была под охраной, и два экрана расходились.
+        if !isMain, let vehicle, !vehicle.isSold, !vehicle.isArchived {
             items.append(
                 .init(title: AppStrings.makeMainVehicle(l), systemImage: "star") {
                     run { settings.selectVehicle(id: vehicleId) }
                 }
             )
         }
+        // Архив — обратимое действие, поэтому без подтверждения. Проданную
+        // машину из архива не поднимаем: снятие «продана» это отдельный шаг.
+        if let vehicle, !vehicle.isSold {
+            items.append(
+                .init(title: vehicle.isArchived
+                      ? AppStrings.vehicleUnarchiveAction(l)
+                      : AppStrings.vehicleArchiveAction(l),
+                      systemImage: vehicle.isArchived ? "tray.and.arrow.up" : "archivebox") {
+                    run { settings.setVehicleArchived(id: vehicleId, archived: !vehicle.isArchived) }
+                }
+            )
+        }
+        // Продажи здесь НЕТ намеренно. Машину продают раз в несколько лет, а
+        // «…» — список на каждый день; редкое и необратимое действие в нём
+        // соседствует с обыденным и однажды получает случайный тап.
+        // Оно живёт в форме редактирования, куда заходят осознанно.
         items.append(
             .init(title: AppStrings.deleteVehicle(l), systemImage: "trash", isDestructive: true) {
                 run { showDeleteConfirm = true }
@@ -87,8 +142,13 @@ struct VehicleDetailView: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         heroCard(vehicle, c: c, l: l)
-                        statGrid(vehicle, c: c, l: l)
-                        odometerBreakdown(vehicle, c: c, l: l)
+                        // Паспорт (0.6.4): круги теперь внутри шапки, здесь —
+                        // строка владельца и рекорды. Всё из поездок ЭТОЙ машины.
+                        aboutCard(vehicle, c: c, l: l)
+                        odometerCard(vehicle, c: c, l: l)
+                        whereWasCard(c: c, l: l)
+                        vehicleTrips(c: c, l: l)
+                        vehicleRecords(c: c, l: l)
                         // A bicycle pairs with no stereo, so auto-record has
                         // nothing to key off — the rows are absent, not
                         // disabled (canon: hidden means gone).
@@ -99,8 +159,7 @@ struct VehicleDetailView: View {
                             // carried two opposite meanings — "all good" and
                             // "nothing is set up" — and the card gave no way
                             // to tell them apart at a glance.
-                            stereoStatusCard(c: c, l: l)
-                            autoRecordRow(c: c, l: l)
+                            recordingSection(c: c, l: l)
                         }
                         // Same for fuel: a bicycle burns none.
                         if vehicle.type.burnsFuel {
@@ -115,6 +174,36 @@ struct VehicleDetailView: View {
             }
             .background(c.bg)
             .task { connectedStereo = AudioRouteDetector.currentBluetoothOutputName() }
+            .task(id: vehicleId) { await loadPassport() }
+            // Машину могли удалить с другого экрана (или синком) прямо сейчас.
+            // Раньше `if let vehicle` без `else` оставлял пустой экран без
+            // шапки и без единого способа уйти — приходилось убивать приложение.
+            .onChange(of: settings.vehicles.count) { _, _ in
+                if settings.vehicle(for: vehicleId) == nil { dismiss() }
+            }
+            // Строка в карточке «Поездки» открывает саму поездку: список, по
+            // которому нельзя ткнуть, читается как картинка, а не как список.
+            .navigationDestination(item: $openTripId) { id in
+                TripDetailView(tripId: id,
+                               viewModel: TripsViewModel(tripManager: mapVM.tripManager))
+            }
+            .navigationDestination(isPresented: $showMap) {
+                VehicleMapView(vehicleId: vehicleId, vehicleName: displayName(vehicle, l))
+                    .environmentObject(lang)
+            }
+            .navigationDestination(isPresented: $showTrips) {
+                VehicleTripsView(vehicleId: vehicleId, vehicleName: displayName(vehicle, l))
+                    .environmentObject(lang)
+            }
+            .navigationDestination(isPresented: $showPhotos) {
+                VehiclePhotosView(vehicleId: vehicleId, vehicleName: displayName(vehicle, l))
+                    .environmentObject(lang)
+            }
+            // Возврат с экрана фотографий обязан обновить героя: человек мог
+            // только что сменить главную, и старая на этом экране была бы ложью.
+            .onChange(of: showPhotos) { _, open in
+                if !open { mainPhoto = VehiclePhotoStore.mainPhoto(of: vehicleId) }
+            }
             // The stereo connects and drops while this screen is open — the
             // card claims «подключена», so it has to keep earning it.
             .onReceive(NotificationCenter.default.publisher(
@@ -204,21 +293,61 @@ struct VehicleDetailView: View {
             // light screen — which is what «too dark, too heavy» actually was.
             // Cropped to the car's own proportions the dark area roughly
             // halves and the sprite is framed rather than floated.
-            VehicleSpritePlate(
-                assetName: vehicle.avatarImageName,
-                fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
-                plateSize: heroPlateWidth,
-                cornerRadius: 20
-            )
+            Button {
+                Haptics.tap()
+                showPhotos = true
+            } label: {
+                // Канон рисует героем ФОТОГРАФИЮ. Пока её нет — спрайт, но
+                // тап ведёт в одно и то же место: «у машины должно быть лицо»
+                // — единственное, что мы взяли у drive2 без поворота.
+                if let photo = mainPhoto, let ui = VehiclePhotoStore.image(photo) {
+                    Image(uiImage: ui)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(height: 180)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                } else {
+                    VehicleSpritePlate(
+                        assetName: vehicle.avatarImageName,
+                        fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
+                        plateSize: heroPlateWidth,
+                        cornerRadius: 20
+                    )
+                }
+            }
+            .buttonStyle(.plain)
             .padding(.top, 4)
 
             Text(displayName(vehicle, l))
-                .font(.system(size: 26, weight: .heavy))
+                .font(.system(size: 19, weight: .heavy))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .minimumScaleFactor(0.6)
                 .padding(.top, 16)
+
+            // Модель под именем — как в каноне: заголовок это ИМЯ машины
+            // («Полторашка»), а «Volkswagen Polo · 2019 · седан» подпись.
+            // Строки нет вовсе, пока паспорт не заполнен: пустая подпись под
+            // именем читается как поломка, а не как приглашение.
+            if let sub = modelLine(vehicle, l) {
+                Text(sub)
+                    .font(.system(size: 13))
+                    .foregroundStyle(c.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
+                    .padding(.horizontal, 8)
+            }
+
+            // Состояние машины прямо под моделью: проданная не должна выглядеть
+            // как обычная, иначе человек попробует записать на неё поездку.
+            if vehicle.isSold {
+                Text(AppStrings.vehicleSoldState(l, when: soldWhen(vehicle, l)))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+                    .padding(.top, 6)
+            }
 
             if vehicle.hasPlate {
                 // The owner always sees their own plate here. `plateVisible`
@@ -228,17 +357,61 @@ struct VehicleDetailView: View {
                     .padding(.top, 8)
             }
 
-            levelRow(vehicle, c: c)
-                .padding(.top, 18)
+            // Канон рисует пилюлю, а не полосу. Полосу заменяем, но оставляем
+            // её роль входа: «Уровень машины» иначе становится недостижим.
+            Button {
+                Haptics.tap()
+                showLevelInfo = true
+            } label: {
+                LvlPill(level: vehicle.level, rankTitle: "")
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 12)
+
+            // Круги живут ВНУТРИ шапки, как в каноне, а не отдельной карточкой:
+            // это те же три числа про эту машину, и разрывать их рамкой значит
+            // делать из одной мысли две.
+            Divider().overlay(c.border).padding(.top, 18)
+            passportCircles(c: c, l: l).padding(.top, 14)
+
+            // Только стаж, без второй «•••».
+            //
+            // Канон рисует три точки здесь, но в этом приложении они уже стоят
+            // в навбаре и открывают ТОТ ЖЕ список действий. Две одинаковые
+            // кнопки на одном экране — это не следование макету, а вопрос
+            // «а эта чем отличается?». Осталась та, что выше: она на месте на
+            // всех экранах и доступна, куда бы ни прокрутили.
+            //
+            // Заодно ушла пустота под строкой: кнопка была 32pt высотой при
+            // тексте в 13, и разница дорисовывалась воздухом.
+            Divider().overlay(c.border).padding(.top, 14)
+            Text(AppStrings.inGarageSince(
+                l, when: StatsPeriodFormat.monthYearGenitive(vehicle.createdAt, l)))
+                .font(.system(size: 11))
+                .foregroundStyle(c.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 12)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 18)
-        .padding(.vertical, 22)
+        // Сверху 22, снизу 16: карточка начинается крупным спрайтом, а
+        // кончается строкой в 11pt, и одинаковый отступ с обеих сторон
+        // оставлял под ней заметно больше воздуха, чем над картинкой.
+        .padding(.top, 22)
+        .padding(.bottom, 16)
         .surfaceCard(cornerRadius: 20)
     }
 
     /// Sized off the screen rather than pinned, so the car stays the biggest
     /// thing on the card on an SE and does not swallow the fold on a Max.
+    private func soldWhen(_ v: Vehicle, _ l: LanguageManager.Language) -> String {
+        guard let d = v.soldAt else { return "" }
+        // Предложный, а не родительный: строка читается «Продана в сентябре»,
+        // и родительный дал бы «в сентября». Для языков без падежей функция
+        // возвращает то же, что и раньше.
+        return StatsPeriodFormat.monthYearPrepositional(d, l)
+    }
+
     private var heroPlateWidth: CGFloat {
         min(max(UIScreen.main.bounds.width * 0.62, 210), 280)
     }
@@ -292,12 +465,12 @@ struct VehicleDetailView: View {
         if vehicle.manualOdometerKm != nil {
             VStack(alignment: .leading, spacing: 2) {
                 Text(AppStrings.odometerTrackedLine(
-                    l, km: "\(GarageFormat.odometer(vehicle.odometerKm)) \(AppStrings.km(l))"))
+                    l, km: "\(GarageFormat.odometer(vehicle.odometerKm, lng: l)) \(AppStrings.km(l))"))
                     .font(.system(size: 11.5))
                     .foregroundStyle(c.textTertiary)
                 if let gap = vehicle.untrackedKm {
                     Text(AppStrings.odometerUntrackedLine(
-                        l, km: "\(GarageFormat.odometer(gap)) \(AppStrings.km(l))"))
+                        l, km: "\(GarageFormat.odometer(gap, lng: l)) \(AppStrings.km(l))"))
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                 }
@@ -305,6 +478,28 @@ struct VehicleDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityIdentifier("vehicle_odometer_breakdown")
         }
+    }
+
+    /// Одометр одной карточкой с крупным числом — как в каноне. Раньше это
+    /// была сетка из двух плиток (пробег + расход), и пробег в ней читался
+    /// наравне с расходом, хотя он и есть биография машины. Расход никуда не
+    /// делся: он живёт в топливной секции ниже, где ему и место.
+    private func odometerCard(_ vehicle: Vehicle, c: AppTheme.Colors,
+                              l: LanguageManager.Language) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(GarageFormat.odometer(vehicle.displayOdometerKm, lng: l))
+                    .font(.system(size: 26, weight: .heavy))
+                    .foregroundStyle(c.text)
+                Text(AppStrings.km(l))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(c.textTertiary)
+            }
+            odometerBreakdown(vehicle, c: c, l: l)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .surfaceCard(cornerRadius: 16)
     }
 
     private func statGrid(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
@@ -317,7 +512,7 @@ struct VehicleDetailView: View {
             statCard(
                 // Главный — реальный, если введён (решение владельца 02.09).
                 // Именно он живёт на приборке, и именно его человек сверяет.
-                value: GarageFormat.odometer(vehicle.displayOdometerKm),
+                value: GarageFormat.odometer(vehicle.displayOdometerKm, lng: l),
                 valueColor: c.text,
                 unit: AppStrings.km(l),
                 label: vehicle.manualOdometerKm == nil
@@ -337,6 +532,311 @@ struct VehicleDetailView: View {
                 )
             }
         }
+    }
+
+    // MARK: - Паспорт машины (0.6.4)
+
+    /// Три числа над всем остальным — приём, взятый у drive2 и повёрнутый на
+    /// наш предмет: у них в кругах «драйв / читают / записи», у нас география.
+    /// «Читают» в круг не ставим — это тщеславие, а не биография.
+    private func passportCircles(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        // Показываются ВСЕГДА, даже когда все три нуля. Первая версия пряталась
+        // при отсутствии поездок — и у машины, к которой ничего не привязано (а
+        // привязка необязательная), экран выглядел точно как до паспорта.
+        // Пустая биография — это состояние блока, а не повод его убрать.
+        // Пока считаем — прочерки, а не нули. У машины с тремя сотнями поездок
+        // экран на каждом открытии показывал «0 поездок · 0 регионов · 0 дней»
+        // и подпись «Биография пока пустая», то есть состояние загрузки было
+        // пиксель в пиксель равно состоянию «ничего нет» — и врало.
+        let p = passport ?? Passport()
+        let ready = passport != nil
+        return VStack(spacing: 10) {
+            HStack(spacing: 0) {
+                circle(ready ? String(p.tripCount) : "—", AppStrings.nounTrips(l, p.tripCount), c: c)
+                circle(ready ? String(p.regionCount) : "—", AppStrings.nounRegions(l, p.regionCount), c: c)
+                circle(ready ? String(p.daysOnRoad) : "—", AppStrings.nounDays(l, p.daysOnRoad), c: c)
+            }
+            if ready, p.tripCount == 0 {
+                Text(AppStrings.vehicleBiographyEmpty(l))
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 14)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// «Volkswagen Polo · 2019 · седан» — из полей паспорта, пустые пропускаются.
+    /// `nil`, когда не заполнено ничего: подпись из одной точки хуже её отсутствия.
+    private func modelLine(_ v: Vehicle, _ l: LanguageManager.Language) -> String? {
+        var parts: [String] = []
+        let makeModel = [v.make, v.model].filter { !$0.isEmpty }.joined(separator: " ")
+        if !makeModel.isEmpty { parts.append(makeModel) }
+        if v.year > 0 { parts.append(String(v.year)) }
+        if !v.bodyType.isEmpty {
+            parts.append(AppStrings.avatarStyleName(l, style: v.bodyType).lowercased(l))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func circle(_ value: String, _ label: String, c: AppTheme.Colors) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 20, weight: .heavy))
+                .foregroundStyle(c.text)
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(c.textTertiary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Строка владельца о машине — единственное, что взято у бортжурнала, и
+    /// взято одним предложением: «почему именно она» GPS не произведёт никогда.
+    /// Пусто — карточки нет: пустая рамка с приглашением писать противоречит
+    /// тому, что паспорт заполняется сам.
+    @ViewBuilder
+    private func aboutCard(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        if !vehicle.about.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(vehicle.about)
+                    .font(.system(size: 13))
+                    .foregroundStyle(c.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 8) {
+                    Text(AppStrings.vehicleAboutFooter(l))
+                        .font(.system(size: 11))
+                        .foregroundStyle(c.textTertiary)
+                    Spacer(minLength: 8)
+                    Button {
+                        Haptics.tap()
+                        showEditForm = true
+                    } label: {
+                        Text(AppStrings.edit(l))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AppTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 16)
+        }
+    }
+
+    /// «Где была» — карта именно этой машины. Не новый рендер: тот же
+    /// `LightRoutePreview`, которым нарисована карточка-вход «Карта» в чужом
+    /// профиле. Форк дал бы два места, где маршрут рисуется по-разному.
+    @ViewBuilder
+    private func whereWasCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        if let p = passport, !p.routes.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AppStrings.vehicleWhereWas(l))
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(c.text)
+                        Text(placesLine(p, l))
+                            .font(.system(size: 12))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { Haptics.tap(); showMap = true }
+                // Настоящая карта, а не набросок: `LightRoutePreview` без
+                // подложки читался как две закорючки в пустоте. Здесь
+                // MapKit-снимок с маршрутами машины.
+                VehicleMiniMap(routes: p.routes)
+                    .frame(height: 130)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .allowsHitTesting(false)
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 16)
+        }
+    }
+
+    /// «8 регионов · 22 города». Отдельной функцией, а не интерполяцией в
+    /// `body`: четыре подстановки в одной строке — это минуты тайпчекинга и
+    /// сборка, которая не укладывается в лимит.
+    private func placesLine(_ p: Passport, _ l: LanguageManager.Language) -> String {
+        let regions = "\(p.regionCount) " + AppStrings.nounRegions(l, p.regionCount)
+        let cities = "\(p.cityCount) " + AppStrings.nounCities(l, p.cityCount)
+        return regions + " · " + cities
+    }
+
+    /// «Поездки этой машины» — приём из бортжурнала drive2, переведённый на
+    /// нашу валюту: у них справа деньги и пробег, у нас километры.
+    @ViewBuilder
+    private func vehicleTrips(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        if let p = passport, !p.recent.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(AppStrings.vehicleTripsTitle(l))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(c.text)
+                    Spacer()
+                    Text(String(p.tripCount))
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textTertiary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { Haptics.tap(); showTrips = true }
+                ForEach(0..<p.recent.count, id: \.self) { idx in
+                    let trip = p.recent[idx]
+                    if idx > 0 { Divider().overlay(c.border) }
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(TripRowText.title(trip, l))
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(c.text)
+                                .lineLimit(1)
+                            Text(TripRowText.when(trip, l))
+                                .font(.system(size: 11))
+                                .foregroundStyle(c.textTertiary)
+                        }
+                        Spacer(minLength: 8)
+                        Text(TripRowText.km(trip, l))
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(c.text)
+                    }
+                    .frame(minHeight: 38)
+                    .contentShape(Rectangle())
+                    .onTapGesture { Haptics.tap(); openTripId = trip.id }
+                }
+            }
+            .padding(14)
+            .surfaceCard(cornerRadius: 16)
+        }
+    }
+
+    /// Рекорды ИМЕННО ЭТОЙ машины. Ни строчки нового расчёта: тот же
+    /// `MeAggregates.compute`, которому всё равно, чьи поездки ему дали.
+    ///
+    /// Одна карточка со строками, а не три отдельных: три штуки по сорок
+    /// точек высоты растягивали низ экрана на пустоту, а цветные кружки
+    /// рядом с ними ничего не кодировали — зелёный и красный не значили
+    /// «хорошо» и «плохо», это был просто разный цвет у соседних строк.
+    @ViewBuilder
+    private func vehicleRecords(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        if let agg = passport?.agg, agg.tripCount > 0 {
+            VStack(alignment: .leading, spacing: 10) {
+                GarageSectionLabel(text: AppStrings.statsRecords(l), color: c.textSecondary)
+
+                VStack(spacing: 0) {
+                    recordRow(AppStrings.recordLongest(l),
+                              agg.longestTripTitle ?? agg.longestTripRegion ?? "—",
+                              kmValue(agg.longestTripKm, l), c: c)
+
+                    if let peak = passport?.highest, peak.meters > 0 {
+                        rowDivider(c)
+                        recordRow(AppStrings.recordHighest(l), peak.title,
+                                  metersValue(peak.meters, l), c: c)
+                    }
+
+                    if agg.maxDayKm > 0 {
+                        rowDivider(c)
+                        recordRow(AppStrings.statsRecordBestDay(l),
+                                  agg.longestTripDate.map { Self.dayFormatter(l).string(from: $0) } ?? "—",
+                                  kmValue(agg.maxDayKm, l), c: c)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 2)
+                .surfaceCard(cornerRadius: 16)
+            }
+        }
+    }
+
+    /// Разделитель между строками внутри одной карточки.
+    private func rowDivider(_ c: AppTheme.Colors) -> some View {
+        Divider().overlay(c.border)
+    }
+
+    private func kmValue(_ km: Double, _ l: LanguageManager.Language) -> String {
+        GarageFormat.odometer(km, lng: l) + " " + AppStrings.km(l)
+    }
+
+    private func metersValue(_ m: Double, _ l: LanguageManager.Language) -> String {
+        GarageFormat.odometer(m, lng: l) + " " + AppStrings.unitMeters(l)
+    }
+
+    private func recordRow(_ label: String, _ subtitle: String, _ value: String,
+                           c: AppTheme.Colors) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+                Text(subtitle)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(c.text)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            if !value.isEmpty {
+                Text(value)
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(c.text)
+            }
+        }
+        .frame(minHeight: 46)
+    }
+
+    private static func dayFormatter(_ l: LanguageManager.Language) -> DateFormatter {
+        let f = DateFormatter()
+        f.locale = l.locale
+        f.setLocalizedDateFormatFromTemplate("dMMMMyyyy")
+        return f
+    }
+
+    /// Считает биографию машины вне главного актора: разбор полилиний на
+    /// сотнях поездок — это секунды заморозки, если делать его в `body`.
+    private func loadPassport() async {
+        let id = vehicleId
+        let built = await Task.detached(priority: .userInitiated) { () -> Passport in
+            // Репозиторий напрямую: `TripManager` заводится с `LocationManager`
+            // и синглтона не имеет, а здесь нужно только прочитать поездки.
+            let repo: TripRepository = CoreDataTripRepository()
+            let mine = repo.fetchTripsForMap()
+                .filter { $0.vehicleId == id && !$0.isTransfer }
+            guard !mine.isEmpty else { return Passport() }
+            let agg = MeAggregates.compute(trips: mine, now: Date(), calendar: .current)
+            let cal = Calendar.current
+            let days = Set(mine.map { cal.startOfDay(for: $0.startDate) }).count
+            // Та же функция, что строит карту профиля, только с поездками одной
+            // машины — ровно как обещал `VehicleMapFeasibilityTests`.
+            await RegionAtlas.shared.loadIfNeeded()
+            let exploration = MapExploration.build(
+                trips: mine,
+                visitedHashes: TerritoryManager.geohashes(
+                    fromTrips: mine.map { $0.previewCoordinates }, precision: 6),
+                atlas: RegionAtlas.shared
+            )
+            let routes = mine.prefix(120).map { $0.previewCoordinates }.filter { $0.count >= 2 }
+            return Passport(tripCount: mine.count,
+                            regionCount: exploration.regions.count,
+                            daysOnRoad: days,
+                            agg: agg,
+                            recent: Array(mine.prefix(3)),
+                            routes: Array(routes),
+                            cityCount: exploration.regions.reduce(0) { $0 + $1.visitedCityCount },
+                            highest: mine.max(by: { $0.elevation < $1.elevation }).map {
+                                ($0.title ?? $0.region ?? "—", $0.elevation)
+                            })
+        }.value
+        passport = built
+        mainPhoto = VehiclePhotoStore.mainPhoto(of: id)
     }
 
     private func statCard(value: String, valueColor: Color, unit: String, label: String, c: AppTheme.Colors) -> some View {
@@ -444,6 +944,21 @@ struct VehicleDetailView: View {
         }
     }
 
+    /// Магнитола и автозапись — про одно и то же, поэтому живут одной
+    /// группой под общим заголовком. Раздельными карточками они читались
+    /// как два несвязанных сообщения, между которыми ещё и дырка.
+    private func recordingSection(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GarageSectionLabel(text: AppStrings.vehicleRecordingSection(l), color: c.textSecondary)
+            VStack(spacing: 0) {
+                stereoStatusCard(c: c, l: l)
+                rowDivider(c).padding(.leading, 14)
+                autoRecordRow(c: c, l: l)
+            }
+            .surfaceCard(cornerRadius: 16)
+        }
+    }
+
     /// One shape for all three states — the icon's colour is what changes, so
     /// the row is recognised before it is read.
     private func stereoRow<Action: View>(
@@ -476,7 +991,6 @@ struct VehicleDetailView: View {
             action()
         }
         .padding(14)
-        .surfaceCard(cornerRadius: 16)
         .accessibilityIdentifier("vehicle_stereo_status")
     }
 
@@ -505,7 +1019,6 @@ struct VehicleDetailView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("vehicle_autorecord_row")
-        .surfaceCard(cornerRadius: 16)
     }
 
     /// On/Off, not the mode name: this row answers «is it armed?». Which of the
@@ -619,7 +1132,7 @@ struct VehicleDetailView: View {
     private func performDelete() {
         settings.deleteVehicle(id: vehicleId)
         if settings.selectedVehicleId == vehicleId {
-            settings.selectVehicle(id: settings.vehicles.first?.id)
+            settings.selectVehicle(id: settings.recordableVehicles.first?.id)
         }
         dismiss()
     }

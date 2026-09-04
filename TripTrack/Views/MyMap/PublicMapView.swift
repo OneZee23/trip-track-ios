@@ -153,7 +153,7 @@ struct PublicMapView: View {
                     cell(String(vm.exploration.trips.count),
                          AppStrings.publicRoutesCaption(l), c)
                     rule(c)
-                    cell(GarageFormat.odometer(vm.exploration.totalKm),
+                    cell(GarageFormat.odometer(vm.exploration.totalKm, lng: l),
                          AppStrings.km(l), c)
                     rule(c)
                     cell(String(vm.exploration.regions.count),

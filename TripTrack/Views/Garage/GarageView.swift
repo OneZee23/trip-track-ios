@@ -18,7 +18,11 @@ struct GarageView: View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
 
-        NavigationStack {
+        // БЕЗ собственного NavigationStack: гараж — полноценная СТРАНИЦА,
+        // которую пушит хозяин (профиль). Раньше он выезжал шитом снизу, и
+        // это расходилось с каноном; а свой стек внутри чужого запрещён
+        // домашними правилами и ломает жест «назад».
+        Group {
             VStack(spacing: 0) {
                 navRow(c: c, l: l)
                 // An empty garage is a screen, not a card: it has to own the
@@ -86,7 +90,10 @@ struct GarageView: View {
     /// curved glass, and it carries `NavCircleIcon` — the same control every
     /// other sheet in the app uses.
     private func navRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        let atCap = settings.vehicles.count >= 5
+        // Потолок считает ТОЛЬКО те машины, на которые можно писать. Иначе
+        // архив не даёт ничего: убрал лишнюю — место всё равно занято, и
+        // «убери в архив» превращается в уборку на экране без последствий.
+        let atCap = settings.recordableVehicles.count >= 5
         return CustomNavBar(title: AppStrings.garage(l)) {
             Button {
                 Haptics.tap()
@@ -119,13 +126,80 @@ struct GarageView: View {
         }
     }
 
+    /// Три раздела: АКТИВНАЯ, ОСТАЛЬНЫЕ, АРХИВ.
+    ///
+    /// Раньше было два, и второй назывался «АРХИВ», хотя считался как «всё,
+    /// что не выбрано». Флаг `isArchived` при этом существовал и не
+    /// использовался НИГДЕ. Получалось, что гараж обещал состояние, которого
+    /// не было: экран записи спокойно предлагал любую «архивную» машину, и
+    /// приложение спорило само с собой.
+    ///
+    /// Теперь архив — настоящее состояние, в которое машину кладёт человек
+    /// руками. Автоматически туда не попадает никто и никогда: у тех, кто
+    /// обновится, раздел «Архив» пуст, и все машины остаются рабочими.
+    /// «Остальные» — те, на которые писать можно, просто сейчас активна не
+    /// они; переключение бесплатно и мгновенно, о чём и говорит подпись.
     @ViewBuilder
     private func vehicleList(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        let sorted = settings.vehicles.sorted { $0.displayOdometerKm > $1.displayOdometerKm }
-        ForEach(sorted) { vehicle in
-            vehicleCard(vehicle, c: c, l: l)
+        // Тот же ответ, что даст экран записи, — иначе гараж снова начнёт
+        // обещать одно, а запись делать другое.
+        let active = settings.vehicle(for: settings.activeRecordableVehicleId)
+        let others = settings.recordableVehicles
+            .filter { $0.id != active?.id }
+            .sorted { $0.displayOdometerKm > $1.displayOdometerKm }
+        // `!isRecordable`, а не `isArchived`: проданная машина, до которой по
+        // какой-то причине не доехал флаг архива (например, приехала синком с
+        // другого устройства), не попадала НИ В ОДИН раздел и пропадала из
+        // гаража насовсем — вместе с единственной дверью, за которой её можно
+        // вернуть. Раздел обязан покрывать всё, что не попало в первые два.
+        let recordableIds = Set(settings.recordableVehicles.map(\.id))
+        let archive = settings.vehicles
+            .filter { !recordableIds.contains($0.id) }
+            .sorted { $0.displayOdometerKm > $1.displayOdometerKm }
+
+        if let active {
+            GarageSectionLabel(text: AppStrings.garageActive(l), color: c.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            vehicleCard(active, c: c, l: l)
+            Text(AppStrings.garageActiveHint(l))
+                .font(.system(size: 11))
+                .foregroundStyle(c.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        if settings.vehicles.count >= 5 {
+
+        if !others.isEmpty {
+            GarageSectionLabel(text: AppStrings.garageOthers(l), color: c.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
+            ForEach(others) { vehicle in
+                vehicleCard(vehicle, c: c, l: l)
+            }
+            // Прежняя подпись «Активна одна машина, переключить можно когда
+            // угодно» наконец стоит под заголовком, которому не противоречит —
+            // но только пока активная действительно есть. Без этой развилки
+            // она утверждала бы «активна одна» прямо под пустым местом.
+            Text(active == nil
+                 ? AppStrings.garageNoActiveHint(l)
+                 : AppStrings.garageArchiveHint(l))
+                .font(.system(size: 11))
+                .foregroundStyle(c.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        if !archive.isEmpty {
+            GarageSectionLabel(text: AppStrings.garageArchive(l), color: c.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
+            ForEach(archive) { vehicle in
+                vehicleCard(vehicle, c: c, l: l)
+            }
+            Text(AppStrings.garageArchivedHint(l))
+                .font(.system(size: 11))
+                .foregroundStyle(c.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        if settings.recordableVehicles.count >= 5 {
             Text(AppStrings.maxVehiclesHint(l))
                 .font(.system(size: 12))
                 .foregroundStyle(c.textTertiary)
@@ -138,7 +212,7 @@ struct GarageView: View {
 
     private func vehicleCard(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         // Keep the exact existing main-vehicle fallback semantics.
-        let isMain = vehicle.id == (settings.selectedVehicleId ?? settings.vehicles.first?.id)
+        let isMain = vehicle.id == settings.activeRecordableVehicleId
 
         return Button {
             Haptics.tap()
@@ -180,7 +254,10 @@ struct GarageView: View {
             .padding(14)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        // Карточка «поддаётся» под пальцем, пока держишь: у долгого тапа тут
+        // всё меню действий (сделать основной, в архив, удалить), а без
+        // видимой реакции о нём просто не догадываются.
+        .buttonStyle(HoldableCardStyle())
         .accessibilityIdentifier("garage_card")
         .background {
             // Drawn before `surfaceCard` so it lands ON the card fill rather
@@ -204,11 +281,25 @@ struct GarageView: View {
             }
         }
         .contextMenu {
-            if !isMain {
+            if !isMain, !vehicle.isArchived {
                 Button {
                     settings.selectVehicle(id: vehicle.id)
                 } label: {
                     Label(AppStrings.makeMainVehicle(l), systemImage: "star")
+                }
+            }
+            // Подтверждения нет намеренно: действие обратимо одним тапом
+            // отсюда же, а диалог на обратимое действие — это шум.
+            // Проданную из архива не поднимаем: снятие «продана» — отдельный
+            // шаг, иначе случайный тап переписал бы историю машины.
+            if !vehicle.isSold {
+                Button {
+                    settings.setVehicleArchived(id: vehicle.id, archived: !vehicle.isArchived)
+                } label: {
+                    Label(vehicle.isArchived
+                          ? AppStrings.vehicleUnarchiveAction(l)
+                          : AppStrings.vehicleArchiveAction(l),
+                          systemImage: vehicle.isArchived ? "tray.and.arrow.up" : "archivebox")
                 }
             }
             Button(role: .destructive) {
@@ -266,7 +357,7 @@ struct GarageView: View {
             // about what everyone else may see.
             VehiclePlateChip(plate: vehicle.plate)
         } else {
-            Text("\(GarageFormat.odometer(vehicle.displayOdometerKm)) \(AppStrings.km(l))")
+            Text("\(GarageFormat.odometer(vehicle.displayOdometerKm, lng: l)) \(AppStrings.km(l))")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(c.textTertiary)
         }
@@ -323,7 +414,7 @@ struct GarageView: View {
     private func performDelete(id: UUID) {
         settings.deleteVehicle(id: id)
         if settings.selectedVehicleId == id {
-            settings.selectVehicle(id: settings.vehicles.first?.id)
+            settings.selectVehicle(id: settings.recordableVehicles.first?.id)
         }
     }
 }

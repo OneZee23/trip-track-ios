@@ -224,6 +224,22 @@ struct PressableCardStyle: ButtonStyle {
     }
 }
 
+/// Карточка, у которой долгий тап что-то открывает.
+///
+/// Обычный `PressableCardStyle` отрабатывает мгновенно и на глаз неотличим от
+/// простого нажатия: человек не понимает, что палец надо ЗАДЕРЖАТЬ, и просто
+/// не находит меню. Здесь сжатие идёт полсекунды — примерно столько же, сколько
+/// система ждёт до контекстного меню, — поэтому карточка на глазах «поддаётся»,
+/// пока держишь, и становится ясно, что произойдёт, если не отпускать.
+struct HoldableCardStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.945 : 1.0)
+            .animation(.easeOut(duration: configuration.isPressed ? 0.5 : 0.18),
+                       value: configuration.isPressed)
+    }
+}
+
 // MARK: - Shimmer Modifier
 
 struct ShimmerModifier: ViewModifier {

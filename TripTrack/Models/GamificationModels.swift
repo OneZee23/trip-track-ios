@@ -608,7 +608,6 @@ struct TripCompletionData {
     let vehicleLevelAfter: Int
     let newBadges: [Badge]
     let repeatedBadgeCounts: [String: Int]
-    let newStickers: [VehicleSticker]
     let currentStreak: Int
     var roadCard: RoadCompletionInfo?
 

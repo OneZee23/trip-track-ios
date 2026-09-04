@@ -958,6 +958,22 @@ final class CoreDataTripRepository: TripRepository {
         if let plateVisible = p.plateVisible { entity.plateVisible = plateVisible }
         if let visible = p.visibleToOthers { entity.visibleToOthers = visible }
         if let currency = p.fuelCurrency { entity.fuelCurrency = currency }
+        // Паспорт (0.6.4) — по тому же правилу: ключ пришёл, значит сервер
+        // имеет мнение; не пришёл — молчит, и локальное трогать нельзя.
+        if let about = p.about { entity.about = about }
+        if let make = p.make { entity.make = make }
+        if let model = p.model { entity.model = model }
+        if let year = p.year { entity.year = Int32(year) }
+        if let body = p.bodyType { entity.bodyType = body }
+        if let mapVisible = p.mapVisible { entity.mapVisible = mapVisible }
+        if let photosVisible = p.photosVisible { entity.photosVisible = photosVisible }
+        if let archived = p.isArchived { entity.isArchived = archived }
+        // `soldAt` — исключение: здесь nil ЗНАЧИМ, это «продажу отменили».
+        // Отличаем по наличию КЛЮЧА, а не по значению: старый сервер про поле
+        // молчит (тогда локальное не трогаем), новый присылает `null` (тогда
+        // снимаем продажу). Раньше здесь стояло `if let`, и отмена продажи с
+        // другого устройства не приезжала никогда.
+        if p.soldAtKnown { entity.soldAt = p.soldAt }
         entity.conflictVersion = Int32(p.conflictVersion)
         entity.lastModifiedAt = p.lastModifiedAt
         entity.syncStatus = SyncStatus.synced.rawValue

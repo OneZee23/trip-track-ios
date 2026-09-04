@@ -101,6 +101,10 @@ struct NotificationsInboxView: View {
                         )
                     case .publicMap(let id, let name):
                         PublicMapView(accountId: id, ownerName: name)
+                    case .publicGarage(let id, let name):
+                        PublicGarageView(accountId: id, ownerName: name)
+                    case .publicVehicle(let id, let vid, let name):
+                        PublicVehicleView(accountId: id, vehicleId: vid, ownerName: name)
                     case .trip, .socialTrip:
                         // Inbox doesn't push trip destinations directly —
                         // tap-on-reaction routes through the trip detail

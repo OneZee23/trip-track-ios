@@ -6,17 +6,26 @@ private let reportLog = Logger(subsystem: "com.triptrack", category: "social.rep
 enum ReportTarget {
     case user(UUID)
     case trip(UUID)
+    /// Машина и её снимок (0.6.4). Без этих двух Apple заворачивает релиз по
+    /// 1.2: на любой пользовательский контент должен быть путь жалобы, а
+    /// гараж — это чужие имена, тексты и фотографии.
+    case vehicle(UUID)
+    case vehiclePhoto(UUID)
 
     var type: String {
         switch self {
         case .user: return "user"
         case .trip: return "trip"
+        case .vehicle: return "vehicle"
+        case .vehiclePhoto: return "vehicle_photo"
         }
     }
     var id: UUID {
         switch self {
         case .user(let id): return id
         case .trip(let id): return id
+        case .vehicle(let id): return id
+        case .vehiclePhoto(let id): return id
         }
     }
 }

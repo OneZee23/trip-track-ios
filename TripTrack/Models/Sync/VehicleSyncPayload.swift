@@ -15,6 +15,10 @@ struct VehicleSyncPayload: Codable {
     /// (не трогать локальное) от «сервер прислал null» (очистить).
     /// `decodeIfPresent` эти два случая не различает, `contains` — различает.
     var manualOdometerKnown: Bool = false
+    /// То же самое для `soldAt`: «ключа не было» и «пришёл null» — разные
+    /// ответы, и путать их нельзя, иначе старый сервер молчанием отменял бы
+    /// продажу, а новый не мог бы её отменить вовсе.
+    var soldAtKnown: Bool = false
     let level: Int
     let stickersJson: String?
     let cityConsumption: Double
@@ -41,6 +45,19 @@ struct VehicleSyncPayload: Codable {
     let visibleToOthers: Bool?
     let fuelCurrency: String?
 
+    // Паспорт (0.6.4). Опциональные, как и всё, что появилось после первого
+    // релиза: сервер до 0.6.4 этих ключей не знает, и их отсутствие обязано
+    // означать «не трогать», а не «сбросить».
+    let about: String?
+    let make: String?
+    let model: String?
+    let year: Int?
+    let bodyType: String?
+    let mapVisible: Bool?
+    let photosVisible: Bool?
+    let isArchived: Bool?
+    let soldAt: Date?
+
     init(
         id: UUID,
         name: String,
@@ -59,8 +76,26 @@ struct VehicleSyncPayload: Codable {
         plate: String? = nil,
         plateVisible: Bool? = nil,
         visibleToOthers: Bool? = nil,
-        fuelCurrency: String? = nil
+        fuelCurrency: String? = nil,
+        about: String? = nil,
+        make: String? = nil,
+        model: String? = nil,
+        year: Int? = nil,
+        bodyType: String? = nil,
+        mapVisible: Bool? = nil,
+        photosVisible: Bool? = nil,
+        isArchived: Bool? = nil,
+        soldAt: Date? = nil
     ) {
+        self.about = about
+        self.make = make
+        self.model = model
+        self.year = year
+        self.bodyType = bodyType
+        self.mapVisible = mapVisible
+        self.photosVisible = photosVisible
+        self.isArchived = isArchived
+        self.soldAt = soldAt
         self.id = id
         self.name = name
         self.avatarEmoji = avatarEmoji
@@ -83,7 +118,8 @@ struct VehicleSyncPayload: Codable {
 
     // MARK: - Codable вручную
 
-    /// Ручной кодинг существует ради ОДНОГО поля — `manualOdometerKm`.
+    /// Ручной кодинг существует ради двух полей — `manualOdometerKm` и
+    /// `soldAt`.
     ///
     /// Синтезированный вариант шлёт его через `encodeIfPresent`, то есть
     /// выбрасывает `nil`. Для этого поля `nil` — не «нечего слать», а
@@ -94,11 +130,19 @@ struct VehicleSyncPayload: Codable {
     /// На чтении та же граница с другой стороны: `contains` отличает «ключа
     /// нет» (сервер про поле не знает — локальное не трогаем) от «пришёл
     /// null» (очистить). `decodeIfPresent` эти случаи не различает.
+    ///
+    /// С `soldAt` ровно та же история, и она уже стоила работающей кнопки:
+    /// «Вернуть из проданных» снимала продажу локально, апсерт выбрасывал
+    /// `nil` как «нечего слать», сервер оставлял дату продажи, а следующий пул
+    /// возвращал машину в проданные. Кнопка выглядела рабочей и не работала
+    /// никогда. Сервер `null` понимает правильно — не долетал он.
     enum CodingKeys: String, CodingKey {
         case id, name, avatarEmoji, odometerKm, manualOdometerKm, level
         case stickersJson, cityConsumption, highwayConsumption, fuelPrice
         case conflictVersion, lastModifiedAt, vehicleType, avatarStyle
         case plate, plateVisible, visibleToOthers, fuelCurrency
+        case about, make, model, year, bodyType
+        case mapVisible, photosVisible, isArchived, soldAt
     }
 
     init(from decoder: Decoder) throws {
@@ -118,6 +162,16 @@ struct VehicleSyncPayload: Codable {
         lastModifiedAt = try c.decode(Date.self, forKey: .lastModifiedAt)
         vehicleType = try c.decodeIfPresent(String.self, forKey: .vehicleType)
         avatarStyle = try c.decodeIfPresent(String.self, forKey: .avatarStyle)
+        about = try c.decodeIfPresent(String.self, forKey: .about)
+        make = try c.decodeIfPresent(String.self, forKey: .make)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        year = try c.decodeIfPresent(Int.self, forKey: .year)
+        bodyType = try c.decodeIfPresent(String.self, forKey: .bodyType)
+        mapVisible = try c.decodeIfPresent(Bool.self, forKey: .mapVisible)
+        photosVisible = try c.decodeIfPresent(Bool.self, forKey: .photosVisible)
+        isArchived = try c.decodeIfPresent(Bool.self, forKey: .isArchived)
+        soldAt = try c.decodeIfPresent(Date.self, forKey: .soldAt)
+        soldAtKnown = c.contains(.soldAt)
         plate = try c.decodeIfPresent(String.self, forKey: .plate)
         plateVisible = try c.decodeIfPresent(Bool.self, forKey: .plateVisible)
         visibleToOthers = try c.decodeIfPresent(Bool.self, forKey: .visibleToOthers)
@@ -145,5 +199,14 @@ struct VehicleSyncPayload: Codable {
         try c.encodeIfPresent(plateVisible, forKey: .plateVisible)
         try c.encodeIfPresent(visibleToOthers, forKey: .visibleToOthers)
         try c.encodeIfPresent(fuelCurrency, forKey: .fuelCurrency)
+        try c.encodeIfPresent(about, forKey: .about)
+        try c.encodeIfPresent(make, forKey: .make)
+        try c.encodeIfPresent(model, forKey: .model)
+        try c.encodeIfPresent(year, forKey: .year)
+        try c.encodeIfPresent(bodyType, forKey: .bodyType)
+        try c.encodeIfPresent(mapVisible, forKey: .mapVisible)
+        try c.encodeIfPresent(photosVisible, forKey: .photosVisible)
+        try c.encodeIfPresent(isArchived, forKey: .isArchived)
+        try c.encode(soldAt, forKey: .soldAt)
     }
 }

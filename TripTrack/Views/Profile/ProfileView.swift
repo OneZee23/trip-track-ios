@@ -37,12 +37,19 @@ struct ProfileView: View {
 
     /// Typed destinations for the Я stack.
     private enum MeDest: Hashable {
+        /// Гараж — страница, а не шит. Канон 0.6.4 рисует его полноэкранным,
+        /// и внутри него «машина» пушится дальше по этому же стеку.
+        case garage
         case stats
         /// Чужая статистика и чужая карта (0.6.3). Те же экраны, что и свои,
         /// с другим источником поездок; имя владельца едет с ними, чтобы
         /// шапка отличала одну «Статистику» от другой.
         case publicStats(UUID, String?)
         case publicMap(UUID, String?)
+        /// Чужой гараж и чужая машина (0.6.4) — как статистика и карта, с
+        /// именем владельца для шапки.
+        case publicGarage(UUID, String?)
+        case publicVehicle(UUID, UUID, String?)
         /// «Мой профиль» — the hub behind the header (avatar + name/handle/bio
         /// /level/stats rows). Its five row editors are NOT cases here: four
         /// of them are sheets this view presents, and the fifth is Статистика,
@@ -107,7 +114,6 @@ struct ProfileView: View {
     @State private var showSettings = false
     /// Разовая карточка ведёт прямо в «Приватность», а не в общий список.
     @State private var opensPrivacyFromNotice = false
-    @State private var showGarage = false
     /// Presented here rather than from «Мой профиль» itself, for the same
     /// reason the three field editors are: one host owns every presentation
     /// this stack raises.
@@ -254,6 +260,8 @@ struct ProfileView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: MeDest.self) { dest in
                 switch dest {
+                case .garage:
+                    GarageView()
                 case .stats:
                     // Push onto THIS stack. Without the callback the screen
                     // falls back to the app-wide `.openTripDetail` channel,
@@ -315,6 +323,10 @@ struct ProfileView: View {
                 case .publicMap(let id, let name):
                     PublicMapView(accountId: id, ownerName: name)
                         .hideAppTabBar()
+                case .publicGarage(let id, let name):
+                    garageDest(id: id, name: name)
+                case .publicVehicle(let id, let vid, let name):
+                    vehicleDest(id: id, vehicleId: vid, name: name)
                 case .trip(let id):
                     // Same construction FeedView uses; TripDetailView manages
                     // its own chrome and hides the tab bar itself.
@@ -385,7 +397,7 @@ struct ProfileView: View {
             // Second phase of VehiclePickerSheet's «Управлять в Гараже»:
             // ContentView switched to the Я tab, waited for this view to
             // mount, then re-posted.
-            showGarage = true
+            push(.garage)
         }
         // Настройки видимости просят показать превью. Лист к этому моменту
         // уже закрылся сам — иначе push ушёл бы под него.
@@ -412,9 +424,6 @@ struct ProfileView: View {
                 .environmentObject(lang)
                 .environment(\.navBarInSheet, true)
                 .environmentObject(themeManager)
-        }
-        .sheet(isPresented: $showGarage) {
-            GarageView()
         }
         .sheet(isPresented: $showBackgroundPicker) {
             ProfileBackgroundPickerSheet()
@@ -545,13 +554,32 @@ struct ProfileView: View {
         )
     }
 
+    /// Вынесено из `navigationDestination`: его switch типизировался
+    /// пятнадцать секунд ещё до гаража, и две новые ветки прямо в теле
+    /// перевели компилятор в «unable to type-check in reasonable time».
+    @ViewBuilder
+    private func garageDest(id: UUID, name: String?) -> some View {
+        PublicGarageView(accountId: id, ownerName: name)
+            .hideAppTabBar()
+    }
+
+    @ViewBuilder
+    private func vehicleDest(id: UUID, vehicleId: UUID, name: String?) -> some View {
+        PublicVehicleView(accountId: id, vehicleId: vehicleId, ownerName: name)
+            .hideAppTabBar()
+    }
+
     private static func socialDest(_ dest: MeDest) -> ProfilePreviewDest? {
         switch dest {
         case .publicProfile(let id, let author): return .profile(id, author)
         case .followList(let id, let mode): return .followList(id, mode)
         case .publicStats(let id, let name): return .publicStats(id, name)
         case .publicMap(let id, let name): return .publicMap(id, name)
-        case .stats, .myProfile, .levels, .country, .achievements,
+        case .publicGarage(let id, let name): return .publicGarage(id, name)
+        case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
+        case .publicGarage(let id, let name): return .publicGarage(id, name)
+        case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
+        case .garage, .stats, .myProfile, .levels, .country, .achievements,
              .achievement, .trip, .companionTrip:
             return nil
         }
@@ -569,6 +597,8 @@ struct ProfileView: View {
         case .socialTrip(let trip, _): return .companionTrip(trip)
         case .publicStats(let id, let name): return .publicStats(id, name)
         case .publicMap(let id, let name): return .publicMap(id, name)
+        case .publicGarage(let id, let name): return .publicGarage(id, name)
+        case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
         }
     }
 
@@ -723,7 +753,7 @@ struct ProfileView: View {
 
                 Button {
                     Haptics.tap()
-                    showGarage = true
+                    push(.garage)
                 } label: {
                     HStack(spacing: 5) {
                         // NOT «3 машины»: the app has no countable noun for
@@ -778,7 +808,7 @@ struct ProfileView: View {
         // the rest of the app reads `selectedVehicleId` with, so the ✓ here
         // can't disagree with the one inside the Гараж.
         if let main = settings.vehicles.first(where: { $0.id == settings.selectedVehicleId })
-            ?? settings.vehicles.first {
+            ?? settings.recordableVehicles.first {
             garageVehicleRow(main, isMain: true, c: c, l: l)
                 .surfaceCard(cornerRadius: 16)
                 .accessibilityIdentifier("profile_garage_card")
@@ -793,7 +823,7 @@ struct ProfileView: View {
     ) -> some View {
         Button {
             Haptics.tap()
-            showGarage = true
+            push(.garage)
         } label: {
             HStack(spacing: 12) {
                 VehicleSpritePlate(
@@ -829,7 +859,7 @@ struct ProfileView: View {
                         }
                     }
 
-                    Text("\(GarageFormat.odometer(vehicle.displayOdometerKm)) \(AppStrings.km(l))")
+                    Text("\(GarageFormat.odometer(vehicle.displayOdometerKm, lng: l)) \(AppStrings.km(l))")
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
@@ -851,7 +881,7 @@ struct ProfileView: View {
     private func garageEmptyCard(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         Button {
             Haptics.tap()
-            showGarage = true
+            push(.garage)
         } label: {
             HStack(spacing: 12) {
                 ZStack {

@@ -715,7 +715,7 @@ final class AutoTripService: ObservableObject {
                 }
                 guard let vm, vm.isRecording else { return }
                 let settings = SettingsManager.shared
-                let vehicle = settings.vehicles.first { $0.id == settings.selectedVehicleId } ?? settings.vehicles.first
+                let vehicle = settings.vehicle(for: settings.selectedVehicleId)
                 let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
                 LiveActivityManager.shared.startActivity(
                     tripId: vm.tripManager.activeTrip?.id ?? UUID(),

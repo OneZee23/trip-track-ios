@@ -544,7 +544,7 @@ struct MyProfileView: View {
                     value: AppStrings.myProfileStatsSummary(
                         l,
                         trips: mapVM.cachedTripCount,
-                        km: GarageFormat.odometer(mapVM.cachedTotalKm)
+                        km: GarageFormat.odometer(mapVM.cachedTotalKm, lng: l)
                     ),
                     isUnset: false,
                     identifier: "my_profile_row_stats",

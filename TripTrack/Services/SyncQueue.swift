@@ -17,6 +17,10 @@ struct SyncOperation: Identifiable, Equatable {
         case trip
         case vehicle
         case photo
+        /// Фотография МАШИНЫ (0.6.4). Отдельно от `.photo`: та привязана к
+        /// поездке и уезжает вместе с её публичностью, а эта — личные данные
+        /// машины и уходит только при включённой синхронизации.
+        case vehiclePhoto
         case settings
     }
 

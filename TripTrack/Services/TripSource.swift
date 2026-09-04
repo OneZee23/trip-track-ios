@@ -41,6 +41,24 @@ struct LocalTripSource: TripSource {
     }
 }
 
+/// Поездки ОДНОЙ машины из локальной базы (0.6.4).
+///
+/// Существует ровно затем, чтобы карта машины была тем же рендером, что «Моя
+/// карта» и чужая карта, а не третьей реализацией. Вся разница между ними —
+/// массив на входе, и она вся живёт здесь.
+///
+/// Трансферы отброшены: человек ехал пассажиром, машина никуда не ехала.
+struct VehicleTripSource: TripSource {
+    let vehicleId: UUID
+
+    func load() async -> TripSourceResult {
+        let repo: TripRepository = CoreDataTripRepository()
+        let mine = repo.fetchTripsForMap()
+            .filter { $0.vehicleId == vehicleId && !$0.isTransfer }
+        return TripSourceResult(trips: mine, failed: false)
+    }
+}
+
 // MARK: - Чужие поездки
 
 /// Публичные поездки другого аккаунта — постранично, с сервера.
@@ -48,6 +66,10 @@ struct LocalTripSource: TripSource {
 /// Транспорт вынесен в протокол, чтобы тесты проверяли пагинацию без сети.
 struct RemoteTripSource: TripSource {
     let accountId: UUID
+    /// Ограничить одной машиной (0.6.4). Сервер сам проверяет, что машина
+    /// открыта и её карта не выключена, — клиентское `if` приватностью не
+    /// является.
+    var vehicleId: UUID? = nil
     var transport: PublicTripsTransport = APIPublicTripsTransport()
 
     /// Потолок страниц за один заход. Размер страницы просим явно (`pageSize`),
@@ -69,7 +91,8 @@ struct RemoteTripSource: TripSource {
             let page: PublicTripsResponse
             do {
                 page = try await transport.fetch(
-                    accountId: accountId, cursor: cursor, limit: Self.pageSize)
+                    accountId: accountId, cursor: cursor, limit: Self.pageSize,
+                    vehicleId: vehicleId)
             } catch {
                 // Сетевой отказ отдаёт то, что успели собрать. Экран покажет
                 // неполную карту, но не «не удалось загрузить» поверх уже
@@ -112,13 +135,19 @@ struct RemoteTripSource: TripSource {
 // MARK: - Транспорт
 
 protocol PublicTripsTransport: Sendable {
-    func fetch(accountId: UUID, cursor: String?, limit: Int) async throws -> PublicTripsResponse
+    /// `vehicleId` — фильтр по машине (0.6.4). Проходит через транспорт, а не
+    /// живёт в источнике: тесты подменяют транспорт, и фильтр обязан быть
+    /// виден им так же, как курсор и лимит.
+    func fetch(accountId: UUID, cursor: String?, limit: Int,
+               vehicleId: UUID?) async throws -> PublicTripsResponse
 }
 
 struct APIPublicTripsTransport: PublicTripsTransport {
-    func fetch(accountId: UUID, cursor: String?, limit: Int) async throws -> PublicTripsResponse {
+    func fetch(accountId: UUID, cursor: String?, limit: Int,
+               vehicleId: UUID?) async throws -> PublicTripsResponse {
         try await APIClient.shared.get(
-            APIEndpoint.userTrips(accountId.uuidString, cursor: cursor, limit: limit),
+            APIEndpoint.userTrips(accountId.uuidString, cursor: cursor, limit: limit,
+                                  vehicleId: vehicleId?.uuidString),
             requiresAuth: AuthService.shared.isSignedIn
         )
     }

@@ -318,7 +318,7 @@ struct StatsScreenView: View {
 
     /// «118 км · 3 фото» — the photo half disappears on a trip without any.
     private func memoryMeta(_ trip: Trip, _ l: LanguageManager.Language) -> String {
-        let km = "\(GarageFormat.odometer(trip.distanceKm)) \(AppStrings.km(l))"
+        let km = "\(GarageFormat.odometer(trip.distanceKm, lng: l)) \(AppStrings.km(l))"
         guard !trip.photos.isEmpty else { return km }
         return "\(km) · \(AppStrings.photosCount(l, n: trip.photos.count))"
     }
@@ -448,7 +448,7 @@ struct StatsScreenView: View {
     ) -> some View {
         HStack(spacing: 0) {
             totalsColumn(
-                value: GarageFormat.odometer(slice.km),
+                value: GarageFormat.odometer(slice.km, lng: l),
                 label: AppStrings.km(l),
                 valueColor: AppTheme.accent, size: 26, c: c
             )
@@ -508,8 +508,8 @@ struct StatsScreenView: View {
             Text(AppStrings.statsVsLastPeriod(
                 l, more: more,
                 period: comparisonPeriod(l),
-                current: GarageFormat.odometer(current.km),
-                previous: GarageFormat.odometer(previous.km)
+                current: GarageFormat.odometer(current.km, lng: l),
+                previous: GarageFormat.odometer(previous.km, lng: l)
             ))
             .font(.system(size: 12))
             .foregroundStyle(c.textSecondary)
@@ -664,7 +664,7 @@ struct StatsScreenView: View {
     private func popoverMeta(
         index: Int, model: ChartModel, l: LanguageManager.Language
     ) -> String {
-        let km = "\(GarageFormat.odometer(model.km[index])) \(AppStrings.km(l))"
+        let km = "\(GarageFormat.odometer(model.km[index], lng: l)) \(AppStrings.km(l))"
         return "\(km) · \(AppStrings.tripsCount(l, n: model.trips[index]))"
     }
 
@@ -769,7 +769,7 @@ struct StatsScreenView: View {
                 id: "longest", icon: "arrow.up.right", tint: AppTheme.green,
                 label: AppStrings.statsRecordLongest(l),
                 subject: longestTripName(agg, l),
-                value: "\(GarageFormat.odometer(agg.longestTripKm)) \(AppStrings.km(l))",
+                value: "\(GarageFormat.odometer(agg.longestTripKm, lng: l)) \(AppStrings.km(l))",
                 tripId: agg.longestTripId
             ))
         }
@@ -778,7 +778,7 @@ struct StatsScreenView: View {
                 id: "bestDay", icon: "clock.fill", tint: AppTheme.accent,
                 label: AppStrings.statsRecordBestDay(l),
                 subject: StatsPeriodFormat.dayMonth(date, l),
-                value: "\(GarageFormat.odometer(agg.bestDayKm)) \(AppStrings.km(l))",
+                value: "\(GarageFormat.odometer(agg.bestDayKm, lng: l)) \(AppStrings.km(l))",
                 tripId: agg.bestDayTripId
             ))
         }
@@ -806,7 +806,7 @@ struct StatsScreenView: View {
                 id: "farthest", icon: "mappin.and.ellipse", tint: AppTheme.green,
                 label: AppStrings.statsRecordFarthest(l),
                 subject: place,
-                value: "\(GarageFormat.odometer(agg.farthestKm)) \(AppStrings.km(l))",
+                value: "\(GarageFormat.odometer(agg.farthestKm, lng: l)) \(AppStrings.km(l))",
                 tripId: agg.farthestTripId
             ))
         }
@@ -880,7 +880,7 @@ struct StatsScreenView: View {
                 .foregroundStyle(c.text)
                 Text(AppStrings.statsMemoriesLine(
                     l,
-                    km: GarageFormat.odometer(agg.totalKm),
+                    km: GarageFormat.odometer(agg.totalKm, lng: l),
                     // Trips that actually carry a photo or a note — the line
                     // says «фото и заметки в N поездках», and the total trip
                     // count answers a different question.
@@ -1244,6 +1244,45 @@ enum StatsPeriodFormat {
     /// form ICU gives `MMMM` in a format context.
     static func monthYearInline(_ date: Date, _ l: LanguageManager.Language) -> String {
         monthYearInlineFmt[l]?.string(from: date) ?? ""
+    }
+
+    /// «апреля 2026» / "April 2026" — месяц в РОДИТЕЛЬНОМ падеже и БЕЗ «г.».
+    ///
+    /// `monthYearInline` строится из `templates("MMMMyyyy")`, и ICU для
+    /// русского отдаёт оттуда «апрель 2026 г.» — именительный падеж плюс
+    /// сокращение. После предлога это читается сломанным: «В гараже с апрель
+    /// 2026 г.». Здесь месяц берётся из формат-контекста (`MMMM` даёт
+    /// родительный), а год приписывается числом — без «г.», потому что
+    /// подпись и так о годе.
+    static func monthYearGenitive(_ date: Date, _ l: LanguageManager.Language) -> String {
+        let month = genitiveMonths[l]?.string(from: date) ?? ""
+        guard !month.isEmpty else { return monthYearInline(date, l) }
+        let lowered = l == .ru ? month.lowercased(with: ruLocale) : month
+        return "\(lowered) \(yearText(date))"
+    }
+
+    /// «сентябре 2026» — ПРЕДЛОЖНЫЙ падеж, для конструкции «в сентябре».
+    ///
+    /// Третья форма месяца в проекте, и завести её пришлось, потому что двух
+    /// не хватает: «с апреля» — родительный, «в сентябре» — предложный, и
+    /// подстановка родительного после «в» даёт «в сентября».
+    ///
+    /// Таблицей, а не правилом: ICU предложного падежа не отдаёт вовсе, а
+    /// «отбросить окончание и добавить -е» ломается на «мае» и «августе».
+    /// Языков ровно два — в остальных месяц после предлога не склоняется.
+    static func monthYearPrepositional(_ date: Date, _ l: LanguageManager.Language) -> String {
+        let idx = Calendar(identifier: .gregorian).component(.month, from: date) - 1
+        guard (0..<12).contains(idx) else { return monthYearGenitive(date, l) }
+        let table: [String]?
+        switch l {
+        case .ru: table = ["январе", "феврале", "марте", "апреле", "мае", "июне",
+                           "июле", "августе", "сентябре", "октябре", "ноябре", "декабре"]
+        case .uk: table = ["січні", "лютому", "березні", "квітні", "травні", "червні",
+                           "липні", "серпні", "вересні", "жовтні", "листопаді", "грудні"]
+        default:  table = nil
+        }
+        guard let table else { return monthYearGenitive(date, l) }
+        return "\(table[idx]) \(yearText(date))"
     }
 
     /// «июнь 2025» / "June 2025" — the chart's reference-rule label.

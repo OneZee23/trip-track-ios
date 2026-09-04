@@ -118,7 +118,7 @@ struct ProfileTripTile: View {
     /// has no room at 10pt in a half-width tile.
     private var metaText: String {
         let date = ProfileDateFormat.dayMonth(trip.startDate, lang: lang.language)
-        let km = "\(GarageFormat.odometer(trip.distanceKm)) \(AppStrings.km(lang.language))"
+        let km = "\(GarageFormat.odometer(trip.distanceKm, lng: lang.language)) \(AppStrings.km(lang.language))"
         return "\(date) · \(km)"
     }
 }

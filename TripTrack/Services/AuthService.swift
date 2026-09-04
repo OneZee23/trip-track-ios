@@ -403,6 +403,36 @@ final class AuthService: ObservableObject {
             entity.isPrivate = true
             repo.markUnpublished(tripId: id)
         }
+
+        // Гараж тоже. Раньше «стереть мои данные с сервера» удаляло только
+        // поездки, и у человека, который этой кнопкой воспользовался, на
+        // сервере оставался ПУБЛИЧНЫЙ гараж: машины, их марки, пробеги и
+        // фотографии продолжали показываться незнакомым людям. Кнопка обещала
+        // обратное.
+        await wipeServerVehicles(ctx)
+    }
+
+    /// Удаляет машины (а вместе с ними, каскадом на сервере, и их снимки).
+    private func wipeServerVehicles(_ ctx: NSManagedObjectContext) async {
+        let req: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        guard let vehicles = try? ctx.fetch(req) else { return }
+        struct DeleteReq: Encodable { let id: UUID }
+        for vehicle in vehicles {
+            guard let id = vehicle.id else { continue }
+            do {
+                let _: EmptyResponse = try await APIClient.shared.post(
+                    APIEndpoint.vehicleDelete, body: DeleteReq(id: id))
+            } catch {
+                authLog.error("wipeServerData failed for vehicle \(id, privacy: .public): \(String(describing: error), privacy: .public)")
+                continue
+            }
+            // Машина остаётся на телефоне — стирали серверную копию, не гараж.
+            // `pendingUpload`, а не «синхронизирована»: серверной копии больше
+            // нет, и если человек снова включит синхронизацию, машина должна
+            // уехать заново, а не считаться уже отправленной.
+            vehicle.syncStatus = SyncStatus.pendingUpload.rawValue
+        }
+        try? ctx.save()
     }
 
     /// Re-entrancy guard for the signout path. Without it a dead session

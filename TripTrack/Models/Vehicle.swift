@@ -43,6 +43,56 @@ struct Vehicle: Identifiable, Codable {
     /// second car can live in a second country; a trip may still override it.
     var fuelCurrency: String
 
+    // MARK: - Паспорт машины (0.6.4)
+
+    /// Одна строка о машине, написанная владельцем: «Первая своя. Брал, чтобы
+    /// ездить к родителям».
+    ///
+    /// Единственное, что взято у бортжурнала drive2, и взято намеренно
+    /// маленьким куском: «почему именно она» — то, чего GPS не произведёт
+    /// никогда. Всё остальное в паспорте заполняется само, поэтому здесь
+    /// СТРОКА, а не запись: пять абзацев на пустом гараже — пять пустых абзацев.
+    var about: String
+    /// Марка и модель из `VehicleCatalog`. Пусто — не указаны; форма всегда
+    /// оставляет свободный ввод, поэтому здесь строки, а не идентификаторы.
+    var make: String
+    var model: String
+    /// Год выпуска; `0` — не указан. Ноль вместо опционала: год не бывает
+    /// нулевым, а опционал протёк бы в каждую подпись.
+    var year: Int
+    /// Кузов — силуэт из `VehicleAvatar.styles`. Отличается от `avatarStyle`
+    /// тем, что это ФАКТ о машине, а не выбор картинки: каталог подставляет
+    /// его при выборе модели, а спрайт владелец волен поменять.
+    var bodyType: String
+
+    // MARK: - Оси видимости
+
+    /// Показывать ли фотографии машины чужим. Отдельная ось от самой машины и
+    /// по умолчанию ВЫКЛЮЧЕНА: на снимке во дворе видны и номер, и дом, и это
+    /// решение человек принимает сам, а не получает вместе с гаражом.
+    var photosVisible: Bool
+    /// Показывать ли карту этой машины. Отдельная ось: спрятать маршруты, не
+    /// пряча саму машину. По умолчанию включена — карта и есть то, ради чего
+    /// паспорт существует.
+    var mapVisible: Bool
+
+    // MARK: - Архив
+
+    /// Машина твоя, но новые поездки идут не на неё.
+    var isArchived: Bool
+    /// Дата продажи; `nil` — не продана.
+    ///
+    /// Отдельно от `isArchived` намеренно. «Не активна» и «продана» — разные
+    /// вещи: у первой можно нажать «Сделать активной», у второй биография
+    /// заморожена, потому что записать на неё поездку значит приписать чужую
+    /// дорогу своему паспорту. И одним словом их на тринадцати языках не
+    /// назвать: «архив» прочитается как «я её продал».
+    var soldAt: Date?
+
+    /// Продана ли машина — читается на месте использования лучше, чем
+    /// `soldAt != nil`.
+    var isSold: Bool { soldAt != nil }
+
     init(id: UUID = UUID(), name: String = "", avatarEmoji: String = "🏎️",
          avatarStyle: String = VehicleAvatar.defaultStyle,
          type: VehicleType = .car, plate: String = "", plateVisible: Bool = false,
@@ -50,7 +100,20 @@ struct Vehicle: Identifiable, Codable {
          odometerKm: Double = 0, manualOdometerKm: Double? = nil, level: Int = 1, stickers: [VehicleSticker] = [],
          createdAt: Date = Date(),
          cityConsumption: Double = 10.0, highwayConsumption: Double = 6.0,
-         fuelPrice: Double = 56.0, fuelCurrency: String = FuelCurrency.current) {
+         fuelPrice: Double = 56.0, fuelCurrency: String = FuelCurrency.current,
+         about: String = "", make: String = "", model: String = "",
+         year: Int = 0, bodyType: String = "",
+         photosVisible: Bool = false, mapVisible: Bool = true,
+         isArchived: Bool = false, soldAt: Date? = nil) {
+        self.about = about
+        self.make = make
+        self.model = model
+        self.year = year
+        self.bodyType = bodyType
+        self.photosVisible = photosVisible
+        self.mapVisible = mapVisible
+        self.isArchived = isArchived
+        self.soldAt = soldAt
         self.id = id
         self.name = name
         self.avatarEmoji = avatarEmoji
@@ -98,6 +161,23 @@ struct Vehicle: Identifiable, Codable {
         fuelPrice = try c.decode(Double.self, forKey: .fuelPrice)
         fuelCurrency = try c.decodeIfPresent(String.self, forKey: .fuelCurrency)
             ?? FuelCurrency.current
+
+        // Поля паспорта (0.6.4). Все через `decodeIfPresent` с умолчанием: их
+        // не шлёт ни один сохранённый payload и ни один сервер до 0.6.4, и
+        // отсутствие ключа обязано означать «не заполнено», а не ронять весь
+        // гараж. Ровно тот же приём, что с `avatarStyle` и `manualOdometerKm`.
+        about = try c.decodeIfPresent(String.self, forKey: .about) ?? ""
+        make = try c.decodeIfPresent(String.self, forKey: .make) ?? ""
+        model = try c.decodeIfPresent(String.self, forKey: .model) ?? ""
+        year = try c.decodeIfPresent(Int.self, forKey: .year) ?? 0
+        bodyType = try c.decodeIfPresent(String.self, forKey: .bodyType) ?? ""
+        // Умолчания разные и оба осознанные: фотографии закрыты, пока их не
+        // откроют (на снимке во дворе видны номер и дом), а карта открыта —
+        // без неё паспорт наполовину пуст.
+        photosVisible = try c.decodeIfPresent(Bool.self, forKey: .photosVisible) ?? false
+        mapVisible = try c.decodeIfPresent(Bool.self, forKey: .mapVisible) ?? true
+        isArchived = try c.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+        soldAt = try c.decodeIfPresent(Date.self, forKey: .soldAt)
     }
 
     /// Calculate fuel cost for a trip based on speed-weighted city/highway ratio

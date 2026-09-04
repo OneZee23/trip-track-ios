@@ -225,8 +225,18 @@ final class SettingsManager: ObservableObject {
         savedBluetoothDevices.first { $0.vehicleId == vehicleId }
     }
 
+    /// Магнитола → машина, НО только та, на которую сейчас можно писать.
+    ///
+    /// Без этой проверки правило «в архив — значит не пишем» обходилось само,
+    /// без единого тапа человека: воткнулся в магнитолу архивной машины — и
+    /// она молча снова стала активной, потому что оба вызывающих отсюда пишут
+    /// результат прямо в сохранённый выбор. Поездка при этом остаётся на той
+    /// машине, что активна сейчас, и переназначить её задним числом можно
+    /// бесплатно.
     func vehicleId(forDeviceName name: String) -> UUID? {
-        savedBluetoothDevices.first { $0.name == name }?.vehicleId
+        guard let id = savedBluetoothDevices.first(where: { $0.name == name })?.vehicleId,
+              recordableVehicles.contains(where: { $0.id == id }) else { return nil }
+        return id
     }
 
     func addBluetoothDevice(_ device: SavedBluetoothDevice) {
@@ -307,6 +317,60 @@ final class SettingsManager: ObservableObject {
         saveSettings()
     }
 
+    /// На что можно писать ПРЯМО СЕЙЧАС — и единственное место, где это
+    /// решается.
+    ///
+    /// `vehicles` намеренно остаётся неотфильтрованным: через него четыре
+    /// экрана достают машину СТАРОЙ поездки (`VehicleDetailView`,
+    /// `TripDetailView` дважды, сам гараж), и фильтр там стёр бы историю —
+    /// поездка двухлетней давности показала бы «Транспорт удалён».
+    /// Фильтровать можно только в точке ПРИМЕНЕНИЯ, то есть здесь.
+    ///
+    /// Сюда же придёт лимит бесплатного тарифа, когда будет что покупать:
+    /// одной строкой в этом фильтре, а не проверкой на десяти экранах.
+    var recordableVehicles: [Vehicle] {
+        vehicles.filter { !$0.isArchived && !$0.isSold }
+    }
+
+    /// Машина, на которую уйдёт СЛЕДУЮЩАЯ поездка, — и единственный ответ на
+    /// этот вопрос для всех экранов сразу.
+    ///
+    /// `nil` тут значит «без транспорта», и это законный выбор человека, а не
+    /// сбой: подменять пустой выбор первой попавшейся машиной нельзя, иначе
+    /// нажатие «Без транспорта» молча отменяется.
+    ///
+    /// Отдельно ловится случай, которого не бывает по своей воле: выбранная
+    /// машина перестала быть доступной НЕ через этот экран. Синхронизация с
+    /// другого устройства пишет `isArchived` прямо в запись машины и выбора не
+    /// трогает — без этой проверки поездка уехала бы на архивную машину,
+    /// причём гараж в этот момент показывал бы её как активную.
+    var activeRecordableVehicleId: UUID? {
+        guard let id = selectedVehicleId else { return nil }
+        return recordableVehicles.contains { $0.id == id } ? id : nil
+    }
+
+    /// Пропускает id, только если на эту машину сейчас можно писать.
+    ///
+    /// Через это горлышко проходит и «Команды»: ярлык, сохранённый месяц назад,
+    /// помнит машину, которую с тех пор убрали в архив, и iOS показывает его
+    /// до следующего опроса. Такая поездка запишется без транспорта — назначить
+    /// машину задним числом можно бесплатно и в любой момент.
+    func recordableVehicleId(_ id: UUID?) -> UUID? {
+        guard let id else { return nil }
+        // Читаем ЗАПИСЬ, а не список в памяти. Список — снимок, он обновляется
+        // только когда его кто-то перечитает, и однажды кто-то этого не
+        // сделает: ровно так синк уже проносил архивную машину мимо проверки.
+        // Это последний рубеж, он обязан спрашивать у хранилища, а не у копии.
+        // Цена — один запрос на старт поездки, раз в несколько часов.
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.fetchLimit = 1
+        guard let entity = try? context.fetch(request).first,
+              !entity.isArchived, entity.soldAt == nil else { return nil }
+        return id
+    }
+
     /// Resolve a vehicle by id. Nil in, nil out.
     ///
     /// This used to fall back to `vehicles.first` for any id it could not
@@ -321,12 +385,36 @@ final class SettingsManager: ObservableObject {
 
     // MARK: - Vehicles
 
+    /// Перечитать список машин — то же, что делает приходящий синк, дописав
+    /// запись машины напрямую. Нужен тестам, которым надо воспроизвести именно
+    /// этот путь, а не пройти через методы экрана.
+    func reloadVehiclesForTesting() { loadVehicles() }
+
     private func loadVehicles() {
         let context = persistenceController.container.viewContext
         let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
         request.sortDescriptors = [NSSortDescriptor(keyPath: \VehicleEntity.name, ascending: true)]
 
         vehicles = (try? context.fetch(request))?.compactMap { vehicleFromEntity($0) } ?? []
+        healStuckSelection()
+    }
+
+    /// Выбор указывает на машину, которая больше не может принимать поездки, —
+    /// чиним молча и отдаём слот другой.
+    ///
+    /// Пустой выбор не трогаем НИКОГДА: `nil` значит «Без транспорта», это
+    /// решение человека, а не поломка.
+    ///
+    /// Случай не выдуманный: продажа машины раньше меняла выбор только в
+    /// памяти и не сохраняла его, поэтому на диске он так и остался стоять на
+    /// проданной. Пока запись брала выбор на веру, поездки уезжали на неё;
+    /// после того как проверка появилась, человек остался вообще без активной
+    /// машины — и без единого намёка, почему. Такие данные уже лежат на
+    /// устройствах, и вычистить их можно только здесь.
+    private func healStuckSelection() {
+        guard let id = selectedVehicleId,
+              !recordableVehicles.contains(where: { $0.id == id }) else { return }
+        selectVehicle(id: recordableVehicles.first?.id)
     }
 
     private func migrateDefaultVehicleName() {
@@ -386,8 +474,22 @@ final class SettingsManager: ObservableObject {
 
         if let entity = try? context.fetch(request).first {
             context.delete(entity)
+            // Привязка магнитолы к удалённой машине пережила бы саму машину и
+            // осталась бы указывать в никуда: `vehicleId(forDeviceName:)` по
+            // ней ничего не найдёт, а список привязок будет копить мусор.
+            removeBluetoothDevice(forVehicle: id)
+            // Снимки машины лежат файлами на диске, а строка про них — без
+            // связи с машиной, поэтому каскад их не заберёт: без этой строки
+            // фотографии удалённой машины оставались в Documents навсегда, и
+            // добраться до них было уже нечем.
+            VehiclePhotoStore.deleteAll(of: id)
             persistenceController.save()
             loadVehicles()
+            // Удалённая не может остаться выбранной — иначе следующая поездка
+            // уйдёт на несуществующий id и покажется «Транспорт удалён».
+            if selectedVehicleId == id {
+                selectVehicle(id: recordableVehicles.first?.id)
+            }
             Task { @MainActor in
                 SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .delete))
             }
@@ -405,7 +507,7 @@ final class SettingsManager: ObservableObject {
             stickers = ids.compactMap { VehicleSticker(rawValue: $0) }
         }
 
-        return Vehicle(
+        var v = Vehicle(
             id: id,
             name: entity.name ?? "",
             avatarEmoji: entity.avatarEmoji ?? "🏎️",
@@ -431,6 +533,20 @@ final class SettingsManager: ObservableObject {
             fuelPrice: entity.fuelPrice,
             fuelCurrency: entity.fuelCurrency ?? FuelCurrency.current
         )
+        // Поля паспорта присваиваются ОТДЕЛЬНО, а не аргументами инициализатора:
+        // с ними одно выражение перестало проверяться по типам за разумное
+        // время («unable to type-check this expression in reasonable time»).
+        // Разбиение — не стилевая прихоть, а условие сборки.
+        v.about = entity.about ?? ""
+        v.make = entity.make ?? ""
+        v.model = entity.model ?? ""
+        v.year = Int(entity.year)
+        v.bodyType = entity.bodyType ?? ""
+        v.photosVisible = entity.photosVisible
+        v.mapVisible = entity.mapVisible
+        v.isArchived = entity.isArchived
+        v.soldAt = entity.soldAt
+        return v
     }
 
     /// Записать пробег с приборной панели. `nil` стирает значение и возвращает
@@ -457,6 +573,118 @@ final class SettingsManager: ObservableObject {
 
     /// The identity half of the form: everything the person typed or picked
     /// that is not a fuel figure. One write, one sync operation.
+    /// Марка, модель, год и кузов — поля паспорта (0.6.4).
+    ///
+    /// Отдельной функцией, а не аргументами `updateVehicleIdentity`: та уже
+    /// принимает семь параметров и отвечает за то, КАК машина выглядит и кому
+    /// видна, а это — что она такое. Плюс её вызывают из мест, которым про
+    /// каталог знать незачем.
+    func updateVehiclePassport(
+        id: UUID, make: String, model: String, year: Int, bodyType: String,
+        about: String = ""
+    ) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let entity = try? context.fetch(request).first else { return }
+        entity.make = make
+        entity.model = model
+        // 0 — «не указан»: год не бывает нулевым, и опционал протёк бы в каждую
+        // подпись. Заведомо неправдоподобные значения не сохраняем — пустое
+        // поле честнее, чем «1» в паспорте.
+        entity.year = (year >= 1900 && year <= 2100) ? Int32(year) : 0
+        entity.bodyType = bodyType
+        entity.about = about
+        entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        loadVehicles()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
+        }
+    }
+
+    /// Архив и продажа — РАЗНЫЕ состояния, и намеренно двумя функциями.
+    ///
+    /// «Не активна» значит «машина твоя, просто новые поездки идут не на неё».
+    /// «Продана» значит «владелец сменился, биография заморожена»: записать на
+    /// такую машину поездку — приписать чужую дорогу своему паспорту. Поэтому
+    /// активной проданную сделать нельзя, пока продажу не отменили.
+    func setVehicleSold(id: UUID, soldAt: Date?) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let entity = try? context.fetch(request).first else { return }
+        entity.soldAt = soldAt
+        // Проданная всегда в архиве; возврат из проданных архива не снимает —
+        // это второй, отдельный шаг, чтобы случайный тап не переписал историю.
+        if soldAt != nil { entity.isArchived = true }
+        entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        // Активной проданная быть не может: следующая запись ушла бы на чужую
+        // машину. Снимаем выбор молча — альтернатива это диалог посреди
+        // подтверждения продажи.
+        persistenceController.save()
+        loadVehicles()
+        // ПОСЛЕ loadVehicles и через selectVehicle, а не голым присваиванием:
+        // запись читает выбор из СОХРАНЁННОЙ UserSettingsEntity, а голое
+        // присваивание меняло только @Published. Из-за этого следующая после
+        // продажи поездка уходила ровно на проданную машину — то самое, ради
+        // чего эти три строки и были написаны.
+        if soldAt != nil, selectedVehicleId == id {
+            selectVehicle(id: recordableVehicles.first?.id)
+        }
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
+        }
+    }
+
+    func setVehicleArchived(id: UUID, archived: Bool) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let entity = try? context.fetch(request).first else { return }
+        entity.isArchived = archived
+        entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        loadVehicles()
+        // Убранная в архив не может остаться активной — иначе гараж обещает
+        // одно («пишем на активную»), а запись делает другое. Слот уходит
+        // другой машине, а в гараже из одной машины — никому: «Без
+        // транспорта» это законный исход, а не ошибка.
+        if archived, selectedVehicleId == id {
+            selectVehicle(id: recordableVehicles.first?.id)
+        }
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
+        }
+    }
+
+    /// Четыре оси видимости машины (экран 13). Отдельно от
+    /// `updateVehicleIdentity`: та про то, как машина ВЫГЛЯДИТ, а это про то,
+    /// кому она видна, и меняется с другого экрана и по другому поводу.
+    func updateVehicleVisibility(
+        id: UUID, visibleToOthers: Bool, plateVisible: Bool,
+        mapVisible: Bool, photosVisible: Bool
+    ) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let entity = try? context.fetch(request).first else { return }
+        entity.visibleToOthers = visibleToOthers
+        entity.plateVisible = plateVisible
+        entity.mapVisible = mapVisible
+        entity.photosVisible = photosVisible
+        entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        loadVehicles()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
+        }
+    }
+
     func updateVehicleIdentity(
         id: UUID,
         name: String,

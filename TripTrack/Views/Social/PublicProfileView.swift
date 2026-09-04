@@ -139,6 +139,12 @@ struct PublicProfileView: View {
         pushPath.wrappedValue.cappedAppend(.publicMap(accountId, resolvedDisplayName))
     }
 
+    /// Гараж чужого человека (0.6.4).
+    private func openGarage() {
+        guard let pushPath else { return }
+        pushPath.wrappedValue.cappedAppend(.publicGarage(accountId, resolvedDisplayName))
+    }
+
     private func openFollowList(_ mode: FollowListMode) {
         if let pushPath {
             pushPath.wrappedValue.cappedAppend(.followList(accountId, mode))
@@ -335,6 +341,14 @@ struct PublicProfileView: View {
                             }
                             if visibility.map, canOpenHub {
                                 mapEntryCard(c, lng: lng)
+                                    .padding(.horizontal, 16)
+                            }
+                            // Гараж (0.6.4). Строка показывается ВСЕГДА, когда
+                            // экран вообще открыт: сервер сам решит, что внутри,
+                            // а прятать вход по локальной догадке значит либо
+                            // соврать, либо выдать, что человек что-то прячет.
+                            if canOpenHub {
+                                garageEntryCard(c, lng: lng)
                                     .padding(.horizontal, 16)
                             }
 
@@ -850,7 +864,7 @@ struct PublicProfileView: View {
         let tripsValue = privacy ? dots : (stats.map { String($0.tripCount) } ?? "—")
         // Grouped like every other km figure in the app — a bare "%.0f"
         // printed «38420» beside «2 430» two cards away.
-        let kmValue = privacy ? dots : (stats.map { GarageFormat.odometer($0.totalKm) } ?? "—")
+        let kmValue = privacy ? dots : (stats.map { GarageFormat.odometer($0.totalKm, lng: lng) } ?? "—")
         let regionsValue = privacy ? dots : (stats.map { String($0.regionsCount) } ?? "—")
         // Trace what the UI is ACTUALLY rendering right now. Compare with the
         // `loadProfile decoded` line to spot the stale-state / wrong-field
@@ -1135,6 +1149,21 @@ struct PublicProfileView: View {
                 }
             },
             action: { openMap() }
+        )
+    }
+
+    /// Вход в чужой гараж. Без превью машин: список ещё не загружен, а
+    /// рисовать заглушку под него значит обещать содержимое, которого может
+    /// не оказаться.
+    private func garageEntryCard(
+        _ c: AppTheme.Colors, lng: LanguageManager.Language
+    ) -> some View {
+        hubCard(
+            c,
+            title: AppStrings.garage(lng),
+            subtitle: AppStrings.publicGarageEntrySubtitle(lng),
+            body: { EmptyView() },
+            action: { openGarage() }
         )
     }
 

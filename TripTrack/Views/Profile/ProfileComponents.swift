@@ -58,7 +58,7 @@ struct ProfileStatsStrip: View {
             HStack(spacing: 0) {
                 column(value: "\(trips)", label: AppStrings.trips(lang.language), c: c)
                 divider(c)
-                column(value: GarageFormat.odometer(km), label: AppStrings.statsKmTotal(lang.language), c: c)
+                column(value: GarageFormat.odometer(km, lng: lang.language), label: AppStrings.statsKmTotal(lang.language), c: c)
                 divider(c)
                 column(value: "\(regions)", label: AppStrings.statsRegions(lang.language), c: c)
             }
@@ -165,7 +165,7 @@ struct ProfileTripRow: View {
         } else if let vehicleName, !vehicleName.isEmpty {
             parts.append(vehicleName)
         }
-        parts.append("\(GarageFormat.odometer(trip.distanceKm)) \(AppStrings.km(lang.language))")
+        parts.append("\(GarageFormat.odometer(trip.distanceKm, lng: lang.language)) \(AppStrings.km(lang.language))")
         return parts.joined(separator: " · ")
     }
 }

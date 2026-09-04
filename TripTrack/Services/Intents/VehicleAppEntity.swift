@@ -25,8 +25,10 @@ struct VehicleEntityQuery: EntityQuery {
     }
 
     @MainActor
+    /// Автоматизация не должна предлагать машину, на которую в приложении
+    /// писать нельзя, — иначе правило архива обходится через «Команды».
     func suggestedEntities() async throws -> [VehicleAppEntity] {
-        SettingsManager.shared.vehicles
+        SettingsManager.shared.recordableVehicles
             .map { VehicleAppEntity(id: $0.id, name: $0.name) }
     }
 }

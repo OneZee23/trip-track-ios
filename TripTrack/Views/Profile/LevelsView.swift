@@ -162,11 +162,11 @@ struct LevelsView: View {
 
             HStack(alignment: .top, spacing: 8) {
                 Text(isMaxLevel
-                     ? AppStrings.levelsXpTotal(l, xp: GarageFormat.odometer(Double(xp)))
+                     ? AppStrings.levelsXpTotal(l, xp: GarageFormat.odometer(Double(xp), lng: l))
                      : AppStrings.levelsXpProgress(
                         l,
-                        current: GarageFormat.odometer(Double(xp)),
-                        target: GarageFormat.odometer(Double(LevelSystem.xpForNextLevel(level)))
+                        current: GarageFormat.odometer(Double(xp), lng: l),
+                        target: GarageFormat.odometer(Double(LevelSystem.xpForNextLevel(level)), lng: l)
                      ))
                     .font(.system(size: 12, weight: .semibold).monospacedDigit())
                     .foregroundStyle(c.text)

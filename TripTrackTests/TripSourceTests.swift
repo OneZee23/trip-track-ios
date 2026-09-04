@@ -207,7 +207,8 @@ private final class StubTripTransport: PublicTripsTransport, @unchecked Sendable
         self.failAfterPages = failAfterPages
     }
 
-    func fetch(accountId: UUID, cursor: String?, limit: Int) async throws -> PublicTripsResponse {
+    func fetch(accountId: UUID, cursor: String?, limit: Int,
+               vehicleId: UUID? = nil) async throws -> PublicTripsResponse {
         requestedLimits.append(limit)
         if let failAfterPages, requestedCursors.count >= failAfterPages {
             requestedCursors.append(cursor)
@@ -221,7 +222,8 @@ private final class StubTripTransport: PublicTripsTransport, @unchecked Sendable
 }
 
 private struct FailingTripTransport: PublicTripsTransport {
-    func fetch(accountId: UUID, cursor: String?, limit: Int) async throws -> PublicTripsResponse {
+    func fetch(accountId: UUID, cursor: String?, limit: Int,
+               vehicleId: UUID? = nil) async throws -> PublicTripsResponse {
         throw APIError.transport("offline")
     }
 }
