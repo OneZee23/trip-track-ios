@@ -17,6 +17,15 @@ struct VehicleChip: View {
     /// because the slot is shared with the GPS pill and the full name pushed
     /// into it.
     var compact = false
+    /// Поездка помечена «еду пассажиром». Тогда чип обязан показывать именно
+    /// это, а не имя машины и не «Без транспорта»: он стоит ровно там, где
+    /// человек проверяет, ЧТО сейчас запишется, и назвать машину, на которую
+    /// поездка не пойдёт, — соврать в единственном месте, где врать нельзя.
+    var isTransfer = false
+    /// Приглушить, не пряча. На экране простоя рядом стоит переключатель «Я
+    /// пассажир», и когда он включён, машина в поездке не участвует — но
+    /// убирать чип нельзя: тогда непонятно, куда вернуться, чтобы выключить.
+    var dimmed = false
     var onTap: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
@@ -32,7 +41,11 @@ struct VehicleChip: View {
     /// the chip claimed one thing while the trip recorded another. Resolving
     /// through the shared helper keeps that rule in one place.
     private var activeVehicle: Vehicle? {
-        settings.vehicle(for: settings.selectedVehicleId)
+        // Ровно то, чем будет проштампована поездка: `activeRecordableVehicleId`
+        // отсеет выбор, который перестал быть годным (архив или продажа с
+        // другого устройства). Пустой выбор так и остаётся «Без транспорта» —
+        // это решение человека, а не поломка.
+        settings.vehicle(for: settings.activeRecordableVehicleId)
     }
 
     /// «▾» only when the sheet actually offers an alternative. One vehicle is
@@ -57,7 +70,9 @@ struct VehicleChip: View {
             onTap()
         } label: {
             HStack(spacing: 6) {
-                if let vehicle = activeVehicle {
+                if isTransfer {
+                    transferLabel
+                } else if let vehicle = activeVehicle {
                     vehicleLabel(vehicle)
                 } else {
                     noVehicleLabel
@@ -85,7 +100,21 @@ struct VehicleChip: View {
             .overlay(Capsule().strokeBorder(.white.opacity(compact ? 0.14 : 0.08), lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .opacity(dimmed ? 0.4 : 1)
         .accessibilityIdentifier("vehicle_chip")
+    }
+
+    /// «Ехал пассажиром» — та же строка, что в шторке и в редакторе поездки.
+    private var transferLabel: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "person.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+            Text(AppStrings.tripTransferTitle(lang.language))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+                .lineLimit(1)
+        }
     }
 
     @ViewBuilder

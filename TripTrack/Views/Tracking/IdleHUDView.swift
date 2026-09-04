@@ -11,13 +11,49 @@ struct IdleHUDView: View {
     var waitingForFix: Bool = false
     let onStartTrip: () -> Void
     var onBlockedStart: () -> Void = {}
+    /// «Поеду пассажиром» — состояние БУДУЩЕЙ поездки, поэтому живёт во
+    /// вью-модели, а не здесь: экран простоя пересоздаётся, намерение — нет.
+    var isTransfer: Bool = false
+    var onSetTransfer: (Bool) -> Void = { _ in }
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var settings = SettingsManager.shared
     @State private var showVehiclePicker = false
 
     private var activeVehicle: Vehicle? {
-        settings.vehicles.first { $0.id == settings.selectedVehicleId }
-            ?? settings.vehicles.first
+        settings.vehicle(for: settings.activeRecordableVehicleId)
+    }
+
+    /// «Я пассажир» одним тапом, прямо на экране, без шторки.
+    ///
+    /// Сначала это жило третьей строкой внутри шторки выбора машины — то есть
+    /// за тапом по чипу, который выглядит как «выбрать машину». Догадаться,
+    /// что сказать «я не за рулём» надо там же, невозможно: человек садится в
+    /// такси и хочет нажать одну кнопку, а не искать её внутри выбора
+    /// автомобиля. В шторке строка тоже осталась — для тех, кто уже там.
+    private var passengerToggle: some View {
+        Button {
+            Haptics.selection()
+            onSetTransfer(!isTransfer)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(AppStrings.passengerToggle(lang.language))
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .foregroundStyle(isTransfer ? .white : .white.opacity(0.7))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(isTransfer
+                                       ? AppTheme.accent
+                                       : Color.white.opacity(0.12)))
+            .overlay(Capsule().strokeBorder(.white.opacity(isTransfer ? 0 : 0.08), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("idle_passenger_toggle")
+        .accessibilityAddTraits(isTransfer ? [.isSelected] : [])
     }
 
     var body: some View {
@@ -61,8 +97,17 @@ struct IdleHUDView: View {
             // is also the door to «Управлять в Гараже», and hiding the chip
             // meant most people never learned a trip HAS a car.
             if !locationDenied {
-                VehicleChip { showVehiclePicker = true }
-                    .padding(.bottom, 14)
+                HStack(spacing: 8) {
+                    // Приоритет у переключателя, а не у чипа: длинное имя
+                    // машины («Mercedes-Benz E-Class») иначе съело бы строку
+                    // целиком и вытолкнуло кнопку за край. Имя обрежется —
+                    // кнопка обязана остаться целой.
+                    VehicleChip(dimmed: isTransfer) { showVehiclePicker = true }
+                    passengerToggle
+                        .layoutPriority(1)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 14)
             }
 
             if locationDenied {
@@ -110,8 +155,17 @@ struct IdleHUDView: View {
         .environment(\.colorScheme, .dark)
         .padding(.horizontal, 16)
         .sheet(isPresented: $showVehiclePicker) {
-            VehiclePickerSheet()
-                .environmentObject(lang)
+            VehiclePickerSheet(
+                // Машины в архиве и проданные здесь не показываются: гараж
+                // обещает, что запись идёт на активную, и шторка обязана
+                // говорить ровно то же самое.
+                checkedVehicleId: isTransfer ? .some(nil) : nil,
+                onPick: { _ in onSetTransfer(false) },
+                showsTransferOption: true,
+                isTransferSelected: isTransfer,
+                onPickTransfer: { onSetTransfer(true) }
+            )
+            .environmentObject(lang)
         }
     }
 

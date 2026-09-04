@@ -112,7 +112,11 @@ final class TripManager: ObservableObject {
         cleanupOrphanedTrips()
     }
 
-    func startTrip(vehicleId: UUID? = nil) {
+    /// `isTransfer` штампуется ЗДЕСЬ, а не через `setTransfer` после старта:
+    /// тот обнуляет `vehicleId` и пересчитывает одометры, а делать это на
+    /// поездке нулевой длины незачем — и один из двух вызовов обязательно
+    /// оказался бы не в том порядке.
+    func startTrip(vehicleId: UUID? = nil, isTransfer: Bool = false) {
         let context = persistenceController.container.viewContext
         let entity = TripEntity(context: context)
         entity.id = UUID()
@@ -121,6 +125,7 @@ final class TripManager: ObservableObject {
         entity.maxSpeed = 0
         entity.averageSpeed = 0
         entity.vehicleId = vehicleId
+        entity.isTransfer = isTransfer
         entity.fuelCurrency = FuelCurrency.current
         entity.lastModifiedAt = Date()
         entity.userId = SettingsManager.shared.localUserId
@@ -136,6 +141,7 @@ final class TripManager: ObservableObject {
         activeTrip = Trip(
             id: tripId,
             startDate: startDate,
+            isTransfer: isTransfer,
             vehicleId: vehicleId
         )
         isRecording = true
@@ -418,7 +424,11 @@ final class TripManager: ObservableObject {
     private let driftSpeedThreshold: Double = 1.0  // m/s — GPS reports "stationary"
     private let driftCalcSpeedLimit: Double = 5.0  // m/s — but distance says "moving"
 
-    private func handleNewLocation(_ location: CLLocation) {
+    /// Не `private` ровно затем, чтобы тест мог позвать его напрямую:
+    /// настоящий путь идёт через `@Published private(set) currentLocation`,
+    /// которое извне не выставить, а пересборка `activeTrip` здесь уже дважды
+    /// теряла поля поездки, и ловить это на устройстве дорого.
+    func handleNewLocation(_ location: CLLocation) {
         guard isRecording, !isPaused, let entity = activeTripEntity else { return }
 
         // Filter: reject poor accuracy (check raw GPS before Kalman)
@@ -502,7 +512,17 @@ final class TripManager: ObservableObject {
             maxSpeed: entity.maxSpeed,
             averageSpeed: entity.averageSpeed,
             trackPoints: [], // don't load all points during tracking
-            vehicleId: entity.vehicleId // keep the car; rebuild would otherwise nil it every fix
+            // Обе пометки переносим из записи. Машину сюда дописали, когда
+            // выяснилось, что пересборка обнуляет её на каждом фиксе; про
+            // «ехал пассажиром» тогда речи не было, и она обнулялась ровно так
+            // же — через секунду после старта поездка в памяти переставала
+            // быть пассажирской, хотя в базе оставалась ею. Дальше по цепочке
+            // это стоило дорого: чип называл машину для поездки на такси, а
+            // проверка в шторке читала уже ложное `false` и не снимала метку —
+            // поездка получала И метку трансфера, И машину, и пассажирские
+            // километры наматывались на её одометр.
+            isTransfer: entity.isTransfer,
+            vehicleId: entity.vehicleId
         )
 
         // Batch saves: persist every N points or every M seconds

@@ -17,16 +17,36 @@ struct VehiclePickerSheet: View {
     /// trip editor — because there the write-through silently changed which
     /// vehicle the next recording would be stamped with.
     var persistsSelection: Bool = true
+    /// Показывать ли машины, на которые сейчас нельзя писать (в архиве,
+    /// проданные).
+    ///
+    /// На записи — нет: гараж обещает, что пишем на активную, и шторка обязана
+    /// говорить то же самое. В редакторе СТАРОЙ поездки — да: поездка могла
+    /// быть на машине, которую с тех пор убрали в архив или продали, и
+    /// запретить это указать значило бы запретить исправлять историю.
+    var includesArchived: Bool = false
+    /// Чья галочка стоит: `nil` — общий выбор приложения, `.some(x)` — значение
+    /// ЭТОЙ поездки (само по себе может быть `nil` = «без транспорта»).
+    ///
+    /// Двойной опционал ровно поэтому: «не передали» и «передали пусто» здесь
+    /// разные ответы. Без него редактор поездки, записанной на машину А, ставил
+    /// галочку на активную машину Б — то есть показывал не то, что правит.
+    var checkedVehicleId: UUID??
     /// Called with the picked vehicle, `nil` for «Без транспорта». The
     /// recording screen uses it to restamp the trip that is already running;
     /// the editor uses it to set the field. Both sides already take `UUID?` —
     /// a trip with no vehicle is a valid trip, all the way down.
     var onPick: ((UUID?) -> Void)?
-    /// Показывать ли строку «Ехал пассажиром» (0.6.3).
+    /// Показывать ли строку «Ехал пассажиром» (0.6.3, включена на записи в 0.6.4).
     ///
-    /// Это свойство КОНКРЕТНОЙ поездки, а не выбор машины «на будущее»,
-    /// поэтому строка появляется только там, где редактируют одну поездку.
-    /// На экране записи её нет: там выбирают, на чём поедешь, а не кем ехал.
+    /// Раньше строка жила только в редакторе поездки: рассуждение было, что на
+    /// экране записи выбирают, НА ЧЁМ поедешь, а не КЕМ ехал. На практике это
+    /// значило, что сказать «я пассажир» можно было только задним числом, уже
+    /// после поездки, — а до тех пор километры такси лежали на своей машине.
+    /// Решение отменено: строка есть и на записи тоже. Свойством КОНКРЕТНОЙ
+    /// поездки она при этом быть не перестала — в `selectedVehicleId` она не
+    /// пишется никогда, иначе следующая поездка молча унаследовала бы «я
+    /// пассажир».
     var showsTransferOption: Bool = false
     /// Помечена ли редактируемая поездка трансфером — для галочки.
     var isTransferSelected: Bool = false
@@ -53,7 +73,7 @@ struct VehiclePickerSheet: View {
 
             rows(c: c)
 
-            if settings.vehicles.isEmpty {
+            if listed.isEmpty {
                 emptyHint(c: c)
             }
 
@@ -99,6 +119,19 @@ struct VehiclePickerSheet: View {
         }
     }
 
+    /// Что вообще показано в списке. Единственное место, где шторка решает
+    /// этот вопрос, — и после фильтра список может стать короче гаража, но
+    /// никогда длиннее, поэтому измерение высоты выше остаётся верным.
+    private var listed: [Vehicle] {
+        includesArchived ? settings.vehicles : settings.recordableVehicles
+    }
+
+    /// Машина, у которой стоит галочка.
+    private var checked: UUID? {
+        if case let .some(explicit) = checkedVehicleId { return explicit }
+        return settings.selectedVehicleId
+    }
+
     private static let rowSpacing: CGFloat = 4
 
     // MARK: - Chrome
@@ -124,7 +157,7 @@ struct VehiclePickerSheet: View {
             if showsTransferOption {
                 transferRow(c: c)
             }
-            ForEach(settings.vehicles) { vehicle in
+            ForEach(listed) { vehicle in
                 vehicleRow(vehicle, c: c)
             }
         }
@@ -181,7 +214,7 @@ struct VehiclePickerSheet: View {
         // dangling id behind, and a strict `== nil` then put the checkmark on
         // no row at all. VehicleChip already reads that same state as «Без
         // транспорта» — the sheet has to agree with the chip that opened it.
-        let selected = settings.vehicle(for: settings.selectedVehicleId) == nil
+        let selected = !isTransferSelected && settings.vehicle(for: checked) == nil
         return Button {
             Haptics.selection()
             if persistsSelection {
@@ -215,7 +248,7 @@ struct VehiclePickerSheet: View {
     }
 
     private func vehicleRow(_ vehicle: Vehicle, c: AppTheme.Colors) -> some View {
-        let selected = vehicle.id == settings.selectedVehicleId
+        let selected = !isTransferSelected && vehicle.id == checked
         return Button {
             Haptics.selection()
             // Persist the pick — a bare `selectedVehicleId =` would not write
@@ -265,7 +298,7 @@ struct VehiclePickerSheet: View {
                             VehiclePlateChip(plate: vehicle.plate, size: 10)
                         }
                     }
-                    Text("\(GarageFormat.odometer(vehicle.displayOdometerKm)) \(AppStrings.km(lang.language))")
+                    Text("\(GarageFormat.odometer(vehicle.displayOdometerKm, lng: lang.language)) \(AppStrings.km(lang.language))")
                         .font(.system(size: 12))
                         .foregroundStyle(c.textTertiary)
                 }

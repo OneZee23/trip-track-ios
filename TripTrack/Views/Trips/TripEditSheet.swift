@@ -195,6 +195,12 @@ struct TripEditSheet: View {
         .sheet(isPresented: $showVehiclePicker) {
             VehiclePickerSheet(
                 persistsSelection: false,
+                // Старую поездку могли записать на машину, которую с тех пор
+                // убрали в архив или продали. Спрятать её здесь значило бы
+                // запретить исправить историю — а исправление истории платным
+                // или запретным не бывает.
+                includesArchived: true,
+                checkedVehicleId: .some(vehicleId),
                 onPick: { picked in
                     vehicleId = picked
                     // Выбрали машину — значит за рулём был человек сам.

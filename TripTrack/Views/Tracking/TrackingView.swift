@@ -106,7 +106,10 @@ struct TrackingView: View {
                     // так что уход на другой экран её не обрывает.
                     backButton
                     if viewModel.isRecording {
-                        VehicleChip(compact: true) { showVehiclePicker = true }
+                        VehicleChip(compact: true,
+                                    isTransfer: viewModel.tripManager.activeTrip?.isTransfer ?? false) {
+                            showVehiclePicker = true
+                        }
                     }
                     Spacer()
                     if !(viewModel.locationDenied && !viewModel.isRecording) {
@@ -167,11 +170,28 @@ struct TrackingView: View {
             // Метка `onPick:` обязательна: после появления `onPickTransfer`
             // хвостовое замыкание без метки всё ещё связывается верно, но
             // компилятор ругается на устаревшее обратное сопоставление.
-            VehiclePickerSheet(onPick: { picked in
-                guard viewModel.isRecording,
-                      let tripId = viewModel.tripManager.activeTrip?.id else { return }
-                viewModel.tripManager.updateVehicle(for: tripId, vehicleId: picked)
-            })
+            VehiclePickerSheet(
+                checkedVehicleId: .some(viewModel.tripManager.activeTrip?.vehicleId),
+                onPick: { picked in
+                    guard viewModel.isRecording,
+                          let tripId = viewModel.tripManager.activeTrip?.id else { return }
+                    // ПОРЯДОК ВАЖЕН: `setTransfer(true)` внутри себя обнуляет
+                    // машину, поэтому снимать метку надо ДО того, как машину
+                    // назначили. Наоборот — и только что выбранная машина
+                    // молча улетит в nil, а поездка окажется ничьей.
+                    if viewModel.tripManager.activeTrip?.isTransfer == true {
+                        viewModel.tripManager.setTransfer(for: tripId, isTransfer: false)
+                    }
+                    viewModel.tripManager.updateVehicle(for: tripId, vehicleId: picked)
+                },
+                showsTransferOption: true,
+                isTransferSelected: viewModel.tripManager.activeTrip?.isTransfer ?? false,
+                onPickTransfer: {
+                    guard viewModel.isRecording,
+                          let tripId = viewModel.tripManager.activeTrip?.id else { return }
+                    viewModel.tripManager.setTransfer(for: tripId, isTransfer: true)
+                }
+            )
             .environmentObject(lang)
         }
         .overlay {
@@ -820,7 +840,9 @@ struct TrackingView: View {
                     withAnimation(.easeInOut(duration: 0.25)) {
                         viewModel.startRefusal = .noFix
                     }
-                }
+                },
+                isTransfer: viewModel.pendingTransfer,
+                onSetTransfer: { viewModel.pendingTransfer = $0 }
             )
             .padding(.bottom, controlBlockBottomInset)
         }

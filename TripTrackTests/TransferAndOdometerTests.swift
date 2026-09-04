@@ -1,4 +1,6 @@
 import XCTest
+import CoreData
+import CoreLocation
 @testable import TripTrack
 
 /// Трансфер и двойной одометр (0.6.3).
@@ -24,6 +26,60 @@ final class TransferAndOdometerTests: XCTestCase {
             isTransfer: transfer,
             vehicleId: vehicle
         )
+    }
+
+    // MARK: - Пометка ставится в момент старта (0.6.4)
+
+    /// «Ехал пассажиром» раньше можно было указать только ЗАДНИМ ЧИСЛОМ, в
+    /// редакторе поездки: до этого километры такси лежали на своей машине.
+    /// Теперь пометка ставится при старте — и обязана попасть на поездку
+    /// вместе с отсутствием машины, одним движением.
+    func testTransferIsStampedAtStartAlongWithNoVehicle() {
+        let pc = PersistenceController(inMemory: true)
+        let manager = TripManager(locationManager: LocationManager(), persistenceController: pc)
+
+        manager.startTrip(vehicleId: nil, isTransfer: true)
+
+        XCTAssertEqual(manager.activeTrip?.isTransfer, true,
+                       "пометка не доехала до поездки в памяти")
+        XCTAssertNil(manager.activeTrip?.vehicleId,
+                     "у пассажирской поездки машины нет по определению")
+        // Через сам store, а не через `activeTripEntity` (он приватный): важно
+        // именно то, что пометка легла НА ДИСК — после перезапуска поездка
+        // иначе снова окажется «за рулём».
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        let saved = (try? pc.container.viewContext.fetch(request))?.first
+        XCTAssertEqual(saved?.isTransfer, true)
+        XCTAssertNil(saved?.vehicleId)
+    }
+
+    /// Обычная поездка не должна нахватать пометку по умолчанию.
+    func testAnOrdinaryStartIsNotATransfer() {
+        let pc = PersistenceController(inMemory: true)
+        let manager = TripManager(locationManager: LocationManager(), persistenceController: pc)
+        let car = UUID()
+
+        manager.startTrip(vehicleId: car)
+
+        XCTAssertEqual(manager.activeTrip?.isTransfer, false)
+        XCTAssertEqual(manager.activeTrip?.vehicleId, car)
+    }
+
+    /// Пометка обязана пережить пересборку `activeTrip`, которая случается на
+    /// КАЖДОМ фиксе GPS. Она её не переживала: через секунду после старта
+    /// поездка в памяти переставала быть пассажирской, и дальше по цепочке
+    /// шторка на ходу назначала ей машину, не сняв метку, — километры такси
+    /// наматывались на одометр.
+    func testTransferSurvivesTheActiveTripRebuildOnEveryFix() {
+        let pc = PersistenceController(inMemory: true)
+        let manager = TripManager(locationManager: LocationManager(), persistenceController: pc)
+        manager.startTrip(vehicleId: nil, isTransfer: true)
+
+        manager.handleNewLocation(CLLocation(latitude: 45.03, longitude: 38.97))
+        manager.handleNewLocation(CLLocation(latitude: 45.04, longitude: 38.98))
+
+        XCTAssertEqual(manager.activeTrip?.isTransfer, true,
+                       "после фикса поездка в памяти перестала быть пассажирской")
     }
 
     // MARK: - Трансфер и пробег машины
