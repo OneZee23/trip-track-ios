@@ -16,16 +16,27 @@ struct VehiclePhotoImage: View {
         case remote(url: URL)
     }
 
+    /// Что рисовать, пока снимка нет.
+    enum Placeholder {
+        /// Ровная подложка и значок «фотография» — когда за картинкой пусто.
+        case neutral
+        /// Ничего: под снимком уже лежит силуэт машины, и он лучше любой
+        /// заглушки — не грузится фотография, остаётся машина.
+        case transparent
+    }
+
     let source: Source
     /// Наибольшая сторона в точках — ровно та, в которой снимок покажут.
     let maxSize: CGFloat
+    var placeholder: Placeholder = .neutral
 
     @State private var image: UIImage?
     @State private var isExact: Bool
     @State private var missing = false
 
-    init(source: Source, maxSize: CGFloat) {
+    init(source: Source, maxSize: CGFloat, placeholder: Placeholder = .neutral) {
         self.source = source
+        self.placeholder = placeholder
         // Размер ПРИЖИМАЕТСЯ к общей лестнице. Без этого каждый экран просил
         // свой, чуть отличающийся: 132, 201, 504 — и ключи не совпадали ни с
         // чем, то есть кэш промахивался всегда, а копий в памяти становилось
@@ -38,14 +49,19 @@ struct VehiclePhotoImage: View {
 
     /// Свой снимок по строке из базы — обёртка ради вызывающих, которые
     /// держат `VehiclePhoto`.
-    init(photo: VehiclePhoto, maxSize: CGFloat) {
-        self.init(source: .local(filename: photo.filename), maxSize: maxSize)
+    init(photo: VehiclePhoto, maxSize: CGFloat, placeholder: Placeholder = .neutral) {
+        self.init(source: .local(filename: photo.filename),
+                  maxSize: maxSize, placeholder: placeholder)
     }
 
     var body: some View {
         Group {
             if let image {
                 Image(uiImage: image).resizable().scaledToFill()
+            } else if placeholder == .transparent {
+                // Ничего не рисуем: под нами силуэт машины, и пусть он и
+                // остаётся, если снимок не доехал.
+                Color.clear
             } else if missing {
                 // Файл исчез, а строка осталась: заглушка честнее пустоты —
                 // пустой прямоугольник читается как «грузится» и никогда не

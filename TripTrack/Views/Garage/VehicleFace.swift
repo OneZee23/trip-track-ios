@@ -104,14 +104,25 @@ struct VehicleFace: View {
             // поверх неё её не сжимает, а обрезает — спрайт вылезал за
             // пределы плиты вбок. Фотографии рамка нужна, плите — нет.
             switch photo {
-            case .local(let p) where p != nil:
-                VehiclePhotoImage(photo: p!, maxSize: maxSize)
-                    .frame(width: side, height: side)
-            case .remote(let url) where !(url ?? "").isEmpty:
-                if let parsed = URL(string: url!) {
-                    VehiclePhotoImage(source: .remote(url: parsed), maxSize: maxSize)
-                        .frame(width: side, height: side)
-                }
+            case .local, .remote:
+                // Силуэт лежит ПОД снимком и просвечивает, пока тот грузится
+                // или если не доехал вовсе. Раньше на его месте была серая
+                // плашка со значком «фотография» — в превью на профиле она
+                // читалась как поломка, при том что нарисованная машина у нас
+                // есть всегда.
+                // Именно НАЛОЖЕНИЕ, а не стопка: `overlay` получает размер
+                // от того, на что накладывается, — то есть от силуэта, который
+                // считает свою высоту сам. В `ZStack` снимок размера не имеет
+                // и растягивает стопку до своих настоящих пропорций: плитка на
+                // профиле превращалась в вертикальный кадр во всю карточку.
+                VehicleSpritePlate(
+                    assetName: assetName,
+                    fallbackEmoji: fallbackEmoji,
+                    plateSize: side,
+                    uniformHeight: true,
+                    cornerRadius: style.corner
+                )
+                .overlay { photoLayer }
             default:
                 VehicleSpritePlate(
                     assetName: assetName,
@@ -152,6 +163,22 @@ struct VehicleFace: View {
 
     /// Ровно та высота, в которой полосу и покажут: просить у декодера больше —
     /// это мегабайты в память на каждую карточку.
+    /// Сам снимок, без подложки: её роль играет силуэт под ним.
+    @ViewBuilder
+    private var photoLayer: some View {
+        switch photo {
+        case .local(let p) where p != nil:
+            VehiclePhotoImage(photo: p!, maxSize: maxSize, placeholder: .transparent)
+        case .remote(let url) where !(url ?? "").isEmpty:
+            if let parsed = URL(string: url!) {
+                VehiclePhotoImage(source: .remote(url: parsed),
+                                  maxSize: maxSize, placeholder: .transparent)
+            }
+        default:
+            EmptyView()
+        }
+    }
+
     /// В ТОЧКАХ: на пиксели умножит кэш, по масштабу экрана.
     private var maxSize: CGFloat {
         switch style {

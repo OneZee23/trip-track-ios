@@ -74,28 +74,31 @@ struct VehiclePhotosView: View {
             guard !items.isEmpty else { return }
             Task { await save(items) }
         }
-        .fullScreenCover(item: Binding(
-            get: { viewerIndex.map { ViewerStart(index: $0) } },
-            set: {
-                if $0 == nil {
-                    viewerIndex = nil
-                    // Порядок и «главная» приводятся в соответствие ЗДЕСЬ, когда
-                    // просмотрщик уже закрыт и переезд карточек никого не собьёт.
-                    reload()
-                }
-            }
-        )) { start in
+        // `onDismiss`, а НЕ работа в сеттере привязки.
+        //
+        // Сеттер вызывается в тот же миг, что и анимация закрытия, и всё, что
+        // в нём стоит, выполняется поверх неё: выборка из CoreData, проверка
+        // каждого файла на диске, иногда сохранение. Свайп вниз получался
+        // вязким — заметно хуже, чем тот же жест в фотографиях поездки, где в
+        // этом месте только сброс индекса. Здесь список перечитывается уже
+        // ПОСЛЕ того, как просмотрщик ушёл.
+        .fullScreenCover(
+            item: Binding(
+                get: { viewerIndex.map { ViewerStart(index: $0) } },
+                set: { if $0 == nil { viewerIndex = nil } }
+            ),
+            onDismiss: { reload() }
+        ) { start in
             PhotoFullScreenView(
                 pages: viewerPages,
                 initialIndex: start.index,
                 language: lang.language,
                 onDelete: { id in
+                    // Только исполняем удаление. Страницу убирает и переводит
+                    // взгляд сам просмотрщик: массив снаружи он не слушает —
+                    // подмена списка под открытым листателем и была причиной
+                    // того, что удалённый снимок оставался на экране.
                     VehiclePhotoStore.delete(id, of: vehicleId)
-                    // Из открытого просмотрщика страница убирается по месту, а
-                    // не пересборкой всего массива: остальные не должны
-                    // переехать под пальцем.
-                    viewerPages.removeAll { $0.id == id }
-                    if viewerPages.isEmpty { viewerIndex = nil }
                 },
                 onSetMain: { id in
                     VehiclePhotoStore.makeMain(id, of: vehicleId)

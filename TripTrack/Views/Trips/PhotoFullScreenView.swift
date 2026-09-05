@@ -52,6 +52,14 @@ struct PhotoFullScreenView: View {
 
     /// Which page the pager has actually LANDED on. Driving the pager by
     /// index through a `TabView` is what this replaces — see `pager`.
+    /// Список страниц ЖИВЁТ ЗДЕСЬ, а не приходит снаружи на каждый кадр.
+    ///
+    /// Удаление снимка меняло массив у владельца, а листатель со своим
+    /// положением прокрутки об этом не знал: удалённая страница оставалась
+    /// на экране, счётчик прыгал, и всё вместе выглядело дёрганно. Теперь
+    /// страницу убирает сам просмотрщик — он же и переводит взгляд на
+    /// соседнюю, — а владелец только исполняет удаление у себя.
+    @State private var livePages: [Page]
     @State private var currentPageID: UUID?
     @State private var currentIndex: Int
     @State private var confirmingDelete = false
@@ -91,6 +99,7 @@ struct PhotoFullScreenView: View {
         self.isMain = isMain
         self.onDismiss = onDismiss
         let start = pages.indices.contains(initialIndex) ? initialIndex : 0
+        _livePages = State(initialValue: pages)
         _currentIndex = State(initialValue: start)
         _currentPageID = State(initialValue: pages.isEmpty ? nil : pages[start].id)
     }
@@ -138,10 +147,7 @@ struct PhotoFullScreenView: View {
             title: AppStrings.deletePhoto(language),
             actions: [
                 AppDialogAction(AppStrings.delete(language), kind: .destructive) {
-                    guard pages.indices.contains(currentIndex) else { return }
-                    // Hands the page to the OWNER, which closes the viewer —
-                    // the dialog is already gone by the time this runs.
-                    onDelete?(pages[currentIndex].id)
+                    deleteCurrent()
                 }
             ],
             cancelTitle: AppStrings.cancel(language)
@@ -149,11 +155,40 @@ struct PhotoFullScreenView: View {
         .onChange(of: currentPageID) { _, id in
             // `.scrollPosition` can publish nil while a target is off screen;
             // only a real landing counts as a page turn.
-            guard let id, let index = pages.firstIndex(where: { $0.id == id }) else { return }
+            guard let id, let index = livePages.firstIndex(where: { $0.id == id }) else { return }
             currentIndex = index
             // A new page starts at rest scale; the zoom belonged to the old one.
             zoomScale = 1
         }
+    }
+
+    /// Убрать текущую страницу и перевести взгляд на соседнюю.
+    ///
+    /// Порядок важен: сначала выбираем, куда смотреть, потом убираем страницу.
+    /// Наоборот — и `scrollPosition` на мгновение указывает в никуда, отчего
+    /// листатель прыгает к началу.
+    private func deleteCurrent() {
+        guard livePages.indices.contains(currentIndex) else { return }
+        let removed = livePages[currentIndex]
+
+        // Соседняя — следующая, а если удаляем последнюю, то предыдущая.
+        let neighbour: Page? = currentIndex + 1 < livePages.count
+            ? livePages[currentIndex + 1]
+            : (currentIndex > 0 ? livePages[currentIndex - 1] : nil)
+
+        guard let neighbour else {
+            // Был единственный снимок — смотреть больше не на что.
+            onDelete?(removed.id)
+            onDismiss()
+            return
+        }
+
+        currentPageID = neighbour.id
+        withAnimation(.easeInOut(duration: 0.2)) {
+            livePages.removeAll { $0.id == removed.id }
+        }
+        currentIndex = livePages.firstIndex(where: { $0.id == neighbour.id }) ?? 0
+        onDelete?(removed.id)
     }
 
     // MARK: - Pages
@@ -179,7 +214,7 @@ struct PhotoFullScreenView: View {
     private var pager: some View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
-                ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
+                ForEach(Array(livePages.enumerated()), id: \.element.id) { index, page in
                     PhotoPage(
                         source: page.source,
                         onZoomChange: { scale in
@@ -301,14 +336,14 @@ struct PhotoFullScreenView: View {
         HStack(spacing: 12) {
             Spacer(minLength: 0)
             if let onSetMain {
-                let already = isMain?(pages[currentIndex].id) ?? false
+                let already = isMain?(livePages[currentIndex].id) ?? false
                 circleButton(already ? "star.fill" : "star",
                              label: AppStrings.vehiclePhotoMakeMain(language),
                              id: "photo_viewer_main",
                              tint: already ? AppTheme.accent : .white) {
                     guard !already else { return }
                     Haptics.tap()
-                    onSetMain(pages[currentIndex].id)
+                    onSetMain(livePages[currentIndex].id)
                 }
             }
             if onDelete != nil {
@@ -320,7 +355,7 @@ struct PhotoFullScreenView: View {
                 circleButton("flag", label: AppStrings.reportProfileAction(language),
                              id: "photo_viewer_report") {
                     Haptics.tap()
-                    onReport(pages[currentIndex].id)
+                    onReport(livePages[currentIndex].id)
                 }
             }
             // No share button: a photo is shared as part of the trip, from
@@ -354,7 +389,7 @@ struct PhotoFullScreenView: View {
     private var bottomBlock: some View {
         VStack(spacing: 6) {
             if pages.count > 1 {
-                Text("\(currentIndex + 1) / \(pages.count)")
+                Text("\(currentIndex + 1) / \(livePages.count)")
                     .font(.system(size: 17, weight: .bold).monospacedDigit())
                     .foregroundStyle(.white)
                     .accessibilityIdentifier("photo_viewer_counter")
@@ -390,7 +425,7 @@ struct PhotoFullScreenView: View {
     private var captionLine: String? {
         guard pages.indices.contains(currentIndex) else { return nil }
         let f = Self.captionFormatters[language]
-        var line = f?.string(from: pages[currentIndex].timestamp) ?? ""
+        var line = f?.string(from: livePages[currentIndex].timestamp) ?? ""
         if let region, !region.isEmpty {
             line += " · \(region)"
         }
@@ -410,6 +445,33 @@ private struct PhotoPage: View {
 
     @State private var image: UIImage?
     @State private var failed = false
+
+    /// Готовая копия — сразу, в том же кадре. Иначе на каждой странице
+    /// сначала показывается заглушка, даже когда картинка давно разобрана и
+    /// лежит в памяти.
+    init(source: FullScreenPhotoSource,
+         onZoomChange: @escaping (CGFloat) -> Void = { _ in },
+         onDismissDrag: @escaping (CGFloat) -> Void = { _ in },
+         onDismissDragEnded: @escaping (CGFloat, CGFloat) -> Void = { _, _ in },
+         onSingleTap: @escaping () -> Void = {}) {
+        self.source = source
+        self.onZoomChange = onZoomChange
+        self.onDismissDrag = onDismissDrag
+        self.onDismissDragEnded = onDismissDragEnded
+        self.onSingleTap = onSingleTap
+        switch source {
+        case .vehicle(let filename):
+            _image = State(initialValue: VehicleImageCache.cached(
+                VehicleImageCache.localKey(filename, Self.fullScreenSize)))
+        case .remote(let urlString):
+            if let urlString, let url = URL(string: urlString) {
+                _image = State(initialValue: VehicleImageCache.cached(
+                    VehicleImageCache.remoteKey(url, Self.fullScreenSize)))
+            }
+        case .local:
+            break
+        }
+    }
 
     var body: some View {
         Group {
@@ -454,6 +516,20 @@ private struct PhotoPage: View {
         }
     }
 
+    /// Ступень лестницы размеров для полного экрана. Ровно столько, чтобы
+    /// кадр был резким по размеру экрана: больше — это мегабайты, которые
+    /// потом двигает палец.
+    private static let fullScreenSize: CGFloat = 460
+
+    // Своих жестов на заглушке НЕТ — ни обычных, ни одновременных.
+    //
+    // Пробовал: заглушка отбирала касание у прокрутки, и листание между
+    // снимками переставало работать вовсе. Прокрутка и жест внутри картинки
+    // уже согласованы между собой (`panGestureRecognizer.require(toFail:)`),
+    // и вставать третьим в эту пару нельзя. Ответ другой: сделать так, чтобы
+    // заглушки почти не было — картинка берётся из кэша сразу, а удалённая
+    // качается один раз и дальше живёт на диске.
+
     private func load() async {
         switch source {
         case .local(let filename):
@@ -462,10 +538,18 @@ private struct PhotoPage: View {
             image = loaded
             failed = loaded == nil
         case .vehicle(let filename):
+            // Через кэш и с уменьшением, а не `UIImage(contentsOfFile:)`.
+            //
+            // Тот разворачивал в память ПОЛНЫЙ кадр с камеры — двенадцать
+            // мегапикселей на страницу, заново при каждом открытии
+            // просмотрщика, и потом эту громадину таскал по экрану жест. Свайп
+            // вниз от этого получался вязким; у фотографий поездки в этом
+            // месте кэширующий сервис, потому там жест и приятнее.
             let url = VehiclePhotoStore.directory.appendingPathComponent(filename)
-            let loaded = await Task.detached(priority: .userInitiated) {
-                UIImage(contentsOfFile: url.path)
-            }.value
+            let loaded = await VehicleImageCache.sized(
+                fileURL: url,
+                key: VehicleImageCache.localKey(filename, Self.fullScreenSize),
+                maxSize: Self.fullScreenSize)
             if Task.isCancelled { return }
             image = loaded
             failed = loaded == nil
@@ -474,16 +558,14 @@ private struct PhotoPage: View {
                 failed = true
                 return
             }
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                if Task.isCancelled { return }
-                let decoded = UIImage(data: data)
-                image = decoded
-                failed = decoded == nil
-            } catch {
-                if Task.isCancelled { return }
-                failed = true
-            }
+            // Через общий кэш: скачивается один раз, дальше берётся с диска и
+            // уменьшается до размера экрана. Раньше каждое открытие тянуло
+            // полный кадр по сети заново — и всё это время на странице висела
+            // заглушка, на которой не работало ни листание, ни закрытие.
+            let loaded = await VehicleImageCache.remote(url, maxSize: Self.fullScreenSize)
+            if Task.isCancelled { return }
+            image = loaded
+            failed = loaded == nil
         }
     }
 }
