@@ -14,6 +14,8 @@ struct GarageView: View {
     /// и без причины, потому что данные лежат на устройстве. Запрос запомнен в
     /// хранилище, поэтому пересоздание экрана его не повторяет.
     @State private var mainPhotos: [UUID: VehiclePhoto] = VehiclePhotoStore.mainPhotos()
+    /// Сколько поездок возила каждая машина — одним запросом на весь гараж.
+    @State private var tripCounts: [UUID: Int] = [:]
 
     @ObservedObject private var settings = SettingsManager.shared
 
@@ -42,7 +44,17 @@ struct GarageView: View {
                 }
             }
             .background(c.bg)
-        .task(id: settings.vehicles.count) { mainPhotos = VehiclePhotoStore.mainPhotos() }
+        .task(id: settings.vehicles.count) {
+            mainPhotos = VehiclePhotoStore.mainPhotos()
+            tripCounts = await Task.detached(priority: .userInitiated) { () -> [UUID: Int] in
+                let repo: TripRepository = CoreDataTripRepository()
+                var counts: [UUID: Int] = [:]
+                for trip in repo.fetchTripsForMap() where !trip.isTransfer {
+                    if let id = trip.vehicleId { counts[id, default: 0] += 1 }
+                }
+                return counts
+            }.value
+        }
         .onChange(of: detailVehicleId) { _, id in
             // Вернулись с экрана машины — там могли сменить главную.
             if id == nil { mainPhotos = VehiclePhotoStore.mainPhotos() }
@@ -235,36 +247,59 @@ struct GarageView: View {
                 // и когда фотографии нет, в ней стоит силуэт: разная высота
                 // соседних карточек читается как поломка вёрстки, а не как
                 // «у этой машины есть фото, а у той нет».
-                VehicleFace(
-                    photo: .local(mainPhotos[vehicle.id]),
-                    assetName: vehicle.avatarImageName,
-                    fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
-                    style: .banner,
-                    dimmed: vehicle.isSold
-                )
-
-                VStack(alignment: .leading, spacing: 6) {
-                    nameRow(vehicle, isMain: isMain, c: c, l: l)
-                    identityLine(vehicle, c: c, l: l)
-
-                    // The level line lives in this column, not across the
-                    // whole card. Run full-bleed under the avatar it reads
-                    // as a loading bar the card is waiting on; kept beside
-                    // the name it reads as one more fact about the car,
-                    // which is what it is.
-                    HStack(spacing: 10) {
-                        // Bar and pill share the decade colour: two
-                        // different colours for one level would read as
-                        // two facts.
-                        VehicleXPBar(
-                            progress: vehicle.progressToNextLevel,
-                            tint: vehicle.levelColor
-                        )
-                        VehicleLevelPill(level: vehicle.level, size: 9)
-                    }
-                    .padding(.top, 2)
+                // Полоса рисуется ТОЛЬКО когда есть фотография.
+                //
+                // Пока силуэт стоял в ней, полоса имела смысл и без снимка. Но
+                // теперь силуэт есть в строке ниже — и без фотографии он
+                // оказывался на карточке дважды: крупно в полосе и маленьким у
+                // имени. Полоса — это место под снимок; нет снимка — нет места.
+                if let photo = mainPhotos[vehicle.id] {
+                    VehicleFace(
+                        photo: .local(photo),
+                        assetName: vehicle.avatarImageName,
+                        fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
+                        style: .banner,
+                        dimmed: vehicle.isSold
+                    )
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // ПРОБА (ветка try/garage-look): силуэт рядом с фотографией,
+                // а не вместо неё, и два крупных числа вместо пяти мелких.
+                //
+                // Взято с постерного баннера 0.6.4: там сцена сверху, а под ней
+                // тот же силуэт как опознавательный знак рядом с цифрами.
+                // Силуэт — единственное, что делает карточку узнаваемо нашей и
+                // читаемой, когда снимок тёмный или снят криво.
+                // По центру, а не по верху: силуэт — это лицо машины, и он
+                // должен смотреть на весь блок с именем и цифрами, а не
+                // прижиматься к первой строке.
+                HStack(alignment: .center, spacing: 12) {
+                    VehicleSpritePlate(
+                        assetName: vehicle.avatarImageName,
+                        fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
+                        plateSize: 52,
+                        uniformHeight: true,
+                        cornerRadius: 12
+                    )
+                    .opacity(vehicle.isSold ? 0.55 : 1)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        nameRow(vehicle, isMain: isMain, c: c, l: l)
+                        identityLine(vehicle, c: c, l: l)
+
+                        HStack(spacing: 10) {
+                            VehicleXPBar(
+                                progress: vehicle.progressToNextLevel,
+                                tint: vehicle.levelColor
+                            )
+                            VehicleLevelPill(level: vehicle.level, size: 9)
+                        }
+                        .padding(.top, 2)
+
+                        factsLine(vehicle, c: c, l: l)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 .padding(14)
             }
             // Обрезаем ЗДЕСЬ: полоса идёт во всю ширину, а `surfaceCard` только
@@ -323,6 +358,36 @@ struct GarageView: View {
         }
     }
 
+    /// Два факта крупно, со значками вместо слов — как на баннере.
+    ///
+    /// Раньше километры стояли пятым по счёту мелким кеглем и терялись между
+    /// именем, моделью и полосой уровня. Здесь их видно с расстояния, а рядом
+    /// — сколько поездок эта машина возила: второе число объясняет первое.
+    private func factsLine(
+        _ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language
+    ) -> some View {
+        HStack(spacing: 14) {
+            fact("mappin", GarageFormat.odometer(vehicle.displayOdometerKm, lng: l)
+                 + " " + AppStrings.km(l), c: c)
+            if let trips = tripCounts[vehicle.id], trips > 0 {
+                fact("flag.checkered", "\(trips) " + AppStrings.nounTrips(l, trips), c: c)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func fact(_ symbol: String, _ text: String, c: AppTheme.Colors) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(c.textTertiary)
+            Text(text)
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundStyle(c.text)
+                .monospacedDigit()
+        }
+    }
+
     private func nameRow(
         _ vehicle: Vehicle,
         isMain: Bool,
@@ -377,14 +442,13 @@ struct GarageView: View {
         c: AppTheme.Colors,
         l: LanguageManager.Language
     ) -> some View {
+        // Только номер. Километры отсюда УБРАНЫ: они переехали в строку
+        // фактов ниже и стояли бы на карточке дважды — у машины без номера
+        // «8 км» печаталось и здесь, и там.
         if vehicle.hasPlate {
             // The owner's own screen — `plate`, not `publicPlate`, which is
             // about what everyone else may see.
             VehiclePlateChip(plate: vehicle.plate)
-        } else {
-            Text("\(GarageFormat.odometer(vehicle.displayOdometerKm, lng: l)) \(AppStrings.km(l))")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(c.textTertiary)
         }
     }
 
