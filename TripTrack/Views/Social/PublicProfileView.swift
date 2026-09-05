@@ -1185,14 +1185,15 @@ struct PublicProfileView: View {
                 // Не больше четырёх: дальше силуэты мельчают до нечитаемости,
                 // а число рядом всё равно называет полное количество.
                 ForEach(garagePreviewVehicles.prefix(4)) { v in
-                    VehicleFace(
-                        photo: .remote(v.mainPhoto),
+                    // См. `ProfileView`: в превью силуэт, фотографии — в гараже.
+                    VehicleSpritePlate(
                         assetName: VehicleAvatar.assetName(
                             style: v.avatarStyle, avatar: v.avatarEmoji),
                         fallbackEmoji: v.avatarEmoji,
-                        style: .thumb(44),
-                        dimmed: v.isSold
+                        plateSize: 44,
+                        cornerRadius: 10
                     )
+                    .opacity(v.isSold ? 0.45 : 1)
                 }
                 Spacer(minLength: 8)
                 Text("\(garagePreviewVehicles.count) " + AppStrings.nounVehicles(lng, garagePreviewVehicles.count))

@@ -107,16 +107,6 @@ struct PublicVehicleView: View {
         // иначе на экране две кнопки «назад», и непонятно, чем они разные.
         .toolbar(.hidden, for: .navigationBar)
         .task(id: vehicleId) { await load() }
-        // Домовой список действий, не системное меню — см. «Dialogs» в CLAUDE.md.
-        //
-        // Именно `popover`, как на своём паспорте машины, а НЕ лист. Лист на
-        // 140 точек вокруг одной строки давал огромную плиту с пунктом
-        // посередине и пустотой под ним: список рассчитан на компактное
-        // окно у кнопки и сам просит `presentationCompactAdaptation(.popover)`,
-        // а поставленный в лист теряет и якорь, и размер.
-        .popover(isPresented: $showActions, arrowEdge: .top) {
-            ActionPopoverList(items: actionItems(l))
-        }
         .navigationDestination(isPresented: $showMap) {
             // Тот же экран, что показывает публичную карту человека, но
             // суженный до одной машины: фильтр по `vehicleId` проверяет сервер.
@@ -203,6 +193,15 @@ struct PublicVehicleView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(AppStrings.moreActions(l))
+                // Всплывающее окно вешается НА КНОПКУ, а не на экран.
+                //
+                // Попап якорится к тому, на что он навешен: с экрана он
+                // цеплялся за его левый верхний угол и выезжал пилюлей в
+                // стороне от «…», которую человек нажал. На своём паспорте
+                // машины он висит на кнопке — потому там и выглядит правильно.
+                .popover(isPresented: $showActions, arrowEdge: .top) {
+                    ActionPopoverList(items: actionItems(l))
+                }
             }
         }
         .padding(.horizontal, 12)

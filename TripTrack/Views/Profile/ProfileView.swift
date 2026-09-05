@@ -826,13 +826,17 @@ struct ProfileView: View {
             push(.garage)
         } label: {
             HStack(spacing: 12) {
-                VehicleFace(
-                    // Через запомненную карту, а не выборкой на каждый кадр:
-                    // строка живёт в теле экрана профиля.
-                    photo: .local(VehiclePhotoStore.mainPhotos()[vehicle.id]),
+                // Силуэт, а не фотография. Фотография здесь пробовалась и
+                // дважды ломала строку: снимок в маленькой плитке не имеет
+                // своего размера и растягивал её до настоящих пропорций кадра.
+                // Превью — это упоминание машины, а не показ; фотографии живут
+                // в самом гараже, куда эта строка и ведёт.
+                VehicleSpritePlate(
                     assetName: vehicle.avatarImageName,
                     fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
-                    style: .thumb(44)
+                    plateSize: 44,
+                    uniformHeight: true,
+                    cornerRadius: 10
                 )
 
                 VStack(alignment: .leading, spacing: 3) {
