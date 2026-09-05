@@ -6,6 +6,36 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ## v0.6.4 — vehicle passport (current submission)
 
+### Короткая версия — вставить в App Store Connect
+
+Ровно то, что нужно ревьюеру: что нового и где жалоба. Длинная версия ниже —
+для нас, не для формы.
+
+```
+TripTrack 0.6.4 adds a "passport" for each vehicle in the user's garage:
+photos, make/model/year, an optional licence plate, and stats derived from
+trips already recorded on the device. A user may open another person's garage
+if that person made it public.
+
+User-generated content and moderation (1.2):
+• Vehicle photos, names, notes and plates are user content and can be public.
+• Report a vehicle: the "..." button in the header of its page.
+• Report a single photo: the flag button in the full-screen photo viewer.
+• Block a user: their profile "..." menu — hides their garage both ways.
+• Reports go to the same queue as trips and profiles, actioned within 24h.
+
+Privacy defaults:
+• Everything about a vehicle is off or private until the owner turns it on.
+• For vehicles that existed before this version, the route map is switched OFF
+  on upgrade — a vehicle's map effectively shows where its owner lives.
+• Photos leave the device only if the user enables Cloud Sync, which is off by
+  default.
+
+No special account is needed. Sign in with Apple is optional; a demo account is
+in App Review Information.
+```
+
+
 Self-contained: paste the **English** block below into App Store Connect →
 App Review Information → Notes. It replaces the 0.6.3 notes entirely.
 
