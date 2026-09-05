@@ -270,7 +270,10 @@ struct GarageView: View {
                 // тот же силуэт как опознавательный знак рядом с цифрами.
                 // Силуэт — единственное, что делает карточку узнаваемо нашей и
                 // читаемой, когда снимок тёмный или снят криво.
-                HStack(alignment: .top, spacing: 12) {
+                // По центру, а не по верху: силуэт — это лицо машины, и он
+                // должен смотреть на весь блок с именем и цифрами, а не
+                // прижиматься к первой строке.
+                HStack(alignment: .center, spacing: 12) {
                     VehicleSpritePlate(
                         assetName: vehicle.avatarImageName,
                         fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
