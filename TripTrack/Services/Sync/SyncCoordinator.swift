@@ -73,6 +73,11 @@ final class SyncCoordinator {
         isPulling = true
         defer { isPulling = false }
         await runPull()
+        // Снимки машин приезжают отдельным заходом, а не в общем пуле: они
+        // файлы, а не строки, и их путь вниз — скачивание, а не применение
+        // полей. Без этого загрузка была односторонней, и на новом телефоне
+        // от гаража оставались серые плитки.
+        await VehiclePhotoRestore.run()
         // Re-enqueue photos whose original blob never landed (thumbnail OK,
         // remoteURL nil). Was previously only fired on wifiConnected events,
         // which never reach the SyncCoordinator if the device booted already

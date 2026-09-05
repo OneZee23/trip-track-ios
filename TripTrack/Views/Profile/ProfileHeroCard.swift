@@ -169,7 +169,7 @@ struct ProfileHeroCard: View {
             HStack(spacing: 0) {
                 column(value: "\(trips)", label: AppStrings.trips(lang.language))
                 divider
-                column(value: GarageFormat.odometer(km), label: AppStrings.statsKmTotal(lang.language))
+                column(value: GarageFormat.odometer(km, lng: lang.language), label: AppStrings.statsKmTotal(lang.language))
                 divider
                 column(value: "\(regions)", label: AppStrings.statsRegions(lang.language))
             }

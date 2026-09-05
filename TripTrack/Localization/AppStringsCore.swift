@@ -116,6 +116,28 @@ extension AppStrings {
         }
     }
 
+    /// «3 машины» — счётчик под превью гаража.
+    ///
+    /// Слово родовое, а не «автомобиль»: в гараже бывают мотоцикл, скутер и
+    /// велосипед, и «3 автомобиля» под ними было бы неправдой.
+    static func nounVehicles(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "машина", few: "машины", many: "машин")
+        case .en: return plural(lang, n, one: "vehicle", many: "vehicles")
+        case .de: return plural(lang, n, one: "Fahrzeug", many: "Fahrzeuge")
+        case .es: return plural(lang, n, one: "vehículo", many: "vehículos")
+        case .fr: return plural(lang, n, one: "véhicule", many: "véhicules")
+        case .it: return plural(lang, n, one: "veicolo", many: "veicoli")
+        case .pl: return plural(lang, n, one: "pojazd", few: "pojazdy", many: "pojazdów")
+        case .id: return "kendaraan"
+        case .tr: return "araç"
+        case .fil: return plural(lang, n, one: "sasakyan", many: "sasakyan")
+        case .uk: return plural(lang, n, one: "машина", few: "машини", many: "машин")
+        case .kk: return "көлік"
+        case .pt: return plural(lang, n, one: "veículo", many: "veículos")
+        }
+    }
+
     static func nounPhotos(_ lang: LanguageManager.Language, _ n: Int) -> String {
         switch lang {
         case .ru: return plural(lang, n, one: "фото", few: "фото", many: "фото")
@@ -149,6 +171,34 @@ extension AppStrings {
         case .uk: return plural(lang, n, one: "день", few: "дні", many: "днів")
         case .kk: return "күн"
         case .pt: return plural(lang, n, one: "dia", many: "dias")
+        }
+    }
+
+    /// «год / года / лет» — для стажа машины в гараже и для срока владения
+    /// в архиве («2012–2023 · 11 лет»).
+    ///
+    /// Заведено в 0.6.4, потому что на макетах паспорта срок был написан
+    /// СЛОВОМ («восемь лет»), а механизма для чисел словами в проекте нет
+    /// вовсе — ни `spellOut`, ни таблицы. Цифра плюс это существительное —
+    /// единственный способ, который переживает тринадцать языков.
+    ///
+    /// Русский тут особенно коварен: «лет» — это супплетивная форма от другого
+    /// корня, и «5 годов» не сказал бы никто.
+    static func nounYears(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "год", few: "года", many: "лет")
+        case .en: return plural(lang, n, one: "year", many: "years")
+        case .de: return plural(lang, n, one: "Jahr", many: "Jahre")
+        case .es: return plural(lang, n, one: "año", many: "años")
+        case .fr: return plural(lang, n, one: "an", many: "ans")
+        case .it: return plural(lang, n, one: "anno", many: "anni")
+        case .pl: return plural(lang, n, one: "rok", few: "lata", many: "lat")
+        case .id: return "tahun"
+        case .tr: return "yıl"
+        case .fil: return "taon"
+        case .uk: return plural(lang, n, one: "рік", few: "роки", many: "років")
+        case .kk: return "жыл"
+        case .pt: return plural(lang, n, one: "ano", many: "anos")
         }
     }
 

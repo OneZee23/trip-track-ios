@@ -28,6 +28,19 @@ struct VehicleEditFormView: View {
     /// plate is enough to look up the owner's name and address, so showing it
     /// has to be its own deliberate answer.
     @State private var plateVisible: Bool
+    /// Пробег с приборки, строкой — поле ввода. Пустая строка = не задан.
+    @State private var manualOdometer: String = ""
+    // Паспорт (0.6.4). Марка и модель — строки, а не идентификаторы каталога:
+    // справочник заведомо неполон, и свободный ввод обязан оставаться
+    // полноправным, а не запасным путём.
+    @State private var make: String
+    @State private var carModel: String
+    @State private var yearText: String
+    @State private var bodyType: String
+    @State private var about: String
+    @State private var showCatalog = false
+    @State private var showPrivacy = false
+    @State private var confirmSell = false
     @State private var visibleToOthers: Bool
     /// Always a real avatar — either a `pixel_car_*` asset name or, for a
     /// vehicle created before the pixel cars replaced the emoji set, that
@@ -78,7 +91,16 @@ struct VehicleEditFormView: View {
             _name = State(initialValue: vehicle.name)
             _selectedType = State(initialValue: vehicle.type)
             _plate = State(initialValue: vehicle.plate)
+            _make = State(initialValue: vehicle.make)
+            _carModel = State(initialValue: vehicle.model)
+            _yearText = State(initialValue: vehicle.year > 0 ? String(vehicle.year) : "")
+            _bodyType = State(initialValue: vehicle.bodyType)
+            _about = State(initialValue: vehicle.about)
             _plateVisible = State(initialValue: vehicle.plateVisible)
+            // Пустая строка, если реальный пробег ещё не вводили — так поле
+            // показывает «—», а не выдуманный ноль.
+            _manualOdometer = State(initialValue: vehicle.manualOdometerKm
+                .map { String(Int($0.rounded())) } ?? "")
             _visibleToOthers = State(initialValue: vehicle.visibleToOthers)
             _selectedAvatar = State(initialValue: vehicle.avatarEmoji)
             _selectedAvatarStyle = State(
@@ -97,6 +119,11 @@ struct VehicleEditFormView: View {
             _name = State(initialValue: "")
             _selectedType = State(initialValue: .car)
             _plate = State(initialValue: "")
+            _make = State(initialValue: "")
+            _carModel = State(initialValue: "")
+            _yearText = State(initialValue: "")
+            _bodyType = State(initialValue: "")
+            _about = State(initialValue: "")
             _plateVisible = State(initialValue: false)
             _visibleToOthers = State(initialValue: true)
             // Canon draws the FIRST grid cell selected by default.
@@ -125,6 +152,7 @@ struct VehicleEditFormView: View {
                 VStack(spacing: 12) {
                     nameCard(c: c, l: l)
                     typeCard(c: c, l: l)
+                    passportCard(c: c, l: l)
                     if selectedType.hasPlate {
                         plateCard(c: c, l: l)
                     }
@@ -133,9 +161,21 @@ struct VehicleEditFormView: View {
                         fuelCard(c: c, l: l)
                         priceCard(c: c, l: l)
                     }
-                    privacyCard(c: c, l: l)
+                    // Только у СУЩЕСТВУЮЩЕЙ машины. В режиме добавления экран
+                    // «Кого пускать» получал `UUID()`, который не совпадает ни
+                    // с одной строкой: он ничего не читал и ничего не сохранял,
+                    // то есть человек на самом первом запуске прятал номер и
+                    // карту, жал «Готово», и всё это выбрасывалось молча.
+                    // Машина создаётся одним тапом — настройки в двух тапах
+                    // после неё, и они работают.
+                    if editedVehicle != nil {
+                        privacyCard(c: c, l: l)
+                    }
                     if let vehicle = editedVehicle {
                         mileageCard(vehicle, c: c, l: l)
+                        // Самой последней: продажа замораживает биографию, и
+                        // до неё человек должен доскроллить, а не наткнуться.
+                        soldCard(vehicle, c: c, l: l)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -215,6 +255,182 @@ struct VehicleEditFormView: View {
         }
         .padding(14)
         .surfaceCard(cornerRadius: 16)
+    }
+
+    /// «Продана» — редкое и почти необратимое действие, поэтому оно лежит в
+    /// конце формы редактирования, а не в списке «…» на экране машины.
+    ///
+    /// Продажа значит, что владелец сменился: записывать на такую машину новые
+    /// поездки нельзя — это была бы чужая дорога в твоём паспорте. Поэтому она
+    /// же снимается с активной, и об этом сказано ДО нажатия, а не после.
+    @ViewBuilder
+    private func soldCard(_ vehicle: Vehicle, c: AppTheme.Colors,
+                          l: LanguageManager.Language) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GarageSectionLabel(text: AppStrings.vehicleStateSection(l), color: c.textSecondary)
+            Button {
+                Haptics.tap()
+                if vehicle.isSold {
+                    // Отмена продажи ничего не разрушает — подтверждать нечего.
+                    settings.setVehicleSold(id: vehicle.id, soldAt: nil)
+                } else {
+                    confirmSell = true
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Text(vehicle.isSold ? AppStrings.vehicleUnsell(l) : AppStrings.vehicleMarkSold(l))
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(vehicle.isSold ? c.text : AppTheme.accent)
+                    Spacer(minLength: 8)
+                    Image(systemName: vehicle.isSold ? "arrow.uturn.backward" : "hand.wave")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 44)
+                .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Text(vehicle.isSold ? AppStrings.vehicleSoldHintOn(l) : AppStrings.vehicleSoldHint(l))
+                .font(.system(size: 12))
+                .foregroundStyle(c.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .surfaceCard(cornerRadius: 16)
+        // Домовой диалог, не системный — см. «Dialogs» в CLAUDE.md.
+        .appConfirm(
+            isPresented: $confirmSell,
+            title: AppStrings.vehicleSellConfirmTitle(l),
+            message: AppStrings.vehicleSellConfirmBody(l),
+            actions: [
+                AppDialogAction(AppStrings.vehicleMarkSold(l), kind: .destructive) {
+                    settings.setVehicleSold(id: vehicle.id, soldAt: Date())
+                }
+            ],
+            cancelTitle: AppStrings.cancel(l)
+        )
+    }
+
+    // MARK: - Паспорт: марка, модель, год (0.6.4)
+
+    /// Строка «Марка и модель» ведёт в справочник, год набирается руками.
+    ///
+    /// Значение стоит ПОД ярлыком, а не справа от него: в канон это пришло
+    /// после того, как выяснилось, что справа ему остаётся 120pt, а сто две
+    /// записи справочника из пятисот двадцати одной длиннее — «Land Rover
+    /// Range Rover Evoque» не помещается никак.
+    private func passportCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GarageSectionLabel(text: AppStrings.vehicleWhatSection(l), color: c.textSecondary)
+
+            Button { showCatalog = true } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AppStrings.vehicleMakeModel(l))
+                            .font(.system(size: 11))
+                            .foregroundStyle(c.textTertiary)
+                        Text(passportTitle(l))
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(passportTitleIsEmpty ? c.textTertiary : c.text)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(minHeight: 44)
+                .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 10) {
+                Text(AppStrings.vehicleYear(l))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(c.text)
+                Spacer(minLength: 8)
+                TextField(AppStrings.vehicleNotSet(l), text: $yearText)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(c.text)
+                    .tint(AppTheme.accent)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 72)
+                    .onChange(of: yearText) { _, v in
+                        let digits = v.filter(\.isNumber)
+                        if digits != v { yearText = String(digits.prefix(4)) }
+                        else if digits.count > 4 { yearText = String(digits.prefix(4)) }
+                    }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+
+            // Одна строка, а не многострочный редактор: форма поля и есть
+            // обещание объёма. Дай текстовое полотно — получишь бортжурнал,
+            // которого мы сознательно не делаем.
+            VStack(alignment: .leading, spacing: 6) {
+                Text(AppStrings.vehicleAbout(l))
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+                TextField(AppStrings.vehicleAboutPlaceholder(l), text: $about, axis: .vertical)
+                    .font(.system(size: 14))
+                    .foregroundStyle(c.text)
+                    .tint(AppTheme.accent)
+                    .lineLimit(1...3)
+                    .onChange(of: about) { _, v in
+                        if v.count > 140 { about = String(v.prefix(140)) }
+                    }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(minHeight: 44, alignment: .leading)
+            .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .padding(14)
+        .surfaceCard(cornerRadius: 16)
+        .sheet(isPresented: $showPrivacy) {
+            // Форма сама показана шитом, стека под ней нет — поэтому вложенный
+            // шит, а не push. Экран приватности самодостаточен: он пишет на
+            // каждое переключение и не требует «Готово».
+            // `editedVehicle` здесь всегда есть: карточка, из которой сюда
+            // попадают, в режиме добавления не рисуется вовсе.
+            VehiclePrivacyView(vehicleId: editedVehicle?.id ?? UUID())
+                .environmentObject(lang)
+        }
+        .sheet(isPresented: $showCatalog) {
+            VehicleCatalogPickerView(
+                type: selectedType.rawValue,
+                initialQuery: make
+            ) { pickedMake, pickedModel, pickedBody in
+                make = pickedMake
+                carModel = pickedModel
+                bodyType = pickedBody
+                // Силуэт идёт следом за кузовом: выбрал «Polo» — спрайт стал
+                // седаном сам. Каталог предлагает, тип решает.
+                selectedAvatarStyle = VehicleAvatar.resolveStyle(
+                    pickedBody, forType: selectedType.rawValue)
+            }
+            .environmentObject(lang)
+        }
+    }
+
+    private var passportTitleIsEmpty: Bool {
+        make.isEmpty && carModel.isEmpty
+    }
+
+    private func passportTitle(_ l: LanguageManager.Language) -> String {
+        let parts = [make, carModel].filter { !$0.isEmpty }
+        return parts.isEmpty ? AppStrings.vehicleNotSet(l) : parts.joined(separator: " ")
     }
 
     // MARK: - Type
@@ -363,6 +579,7 @@ struct VehicleEditFormView: View {
                         // The tile is a picture; VoiceOver has nothing to read
                         // without this and announces seven identical buttons.
                         .accessibilityLabel(AppStrings.avatarStyleName(l, style: style))
+                        .accessibilityAddTraits(selectedStyle == style ? [.isSelected] : [])
                     }
                 }
             }
@@ -408,7 +625,8 @@ struct VehicleEditFormView: View {
                 // dropped: opening the form must never silently restyle a
                 // vehicle somebody chose on purpose.
                 if let legacy = legacyAvatar {
-                    swatchButton(isSelected: selectedAvatar == legacy, c: c) {
+                    swatchButton(isSelected: selectedAvatar == legacy,
+                                 label: legacy, c: c) {
                         selectedAvatar = legacy
                     } fill: {
                         Circle()
@@ -418,7 +636,9 @@ struct VehicleEditFormView: View {
                 }
                 ForEach(VehicleAvatar.colors, id: \.self) { color in
                     let rgb = VehicleAvatar.swatch(color)
-                    swatchButton(isSelected: selectedColor == color && VehicleAvatar.isAsset(selectedAvatar), c: c) {
+                    swatchButton(isSelected: selectedColor == color && VehicleAvatar.isAsset(selectedAvatar),
+                                 label: AppStrings.avatarColorName(lang.language, color: color),
+                                 c: c) {
                         selectedAvatar = VehicleAvatar.legacyName(color: color)
                     } fill: {
                         Circle()
@@ -441,6 +661,7 @@ struct VehicleEditFormView: View {
     /// with a gap so the selected colour is never squeezed by its own marker.
     private func swatchButton<Fill: View>(
         isSelected: Bool,
+        label: String,
         c: AppTheme.Colors,
         onTap: @escaping () -> Void,
         @ViewBuilder fill: () -> Fill
@@ -460,6 +681,12 @@ struct VehicleEditFormView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        // Кружок — это только цвет: без имени VoiceOver читает восемь
+        // одинаковых кнопок, а три из них ещё и соседние оттенки серого.
+        .accessibilityLabel(label)
+        // Без этого признака непонятно, какой цвет сейчас выбран: кольцо
+        // вокруг кружка — чисто зрительная подсказка.
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     /// Which silhouette and which colour the current selection decomposes to.
@@ -700,19 +927,41 @@ struct VehicleEditFormView: View {
 
     // MARK: - Privacy
 
+    /// Строка-переход вместо трёх тумблеров прямо в форме.
+    ///
+    /// Канон 0.6.4 собирает все четыре оси на одном экране, и это не вкусовщина:
+    /// пока тумблеры жили здесь, экран «Приватность машины» был недостижим ни
+    /// из одного места приложения, а флаги имели два источника правды.
     private func privacyCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             GarageSectionLabel(text: AppStrings.privacySection(l), color: c.textSecondary)
-            toggleRow(
-                AppStrings.showVehicleToggle(l),
-                isOn: $visibleToOthers,
-                c: c,
-                identifier: "vehicle_visible_toggle"
-            )
-            Text(AppStrings.showVehicleHint(l))
-                .font(.system(size: 12))
-                .foregroundStyle(c.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                Haptics.tap()
+                showPrivacy = true
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AppStrings.vehicleWhoSees(l))
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(c.text)
+                        Text(AppStrings.vehiclePrivacyRowHint(l))
+                            .font(.system(size: 11))
+                            .foregroundStyle(c.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(minHeight: 44)
+                .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -744,7 +993,12 @@ struct VehicleEditFormView: View {
         VStack(alignment: .leading, spacing: 6) {
             GarageSectionLabel(text: AppStrings.mileageSection(l), color: c.textSecondary)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(GarageFormat.odometer(vehicle.odometerKm))
+                // Здесь СОЗНАТЕЛЬНО треканное число, а не `displayOdometerKm`:
+                // подпись под ним говорит «начисляется автоматически по
+                // поездкам», и показывать под ней введённое руками значило бы
+                // подписать чужое число чужим объяснением. Поле ручного
+                // пробега стоит отдельной строкой ниже.
+                Text(GarageFormat.odometer(vehicle.odometerKm, lng: l))
                     .font(.system(size: 22, weight: .heavy).monospacedDigit())
                     .foregroundStyle(c.text)
                 Text(AppStrings.km(l))
@@ -754,6 +1008,47 @@ struct VehicleEditFormView: View {
             Text(AppStrings.mileageAutoHint(l))
                 .font(.system(size: 12))
                 .foregroundStyle(c.textTertiary)
+
+            Divider().padding(.vertical, 4)
+
+            // Реальный пробег с панели. Отдельно от треканного и НЕ влияет на
+            // уровень: уровень — награда за записанные поездки, а не за цифру
+            // с клавиатуры.
+            HStack(spacing: 10) {
+                Text(AppStrings.odometerEditTitle(l))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(c.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 4) {
+                    TextField("—", text: Binding(
+                        get: { manualOdometer },
+                        // Именно ASCII-цифры, а не `isNumber`: тот пропускает
+                        // арабо-индийские цифры и «½», а `Double(_:)` их потом
+                        // отвергает — и сохранение молча стирало бы значение.
+                        set: { manualOdometer = String($0.unicodeScalars
+                            .filter { CharacterSet.decimalDigits.contains($0) && $0.isASCII }
+                            .prefix(7)) }
+                    ))
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(c.text)
+                    .tint(AppTheme.accent)
+                    .frame(width: 80)
+                    .accessibilityIdentifier("vehicle_manual_odometer")
+                    Text(AppStrings.km(l))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(c.textSecondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 10))
+            }
+
+            Text(AppStrings.odometerEditHint(l))
+                .font(.system(size: 12))
+                .foregroundStyle(c.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -810,6 +1105,13 @@ struct VehicleEditFormView: View {
                 plateVisible: showPlate,
                 visibleToOthers: visibleToOthers
             )
+            // Паспорт пишется сразу после создания: у только что заведённой
+            // машины это единственное, что уже можно заполнить, — биография
+            // появится сама после первой поездки.
+            settings.updateVehiclePassport(
+                id: newId, make: make, model: carModel,
+                year: Int(yearText) ?? 0, bodyType: bodyType, about: about
+            )
             if selectedType.burnsFuel {
                 let defaults = Vehicle()
                 let cityVal = storedConsumption(city) ?? defaults.cityConsumption
@@ -831,6 +1133,13 @@ struct VehicleEditFormView: View {
 
         case .edit(let id):
             guard let original = editedVehicle else { break }
+            // Реальный пробег живёт отдельной записью: он не часть «личности»
+            // машины и не должен тащить за собой её sync-операцию, когда
+            // менялось только число на приборке.
+            let typedOdometer = Double(manualOdometer.trimmingCharacters(in: .whitespaces))
+            if typedOdometer != original.manualOdometerKm {
+                settings.setManualOdometer(vehicleId: id, km: typedOdometer)
+            }
             // One write for the whole identity half, so a type + plate + name
             // change costs one sync operation instead of three.
             let identityChanged = trimmed != original.name
@@ -855,6 +1164,10 @@ struct VehicleEditFormView: View {
                     avatarStyle: selectedAvatarStyle
                 )
             }
+            settings.updateVehiclePassport(
+                id: id, make: make, model: carModel,
+                year: Int(yearText) ?? 0, bodyType: bodyType, about: about
+            )
             // Fuel figures belong to a type that burns fuel; a vehicle turned
             // into a bicycle keeps whatever it had rather than being rewritten.
             if selectedType.burnsFuel {

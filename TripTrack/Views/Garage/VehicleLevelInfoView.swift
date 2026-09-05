@@ -87,7 +87,7 @@ struct VehicleLevelInfoView: View {
             Text(
                 AppStrings.vehicleLevelToNext(
                     l,
-                    km: GarageFormat.odometer(remaining),
+                    km: GarageFormat.odometer(remaining, lng: l),
                     level: level + 1
                 )
             )

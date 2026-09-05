@@ -4,7 +4,213 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.6.2 — vehicles and illustrations (current submission)
+## v0.6.4 — vehicle passport (current submission)
+
+Self-contained: paste the **English** block below into App Store Connect →
+App Review Information → Notes. It replaces the 0.6.3 notes entirely.
+
+### English
+
+TripTrack 0.6.4 — Reviewer Notes
+
+TripTrack is a road-trip diary: it records a drive with GPS and keeps it as a map,
+a track and photos. This release gives each vehicle a page of its own and adds
+user-controlled visibility for everything on it.
+
+WHAT'S NEW IN 0.6.4
+• Vehicle passport — a screen per vehicle: make, model, year, an optional
+  registration plate, a level derived from distance driven, three counters
+  (trips, regions, days on the road), a map of that vehicle's own trips, its
+  records, and its trips as a separate list.
+• Vehicle photos — the user picks images from their library; one is pinned as the
+  vehicle's main photo. They are uploaded to our storage only when Cloud Sync is
+  enabled, which is off by default.
+• Public garage — from another user's profile you can open the vehicles they have
+  chosen to make visible, and the passport of each.
+• "I'm a passenger" — a one-tap state before recording starts, for a taxi, a bus
+  or someone else's car. The trip is recorded without a vehicle attached.
+• Sold — a vehicle can be marked sold by the user; new trips are never recorded
+  onto a sold vehicle. Nothing is marked automatically, and a sold vehicle stays
+  visible in the garage (and to other users, if the owner made it public).
+
+USER-GENERATED CONTENT AND MODERATION
+0.6.4 adds three new stranger-visible surfaces, all optional and all off or
+owner-controlled:
+• Free text — the vehicle's name, an optional one-line "about", and make/model
+  chosen from a built-in catalogue or typed.
+• Photos of the vehicle. They are uploaded to our storage only when Cloud Sync
+  is enabled, which is OFF by default; with it off they never leave the device.
+• An optional registration plate, hidden by default and shown only if the owner
+  turns it on.
+Each is covered by the existing report-and-block flow. A vehicle is reported
+from the "…" in the header of its page; a single photo is reported from the flag
+button in the full-screen viewer, where the photo being reported is on screen
+and cannot be mistaken. Blocking a user hides their garage entirely, in both
+directions. Reports reach the same queue as the existing ones and are actioned
+within 24 hours, per 1.2.
+
+PRIVACY DEFAULTS ON UPGRADE
+• Vehicles that existed before this release have their route map switched OFF by
+  the upgrade migration. A vehicle's map is effectively "where its owner lives",
+  and the axis did not exist before 0.6.4, so no consent to it was ever given.
+  Newly created vehicles default to on; the switches live on the vehicle's own
+  "Who can see" screen, two taps after it is created.
+• Plates are hidden by default; photos are hidden by default for existing vehicles.
+• All four axes (vehicle, map, photos, plate) are enforced on the SERVER: hidden
+  data is not returned to another user's device at all, rather than being returned
+  and hidden by the app.
+
+DATA DELETION
+"Delete account" erases the account and its server data, and also erases every
+trip, track point, photo, vehicle and vehicle photo held on the device. The
+separate "Erase my server data" removes trips, photos and the garage from the
+server while leaving the local copy in place.
+
+HOW TO REVIEW
+No special account is required; sign-in with Apple is optional and the app is
+fully usable signed out. To see the garage: Profile ("Я") → Garage → "+" to add a
+vehicle → open it. To see the passenger state: Record tab → the "I'm a passenger"
+button next to the vehicle chip. Location permission is requested only when the
+user starts a recording.
+
+### Русский (для себя, не для вставки)
+
+То же самое своими словами: паспорт машины, фотографии, чужой гараж, «я
+пассажир», проданные машины. Три новых поверхности с пользовательским контентом — имя и
+описание машины, фотографии, номер, — все закрываются переключателями, и все
+проверяются на сервере. У машин, заведённых до релиза, карта маршрутов выключена
+миграцией: согласия на эту ось никто не давал, потому что до 0.6.4 её не было.
+
+---
+
+## v0.6.3 — public profile (previous submission)
+
+Self-contained: paste the **English** block below into App Store Connect →
+App Review Information → Notes. It replaces the 0.6.0/0.6.2 notes entirely —
+nothing below this section needs to be pasted alongside it.
+
+### English
+
+TripTrack 0.6.3 — Reviewer Notes
+
+TripTrack is a road-trip diary: it records a drive with GPS and keeps it as a map,
+a track and photos. This release is about what OTHER people can see, and about
+giving every user explicit control over it.
+
+WHAT'S NEW IN 0.6.3
+• Opening someone's profile now offers two screens — their full statistics, and a
+  map of the trips they chose to make public. Both are the same screens the user
+  already has for their own data; only the source of the trips differs.
+• "What others see" — four switches (basic counters, full statistics, map,
+  achievements). A switch that is off hides that block from everyone else. Basic
+  counters, achievements and vehicle visibility are enforced on the server, which
+  stops returning the data. Statistics and the map are drawn from the same set of
+  the user's already-public trips, so the server stops returning that set when BOTH
+  are off; with one of the two still on, the remaining screen is the one hidden by
+  the app. Nothing private is involved either way: these are trips the user chose
+  to publish, and they are visible in the feed regardless.
+• Vehicle visibility is now enforced on the server: a car the owner marked private
+  no longer appears on their profile or on feed cards.
+• Odometer split in two — the dashboard reading the owner types in, and the distance
+  the app recorded itself. The car's level is earned only from the recorded part.
+• "I was a passenger" — a trip can be marked as a transfer (taxi, bus, someone
+  else's car). The distance stays in the person's statistics but is not added to
+  any car's mileage.
+• Live Activity shows distance in the compact Dynamic Island.
+• A back control is now always present on the recording screen, so a recording in
+  progress no longer traps the user there. Recording continues in the background.
+• New accent colour.
+
+NO NEW PERMISSIONS. No change to what is collected or stored. Nothing is published
+that the user had not already published — the public map draws only trips the owner
+marked public, which the app has supported since 0.5. All four switches default to
+ON, which preserves exactly what a profile showed in 0.6.2; the app also shows a
+one-time card explaining this and links straight to the switches.
+
+Private trips are never drawn on a public map. A private profile stays visible only
+to its followers. A closed or blocked profile returns the same indistinguishable
+response as a non-existent one, so the app cannot be used to confirm that an
+account exists.
+
+ACCOUNT DELETION (Guideline 5.1.1(v))
+Me → Account & sync → Delete account. Two taps from the tab bar, no email, no
+support ticket. It deletes the server account and everything on it (trips, photos in
+object storage, reactions, comments, follows) AND erases the trips and photos stored
+on the device. The row states this ("Permanently, everywhere") and the confirmation
+names every category before the destructive button. A separate, less destructive
+option — "Clear my server data" — wipes the server copy while keeping the account.
+
+LOCATION
+Background location ("Always") keeps a recording alive while the screen is off —
+that is the product. Location is collected ONLY during a recording the user started.
+
+SIGN IN
+Sign in with Apple only, and entirely optional: recording, history, photos,
+vehicles, map and statistics all work signed out and offline. Signing in adds cloud
+sync and the social layer. A demo account is provided in App Review Information →
+User Account.
+
+UGC MODERATION (Guideline 1.2)
+• Report — on every public profile, every feed card, every trip, every vehicle
+  and every vehicle photo. Eight reasons: spam, harassment, hate, nudity,
+  violence, illegal, impersonation, other.
+• Block — from any public profile's "…" menu; hides content in both directions.
+• Comments can be deleted by their author and by the trip owner.
+• Terms of Service state a zero-tolerance policy and a 24-hour moderation SLA.
+• Automated denylist filter on user-entered trip titles.
+
+PRIVACY
+• No tracking, no ads, no third-party analytics, no cross-app identifiers.
+• Photos are stripped of EXIF/GPS metadata on the device before any upload.
+• Profiles are public only if the user turns them on (Me → Privacy).
+• Privacy Policy and Terms: https://trip-track.app
+
+LANGUAGES
+Thirteen: English, Russian, German, Spanish, French, Italian, Polish, Indonesian,
+Turkish, Filipino, Ukrainian, Kazakh, Portuguese. The in-app language is chosen in
+settings and is independent of the device language; system permission prompts follow
+the device language.
+
+HOW TO TEST WITHOUT DRIVING
+1. Onboarding → "While using the app" is enough to see every screen.
+2. The Feed opens with public trips from real accounts — open one for the trip
+   detail, replay, photos and discussion.
+3. Open the author of any feed card → their profile has "Statistics" and "Map" cards
+   under the counters. That is the new part of this release.
+4. Me (last tab) → Privacy → "What others see" → turn a switch off, then reopen your
+   own profile through "How others see you": the block is gone there too, because
+   that preview obeys the same switches a stranger does.
+5. Me → Account & sync for sign-out, "Clear my server data" and Delete account.
+6. Recording screen: Record tab → start → the back control in the top row returns to
+   the app while the recording keeps running.
+
+CONTACT
+privacy@trip-track.app
+
+### Русский (для себя, в ASC не вставлять)
+
+TripTrack 0.6.3 — заметки для ревьюера
+
+При открытии чужого профиля теперь доступны два экрана: полная статистика человека
+и карта его публичных маршрутов. Это те же экраны, что пользователь видит для своих
+данных; отличается только источник поездок.
+
+Управление приватностью расширено, а не сокращено. «Приватность» → «Кто что видит»:
+четыре тумблера — базовые счётчики, расширенная статистика, карта, достижения. Все
+включены по умолчанию, что в точности сохраняет то, как профиль выглядел в 0.6.2.
+Выключенный блок скрывается от всех, и сервер перестаёт отдавать эти данные вовсе, а
+не полагается на то, что их спрячет приложение. Видимость машины теперь тоже
+соблюдается на сервере.
+
+Приватные поездки на публичную карту не попадают никогда. Закрытый и заблокированный
+профиль отвечают тем же, чем несуществующий, — по ответу нельзя подтвердить, что
+аккаунт есть.
+
+Новых разрешений нет, состав собираемых данных не изменился.
+
+---
+
+## v0.6.2 — vehicles and illustrations (previous submission)
 
 A cosmetic release on top of 0.6.1, plus a sign-in stability fix. No new
 permissions, no change to what data is collected, stored or transmitted, no

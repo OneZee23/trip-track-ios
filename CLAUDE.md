@@ -38,9 +38,13 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
 
 **Location tracking** uses Provider pattern: `LocationProvider` protocol → `RealGPSProvider` (CoreLocation) + `SimulatedLocationProvider` (dev joystick). LocationManager switches between them.
 
-## CoreData Schema (8 entities, versioned)
+## CoreData Schema (versioned, v9 — 0.6.4)
 
-`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `VehicleEntity`, `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v2 = current with sync fields).
+`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v9 = current).
+
+**Внимание:** `VehiclePhotoEntity` связи с машиной НЕ имеет — `vehicleId` это
+обычный атрибут. Значит каскад её не заберёт: удаление машины и стирание
+аккаунта обязаны называть её явно (см. `LocalDataWipe` и `deleteVehicle`).
 
 **Sync-readiness fields (v2):** `userId`, `serverCreatedAt`, `conflictVersion` on TripEntity; `remoteURL`, `uploadStatus` on TripPhotoEntity; `userId` on VehicleEntity. All models (`Trip`, `TrackPoint`, `TripPhoto`, `Vehicle`) are `Codable` for JSON API serialization.
 
@@ -56,6 +60,29 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
 - **Soft delete**: `SyncStatus.pendingDelete` hides trips from UI; physical delete after server confirms
 - **User identity**: `SettingsManager.localUserId` (UUID) stamped on all entities, prepared for Sign in with Apple
 - **UI modifiers**: `.surfaceCard()`, `.glassBackground()`, `.glassPill()` for consistent card styling
+
+### На какую машину пишется поездка (0.6.4)
+
+Один вопрос — один ответ, и он живёт в `SettingsManager`:
+
+- `vehicles` — **весь** гараж, включая архивные и проданные. Не фильтровать
+  НИКОГДА: через него четыре экрана достают машину СТАРОЙ поездки, и фильтр
+  там стирает историю («Транспорт удалён» у живой машины).
+- `recordableVehicles` — на что можно писать сейчас (не в архиве, не продана).
+  Сюда же придёт лимит бесплатного тарифа в 0.6.5 — одной строкой.
+- `activeRecordableVehicleId` — на что уйдёт СЛЕДУЮЩАЯ поездка. Это читают
+  гараж, паспорт и чип на экране записи, чтобы не расходиться в показаниях.
+  `nil` значит «Без транспорта» — законный выбор человека, не поломка.
+- `recordableVehicleId(_:)` — последний рубеж перед штампом. Спрашивает
+  ХРАНИЛИЩЕ, а не список в памяти: снимок обновляется только когда его кто-то
+  перечитает, и однажды кто-то этого не сделает (так синк уже проносил архивную
+  машину мимо проверки).
+
+Правило, которое всё это держит: **архивная или проданная машина не принимает
+новых поездок нигде** — ни на экране записи, ни через автозапись по магнитоле,
+ни через «Команды». Уже записанные поездки остаются при своих машинах: архив
+про будущее, а не про переписывание истории. Автоматически в архив не уезжает
+никто и никогда.
 
 ## Localization & Theming
 
@@ -125,10 +152,41 @@ Rules that are easy to get wrong:
 - Always add `.animation(.default, value:)` with explicit value, never `.animation(.default)` (deprecated)
 - Use `LazyVStack` / `LazyHStack` inside `ScrollView` for lists with >20 items
 
+### Нажатие обязано отвечать
+
+Три правила из доклада Apple «Designing Fluid Interfaces» (WWDC 2018),
+переписанные под наш случай. Все три мы уже нарушили — каждое поймал человек
+на устройстве, не тест и не сборка.
+
+- **Отклик в момент КАСАНИЯ, а не в момент результата.** У всего, что
+  нажимается, должен быть видимый отклик под пальцем: `PressableCardStyle` для
+  обычного тапа, `HoldableCardStyle` там, где действие открывает долгий тап.
+  Голый `.buttonStyle(.plain)` на карточке — нажатие, которого не видно.
+  История: карточка гаража с целым меню за долгим тапом выглядела мёртвой,
+  потому что удержание ничем не отличалось от промаха.
+
+- **Если нажатие что-то открывает — это видно. Если не открывает — не
+  притворяемся.** Шеврон, отклик или и то и другое. Из четырёх строк в карточке
+  рекордов открывается ровно одна, и шеврон стоит ровно у неё: неровно
+  настолько, насколько неровна правда. Обратная ошибка тоже наша — фотографии
+  машины, где обычный тап не делал НИЧЕГО, а единственное действие пряталось за
+  жестом, о котором сообщала подпись внизу экрана.
+
+- **Анимацию можно прервать.** Всегда `.animation(_:value:)` с явным значением
+  (см. правило выше) и пружина, а не цепочка из `withAnimation` + `sleep`,
+  которую нельзя отменить на середине. Человек, передумавший в середине жеста,
+  не должен ждать, пока приложение доиграет.
+
+Родня этих правил — раздел «Dialogs» ниже: там та же мысль про то, что экран не
+должен обещать одно, а делать другое.
+
 ### Performance
 - Mark ViewModels as `@MainActor` class
 - Use `nonisolated` for heavy computation methods that don't touch UI
-- Prefer `task.detached` for CPU-heavy work (encoding, filtering large arrays)
+- `Task.detached` для тяжёлого счёта (кодирование, фильтрация больших массивов) —
+  ПОКА мы на Swift 5.9. В 6.2 правильный инструмент `@concurrent`, а
+  `Task.detached` становится «почти никогда»: он не наследует ни изоляцию, ни
+  приоритет, ни task-local. При переходе на 6.2 эти 23 места пересмотреть
 - For CoreData fetches in background: use `viewContext.perform {}` or `newBackgroundContext()`
 - Avoid re-creating objects in `body` — pull constants and formatters to static/lazy properties
 
@@ -136,7 +194,10 @@ Rules that are easy to get wrong:
 - Prefer `guard let` for early exits over nested `if let`
 - Use `[weak self]` in closures that capture self in non-@MainActor contexts
 - Prefer `async/await` over Combine chains for new code. Keep existing Combine as-is
-- Use `Result` type for error handling in service methods, not throwing + catch at every call site
+- Ошибки: восстановимая — `throws`, ошибка программиста — `precondition`.
+  Правило про `Result` здесь стояло годами и НЕ соответствовало коду:
+  сервисов, возвращающих `Result`, — ноль, бросающих — сорок два.
+  Тип ошибки — enum со связанными значениями (`APIError`), контекст в нём же
 - Enums with associated values over multiple optional properties when states are mutually exclusive
 
 ### File Organization

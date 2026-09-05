@@ -26,7 +26,11 @@ enum LocalDataWipe {
         // the children anyway so nothing survives a partial cascade.
         let entities = [
             "TripPhotoEntity", "TrackPointEntity", "TripEntity",
-            "VehicleEntity", "VisitedGeohashEntity", "RoadEntity",
+            // `VehiclePhotoEntity` названа ЯВНО: связи с машиной у неё нет,
+            // `vehicleId` — обычный атрибут, поэтому каскад её не заберёт, и
+            // после «удалить безвозвратно, везде» снимки машин оставались и
+            // строками, и файлами.
+            "VehiclePhotoEntity", "VehicleEntity", "VisitedGeohashEntity", "RoadEntity",
             "GeocodeCacheEntity",
         ]
         for name in entities {
@@ -60,6 +64,7 @@ enum LocalDataWipe {
             .urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("TripPhotos", isDirectory: true)
         try? FileManager.default.removeItem(at: photos)
+        try? FileManager.default.removeItem(at: VehiclePhotoStore.directory)
 
         wipeLog.notice("[data.wipe] local user data erased")
     }

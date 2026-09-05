@@ -13,5 +13,8 @@
 /* Photo Library: add only — saving share-card to Photos */
 "NSPhotoLibraryAddUsageDescription" = "Sine-save ng TripTrack ang larawan ng biyahe sa Photos para maibahagi mo ito bilang story o post.";
 
+/* Photo Library: read — attaching photos to a trip or a vehicle (0.6.4) */
+"NSPhotoLibraryUsageDescription" = "Ipinapakita ng TripTrack ang iyong photo library para makapaglagay ka ng larawan sa isang biyahe o sa sasakyan sa iyong garahe. Nananatili sa device mo ang mga larawan maliban kung ilalathala mo ang biyahe o ikaw mismo ang magbubukas ng mga larawan ng sasakyan sa iba.";
+
 /* Local network: dev/beta only */
 "NSLocalNetworkUsageDescription" = "Ginagamit ng TripTrack ang lokal na network para kumonekta sa development o beta server habang nagte-test.";

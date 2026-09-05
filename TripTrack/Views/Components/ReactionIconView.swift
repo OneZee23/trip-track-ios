@@ -11,7 +11,7 @@ struct ReactionIconView: View {
     var size: CGFloat = 14
     var filled: Bool = false
     /// Explicit tint override. Default: fill state → accent (the Figma
-    /// fill variant is #EB571E), outline state → theme ink.
+    /// fill variant is #C2452B), outline state → theme ink.
     var tint: Color? = nil
 
     @Environment(\.colorScheme) private var scheme

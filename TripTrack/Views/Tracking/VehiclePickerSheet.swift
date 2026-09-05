@@ -17,11 +17,52 @@ struct VehiclePickerSheet: View {
     /// trip editor — because there the write-through silently changed which
     /// vehicle the next recording would be stamped with.
     var persistsSelection: Bool = true
+    /// Показывать ли машины, на которые сейчас нельзя писать (в архиве,
+    /// проданные).
+    ///
+    /// На записи — нет: гараж обещает, что пишем на активную, и шторка обязана
+    /// говорить то же самое. В редакторе СТАРОЙ поездки — да: поездка могла
+    /// быть на машине, которую с тех пор убрали в архив или продали, и
+    /// запретить это указать значило бы запретить исправлять историю.
+    var includesArchived: Bool = false
+    /// Чья галочка стоит: `nil` — общий выбор приложения, `.some(x)` — значение
+    /// ЭТОЙ поездки (само по себе может быть `nil` = «без транспорта»).
+    ///
+    /// Двойной опционал ровно поэтому: «не передали» и «передали пусто» здесь
+    /// разные ответы. Без него редактор поездки, записанной на машину А, ставил
+    /// галочку на активную машину Б — то есть показывал не то, что правит.
+    var checkedVehicleId: UUID??
     /// Called with the picked vehicle, `nil` for «Без транспорта». The
     /// recording screen uses it to restamp the trip that is already running;
     /// the editor uses it to set the field. Both sides already take `UUID?` —
     /// a trip with no vehicle is a valid trip, all the way down.
     var onPick: ((UUID?) -> Void)?
+    /// Показывать ли строку «Ехал пассажиром» (0.6.3, включена на записи в 0.6.4).
+    ///
+    /// Раньше строка жила только в редакторе поездки: рассуждение было, что на
+    /// экране записи выбирают, НА ЧЁМ поедешь, а не КЕМ ехал. На практике это
+    /// значило, что сказать «я пассажир» можно было только задним числом, уже
+    /// после поездки, — а до тех пор километры такси лежали на своей машине.
+    /// Решение отменено: строка есть и на записи тоже. Свойством КОНКРЕТНОЙ
+    /// поездки она при этом быть не перестала — в `selectedVehicleId` она не
+    /// пишется никогда, иначе следующая поездка молча унаследовала бы «я
+    /// пассажир».
+    var showsTransferOption: Bool = false
+    /// Помечена ли редактируемая поездка трансфером — для галочки.
+    var isTransferSelected: Bool = false
+    /// Выбран трансфер. Отдельный колбэк, а не `onPick(nil)`: «без транспорта»
+    /// значит «не указал машину», а трансфер — «ехал не за рулём», и путать
+    /// их нельзя, иначе километры молча останутся на чьём-то одометре.
+    var onPickTransfer: (() -> Void)?
+    /// Куда ведёт «Управлять в Гараже». Когда закрыто — экран открывает гараж
+    /// сам, прямо поверх себя; когда нет — старый путь через таб «Я».
+    ///
+    /// Различие не косметическое. С экрана записи гараж открывался переключением
+    /// таба: на долю секунды показывался профиль, потом ехала анимация push. И
+    /// дело даже не в мигании — «назад» после гаража возвращало в профиль, а не
+    /// туда, откуда человек шёл. В редакторе поездки закрытия нет, и там
+    /// по-прежнему уместен переход в таб.
+    var onManageGarage: (() -> Void)?
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -41,7 +82,7 @@ struct VehiclePickerSheet: View {
 
             rows(c: c)
 
-            if settings.vehicles.isEmpty {
+            if listed.isEmpty {
                 emptyHint(c: c)
             }
 
@@ -87,6 +128,19 @@ struct VehiclePickerSheet: View {
         }
     }
 
+    /// Что вообще показано в списке. Единственное место, где шторка решает
+    /// этот вопрос, — и после фильтра список может стать короче гаража, но
+    /// никогда длиннее, поэтому измерение высоты выше остаётся верным.
+    private var listed: [Vehicle] {
+        includesArchived ? settings.vehicles : settings.recordableVehicles
+    }
+
+    /// Машина, у которой стоит галочка.
+    private var checked: UUID? {
+        if case let .some(explicit) = checkedVehicleId { return explicit }
+        return settings.selectedVehicleId
+    }
+
     private static let rowSpacing: CGFloat = 4
 
     // MARK: - Chrome
@@ -109,7 +163,10 @@ struct VehiclePickerSheet: View {
         // be. Fixed content is what makes the measurement above possible.
         VStack(spacing: Self.rowSpacing) {
             noVehicleRow(c: c)
-            ForEach(settings.vehicles) { vehicle in
+            if showsTransferOption {
+                transferRow(c: c)
+            }
+            ForEach(listed) { vehicle in
                 vehicleRow(vehicle, c: c)
             }
         }
@@ -119,13 +176,54 @@ struct VehiclePickerSheet: View {
     /// «Без транспорта» — the trip still records, it just has no vehicle to
     /// bill the fuel, mileage and level to. A neutral glyph rather than a car:
     /// a car with a slash through it would read as an error state.
+    /// «Ехал пассажиром» — такси, автобус, чужая машина.
+    ///
+    /// Стоит рядом с «Без транспорта» намеренно: обе строки означают «машины у
+    /// этой поездки нет», но по разным причинам, и разница видна в пробеге.
+    private func transferRow(c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.selection()
+            onPickTransfer?()
+            dismiss()
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(isTransferSelected ? AppTheme.accentBg : c.cardAlt)
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(isTransferSelected ? AppTheme.accent : c.textTertiary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AppStrings.tripTransferTitle(lang.language))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    Text(AppStrings.tripTransferHint(lang.language))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(c.textTertiary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                if isTransferSelected {
+                    selectedCheck
+                }
+            }
+            .modifier(PickerRowChrome(selected: isTransferSelected))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("vehicle_picker_transfer")
+    }
+
     private func noVehicleRow(c: AppTheme.Colors) -> some View {
         // Checked whenever the selection resolves to nothing, not only when the
         // id is literally nil: deleting the selected vehicle can leave a
         // dangling id behind, and a strict `== nil` then put the checkmark on
         // no row at all. VehicleChip already reads that same state as «Без
         // транспорта» — the sheet has to agree with the chip that opened it.
-        let selected = settings.vehicle(for: settings.selectedVehicleId) == nil
+        let selected = !isTransferSelected && settings.vehicle(for: checked) == nil
         return Button {
             Haptics.selection()
             if persistsSelection {
@@ -159,7 +257,7 @@ struct VehiclePickerSheet: View {
     }
 
     private func vehicleRow(_ vehicle: Vehicle, c: AppTheme.Colors) -> some View {
-        let selected = vehicle.id == settings.selectedVehicleId
+        let selected = !isTransferSelected && vehicle.id == checked
         return Button {
             Haptics.selection()
             // Persist the pick — a bare `selectedVehicleId =` would not write
@@ -209,7 +307,7 @@ struct VehiclePickerSheet: View {
                             VehiclePlateChip(plate: vehicle.plate, size: 10)
                         }
                     }
-                    Text("\(GarageFormat.odometer(vehicle.odometerKm)) \(AppStrings.km(lang.language))")
+                    Text("\(GarageFormat.odometer(vehicle.displayOdometerKm, lng: lang.language)) \(AppStrings.km(lang.language))")
                         .font(.system(size: 12))
                         .foregroundStyle(c.textTertiary)
                 }
@@ -255,9 +353,13 @@ struct VehiclePickerSheet: View {
         return Button {
             Haptics.tap()
             dismiss()
-            // Garage lives under the Я tab — switch there; ProfileView
-            // hosts the Garage entry point.
-            NotificationCenter.default.post(name: .openGarage, object: nil)
+            if let onManageGarage {
+                onManageGarage()
+            } else {
+                // Garage lives under the Я tab — switch there; ProfileView
+                // hosts the Garage entry point.
+                NotificationCenter.default.post(name: .openGarage, object: nil)
+            }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")

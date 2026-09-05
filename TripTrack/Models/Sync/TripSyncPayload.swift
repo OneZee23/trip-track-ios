@@ -29,6 +29,9 @@ struct TripSyncPayload: Codable {
     let region: String?
     let isPrivate: Bool
     let vehicleId: UUID?
+    /// Поездка пассажиром. Опционально: сервер без этой колонки ключа не шлёт,
+    /// и старый бэкенд обязан декодироваться, а не ронять всю синхронизацию.
+    var isTransfer: Bool?
     let fuelCurrency: String?
     let previewPolyline: String?
     let badgesJson: String?
@@ -79,6 +82,7 @@ extension TripSyncPayload {
         }
         self.region = trip.region
         self.isPrivate = trip.isPrivate
+        self.isTransfer = trip.isTransfer
         self.vehicleId = trip.vehicleId
         self.fuelCurrency = trip.fuelCurrency
         self.previewPolyline = trip.previewPolyline?.base64EncodedString()

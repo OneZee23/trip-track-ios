@@ -37,9 +37,15 @@ struct PublicProfileView: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var profile: SocialProfile?
+    /// Машины для превью гаража. Пусто — строка просто без превью: пока
+    /// список не приехал, обещать содержимое нечем.
+    @State private var garagePreviewVehicles: [PublicVehicle] = []
     @State private var isLoading = false
     @State private var isTogglingFollow = false
     @State private var loadError: String?
+    /// Последняя ошибка загрузки как ТИП, а не как текст: закрытый профиль
+    /// отличается от обрыва связи кодом, и строка эту разницу уже потеряла.
+    @State private var loadFailure: APIError?
     @State private var followListMode: FollowListMode?
     @State private var isBlocked = false
     @State private var showBlockConfirm = false
@@ -121,6 +127,25 @@ struct PublicProfileView: View {
         pushPath?.wrappedValue.cappedAppend(
             isOwnTrip(trip) ? .trip(trip.id, focus: focus) : .socialTrip(trip, focus: focus)
         )
+    }
+
+    /// Открыть чужую статистику / карту. Оба экрана живут в том же
+    /// NavigationStack, что и профиль, поэтому кнопка «назад» возвращает
+    /// именно сюда, а не на корень таба.
+    private func openStats() {
+        guard let pushPath else { return }
+        pushPath.wrappedValue.cappedAppend(.publicStats(accountId, resolvedDisplayName))
+    }
+
+    private func openMap() {
+        guard let pushPath else { return }
+        pushPath.wrappedValue.cappedAppend(.publicMap(accountId, resolvedDisplayName))
+    }
+
+    /// Гараж чужого человека (0.6.4).
+    private func openGarage() {
+        guard let pushPath else { return }
+        pushPath.wrappedValue.cappedAppend(.publicGarage(accountId, resolvedDisplayName))
     }
 
     private func openFollowList(_ mode: FollowListMode) {
@@ -298,16 +323,52 @@ struct PublicProfileView: View {
                             heroSection(c)
                                 .padding(.top, 6)
 
+                            // Видимость (0.6.3) действует и на своём экране.
+                            // Этот экран для владельца — ПРЕВЬЮ «как видят
+                            // другие» (см. previewBanner), и оговорка
+                            // «|| isOwnProfile» превратила бы его в ложь:
+                            // владелец видел бы блоки, которых у других нет.
+                            // Свои полные данные у него в табе «Я».
+                            // Карточка рисуется всегда: внутри неё тумблер
+                            // гасит только дорожные числа, а счётчики подписок
+                            // остаются входом в списки.
                             statsGrid(c, lng: lng)
                                 .padding(.horizontal, 16)
 
-                            achievementsSection(c)
-                                .padding(.horizontal, 16)
+                            // Скрытый блок исчезает целиком — ни плашки
+                            // «скрыто», ни серой заглушки: прецедент правила
+                            // про госномер.
+                            if visibility.stats, canOpenHub {
+                                statsEntryCard(c, lng: lng)
+                                    .padding(.horizontal, 16)
+                            }
+                            if visibility.map, canOpenHub {
+                                mapEntryCard(c, lng: lng)
+                                    .padding(.horizontal, 16)
+                            }
+                            // Гараж (0.6.4). Строка показывается ВСЕГДА, когда
+                            // экран вообще открыт: сервер сам решит, что внутри,
+                            // а прятать вход по локальной догадке значит либо
+                            // соврать, либо выдать, что человек что-то прячет.
+                            if canOpenHub {
+                                garageEntryCard(c, lng: lng)
+                                    .padding(.horizontal, 16)
+                            }
+
+                            if visibility.achievements {
+                                achievementsSection(c)
+                                    .padding(.horizontal, 16)
+                            }
 
                             recentTrips(c, lng: lng)
                                 .padding(.horizontal, 16)
                         }
                         .transition(.opacity)
+                    } else if let failure = loadFailure {
+                        // Включая `.transient`: без этой ветки сетевой отказ
+                        // рисовал бы скелетон вечно — без слова и без повтора.
+                        unavailableScreen(
+                            ProfileUnavailableState.from(error: failure, preloaded: preloaded), c)
                     } else {
                         SkeletonProfileView()
                             .transition(.opacity)
@@ -326,6 +387,13 @@ struct PublicProfileView: View {
             // toggle flipped. Nothing above needs to be wider than the screen.
             .containerRelativeFrame(.horizontal)
         }
+        // Тот же приём, что в ленте: скролл доходит до физического низа экрана.
+        // Без этого он останавливается над домашним индикатором, а плавающий
+        // таб-бар безопасную зону игнорирует — и 120pt отступа превращались в
+        // 120 + высота индикатора. В ленте этого не видно, потому что до её
+        // конца никто не доскроллил; профиль кончается всегда, и пустая
+        // полоса под последней карточкой была последним, что человек видит.
+        .ignoresSafeArea(edges: .bottom)
         .background(c.bg)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -476,6 +544,82 @@ struct PublicProfileView: View {
             ],
             cancelTitle: AppStrings.cancel(lang.language)
         )
+    }
+
+    // MARK: - Профиль не открылся (0.6.3)
+
+    /// Один экран на два случая, и разница между ними — не косметика.
+    ///
+    /// `.closed` показывает имя и аватар, потому что человека только что видели
+    /// в публичной ленте: его существование уже публично, и молчать о нём —
+    /// значит выглядеть сломанным приложением без единой выгоды для приватности.
+    ///
+    /// `.unavailable` — переход по прямой ссылке. Здесь нельзя ни назвать
+    /// человека, ни подтвердить, что аккаунт есть: сервер отвечает одинаково на
+    /// «нет такого», «закрыт» и «вы заблокированы» именно для того, чтобы по
+    /// ссылке нельзя было это проверить.
+    @ViewBuilder
+    private func unavailableScreen(
+        _ state: ProfileUnavailableState, _ c: AppTheme.Colors
+    ) -> some View {
+        let l = lang.language
+        VStack(spacing: 12) {
+            switch state {
+            case .closed(let name, let avatar):
+                Text(avatar ?? "🙂")
+                    .font(.system(size: 44))
+                    .frame(width: 84, height: 84)
+                    .background(c.cardAlt, in: Circle())
+                Text(name)
+                    .font(.system(size: 20, weight: .heavy))
+                    .foregroundStyle(c.text)
+                Image(systemName: "lock")
+                    .font(.system(size: 18))
+                    .foregroundStyle(c.textTertiary)
+                Text(AppStrings.closedProfileTitle(l))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(c.text)
+                Text(AppStrings.closedProfileBody(l))
+                    .font(.system(size: 12.5))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(c.textTertiary)
+
+            case .unavailable:
+                Circle()
+                    .fill(c.cardAlt)
+                    .frame(width: 84, height: 84)
+                Image(systemName: "lock")
+                    .font(.system(size: 18))
+                    .foregroundStyle(c.textTertiary)
+                Text(AppStrings.profileUnavailableTitle(l))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(c.text)
+                Text(AppStrings.profileUnavailableBody(l))
+                    .font(.system(size: 12.5))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(c.textTertiary)
+
+            case .transient:
+                // Отказ загрузки, а не закрытый профиль: ничего не утверждаем
+                // про человека и предлагаем повтор.
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 26, weight: .light))
+                    .foregroundStyle(c.textTertiary)
+                Text(AppStrings.publicDataLoadFailed(l))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(c.text)
+                Button { Task { await loadProfile() } } label: {
+                    Text(AppStrings.retry(l))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppTheme.accent)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, 40)
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("profile_unavailable")
     }
 
     // MARK: - Preview banner
@@ -723,7 +867,7 @@ struct PublicProfileView: View {
         let tripsValue = privacy ? dots : (stats.map { String($0.tripCount) } ?? "—")
         // Grouped like every other km figure in the app — a bare "%.0f"
         // printed «38420» beside «2 430» two cards away.
-        let kmValue = privacy ? dots : (stats.map { GarageFormat.odometer($0.totalKm) } ?? "—")
+        let kmValue = privacy ? dots : (stats.map { GarageFormat.odometer($0.totalKm, lng: lng) } ?? "—")
         let regionsValue = privacy ? dots : (stats.map { String($0.regionsCount) } ?? "—")
         // Trace what the UI is ACTUALLY rendering right now. Compare with the
         // `loadProfile decoded` line to spot the stale-state / wrong-field
@@ -739,14 +883,19 @@ struct PublicProfileView: View {
             // second, unrelated set of stats — and let the trips grid drift
             // that much further off the fold.
             VStack(spacing: 16) {
-                HStack(spacing: 0) {
-                    statCell(value: tripsValue, label: AppStrings.trips(lang.language), c: c)
-                    columnRule(c)
-                    statCell(value: kmValue, label: AppStrings.km(lang.language), c: c)
-                    columnRule(c)
-                    statCell(value: regionsValue, label: AppStrings.statsRegions(lang.language), c: c)
+                // Тумблер обещает спрятать «поездки, километры и регионы» — и
+                // прячет ровно их. Счётчики подписок остаются: они не дорожные
+                // числа, и это ЕДИНСТВЕННЫЙ вход в списки подписок.
+                if visibility.counters {
+                    HStack(spacing: 0) {
+                        statCell(value: tripsValue, label: AppStrings.trips(lang.language), c: c)
+                        columnRule(c)
+                        statCell(value: kmValue, label: AppStrings.km(lang.language), c: c)
+                        columnRule(c)
+                        statCell(value: regionsValue, label: AppStrings.statsRegions(lang.language), c: c)
+                    }
+                    divider(c)
                 }
-                divider(c)
                 HStack(spacing: 0) {
                     followCounterCell(
                         count: followerShown,
@@ -841,6 +990,227 @@ struct PublicProfileView: View {
         Rectangle()
             .fill(c.borderBright)
             .frame(height: 1)
+    }
+
+    // MARK: - Хаб: входы в статистику и карту (0.6.3)
+
+    /// Что владелец профиля разрешил показывать. Сервер без этой фичи ключа не
+    /// шлёт — тогда открыто всё, ровно как было до 0.6.3.
+    private var visibility: SocialProfileVisibility {
+        profile?.visibility ?? .open
+    }
+
+    /// Есть ли куда открывать хаб-карточки.
+    ///
+    /// Два хоста показывают профиль без своего пути навигации
+    /// (`FollowListView` в старом режиме и `TripDetailView`). Там карточка
+    /// нарисовалась бы, но не открывала бы ничего — а мёртвая кнопка хуже её
+    /// отсутствия. Тот же приём, что у `canOpenTrips` строкой выше.
+    private var canOpenHub: Bool { pushPath != nil }
+
+    /// Карточка-вход. Показывается ТОЛЬКО когда блок открыт — в том числе на
+    /// собственном превью: этот экран для владельца и есть «как видят другие»,
+    /// и показывать в нём спрятанное значило бы врать про результат настройки.
+    /// Свои полные данные у владельца в табе «Я».
+    private func hubCard(
+        _ c: AppTheme.Colors,
+        title: String,
+        subtitle: String,
+        @ViewBuilder body: () -> some View,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.system(size: 15, weight: .heavy))
+                            .foregroundStyle(c.text)
+                        Text(subtitle)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(c.textTertiary)
+                }
+                body()
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(c.card, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(c.border, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Плашки-тизера на карточке «Статистика».
+    ///
+    /// Только те факты, которые УЖЕ приехали с профилем и которых нет в
+    /// карточке счётчиков выше. Рекорды вроде «самой длинной» сюда сознательно
+    /// не попали: у нас на руках лишь десяток последних поездок, и назвать
+    /// самую длинную ИЗ НИХ самой длинной вообще — это ровно то враньё точной
+    /// цифрой, которое аудит профиля заносил в P0.
+    private func statsTeaserFacts(
+        _ lng: LanguageManager.Language
+    ) -> [(value: String, label: String)] {
+        guard let p = profile else { return [] }
+        var facts: [(String, String)] = []
+        if let last = p.recentTrips.first {
+            facts.append((ProfileDateFormat.dayMonth(last.startDate, lang: lng),
+                          AppStrings.profileTeaserLastTrip(lng)))
+        }
+        if p.currentStreak > 0 {
+            facts.append((AppStrings.daysCount(lng, n: p.currentStreak),
+                          AppStrings.profileTeaserStreak(lng)))
+        }
+        return facts
+    }
+
+    private func statsEntryCard(
+        _ c: AppTheme.Colors, lng: LanguageManager.Language
+    ) -> some View {
+        let facts = statsTeaserFacts(lng)
+        return hubCard(
+            c,
+            title: AppStrings.stats(lng),
+            subtitle: AppStrings.profileStatsEntrySubtitle(lng),
+            body: {
+                // График из двух значений красивым не бывает — вместо него
+                // компактные плашки, которые работают и при одной поездке.
+                if !facts.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
+                            VStack(spacing: 2) {
+                                Text(fact.value)
+                                    .font(.system(size: 15, weight: .heavy))
+                                    .foregroundStyle(c.text)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                Text(fact.label)
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .foregroundStyle(c.textTertiary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                    }
+                }
+            },
+            action: { openStats() }
+        )
+    }
+
+    private func mapEntryCard(
+        _ c: AppTheme.Colors, lng: LanguageManager.Language
+    ) -> some View {
+        hubCard(
+            c,
+            title: AppStrings.profileMapEntryTitle(lng),
+            subtitle: AppStrings.profileMapEntrySubtitle(lng),
+            body: {
+                VStack(alignment: .leading, spacing: 6) {
+                    // Настоящие маршруты, а не серый прямоугольник с системной
+                    // иконкой: полилинии уже приехали в `recentTrips`, так что
+                    // превью ничего не стоит и показывает именно эту карту.
+                    let routes = (profile?.recentTrips ?? [])
+                        .map(\.previewCoordinates)
+                        .filter { $0.count >= 2 }
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(c.cardAlt)
+                        .frame(height: 120)
+                        .overlay(
+                            Group {
+                                if routes.isEmpty {
+                                    Image(systemName: "map")
+                                        .font(.system(size: 26, weight: .light))
+                                        .foregroundStyle(c.textTertiary)
+                                } else {
+                                    // Настоящие тайлы: две линии на пустом
+                                    // фоне читаются как график, а не как карта.
+                                    // Здесь это одна карточка на экране, а не
+                                    // ячейка списка, так что MapKit по силам.
+                                    CardMapPreview(routes: routes)
+                                }
+                            }
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    // Рамка обязательна: счётчики считаются по ВСЕМ поездкам,
+                    // включая приватные, а карта рисует только публичные —
+                    // «47 поездок» и карта с двенадцатью маршрутами оказываются
+                    // на расстоянии одного тапа.
+                    Text(AppStrings.publicRoutesCaption(lng))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(c.textTertiary)
+                }
+            },
+            action: { openMap() }
+        )
+    }
+
+    /// Вход в чужой гараж — с превью машин.
+    ///
+    /// Раньше здесь была голая строка со стрелкой, и до тапа нельзя было
+    /// понять ни сколько там машин, ни есть ли они вообще: строка показывается
+    /// всегда, потому что прятать вход по локальной догадке значит выдать, что
+    /// человек что-то прячет. Превью снимает этот вопрос, ничего не выдавая:
+    /// пока список не приехал — просто нет строки под заголовком, а не
+    /// заглушка, обещающая содержимое.
+    private func garageEntryCard(
+        _ c: AppTheme.Colors, lng: LanguageManager.Language
+    ) -> some View {
+        hubCard(
+            c,
+            title: AppStrings.garage(lng),
+            subtitle: AppStrings.publicGarageEntrySubtitle(lng),
+            body: { garagePreview(c, lng: lng) },
+            action: { openGarage() }
+        )
+        .task(id: accountId) { await loadGaragePreview() }
+    }
+
+    @ViewBuilder
+    private func garagePreview(
+        _ c: AppTheme.Colors, lng: LanguageManager.Language
+    ) -> some View {
+        if !garagePreviewVehicles.isEmpty {
+            HStack(spacing: 10) {
+                // Не больше четырёх: дальше силуэты мельчают до нечитаемости,
+                // а число рядом всё равно называет полное количество.
+                ForEach(garagePreviewVehicles.prefix(4)) { v in
+                    VehicleFace(
+                        photo: .remote(v.mainPhoto),
+                        assetName: VehicleAvatar.assetName(
+                            style: v.avatarStyle, avatar: v.avatarEmoji),
+                        fallbackEmoji: v.avatarEmoji,
+                        style: .thumb(44),
+                        dimmed: v.isSold
+                    )
+                }
+                Spacer(minLength: 8)
+                Text("\(garagePreviewVehicles.count) " + AppStrings.nounVehicles(lng, garagePreviewVehicles.count))
+                    .font(.system(size: 12))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(.top, 10)
+        }
+    }
+
+    private func loadGaragePreview() async {
+        guard garagePreviewVehicles.isEmpty else { return }
+        let res: PublicGarageResponse? = try? await APIClient.shared.get(
+            APIEndpoint.userGarage(accountId.uuidString),
+            requiresAuth: AuthService.shared.isSignedIn)
+        // Отказ сети — молчание, а не пустая заглушка: строка остаётся тем,
+        // чем была, и ведёт внутрь, где ошибку покажут словами.
+        garagePreviewVehicles = res?.vehicles ?? []
     }
 
     // MARK: - Achievements
@@ -1367,6 +1737,7 @@ struct PublicProfileView: View {
         isLoading = true
         defer { isLoading = false }
         loadError = nil
+        loadFailure = nil
         let idPrefix = accountId.uuidString.prefix(8)
         countsLog.debug("loadProfile start id=\(idPrefix, privacy: .public) own=\(self.isOwnProfile, privacy: .public)")
         do {
@@ -1403,6 +1774,7 @@ struct PublicProfileView: View {
             let msg = (error as? APIError).map { String(describing: $0) }
                 ?? error.localizedDescription
             loadError = msg
+            loadFailure = error as? APIError
             profileLog.error("profile load failed: \(msg)")
         }
     }
@@ -1541,7 +1913,7 @@ private extension SocialProfile {
             stats: stats, activeVehicle: activeVehicle, recentBadges: recentBadges,
             recentTrips: recentTrips,
             followerCount: followerCount, followingCount: followingCount,
-            isFollowing: isFollowing, bio: bio
+            isFollowing: isFollowing, bio: bio, visibility: visibility
         )
     }
 }

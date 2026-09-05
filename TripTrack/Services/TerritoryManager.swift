@@ -314,6 +314,77 @@ final class TerritoryManager: ObservableObject {
         visitedCache
     }
 
+    /// Геохеши по набору координат — ЧИСТАЯ функция, ничего не читающая и
+    /// ничего не пишущая (0.6.3).
+    ///
+    /// Нужна чужой карте: её туман строится из preview-полилиний чужого
+    /// аккаунта и живёт только в памяти экрана. Записать их в
+    /// `VisitedGeohashEntity` нельзя ни при каких условиях — это единственное
+    /// хранилище СВОЕГО тумана, а `rebuildFromTrips()` стирает его целиком и
+    /// штампует заново, так что чужие тайлы там означают необратимо
+    /// закрашенную свою карту.
+    ///
+    /// Плотность точек в полилинии после RDP-упрощения ниже, чем у сырого
+    /// трека, поэтому длинные отрезки досэмплируются: без этого на трассе
+    /// между двумя точками остаётся незакрашенный коридор.
+    /// Объединение по НЕСКОЛЬКИМ поездкам.
+    ///
+    /// Считать их одним склеенным массивом нельзя: между последней точкой одной
+    /// поездки и первой точкой следующей досэмплирование протянуло бы прямую
+    /// через полстраны и закрасило тайлы, где человек не был. Именно из этих
+    /// тайлов потом считаются «Новые места» и покрытие городов.
+    static func geohashes(
+        fromTrips trips: [[CLLocationCoordinate2D]],
+        precision: Int
+    ) -> Set<String> {
+        var all = Set<String>()
+        for coordinates in trips {
+            all.formUnion(geohashes(from: coordinates, precision: precision))
+        }
+        return all
+    }
+
+    static func geohashes(
+        from coordinates: [CLLocationCoordinate2D],
+        precision: Int
+    ) -> Set<String> {
+        guard coordinates.count > 0 else { return [] }
+        var result = Set<String>()
+        result.reserveCapacity(coordinates.count * 2)
+
+        func stamp(_ c: CLLocationCoordinate2D) {
+            result.insert(GeohashEncoder.encode(
+                latitude: c.latitude, longitude: c.longitude, precision: precision))
+        }
+
+        stamp(coordinates[0])
+        guard coordinates.count > 1 else { return result }
+
+        // Тайл geohash6 — примерно 0.61 км по широте и ~0.7 км по долготе на
+        // широте 55°. Шаг должен быть заметно МЕНЬШЕ стороны, иначе между двумя
+        // отметками помещается целая незакрашенная клетка: 300 м даёт двойной
+        // запас по короткой стороне.
+        let stepMetres: Double = 300
+        for i in 1..<coordinates.count {
+            let a = coordinates[i - 1], b = coordinates[i]
+            let metres = GeometryUtils.haversineDistance(a, b)
+            // Разрыв такой длины — это склейка паузы или сбой GPS, а не езда.
+            // Тот же порог, что в MapExploration: закрашивать перелёт нельзя.
+            if metres >= 20_000 { stamp(b); continue }
+            if metres > stepMetres {
+                let steps = Int(metres / stepMetres)
+                for s in 1...steps {
+                    let t = Double(s) / Double(steps + 1)
+                    stamp(CLLocationCoordinate2D(
+                        latitude: a.latitude + (b.latitude - a.latitude) * t,
+                        longitude: a.longitude + (b.longitude - a.longitude) * t))
+                }
+            }
+            stamp(b)
+        }
+        return result
+    }
+
     /// Fetch geohash6 strings visited before or on the given date.
     /// Used for temporal fog in trip detail (shows fog state at trip.endDate).
     func visitedHashes(before date: Date) -> Set<String> {

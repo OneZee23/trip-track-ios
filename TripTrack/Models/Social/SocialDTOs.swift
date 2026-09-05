@@ -381,6 +381,46 @@ struct SocialProfile: Codable, Hashable {
     /// exactly as it did before. Blank strings are treated as absent by the
     /// view, so a user who cleared their bio doesn't leave a gap.
     let bio: String?
+    /// Что владелец разрешил показывать (0.6.3).
+    ///
+    /// Опционально по той же причине, что и `bio`: бэкенд без этой фичи ключа
+    /// не шлёт, и старый сервер обязан декодироваться, а не ронять весь экран.
+    /// Отсутствие читается как «всё открыто» — см. `SocialProfileVisibility.open`.
+    let visibility: SocialProfileVisibility?
+}
+
+/// Пер-блочная видимость публичного профиля (0.6.3).
+///
+/// Скрытый блок ИСЧЕЗАЕТ целиком — ни плашки «скрыто», ни серой заглушки.
+/// Прецедент — правило про госномер: когда его не показывают, чужой видит
+/// машину без чипа номера, а не пустое место с подписью.
+struct SocialProfileVisibility: Codable, Hashable {
+    let counters: Bool
+    let stats: Bool
+    let map: Bool
+    let achievements: Bool
+
+    /// Дефолт для сервера, который про видимость ещё не знает.
+    static let open = SocialProfileVisibility(
+        counters: true, stats: true, map: true, achievements: true)
+
+    /// Каждое поле опционально по отдельности: сервер может научиться слать
+    /// блок раньше, чем все четыре флага, и половина ответа не должна
+    /// закрывать профиль молча.
+    init(counters: Bool, stats: Bool, map: Bool, achievements: Bool) {
+        self.counters = counters
+        self.stats = stats
+        self.map = map
+        self.achievements = achievements
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        counters = try c.decodeIfPresent(Bool.self, forKey: .counters) ?? true
+        stats = try c.decodeIfPresent(Bool.self, forKey: .stats) ?? true
+        map = try c.decodeIfPresent(Bool.self, forKey: .map) ?? true
+        achievements = try c.decodeIfPresent(Bool.self, forKey: .achievements) ?? true
+    }
 }
 
 // MARK: - Suggested people (Discover)
@@ -480,6 +520,14 @@ struct ProfileUpdateRequest: Encodable {
     /// sync would clobber the server flag); only the explicit
     /// `AuthService.setPublicProfile` builds a payload containing it.
     var isPublic: Bool? = nil
+    /// Пер-блочная видимость публичного профиля (0.6.3). Та же дисциплина, что
+    /// у `isPublic`: `var` с nil-дефолтом, и `syncProfileToServer` их НЕ шлёт —
+    /// зеркало клиента, отправленное на каждой синхронизации профиля, затёрло
+    /// бы серверный флаг. Отправляет только явный тумблер.
+    var countersPublic: Bool? = nil
+    var statsPublic: Bool? = nil
+    var mapPublic: Bool? = nil
+    var achievementsPublic: Bool? = nil
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -494,12 +542,22 @@ struct ProfileUpdateRequest: Encodable {
         try c.encodeIfPresent(language, forKey: .language)
         try c.encodeIfPresent(showOnPublicMap, forKey: .showOnPublicMap)
         try c.encodeIfPresent(isPublic, forKey: .isPublic)
+        try c.encodeIfPresent(countersPublic, forKey: .countersPublic)
+        try c.encodeIfPresent(statsPublic, forKey: .statsPublic)
+        try c.encodeIfPresent(mapPublic, forKey: .mapPublic)
+        try c.encodeIfPresent(achievementsPublic, forKey: .achievementsPublic)
     }
 
+    /// ВНИМАНИЕ: этот тип кодируется ВРУЧНУЮ, потому что отсутствующее поле
+    /// означает «не менять», а синтезированный энкодер слал бы `null`.
+    /// Цена: новое свойство, не добавленное И сюда, И в `encode(to:)`, молча
+    /// не уезжает на сервер. Запрос при этом успешен — все поля опциональны, —
+    /// так что отказ не виден ни в сборке, ни в логах. См. `VisibilityWireTests`.
     private enum CodingKeys: String, CodingKey {
         case displayName, avatarEmoji, profileBackground
         case profileLevel, profileXp, currentStreak, bestStreak
         case activeVehicleId, language, showOnPublicMap, isPublic
+        case countersPublic, statsPublic, mapPublic, achievementsPublic
     }
 }
 
@@ -768,5 +826,72 @@ extension ProfileUpdateRequest {
             profileLevel: nil, profileXp: nil, currentStreak: nil,
             bestStreak: nil, activeVehicleId: nil, language: nil,
             showOnPublicMap: nil)
+    }
+}
+
+/// Один блок публичного профиля, который владелец может выключить (0.6.3).
+enum ProfileVisibilityBlock: CaseIterable, Hashable {
+    case counters, stats, map, achievements
+}
+
+/// Клиентское зеркало четырёх серверных флагов.
+///
+/// Дефолт — «всё открыто»: колонки на сервере заведены с `TRUE`, и любой
+/// другой дефолт здесь означал бы, что профиль закрывается молча у тех, чей
+/// сервер про эти флаги ещё не знает.
+struct ProfileVisibilityFlags: Equatable {
+    var counters: Bool
+    var stats: Bool
+    var map: Bool
+    var achievements: Bool
+
+    static let open = ProfileVisibilityFlags(
+        counters: true, stats: true, map: true, achievements: true)
+
+    /// Явный memberwise: собственный `init?` ниже отменяет синтезированный.
+    init(counters: Bool, stats: Bool, map: Bool, achievements: Bool) {
+        self.counters = counters
+        self.stats = stats
+        self.map = map
+        self.achievements = achievements
+    }
+
+    /// Флаги из ответа `/auth/me`, либо `nil`, если сервер не прислал НИ
+    /// ОДНОГО ключа.
+    ///
+    /// Разница принципиальна. Схлопнуть отсутствие в «всё открыто» значит
+    /// показать рабочие на вид тумблеры там, где сохранять их некуда: запрос
+    /// уйдёт, вернётся 200, и пользователь будет думать, что спрятал карту.
+    /// Это тот же fake-succeed, ради которого у «Публичного профиля» заведён
+    /// гейт на успешный `/auth/me`.
+    ///
+    /// Частичный ответ считается поддержкой: сервер может научиться слать блок
+    /// раньше, чем все четыре ключа, и половина ответа — не её отсутствие.
+    init?(_ me: MeResponse) {
+        let known = [me.countersPublic, me.statsPublic, me.mapPublic, me.achievementsPublic]
+        guard known.contains(where: { $0 != nil }) else { return nil }
+        self.init(
+            counters: me.countersPublic ?? true,
+            stats: me.statsPublic ?? true,
+            map: me.mapPublic ?? true,
+            achievements: me.achievementsPublic ?? true)
+    }
+
+    func value(_ block: ProfileVisibilityBlock) -> Bool {
+        switch block {
+        case .counters: return counters
+        case .stats: return stats
+        case .map: return map
+        case .achievements: return achievements
+        }
+    }
+
+    mutating func set(_ block: ProfileVisibilityBlock, _ isOn: Bool) {
+        switch block {
+        case .counters: counters = isOn
+        case .stats: stats = isOn
+        case .map: map = isOn
+        case .achievements: achievements = isOn
+        }
     }
 }

@@ -85,7 +85,6 @@ final class GamificationManager {
         // Vehicle progress
         let vehicleOdometerBefore = vehicleEntity?.odometerKm ?? 0
         let vehicleLevelBefore = Int(vehicleEntity?.vehicleLevel ?? 1)
-        var newStickers: [VehicleSticker] = []
 
         if let vehicle = vehicleEntity {
             let newOdometer = vehicleOdometerBefore + trip.distanceKm
@@ -93,12 +92,6 @@ final class GamificationManager {
             let newVehicleLevel = VehicleLevelSystem.level(for: newOdometer)
             vehicle.vehicleLevel = Int32(newVehicleLevel)
 
-            // Check stickers
-            newStickers = checkNewStickers(
-                vehicle: vehicle,
-                trip: trip,
-                newOdometer: newOdometer
-            )
         }
 
         let vehicleOdometerAfter = vehicleEntity?.odometerKm ?? vehicleOdometerBefore
@@ -134,7 +127,6 @@ final class GamificationManager {
             vehicleLevelAfter: vehicleLevelAfter,
             newBadges: badgeResult.allEarned,
             repeatedBadgeCounts: badgeResult.repeatedBadgeCounts,
-            newStickers: newStickers,
             currentStreak: currentStreak,
             roadCard: nil // Set by RoadCollectionManager later
         )
@@ -183,48 +175,14 @@ final class GamificationManager {
         return Int(entity.currentStreak)
     }
 
-    // MARK: - Vehicle Stickers
-
-    private func checkNewStickers(
-        vehicle: VehicleEntity,
-        trip: Trip,
-        newOdometer: Double
-    ) -> [VehicleSticker] {
-        var currentStickers = decodeStickers(vehicle.stickersJSON)
-        var newStickers: [VehicleSticker] = []
-
-        let candidates: [(VehicleSticker, Bool)] = [
-            (.flag100km, newOdometer >= 100),
-            (.route500km, newOdometer >= 500),
-            (.bronzeFrame, newOdometer >= 1_000),
-            (.silverFrame, newOdometer >= 2_500),
-            (.goldenFrame, newOdometer >= 5_000),
-            (.regionMap, newOdometer >= 10_000),
-            (.platinumFrame, newOdometer >= 25_000),
-            (.mountain, trip.elevation >= 1_000),
-            (.night, {
-                let hour = Calendar.current.component(.hour, from: trip.startDate)
-                return hour >= 23 || hour < 5
-            }()),
-            (.winter, {
-                let month = Calendar.current.component(.month, from: trip.startDate)
-                return month == 12 || month == 1 || month == 2
-            }()),
-        ]
-
-        for (sticker, condition) in candidates {
-            if condition && !currentStickers.contains(sticker) {
-                currentStickers.append(sticker)
-                newStickers.append(sticker)
-            }
-        }
-
-        if !newStickers.isEmpty {
-            vehicle.stickersJSON = encodeStickers(currentStickers)
-        }
-
-        return newStickers
-    }
+    // Начисление стикеров выключено в 0.6.4.
+    //
+    // Показывать их было негде: раздел на экране машины убран, а больше их не
+    // рисовал никто — начисление писало в базу состояние, которое не читала ни
+    // одна строчка кода. Само поле `stickersJSON` и `VehicleSticker` оставлены:
+    // они уходят в синк, и выкидывать их значило бы менять схему ради уборки.
+    // Если стикеры когда-нибудь станут настоящей фичей, начисление вернётся
+    // сюда же — вместе с местом, где их видно.
 
     private func decodeStickers(_ json: String?) -> [VehicleSticker] {
         guard let json, !json.isEmpty,
@@ -304,13 +262,9 @@ final class GamificationManager {
 
     private func backfillVehicleOdometers(trips: [Trip]) {
         let context = persistenceController.container.viewContext
-        var odometerMap: [UUID: Double] = [:]
-
-        for trip in trips {
-            if let vid = trip.vehicleId {
-                odometerMap[vid, default: 0] += trip.distanceKm
-            }
-        }
+        // Правило «что считать» живёт в `VehicleOdometer` и покрыто тестами:
+        // трансферы сюда не попадают.
+        let odometerMap = VehicleOdometer.trackedByVehicle(from: trips)
 
         for (vehicleId, km) in odometerMap {
             let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()

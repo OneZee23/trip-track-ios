@@ -4,9 +4,9 @@ import WidgetKit
 
 // MARK: - Colors
 
-// 0.6.0 (Figma 356:119/365:119): brand accent #EB571E, cream light bg,
+// 0.6.0 (Figma 356:119/365:119): brand accent #C2452B, cream light bg,
 // #19191F dark bg.
-private let accentOrange = Color(red: 235/255, green: 87/255, blue: 30/255)
+private let accentOrange = Color(red: 194/255, green: 69/255, blue: 43/255)
 private let accentRed = Color(red: 1.0, green: 0.231, blue: 0.188)
 private let lightBg = Color(red: 248/255, green: 246/255, blue: 242/255)
 private let darkBg = Color(red: 25/255, green: 25/255, blue: 31/255)
@@ -245,20 +245,22 @@ struct TripTrackLiveActivity: Widget {
                     .padding(.leading, 3)
                 }
             } compactTrailing: {
-                if context.state.isFinished {
-                    Text(fmtDist(context.state.distanceKm) + (" " + LiveActivityStrings.km(context.state.language))).font(.caption)
-                } else {
-                    // Figma 03b: elapsed time on the trailing side — frozen
-                    // rather than ticking while paused (`timerText` handles
-                    // that), because the pause used to swap this whole region
-                    // for a lone glyph. The island sizes the trailing slot to
-                    // its content, so that glyph got pinned against the right
-                    // edge with a hole where the time had been.
-                    timerText(context: context)
-                        .font(.caption)
-                        .frame(maxWidth: 44)
-                        .foregroundStyle(context.state.isPaused ? accentOrange : .primary)
-                }
+                // Километры, а не время (решение владельца 02.09.2026).
+                //
+                // В свёрнутом острове видно два числа, и время из них — худшее:
+                // сколько едешь, человек и так знает, а «сколько уже проехал»
+                // больше нигде на глаза не попадается, пока не развернёшь.
+                // Время осталось в развёрнутом острове (крупные часы снизу) и
+                // на локскрине. Слева при этом скорость — она уже там была.
+                //
+                // Ширина слота фиксирована по той же причине, по какой была
+                // фиксирована у таймера: остров подгоняет слот под контент, и
+                // на паузе он схлопывался бы, дёргая весь ряд.
+                Text(fmtDist(context.state.distanceKm))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .frame(maxWidth: 44)
+                    .foregroundStyle(context.state.isPaused ? accentOrange : .primary)
             } minimal: {
                 if context.state.isFinished {
                     Image("app_icon")

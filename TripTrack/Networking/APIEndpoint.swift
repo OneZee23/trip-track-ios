@@ -21,6 +21,13 @@ enum APIEndpoint {
     static let photoUpload = "/photos/upload"
     static let photoURL    = "/photos/url"
     static let photoDelete = "/photos/delete"
+    // Фотографии машины (0.6.4). Отдельные маршруты, а не `/photos/*` с
+    // необязательным vehicleId: там вся проверка доступа построена вокруг
+    // поездки и попутчиков, а у машины владелец ровно один.
+    static let vehiclePhotoUpload = "/vehicles/photos/upload"
+    static let vehiclePhotoDelete = "/vehicles/photos/delete"
+    static let vehiclePhotoMain   = "/vehicles/photos/main"
+    static let vehiclePhotoList   = "/vehicles/photos/list"
 
     static let syncPull = "/sync/pull"
     static let syncPush = "/sync/push"
@@ -68,4 +75,27 @@ enum APIEndpoint {
     static let companionsMyTrips       = "/companions/my-trips"
 
     static func userProfile(_ id: String) -> String { "/users/\(id)/profile" }
+    /// Гараж другого человека (0.6.4) — только открытые машины.
+    static func userGarage(_ id: String) -> String { "/users/\(id)/garage" }
+    /// Одна машина чужого человека. Скрытая отвечает как несуществующая —
+    /// ответ не должен подтверждать, что она есть.
+    static func userVehicle(_ id: String, _ vehicleId: String) -> String {
+        "/users/\(id)/vehicles/\(vehicleId)"
+    }
+    /// Все публичные поездки аккаунта с геометрией — источник чужой карты (0.6.3).
+    /// Курсор по формату совпадает с лентой: `${startDate.toISOString()}|${id}`,
+    /// поэтому его надо процентно экранировать (в нём есть `|` и `:`).
+    static func userTrips(_ id: String, cursor: String? = nil, limit: Int? = nil,
+                          vehicleId: String? = nil) -> String {
+        var query: [String] = []
+        if let limit { query.append("limit=\(limit)") }
+        if let vehicleId { query.append("vehicleId=\(vehicleId)") }
+        if let cursor, !cursor.isEmpty {
+            let escaped = cursor.addingPercentEncoding(
+                withAllowedCharacters: .alphanumerics) ?? cursor
+            query.append("cursor=\(escaped)")
+        }
+        let base = "/users/\(id)/trips"
+        return query.isEmpty ? base : "\(base)?\(query.joined(separator: "&"))"
+    }
 }

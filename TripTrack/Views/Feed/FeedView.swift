@@ -218,6 +218,24 @@ struct FeedView: View {
                     )
                 case .followList(let id, let mode):
                     FollowListView(accountId: id, mode: mode, pushPath: $authorPath)
+                case .publicStats(let id, let name):
+                    StatsScreenView(
+                        tripManager: feedVM.tripManager,
+                        source: RemoteTripSource(accountId: id),
+                        ownerName: name
+                    )
+                case .publicGarage(let id, let name):
+                    PublicGarageView(accountId: id, ownerName: name)
+                        .hideAppTabBar()
+                case .publicVehicle(let id, let vid, let name):
+                    PublicVehicleView(accountId: id, vehicleId: vid, ownerName: name)
+                        .hideAppTabBar()
+                case .publicMap(let id, let name):
+                    // Карта полноэкранная, и её нижний лист живёт там же, где
+                    // таб-бар: без этого бар красится поверх сводки и остаётся
+                    // тапабельным.
+                    PublicMapView(accountId: id, ownerName: name)
+                        .hideAppTabBar()
                 case .trip(let id, let focus):
                     TripDetailView(
                         tripId: id,
@@ -473,7 +491,12 @@ struct FeedView: View {
             }
         }
         .sheet(isPresented: $showGarage) {
-            GarageView()
+            // Гараж больше не носит свой NavigationStack (он страница в
+            // профиле), поэтому здесь стек даёт презентация — иначе «машина»
+            // внутри него пушиться некуда.
+            NavigationStack {
+                GarageView()
+            }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         }

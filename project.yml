@@ -82,10 +82,10 @@ targets:
         # library directly so it can draw the canon's numbered selection.
         # The system picker needs no permission at all — that is the price of
         # the custom grid, and it is why the app asks for read access only.
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "TripTrack shows your photo library so you can attach photos to a trip. Photos stay on your device unless you publish the trip yourself."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "TripTrack shows your photo library so you can attach photos to a trip or to a vehicle in your garage. Photos stay on your device unless you publish the trip, or open your vehicle photos to other people yourself."
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        MARKETING_VERSION: "0.6.2"
-        CURRENT_PROJECT_VERSION: "53"
+        MARKETING_VERSION: "0.6.4"
+        CURRENT_PROJECT_VERSION: "55"
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrack.dev
@@ -152,8 +152,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.widgetkit-extension
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack Live"
-        MARKETING_VERSION: "0.6.2"
-        CURRENT_PROJECT_VERSION: "53"
+        MARKETING_VERSION: "0.6.4"
+        CURRENT_PROJECT_VERSION: "55"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         APP_INTENTS_DEPLOYMENT_POSTPROCESSING: NO
@@ -188,8 +188,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: "TripTrack"
         INFOPLIST_KEY_WKApplication: YES
-        MARKETING_VERSION: "0.6.2"
-        CURRENT_PROJECT_VERSION: "53"
+        MARKETING_VERSION: "0.6.4"
+        CURRENT_PROJECT_VERSION: "55"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "4"
       configs:
@@ -212,6 +212,10 @@ targets:
       # runner — the region atlas has to be copied in here as well or every
       # geometry test silently skips itself.
       - path: TripTrack/Resources/MapRegions.json
+        buildPhase: resources
+      # То же и с каталогом марок: `VehicleCatalogTests` читает его из бандла,
+      # а без этой строки тест молча проходит на пустом каталоге.
+      - path: TripTrack/Resources/VehicleCatalog.json
         buildPhase: resources
     dependencies:
       - target: TripTrack

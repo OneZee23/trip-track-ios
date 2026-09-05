@@ -8,6 +8,11 @@ import SwiftUI
 enum FullScreenPhotoSource: Hashable {
     case local(filename: String)
     case remote(url: String?)
+    /// Снимок МАШИНЫ: тоже файл на устройстве, но в своём каталоге —
+    /// `Documents/VehiclePhotos/`, а не в папке поездки. Отдельный случай, а
+    /// не «положить рядом с фото поездок»: снимки машины обязаны пережить
+    /// удаление любой её поездки, поэтому и лежат отдельно.
+    case vehicle(filename: String)
 }
 
 struct PhotoFullScreenView: View {
@@ -27,6 +32,22 @@ struct PhotoFullScreenView: View {
     /// own trip. The viewer closes itself before calling it: the page it is
     /// showing is about to stop existing.
     var onDelete: ((UUID) -> Void)? = nil
+    /// «Сделать главной» — только у своей машины. Кнопка на снимке, который
+    /// уже открыт во весь экран: решение «вот это лицо машины» принимают,
+    /// глядя на снимок целиком, а не на плитку сорока точек в сетке.
+    /// `nil` у поездок — у них главной фотографии нет.
+    var onSetMain: ((UUID) -> Void)? = nil
+    /// Уже главная: кнопка тогда показывает состояние, а не предлагает
+    /// сделать то, что и так сделано.
+    var isMain: ((UUID) -> Bool)? = nil
+    /// Пожаловаться на ЭТОТ снимок. Есть только у чужих фотографий.
+    ///
+    /// Раньше жалоба висела на долгом тапе по плитке в ленте снимков. Системное
+    /// меню строило ради одного пункта размытый предпросмотр во весь экран —
+    /// выглядело поломкой, спорило с домашним правилом «системных меню не
+    /// держим», и главное: с плитки было не видно, на что жалуешься. Здесь
+    /// снимок открыт целиком, и сомнений нет.
+    var onReport: ((UUID) -> Void)? = nil
     let onDismiss: () -> Void
 
     /// Which page the pager has actually LANDED on. Driving the pager by
@@ -55,6 +76,9 @@ struct PhotoFullScreenView: View {
         region: String? = nil,
         language: LanguageManager.Language = .en,
         onDelete: ((UUID) -> Void)? = nil,
+        onSetMain: ((UUID) -> Void)? = nil,
+        onReport: ((UUID) -> Void)? = nil,
+        isMain: ((UUID) -> Bool)? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.pages = pages
@@ -62,6 +86,9 @@ struct PhotoFullScreenView: View {
         self.region = region
         self.language = language
         self.onDelete = onDelete
+        self.onSetMain = onSetMain
+        self.onReport = onReport
+        self.isMain = isMain
         self.onDismiss = onDismiss
         let start = pages.indices.contains(initialIndex) ? initialIndex : 0
         _currentIndex = State(initialValue: start)
@@ -273,9 +300,27 @@ struct PhotoFullScreenView: View {
     private var topRow: some View {
         HStack(spacing: 12) {
             Spacer(minLength: 0)
+            if let onSetMain {
+                let already = isMain?(pages[currentIndex].id) ?? false
+                circleButton(already ? "star.fill" : "star",
+                             label: AppStrings.vehiclePhotoMakeMain(language),
+                             id: "photo_viewer_main",
+                             tint: already ? AppTheme.accent : .white) {
+                    guard !already else { return }
+                    Haptics.tap()
+                    onSetMain(pages[currentIndex].id)
+                }
+            }
             if onDelete != nil {
                 circleButton("trash", label: AppStrings.delete(language), id: "photo_viewer_delete") {
                     confirmingDelete = true
+                }
+            }
+            if let onReport {
+                circleButton("flag", label: AppStrings.reportProfileAction(language),
+                             id: "photo_viewer_report") {
+                    Haptics.tap()
+                    onReport(pages[currentIndex].id)
                 }
             }
             // No share button: a photo is shared as part of the trip, from
@@ -289,12 +334,13 @@ struct PhotoFullScreenView: View {
     }
 
     private func circleButton(
-        _ systemImage: String, label: String, id: String, action: @escaping () -> Void
+        _ systemImage: String, label: String, id: String,
+        tint: Color = .white, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(tint)
                 .frame(width: 40, height: 40)
                 .background(.black.opacity(0.5), in: Circle())
         }
@@ -412,6 +458,14 @@ private struct PhotoPage: View {
         switch source {
         case .local(let filename):
             let loaded = await PhotoStorageService.loadPhotoAsync(filename: filename)
+            if Task.isCancelled { return }
+            image = loaded
+            failed = loaded == nil
+        case .vehicle(let filename):
+            let url = VehiclePhotoStore.directory.appendingPathComponent(filename)
+            let loaded = await Task.detached(priority: .userInitiated) {
+                UIImage(contentsOfFile: url.path)
+            }.value
             if Task.isCancelled { return }
             image = loaded
             failed = loaded == nil

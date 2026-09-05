@@ -28,6 +28,12 @@ struct TrackingView: View {
     /// the canon's «один и тот же sheet отовсюду». Changing car mid-drive
     /// reassigns the WHOLE trip, it does not split it.
     @State private var showVehiclePicker = false
+    /// Гараж, открытый прямо с экрана записи. Свой `NavigationStack`: экран
+    /// записи — корень таба и стека не имеет, а `GarageView` намеренно живёт
+    /// без собственного, потому что под «Я» он полноценная страница.
+    @State private var showGarage = false
+    /// См. `IdleHUDView.pendingGarage` — гараж ждёт закрытия шторки.
+    @State private var pendingGarage = false
     /// Ending a recording is the one irreversible control on this screen.
     @State private var confirmStop = false
 
@@ -77,9 +83,8 @@ struct TrackingView: View {
                     .transition(.opacity)
             }
 
-            // Shared top bar — always the same position. Left slot: back
-            // chevron while idle (the tab bar is hidden here, so the chevron
-            // is the only way out), the car chip while recording.
+            // Shared top bar — always the same position. Слева шеврон выхода
+            // (в записи рядом с ним встаёт чип машины), справа GPS.
             //
             // That slot used to hold a «REC · 0:34:12» pill. The canon rules
             // it out — «БЕЗ отдельного REC-индикатора — запись очевидна из
@@ -93,11 +98,24 @@ struct TrackingView: View {
             // which still draws the pill: the chip stays, the pill does not
             // come back.
             VStack(spacing: 10) {
-                HStack {
+                HStack(spacing: 8) {
+                    // Шеврон стоит ВСЕГДА, и в простое, и в записи.
+                    //
+                    // Канон рисует верхний ряд как «чип слева + GPS справа», но
+                    // из этого следовало, что во время записи выхода с экрана
+                    // нет вообще: в простое слот занимал шеврон, а на старте
+                    // записи его подменял чип. Решение владельца (02.09):
+                    // выход важнее правила. Побочно ряд стал СТАБИЛЬНЕЕ —
+                    // шеврон больше не прыгает, чип просто встаёт рядом.
+                    //
+                    // Запись живёт в фоне (фоновая геолокация + Live Activity),
+                    // так что уход на другой экран её не обрывает.
+                    backButton
                     if viewModel.isRecording {
-                        VehicleChip(compact: true) { showVehiclePicker = true }
-                    } else {
-                        backButton
+                        VehicleChip(compact: true,
+                                    isTransfer: viewModel.tripManager.activeTrip?.isTransfer ?? false) {
+                            showVehiclePicker = true
+                        }
                     }
                     Spacer()
                     if !(viewModel.locationDenied && !viewModel.isRecording) {
@@ -150,16 +168,49 @@ struct TrackingView: View {
         .onReceive(viewModel.objectWillChange) { _ in
             recLog.notice("objectWillChange received")
         }
-        .sheet(isPresented: $showVehiclePicker) {
+        // Гараж поверх записи, а не переключением таба: «назад» возвращает
+        // сюда же, к записи, откуда человек и шёл его открывать.
+        .fullScreenCover(isPresented: $showGarage) {
+            NavigationStack {
+                GarageView()
+                    .environmentObject(lang)
+            }
+        }
+        .sheet(isPresented: $showVehiclePicker, onDismiss: {
+            guard pendingGarage else { return }
+            pendingGarage = false
+            showGarage = true
+        }) {
             // The chip is reachable mid-recording, and a trip carries the car
             // it was stamped with at start — picking a different one has to
             // reach the trip in flight, or the drive lands on the wrong car
             // while the chip claims otherwise.
-            VehiclePickerSheet { picked in
-                guard viewModel.isRecording,
-                      let tripId = viewModel.tripManager.activeTrip?.id else { return }
-                viewModel.tripManager.updateVehicle(for: tripId, vehicleId: picked)
-            }
+            // Метка `onPick:` обязательна: после появления `onPickTransfer`
+            // хвостовое замыкание без метки всё ещё связывается верно, но
+            // компилятор ругается на устаревшее обратное сопоставление.
+            VehiclePickerSheet(
+                checkedVehicleId: .some(viewModel.tripManager.activeTrip?.vehicleId),
+                onPick: { picked in
+                    guard viewModel.isRecording,
+                          let tripId = viewModel.tripManager.activeTrip?.id else { return }
+                    // ПОРЯДОК ВАЖЕН: `setTransfer(true)` внутри себя обнуляет
+                    // машину, поэтому снимать метку надо ДО того, как машину
+                    // назначили. Наоборот — и только что выбранная машина
+                    // молча улетит в nil, а поездка окажется ничьей.
+                    if viewModel.tripManager.activeTrip?.isTransfer == true {
+                        viewModel.tripManager.setTransfer(for: tripId, isTransfer: false)
+                    }
+                    viewModel.tripManager.updateVehicle(for: tripId, vehicleId: picked)
+                },
+                showsTransferOption: true,
+                isTransferSelected: viewModel.tripManager.activeTrip?.isTransfer ?? false,
+                onPickTransfer: {
+                    guard viewModel.isRecording,
+                          let tripId = viewModel.tripManager.activeTrip?.id else { return }
+                    viewModel.tripManager.setTransfer(for: tripId, isTransfer: true)
+                },
+                onManageGarage: { pendingGarage = true }
+            )
             .environmentObject(lang)
         }
         .overlay {
@@ -808,7 +859,10 @@ struct TrackingView: View {
                     withAnimation(.easeInOut(duration: 0.25)) {
                         viewModel.startRefusal = .noFix
                     }
-                }
+                },
+                isTransfer: viewModel.pendingTransfer,
+                onSetTransfer: { viewModel.pendingTransfer = $0 },
+                onManageGarage: { showGarage = true }
             )
             .padding(.bottom, controlBlockBottomInset)
         }

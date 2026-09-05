@@ -19,6 +19,11 @@ final class MapViewModel: ObservableObject {
 
     // MARK: - Recording State
     @Published var isRecording: Bool = false
+    /// «Следующую поездку я еду пассажиром» — такси, автобус, чужая машина.
+    ///
+    /// Живёт до старта записи и гасится в момент штампа: это свойство ОДНОЙ
+    /// поездки, а не настройка. Поэтому и не `SettingsManager`.
+    @Published var pendingTransfer: Bool = false
     @Published var speed: Double = 0        // km/h
     @Published var altitude: Double = 0     // meters
     @Published var distance: Double = 0     // km
@@ -570,15 +575,21 @@ final class MapViewModel: ObservableObject {
 
     /// Resolves the car (with the shared selection fallback) and starts the
     /// Lock-Screen Live Activity. Shared by fresh-start and force-quit recovery.
-    private func startLiveActivity(tripId: UUID, startDate: Date, vehicleId: UUID?) {
+    private func startLiveActivity(tripId: UUID, startDate: Date, vehicleId: UUID?,
+                                   isTransfer: Bool = false) {
         let vehicle = SettingsManager.shared.vehicle(for: vehicleId)
-        let lang = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
+        let lang = LanguageManager.Language(
+            rawValue: UserDefaults.standard.string(forKey: "appLanguage") ?? "en") ?? .en
+        // На экране блокировки карточку видит любой, кто взглянул на телефон.
+        // Поездка на такси не должна называть там машину: она на неё не
+        // записана, и подпись была бы просто неправдой.
         LiveActivityManager.shared.startActivity(
             tripId: tripId,
             startDate: startDate,
-            vehicleName: vehicle?.name
-                        ?? AppStrings.vehicleTypeCar(LanguageManager.Language(rawValue: lang) ?? .en),
-            vehicleAvatar: vehicle?.avatarEmoji ?? "🚗"
+            vehicleName: isTransfer
+                ? AppStrings.tripTransferTitle(lang)
+                : (vehicle?.name ?? AppStrings.vehicleTypeCar(lang)),
+            vehicleAvatar: isTransfer ? "🧍" : (vehicle?.avatarEmoji ?? "🚗")
         )
     }
 
@@ -633,8 +644,19 @@ final class MapViewModel: ObservableObject {
         // Shortcuts/automation start path) over the persisted selection, so the
         // recorded trip is stamped with exactly the chosen vehicle without
         // depending on a prior persist having already landed.
-        let vid = overrideId ?? selectedVehicleId
-        tripManager.startTrip(vehicleId: vid)
+        // «Еду пассажиром» — свойство ЭТОЙ поездки и только её. В
+        // `selectedVehicleId` оно не пишется никогда: иначе одна поездка на
+        // такси сделала бы пассажирскими все следующие.
+        let transfer = pendingTransfer
+        // Сохранённый выбор проверяется, а не берётся на веру: он мог остаться
+        // указывать на машину, которую убрали в архив или продали с ДРУГОГО
+        // устройства. Это последний рубеж правила «на архивную не пишем» —
+        // здесь, в точке штампа, а не на десяти экранах перед ним.
+        let vid = transfer
+            ? nil
+            : SettingsManager.shared.recordableVehicleId(overrideId ?? selectedVehicleId)
+        tripManager.startTrip(vehicleId: vid, isTransfer: transfer)
+        pendingTransfer = false
         isRecording = true
         // This trip's inactivity window starts now, from this trip's odometer.
         AutoTripService.shared.recordingDidStart()
@@ -643,7 +665,8 @@ final class MapViewModel: ObservableObject {
         startLiveActivity(
             tripId: tripManager.activeTrip?.id ?? UUID(),
             startDate: recordingStartDate ?? Date(),
-            vehicleId: vid
+            vehicleId: vid,
+            isTransfer: transfer
         )
 
         // Simple follow mode — no zoom management
@@ -710,6 +733,12 @@ final class MapViewModel: ObservableObject {
         // this, `tripManager.stopTrip()` ran twice and side effects (Live
         // Activity end, gamification, junk-discard delete) executed twice.
         guard isRecording else { return }
+        // Намерение сгорает вместе с поездкой — на всех выходах ниже, включая
+        // выброшенную мусорную поездку. Иначе следующая унаследует «я
+        // пассажир». Строго ПОСЛЕ guard: холостой вызов (Stop из Live Activity,
+        // когда запись уже кончилась) не должен стирать то, что человек
+        // поставил на простое для СЛЕДУЮЩЕЙ поездки.
+        defer { pendingTransfer = false }
         isRecording = false
         // Stale from the previous trip would otherwise suppress the tab switch
         // for a perfectly good one.
@@ -871,7 +900,6 @@ final class MapViewModel: ObservableObject {
             vehicleLevelAfter: 3,
             newBadges: badges,
             repeatedBadgeCounts: Dictionary(uniqueKeysWithValues: badges.map { ($0.id, 5) }),
-            newStickers: [],
             currentStreak: 14,
             roadCard: nil
         )

@@ -3,23 +3,42 @@ import MapKit
 
 /// Lightweight non-interactive map preview with route polyline for feed cards.
 struct CardMapPreview: View {
-    let coordinates: [CLLocationCoordinate2D]
+    /// Один или несколько маршрутов в общей рамке. Несколько нужны
+    /// карточке-входу «Карта» в чужом профиле (0.6.3): там это тизер всей
+    /// карты, и настоящие тайлы под линиями — единственное, что отличает
+    /// карту от графика.
+    let routes: [[CLLocationCoordinate2D]]
+
+    init(coordinates: [CLLocationCoordinate2D]) {
+        self.routes = [coordinates]
+    }
+
+    init(routes: [[CLLocationCoordinate2D]]) {
+        self.routes = routes.filter { $0.count >= 2 }
+    }
+
+    /// Все точки всех маршрутов — для рамки и легаси-пути.
+    private var coordinates: [CLLocationCoordinate2D] { routes.flatMap { $0 } }
 
     var body: some View {
         let region = mapRegion
         if #available(iOS 17, *) {
             Map(initialPosition: .region(region), interactionModes: []) {
-                MapPolyline(coordinates: coordinates)
-                    .stroke(AppTheme.accent, lineWidth: 3)
+                ForEach(Array(routes.enumerated()), id: \.offset) { _, route in
+                    MapPolyline(coordinates: route)
+                        .stroke(AppTheme.accent, lineWidth: 3)
+                }
 
-                if let first = coordinates.first {
+                // Точки старта и финиша — только у ОДИНОЧНОГО маршрута: на
+                // десятке трасс двадцать кружков читаются как сыпь.
+                if routes.count == 1, let first = coordinates.first {
                     Annotation("", coordinate: first) {
                         Circle()
                             .fill(.green)
                             .frame(width: 6, height: 6)
                     }
                 }
-                if let last = coordinates.last {
+                if routes.count == 1, let last = coordinates.last {
                     Annotation("", coordinate: last) {
                         Circle()
                             .fill(.red)

@@ -88,6 +88,28 @@ final class R2PhotoStorage: RemotePhotoStorage {
         )
     }
 
+    /// То же самое для фотографии МАШИНЫ: та же форма multipart, тот же ответ,
+    /// другой маршрут и `vehicleId` вместо `tripId`.
+    func uploadVehiclePhotoPart(
+        vehicleId: UUID, photoId: UUID, type: PhotoType,
+        data: Data, isMain: Bool, takenAt: Date,
+        metadataAlreadyClean: Bool = false
+    ) async throws -> PhotoUploadResponse {
+        let cleanData = metadataAlreadyClean ? data : stripImageMetadata(data)
+        let fields: [(name: String, value: String)] = [
+            ("vehicleId", vehicleId.uuidString),
+            ("photoId", photoId.uuidString),
+            ("type", type.rawValue),
+            ("isMain", isMain ? "true" : "false"),
+            ("takenAt", ISODate.format(takenAt)),
+        ]
+        return try await client.uploadMultipart(
+            APIEndpoint.vehiclePhotoUpload,
+            fields: fields,
+            file: (name: "file", filename: "photo.jpg", mimeType: "image/jpeg", data: cleanData)
+        )
+    }
+
     func fetchPresignedURL(photoId: UUID, type: PhotoType) async throws -> URL {
         let res: PhotoURLResponse = try await client.post(
             APIEndpoint.photoURL,

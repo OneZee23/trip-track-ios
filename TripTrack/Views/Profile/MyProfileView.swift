@@ -228,13 +228,12 @@ struct MyProfileView: View {
     private func hero(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         let background = ProfileBackground.from(settings.profileBackground)
 
-        return Button {
-            Haptics.tap()
-            withAnimation(.easeInOut(duration: 0.22)) {
-                isEditingAvatar.toggle()
-            }
-        } label: {
-            VStack(spacing: 10) {
+        // ДВЕ зоны, а не одна кнопка на весь герой. Раньше баннер, аватар и
+        // подпись лежали внутри общего Button, и тап по фону открывал выбор
+        // аватара — то есть попадание в баннер делало ровно не то, на что
+        // человек целился. Аватар лежит в ZStack поверх баннера, поэтому в
+        // области пересечения выигрывает он, как и ожидается.
+        return VStack(spacing: 10) {
                 ZStack(alignment: .bottom) {
                     // «Без фона» draws nothing at all, which would leave the
                     // disc floating on the page ground — the bare look this
@@ -246,7 +245,11 @@ struct MyProfileView: View {
                     // with the avatar stranded in the middle of it — worse than
                     // no header. A wash reads as a band at any brightness, and
                     // still reads as the quiet option beside any real preset.
-                    Group {
+                    Button {
+                        Haptics.tap()
+                        onTapBackground()
+                    } label: {
+                        Group {
                         if background == .none {
                             UnevenRoundedRectangle(
                                 bottomLeadingRadius: 24, bottomTrailingRadius: 24
@@ -265,10 +268,21 @@ struct MyProfileView: View {
                                 background: background, height: Self.bannerHeight
                             )
                         }
+                        }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(AppStrings.settingsProfileBackground(l))
+                    .accessibilityIdentifier("my_profile_hero_background")
                     // Room for the half of the disc that hangs below the banner.
                     .padding(.bottom, Self.avatarDiameter / 2)
 
+                    Button {
+                        Haptics.tap()
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            isEditingAvatar.toggle()
+                        }
+                    } label: {
                     ZStack(alignment: .bottomTrailing) {
                         Circle()
                             .fill(c.cardAlt)
@@ -293,16 +307,29 @@ struct MyProfileView: View {
                                 .transition(.opacity)
                         }
                     }
+                    .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(AppStrings.myProfileChangeAvatar(l))
+                    .accessibilityIdentifier("my_profile_hero_avatar")
                 }
 
-                Text(AppStrings.myProfileChangeAvatar(l))
-                    .font(.system(size: 12))
-                    .foregroundStyle(c.textSecondary)
+                // Подпись про аватар — часть аватарной зоны, а не фона.
+                Button {
+                    Haptics.tap()
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isEditingAvatar.toggle()
+                    }
+                } label: {
+                    Text(AppStrings.myProfileChangeAvatar(l))
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textSecondary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHidden(true)
             }
             .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
         .accessibilityIdentifier("my_profile_avatar")
     }
 
@@ -517,7 +544,7 @@ struct MyProfileView: View {
                     value: AppStrings.myProfileStatsSummary(
                         l,
                         trips: mapVM.cachedTripCount,
-                        km: GarageFormat.odometer(mapVM.cachedTotalKm)
+                        km: GarageFormat.odometer(mapVM.cachedTotalKm, lng: l)
                     ),
                     isUnset: false,
                     identifier: "my_profile_row_stats",

@@ -1003,8 +1003,17 @@ enum AppStrings {
             let f = NumberFormatter()
             f.numberStyle = .decimal
             f.locale = lang.locale
-            if lang == .ru { f.groupingSeparator = " " }
+            if lang == .ru { f.groupingSeparator = "\u{00A0}" }
             if lang == .en { f.groupingSeparator = "," }
+            // Разделитель разрядов обязан быть НЕРАЗРЫВНЫМ. С обычным пробелом
+            // строка «Volkswagen Polo · 2019 · 12 000 км» переносится ВНУТРИ
+            // числа — «12» остаётся на одной строке, «000 км» уезжает на
+            // следующую. Ловится не в тестах, а глазами на узкой карточке, и то
+            // не сразу. Локали, которые сами группируют пробелом (fr, pl, kk,
+            // uk), приходят сюда с U+0020 и чинятся тем же правилом.
+            if let sep = f.groupingSeparator, sep == " " {
+                f.groupingSeparator = "\u{00A0}"
+            }
             map[lang] = f
         }
         return map
@@ -2187,6 +2196,328 @@ enum AppStrings {
     static func vehicleNameSection(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehicleNameSection", ru: "Название", en: "Name")
     }
+
+    // MARK: - Паспорт машины: марка, модель, год (0.6.4)
+
+    /// Заголовок секции. Не «характеристики»: тех. параметры мы сознательно не
+    /// собираем — их нечем проверить, и это поле drive2, а не наше.
+    static func vehicleWhatSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleWhatSection", ru: "Что за машина", en: "What it is")
+    }
+    static func vehicleMakeModel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleMakeModel", ru: "Марка и модель", en: "Make and model")
+    }
+    static func vehicleYear(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleYear", ru: "Год", en: "Year")
+    }
+    /// «Про неё» — одна строка владельца. Ровно одна: пять абзацев на пустом
+    /// гараже это пять пустых абзацев, а весь смысл паспорта в том, что он
+    /// заполняется сам.
+    /// Подпись под нулевыми кругами. Не «нет данных»: биография не потеряна,
+    /// её просто ещё не наездили — и появится она сама.
+    static func vehicleBiographyEmpty(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleBiographyEmpty",
+           ru: "Биография пока пустая. Привяжите поездки к этой машине — карта, регионы и рекорды появятся сами",
+           en: "The biography is still empty. Assign trips to this vehicle and the map, regions and records will appear on their own")
+    }
+    /// Переключатель на экране записи, ДО старта. Отдельная строка от
+    /// `tripTransferTitle` («Ехал пассажиром») именно из-за времени: то
+    /// подпись к уже записанной поездке, а это заявление о будущей.
+    static func passengerToggle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "passengerToggle", ru: "Я пассажир", en: "I'm a passenger")
+    }
+
+    /// Заголовок группы «магнитола + автозапись» на экране машины.
+    static func vehicleRecordingSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleRecordingSection", ru: "Запись", en: "Recording")
+    }
+
+    static func vehicleStateSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleStateSection", ru: "Состояние", en: "Status")
+    }
+    static func vehicleSoldHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleSoldHint",
+           ru: "Биография останется, но новые поездки на неё записываться перестанут. Если машина просто стоит — отмечать её проданной не нужно.",
+           en: "The biography stays, but new trips stop being recorded onto it. If the vehicle is simply parked, there is no need to mark it sold.")
+    }
+    static func vehicleSoldHintOn(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleSoldHintOn",
+           ru: "Машина отмечена проданной. Верните её, если продажа не состоялась или Вы выкупили её обратно.",
+           en: "The vehicle is marked as sold. Undo it if the sale fell through or you bought it back.")
+    }
+    static func vehicleSellConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleSellConfirmTitle", ru: "Отметить проданной?", en: "Mark as sold?")
+    }
+    static func vehicleSellConfirmBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleSellConfirmBody",
+           ru: "Все её поездки останутся на месте. Активной она быть перестанет — новые поездки поедут на другую машину. Отменить можно здесь же.",
+           en: "All of its trips stay where they are. It stops being the active vehicle — new trips will go to another one. You can undo this in the same place.")
+    }
+    static func vehicleMarkSold(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleMarkSold", ru: "Отметить проданной", en: "Mark as sold")
+    }
+    /// Не «вернуть в гараж»: машина из гаража и не уходила. Отменяется именно
+    /// ОТМЕТКА о продаже, и слово должно называть ровно это.
+    static func vehicleUnsell(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleUnsell", ru: "Вернуть из проданных", en: "Undo «sold»")
+    }
+    /// Метка на карточке в гараже. Короткая: место в строке с именем.
+    static func vehicleSoldBadge(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleSoldBadge", ru: "Продана", en: "Sold")
+    }
+    static func vehicleSoldState(_ lang: LanguageManager.Language, when: String) -> String {
+        switch lang {
+        case .ru:  return "Продана в \(when) · биография закрыта"
+        case .en:  return "Sold in \(when) · biography closed"
+        case .de:  return "Verkauft im \(when) · Biografie geschlossen"
+        case .es:  return "Vendido en \(when) · biografía cerrada"
+        case .fr:  return "Vendu en \(when) · biographie close"
+        case .it:  return "Venduto in \(when) · biografia chiusa"
+        case .pl:  return "Sprzedany w \(when) · biografia zamknięta"
+        case .id:  return "Terjual pada \(when) · biografi ditutup"
+        case .tr:  return "\(when) tarihinde satıldı · biyografi kapandı"
+        case .fil: return "Naibenta noong \(when) · sarado ang biograpiya"
+        case .uk:  return "Продана в \(when) · біографія закрита"
+        case .kk:  return "\(when) сатылды · өмірбаяны жабық"
+        case .pt:  return "Vendido em \(when) · biografia encerrada"
+        }
+    }
+    static func vehiclePrivacyRowHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePrivacyRowHint",
+           ru: "Машина, номер, карта и фотографии — четыре отдельных тумблера",
+           en: "Vehicle, plate, map and photos — four separate switches")
+    }
+    static func vehicleWhoSees(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleWhoSees", ru: "Кого пускать", en: "Who gets in")
+    }
+    static func vehicleShowMap(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleShowMap", ru: "Показывать карту машины", en: "Show this vehicle's map")
+    }
+    static func vehicleShowMapHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleShowMapHint",
+           ru: "Маршруты этой машины на её странице. Сама машина остаётся видна.",
+           en: "This vehicle's routes on its page. The vehicle itself stays visible.")
+    }
+    static func vehicleShowPhotos(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleShowPhotos", ru: "Показывать фотографии другим", en: "Show photos to others")
+    }
+    static func vehicleShowPhotosHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleShowPhotosHint",
+           ru: "Отдельно от самой машины: во дворе виден и номер, и дом.",
+           en: "Separate from the vehicle itself: a photo in your yard shows both the plate and the building.")
+    }
+    /// Разовый вопрос в момент, когда у машины появляется ПЕРВЫЙ снимок.
+    ///
+    /// Ось «фотографии» выключена по умолчанию, и без этого вопроса человек
+    /// узнавал бы о ней только случайно — то есть добавил бы снимки и не понял,
+    /// почему их никто не видит. Спрашиваем ровно один раз на машину и ровно
+    /// тогда, когда вопрос осмыслен: показывать пока нечего — нечего и решать.
+    static func vehiclePhotoAskTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoAskTitle",
+           ru: "Показывать фотографии этой машины другим?",
+           en: "Show this vehicle's photos to others?")
+    }
+    static func vehiclePhotoAskBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoAskBody",
+           ru: "Во дворе на снимке виден и номер, и дом. Решение меняется в любой момент — «Кого пускать» в редактировании машины.",
+           en: "A photo in your yard shows both the plate and the building. You can change this at any time — «Who can see» in the vehicle's settings.")
+    }
+    static func vehiclePhotoAskShow(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoAskShow", ru: "Показывать", en: "Show them")
+    }
+    static func vehiclePhotoAskKeep(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoAskKeep", ru: "Оставить при себе", en: "Keep private")
+    }
+    static func vehiclePlateHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePlateHint",
+           ru: "По номеру находят имя и адрес владельца — поэтому выключено по умолчанию.",
+           en: "A plate is enough to look up the owner's name and address — off by default for that reason.")
+    }
+    static func vehiclePrivacyFooter(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePrivacyFooter",
+           ru: "Выключенное исчезает у других целиком, без плашки «скрыто». Ваши поездки при этом публикуются как обычно — просто без упоминания, на чём они сделаны.",
+           en: "What you switch off disappears for other people entirely, with no «hidden» placeholder. Your trips still publish as usual — just without saying what they were made in.")
+    }
+    /// Пустой гараж и полностью скрытый гараж говорят ОДНО И ТО ЖЕ. Разные
+    /// формулировки выдали бы, что человек что-то прячет.
+    static func publicGarageEntrySubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicGarageEntrySubtitle",
+           ru: "Машины, которые он открыл, и где они побывали",
+           en: "The vehicles they opened up, and where those have been")
+    }
+    static func publicGarageEmpty(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicGarageEmpty",
+           ru: "Здесь пока пусто. Поездки и карта — по-прежнему на месте.",
+           en: "Nothing here yet. Their trips and map are where they were.")
+    }
+    static func publicVehicleUnavailable(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicVehicleUnavailable",
+           ru: "Эта машина недоступна.",
+           en: "This vehicle isn't available.")
+    }
+    static func publicVehicleSold(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicVehicleSold", ru: "Продана · биография закрыта", en: "Sold · biography closed")
+    }
+    static func publicRecordsNote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicRecordsNote",
+           ru: "По публичным поездкам. Приватные в рекорды не попадают — иначе они выдали бы дату и место.",
+           en: "From public trips only. Private ones stay out of the records — otherwise they would give away the date and the place.")
+    }
+    static func publicAboutBy(_ lang: LanguageManager.Language, name: String) -> String {
+        switch lang {
+        case .ru:  return "\(name) — о своей машине"
+        case .uk:  return "\(name) — про свою машину"
+        case .kk:  return "\(name) — өз көлігі туралы"
+        case .de:  return "\(name) über sein Fahrzeug"
+        case .es:  return "\(name) sobre su vehículo"
+        case .fr:  return "\(name) à propos de son véhicule"
+        case .it:  return "\(name) sul suo veicolo"
+        case .pl:  return "\(name) o swoim pojeździe"
+        case .tr:  return "\(name) aracı hakkında"
+        case .id:  return "\(name) tentang kendaraannya"
+        case .fil: return "\(name) tungkol sa sasakyan niya"
+        case .pt:  return "\(name) sobre o seu veículo"
+        case .en:  return "\(name) on their vehicle"
+        }
+    }
+    static func garageLoadFailed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "garageLoadFailed", ru: "Не удалось загрузить гараж", en: "Couldn't load the garage")
+    }
+    static func garageActive(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "garageActive", ru: "Активная", en: "Active")
+    }
+    static func garageActiveHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "garageActiveHint",
+           ru: "Новые поездки записываются на неё.",
+           en: "New trips are recorded onto this one.")
+    }
+    static func garageArchiveHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "garageArchiveHint",
+           ru: "Активна одна машина. Переключить можно когда угодно: новые поездки поедут на выбранную, уже записанные останутся на своих.",
+           en: "One vehicle is active at a time. You can switch whenever you like: new trips go to the one you pick, and the ones already recorded stay where they are.")
+    }
+    /// Заголовок раздела «на них тоже можно писать, просто сейчас активна не они».
+    /// Раздел проданных. Отдельный, а не метка в общем списке: разница между
+    /// «можно ездить» и «нельзя» не должна быть мелким текстом.
+    static func garageSold(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "garageSold", ru: "Проданные", en: "Sold")
+    }
+    static func garageSoldHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "garageSoldHint",
+           ru: "Новые поездки на них не пишутся — машина уехала к другому человеку. Всё, что уже записано, остаётся при ней; если продажа сорвалась, её можно снять.",
+           en: "New trips are never recorded onto these — the car belongs to someone else now. Everything already recorded stays with it, and if the sale fell through you can undo it.")
+    }
+    static func garageOthers(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "garageOthers", ru: "Остальные", en: "Others")
+    }
+    /// Когда активной машины нет вовсе. Прежняя подпись в этом состоянии
+    /// утверждала «Активна одна машина» — то есть врала прямо под пустым
+    /// местом, где эта машина должна была быть.
+    static func garageNoActiveHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "garageNoActiveHint",
+           ru: "Активной машины сейчас нет — новые поездки записываются без транспорта. Откройте машину и выберите «Сделать основной».",
+           en: "No vehicle is active right now, so new trips are recorded with no vehicle. Open a vehicle and choose «Make main».")
+    }
+    static func vehicleAboutFooter(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleAboutFooter", ru: "Одна строка, не бортжурнал", en: "One line, not a logbook")
+    }
+    static func recordHighest(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "recordHighest", ru: "Выше всего", en: "Highest")
+    }
+    /// «6 из 10». Отдельной функцией, потому что «из» — предлог, и на
+    /// тринадцати языках это не всегда «X of Y».
+    static func outOf(l lang: LanguageManager.Language, have: Int, all: Int) -> String {
+        switch lang {
+        case .ru:  return "\(have) из \(all)"
+        case .uk:  return "\(have) з \(all)"
+        case .kk:  return "\(all) ішінен \(have)"
+        case .de:  return "\(have) von \(all)"
+        case .es:  return "\(have) de \(all)"
+        case .fr:  return "\(have) sur \(all)"
+        case .it:  return "\(have) su \(all)"
+        case .pl:  return "\(have) z \(all)"
+        case .tr:  return "\(all) taneden \(have)"
+        case .id:  return "\(have) dari \(all)"
+        case .fil: return "\(have) sa \(all)"
+        case .pt:  return "\(have) de \(all)"
+        case .en:  return "\(have) of \(all)"
+        }
+    }
+    static func vehicleTripsShort(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleTripsShort", ru: "Поездки", en: "Trips")
+    }
+    static func sortByDate(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "sortByDate", ru: "По дате", en: "By date")
+    }
+    static func sortByDistance(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "sortByDistance", ru: "По длине", en: "By distance")
+    }
+    static func sortByElevation(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "sortByElevation", ru: "По высоте", en: "By elevation")
+    }
+    /// Почему приватная поездка тут ЕСТЬ, а в чужом гараже её не будет.
+    static func vehicleTripsPrivateNote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleTripsPrivateNote",
+           ru: "Приватные поездки — с замком, и видны только Вам. В чужом гараже этой машины их нет: ни строки, ни километров, ни высоты.",
+           en: "Private trips carry a lock and are visible only to you. In someone else's garage this vehicle has none of them — no row, no kilometres, no elevation.")
+    }
+    static func vehiclePhotos(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotos", ru: "Фотографии", en: "Photos")
+    }
+    static func vehiclePhotoMain(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoMain", ru: "ГЛАВНАЯ", en: "MAIN")
+    }
+    static func vehiclePhotoMakeMain(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoMakeMain", ru: "Сделать главной", en: "Make it the main one")
+    }
+    static func vehiclePhotoActions(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotoActions", ru: "Что сделать со снимком?", en: "What to do with this photo?")
+    }
+    static func vehiclePhotosHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotosHint",
+           ru: "Тап открывает снимок — там же можно сделать его главным или удалить. Главный стоит на карточке машины.",
+           en: "Tap to open a photo — from there you can make it the main one or delete it. The main photo is the car's face.")
+    }
+    static func vehiclePhotosEmpty(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehiclePhotosEmpty",
+           ru: "Пока ни одной фотографии. Первая станет главной — её увидят на карточке машины.",
+           en: "No photos yet. The first one becomes the main photo — the face of the car.")
+    }
+    static func vehicleWhereWas(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleWhereWas", ru: "Где была", en: "Where it has been")
+    }
+    static func vehicleStickers(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleStickers", ru: "Стикеры", en: "Stickers")
+    }
+    static func vehicleTripsTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleTripsTitle", ru: "Поездки этой машины", en: "This vehicle's trips")
+    }
+    static func vehicleAbout(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleAbout", ru: "Про неё", en: "About it")
+    }
+    static func vehicleAboutPlaceholder(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleAboutPlaceholder",
+           ru: "Одна строка: почему именно она",
+           en: "One line: why this one")
+    }
+    /// Значение пустой строки паспорта. Именно «не указано», а не прочерк:
+    /// прочерк читается как «нет и не будет».
+    static func vehicleNotSet(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleNotSet", ru: "Не указано", en: "Not set")
+    }
+    static func catalogSearchPlaceholder(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogSearchPlaceholder", ru: "Марка или модель", en: "Make or model")
+    }
+    /// Каталог заведомо неполон — 97 марок и 521 модель не покроют всё, что
+    /// ездит. Пустой результат не тупик: строку всегда можно вписать руками.
+    static func catalogNothingFound(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogNothingFound",
+           ru: "Ничего не нашлось — впишите своими словами",
+           en: "Nothing found — type it in yourself")
+    }
+    static func catalogUseTyped(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "catalogUseTyped", ru: "Оставить как есть", en: "Use what I typed")
+    }
     static func vehicleNamePlaceholder(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehicleNamePlaceholder", ru: "Например, Honda Civic", en: "e.g. Honda Civic")
     }
@@ -2210,6 +2541,25 @@ enum AppStrings {
     /// Names for the silhouettes. Nothing draws these as visible text — the
     /// tiles are pictures — but VoiceOver has no picture to read, so without
     /// them the whole row announces as seven identical buttons.
+    /// Название цвета — для VoiceOver.
+    ///
+    /// Восемь кружков в ряд отличаются ТОЛЬКО цветом, а трое из них —
+    /// соседние оттенки серого. Незрячему человеку это восемь одинаковых
+    /// кнопок без имени, то есть выбрать цвет машины он не может вовсе.
+    static func avatarColorName(_ lang: LanguageManager.Language, color: String) -> String {
+        switch color {
+        case "white":  return tr(lang, "avatarColor_white", ru: "Белый", en: "White")
+        case "black":  return tr(lang, "avatarColor_black", ru: "Чёрный", en: "Black")
+        case "silver": return tr(lang, "avatarColor_silver", ru: "Серебристый", en: "Silver")
+        case "gray":   return tr(lang, "avatarColor_gray", ru: "Серый", en: "Gray")
+        case "red":    return tr(lang, "avatarColor_red", ru: "Красный", en: "Red")
+        case "blue":   return tr(lang, "avatarColor_blue", ru: "Синий", en: "Blue")
+        case "orange": return tr(lang, "avatarColor_orange", ru: "Оранжевый", en: "Orange")
+        case "green":  return tr(lang, "avatarColor_green", ru: "Зелёный", en: "Green")
+        default:       return color
+        }
+    }
+
     static func avatarStyleName(_ lang: LanguageManager.Language, style: String) -> String {
         switch style {
         case "car":         return tr(lang, "avatarStyle_car", ru: "Седан", en: "Sedan")
@@ -2219,7 +2569,20 @@ enum AppStrings {
         case "van":         return tr(lang, "avatarStyle_van", ru: "Фургон", en: "Van")
         case "convertible":         return tr(lang, "avatarStyle_convertible", ru: "Кабриолет", en: "Convertible")
         case "sports":         return tr(lang, "avatarStyle_sports", ru: "Спорткар", en: "Sports car")
-        default:            return tr(lang, "avatarStyle_car", ru: "Седан", en: "Sedan")
+        case "motorcycle":     return tr(lang, "avatarStyle_motorcycle", ru: "Мотоцикл", en: "Motorcycle")
+        case "scooter":        return tr(lang, "avatarStyle_scooter", ru: "Скутер", en: "Scooter")
+        case "bicycle":        return tr(lang, "avatarStyle_bicycle", ru: "Велосипед", en: "Bicycle")
+        // Не «Седан». Раньше сюда падали мотоциклы, скутеры и велосипеды —
+        // три силуэта из десяти, а с приходом справочника это 122 модели из
+        // 521, и все они подписывались бы седанами на всех тринадцати языках.
+        //
+        // Сырой ключ вместо перевода выбран нарочно: он ЗАМЕТНО неправильный
+        // (латиница посреди русского интерфейса), тогда как «Седан» был тихо
+        // неправильным и прожил так до аудита. Пустую строку не отдаём —
+        // отсюда берётся и метка VoiceOver, а немая метка хуже странной.
+        // `VehicleAvatarNamingTests` держит инвариант: у каждого силуэта из
+        // `VehicleAvatar.styles` есть свой case, и сюда никто не попадает.
+        default:               return style
         }
     }
     static func fuelCity(_ lang: LanguageManager.Language) -> String {
@@ -2268,6 +2631,34 @@ enum AppStrings {
     static func unnamedVehicle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "unnamedVehicle", ru: "Без имени", en: "Unnamed")
     }
+    /// «В гараже с марта 2024» — стаж МАШИНЫ, отдельно от стажа человека.
+    ///
+    /// Собирается ЦЕЛИКОМ на каждом языке, а не склейкой «предлог + дата»:
+    /// в турецком и казахском предлога нет вовсе, там послелог идёт ПОСЛЕ
+    /// даты. Тот же случай уже решён поштучно в `sinceYear` ниже — здесь
+    /// повторено сознательно, потому что склейка выглядит работающей ровно до
+    /// первого турецкого телефона.
+    ///
+    /// `when` приходит уже отформатированным (`StatsPeriodFormat.monthYearInline`),
+    /// который для русского даёт родительный падеж — «марта», а не «март».
+    static func inGarageSince(_ lang: LanguageManager.Language, when: String) -> String {
+        switch lang {
+        case .ru:  return "В гараже с \(when)"
+        case .en:  return "In the garage since \(when)"
+        case .de:  return "In der Garage seit \(when)"
+        case .es:  return "En el garaje desde \(when)"
+        case .fr:  return "Au garage depuis \(when)"
+        case .it:  return "In garage da \(when)"
+        case .pl:  return "W garażu od \(when)"
+        case .id:  return "Di garasi sejak \(when)"
+        case .tr:  return "\(when) tarihinden beri garajda"
+        case .fil: return "Nasa garahe mula \(when)"
+        case .uk:  return "У гаражі з \(when)"
+        case .kk:  return "\(when) бастап гаражда"
+        case .pt:  return "Na garagem desde \(when)"
+        }
+    }
+
     static func sinceYear(_ lang: LanguageManager.Language, year: Int) -> String {
         switch lang {
         case .ru: return "с \(year)"
@@ -2905,8 +3296,8 @@ enum AppStrings {
     }
     static func wipeServerConfirmBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "wipeServerConfirmBody",
-           ru: "Все Ваши поездки и фото будут удалены с сервера. Локальные данные сохранятся, Вы останетесь в аккаунте.\n\nСинхронизация будет выключена — Вы сможете включить её снова, когда захотите.",
-           en: "All your trips and photos will be removed from the server. Local data stays on this device, your account is preserved.\n\nCloud sync will be turned off — you can re-enable it anytime.")
+           ru: "Все Ваши поездки, фотографии и гараж будут удалены с сервера. Локальные данные сохранятся, Вы останетесь в аккаунте.\n\nСинхронизация будет выключена — Вы сможете включить её снова, когда захотите.",
+           en: "All your trips, photos and garage will be removed from the server. Local data stays on this device, your account is preserved.\n\nCloud sync will be turned off — you can re-enable it anytime.")
     }
     static func wipeServerConfirmAction(_ lang: LanguageManager.Language) -> String {
         tr(lang, "wipeServerConfirmAction", ru: "Очистить", en: "Clear")
@@ -4470,6 +4861,11 @@ enum AppStrings {
     static func statsRecordBestDay(_ lang: LanguageManager.Language) -> String {
         tr(lang, "statsRecordBestDay", ru: "Лучший день по км", en: "Best day by km")
     }
+    /// Подпись к рекорду «дольше всего за рулём»: сам рекорд — часы, и надо
+    /// сказать, за какой отрезок они набраны.
+    static func recordLongestDaySubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "recordLongestDaySubtitle", ru: "За один день", en: "In a single day")
+    }
     static func statsRecordMostPhotos(_ lang: LanguageManager.Language) -> String {
         tr(lang, "statsRecordMostPhotos", ru: "Больше всего фото", en: "Most photos")
     }
@@ -5206,5 +5602,214 @@ enum AppStrings {
         tr(lang, "storeRecoveryStartFreshConfirm",
            ru: "Приложение откроется пустым. Старый файл останется на телефоне — напиши нам, поможем достать. Если Облачная синхронизация была включена, поездки подтянутся с сервера.",
            en: "The app will start empty. The old file stays on your phone — write to us and we'll help recover it. If Cloud Sync was on, your trips will come back from the server.")
+    }
+
+    // MARK: - Публичный профиль 0.6.3
+
+    /// Подзаголовок карточки-входа в чужую статистику. Перечисляет секции,
+    /// которые человек там увидит, — иначе «Статистика» ничем не отличается
+    /// от счётчиков, стоящих строкой выше.
+    static func profileStatsEntrySubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileStatsEntrySubtitle",
+           ru: "ритм · рекорды · новые места",
+           en: "rhythm · records · new places")
+    }
+    static func profileMapEntryTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileMapEntryTitle", ru: "Карта", en: "Map")
+    }
+    static func profileMapEntrySubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileMapEntrySubtitle",
+           ru: "где человек был за всё время",
+           en: "everywhere they have been")
+    }
+    /// Рамка под чужой картой и в её нижнем листе.
+    ///
+    /// Обязательна. Счётчики профиля считаются по ВСЕМ поездкам, включая
+    /// приватные, а карта физически рисует только публичные — «47 поездок» и
+    /// карта с двенадцатью маршрутами оказываются на расстоянии одного тапа.
+    /// Без этой подписи расхождение читается как баг.
+    static func publicRoutesCaption(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicRoutesCaption", ru: "публичные маршруты", en: "public routes")
+    }
+    /// Через `tr` с плейсхолдером, а НЕ инлайновым `switch lang`: инлайн
+    /// невидим для одиннадцати таблиц и для `LocalizationTests`, и на немецком
+    /// телефоне навсегда остался бы английским. Правило дома, нарушенное здесь
+    /// при первом заходе.
+    static func publicRoutesExplainer(_ lang: LanguageManager.Language, name: String) -> String {
+        tr(lang, "publicRoutesExplainer",
+           ru: "Здесь только те поездки, которые {name} сделал публичными. Приватные на карту не попадают.",
+           en: "Only the trips {name} made public are drawn here. Private ones never reach the map.")
+            .replacingOccurrences(of: "{name}", with: name)
+    }
+    static func publicMapEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicMapEmptyTitle", ru: "Пока нечего показать", en: "Nothing to show yet")
+    }
+    static func publicMapEmptyBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicMapEmptyBody",
+           ru: "Ни одна поездка ещё не опубликована. Как только появится — она будет здесь.",
+           en: "No trip has been made public yet. As soon as one is, it shows up here.")
+    }
+
+    // MARK: - Кто что видит (настройки видимости)
+
+    static func visibilityTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityTitle", ru: "Кто что видит", en: "What others see")
+    }
+    static func visibilityIntro(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityIntro",
+           ru: "Профиль открыт по умолчанию. Выключите то, что не хотите показывать, — остальное останется видно.",
+           en: "Your profile is open by default. Switch off what you would rather keep to yourself; the rest stays visible.")
+    }
+    static func visibilityCounters(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityCounters", ru: "Базовые счётчики", en: "Basic counters")
+    }
+    static func visibilityCountersSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityCountersSub",
+           ru: "Поездки, километры и регионы в шапке профиля",
+           en: "Trips, kilometres and regions in the profile header")
+    }
+    static func visibilityStats(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityStats", ru: "Расширенная статистика", en: "Full statistics")
+    }
+    static func visibilityStatsSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityStatsSub",
+           ru: "Ритм, доска почёта, новые места",
+           en: "Rhythm, records board, new places")
+    }
+    static func visibilityMap(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityMap", ru: "Карта", en: "Map")
+    }
+    static func visibilityMapSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityMapSub",
+           ru: "Публичные маршруты на карте",
+           en: "Your public routes on the map")
+    }
+    static func visibilityAchievements(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityAchievements", ru: "Достижения", en: "Achievements")
+    }
+    static func visibilityAchievementsSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityAchievementsSub", ru: "Значки и прогресс", en: "Badges and progress")
+    }
+    /// Объясняет, что «скрыто» здесь означает буквально: сервер не отдаёт
+    /// данные, а не клиент их прячет.
+    static func visibilityFootnote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityFootnote",
+           ru: "Скрытый блок не появляется у других вовсе — без плашки «скрыто». Счётчики и достижения сервер при этом не отдаёт совсем; статистика и карта считаются из одних и тех же публичных поездок, поэтому перестают приходить, когда выключены обе.",
+           en: "A hidden block simply is not there for others — no «hidden» placeholder. Counters and achievements are withheld by the server outright; statistics and the map are computed from the same public trips, so the data stops being sent once both are off.")
+    }
+    static func visibilityPreviewLink(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityPreviewLink", ru: "Посмотреть, как видят другие", en: "See what others see")
+    }
+    static func visibilityPreviewSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityPreviewSub", ru: "Свой профиль чужими глазами", en: "Your profile through their eyes")
+    }
+
+    // MARK: - Разовая карточка про opt-out
+
+    static func visibilityNoticeTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityNoticeTitle",
+           ru: "Профиль теперь показывает больше",
+           en: "Your profile now shows more")
+    }
+    static func visibilityNoticeBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityNoticeBody",
+           ru: "Ваша статистика и карта публичных поездок стали видны другим. Ничего не публиковалось заново — выключить можно в одно касание.",
+           en: "Your statistics and the map of your public trips are now visible to others. Nothing was published anew, and you can switch any of it off in one tap.")
+    }
+    static func visibilityNoticeConfigure(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityNoticeConfigure", ru: "Настроить", en: "Adjust")
+    }
+    static func visibilityNoticeDismiss(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityNoticeDismiss", ru: "Понятно", en: "Got it")
+    }
+
+    // MARK: - Закрытый профиль
+
+    static func closedProfileTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "closedProfileTitle", ru: "Закрытый профиль", en: "Private profile")
+    }
+    static func closedProfileBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "closedProfileBody",
+           ru: "Статистика, карта и поездки видны только подписчикам.",
+           en: "Statistics, map and trips are visible to followers only.")
+    }
+    /// Экран по ПРЯМОЙ ссылке. Сервер отвечает `UserNotFound`, чтобы скрыть
+    /// само существование аккаунта, поэтому здесь нет ни имени, ни аватара, и
+    /// текст не подтверждает, что аккаунт есть.
+    /// Отказ загрузки чужой статистики или карты. Отдельно от пустого
+    /// состояния: «человек ничего не опубликовал» — утверждение о другом
+    /// человеке, и говорить его из-за обрыва связи нельзя.
+    static func publicDataLoadFailed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicDataLoadFailed",
+           ru: "Не удалось загрузить",
+           en: "Couldn't load this")
+    }
+    /// Часть страниц не доехала: числа верны, но это нижняя граница.
+    static func publicDataPartial(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "publicDataPartial",
+           ru: "Загрузилось не всё — числа могут быть занижены",
+           en: "Not everything loaded — these numbers may be low")
+    }
+    /// Сервер этого аккаунта ещё не умеет пер-блочную видимость. Инертный
+    /// тумблер без объяснения выглядит сломанным — тот же урок, что с
+    /// «Публичным профилем».
+    static func visibilityUnavailable(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "visibilityUnavailable",
+           ru: "Пока недоступно — обновление ещё не дошло до сервера",
+           en: "Not available yet — the server update hasn't landed")
+    }
+    /// Подпись плашки-тизера на карточке «Статистика» в чужом профиле.
+    /// Оба факта берутся из уже приехавшего профиля — ни одного лишнего
+    /// запроса, и ни одного числа, которого мы не можем подтвердить.
+    static func profileTeaserLastTrip(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileTeaserLastTrip", ru: "последняя поездка", en: "last drive")
+    }
+    static func profileTeaserStreak(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileTeaserStreak", ru: "серия подряд", en: "current streak")
+    }
+    // MARK: - Одометр и трансфер (0.6.3)
+
+    /// Крупное число в карточке машины, когда реальный пробег введён.
+    static func odometerRealLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "odometerRealLabel", ru: "Пробег", en: "Odometer")
+    }
+    /// Вторая строка: сколько из него приложение видело своими глазами.
+    static func odometerTrackedLine(_ lang: LanguageManager.Language, km: String) -> String {
+        tr(lang, "odometerTrackedLine",
+           ru: "из них затрекано {km}",
+           en: "{km} of it tracked")
+            .replacingOccurrences(of: "{km}", with: km)
+    }
+    /// Разрыв — то, ради чего одометр и раздваивался.
+    static func odometerUntrackedLine(_ lang: LanguageManager.Language, km: String) -> String {
+        tr(lang, "odometerUntrackedLine",
+           ru: "{km} прошло мимо записи",
+           en: "{km} never made it into a trip")
+            .replacingOccurrences(of: "{km}", with: km)
+    }
+    static func odometerEditTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "odometerEditTitle", ru: "Пробег с приборки", en: "Odometer reading")
+    }
+    static func odometerEditHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "odometerEditHint",
+           ru: "Спишите число с панели. Уровень машины считается по записанным поездкам и от этого не изменится.",
+           en: "Copy the number from your dashboard. The vehicle level is earned from recorded trips and will not change.")
+    }
+    /// Поездка пассажиром.
+    static func tripTransferTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tripTransferTitle", ru: "Ехал пассажиром", en: "I was a passenger")
+    }
+    static func tripTransferHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tripTransferHint",
+           ru: "Такси, автобус, чужая машина. Километры останутся в вашей статистике, но не пойдут в пробег машины.",
+           en: "Taxi, bus, someone else's car. The kilometres stay in your statistics but never reach a vehicle's odometer.")
+    }
+    static func profileUnavailableTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileUnavailableTitle", ru: "Профиль недоступен", en: "Profile unavailable")
+    }
+    static func profileUnavailableBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileUnavailableBody",
+           ru: "Ссылка устарела, профиль закрыт или его владелец вас заблокировал. Мы не показываем, какой именно случай — иначе по ссылке можно было бы проверять, существует ли аккаунт.",
+           en: "The link is stale, the profile is private, or its owner blocked you. We do not say which — otherwise a link could be used to check whether an account exists.")
     }
 }

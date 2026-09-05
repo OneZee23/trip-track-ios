@@ -39,6 +39,7 @@ extension EnvironmentValues {
 /// At root (empty path) we do NOT inject `\.previewPop` so `NavBackButton`
 /// falls through to `\.dismiss`, which closes the presenting sheet.
 struct PreviewNavigator: View {
+    @EnvironmentObject private var mapVM: MapViewModel
     /// The root destination — shown when `path` is empty. Generalizing this
     /// (vs. hardcoding `PublicProfileView`) lets the same navigator host the
     /// ProfileView → FollowListView flow without a `NavigationStack`.
@@ -89,6 +90,20 @@ struct PreviewNavigator: View {
                 onClose: isRoot ? onCloseSheet : nil,
                 pushPath: $path,
             )
+        case .publicStats(let id, let name):
+            // Тот же StatsScreenView. Меняется только источник поездок —
+            // форка экрана нет, и правка статистики меняет оба места сразу.
+            StatsScreenView(
+                tripManager: mapVM.tripManager,
+                source: RemoteTripSource(accountId: id),
+                ownerName: name
+            )
+        case .publicMap(let id, let name):
+            PublicMapView(accountId: id, ownerName: name)
+        case .publicGarage(let id, let name):
+            PublicGarageView(accountId: id, ownerName: name)
+        case .publicVehicle(let id, let vid, let name):
+            PublicVehicleView(accountId: id, vehicleId: vid, ownerName: name)
         case .trip, .socialTrip:
             // Trip destinations only belong to Feed's NavigationStack. If they
             // somehow ended up here (in the profile-preview sheet) just render

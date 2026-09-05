@@ -36,7 +36,15 @@ final class PullApplier {
         // CoreData performance scales linearly with save count, so a
         // pull of 50 trips drops from 50× saveContext() to 1×.
         repo.flushPendingApplies()
-        if response.settings != nil {
+        // Раньше перечитывали только когда приехали НАСТРОЙКИ. Но архив и
+        // продажа приезжают в записи МАШИНЫ, а настройки при этом могут не
+        // прийти вовсе: чужое устройство трогает свою строку настроек только
+        // если убранная машина была выбрана именно на нём. В результате
+        // CoreData уже знала, что машина в архиве, а список в памяти — ещё
+        // нет, и запись уходила на архивную машину до конца сеанса.
+        let vehiclesChanged = !response.vehicles.upserted.isEmpty
+            || !response.vehicles.deleted.isEmpty
+        if response.settings != nil || vehiclesChanged {
             SettingsManager.shared.reloadFromCoreData()
         }
     }

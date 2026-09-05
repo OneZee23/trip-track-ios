@@ -36,6 +36,11 @@ struct CustomNavBar<Trailing: View>: View {
     /// title, because they are destinations you land on rather than steps you
     /// pass through.
     var largeTitle: Bool = false
+    /// Вторая строка под заголовком. Появилась ради ЧУЖИХ экранов (0.6.3):
+    /// «Статистика» своя и «Статистика» Александра отличаются только этим
+    /// именем, а без него две страницы с разными числами выглядят одинаково.
+    /// `nil` на всех остальных экранах — их вёрстка не меняется.
+    var subtitle: String?
     @ViewBuilder var trailing: () -> Trailing
 
     @Environment(\.colorScheme) private var scheme
@@ -64,16 +69,25 @@ struct CustomNavBar<Trailing: View>: View {
             // iOS draws its own nav titles at 17pt semibold — this sits a
             // hair above that because the bar carries no hairline to separate
             // it from the content below.
-            Text(title)
-                .font(.system(size: largeTitle ? 28 : 18, weight: .heavy))
-                .tracking(largeTitle ? -0.56 : 0)
-                .foregroundStyle(c.text)
-                .lineLimit(1)
-                .minimumScaleFactor(largeTitle ? 0.7 : 1)
-                .truncationMode(.tail)
-                // Clear both controls (40pt + 20pt inset) so a long title
-                // truncates instead of colliding with them.
-                .padding(.horizontal, 72)
+            VStack(spacing: 1) {
+                Text(title)
+                    .font(.system(size: largeTitle ? 28 : 18, weight: .heavy))
+                    .tracking(largeTitle ? -0.56 : 0)
+                    .foregroundStyle(c.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(largeTitle ? 0.7 : 1)
+                    .truncationMode(.tail)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(c.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+            // Clear both controls (40pt + 20pt inset) so a long title
+            // truncates instead of colliding with them.
+            .padding(.horizontal, 72)
 
             HStack {
                 if showsBack {
@@ -105,10 +119,16 @@ struct CustomNavBar<Trailing: View>: View {
 }
 
 extension CustomNavBar where Trailing == EmptyView {
-    init(title: String, showsBack: Bool = true, largeTitle: Bool = false) {
+    init(
+        title: String,
+        showsBack: Bool = true,
+        largeTitle: Bool = false,
+        subtitle: String? = nil
+    ) {
         self.title = title
         self.showsBack = showsBack
         self.largeTitle = largeTitle
+        self.subtitle = subtitle
         self.trailing = { EmptyView() }
     }
 }

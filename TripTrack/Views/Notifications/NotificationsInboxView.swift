@@ -12,6 +12,7 @@ struct NotificationsInboxView: View {
     /// — see `openAcceptedInviteTrip`).
     @ObservedObject private var companionsStore = CompanionsStore.shared
     @EnvironmentObject private var lang: LanguageManager
+    @EnvironmentObject private var mapVM: MapViewModel
     /// Injected by both presenters (FeedView, ProfileSettingsSheet) — needed
     /// to re-apply the in-app theme override on the nested prefs sheet.
     @Environment(\.colorScheme) private var scheme
@@ -92,6 +93,18 @@ struct NotificationsInboxView: View {
                         PublicProfileView(accountId: id, preloaded: author, pushPath: $path)
                     case .followList(let id, let mode):
                         FollowListView(accountId: id, mode: mode, pushPath: $path)
+                    case .publicStats(let id, let name):
+                        StatsScreenView(
+                            tripManager: mapVM.tripManager,
+                            source: RemoteTripSource(accountId: id),
+                            ownerName: name
+                        )
+                    case .publicMap(let id, let name):
+                        PublicMapView(accountId: id, ownerName: name)
+                    case .publicGarage(let id, let name):
+                        PublicGarageView(accountId: id, ownerName: name)
+                    case .publicVehicle(let id, let vid, let name):
+                        PublicVehicleView(accountId: id, vehicleId: vid, ownerName: name)
                     case .trip, .socialTrip:
                         // Inbox doesn't push trip destinations directly —
                         // tap-on-reaction routes through the trip detail

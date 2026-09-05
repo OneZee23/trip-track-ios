@@ -5,7 +5,7 @@ import UIKit
 
 enum AppTheme {
     // MARK: - Accent — warm orange, road-trip feel
-    static let accent = Color(red: 235/255, green: 87/255, blue: 30/255)       // warm road orange
+    static let accent = Color(red: 194/255, green: 69/255, blue: 43/255)       // #C2452B — terracotta
     static let accentBg = accent.opacity(0.08)
 
     static let green = Color(red: 46/255, green: 174/255, blue: 80/255)        // earthy green
@@ -221,6 +221,22 @@ struct PressableCardStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .opacity(configuration.isPressed ? 0.92 : 1.0)
             .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+/// Карточка, у которой долгий тап что-то открывает.
+///
+/// Обычный `PressableCardStyle` отрабатывает мгновенно и на глаз неотличим от
+/// простого нажатия: человек не понимает, что палец надо ЗАДЕРЖАТЬ, и просто
+/// не находит меню. Здесь сжатие идёт полсекунды — примерно столько же, сколько
+/// система ждёт до контекстного меню, — поэтому карточка на глазах «поддаётся»,
+/// пока держишь, и становится ясно, что произойдёт, если не отпускать.
+struct HoldableCardStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.945 : 1.0)
+            .animation(.easeOut(duration: configuration.isPressed ? 0.5 : 0.18),
+                       value: configuration.isPressed)
     }
 }
 

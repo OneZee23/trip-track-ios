@@ -88,6 +88,11 @@ struct FollowListView: View {
             .padding(.top, 12)
             .padding(.bottom, 120)
         }
+        // См. PublicProfileView: скролл обязан доходить до физического низа,
+        // иначе к 120pt отступа прибавляется домашний индикатор, а плавающий
+        // таб-бар безопасную зону игнорирует — под последней строкой остаётся
+        // пустая полоса.
+        .ignoresSafeArea(edges: .bottom)
         .background(c.bg)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top, spacing: 0) {

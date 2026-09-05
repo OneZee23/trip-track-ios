@@ -24,6 +24,8 @@ protocol TripRepository {
     func updateTitle(for tripId: UUID, title: String)
     func updateNotes(for tripId: UUID, notes: String)
     func updatePrivacy(for tripId: UUID, isPrivate: Bool)
+    /// Пометить поездку трансфером (человек ехал пассажиром) или снять метку.
+    func updateTransfer(for tripId: UUID, isTransfer: Bool)
     /// Photos whose only copy is the server's — see the implementation.
     func serverOnlyPhotoIds(tripId: UUID) -> [UUID]
     func adoptRescuedPhoto(id: UUID, filename: String)
@@ -345,6 +347,24 @@ final class CoreDataTripRepository: TripRepository {
     /// like updateTitle/updateNotes — it does NOT rebalance vehicle odometers or
     /// stats (those accumulate at record time). `vehicleId` already rides the
     /// existing sync payload, so no transport change is needed.
+    /// Трансфер: человек ехал пассажиром — такси, автобус, чужая машина.
+    ///
+    /// Снимает машину с поездки: держать её было бы враньём — она никуда не
+    /// ехала. Пробег машины пересчитывается там же, где и при обычной смене
+    /// машины, поэтому километры трансфера уходят с её одометра.
+    func updateTransfer(for tripId: UUID, isTransfer: Bool) {
+        guard let entity = fetchEntity(id: tripId) else { return }
+        let previousVehicleId = entity.vehicleId
+        entity.isTransfer = isTransfer
+        if isTransfer { entity.vehicleId = nil }
+        entity.lastModifiedAt = Date()
+        if Self.shouldFlipPendingUpload(for: entity) {
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        }
+        recomputeOdometers(forVehicles: [previousVehicleId].compactMap { $0 })
+        persistenceController.save()
+    }
+
     func updateVehicle(for tripId: UUID, vehicleId: UUID?) {
         guard let entity = fetchEntity(id: tripId) else { return }
         // Both cars have to be recomputed, not just the new one: the odometer
@@ -766,6 +786,7 @@ final class CoreDataTripRepository: TripRepository {
             tripDescription: entity.tripDescription,
             fuelUsed: entity.fuelUsed, elevation: entity.elevation,
             region: entity.region, isPrivate: entity.isPrivate,
+            isTransfer: entity.isTransfer,
             vehicleId: entity.vehicleId, fuelCurrency: entity.fuelCurrency,
             previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds,
             xpEarned: Int(entity.xpEarned),
@@ -841,6 +862,11 @@ final class CoreDataTripRepository: TripRepository {
         entity.region = p.region
         entity.isPrivate = p.isPrivate
         entity.vehicleId = p.vehicleId
+        // ТОЛЬКО когда сервер прислал ключ. `?? false` читал отсутствие поля
+        // как явное «не трансфер», и пул со старого бэкенда молча откатывал
+        // пометку «ехал пассажиром» — машина при этом уже снята, и поездка
+        // оставалась без того и без другого.
+        if let remoteTransfer = p.isTransfer { entity.isTransfer = remoteTransfer }
         entity.fuelCurrency = p.fuelCurrency
         entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
         entity.badgesJSON = p.badgesJson
@@ -898,7 +924,13 @@ final class CoreDataTripRepository: TripRepository {
         let req: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
         req.predicate = NSPredicate(format: "id == %@", p.id as CVarArg)
         req.fetchLimit = 1
-        let entity = (try? context.fetch(req).first) ?? VehicleEntity(context: context)
+        let existing = try? context.fetch(req).first
+        let entity = existing ?? VehicleEntity(context: context)
+        // Есть ли на этом устройстве правки, которые ещё не уехали. Считается
+        // ДО присваиваний и только для уже существующей строки: у новой
+        // `syncStatus` равен нулю (`pendingUpload`) по умолчанию, и без этой
+        // оговорки ни одна приехавшая машина не применилась бы вовсе.
+        let hasLocalEdits = existing?.syncStatus == SyncStatus.pendingUpload.rawValue
         entity.id = p.id
         entity.name = p.name
         entity.avatarEmoji = p.avatarEmoji
@@ -911,6 +943,15 @@ final class CoreDataTripRepository: TripRepository {
         // that was every pull for every signed-in person.
         if let style = p.avatarStyle { entity.avatarStyle = style }
         entity.odometerKm = p.odometerKm
+        // Только когда ключ пришёл: сервер без колонки его не шлёт, и `?? nil`
+        // стёр бы введённое человеком число. Без этой строки ручной пробег
+        // уезжал на сервер и не возвращался — терялся при переустановке и не
+        // доезжал на второй телефон.
+        if p.manualOdometerKnown {
+            // Ключ пришёл: значение ИЛИ явный null. Второе — это очистка,
+            // сделанная на другом устройстве, и её надо применить.
+            entity.manualOdometerKm = p.manualOdometerKm.map { NSNumber(value: $0) }
+        }
         entity.vehicleLevel = Int32(p.level)
         entity.stickersJSON = p.stickersJson
         entity.cityConsumption = p.cityConsumption
@@ -920,9 +961,32 @@ final class CoreDataTripRepository: TripRepository {
         // is not "reset to default" — keep whatever this device already knows.
         if let type = p.vehicleType { entity.vehicleType = type }
         if let plate = p.plate { entity.plate = plate }
-        if let plateVisible = p.plateVisible { entity.plateVisible = plateVisible }
-        if let visible = p.visibleToOthers { entity.visibleToOthers = visible }
+        // Четыре оси видимости — единственные поля, где ответ сервера НЕ
+        // главнее локального. Человек мог выключить показ машины в самолёте
+        // или в момент, когда очередь стоит в бэкоффе; следующий пул возвращал
+        // флаг обратно, а экран честно показывал возвращённое значение — то
+        // есть приватное решение отменялось молча и без следа. Пока правка не
+        // уехала, побеждает она. Остальные поля этой оговорки не получают:
+        // вернувшееся название машины — досада, вернувшаяся видимость — утечка.
+        if !hasLocalEdits, let plateVisible = p.plateVisible { entity.plateVisible = plateVisible }
+        if !hasLocalEdits, let visible = p.visibleToOthers { entity.visibleToOthers = visible }
         if let currency = p.fuelCurrency { entity.fuelCurrency = currency }
+        // Паспорт (0.6.4) — по тому же правилу: ключ пришёл, значит сервер
+        // имеет мнение; не пришёл — молчит, и локальное трогать нельзя.
+        if let about = p.about { entity.about = about }
+        if let make = p.make { entity.make = make }
+        if let model = p.model { entity.model = model }
+        if let year = p.year { entity.year = Int32(year) }
+        if let body = p.bodyType { entity.bodyType = body }
+        if !hasLocalEdits, let mapVisible = p.mapVisible { entity.mapVisible = mapVisible }
+        if !hasLocalEdits, let photosVisible = p.photosVisible { entity.photosVisible = photosVisible }
+        if let archived = p.isArchived { entity.isArchived = archived }
+        // `soldAt` — исключение: здесь nil ЗНАЧИМ, это «продажу отменили».
+        // Отличаем по наличию КЛЮЧА, а не по значению: старый сервер про поле
+        // молчит (тогда локальное не трогаем), новый присылает `null` (тогда
+        // снимаем продажу). Раньше здесь стояло `if let`, и отмена продажи с
+        // другого устройства не приезжала никогда.
+        if p.soldAtKnown { entity.soldAt = p.soldAt }
         entity.conflictVersion = Int32(p.conflictVersion)
         entity.lastModifiedAt = p.lastModifiedAt
         entity.syncStatus = SyncStatus.synced.rawValue
@@ -1068,9 +1132,15 @@ final class CoreDataTripRepository: TripRepository {
     func recomputeOdometers(forVehicles vehicleIds: [UUID]) {
         for vehicleId in Set(vehicleIds) {
             let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+            // Трансферы не наматывают машину — то же правило, что в
+            // `VehicleOdometer`. Два места, считающие ОДНО число по разным
+            // правилам, однажды разойдутся молча: сюда можно попасть из
+            // `applyRemoteTrip`, который ставит `vehicleId` и `isTransfer`
+            // независимо друг от друга.
             req.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
                 completedTripPredicate,
                 NSPredicate(format: "vehicleId == %@", vehicleId as CVarArg),
+                NSPredicate(format: "isTransfer == NO"),
             ])
             let metres = (try? context.fetch(req))?.reduce(0.0) { $0 + $1.distance } ?? 0
             let km = metres / 1000

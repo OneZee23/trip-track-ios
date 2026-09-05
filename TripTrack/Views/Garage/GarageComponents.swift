@@ -170,18 +170,18 @@ struct GarageSectionLabel: View {
 // MARK: - Shared Garage formatting
 
 enum GarageFormat {
-    private static let odometerFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = " "
-        formatter.maximumFractionDigits = 0
-        return formatter
-    }()
-
-    /// "38 420" — odometer value with space thousands grouping.
-    static func odometer(_ km: Double) -> String {
-        odometerFormatter.string(from: NSNumber(value: km.rounded()))
-            ?? String(format: "%.0f", km)
+    /// «38 420» — пробег с разбивкой по разрядам ПО ЯЗЫКУ.
+    ///
+    /// Единственная функция этого enum'а, которая раньше не принимала язык, —
+    /// и при этом самая заметная: паспорт машины делает пробег главным числом
+    /// экрана. Русский разделитель разрядов уезжал на немецкие и английские
+    /// телефоны, где ждут «38,420» или «38.420».
+    ///
+    /// Форматирование делегировано `AppStrings.groupedNumber`, где таблица
+    /// форматтеров на тринадцать языков уже есть, — второй такой заводить
+    /// незачем, а разъехаться они бы разъехались.
+    static func odometer(_ km: Double, lng: LanguageManager.Language) -> String {
+        AppStrings.groupedNumber(Int(km.rounded()), lng)
     }
 
     /// Retired FuelSettingsCard's proven display format: integral values drop
