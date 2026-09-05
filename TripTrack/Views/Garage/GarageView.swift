@@ -7,6 +7,13 @@ struct GarageView: View {
     /// from HERE, so the add-vehicle form must re-apply it.
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
+    /// Главные снимки всего гаража, снятые разом. Не в теле вью: там это была
+    /// бы выборка на карточку на каждый кадр прокрутки.
+    /// Считывается СРАЗУ, а не задачей после первого кадра: иначе гараж
+    /// рисуется силуэтами и через мгновение подменяет их фотографиями — рвано
+    /// и без причины, потому что данные лежат на устройстве. Запрос запомнен в
+    /// хранилище, поэтому пересоздание экрана его не повторяет.
+    @State private var mainPhotos: [UUID: VehiclePhoto] = VehiclePhotoStore.mainPhotos()
 
     @ObservedObject private var settings = SettingsManager.shared
 
@@ -35,6 +42,11 @@ struct GarageView: View {
                 }
             }
             .background(c.bg)
+        .task(id: settings.vehicles.count) { mainPhotos = VehiclePhotoStore.mainPhotos() }
+        .onChange(of: detailVehicleId) { _, id in
+            // Вернулись с экрана машины — там могли сменить главную.
+            if id == nil { mainPhotos = VehiclePhotoStore.mainPhotos() }
+        }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(item: $detailVehicleId) { id in
                 VehicleDetailView(vehicleId: id)
@@ -126,19 +138,20 @@ struct GarageView: View {
         }
     }
 
-    /// Три раздела: АКТИВНАЯ, ОСТАЛЬНЫЕ, АРХИВ.
+    /// Три раздела: АКТИВНАЯ, ОСТАЛЬНЫЕ, ПРОДАННЫЕ.
     ///
-    /// Раньше было два, и второй назывался «АРХИВ», хотя считался как «всё,
-    /// что не выбрано». Флаг `isArchived` при этом существовал и не
-    /// использовался НИГДЕ. Получалось, что гараж обещал состояние, которого
-    /// не было: экран записи спокойно предлагал любую «архивную» машину, и
-    /// приложение спорило само с собой.
+    /// Архива здесь больше нет. Он был подготовкой к монетизации («бесплатно
+    /// активна одна, остальные убери руками»), а не пользой: человек разбирал
+    /// собственный гараж, чтобы приложение перестало ему мешать. Машин
+    /// столько, сколько есть, все рабочие.
     ///
-    /// Теперь архив — настоящее состояние, в которое машину кладёт человек
-    /// руками. Автоматически туда не попадает никто и никогда: у тех, кто
-    /// обновится, раздел «Архив» пуст, и все машины остаются рабочими.
-    /// «Остальные» — те, на которые писать можно, просто сейчас активна не
-    /// они; переключение бесплатно и мгновенно, о чём и говорит подпись.
+    /// Разделение осталось ради одного честного различия: **на что пойдёт
+    /// следующая поездка**. Активная — пойдёт. Остальные — можно переключить
+    /// одним тапом. Проданные — нельзя вообще, и это не ограничение, а правда:
+    /// машина уехала к другому человеку, чужая дорога в её паспорте была бы
+    /// враньём. Поэтому проданные отдельной секцией, а не меткой в общем
+    /// списке: разница между «можно ездить» и «нельзя» не должна быть мелким
+    /// текстом.
     @ViewBuilder
     private func vehicleList(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         // Тот же ответ, что даст экран записи, — иначе гараж снова начнёт
@@ -147,13 +160,12 @@ struct GarageView: View {
         let others = settings.recordableVehicles
             .filter { $0.id != active?.id }
             .sorted { $0.displayOdometerKm > $1.displayOdometerKm }
-        // `!isRecordable`, а не `isArchived`: проданная машина, до которой по
-        // какой-то причине не доехал флаг архива (например, приехала синком с
-        // другого устройства), не попадала НИ В ОДИН раздел и пропадала из
-        // гаража насовсем — вместе с единственной дверью, за которой её можно
-        // вернуть. Раздел обязан покрывать всё, что не попало в первые два.
+        // Через `!isRecordable`, а не `isSold` напрямую: раздел обязан
+        // покрывать ВСЁ, что не попало в первые два. Иначе машина в состоянии,
+        // которое мы не предусмотрели, пропадёт из гаража насовсем — вместе с
+        // единственной дверью, за которой её можно вернуть.
         let recordableIds = Set(settings.recordableVehicles.map(\.id))
-        let archive = settings.vehicles
+        let sold = settings.vehicles
             .filter { !recordableIds.contains($0.id) }
             .sorted { $0.displayOdometerKm > $1.displayOdometerKm }
 
@@ -186,14 +198,14 @@ struct GarageView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
 
-        if !archive.isEmpty {
-            GarageSectionLabel(text: AppStrings.garageArchive(l), color: c.textSecondary)
+        if !sold.isEmpty {
+            GarageSectionLabel(text: AppStrings.garageSold(l), color: c.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 4)
-            ForEach(archive) { vehicle in
+            ForEach(sold) { vehicle in
                 vehicleCard(vehicle, c: c, l: l)
             }
-            Text(AppStrings.garageArchivedHint(l))
+            Text(AppStrings.garageSoldHint(l))
                 .font(.system(size: 11))
                 .foregroundStyle(c.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,11 +230,17 @@ struct GarageView: View {
             Haptics.tap()
             detailVehicleId = vehicle.id
         } label: {
-            HStack(spacing: 14) {
-                VehicleSpritePlate(
+            VStack(alignment: .leading, spacing: 0) {
+                // Полоса сверху — лицо машины. Высота одна для всех карточек,
+                // и когда фотографии нет, в ней стоит силуэт: разная высота
+                // соседних карточек читается как поломка вёрстки, а не как
+                // «у этой машины есть фото, а у той нет».
+                VehicleFace(
+                    photo: .local(mainPhotos[vehicle.id]),
                     assetName: vehicle.avatarImageName,
                     fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
-                    uniformHeight: true
+                    style: .banner,
+                    dimmed: vehicle.isSold
                 )
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -246,12 +264,12 @@ struct GarageView: View {
                     }
                     .padding(.top, 2)
                 }
-                // The checkmark is trailing-aligned inside the name row,
-                // so the column has to take the full card width instead
-                // of being pushed left by a Spacer beside it.
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
             }
-            .padding(14)
+            // Обрезаем ЗДЕСЬ: полоса идёт во всю ширину, а `surfaceCard` только
+            // красит фон. Без этого её прямые углы вылезали бы за скругления.
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .contentShape(Rectangle())
         }
         // Карточка «поддаётся» под пальцем, пока держишь: у долгого тапа тут
@@ -281,34 +299,20 @@ struct GarageView: View {
             }
         }
         .contextMenu {
-            if !isMain, !vehicle.isArchived {
+            if !isMain, !vehicle.isSold {
                 Button {
                     settings.selectVehicle(id: vehicle.id)
                 } label: {
                     Label(AppStrings.makeMainVehicle(l), systemImage: "star")
                 }
             }
-            // Подтверждения нет намеренно: действие обратимо одним тапом
-            // отсюда же, а диалог на обратимое действие — это шум.
-            // Проданную из архива не поднимаем: снятие «продана» — отдельный
-            // шаг, иначе случайный тап переписал бы историю машины.
-            // У проданной машины выход из архива один — снять продажу, и он
-            // лежал в четырёх тапах внутри формы. Здесь же, рядом.
+            // Снять продажу можно здесь же: иначе единственная дорога назад
+            // лежит в четырёх тапах внутри формы редактирования.
             if vehicle.isSold {
                 Button {
                     settings.setVehicleSold(id: vehicle.id, soldAt: nil)
                 } label: {
                     Label(AppStrings.vehicleUnsell(l), systemImage: "arrow.uturn.backward")
-                }
-            }
-            if !vehicle.isSold {
-                Button {
-                    settings.setVehicleArchived(id: vehicle.id, archived: !vehicle.isArchived)
-                } label: {
-                    Label(vehicle.isArchived
-                          ? AppStrings.vehicleUnarchiveAction(l)
-                          : AppStrings.vehicleArchiveAction(l),
-                          systemImage: vehicle.isArchived ? "tray.and.arrow.up" : "archivebox")
                 }
             }
             Button(role: .destructive) {

@@ -90,7 +90,11 @@ struct PublicGarageView: View {
         case .loaded:
             ScrollView {
                 VStack(spacing: 10) {
-                    ForEach(vehicles) { v in
+                    // Проданные уходят вниз, но остаются на виду: машина, на
+                    // которой человек отъездил десять лет, — часть его истории,
+                    // и прятать её от других незачем. Порядок говорит, что она
+                    // уже не в строю, метка — почему.
+                    ForEach(vehicles.sorted { !$0.isSold && $1.isSold }) { v in
                         row(v, c: c, l: l)
                     }
                 }
@@ -108,35 +112,68 @@ struct PublicGarageView: View {
             Haptics.tap()
             openVehicle = v
         } label: {
-            HStack(spacing: 12) {
-                VehicleSpritePlate(
+            VStack(alignment: .leading, spacing: 0) {
+                // Та же форма, что в собственном гараже: одна высота полосы,
+                // фотография или силуэт. Чужой гараж не должен выглядеть
+                // устройством иначе, чем свой.
+                VehicleFace(
+                    photo: .remote(v.mainPhoto),
                     assetName: VehicleAvatar.assetName(
                         style: v.avatarStyle, avatar: v.avatarEmoji),
                     fallbackEmoji: v.avatarEmoji,
-                    plateSize: 56,
-                    cornerRadius: 12
+                    style: .banner,
+                    dimmed: v.isSold
                 )
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(v.name)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                    Text(subtitle(v, l))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text(v.name)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(c.text)
+                            .lineLimit(1)
+                        if v.isSold {
+                            Text(AppStrings.vehicleSoldBadge(l))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(c.textTertiary)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(c.cardAlt, in: Capsule())
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                    if let line = v.modelLine(l) {
+                        Text(line)
+                            .font(.system(size: 12))
+                            .foregroundStyle(c.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    HStack(spacing: 10) {
+                        VehicleXPBar(
+                            progress: VehicleLevelSystem.progressToNext(
+                                km: v.odometerKm, level: v.level),
+                            tint: VehicleLevelSystem.color(for: v.level)
+                        )
+                        VehicleLevelPill(level: v.level, size: 9)
+                    }
+                    .padding(.top, 2)
+                    Text(GarageFormat.odometer(v.odometerKm, lng: l) + " " + AppStrings.km(l))
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
                 }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
             }
-            .padding(12)
-            .surfaceCard(cornerRadius: 16)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        // Обычный отклик, а не «держи и что-то будет»: долгого меню на чужой
+        // машине нет, и обещать его затяжным сжатием — врать пальцу.
+        .buttonStyle(PressableCardStyle())
+        .surfaceCard(cornerRadius: 16)
     }
 
     /// Собрано функцией, а не интерполяцией: несколько подстановок в одном

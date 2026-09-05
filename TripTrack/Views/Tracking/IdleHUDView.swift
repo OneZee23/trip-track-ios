@@ -15,9 +15,17 @@ struct IdleHUDView: View {
     /// вью-модели, а не здесь: экран простоя пересоздаётся, намерение — нет.
     var isTransfer: Bool = false
     var onSetTransfer: (Bool) -> Void = { _ in }
+    /// «Управлять в Гараже» — открывает хозяин экрана, поверх записи.
+    var onManageGarage: () -> Void = {}
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var settings = SettingsManager.shared
     @State private var showVehiclePicker = false
+    /// Гараж открывается ПОСЛЕ того, как шторка закрылась.
+    ///
+    /// Открывать его прямо из кнопки нельзя: закрытие листа и показ
+    /// полноэкранного окна попадают в один такт, и SwiftUI регулярно теряет
+    /// одно из двух — экран остаётся ни с чем, а кнопка выглядит мёртвой.
+    @State private var pendingGarage = false
 
     private var activeVehicle: Vehicle? {
         settings.vehicle(for: settings.activeRecordableVehicleId)
@@ -154,7 +162,11 @@ struct IdleHUDView: View {
         )
         .environment(\.colorScheme, .dark)
         .padding(.horizontal, 16)
-        .sheet(isPresented: $showVehiclePicker) {
+        .sheet(isPresented: $showVehiclePicker, onDismiss: {
+            guard pendingGarage else { return }
+            pendingGarage = false
+            onManageGarage()
+        }) {
             VehiclePickerSheet(
                 // Машины в архиве и проданные здесь не показываются: гараж
                 // обещает, что запись идёт на активную, и шторка обязана
@@ -163,7 +175,8 @@ struct IdleHUDView: View {
                 onPick: { _ in onSetTransfer(false) },
                 showsTransferOption: true,
                 isTransferSelected: isTransfer,
-                onPickTransfer: { onSetTransfer(true) }
+                onPickTransfer: { onSetTransfer(true) },
+                onManageGarage: { pendingGarage = true }
             )
             .environmentObject(lang)
         }

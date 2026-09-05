@@ -37,6 +37,9 @@ struct PublicProfileView: View {
     @ObservedObject private var settings = SettingsManager.shared
 
     @State private var profile: SocialProfile?
+    /// Машины для превью гаража. Пусто — строка просто без превью: пока
+    /// список не приехал, обещать содержимое нечем.
+    @State private var garagePreviewVehicles: [PublicVehicle] = []
     @State private var isLoading = false
     @State private var isTogglingFollow = false
     @State private var loadError: String?
@@ -1152,9 +1155,14 @@ struct PublicProfileView: View {
         )
     }
 
-    /// Вход в чужой гараж. Без превью машин: список ещё не загружен, а
-    /// рисовать заглушку под него значит обещать содержимое, которого может
-    /// не оказаться.
+    /// Вход в чужой гараж — с превью машин.
+    ///
+    /// Раньше здесь была голая строка со стрелкой, и до тапа нельзя было
+    /// понять ни сколько там машин, ни есть ли они вообще: строка показывается
+    /// всегда, потому что прятать вход по локальной догадке значит выдать, что
+    /// человек что-то прячет. Превью снимает этот вопрос, ничего не выдавая:
+    /// пока список не приехал — просто нет строки под заголовком, а не
+    /// заглушка, обещающая содержимое.
     private func garageEntryCard(
         _ c: AppTheme.Colors, lng: LanguageManager.Language
     ) -> some View {
@@ -1162,9 +1170,47 @@ struct PublicProfileView: View {
             c,
             title: AppStrings.garage(lng),
             subtitle: AppStrings.publicGarageEntrySubtitle(lng),
-            body: { EmptyView() },
+            body: { garagePreview(c, lng: lng) },
             action: { openGarage() }
         )
+        .task(id: accountId) { await loadGaragePreview() }
+    }
+
+    @ViewBuilder
+    private func garagePreview(
+        _ c: AppTheme.Colors, lng: LanguageManager.Language
+    ) -> some View {
+        if !garagePreviewVehicles.isEmpty {
+            HStack(spacing: 10) {
+                // Не больше четырёх: дальше силуэты мельчают до нечитаемости,
+                // а число рядом всё равно называет полное количество.
+                ForEach(garagePreviewVehicles.prefix(4)) { v in
+                    VehicleFace(
+                        photo: .remote(v.mainPhoto),
+                        assetName: VehicleAvatar.assetName(
+                            style: v.avatarStyle, avatar: v.avatarEmoji),
+                        fallbackEmoji: v.avatarEmoji,
+                        style: .thumb(44),
+                        dimmed: v.isSold
+                    )
+                }
+                Spacer(minLength: 8)
+                Text("\(garagePreviewVehicles.count) " + AppStrings.nounVehicles(lng, garagePreviewVehicles.count))
+                    .font(.system(size: 12))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(.top, 10)
+        }
+    }
+
+    private func loadGaragePreview() async {
+        guard garagePreviewVehicles.isEmpty else { return }
+        let res: PublicGarageResponse? = try? await APIClient.shared.get(
+            APIEndpoint.userGarage(accountId.uuidString),
+            requiresAuth: AuthService.shared.isSignedIn)
+        // Отказ сети — молчание, а не пустая заглушка: строка остаётся тем,
+        // чем была, и ведёт внутрь, где ошибку покажут словами.
+        garagePreviewVehicles = res?.vehicles ?? []
     }
 
     // MARK: - Achievements

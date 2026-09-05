@@ -23,6 +23,19 @@ struct VehiclePhotosView: View {
     /// а «сделать главной» и «удалить» переехали в саму открытую фотографию —
     /// туда, где на неё смотрят целиком.
     @State private var viewerIndex: Int?
+    /// Страницы, замороженные на время показа, и id главной — отдельно.
+    ///
+    /// Пересобирать этот массив под открытым просмотрщиком нельзя: «сделать
+    /// главной» ставит снимок первым, порядок меняется, а страница под пальцем
+    /// и внутреннее состояние пейджера остаются на старом месте. Наружу это
+    /// выглядело так: звезда не загорается, счётчик прыгает на «1 из 4», а сама
+    /// фотография не двигается — три разных ответа на один тап.
+    ///
+    /// Поэтому порядок фиксируется в момент открытия, а звезда рисуется по
+    /// `viewerMainId`, который меняется сразу. Список пересортируется потом, на
+    /// закрытии, когда это уже никого не сбивает.
+    @State private var viewerPages: [PhotoFullScreenView.Page] = []
+    @State private var viewerMainId: UUID?
     /// Разовый вопрос «показывать ли эти снимки другим», который задаётся ровно
     /// в тот момент, когда он впервые осмыслен: у машины появилась первая
     /// фотография. Ось выключена по умолчанию, и без вопроса человек добавил бы
@@ -63,24 +76,32 @@ struct VehiclePhotosView: View {
         }
         .fullScreenCover(item: Binding(
             get: { viewerIndex.map { ViewerStart(index: $0) } },
-            set: { if $0 == nil { viewerIndex = nil } }
+            set: {
+                if $0 == nil {
+                    viewerIndex = nil
+                    // Порядок и «главная» приводятся в соответствие ЗДЕСЬ, когда
+                    // просмотрщик уже закрыт и переезд карточек никого не собьёт.
+                    reload()
+                }
+            }
         )) { start in
             PhotoFullScreenView(
-                pages: photos.map {
-                    .init(id: $0.id, source: .vehicle(filename: $0.filename),
-                          timestamp: $0.timestamp)
-                },
+                pages: viewerPages,
                 initialIndex: start.index,
                 language: lang.language,
                 onDelete: { id in
                     VehiclePhotoStore.delete(id, of: vehicleId)
-                    reload()
+                    // Из открытого просмотрщика страница убирается по месту, а
+                    // не пересборкой всего массива: остальные не должны
+                    // переехать под пальцем.
+                    viewerPages.removeAll { $0.id == id }
+                    if viewerPages.isEmpty { viewerIndex = nil }
                 },
                 onSetMain: { id in
                     VehiclePhotoStore.makeMain(id, of: vehicleId)
-                    reload()
+                    viewerMainId = id
                 },
-                isMain: { id in photos.first(where: { $0.id == id })?.isMain ?? false },
+                isMain: { $0 == viewerMainId },
                 onDismiss: { viewerIndex = nil }
             )
         }
@@ -170,7 +191,7 @@ struct VehiclePhotosView: View {
         // Обычный тап, а не долгий: раньше тап по снимку не делал ВООБЩЕ
         // ничего, а единственное действие пряталось за жестом, о котором можно
         // было узнать только из подписи внизу экрана.
-        .onTapGesture { Haptics.tap(); viewerIndex = 0 }
+        .onTapGesture { Haptics.tap(); openViewer(at: 0) }
     }
 
     // MARK: - Сетка
@@ -183,7 +204,7 @@ struct VehiclePhotosView: View {
                 ForEach(rest) { photo in
                     Button {
                         Haptics.tap()
-                        viewerIndex = photos.firstIndex(where: { $0.id == photo.id })
+                        openViewer(at: photos.firstIndex(where: { $0.id == photo.id }) ?? 0)
                     } label: {
                         image(photo, maxSize: 140)
                             .frame(height: 104)
@@ -275,6 +296,16 @@ struct VehiclePhotosView: View {
             plateVisible: v.plateVisible,
             mapVisible: v.mapVisible,
             photosVisible: visible)
+    }
+
+    /// Снимок порядка на момент открытия — см. `viewerPages`.
+    private func openViewer(at index: Int) {
+        viewerPages = photos.map {
+            .init(id: $0.id, source: .vehicle(filename: $0.filename),
+                  timestamp: $0.timestamp)
+        }
+        viewerMainId = photos.first(where: { $0.isMain })?.id
+        viewerIndex = index
     }
 
     private func reload() {

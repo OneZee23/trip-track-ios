@@ -826,12 +826,13 @@ struct ProfileView: View {
             push(.garage)
         } label: {
             HStack(spacing: 12) {
-                VehicleSpritePlate(
+                VehicleFace(
+                    // Через запомненную карту, а не выборкой на каждый кадр:
+                    // строка живёт в теле экрана профиля.
+                    photo: .local(VehiclePhotoStore.mainPhotos()[vehicle.id]),
                     assetName: vehicle.avatarImageName,
                     fallbackEmoji: vehicle.isPixelAvatar ? nil : vehicle.avatarEmoji,
-                    plateSize: 44,
-                    uniformHeight: true,
-                    cornerRadius: 10
+                    style: .thumb(44)
                 )
 
                 VStack(alignment: .leading, spacing: 3) {

@@ -25,7 +25,15 @@ struct VehicleDetailView: View {
     @State private var showMap = false
     @State private var openTripId: UUID?
     /// Главная фотография машины — она же герой экрана, как в каноне.
+    /// Известна ДО первого кадра, а не после задачи: иначе паспорт рисует
+    /// силуэт и через мгновение подменяет его фотографией. Запрос запомнен в
+    /// хранилище, так что цена этого — ноль.
     @State private var mainPhoto: VehiclePhoto?
+
+    init(vehicleId: UUID) {
+        self.vehicleId = vehicleId
+        _mainPhoto = State(initialValue: VehiclePhotoStore.mainPhotos()[vehicleId])
+    }
 
     /// Биография машины: три числа и рекорды, посчитанные из ЕЁ поездок.
     ///
@@ -99,22 +107,10 @@ struct VehicleDetailView: View {
         // потом отфильтровывался обратно, и человек оставался вообще без
         // активной машины, без единого сообщения. В гараже такая же кнопка
         // уже была под охраной, и два экрана расходились.
-        if !isMain, let vehicle, !vehicle.isSold, !vehicle.isArchived {
+        if !isMain, let vehicle, !vehicle.isSold {
             items.append(
                 .init(title: AppStrings.makeMainVehicle(l), systemImage: "star") {
                     run { settings.selectVehicle(id: vehicleId) }
-                }
-            )
-        }
-        // Архив — обратимое действие, поэтому без подтверждения. Проданную
-        // машину из архива не поднимаем: снятие «продана» это отдельный шаг.
-        if let vehicle, !vehicle.isSold {
-            items.append(
-                .init(title: vehicle.isArchived
-                      ? AppStrings.vehicleUnarchiveAction(l)
-                      : AppStrings.vehicleArchiveAction(l),
-                      systemImage: vehicle.isArchived ? "tray.and.arrow.up" : "archivebox") {
-                    run { settings.setVehicleArchived(id: vehicleId, archived: !vehicle.isArchived) }
                 }
             )
         }
@@ -152,14 +148,12 @@ struct VehicleDetailView: View {
                         // A bicycle pairs with no stereo, so auto-record has
                         // nothing to key off — the rows are absent, not
                         // disabled (canon: hidden means gone).
-                        // На проданную и архивную машину не записывается
-                        // ничего — значит и предлагать ей автозапись нельзя.
-                        // Паспорт проданной машины показывал «Привязать
-                        // магнитолу» и «Автозапись · Вкл» прямо под строкой
-                        // «Продана в сентябре»: обещание, которое приложение
-                        // выполнить уже не может, — воткнёшь магнитолу и
-                        // получишь тишину.
-                        if vehicle.type.supportsAutoRecord, !vehicle.isSold, !vehicle.isArchived {
+                        // На проданную машину не записывается ничего — значит
+                        // и предлагать ей автозапись нельзя. Паспорт проданной
+                        // показывал «Привязать магнитолу» и «Автозапись · Вкл»
+                        // прямо под строкой «Продана в сентябре»: обещание,
+                        // которое приложение выполнить уже не может.
+                        if vehicle.type.supportsAutoRecord, !vehicle.isSold {
                             // Always present, never conditional. It used to
                             // appear only when Bluetooth was off AND
                             // auto-record was armed, which meant its silence
@@ -505,6 +499,12 @@ struct VehicleDetailView: View {
                 Text(AppStrings.km(l))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(c.textTertiary)
+                Spacer(minLength: 8)
+                // Карточка открывает ввод реального пробега. Без этой стрелки
+                // об этом можно узнать только случайно ткнув.
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
             }
             odometerBreakdown(vehicle, c: c, l: l)
         }
@@ -744,6 +744,9 @@ struct VehicleDetailView: View {
                         Text(TripRowText.km(trip, l))
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(c.text)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(c.textTertiary)
                     }
                     .frame(minHeight: 38)
                     .contentShape(Rectangle())
@@ -842,6 +845,16 @@ struct VehicleDetailView: View {
                     .font(.system(size: 15, weight: .heavy))
                     .foregroundStyle(c.text)
             }
+            // Шеврон ТОЛЬКО у строки, которая правда открывается. Из четырёх
+            // рекордов поездка есть у одной — «самая длинная»; «лучший день»
+            // и «дольше всего» это дни, а не поездки, и открывать там нечего.
+            // Один шеврон в карточке выглядит неровно ровно настолько,
+            // насколько неровна сама правда: нажимается одна строка.
+            if tripId != nil {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
         }
         .frame(minHeight: 46)
 
@@ -852,7 +865,10 @@ struct VehicleDetailView: View {
             } label: {
                 row.contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            // Нажатие видно: строка внутри общей карточки, и без отклика
+            // непонятно, что палец вообще попал по чему-то живому.
+            .buttonStyle(PressableCardStyle())
+            .accessibilityHint(AppStrings.tripTitle(LanguageManager.currentLanguage))
         } else {
             row
         }

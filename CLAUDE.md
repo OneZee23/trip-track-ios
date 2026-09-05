@@ -152,10 +152,41 @@ Rules that are easy to get wrong:
 - Always add `.animation(.default, value:)` with explicit value, never `.animation(.default)` (deprecated)
 - Use `LazyVStack` / `LazyHStack` inside `ScrollView` for lists with >20 items
 
+### Нажатие обязано отвечать
+
+Три правила из доклада Apple «Designing Fluid Interfaces» (WWDC 2018),
+переписанные под наш случай. Все три мы уже нарушили — каждое поймал человек
+на устройстве, не тест и не сборка.
+
+- **Отклик в момент КАСАНИЯ, а не в момент результата.** У всего, что
+  нажимается, должен быть видимый отклик под пальцем: `PressableCardStyle` для
+  обычного тапа, `HoldableCardStyle` там, где действие открывает долгий тап.
+  Голый `.buttonStyle(.plain)` на карточке — нажатие, которого не видно.
+  История: карточка гаража с целым меню за долгим тапом выглядела мёртвой,
+  потому что удержание ничем не отличалось от промаха.
+
+- **Если нажатие что-то открывает — это видно. Если не открывает — не
+  притворяемся.** Шеврон, отклик или и то и другое. Из четырёх строк в карточке
+  рекордов открывается ровно одна, и шеврон стоит ровно у неё: неровно
+  настолько, насколько неровна правда. Обратная ошибка тоже наша — фотографии
+  машины, где обычный тап не делал НИЧЕГО, а единственное действие пряталось за
+  жестом, о котором сообщала подпись внизу экрана.
+
+- **Анимацию можно прервать.** Всегда `.animation(_:value:)` с явным значением
+  (см. правило выше) и пружина, а не цепочка из `withAnimation` + `sleep`,
+  которую нельзя отменить на середине. Человек, передумавший в середине жеста,
+  не должен ждать, пока приложение доиграет.
+
+Родня этих правил — раздел «Dialogs» ниже: там та же мысль про то, что экран не
+должен обещать одно, а делать другое.
+
 ### Performance
 - Mark ViewModels as `@MainActor` class
 - Use `nonisolated` for heavy computation methods that don't touch UI
-- Prefer `task.detached` for CPU-heavy work (encoding, filtering large arrays)
+- `Task.detached` для тяжёлого счёта (кодирование, фильтрация больших массивов) —
+  ПОКА мы на Swift 5.9. В 6.2 правильный инструмент `@concurrent`, а
+  `Task.detached` становится «почти никогда»: он не наследует ни изоляцию, ни
+  приоритет, ни task-local. При переходе на 6.2 эти 23 места пересмотреть
 - For CoreData fetches in background: use `viewContext.perform {}` or `newBackgroundContext()`
 - Avoid re-creating objects in `body` — pull constants and formatters to static/lazy properties
 
@@ -163,7 +194,10 @@ Rules that are easy to get wrong:
 - Prefer `guard let` for early exits over nested `if let`
 - Use `[weak self]` in closures that capture self in non-@MainActor contexts
 - Prefer `async/await` over Combine chains for new code. Keep existing Combine as-is
-- Use `Result` type for error handling in service methods, not throwing + catch at every call site
+- Ошибки: восстановимая — `throws`, ошибка программиста — `precondition`.
+  Правило про `Result` здесь стояло годами и НЕ соответствовало коду:
+  сервисов, возвращающих `Result`, — ноль, бросающих — сорок два.
+  Тип ошибки — enum со связанными значениями (`APIError`), контекст в нём же
 - Enums with associated values over multiple optional properties when states are mutually exclusive
 
 ### File Organization

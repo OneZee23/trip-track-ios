@@ -44,7 +44,12 @@ enum VehiclePhotoStore {
             }
             return exists || photo.remoteURL != nil
         }
-        if context.hasChanges { try? context.save() }
+        if context.hasChanges {
+            try? context.save()
+            // Строку снимка, у которого не осталось ни файла, ни серверной
+            // копии, только что удалили — запомненная главная могла быть ею.
+            invalidateMainCache()
+        }
         return alive
             .sorted { a, b in
                 if a.isMain != b.isMain { return a.isMain }
@@ -56,38 +61,60 @@ enum VehiclePhotoStore {
         photos(of: vehicleId).first
     }
 
-    /// Уменьшенная копия снимка — то, что нужно показать почти везде.
+    /// Главные снимки сразу для всего гаража — ОДИН запрос вместо запроса на
+    /// карточку.
     ///
-    /// Фотографии пишутся с камеры (десяток мегапикселей), а показываются
-    /// плитками по сто точек. Раньше каждая плитка декодировала ОРИГИНАЛ, и
-    /// делала это прямо в теле вью — то есть заново на каждую перерисовку,
-    /// включая анимацию диалога. На экране, который существует ради того,
-    /// чтобы держать много снимков, это подвисания и реальный шанс быть
-    /// убитым по памяти на старом телефоне.
+    /// Точечный `mainPhoto(of:)` из тела вью означал выборку из CoreData на
+    /// каждую карточку и на каждую перерисовку: пять машин прокручиваются —
+    /// пять запросов на кадр. Экран это переживал, но это ровно тот случай,
+    /// который правила проекта запрещают («не создавать объекты в body»).
+    /// Запомненный ответ. Нужен не ради скорости, а ради ПЕРВОГО КАДРА:
+    /// пока список главных снимков подгружался задачей, гараж успевал
+    /// нарисовать силуэты, и человек видел, как седан на тёмном фоне сменяется
+    /// фотографией. Рвано и без причины — данные лежат на устройстве и
+    /// достаются одним запросом.
     ///
-    /// Кэш в памяти, потому что ключ — имя файла, а файл неизменяем: снимок
-    /// либо есть, либо удалён вместе со строкой.
-    private static let thumbCache = NSCache<NSString, UIImage>()
+    /// Сбрасывается всеми, кто эти снимки меняет; читать его напрямую нельзя.
+    nonisolated(unsafe) private static var mainCache: [UUID: VehiclePhoto]?
+    private static let cacheLock = NSLock()
 
-    static func thumbnail(_ photo: VehiclePhoto, maxSize: CGFloat) async -> UIImage? {
-        let key = "\(photo.filename)@\(Int(maxSize))" as NSString
-        if let cached = thumbCache.object(forKey: key) { return cached }
-        let url = directory.appendingPathComponent(photo.filename)
-        let scale = await MainActor.run { UIScreen.main.scale }
-        return await Task.detached(priority: .userInitiated) { () -> UIImage? in
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-            let options: [CFString: Any] = [
-                kCGImageSourceThumbnailMaxPixelSize: maxSize * scale,
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-            ]
-            guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
-            else { return nil }
-            let image = UIImage(cgImage: cg)
-            thumbCache.setObject(image, forKey: key)
-            return image
-        }.value
+    static func invalidateMainCache() {
+        cacheLock.lock(); mainCache = nil; cacheLock.unlock()
+        // Снимки могли не только перевыбраться, но и исчезнуть — копии в
+        // памяти после этого показывать нечего.
+        VehicleImageCache.forget()
     }
+
+    static func mainPhotos(
+        context: NSManagedObjectContext = PersistenceController.shared.container.viewContext
+    ) -> [UUID: VehiclePhoto] {
+        cacheLock.lock()
+        if let cached = mainCache { cacheLock.unlock(); return cached }
+        cacheLock.unlock()
+        let fresh = computeMainPhotos(context: context)
+        cacheLock.lock(); mainCache = fresh; cacheLock.unlock()
+        return fresh
+    }
+
+    private static func computeMainPhotos(
+        context: NSManagedObjectContext
+    ) -> [UUID: VehiclePhoto] {
+        let req = NSFetchRequest<NSManagedObject>(entityName: "VehiclePhotoEntity")
+        guard let rows = try? context.fetch(req) else { return [:] }
+        var out: [UUID: VehiclePhoto] = [:]
+        for photo in rows.compactMap(VehiclePhoto.init(entity:))
+            .sorted(by: { a, b in
+                if a.isMain != b.isMain { return a.isMain }
+                return a.timestamp < b.timestamp
+            }) {
+            if out[photo.vehicleId] == nil { out[photo.vehicleId] = photo }
+        }
+        return out
+    }
+
+    /// Уменьшенные копии живут в `VehicleImageCache` — общем для своих
+    /// снимков и чужих. Здесь их больше нет: два кэша на одну картинку
+    /// расходились ключами, и промах одного означал повторный разбор кадра.
 
     /// Полный размер — только там, где снимок действительно смотрят целиком.
     static func image(_ photo: VehiclePhoto) -> UIImage? {
@@ -126,6 +153,7 @@ enum VehiclePhotoStore {
         e.setValue(Date(), forKey: "lastModifiedAt")
         if let sourceTripId { e.setValue(sourceTripId, forKey: "sourceTripId") }
         try? context.save()
+        invalidateMainCache()
         // Снимок уходит на сервер только при включённой синхронизации — это
         // проверяет сама очередь (`SyncEnqueuer` держит фотографии машины в
         // одной корзине с самой машиной, то есть с личными данными).
@@ -163,6 +191,7 @@ enum VehiclePhotoStore {
             }
         }
         try? context.save()
+        invalidateMainCache()
     }
 
     /// Удаляет и строку, и ФАЙЛ. Каскад CoreData файлов не трогает — забыть
@@ -180,6 +209,7 @@ enum VehiclePhotoStore {
         }
         context.delete(row)
         try? context.save()
+        invalidateMainCache()
         // Удалять на сервере есть смысл только если он там что-то видел.
         // Строку удаляем ДО постановки в очередь, поэтому решение принимается
         // здесь, по снятому заранее флагу, — потом спросить будет не у кого.

@@ -2391,30 +2391,24 @@ enum AppStrings {
            ru: "Новые поездки записываются на неё.",
            en: "New trips are recorded onto this one.")
     }
-    static func garageArchive(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "garageArchive", ru: "Архив", en: "Archive")
-    }
     static func garageArchiveHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "garageArchiveHint",
            ru: "Активна одна машина. Переключить можно когда угодно: новые поездки поедут на выбранную, уже записанные останутся на своих.",
            en: "One vehicle is active at a time. You can switch whenever you like: new trips go to the one you pick, and the ones already recorded stay where they are.")
     }
     /// Заголовок раздела «на них тоже можно писать, просто сейчас активна не они».
+    /// Раздел проданных. Отдельный, а не метка в общем списке: разница между
+    /// «можно ездить» и «нельзя» не должна быть мелким текстом.
+    static func garageSold(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "garageSold", ru: "Проданные", en: "Sold")
+    }
+    static func garageSoldHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "garageSoldHint",
+           ru: "Новые поездки на них не пишутся — машина уехала к другому человеку. Всё, что уже записано, остаётся при ней; если продажа сорвалась, её можно снять.",
+           en: "New trips are never recorded onto these — the car belongs to someone else now. Everything already recorded stays with it, and if the sale fell through you can undo it.")
+    }
     static func garageOthers(_ lang: LanguageManager.Language) -> String {
         tr(lang, "garageOthers", ru: "Остальные", en: "Others")
-    }
-    /// Подпись НАСТОЯЩЕГО архива. Обязана сказать две вещи: новые поездки сюда
-    /// не пойдут и старые никуда не делись — иначе архив читается как удаление.
-    static func garageArchivedHint(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "garageArchivedHint",
-           ru: "На эти машины новые поездки не записываются. Уже записанные остаются при них — вернуть машину можно когда угодно.",
-           en: "New trips are never recorded onto these. The ones already recorded stay with them, and you can bring a vehicle back at any time.")
-    }
-    static func vehicleArchiveAction(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "vehicleArchiveAction", ru: "Убрать в архив", en: "Move to archive")
-    }
-    static func vehicleUnarchiveAction(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "vehicleUnarchiveAction", ru: "Вернуть из архива", en: "Bring back")
     }
     /// Когда активной машины нет вовсе. Прежняя подпись в этом состоянии
     /// утверждала «Активна одна машина» — то есть врала прямо под пустым

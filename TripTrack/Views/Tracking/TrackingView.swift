@@ -28,6 +28,12 @@ struct TrackingView: View {
     /// the canon's «один и тот же sheet отовсюду». Changing car mid-drive
     /// reassigns the WHOLE trip, it does not split it.
     @State private var showVehiclePicker = false
+    /// Гараж, открытый прямо с экрана записи. Свой `NavigationStack`: экран
+    /// записи — корень таба и стека не имеет, а `GarageView` намеренно живёт
+    /// без собственного, потому что под «Я» он полноценная страница.
+    @State private var showGarage = false
+    /// См. `IdleHUDView.pendingGarage` — гараж ждёт закрытия шторки.
+    @State private var pendingGarage = false
     /// Ending a recording is the one irreversible control on this screen.
     @State private var confirmStop = false
 
@@ -162,7 +168,19 @@ struct TrackingView: View {
         .onReceive(viewModel.objectWillChange) { _ in
             recLog.notice("objectWillChange received")
         }
-        .sheet(isPresented: $showVehiclePicker) {
+        // Гараж поверх записи, а не переключением таба: «назад» возвращает
+        // сюда же, к записи, откуда человек и шёл его открывать.
+        .fullScreenCover(isPresented: $showGarage) {
+            NavigationStack {
+                GarageView()
+                    .environmentObject(lang)
+            }
+        }
+        .sheet(isPresented: $showVehiclePicker, onDismiss: {
+            guard pendingGarage else { return }
+            pendingGarage = false
+            showGarage = true
+        }) {
             // The chip is reachable mid-recording, and a trip carries the car
             // it was stamped with at start — picking a different one has to
             // reach the trip in flight, or the drive lands on the wrong car
@@ -190,7 +208,8 @@ struct TrackingView: View {
                     guard viewModel.isRecording,
                           let tripId = viewModel.tripManager.activeTrip?.id else { return }
                     viewModel.tripManager.setTransfer(for: tripId, isTransfer: true)
-                }
+                },
+                onManageGarage: { pendingGarage = true }
             )
             .environmentObject(lang)
         }
@@ -842,7 +861,8 @@ struct TrackingView: View {
                     }
                 },
                 isTransfer: viewModel.pendingTransfer,
-                onSetTransfer: { viewModel.pendingTransfer = $0 }
+                onSetTransfer: { viewModel.pendingTransfer = $0 },
+                onManageGarage: { showGarage = true }
             )
             .padding(.bottom, controlBlockBottomInset)
         }

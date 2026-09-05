@@ -29,8 +29,9 @@ WHAT'S NEW IN 0.6.4
   chosen to make visible, and the passport of each.
 • "I'm a passenger" — a one-tap state before recording starts, for a taxi, a bus
   or someone else's car. The trip is recorded without a vehicle attached.
-• Archive — a vehicle can be archived by the user; new trips are never recorded
-  onto an archived or sold vehicle. Nothing is archived automatically.
+• Sold — a vehicle can be marked sold by the user; new trips are never recorded
+  onto a sold vehicle. Nothing is marked automatically, and a sold vehicle stays
+  visible in the garage (and to other users, if the owner made it public).
 
 USER-GENERATED CONTENT AND MODERATION
 0.6.4 adds three new stranger-visible surfaces, all optional and all off or
@@ -41,10 +42,12 @@ owner-controlled:
   is enabled, which is OFF by default; with it off they never leave the device.
 • An optional registration plate, hidden by default and shown only if the owner
   turns it on.
-Each is covered by the existing report-and-block flow: any vehicle or vehicle
-photo can be reported from the same menu as a trip or a profile, and blocking a
-user hides their garage entirely, in both directions. Reports reach the same
-queue as the existing ones and are actioned within 24 hours, per 1.2.
+Each is covered by the existing report-and-block flow. A vehicle is reported
+from the "…" in the header of its page; a single photo is reported from the flag
+button in the full-screen viewer, where the photo being reported is on screen
+and cannot be mistaken. Blocking a user hides their garage entirely, in both
+directions. Reports reach the same queue as the existing ones and are actioned
+within 24 hours, per 1.2.
 
 PRIVACY DEFAULTS ON UPGRADE
 • Vehicles that existed before this release have their route map switched OFF by
@@ -73,7 +76,7 @@ user starts a recording.
 ### Русский (для себя, не для вставки)
 
 То же самое своими словами: паспорт машины, фотографии, чужой гараж, «я
-пассажир», архив. Три новых поверхности с пользовательским контентом — имя и
+пассажир», проданные машины. Три новых поверхности с пользовательским контентом — имя и
 описание машины, фотографии, номер, — все закрываются переключателями, и все
 проверяются на сервере. У машин, заведённых до релиза, карта маршрутов выключена
 миграцией: согласия на эту ось никто не давал, потому что до 0.6.4 её не было.
@@ -148,8 +151,9 @@ sync and the social layer. A demo account is provided in App Review Information 
 User Account.
 
 UGC MODERATION (Guideline 1.2)
-• Report — on every public profile, every feed card and every trip. Eight reasons:
-  spam, harassment, hate, nudity, violence, illegal, impersonation, other.
+• Report — on every public profile, every feed card, every trip, every vehicle
+  and every vehicle photo. Eight reasons: spam, harassment, hate, nudity,
+  violence, illegal, impersonation, other.
 • Block — from any public profile's "…" menu; hides content in both directions.
 • Comments can be deleted by their author and by the trip owner.
 • Terms of Service state a zero-tolerance policy and a 24-hour moderation SLA.

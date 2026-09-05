@@ -54,6 +54,15 @@ struct VehiclePickerSheet: View {
     /// значит «не указал машину», а трансфер — «ехал не за рулём», и путать
     /// их нельзя, иначе километры молча останутся на чьём-то одометре.
     var onPickTransfer: (() -> Void)?
+    /// Куда ведёт «Управлять в Гараже». Когда закрыто — экран открывает гараж
+    /// сам, прямо поверх себя; когда нет — старый путь через таб «Я».
+    ///
+    /// Различие не косметическое. С экрана записи гараж открывался переключением
+    /// таба: на долю секунды показывался профиль, потом ехала анимация push. И
+    /// дело даже не в мигании — «назад» после гаража возвращало в профиль, а не
+    /// туда, откуда человек шёл. В редакторе поездки закрытия нет, и там
+    /// по-прежнему уместен переход в таб.
+    var onManageGarage: (() -> Void)?
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -344,9 +353,13 @@ struct VehiclePickerSheet: View {
         return Button {
             Haptics.tap()
             dismiss()
-            // Garage lives under the Я tab — switch there; ProfileView
-            // hosts the Garage entry point.
-            NotificationCenter.default.post(name: .openGarage, object: nil)
+            if let onManageGarage {
+                onManageGarage()
+            } else {
+                // Garage lives under the Я tab — switch there; ProfileView
+                // hosts the Garage entry point.
+                NotificationCenter.default.post(name: .openGarage, object: nil)
+            }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")

@@ -143,6 +143,7 @@ final class SettingsManager: ObservableObject {
         migrateCloudSyncToOptIn()
         migrateTripsToPrivateByDefault()
         migrateVehicleMapToOptIn()
+        migrateArchiveAway()
         loadAutoRecordSettings()
         loadSettings()
         persistenceController.migrateUserIdIfNeeded(userId: localUserId)
@@ -160,6 +161,33 @@ final class SettingsManager: ObservableObject {
     /// init time `AuthService` may not have hydrated yet, so we persist the
     /// IDs and let `AuthService.drainPendingPrivateMigrationUnpublish()`
     /// flush them after sign-in instead of firing a doomed enqueue here.
+    /// Архива больше нет — возвращаем в строй всё, что успело в него уехать.
+    ///
+    /// Без этого машина, убранная в архив до отмены механики, тихо исчезла бы
+    /// из выбора при записи: механики нет, а флаг остался. Ровно тот класс
+    /// поломки, ради которого архив и переделывали.
+    ///
+    /// Флаг `isArchived` остаётся в схеме и в синке: выкидывать колонку ради
+    /// уборки — менять версию модели и ломать обмен со старыми сборками.
+    /// Просто больше никто его не ставит и не читает.
+    private func migrateArchiveAway() {
+        let key = "com.triptrack.settings.archiveRemovedV1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "isArchived == YES")
+        if let rows = try? context.fetch(request), !rows.isEmpty {
+            for row in rows {
+                row.isArchived = false
+                row.lastModifiedAt = Date()
+                row.syncStatus = SyncStatus.pendingUpload.rawValue
+            }
+            persistenceController.save()
+            loadVehicles()
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     /// Карта маршрутов у машин, заведённых ДО 0.6.4, выключается один раз.
     ///
     /// Обещание дано и в журнале изменений, и во всех двенадцати текстах
@@ -361,10 +389,13 @@ final class SettingsManager: ObservableObject {
     /// поездка двухлетней давности показала бы «Транспорт удалён».
     /// Фильтровать можно только в точке ПРИМЕНЕНИЯ, то есть здесь.
     ///
-    /// Сюда же придёт лимит бесплатного тарифа, когда будет что покупать:
-    /// одной строкой в этом фильтре, а не проверкой на десяти экранах.
+    /// Условие ровно одно: машина не продана. Архив из него убран вместе с
+    /// самой механикой — «одна активная, остальные в архив» была подготовкой к
+    /// монетизации, а не пользой, и заставляла человека руками разбирать
+    /// собственный гараж. Машин столько, сколько есть, все рабочие; одна из
+    /// них — та, на которую пойдёт следующая поездка.
     var recordableVehicles: [Vehicle] {
-        vehicles.filter { !$0.isArchived && !$0.isSold }
+        vehicles.filter { !$0.isSold }
     }
 
     /// Машина, на которую уйдёт СЛЕДУЮЩАЯ поездка, — и единственный ответ на
@@ -652,9 +683,6 @@ final class SettingsManager: ObservableObject {
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         guard let entity = try? context.fetch(request).first else { return }
         entity.soldAt = soldAt
-        // Проданная всегда в архиве; возврат из проданных архива не снимает —
-        // это второй, отдельный шаг, чтобы случайный тап не переписал историю.
-        if soldAt != nil { entity.isArchived = true }
         entity.lastModifiedAt = Date()
         entity.syncStatus = SyncStatus.pendingUpload.rawValue
         // Активной проданная быть не может: следующая запись ушла бы на чужую
@@ -668,28 +696,6 @@ final class SettingsManager: ObservableObject {
         // продажи поездка уходила ровно на проданную машину — то самое, ради
         // чего эти три строки и были написаны.
         if soldAt != nil, selectedVehicleId == id {
-            selectVehicle(id: recordableVehicles.first?.id)
-        }
-        Task { @MainActor in
-            SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .upload))
-        }
-    }
-
-    func setVehicleArchived(id: UUID, archived: Bool) {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
-        guard let entity = try? context.fetch(request).first else { return }
-        entity.isArchived = archived
-        entity.lastModifiedAt = Date()
-        entity.syncStatus = SyncStatus.pendingUpload.rawValue
-        persistenceController.save()
-        loadVehicles()
-        // Убранная в архив не может остаться активной — иначе гараж обещает
-        // одно («пишем на активную»), а запись делает другое. Слот уходит
-        // другой машине, а в гараже из одной машины — никому: «Без
-        // транспорта» это законный исход, а не ошибка.
-        if archived, selectedVehicleId == id {
             selectVehicle(id: recordableVehicles.first?.id)
         }
         Task { @MainActor in

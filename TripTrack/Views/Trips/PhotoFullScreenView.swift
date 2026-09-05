@@ -40,6 +40,14 @@ struct PhotoFullScreenView: View {
     /// Уже главная: кнопка тогда показывает состояние, а не предлагает
     /// сделать то, что и так сделано.
     var isMain: ((UUID) -> Bool)? = nil
+    /// Пожаловаться на ЭТОТ снимок. Есть только у чужих фотографий.
+    ///
+    /// Раньше жалоба висела на долгом тапе по плитке в ленте снимков. Системное
+    /// меню строило ради одного пункта размытый предпросмотр во весь экран —
+    /// выглядело поломкой, спорило с домашним правилом «системных меню не
+    /// держим», и главное: с плитки было не видно, на что жалуешься. Здесь
+    /// снимок открыт целиком, и сомнений нет.
+    var onReport: ((UUID) -> Void)? = nil
     let onDismiss: () -> Void
 
     /// Which page the pager has actually LANDED on. Driving the pager by
@@ -69,6 +77,7 @@ struct PhotoFullScreenView: View {
         language: LanguageManager.Language = .en,
         onDelete: ((UUID) -> Void)? = nil,
         onSetMain: ((UUID) -> Void)? = nil,
+        onReport: ((UUID) -> Void)? = nil,
         isMain: ((UUID) -> Bool)? = nil,
         onDismiss: @escaping () -> Void
     ) {
@@ -78,6 +87,7 @@ struct PhotoFullScreenView: View {
         self.language = language
         self.onDelete = onDelete
         self.onSetMain = onSetMain
+        self.onReport = onReport
         self.isMain = isMain
         self.onDismiss = onDismiss
         let start = pages.indices.contains(initialIndex) ? initialIndex : 0
@@ -304,6 +314,13 @@ struct PhotoFullScreenView: View {
             if onDelete != nil {
                 circleButton("trash", label: AppStrings.delete(language), id: "photo_viewer_delete") {
                     confirmingDelete = true
+                }
+            }
+            if let onReport {
+                circleButton("flag", label: AppStrings.reportProfileAction(language),
+                             id: "photo_viewer_report") {
+                    Haptics.tap()
+                    onReport(pages[currentIndex].id)
                 }
             }
             // No share button: a photo is shared as part of the trip, from

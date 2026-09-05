@@ -40,11 +40,13 @@ Taxi, bus, someone else's car — say so before you start recording, in one tap.
 The kilometres count toward your statistics and stay off your car's odometer.
 It used to be something you could only fix afterwards.
 
-ARCHIVE IS NOW A REAL STATE
+YOUR DEFAULT CAR, AND THE ONES YOU SOLD
 
-A car goes to the archive by your hand, and nothing records onto it after that —
-not the trip you start, not Bluetooth auto-record, not a Shortcut. Trips already
-recorded stay with their car. Bringing it back is one tap.
+One car in your garage is the default — the one your next trip is recorded onto,
+and one tap changes it. Sold a car? Mark it sold: nothing records onto it any
+more — not the trip you start, not Bluetooth auto-record, not a Shortcut.
+Everything already recorded stays with it, and it stays in your garage in plain
+sight.
 
 YOU DECIDE WHAT OTHERS SEE
 
@@ -58,7 +60,7 @@ FIXED
 
 - After selling a car, the next trip was recorded onto it anyway.
 - «Un-sell» never reached the server, so the sale came back.
-- Connecting to an archived car's stereo made it active again, with no tap.
+- Connecting to a sold car's stereo made it active again, with no tap.
 - Deleting your account left vehicle photos behind; erasing server data left
   your garage public.
 ```
@@ -83,11 +85,12 @@ FIXED
 Километры пойдут в вашу статистику и не намотаются на одометр вашей машины.
 Раньше это можно было поправить только задним числом.
 
-АРХИВ СТАЛ НАСТОЯЩИМ СОСТОЯНИЕМ
+МАШИНА ПО УМОЛЧАНИЮ И ПРОДАННЫЕ
 
-Машина уезжает в архив вашей рукой, и после этого на неё не записывается
-ничего: ни поездка, которую вы начали, ни автозапись по магнитоле, ни
-«Команды». Уже записанные поездки остаются при ней. Вернуть — один тап.
+Одна машина в гараже — та, на которую пойдёт следующая поездка; сменить её можно
+одним тапом. Проданную отметьте проданной: на неё больше не запишется ничего —
+ни поездка, которую вы начали, ни автозапись по магнитоле, ни «Команды». Всё,
+что уже записано, остаётся при ней, и сама она остаётся в гараже на виду.
 
 ВЫ РЕШАЕТЕ, ЧТО ВИДНО ДРУГИМ
 
@@ -100,7 +103,7 @@ FIXED
 
 - После продажи машины следующая поездка уезжала на неё же.
 - «Вернуть из проданных» не доезжало до сервера, и продажа возвращалась.
-- Подключение к магнитоле архивной машины снова делало её активной.
+- Подключение к магнитоле проданной машины снова делало её активной.
 - «Удалить аккаунт» не стирал фотографии машин, а «стереть данные с сервера»
   оставляло гараж публичным.
 ```
@@ -124,11 +127,13 @@ Taxi, Bus, fremdes Auto — sag es mit einem Tippen, bevor die Aufzeichnung
 startet. Die Kilometer zählen für deine Statistik und bleiben vom Tachostand
 deines Autos fern.
 
-DAS ARCHIV IST JETZT EIN ECHTER ZUSTAND
+DEIN STANDARDAUTO — UND DIE VERKAUFTEN
 
-Ein Auto wandert von Hand ins Archiv, und danach wird nichts mehr darauf
-aufgezeichnet — weder eine gestartete Fahrt noch die Bluetooth-Automatik noch
-ein Kurzbefehl. Bereits aufgezeichnete Fahrten bleiben bei ihm.
+Ein Auto in deiner Garage ist das Standardauto: darauf wird die nächste Fahrt
+aufgezeichnet, und ein Tippen wechselt es. Ein verkauftes Auto markierst du als
+verkauft — danach wird nichts mehr darauf aufgezeichnet, weder eine gestartete
+Fahrt noch die Bluetooth-Automatik noch ein Kurzbefehl. Alles bereits
+Aufgezeichnete bleibt bei ihm, und es bleibt sichtbar in der Garage.
 
 DU ENTSCHEIDEST, WAS ANDERE SEHEN
 
@@ -138,7 +143,7 @@ hattest, ist die Routenkarte AUS — die Karte eines Autos zeigt praktisch, wo
 sein Besitzer wohnt.
 
 BEHOBEN: Verkauf setzte die nächste Fahrt trotzdem auf das verkaufte Auto;
-«Verkauf zurücknehmen» erreichte den Server nie; das Radio eines archivierten
+«Verkauf zurücknehmen» erreichte den Server nie; das Radio eines verkauften
 Autos machte es wieder aktiv.
 ```
 
@@ -161,11 +166,13 @@ Taxi, autobús, coche de otro: dilo antes de empezar a grabar, con un toque. Los
 kilómetros cuentan para tus estadísticas y no suben al cuentakilómetros de tu
 coche.
 
-EL ARCHIVO ES AHORA UN ESTADO REAL
+TU COCHE POR DEFECTO Y LOS VENDIDOS
 
-Un coche va al archivo por tu mano y, después, no se graba nada en él: ni el
-viaje que empiezas, ni la grabación automática por Bluetooth, ni un atajo. Los
-viajes ya grabados se quedan con él.
+Un coche de tu garaje es el predeterminado: en él se graba tu próximo viaje, y
+cambiarlo es un toque. Si vendes uno, márcalo como vendido: ya no se graba nada
+en él, ni el viaje que empiezas, ni la grabación automática por Bluetooth, ni un
+atajo. Todo lo ya grabado se queda con él, y él se queda a la vista en tu
+garaje.
 
 TÚ DECIDES QUÉ SE VE
 
@@ -196,11 +203,13 @@ Taxi, bus, voiture d'un autre : dites-le avant de lancer l'enregistrement, en
 une touche. Les kilomètres comptent dans vos statistiques et n'entrent pas au
 compteur de votre voiture.
 
-L'ARCHIVE EST UN VRAI ÉTAT
+VOTRE VOITURE PAR DÉFAUT, ET CELLES VENDUES
 
-Une voiture part à l'archive de votre main, et plus rien ne s'y enregistre : ni
-le trajet que vous lancez, ni l'enregistrement automatique par Bluetooth, ni un
-raccourci. Les trajets déjà enregistrés lui restent attachés.
+Une voiture de votre garage est celle par défaut : c'est sur elle que le
+prochain trajet s'enregistre, et un geste suffit pour en changer. Une voiture
+vendue, marquez-la vendue : plus rien ne s'y enregistre, ni le trajet que vous
+lancez, ni l'enregistrement automatique par Bluetooth, ni un raccourci. Tout ce
+qui est déjà enregistré lui reste, et elle reste visible dans le garage.
 
 VOUS DÉCIDEZ DE CE QUI EST VISIBLE
 
@@ -232,11 +241,13 @@ Taxi, autobus, auto di qualcun altro: dillo prima di iniziare a registrare, con
 un tocco. I chilometri contano nelle tue statistiche e non finiscono sul
 contachilometri della tua auto.
 
-L'ARCHIVIO È UNO STATO VERO
+LA TUA AUTO PREDEFINITA E QUELLE VENDUTE
 
-Un'auto va in archivio per tua mano e da quel momento non ci si registra più
-nulla: né il viaggio che avvii, né la registrazione automatica via Bluetooth,
-né un comando rapido. I viaggi già registrati restano con lei.
+Un'auto del tuo garage è quella predefinita: è su di lei che si registra il
+prossimo viaggio, e cambiarla è un tocco. Un'auto venduta, segnala come venduta:
+non ci si registra più nulla, né il viaggio che avvii, né la registrazione
+automatica via Bluetooth, né un comando rapido. Tutto ciò che è già registrato
+resta con lei, e lei resta in vista nel garage.
 
 DECIDI TU COSA SI VEDE
 
@@ -268,11 +279,13 @@ Taksówka, autobus, cudze auto — powiedz to jednym dotknięciem przed startem
 nagrywania. Kilometry liczą się do Twoich statystyk i nie trafiają na licznik
 Twojego samochodu.
 
-ARCHIWUM JEST TERAZ PRAWDZIWYM STANEM
+TWÓJ DOMYŚLNY SAMOCHÓD I TE SPRZEDANE
 
-Samochód trafia do archiwum Twoją ręką i od tej pory nic się na niego nie
-zapisuje: ani rozpoczęty przejazd, ani automat po Bluetooth, ani skrót. Już
-zapisane przejazdy zostają przy nim.
+Jeden samochód w garażu jest domyślny — to na niego zapisze się następny
+przejazd, a zmiana to jedno dotknięcie. Sprzedany oznacz jako sprzedany: nic się
+już na niego nie zapisze, ani rozpoczęty przejazd, ani automat po Bluetooth, ani
+skrót. Wszystko, co zapisane, zostaje przy nim, a on zostaje w garażu na
+widoku.
 
 TY DECYDUJESZ, CO WIDAĆ
 
@@ -302,11 +315,13 @@ SAYA PENUMPANG
 Taksi, bus, mobil orang lain — katakan sebelum mulai merekam, satu ketukan.
 Kilometernya masuk ke statistikmu dan tidak menambah odometer mobilmu.
 
-ARSIP KINI STATUS SUNGGUHAN
+MOBIL BAWAAN DAN YANG SUDAH TERJUAL
 
-Mobil masuk arsip karena tanganmu, dan setelah itu tidak ada yang direkam ke
-sana: tidak perjalanan yang kamu mulai, tidak perekaman otomatis Bluetooth,
-tidak pintasan. Perjalanan yang sudah tercatat tetap bersamanya.
+Satu mobil di garasimu jadi bawaan: ke sanalah perjalanan berikutnya direkam,
+dan menggantinya cukup satu ketukan. Mobil yang terjual, tandai terjual: tidak
+ada lagi yang direkam ke sana — tidak perjalanan yang kamu mulai, tidak perekaman
+otomatis Bluetooth, tidak pintasan. Semua yang sudah tercatat tetap bersamanya,
+dan ia tetap terlihat di garasi.
 
 KAMU YANG MENENTUKAN APA YANG TERLIHAT
 
@@ -336,11 +351,12 @@ YOLCUYUM
 Taksi, otobüs, başkasının arabası — kayda başlamadan önce tek dokunuşla söyle.
 Kilometreler istatistiğine yazılır, arabanın kilometre sayacına yazılmaz.
 
-ARŞİV ARTIK GERÇEK BİR DURUM
+VARSAYILAN ARABAN VE SATTIKLARIN
 
-Araba arşive senin elinle gider ve ondan sonra ona hiçbir şey kaydedilmez: ne
-başlattığın yolculuk, ne Bluetooth otomatiği, ne bir kısayol. Kayıtlı
-yolculuklar onda kalır.
+Garajındaki bir araba varsayılandır: sonraki yolculuk ona kaydedilir, değiştirmek
+tek dokunuş. Sattığın arabayı satıldı olarak işaretle: artık ona hiçbir şey
+kaydedilmez — ne başlattığın yolculuk, ne Bluetooth otomatiği, ne bir kısayol.
+Kayıtlı olan her şey onda kalır ve kendisi garajda görünür kalır.
 
 NEYİN GÖRÜNECEĞİNE SEN KARAR VER
 
@@ -369,11 +385,12 @@ DÜZELTİLDİ: satıştan sonra bir sonraki yolculuk yine o arabaya yazılıyord
 Таксі, автобус, чужа машина — скажіть про це до початку запису, одним дотиком.
 Кілометри підуть у вашу статистику й не намотаються на одометр вашої машини.
 
-АРХІВ СТАВ СПРАВЖНІМ СТАНОМ
+МАШИНА ЗА ЗАМОВЧУВАННЯМ І ПРОДАНІ
 
-Машина їде в архів вашою рукою, і після цього на неї не записується нічого: ні
-поїздка, яку ви почали, ні автозапис по магнітолі, ні «Команди». Уже записані
-поїздки залишаються при ній.
+Одна машина в гаражі — та, на яку піде наступна поїздка; змінити її можна одним
+дотиком. Продану позначте проданою: на неї більше не запишеться нічого — ні
+поїздка, яку ви почали, ні автозапис по магнітолі, ні «Команди». Усе, що вже
+записано, лишається при ній, і сама вона лишається в гаражі на видноті.
 
 ВИ ВИРІШУЄТЕ, ЩО ВИДНО ІНШИМ
 
@@ -406,11 +423,13 @@ PASAHERO AKO
 Taxi, bus, sasakyan ng iba — sabihin mo bago mag-record, isang tap lang. Bibilang
 ang kilometro sa istatistika mo pero hindi sa odometer ng sasakyan mo.
 
-TUNAY NANG ESTADO ANG ARCHIVE
+ANG DEFAULT MONG SASAKYAN, AT ANG MGA NABENTA
 
-Sa kamay mo napupunta sa archive ang sasakyan, at pagkatapos ay wala nang
-naitatala rito: kahit biyaheng sinimulan mo, kahit auto-record sa Bluetooth,
-kahit Shortcut. Nananatili rito ang mga naitalang biyahe.
+Isang sasakyan sa garahe mo ang default: doon naitatala ang susunod mong biyahe,
+at isang tap lang ang pagpapalit. Kapag nabenta, markahan mong nabenta: wala nang
+maitatala rito — kahit biyaheng sinimulan mo, kahit auto-record sa Bluetooth,
+kahit Shortcut. Nananatili rito ang lahat ng naitala na, at nananatili itong
+nakikita sa garahe.
 
 IKAW ANG MAGPAPASYA KUNG ANO ANG NAKIKITA
 
@@ -441,11 +460,13 @@ Táxi, ônibus, carro de outra pessoa — diga isso antes de começar a gravar, 
 um toque. Os quilômetros contam na sua estatística e não sobem no odômetro do
 seu carro.
 
-O ARQUIVO AGORA É UM ESTADO DE VERDADE
+SEU CARRO PADRÃO E OS VENDIDOS
 
-O carro vai para o arquivo pela sua mão e, depois disso, nada é gravado nele:
+Um carro da sua garagem é o padrão: é nele que a próxima viagem é gravada, e
+trocar é um toque. Vendeu um? Marque como vendido: nada mais é gravado nele —
 nem a viagem que você inicia, nem a gravação automática por Bluetooth, nem um
-atalho. As viagens já gravadas continuam com ele.
+atalho. Tudo o que já foi gravado continua com ele, e ele continua à vista na
+garagem.
 
 VOCÊ DECIDE O QUE APARECE
 

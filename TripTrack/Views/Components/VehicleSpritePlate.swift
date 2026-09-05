@@ -29,6 +29,13 @@ struct VehicleSpritePlate: View {
     /// wrong for a garage, where it makes the rows step up and down.
     var uniformHeight: Bool = false
     var cornerRadius: CGFloat = 16
+    /// Рисовать ли собственную подложку.
+    ///
+    /// `false` — когда плитой служит то, во что спрайт кладут (полоса карточки
+    /// в гараже). Свой градиент поверх чужого не совпадает с ним по высоте, и
+    /// на его месте проступает прямоугольник: на приглушённой проданной машине
+    /// это видно сразу, на обычной — исподволь.
+    var showsPlate: Bool = true
 
     private var style: String { assetName.map(VehicleAvatar.style(ofAsset:)) ?? VehicleAvatar.defaultStyle }
     private var spriteWidth: CGFloat { plateSize * fill }
@@ -46,14 +53,16 @@ struct VehicleSpritePlate: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [AppTheme.spritePlateTop, AppTheme.spritePlateBottom],
-                        startPoint: .top,
-                        endPoint: .bottom
+            if showsPlate {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [AppTheme.spritePlateTop, AppTheme.spritePlateBottom],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                )
+            }
 
             if let assetName {
                 ZStack {

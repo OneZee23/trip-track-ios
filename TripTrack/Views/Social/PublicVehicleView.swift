@@ -108,9 +108,14 @@ struct PublicVehicleView: View {
         .toolbar(.hidden, for: .navigationBar)
         .task(id: vehicleId) { await load() }
         // Домовой список действий, не системное меню — см. «Dialogs» в CLAUDE.md.
-        .sheet(isPresented: $showActions) {
+        //
+        // Именно `popover`, как на своём паспорте машины, а НЕ лист. Лист на
+        // 140 точек вокруг одной строки давал огромную плиту с пунктом
+        // посередине и пустотой под ним: список рассчитан на компактное
+        // окно у кнопки и сам просит `presentationCompactAdaptation(.popover)`,
+        // а поставленный в лист теряет и якорь, и размер.
+        .popover(isPresented: $showActions, arrowEdge: .top) {
             ActionPopoverList(items: actionItems(l))
-                .presentationDetents([.height(140)])
         }
         .navigationDestination(isPresented: $showMap) {
             // Тот же экран, что показывает публичную карту человека, но
@@ -128,6 +133,13 @@ struct PublicVehicleView: View {
                 },
                 initialIndex: start.index,
                 language: lang.language,
+                onReport: { id in
+                    // Сначала закрыть просмотрщик, потом показать форму: два
+                    // полноэкранных показа в одном такте SwiftUI регулярно
+                    // теряет, и жалоба просто не открывалась бы.
+                    viewerStart = nil
+                    reportPhoto = ReportedPhoto(id: id)
+                },
                 onDismiss: { viewerStart = nil }
             )
         }
@@ -174,6 +186,23 @@ struct PublicVehicleView: View {
                 }
                 .accessibilityLabel(AppStrings.back(l))
                 Spacer()
+                // «…» живёт в шапке, как на всех остальных экранах приложения,
+                // включая свой собственный паспорт машины. В теле карточки она
+                // стояла в пустоте рядом со строкой «В гараже с…» и выглядела
+                // случайной — при том что пункт в ней ровно один и он редкий:
+                // пожаловаться. Убрать её совсем нельзя: без входа в жалобу на
+                // пользовательский контент релиз заворачивают.
+                Button {
+                    Haptics.tap()
+                    showActions = true
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(c.textSecondary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(AppStrings.moreActions(l))
             }
         }
         .padding(.horizontal, 12)
@@ -183,14 +212,31 @@ struct PublicVehicleView: View {
     private func header(_ v: PublicVehicle, c: AppTheme.Colors,
                         l: LanguageManager.Language) -> some View {
         VStack(spacing: 0) {
-            VehicleSpritePlate(
-                assetName: VehicleAvatar.assetName(
-                    style: v.avatarStyle, avatar: v.avatarEmoji),
-                fallbackEmoji: v.avatarEmoji,
-                plateSize: 210,
-                cornerRadius: 20
-            )
-            .padding(.top, 4)
+            // Героем идёт ФОТОГРАФИЯ, если владелец её открыл. Раньше здесь
+            // всегда стоял силуэт, а снимки лежали карточкой ниже: экран
+            // показывал эмодзи-машинку и тут же, под ней, настоящую машину.
+            // Свой паспорт так себя не ведёт, и чужой не должен.
+            if let main = mainShot(v) {
+                remoteImage(main.best, height: 210, corner: 20)
+                    .padding(.top, 4)
+                    .onTapGesture {
+                        Haptics.tap()
+                        // Индекс ИЩЕМ, а не берём нулевой: сервер сейчас
+                        // отдаёт главную первой, но просмотрщик не должен
+                        // зависеть от порядка в чужом ответе.
+                        viewerStart = ViewerStart(
+                            index: (v.photos ?? []).firstIndex(of: main) ?? 0)
+                    }
+            } else {
+                VehicleSpritePlate(
+                    assetName: VehicleAvatar.assetName(
+                        style: v.avatarStyle, avatar: v.avatarEmoji),
+                    fallbackEmoji: v.avatarEmoji,
+                    plateSize: 210,
+                    cornerRadius: 20
+                )
+                .padding(.top, 4)
+            }
 
             Text(v.name)
                 .font(.system(size: 19, weight: .heavy))
@@ -230,33 +276,15 @@ struct PublicVehicleView: View {
                 circles(c: c, l: l).padding(.top, 14)
             }
 
-            Divider().overlay(c.border).padding(.top, 14)
-            HStack(spacing: 8) {
-                if let created = v.createdAt {
-                    Text(AppStrings.inGarageSince(
-                        l, when: StatsPeriodFormat.monthYearGenitive(created, l)))
-                        .font(.system(size: 11))
-                        .foregroundStyle(c.textTertiary)
-                }
-                Spacer(minLength: 8)
-                // «…» существует ради ОДНОГО пункта — жалобы. Без входа в
-                // жалобу на пользовательский контент релиз заворачивают.
-                Button {
-                    Haptics.tap()
-                    showActions = true
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(c.textSecondary)
-                        .frame(width: 44, height: 44)
-                        .background(c.cardAlt, in: Circle())
-                }
-                .buttonStyle(.plain)
-                // Единственная дорога к жалобе на чужую машину — и до этой
-                // подписи VoiceOver читал её просто «кнопка».
-                .accessibilityLabel(AppStrings.moreActions(lang.language))
+            if let created = v.createdAt {
+                Divider().overlay(c.border).padding(.top, 14)
+                Text(AppStrings.inGarageSince(
+                    l, when: StatsPeriodFormat.monthYearGenitive(created, l)))
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 12)
             }
-            .padding(.top, 12)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 14)
@@ -290,28 +318,28 @@ struct PublicVehicleView: View {
     /// Скрытые снимки не приезжают вовсе (сервер их не кладёт в ответ), и
     /// плашки «фотографии скрыты» здесь нет намеренно: она отличала бы
     /// человека, который прячет, от человека, которому нечего показать.
+    /// Главный снимок — тот, что владелец закрепил; иначе первый.
+    private func mainShot(_ v: PublicVehicle) -> PublicVehiclePhoto? {
+        let shots = v.photos ?? []
+        return shots.first(where: { $0.isMain }) ?? shots.first
+    }
+
     @ViewBuilder
     private func photosCard(_ v: PublicVehicle, c: AppTheme.Colors,
                             l: LanguageManager.Language) -> some View {
         let shots = v.photos ?? []
         if !shots.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                if let main = shots.first(where: { $0.isMain }) ?? shots.first {
-                    remoteImage(main.best, height: 190, corner: 16)
-                        .contextMenu { reportItem(main.id, l) }
-                        .onTapGesture {
-                            Haptics.tap()
-                            viewerStart = ViewerStart(index: shots.firstIndex(of: main) ?? 0)
-                        }
-                }
-                let rest = shots.filter { $0.id != (shots.first(where: { $0.isMain }) ?? shots[0]).id }
+                // Главная здесь БОЛЬШЕ НЕ ПОВТОРЯЕТСЯ: она стоит героем выше.
+                // Второй крупный кадр той же машины на одном экране читался
+                // как две разные фотографии.
+                let rest = shots.filter { $0.id != mainShot(v)?.id }
                 if !rest.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(rest) { shot in
                                 remoteImage(shot.thumb, height: 84, corner: 12)
                                     .frame(width: 110)
-                                    .contextMenu { reportItem(shot.id, l) }
                                     .onTapGesture {
                                         Haptics.tap()
                                         viewerStart = ViewerStart(index: shots.firstIndex(of: shot) ?? 0)
@@ -324,34 +352,28 @@ struct PublicVehicleView: View {
         }
     }
 
-    /// Пожаловаться на снимок. Долгий тап — платформенный жест для медиа, и
-    /// для действия, которое совершают раз в год, он уместен; на саму машину
-    /// жалоба лежит в видимом «…» в шапке.
-    @ViewBuilder
-    private func reportItem(_ photoId: UUID, _ l: LanguageManager.Language) -> some View {
-        Button(role: .destructive) {
-            Haptics.tap()
-            reportPhoto = ReportedPhoto(id: photoId)
-        } label: {
-            Label(AppStrings.reportProfileAction(l), systemImage: "flag")
-        }
-    }
-
     /// Одна форма для всех снимков: пока грузится — фон, а не пустота, иначе
     /// карточка прыгает по высоте на каждой загрузке.
+    /// Через общий кэш машин, а НЕ через `AsyncImage`.
+    ///
+    /// У `AsyncImage` своего кэша нет, а ссылки на снимки подписанные и каждый
+    /// раз новые — совпадает только путь. Поэтому и системный `URLCache`
+    /// промахивался, и каждое появление карточки означало новую загрузку по
+    /// сети с серым прямоугольником на её время.
+    @ViewBuilder
     private func remoteImage(_ url: URL?, height: CGFloat, corner: CGFloat) -> some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().scaledToFill()
-            default:
-                Rectangle().fill(Color.gray.opacity(0.18))
-            }
+        if let url {
+            VehiclePhotoImage(source: .remote(url: url), maxSize: height)
+                .frame(height: height)
+                .frame(maxWidth: .infinity)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: corner))
+        } else {
+            Rectangle().fill(Color.gray.opacity(0.18))
+                .frame(height: height)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: corner))
         }
-        .frame(height: height)
-        .frame(maxWidth: .infinity)
-        .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: corner))
     }
 
     private func aboutCard(_ about: String, c: AppTheme.Colors,
@@ -371,12 +393,19 @@ struct PublicVehicleView: View {
 
     private func mapCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(AppStrings.vehicleWhereWas(l))
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(c.text)
-                Text(placesLine(l))
-                    .font(.system(size: 12))
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AppStrings.vehicleWhereWas(l))
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(c.text)
+                    Text(placesLine(l))
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textTertiary)
+                }
+                Spacer(minLength: 8)
+                // Карточка открывает карту целиком — и должна это показывать.
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
             }
             VehicleMiniMap(routes: routes)

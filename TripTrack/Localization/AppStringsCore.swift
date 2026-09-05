@@ -116,6 +116,28 @@ extension AppStrings {
         }
     }
 
+    /// «3 машины» — счётчик под превью гаража.
+    ///
+    /// Слово родовое, а не «автомобиль»: в гараже бывают мотоцикл, скутер и
+    /// велосипед, и «3 автомобиля» под ними было бы неправдой.
+    static func nounVehicles(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "машина", few: "машины", many: "машин")
+        case .en: return plural(lang, n, one: "vehicle", many: "vehicles")
+        case .de: return plural(lang, n, one: "Fahrzeug", many: "Fahrzeuge")
+        case .es: return plural(lang, n, one: "vehículo", many: "vehículos")
+        case .fr: return plural(lang, n, one: "véhicule", many: "véhicules")
+        case .it: return plural(lang, n, one: "veicolo", many: "veicoli")
+        case .pl: return plural(lang, n, one: "pojazd", few: "pojazdy", many: "pojazdów")
+        case .id: return "kendaraan"
+        case .tr: return "araç"
+        case .fil: return plural(lang, n, one: "sasakyan", many: "sasakyan")
+        case .uk: return plural(lang, n, one: "машина", few: "машини", many: "машин")
+        case .kk: return "көлік"
+        case .pt: return plural(lang, n, one: "veículo", many: "veículos")
+        }
+    }
+
     static func nounPhotos(_ lang: LanguageManager.Language, _ n: Int) -> String {
         switch lang {
         case .ru: return plural(lang, n, one: "фото", few: "фото", many: "фото")
