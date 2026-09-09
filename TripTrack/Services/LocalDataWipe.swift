@@ -69,6 +69,13 @@ enum LocalDataWipe {
         try? FileManager.default.removeItem(at: photos)
         try? FileManager.default.removeItem(at: VehiclePhotoStore.directory)
 
+        // Дом и отказ от подсказки лежат в UserDefaults, но настройками НЕ
+        // являются: `homeLatitude`/`homeLongitude` — это домашний адрес с
+        // точностью до двора, а `dismissedSuggestionTripId` — id поездки,
+        // которой после вайпа не существует. Исключение из правила «префы не
+        // трогаем» ровно на эти ключи и ровно потому, что это данные человека.
+        SettingsManager.shared.wipeJourneyPrivateState()
+
         wipeLog.notice("[data.wipe] local user data erased")
     }
 }

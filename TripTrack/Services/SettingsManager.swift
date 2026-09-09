@@ -127,6 +127,24 @@ final class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(homeAsked, forKey: "com.triptrack.settings.homeAsked") }
     }
 
+    /// Ключ отказа от подсказки. Живёт здесь, а не в экране, который его
+    /// пишет: стирать его обязано «Удалить аккаунт», и второй литерал в
+    /// `LocalDataWipe` разошёлся бы с первым молча.
+    static let dismissedJourneySuggestionKey = "com.triptrack.journeys.dismissedSuggestionTripId"
+
+    /// Стирает всё, что подсказка путешествий запомнила о человеке.
+    ///
+    /// Зовётся из `LocalDataWipe`. Дом — это домашний АДРЕС с точностью до
+    /// двора, а не настройка вроде темы: обещание «безвозвратно, везде» на нём
+    /// обязано держаться, даже притом что остальной UserDefaults вайп не
+    /// трогает.
+    @MainActor
+    func wipeJourneyPrivateState() {
+        homeLocation = nil   // didSet уберёт обе координаты из UserDefaults
+        homeAsked = false
+        UserDefaults.standard.removeObject(forKey: Self.dismissedJourneySuggestionKey)
+    }
+
     private static func storedHome() -> CLLocationCoordinate2D? {
         let d = UserDefaults.standard
         guard let lat = d.object(forKey: homeLatitudeKey) as? Double,

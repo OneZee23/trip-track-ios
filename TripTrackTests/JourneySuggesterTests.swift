@@ -111,6 +111,18 @@ final class JourneySuggesterTests: XCTestCase {
         XCTAssertNil(s)
     }
 
+    func testNightTenKilometresFromHomeIsNotAJourney() {
+        // Ночь у друга через город: место незнакомое (в кэше оно один раз), но
+        // 10 км от дома — это не «уехал», а «заночевал не у себя». Порог
+        // именно 50 км: иначе подсказка вылезала бы после каждой такой ночи.
+        let near = CLLocationCoordinate2D(latitude: 45.12, longitude: 38.98)
+        let trips = [trip(day: 0, hour: 22, from: krd, to: near, km: 10, hours: 0.3),
+                     trip(day: 1, hour: 10, from: near, to: krd, km: 10, hours: 0.3)]
+        let s = JourneySuggester.suggestion(trips: trips, home: krd, existing: [],
+                                            now: end(of: trips).addingTimeInterval(3_600))
+        XCTAssertNil(s)
+    }
+
     func testWeekendsAtTheDachaAreUsualEnvironment() {
         // Ночь на даче — ночь не дома по геометрии, но место, куда приезжают
         // каждые выходные, обычная среда, а не путешествие.

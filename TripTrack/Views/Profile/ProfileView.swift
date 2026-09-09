@@ -1295,8 +1295,9 @@ struct ProfileView: View {
     /// цепочку возвращением домой, то есть не изменится, даже если человек
     /// потом допишет поездку внутрь окна. По первой поездке ключ уезжал бы
     /// вместе с любой более ранней записью, и «не сейчас» пришлось бы жать
-    /// снова.
-    private static let dismissedSuggestionKey = "com.triptrack.journeys.dismissedSuggestionTripId"
+    /// снова. Сам ключ живёт в `SettingsManager`: его стирает «Удалить
+    /// аккаунт», и второй литерал там разошёлся бы с этим молча.
+    private static let dismissedSuggestionKey = SettingsManager.dismissedJourneySuggestionKey
 
     @ViewBuilder
     private func journeyPrompts() -> some View {

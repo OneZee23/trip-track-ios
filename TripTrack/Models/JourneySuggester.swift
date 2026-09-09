@@ -157,12 +157,18 @@ enum JourneySuggester {
     }
 
     /// Между какими-то соседними поездками цепочки прошло 02:00 местного, а
-    /// машина стояла не дома и не в обычной среде.
+    /// машина стояла ДАЛЬШЕ `awayRadius` от дома и не в обычной среде.
+    ///
+    /// Порог тут именно `awayRadius` (50 км), а не «не дома» (5 км): ночь у
+    /// друга через город — не путешествие, и по пятикилометровому порогу
+    /// подсказка вылезала бы после каждой такой ночи. `homeRadius` отвечает на
+    /// другой вопрос — где цепочка начинается и где закрывается.
     private static func hasNightAway(_ chain: [Trip], home: CLLocationCoordinate2D,
                                      usual: Set<String>, calendar: Calendar) -> Bool {
         for (a, b) in zip(chain, chain.dropFirst()) {
             guard let spot = JourneyAggregate.endCoordinate(of: a) else { continue }
-            guard !isSettled(spot, home: home, usual: usual) else { continue }
+            guard distance(spot, home) >= awayRadius,
+                  !isSettled(spot, home: home, usual: usual) else { continue }
             let from = a.endDate ?? a.startDate
             guard let night = calendar.nextDate(after: from, matching: DateComponents(hour: 2, minute: 0),
                                                 matchingPolicy: .nextTime) else { continue }
