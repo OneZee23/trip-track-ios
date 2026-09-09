@@ -4,7 +4,65 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.6.5 — checkpoints and photos on the route (current submission)
+## v0.6.6 — journeys (current submission)
+
+### Короткая версия — вставить в App Store Connect
+
+```
+TripTrack 0.6.6 adds "journeys": a way to group the user's own recorded trips
+into one story — Krasnodar → Vladikavkaz → Tbilisi and back is four recordings
+and one trip in real life. A journey is a window of dates over trips that are
+already on the device; nothing is copied, and deleting a journey leaves every
+trip untouched.
+
+No new permissions, no new data collection. Journeys are built only from trips
+the user recorded themselves, and are private by default: they leave the device
+only if the user has turned Cloud Sync on (off by default). There is no public
+page for a journey in this version.
+
+Location (5.1.1): unchanged — recording is still started and stopped by the
+user (or by the user's own Bluetooth/Shortcuts automation, opt-in). No
+background collection was added.
+
+The "home" suggestion: to offer "these drives look like one journey", the app
+needs to know where the user sleeps normally, because what makes a journey is a
+night away from home. That location is inferred ON DEVICE from the user's own
+recorded trips (the ends of evening/night drives), stored locally in app
+settings, shown to the user once as "Is this your home?", and NEVER sent to our
+server or to anyone else. Answering "No" simply turns the suggestions off. No
+new permission is requested for this.
+
+User content (1.2): a journey has a user-typed name and an optional cover photo
+chosen from the trip's own photos. Both are private; nothing about a journey is
+published to other users in this version. Reporting and blocking work as in
+0.6.5.
+
+How to test:
+1. Have two or more recorded trips (record short drives, or use the built-in
+   simulated location in Settings → Developer).
+2. Open a trip → "..." in the header → "Combine into a journey". The sheet
+   lists the neighbouring trips (±7 days), all ticked; untick any, then
+   "Create journey".
+3. Alternatively, on the "Mine" tab press and hold any trip card, tick several
+   cards, then "To journey" in the bar at the bottom.
+4. The journey card replaces its legs in the "Mine" list. Open it: one map with
+   all legs, the totals (days, km, drives, time), then the road day by day.
+   "..." → "Edit journey" changes the name and the date window; "Delete
+   journey" removes only the journey — the trips stay in the list.
+```
+
+### Длинная версия — для нас
+
+Никаких новых разрешений и никакого нового сбора. Схема CoreData v12 —
+`JourneyEntity` (окно дат, исключённые поездки, обложка), миграция lightweight.
+Дом — два `Double` в `UserDefaults` приложения (`homeLatitude/homeLongitude`)
+плюс флаг «спрашивали»; в синк-пейлоаде его нет вовсе, `git grep homeLatitude`
+по сетевому слою пуст. Публичной страницы путешествия в 0.6.6 нет намеренно —
+она ждёт подъёма сайта.
+
+---
+
+## v0.6.5 — checkpoints and photos on the route (previous submission)
 
 ### Короткая версия — вставить в App Store Connect
 
