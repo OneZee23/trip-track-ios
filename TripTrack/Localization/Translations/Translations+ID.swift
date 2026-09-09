@@ -1216,6 +1216,7 @@ extension Translations {
         "journeyEmptyTitle": "Belum ada apa-apa",
         "journeyAddFromTrip": "Tambah perjalanan",
         "journeyCreated": "Perjalanan dibuat",
+        "journeySelectAction": "Jadikan perjalanan (%d)",
     ]
 
 }

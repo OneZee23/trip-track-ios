@@ -1216,6 +1216,7 @@ extension Translations {
         "journeyEmptyTitle": "Поки що порожньо",
         "journeyAddFromTrip": "Додати поїздку",
         "journeyCreated": "Подорож створено",
+        "journeySelectAction": "У подорож (%d)",
     ]
 
 }

@@ -1806,6 +1806,14 @@ enum AppStrings {
         tr(lang, "journeyCreated", ru: "Путешествие создано", en: "Journey created")
     }
 
+    /// Кнопка плавающей полосы в «Мои», когда поездки отмечены руками. Число в
+    /// подписи — не украшение: полоса перекрывает часть списка, и без него
+    /// человеку пришлось бы прокручивать историю, чтобы пересчитать галочки.
+    static func journeySelectAction(_ lang: LanguageManager.Language, count: Int) -> String {
+        String(format: tr(lang, "journeySelectAction",
+                          ru: "В путешествие (%d)", en: "Into a journey (%d)"), count)
+    }
+
     static func notifTripStopTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifTripStopTitle", ru: "Поездка закончена?", en: "Trip finished?")
     }

@@ -1216,6 +1216,7 @@ extension Translations {
         "journeyEmptyTitle": "Әзірге бос",
         "journeyAddFromTrip": "Сапар қосу",
         "journeyCreated": "Саяхат жасалды",
+        "journeySelectAction": "Саяхатқа (%d)",
     ]
 
 }

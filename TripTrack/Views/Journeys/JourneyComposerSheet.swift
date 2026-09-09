@@ -8,8 +8,15 @@ import SwiftUI
 /// не становится: снять галочку можно и с неё. Человек пришёл сюда с экрана
 /// одной поездки, но собирает историю, а не список её спутников — запрет
 /// «эту нельзя» был бы правилом, которого он не просил.
+///
+/// Со второго входа — мультивыбор в «Мои» (0.6.6) — список приходит готовым в
+/// `preselected`, и соседей лист не ищет вовсе.
 struct JourneyComposerSheet: View {
     let anchor: Trip
+    /// Готовый список — второй вход, мультивыбор в «Мои» (0.6.6). Человек уже
+    /// отобрал поездки руками, и досыпать ему соседей ±7 дней значит
+    /// переспросить о том, на что он только что ответил.
+    var preselected: [Trip]? = nil
     let onCreated: (Journey) -> Void
 
     @EnvironmentObject private var lang: LanguageManager
@@ -39,9 +46,14 @@ struct JourneyComposerSheet: View {
         let c = AppTheme.colors(for: scheme)
         VStack(alignment: .leading, spacing: 16) {
             header(c)
-            Text(AppStrings.journeyNeighboursHint(lang.language))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(c.textTertiary)
+            // Подсказка про «неделю до и после» правдива только для соседей.
+            // Над списком, собранным руками, она обещала бы не то, что здесь
+            // лежит, — и лист сам себя оговорил бы.
+            if preselected == nil {
+                Text(AppStrings.journeyNeighboursHint(lang.language))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(c.textTertiary)
+            }
             candidateList(c)
             TextField(AppStrings.journeyTitlePlaceholder(lang.language), text: $title)
                 .font(.system(size: 16, weight: .semibold))
@@ -61,12 +73,18 @@ struct JourneyComposerSheet: View {
         .background(c.bg)
         .animation(.easeInOut(duration: 0.15), value: error)
         .task {
-            candidates = manager.neighbours(of: anchor)
-            // Опорная поездка — первой и с запасом на случай, если менеджер
-            // однажды начнёт возвращать её сам: дважды в списке она хуже, чем
-            // не первой.
-            if !candidates.contains(where: { $0.id == anchor.id }) {
-                candidates.insert(anchor, at: 0)
+            if let preselected {
+                // По дате, а не в порядке нажатий: список читается как
+                // будущее путешествие, а оно идёт по дням.
+                candidates = preselected.sorted { $0.startDate < $1.startDate }
+            } else {
+                candidates = manager.neighbours(of: anchor)
+                // Опорная поездка — первой и с запасом на случай, если менеджер
+                // однажды начнёт возвращать её сам: дважды в списке она хуже, чем
+                // не первой.
+                if !candidates.contains(where: { $0.id == anchor.id }) {
+                    candidates.insert(anchor, at: 0)
+                }
             }
             selected = Set(candidates.map(\.id))
         }

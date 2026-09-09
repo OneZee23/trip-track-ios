@@ -1216,6 +1216,7 @@ extension Translations {
         "journeyEmptyTitle": "Ancora niente",
         "journeyAddFromTrip": "Aggiungi un viaggio",
         "journeyCreated": "Viaggio creato",
+        "journeySelectAction": "In un viaggio (%d)",
     ]
 
 }

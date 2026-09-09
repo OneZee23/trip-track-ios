@@ -158,6 +158,20 @@ struct ProfileView: View {
     /// persists and `historyMode` maps it back (unknown value → canon list).
     @AppStorage("profileHistoryMode") private var historyModeRaw = HistoryMode.list.rawValue
 
+    // MARK: - Мультивыбор (0.6.6) — состояние
+
+    /// Отмеченные поездки. Пусто — режима выбора нет; это ЕДИНСТВЕННЫЙ его
+    /// признак, отдельного флага нет специально: два источника правды тут
+    /// разошлись бы на первом же «Отмена».
+    @State private var selectedTripIds: Set<UUID> = []
+    /// Что уехало в лист. Снимок на момент нажатия, а не пересчёт по
+    /// `selectedTripIds`: выбор к тому времени уже сброшен.
+    @State private var composerTrips: [Trip] = []
+    @State private var showJourneyComposer = false
+    /// Лист закрывается сам, и подтвердить, что путешествие создано, больше
+    /// нечем — то же решение, что на экране поездки.
+    @State private var toastItem: ToastItem?
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
 
@@ -264,6 +278,12 @@ struct ProfileView: View {
             }
             .scrollIndicators(.hidden)
             .background(c.bg)
+            // Полоса выбора занимает место таб-бара — см. `JourneySelectionBar`.
+            .hideAppTabBar(isSelecting)
+            .overlay(alignment: .bottom) { selectionBar }
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isSelecting)
+            .toast(item: $toastItem)
+            .sheet(isPresented: $showJourneyComposer) { journeyComposer() }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: MeDest.self) { dest in
                 switch dest {
@@ -368,8 +388,11 @@ struct ProfileView: View {
         }
         // The other half of `refreshVisibleTrips`'s contract: the library moves
         // in `loadAggregates`, the range moves here.
-        .onChange(of: dateFrom) { _, _ in refreshVisibleTrips() }
-        .onChange(of: dateTo) { _, _ in refreshVisibleTrips() }
+        // Выбор уезжает вместе с фильтром: отмеченная поездка, которой в
+        // отрезке больше нет, осталась бы в счётчике невидимкой.
+        .onChange(of: dateFrom) { _, _ in refreshVisibleTrips(); clearSelection() }
+        .onChange(of: dateTo) { _, _ in refreshVisibleTrips(); clearSelection() }
+        .onDisappear { clearSelection() }
         .task {
             await loadAggregates()
         }
@@ -535,6 +558,9 @@ struct ProfileView: View {
     /// same screen.
     private func push(_ dest: MeDest) {
         guard mePath.last != dest else { return }
+        // Уходя с экрана, выбор забирают с собой: полоса нарисована на корне
+        // стека и на пушнутом экране не видна, а таб-бар она прячет.
+        clearSelection()
         mePath.append(dest)
     }
 
@@ -1001,13 +1027,23 @@ struct ProfileView: View {
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
                     }
+                    .modifier(JourneyInertWhileSelecting(isSelecting: isSelecting))
                 } else {
                     LazyVGrid(columns: Self.gridColumns, spacing: 8) {
                         ForEach(run) { row in
                             if case .trip(let trip) = row {
                                 ProfileTripTile(
                                     trip: trip,
-                                    onTap: { push(.trip(trip.id)) }
+                                    // Кнопка плитки остаётся при своём, а
+                                    // молчать в режиме выбора — забота
+                                    // `openTrip`.
+                                    onTap: { openTrip(trip) }
+                                )
+                                .journeySelectable(
+                                    isSelecting: isSelecting,
+                                    isSelected: selectedTripIds.contains(trip.id),
+                                    onToggle: { toggleSelection(trip) },
+                                    onLongPress: { beginSelection(trip) }
                                 )
                             }
                         }
@@ -1037,12 +1073,19 @@ struct ProfileView: View {
                         trip: trip,
                         level: historicalLevels?[trip.id] ?? settings.profileLevel,
                         vehicle: settings.vehicles.first { $0.id == trip.vehicleId },
-                        onTap: { push(.trip(trip.id)) }
+                        onTap: { openTrip(trip) }
+                    )
+                    .journeySelectable(
+                        isSelecting: isSelecting,
+                        isSelected: selectedTripIds.contains(trip.id),
+                        onToggle: { toggleSelection(trip) },
+                        onLongPress: { beginSelection(trip) }
                     )
                 case .journey(let journey, let legs):
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
                     }
+                    .modifier(JourneyInertWhileSelecting(isSelecting: isSelecting))
                 }
             }
         }
@@ -1145,6 +1188,83 @@ struct ProfileView: View {
 
     private func refreshVisibleTrips() {
         visibleTrips = Self.filter(allTrips, from: dateFrom, to: dateTo)
+    }
+
+    // MARK: - Мультивыбор (0.6.6)
+
+    /// Единственный признак режима: пока что-то отмечено — он включён.
+    private var isSelecting: Bool { !selectedTripIds.isEmpty }
+
+    /// Обычный тап по карточке. В режиме выбора он не открывает НИЧЕГО:
+    /// долгое нажатие срабатывает, пока палец на экране, и карточка успевает
+    /// доложить о нажатии ещё раз — уже на отпускании.
+    private func openTrip(_ trip: Trip) {
+        guard !isSelecting else { return }
+        push(.trip(trip.id))
+    }
+
+    /// Вход в режим. Отклик — самый заметный из наших: человек нажал дольше,
+    /// чем собирался, и должен понять, что это было нарочно.
+    private func beginSelection(_ trip: Trip) {
+        guard !selectedTripIds.contains(trip.id) else { return }
+        Haptics.action()
+        selectedTripIds.insert(trip.id)
+    }
+
+    private func toggleSelection(_ trip: Trip) {
+        Haptics.selection()
+        if selectedTripIds.contains(trip.id) {
+            selectedTripIds.remove(trip.id)
+        } else {
+            selectedTripIds.insert(trip.id)
+        }
+    }
+
+    private func clearSelection() {
+        guard isSelecting else { return }
+        selectedTripIds.removeAll()
+    }
+
+    @ViewBuilder
+    private var selectionBar: some View {
+        if isSelecting {
+            JourneySelectionBar(
+                count: selectedTripIds.count,
+                onCreate: { openJourneyComposer() },
+                onCancel: { clearSelection() }
+            )
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// Отмеченные поездки по дате: первая из них — опорная для листа, все
+    /// вместе — его список. Порядок по времени, а не по нажатиям: лист читается
+    /// как будущее путешествие, а оно идёт по дням.
+    private func openJourneyComposer() {
+        let trips = visibleTrips
+            .filter { selectedTripIds.contains($0.id) }
+            .sorted { $0.startDate < $1.startDate }
+        guard !trips.isEmpty else { return }
+        composerTrips = trips
+        showJourneyComposer = true
+    }
+
+    /// Тот же лист, что и с экрана поездки, — только список ему приходит
+    /// готовым, и соседей он не ищет.
+    @ViewBuilder
+    private func journeyComposer() -> some View {
+        if let anchor = composerTrips.first {
+            JourneyComposerSheet(anchor: anchor, preselected: composerTrips) { _ in
+                clearSelection()
+                toastItem = ToastItem(
+                    type: .success,
+                    message: AppStrings.journeyCreated(lang.language)
+                )
+            }
+            .environmentObject(lang)
+            .environmentObject(themeManager)
+            .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
+        }
     }
 
     // MARK: - Guest sign-in card (Figma 424:128 — kept byte-identical)

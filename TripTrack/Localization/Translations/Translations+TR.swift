@@ -1216,6 +1216,7 @@ extension Translations {
         "journeyEmptyTitle": "Henüz boş",
         "journeyAddFromTrip": "Gezi ekle",
         "journeyCreated": "Yolculuk oluşturuldu",
+        "journeySelectAction": "Yolculuğa ekle (%d)",
     ]
 
 }

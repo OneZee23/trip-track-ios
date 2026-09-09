@@ -1216,6 +1216,7 @@ extension Translations {
         "journeyEmptyTitle": "Wala pa",
         "journeyAddFromTrip": "Magdagdag ng biyahe",
         "journeyCreated": "Nagawa na ang paglalakbay",
+        "journeySelectAction": "Gawing paglalakbay (%d)",
     ]
 
 }
