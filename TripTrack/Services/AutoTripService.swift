@@ -477,48 +477,47 @@ final class AutoTripService: ObservableObject {
         let tripDur = vm.tripManager.activeTrip?.duration ?? 0
         autoLog.notice("[auto.bt_disconnect] device=\"\(name, privacy: .public)\" mode=\(self.settings.autoRecordMode.rawValue, privacy: .public) isRecording=\(vm.isRecording, privacy: .public) stale_5min=\(stale5, privacy: .public) dist_m=\(Int(tripDist), privacy: .public) dur_s=\(Int(tripDur), privacy: .public)")
 
-        guard vm.isRecording else {
-            autoLog.notice("[auto.bt_disconnect.skip] reason=not_recording")
-            return
+        // Само правило живёт в `AutoTripPolicy.onBluetoothDisconnect` — чистой
+        // функцией, которую можно проверить тестом. Здесь остаётся только его
+        // исполнение.
+        let decision = AutoTripPolicy.onBluetoothDisconnect(
+            mode: settings.autoRecordMode,
+            isRecording: vm.isRecording,
+            isPaused: vm.isPaused,
+            isIdleBeyondFastStop: stale5,
+            tripDistance: tripDist,
+            tripDuration: tripDur,
+            autoStopTimeout: settings.autoStopTimeout
+        )
+
+        switch decision {
+        case .ignore:
+            autoLog.notice("[auto.bt_disconnect.path] taken=ignore recording=\(vm.isRecording, privacy: .public) paused=\(vm.isPaused, privacy: .public)")
+
+        case .stopNow:
+            autoLog.notice("[auto.bt_disconnect.path] taken=immediate_stop")
+            autoStopTrip()
+
+        case .promptOnly:
+            autoLog.notice("[auto.bt_disconnect.path] taken=prompt_only")
+            notificationManager.sendTripStopPrompt(minutes: nil, reason: .bluetooth)
+
+        case .promptThenStop(let minutes):
+            autoLog.notice("[auto.bt_disconnect.path] taken=prompt_timer timeout_min=\(minutes, privacy: .public)")
+            notificationManager.sendTripStopPrompt(minutes: minutes, reason: .bluetooth)
+            startAutoStopTimer(minutes: minutes)
         }
+    }
 
-        // Fast-stop heuristics that skip the 3-min grace are valid only in
-        // `.auto` mode. In `.remind` the user opted into "ask first" — silently
-        // ending the recording (even with confidence) violates that contract.
-        // Same gating as `recoverStaleTripIfNeeded`. A false BT-disconnect
-        // event mid-drive used to hit the "real-drive" path and immediately
-        // kill the trip; the prompt+timer path below handles BT flap correctly
-        // via `cancelAutoStopTimer` on reconnect.
-        if settings.autoRecordMode == .auto {
-            // BT off + already-idle trip = double confirmation user has parked.
-            // Skip the 3-min grace and end now — the grace is for BT-flap
-            // glitches, not for an obviously-finished trip.
-            if stale5 {
-                autoLog.notice("[auto.bt_disconnect.path] taken=immediate_stop_stale")
-                autoStopTrip()
-                return
-            }
-
-            // BT off after a real drive = user got out and is now walking. If
-            // we wait the 3-min grace, GPS keeps logging footsteps (~5 km/h,
-            // points >5m apart so drift filter doesn't reject them) and a
-            // 50-min drive becomes a 53-min "drive" with 250m of walking
-            // tacked on. End now and trim to the last distance-change time.
-            // The 3-min grace is reserved for trips so short they could only
-            // be a BT glitch in the first place.
-            if let trip = vm.tripManager.activeTrip,
-               trip.distance >= AutoTripPolicy.immediateEndOnBtDisconnectMinDistance,
-               trip.duration >= AutoTripPolicy.immediateEndOnBtDisconnectMinDuration {
-                autoLog.notice("[auto.bt_disconnect.path] taken=immediate_stop_real_drive thresh_dist_m=\(Int(AutoTripPolicy.immediateEndOnBtDisconnectMinDistance), privacy: .public) thresh_dur_s=\(Int(AutoTripPolicy.immediateEndOnBtDisconnectMinDuration), privacy: .public)")
-                autoStopTrip()
-                return
-            }
-        }
-
-        let timeout = settings.autoStopTimeout
-        autoLog.notice("[auto.bt_disconnect.path] taken=prompt_timer timeout_min=\(timeout, privacy: .public)")
-        notificationManager.sendTripStopPrompt(minutes: timeout, reason: .bluetooth)
-        startAutoStopTimer(minutes: timeout)
+    /// Человек нажал «Пауза» вручную.
+    ///
+    /// Гасим всё, что собиралось завершить поездку за него: и таймер, и
+    /// запланированное фоновое уведомление о дедлайне. Без этого таймер,
+    /// заведённый ДО паузы, продолжал тикать и всё равно закрывал запись —
+    /// а уведомление приходило и после того, как завершать стало нечего.
+    func handleManualPause() {
+        autoLog.notice("[auto.manual_pause] cancel_pending_stop")
+        cancelAutoStopTimer()
     }
 
     /// Has the active trip's distance been frozen long enough that the next
@@ -612,9 +611,25 @@ final class AutoTripService: ObservableObject {
         )
     }
 
-    private func autoStopTrip() {
+    /// Кто просит завершить поездку. Разные вещи: таймер и датчик — не человек.
+    private enum AutoStopTrigger {
+        case automatic
+        case userAction
+    }
+
+    private func autoStopTrip(trigger: AutoStopTrigger = .automatic) {
         guard let vm = mapViewModel, vm.isRecording else {
             autoLog.notice("[auto.trip_stop.skip] reason=not_recording")
+            return
+        }
+        // Последний рубеж: что бы ни завело таймер и когда бы он ни сработал,
+        // поставленную на паузу поездку сам он не закрывает. Таймер мог быть
+        // заведён ДО паузы — этот рубеж закрывает и такой случай.
+        //
+        // На «Завершить» из уведомления это не распространяется: там просит
+        // человек, и отказать ему было бы новой поломкой вместо старой.
+        if trigger == .automatic, vm.isPaused {
+            autoLog.notice("[auto.trip_stop.skip] reason=manually_paused")
             return
         }
         let lastChange = movementTracker.lastChangeTime
@@ -659,7 +674,7 @@ final class AutoTripService: ObservableObject {
             Task { @MainActor [weak self] in
                 autoLog.notice("[auto.notification_action] action=stop_requested_by_user")
                 self?.cancelAutoStopTimer()
-                self?.autoStopTrip()
+                self?.autoStopTrip(trigger: .userAction)
             }
         }
 

@@ -459,6 +459,33 @@ private struct LiveLockScreenView: View {
                     context.state.isPaused ? Color(red: 0.92, green: 0.34, blue: 0.12) : c.buttonBg,
                     in: RoundedRectangle(cornerRadius: 12)
                 )
+
+                // Отметка на маршруте. Справа и узкой: действие частое и
+                // безобидное, поэтому должно быть под большим пальцем, но не
+                // спорить шириной с «Паузой» — та здесь главная.
+                //
+                // Число рядом с флажком — это отклик. Кнопка срабатывает молча,
+                // и без растущего счётчика нажатие неотличимо от промаха: за
+                // рулём человек жмёт второй раз и получает две отметки вместо
+                // одной.
+                Button(intent: CheckpointIntent()) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flag.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        if context.state.checkpointCount > 0 {
+                            Text("\(context.state.checkpointCount)")
+                                .font(.system(size: 13, weight: .heavy))
+                                .monospacedDigit()
+                        }
+                    }
+                    .foregroundStyle(c.text)
+                    .frame(minWidth: 52)
+                    .frame(height: 36)
+                }
+                .buttonStyle(.plain)
+                .background(c.buttonBg, in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityLabel(LiveActivityStrings.checkpoint(context.state.language))
+                .accessibilityValue("\(context.state.checkpointCount)")
             }
         }
         .padding(.horizontal, 16)

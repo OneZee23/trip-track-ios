@@ -13,9 +13,21 @@ import Photos
 /// permission, where the system picker needs none. So this asks for read access
 /// only, works in «limited» mode without complaint, and never touches anything
 /// the user has not shared with it.
+/// Снимок вместе с тем, что о нём знает библиотека фотографий.
+///
+/// Координата и время съёмки живут в `PHAsset` и доступны ровно в момент
+/// выбора. Дальше остаётся файл в Documents, из которого ни того, ни другого
+/// уже не достать, — поэтому забрать их надо здесь.
+struct PickedPhoto: Equatable {
+    let image: UIImage
+    let capturedAt: Date?
+    let latitude: Double?
+    let longitude: Double?
+}
+
 struct TripPhotoPicker: View {
-    /// Full-size images, in the order they were picked.
-    let onPick: ([UIImage]) -> Void
+    /// Выбранные снимки вместе с тем, что о них знает библиотека.
+    let onPick: ([PickedPhoto]) -> Void
 
     @State private var assets: [PHAsset] = []
     /// Asset ids in pick order — the order is the feature.
@@ -264,12 +276,20 @@ struct TripPhotoPicker: View {
         defer { isFetchingFullSize = false }
 
         let byId = Dictionary(uniqueKeysWithValues: assets.map { ($0.localIdentifier, $0) })
-        var images: [UIImage] = []
+        var images: [PickedPhoto] = []
         for id in picked {
             guard !isCancelled else { return }
             guard let asset = byId[id] else { continue }
             if let image = await Self.fullSizeImage(for: asset) {
-                images.append(image)
+                // Время съёмки и место кадра берём здесь и только здесь: после
+                // выхода из пикера `PHAsset` уже не спросишь, а по файлу в
+                // Documents этого не восстановить.
+                images.append(PickedPhoto(
+                    image: image,
+                    capturedAt: asset.creationDate,
+                    latitude: asset.location?.coordinate.latitude,
+                    longitude: asset.location?.coordinate.longitude
+                ))
             }
         }
         guard !isCancelled else { return }

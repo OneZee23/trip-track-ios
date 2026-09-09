@@ -10,6 +10,10 @@ struct Trip: Identifiable, Codable {
     var averageSpeed: Double // m/s
     var trackPoints: [TrackPoint]
     var photos: [TripPhoto]
+    /// Отметки на маршруте — «до моря 2:14». Пустой массив у поездок, которых
+    /// это ещё не касалось, поэтому значение по умолчанию обязательно: инициализатор
+    /// зовут из полутора десятков мест, включая ленту и синк.
+    var checkpoints: [TripCheckpoint] = []
 
     var title: String?
     /// Whether a PERSON put that title there, as opposed to the app stamping
@@ -174,18 +178,27 @@ struct Trip: Identifiable, Codable {
         var drv: TimeInterval = 0
         var stp: TimeInterval = 0
         var movingDist: Double = 0
+        // Километры и здесь набираются пятиметровым шагом, а не по каждой паре
+        // соседних точек. С 0.6.5 точек втрое больше, и на медленном ходу шаг
+        // между ними — метр с небольшим при шуме GPS в те же метры: сложи такие
+        // отрезки подряд, и «средняя в движении» поедет вверх, разойдясь с
+        // одометром, который считает по-другому. Якорь сбрасывается на каждой
+        // остановке и на каждом разрыве — там отсчёт начинается заново.
+        var movingAnchor: TrackPoint?
         for i in 1..<trackPoints.count {
             let dt = trackPoints[i].timestamp.timeIntervalSince(trackPoints[i - 1].timestamp)
-            guard dt > 0, dt <= maxGap else { continue }
+            guard dt > 0, dt <= maxGap else { movingAnchor = nil; continue }
             let avgKmh = ((trackPoints[i].speed + trackPoints[i - 1].speed) / 2.0) * 3.6
             if avgKmh < idleSpeedKmh {
                 stp += dt
+                movingAnchor = nil
             } else {
                 // Accumulate distance ONLY over the same <=60s moving segments that
                 // drivingTime counts, so the moving average stays consistent on
                 // sparse-GPS trips (the full trip distance includes long cross-gap
                 // segments that drivingTime excludes — dividing by it would inflate).
-                let a = CLLocation(latitude: trackPoints[i - 1].latitude, longitude: trackPoints[i - 1].longitude)
+                let anchor = movingAnchor ?? trackPoints[i - 1]
+                let a = CLLocation(latitude: anchor.latitude, longitude: anchor.longitude)
                 let b = CLLocation(latitude: trackPoints[i].latitude, longitude: trackPoints[i].longitude)
                 let segDist = b.distance(from: a)
                 // Reject GPS-teleport segments: a stale/low reported .speed paired
@@ -194,9 +207,24 @@ struct Trip: Identifiable, Codable {
                 // moving average. Shared teleport ceiling (TripDistanceGate) — dt is
                 // already guaranteed > 0 here (guarded above), so this is the
                 // implied-speed gate, identical to the distance-stat paths.
-                if !TripDistanceGate.isPlausibleSegment(meters: segDist, dt: dt) { continue }
+                // dt берём до ЯКОРЯ, а не до соседней точки: отрезок теперь
+                // может охватывать несколько шагов, и подставить сюда чужую
+                // секунду значило бы объявить телепортом честный разгон.
+                let anchorDt = trackPoints[i].timestamp.timeIntervalSince(anchor.timestamp)
+                if !TripDistanceGate.isPlausibleSegment(meters: segDist, dt: anchorDt) {
+                    movingAnchor = nil
+                    continue
+                }
+                // Время идёт всегда, а метры — только когда машина отошла от
+                // якоря на шаг. Иначе на плотных точках делимое росло бы от
+                // шума, а делитель — нет.
                 drv += dt
-                movingDist += segDist
+                if segDist >= TripDistanceGate.minStep {
+                    movingDist += segDist
+                    movingAnchor = trackPoints[i]
+                } else if movingAnchor == nil {
+                    movingAnchor = trackPoints[i - 1]
+                }
             }
         }
         return (drv, stp, movingDist)
@@ -262,6 +290,7 @@ struct Trip: Identifiable, Codable {
     init(id: UUID = UUID(), startDate: Date = Date(), endDate: Date? = nil,
          distance: Double = 0, maxSpeed: Double = 0, averageSpeed: Double = 0,
          trackPoints: [TrackPoint] = [], photos: [TripPhoto] = [],
+         checkpoints: [TripCheckpoint] = [],
          title: String? = nil, titleIsCustom: Bool = false,
          tripDescription: String? = nil,
          fuelUsed: Double = 0, elevation: Double = 0,
@@ -279,6 +308,7 @@ struct Trip: Identifiable, Codable {
         self.averageSpeed = averageSpeed
         self.trackPoints = trackPoints
         self.photos = photos
+        self.checkpoints = checkpoints
         self.title = title
         self.titleIsCustom = titleIsCustom
         self.tripDescription = tripDescription

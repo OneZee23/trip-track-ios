@@ -162,6 +162,10 @@ final class MapViewModel: ObservableObject {
             }
             self.togglePause(source: .liveActivity)
         }
+        TripIntentHandler.shared.onCheckpoint = { [weak self] in
+            guard let self, self.isRecording else { return }
+            self.markCheckpoint()
+        }
         TripIntentHandler.shared.onStop = { [weak self] in
             guard let self, self.isRecording else {
                 LiveActivityManager.shared.endActivity()
@@ -396,6 +400,21 @@ final class MapViewModel: ObservableObject {
         case watch
     }
 
+    /// Поставить отметку на маршруте — с Live Activity или с экрана записи.
+    ///
+    /// Ничего не спрашивает: за рулём подписывать некогда, а отметка нужна в ту
+    /// же секунду. Имя и фотография — потом, на экране поездки.
+    @discardableResult
+    func markCheckpoint(name: String? = nil) -> TripCheckpoint? {
+        guard let checkpoint = tripManager.markCheckpoint(name: name) else {
+            Haptics.error()
+            return nil
+        }
+        Haptics.tap()
+        LiveActivityManager.shared.noteCheckpoint(count: tripManager.checkpointCount)
+        return checkpoint
+    }
+
     func togglePause(source: PauseSource = .screen) {
         guard isRecording else { return }
         isPaused.toggle()
@@ -410,6 +429,10 @@ final class MapViewModel: ObservableObject {
             pauseStartDate = Date()
             durationTimer?.cancel()
             durationTimer = nil
+            // Пауза — это «я остановился нарочно». Автосервис обязан узнать
+            // об этом сам: без этого заведённый до паузы таймер продолжал
+            // тикать и закрывал поездку, пока человек стоял в магазине.
+            AutoTripService.shared.handleManualPause()
         } else {
             if let pauseStart = pauseStartDate {
                 pausedAccumulated += Date().timeIntervalSince(pauseStart)
@@ -531,6 +554,9 @@ final class MapViewModel: ObservableObject {
             // selection (the user may have changed it since force-quitting).
             self.startLiveActivity(tripId: trip.id, startDate: trip.startDate, vehicleId: trip.vehicleId ?? selectedVehicleId)
         }
+        // Флажки, поставленные до перезапуска, — на карточке экрана блокировки
+        // должно стоять их число, а не ноль.
+        LiveActivityManager.shared.noteCheckpoint(count: tripManager.checkpointCount)
 
         #if DEBUG
         print("Recording restored: trip \(trip.id), started \(trip.startDate)")

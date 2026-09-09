@@ -29,7 +29,7 @@ final class TripManager: ObservableObject {
             // Drop the pre-pause fix so the first point after resume doesn't add a
             // cross-pause jump to the distance (a settling/drift fix while parked
             // could otherwise be measured from the spot where pause began).
-            if isPaused { lastLocation = nil }
+            if isPaused { lastLocation = nil; lastDistanceLocation = nil }
         }
     }
 
@@ -75,6 +75,11 @@ final class TripManager: ObservableObject {
         activeTrip = trip
         isRecording = true
         lastLocation = nil
+        lastDistanceLocation = nil
+        // Восстановленная запись уже может нести отметки — счётчик для Live
+        // Activity берём по факту, иначе первое нажатие флажка показало бы «1»
+        // при трёх отметках в базе.
+        checkpointCount = activeTripEntity?.checkpoints?.count ?? 0
         unsavedPointCount = 0
         lastSaveTime = Date()
         kalmanFilter.reset()
@@ -83,7 +88,21 @@ final class TripManager: ObservableObject {
         recoverableOrphanEntity = nil
         return trip
     }
+
+    /// Последняя ЗАПИСАННАЯ точка — якорь формы трека. Двигается часто.
     private var lastLocation: CLLocation?
+
+    /// Последнее место, с которого считались километры, — якорь расстояния.
+    /// Двигается редко, ровно теми же пятью метрами, что и до 0.6.5.
+    ///
+    /// Зачем два якоря вместо одного. До 0.6.5 «точка записана» и «километры
+    /// посчитаны» были одним событием: пять метров — и то, и другое. В 0.6.5
+    /// форма пишется втрое чаще, чтобы во дворе был виден каждый манёвр. Если
+    /// бы километры поехали за формой, шум GPS начал бы копиться посекундно и
+    /// одометр вырос бы сам собой — та самая беда, которую чинили в 0.5.7–0.5.8.
+    /// Поэтому расстояние осталось при своём якоре и своих правилах, и его
+    /// поведение не изменилось ни на метр.
+    private var lastDistanceLocation: CLLocation?
     private var unsavedPointCount = 0
     private var lastSaveTime = Date()
     private let saveBatchSize = 10
@@ -146,6 +165,8 @@ final class TripManager: ObservableObject {
         )
         isRecording = true
         lastLocation = nil
+        lastDistanceLocation = nil
+        checkpointCount = 0
         unsavedPointCount = 0
         lastSaveTime = Date()
         kalmanFilter.reset()
@@ -213,6 +234,8 @@ final class TripManager: ObservableObject {
         activeTrip = nil
         activeTripEntity = nil
         lastLocation = nil
+        lastDistanceLocation = nil
+        checkpointCount = 0
 
         return completedTrip
     }
@@ -414,6 +437,135 @@ final class TripManager: ObservableObject {
         }
     }
 
+    // MARK: - Отметки на маршруте
+
+    /// Поставить отметку прямо на ходу — кнопкой на Live Activity или на экране записи.
+    ///
+    /// Километры берём из накопленного одометра поездки, а не пересчитываем по
+    /// точкам: он уже посчитан пятиметровым шагом и по определению сходится с
+    /// итогом поездки. Пересчёт дал бы то же число дороже и с риском разойтись.
+    @discardableResult
+    func markCheckpoint(name: String? = nil) -> TripCheckpoint? {
+        guard isRecording, let entity = activeTripEntity,
+              let tripId = entity.id, let start = entity.startDate else { return nil }
+        // Место берём последнее записанное: оно уже прошло фильтр точности и
+        // Калмана, в отличие от сырого фикса.
+        guard let here = lastLocation ?? locationManager.currentLocation.map({
+            CLLocation(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude)
+        }) else { return nil }
+
+        let now = Date()
+        let checkpoint = TripCheckpoint(
+            timestamp: now,
+            latitude: here.coordinate.latitude,
+            longitude: here.coordinate.longitude,
+            distanceFromStart: entity.distance,
+            elapsedFromStart: now.timeIntervalSince(start),
+            name: name
+        )
+        let saved = repository.addCheckpoint(checkpoint, to: tripId)
+        if saved != nil {
+            checkpointCount += 1
+            nameCheckpointFromPlace(id: checkpoint.id, tripId: tripId, coordinate: here.coordinate)
+        }
+        return saved
+    }
+
+    func updateCheckpoint(id: UUID, name: String?, photoId: UUID?, photoIds: [UUID]) {
+        guard let tripId = repository.updateCheckpoint(
+            id: id, name: name, photoId: photoId, photoIds: photoIds) else { return }
+        enqueueTripUpdate(tripId)
+    }
+
+    /// Прикрепить снимок к отметке и сделать его обложкой — «Отметить это
+    /// место» из просмотрщика. Прочие прикреплённые остаются.
+    func attachPhoto(_ photoId: UUID, toCheckpoint checkpoint: TripCheckpoint) {
+        var ids = checkpoint.photoIds
+        if !ids.contains(photoId) { ids.append(photoId) }
+        updateCheckpoint(id: checkpoint.id, name: checkpoint.name, photoId: photoId, photoIds: ids)
+    }
+
+    func deleteCheckpoint(id: UUID) {
+        guard let tripId = repository.deleteCheckpoint(id: id) else { return }
+        enqueueTripUpdate(tripId)
+    }
+
+    /// Как у названия и заметок: правка поездки → операция в очередь синка.
+    private func enqueueTripUpdate(_ tripId: UUID) {
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
+        }
+    }
+
+    /// Поставить отметку на УЖЕ записанной поездке — пальцем по маршруту.
+    @discardableResult
+    func addCheckpoint(
+        to tripId: UUID, at fix: TripRouteLocator.Fix, name: String? = nil, photoId: UUID? = nil
+    ) -> TripCheckpoint? {
+        let checkpoint = TripCheckpoint(
+            timestamp: fix.timestamp,
+            latitude: fix.coordinate.latitude,
+            longitude: fix.coordinate.longitude,
+            distanceFromStart: fix.distanceFromStart,
+            elapsedFromStart: fix.elapsedFromStart,
+            name: name,
+            photoId: photoId,
+            photoIds: photoId.map { [$0] } ?? []
+        )
+        let saved = repository.addCheckpoint(checkpoint, to: tripId)
+        if saved != nil {
+            enqueueTripUpdate(tripId)
+            nameCheckpointFromPlace(id: checkpoint.id, tripId: tripId, coordinate: fix.coordinate)
+        }
+        return saved
+    }
+
+    /// Дать отметке имя по месту: «Джубга», «Дивноморское».
+    ///
+    /// Человек ставит отметку ради «сколько до моря» — и на ролике должно быть
+    /// написано «Джубга · 1:30», а не «#2 · 1:30». Печатать имя за рулём
+    /// некогда, значит его должен принести геокодер. Сначала спрашиваем свой
+    /// кэш (он же наполняется названиями поездок), потом систему. Всё
+    /// лучшее-по-возможности: нет сети — отметка остаётся с номером, и это
+    /// нормально.
+    func nameCheckpointFromPlace(id: UUID, tripId: UUID, coordinate: CLLocationCoordinate2D) {
+        if let cached = lookupGeocodeCache(for: coordinate)?.locality, !cached.isEmpty {
+            applyPlaceName(cached, toCheckpoint: id, tripId: tripId)
+            return
+        }
+        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        CLGeocoder().reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+            guard let self, let mark = placemarks?.first else { return }
+            let name = mark.locality ?? mark.subLocality ?? mark.name
+            guard let name, !name.isEmpty else { return }
+            Task { @MainActor in
+                self.saveGeocodeCache(for: coordinate, locality: mark.locality, region: mark.administrativeArea)
+                self.applyPlaceName(name, toCheckpoint: id, tripId: tripId)
+            }
+        }
+    }
+
+    /// Имя от человека — священно. Дефолтное «Отметка N» и пустое — можно менять.
+    private func applyPlaceName(_ name: String, toCheckpoint id: UUID, tripId: UUID) {
+        guard let trip = repository.fetchTripDetail(id: tripId),
+              let checkpoint = trip.checkpoints.first(where: { $0.id == id }) else { return }
+        // Дефолтное имя — ровно «Отметка 7» на любом языке, не «Отметка у моря»:
+        // второе написал человек, и его геокодер не трогает.
+        let current = checkpoint.name ?? ""
+        let looksDefault = current.isEmpty || LanguageManager.Language.allCases.contains { lang in
+            let word = NSRegularExpression.escapedPattern(for: AppStrings.checkpointWord(lang))
+            return current.range(of: "^\\(word) \\d+$", options: .regularExpression) != nil
+        }
+        guard looksDefault else { return }
+        repository.updateCheckpoint(
+            id: id, name: name, photoId: checkpoint.photoId, photoIds: checkpoint.photoIds)
+        enqueueTripUpdate(tripId)
+        NotificationCenter.default.post(name: .tripCheckpointsChanged, object: tripId)
+    }
+
+    /// Сколько отметок у текущей записи — для отклика на Live Activity.
+    @Published private(set) var checkpointCount: Int = 0
+
     // MARK: - Private
 
     // Raised 30→65m so heavy-canopy / remote (taiga) fixes still record instead of
@@ -423,6 +575,60 @@ final class TripManager: ObservableObject {
     private let minRecordDistance: Double = 5.0   // ignore points closer than 5m to last
     private let driftSpeedThreshold: Double = 1.0  // m/s — GPS reports "stationary"
     private let driftCalcSpeedLimit: Double = 5.0  // m/s — but distance says "moving"
+
+    // MARK: Плотность формы трека (0.6.5)
+
+    /// Ниже этой скорости точки формы не пишем: машина стоит, а рисовать её
+    /// дрожание на парковке — значит рисовать кляксу вместо места стоянки.
+    ///
+    /// Спрашиваем СЫРУЮ скорость от GPS, а не оценку фильтра, и это выбор, а не
+    /// небрежность. На малом ходу они меряют разное: сырая приходит с доплера и
+    /// у стоящей машины честно равна нулю, а оценка фильтра на стоянке гуляет
+    /// от шума позиции — до полуметра в секунду и выше. Порог по фильтру
+    /// пришлось бы поднимать до метра в секунду, а это 3,6 км/ч, то есть
+    /// быстрее, чем паркуются задним ходом: самый нужный манёвр опять остался
+    /// бы без точек. Проверено тестами `testAParkedCarWritesNothing` и
+    /// `testTheSlowestParkingCrawlIsRecordedToo` — они держат эти два края.
+    ///
+    /// Когда GPS скорости не знает (отрицательная), правило просто не
+    /// срабатывает, и остаётся прежнее пятиметровое — то есть поведение до
+    /// 0.6.5. Отступать в заведомо рабочее лучше, чем гадать.
+    private let shapeMinSpeed: Double = 0.5
+    /// Метр — пол смещения для частых точек. Меньше метра — это уже шум.
+    private let shapeMinDistance: Double = 1.0
+    /// Не чаще трёх точек в секунду, что бы ни присылала система.
+    private let shapeMinInterval: TimeInterval = 1.0 / 3.0
+    /// Поворот на столько градусов — повод записать точку не дожидаясь секунды.
+    private let shapeCourseDelta: Double = 12.0
+
+    /// Писать ли точку ФОРМЫ трека.
+    ///
+    /// Правило расширено ровно в одну сторону: всё, что писалось до 0.6.5,
+    /// пишется и сейчас (первая же строка — прежние пять метров), а сверху
+    /// добавились частые точки на ходу. Это и есть гарантия, что новая запись
+    /// не может потерять ничего из старой — только добавить.
+    ///
+    /// Добавляет она там, где раньше было пусто. Пятиметровый порог считает
+    /// точки в метрах, а не в секундах, поэтому на трассе он тратил бюджет
+    /// впустую, а во дворе на пяти километрах в час отдавал одну точку в три с
+    /// половиной секунды — за которые машина успевала развернуться. Отсюда и
+    /// «срезанные углы»: их некому было нарисовать.
+    private func shouldStoreShapePoint(
+        _ candidate: CLLocation,
+        since last: CLLocation,
+        rawSpeed: Double
+    ) -> Bool {
+        let meters = candidate.distance(from: last)
+        if meters >= minRecordDistance { return true }
+
+        guard rawSpeed >= shapeMinSpeed, meters >= shapeMinDistance else { return false }
+
+        let dt = candidate.timestamp.timeIntervalSince(last.timestamp)
+        guard dt >= shapeMinInterval else { return false }
+        if dt >= 1.0 { return true }
+
+        return GeometryUtils.courseDelta(candidate.course, last.course) >= shapeCourseDelta
+    }
 
     /// Не `private` ровно затем, чтобы тест мог позвать его напрямую:
     /// настоящий путь идёт через `@Published private(set) currentLocation`,
@@ -438,30 +644,51 @@ final class TripManager: ObservableObject {
         // Smooth through Kalman filter
         let filtered = kalmanFilter.processGPSUpdate(location)
 
-        // Filter: minimum distance between stored points (on filtered position).
-        if let last = lastLocation {
-            let delta = filtered.distance(from: last)
+        // --- Километры ---
+        // Свой якорь и прежние правила: пять метров, защита от дрейфа, проверка
+        // правдоподобия. Считается ДО решения о записи точки, потому что путь
+        // пройден независимо от того, попала точка в трек или нет.
+        if let anchor = lastDistanceLocation {
+            let delta = filtered.distance(from: anchor)
             // Flat 5m floor. We deliberately do NOT scale this by accuracy: a higher
             // floor on poor (taiga) fixes silently DROPS real slow-movement segments
             // AND their incremental distance, under-counting the odometer exactly
             // where this release is trying to capture more. Jitter is rejected by the
             // drift filter below, not by inflating the distance floor.
-            guard delta >= minRecordDistance else { return }
-
-            // Filter: GPS drift — the Kalman velocity says near-stationary but the
-            // point-to-point calculated speed is high (parked-but-jittering). Applied
-            // UNCONDITIONALLY: `filtered.speed` is the Kalman velocity estimate derived
-            // from position (raw GPS speed only refines it when known), so this keeps
-            // genuine movement and drops stationary jitter at any accuracy — including
-            // 35–65m taiga fixes, where leaving it off would let jitter inflate distance.
-            let timeDelta = filtered.timestamp.timeIntervalSince(last.timestamp)
-            if timeDelta > 0 {
-                let calculatedSpeed = delta / timeDelta
-                if filtered.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
-                    return
+            if delta >= minRecordDistance {
+                // Filter: GPS drift — the Kalman velocity says near-stationary but the
+                // point-to-point calculated speed is high (parked-but-jittering). Applied
+                // UNCONDITIONALLY: `filtered.speed` is the Kalman velocity estimate derived
+                // from position (raw GPS speed only refines it when known), so this keeps
+                // genuine movement and drops stationary jitter at any accuracy — including
+                // 35–65m taiga fixes, where leaving it off would let jitter inflate distance.
+                let timeDelta = filtered.timestamp.timeIntervalSince(anchor.timestamp)
+                if timeDelta > 0 {
+                    let calculatedSpeed = delta / timeDelta
+                    if filtered.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
+                        // Как и до 0.6.5, дрейф отменяет фикс целиком: ни в
+                        // километры, ни в форму. Якорь остаётся на месте.
+                        return
+                    }
                 }
+
+                // Update distance (use filtered position, not raw GPS). Accept the segment
+                // when the IMPLIED speed is plausible — a sparse-GPS / dead-zone bridge
+                // (minutes apart in the taiga) can exceed 1km yet be real. A genuine GPS
+                // teleport has a tiny dt → impossible implied speed → rejected. Only fall
+                // back to the absolute cap when there's no usable time delta.
+                if TripDistanceGate.isPlausibleSegment(meters: delta, dt: timeDelta) {
+                    entity.distance += delta
+                }
+                lastDistanceLocation = filtered
             }
+        } else {
+            lastDistanceLocation = filtered
         }
+
+        // --- Форма ---
+        if let last = lastLocation,
+           !shouldStoreShapePoint(filtered, since: last, rawSpeed: location.speed) { return }
 
         let context = persistenceController.container.viewContext
         let point = TrackPointEntity(context: context)
@@ -475,18 +702,6 @@ final class TripManager: ObservableObject {
         point.timestamp = filtered.timestamp
         point.trip = entity
 
-        // Update distance (use filtered position, not raw GPS). Accept the segment
-        // when the IMPLIED speed is plausible — a sparse-GPS / dead-zone bridge
-        // (minutes apart in the taiga) can exceed 1km yet be real. A genuine GPS
-        // teleport has a tiny dt → impossible implied speed → rejected. Only fall
-        // back to the absolute cap when there's no usable time delta.
-        if let last = lastLocation {
-            let delta = filtered.distance(from: last)
-            let dt = filtered.timestamp.timeIntervalSince(last.timestamp)
-            if TripDistanceGate.isPlausibleSegment(meters: delta, dt: dt) {
-                entity.distance += delta
-            }
-        }
         lastLocation = filtered
 
         // Update speeds
@@ -543,26 +758,16 @@ final class TripManager: ObservableObject {
         guard let points = entity.trackPoints?.array as? [TrackPointEntity],
               points.count > 1 else { return }
 
-        var totalDistance: Double = 0
-        var maxSpeed: Double = 0
-
-        for i in 1..<points.count {
-            let prev = CLLocation(latitude: points[i-1].latitude, longitude: points[i-1].longitude)
-            let curr = CLLocation(latitude: points[i].latitude, longitude: points[i].longitude)
-            let segmentDist = curr.distance(from: prev)
-
-            // Reject only IMPOSSIBLE-speed segments (real GPS teleport jumps), not
-            // long-but-plausible sparse-GPS bridges. Shared gate (TripDistanceGate):
-            // implied-speed when we have a usable dt, absolute-cap fallback otherwise.
-            var dt: TimeInterval = 0
-            if let prevTS = points[i-1].timestamp, let currTS = points[i].timestamp {
-                dt = currTS.timeIntervalSince(prevTS)
+        // Пятиметровым шагом, а не «каждая точка минус предыдущая». Эта функция
+        // ПЕРЕЗАПИСЫВАЕТ километры, набранные во время записи, — то есть именно
+        // она и есть одометр поездки. Считай она подряд по плотным точкам 0.6.5,
+        // весь разговор про «расстояние не меняется» кончился бы здесь.
+        let totalDistance = TripDistanceGate.totalDistance(
+            points.map {
+                TripDistanceGate.Sample(latitude: $0.latitude, longitude: $0.longitude, timestamp: $0.timestamp)
             }
-            if !TripDistanceGate.isPlausibleSegment(meters: segmentDist, dt: dt) { continue }
-
-            totalDistance += segmentDist
-            maxSpeed = max(maxSpeed, points[i].speed)
-        }
+        )
+        let maxSpeed = points.dropFirst().reduce(0.0) { max($0, $1.speed) }
 
         entity.distance = totalDistance
         entity.maxSpeed = maxSpeed
@@ -1030,8 +1235,13 @@ final class TripManager: ObservableObject {
 
     // MARK: - Photos
 
-    func addPhoto(to tripId: UUID, image: UIImage, caption: String? = nil) -> TripPhoto? {
-        repository.addPhoto(to: tripId, image: image, caption: caption)
+    func addPhoto(
+        to tripId: UUID, image: UIImage, caption: String? = nil,
+        capturedAt: Date? = nil, latitude: Double? = nil, longitude: Double? = nil
+    ) -> TripPhoto? {
+        repository.addPhoto(
+            to: tripId, image: image, caption: caption,
+            capturedAt: capturedAt, latitude: latitude, longitude: longitude)
     }
 
     func deletePhoto(id: UUID, from tripId: UUID) {

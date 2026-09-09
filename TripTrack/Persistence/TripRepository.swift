@@ -48,8 +48,14 @@ protocol TripRepository {
     @discardableResult
     func migrateAllTripsToPrivate() -> [UUID]
     func saveBadgesJSON(tripId: UUID, badgeIds: [String])
-    func addPhoto(to tripId: UUID, image: UIImage, caption: String?) -> TripPhoto?
+    func addPhoto(to tripId: UUID, image: UIImage, caption: String?, capturedAt: Date?, latitude: Double?, longitude: Double?) -> TripPhoto?
     func deletePhoto(id: UUID, from tripId: UUID)
+
+    // MARK: Отметки на маршруте
+    func addCheckpoint(_ checkpoint: TripCheckpoint, to tripId: UUID) -> TripCheckpoint?
+    /// Возвращают id поездки — чтобы вызывающий мог поставить её в очередь синка.
+    @discardableResult func updateCheckpoint(id: UUID, name: String?, photoId: UUID?, photoIds: [UUID]) -> UUID?
+    @discardableResult func deleteCheckpoint(id: UUID) -> UUID?
     func markSynced(tripId: UUID, conflictVersion: Int)
 
     // MARK: Sync
@@ -649,7 +655,10 @@ final class CoreDataTripRepository: TripRepository {
         }
     }
 
-    func addPhoto(to tripId: UUID, image: UIImage, caption: String?) -> TripPhoto? {
+    func addPhoto(
+        to tripId: UUID, image: UIImage, caption: String?,
+        capturedAt: Date? = nil, latitude: Double? = nil, longitude: Double? = nil
+    ) -> TripPhoto? {
         guard let filename = PhotoStorageService.savePhoto(image, for: tripId),
               let entity = fetchEntity(id: tripId) else { return nil }
 
@@ -659,13 +668,18 @@ final class CoreDataTripRepository: TripRepository {
         photoEntity.filename = filename
         photoEntity.caption = caption
         photoEntity.timestamp = Date()
+        photoEntity.capturedAt = capturedAt
+        photoEntity.exifLatitude = latitude.map(NSNumber.init(value:))
+        photoEntity.exifLongitude = longitude.map(NSNumber.init(value:))
         photoEntity.lastModifiedAt = Date()
         photoEntity.sortOrder = Int16(entity.photos?.count ?? 0)
         photoEntity.trip = entity
         entity.lastModifiedAt = Date()
         persistenceController.save()
 
-        let photo = TripPhoto(id: photoId, filename: filename, caption: caption, timestamp: Date())
+        let photo = TripPhoto(
+            id: photoId, filename: filename, caption: caption, timestamp: Date(),
+            capturedAt: capturedAt, exifLatitude: latitude, exifLongitude: longitude)
         Task { @MainActor in
             SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: photoId, action: .upload))
             SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .update))
@@ -681,7 +695,101 @@ final class CoreDataTripRepository: TripRepository {
         return photo
     }
 
+    // MARK: - Отметки на маршруте
+
+    func addCheckpoint(_ checkpoint: TripCheckpoint, to tripId: UUID) -> TripCheckpoint? {
+        guard let entity = fetchEntity(id: tripId) else { return nil }
+
+        let ce = TripCheckpointEntity(context: context)
+        ce.id = checkpoint.id
+        ce.timestamp = checkpoint.timestamp
+        ce.latitude = checkpoint.latitude
+        ce.longitude = checkpoint.longitude
+        ce.distanceFromStart = checkpoint.distanceFromStart
+        ce.elapsedFromStart = checkpoint.elapsedFromStart
+        ce.name = checkpoint.name
+        ce.photoId = checkpoint.photoId
+        ce.photoIdsJSON = Self.encodePhotoIds(checkpoint.photoIds)
+        ce.placeId = checkpoint.placeId
+        ce.createdAt = Date()
+        ce.lastModifiedAt = Date()
+        ce.userId = SettingsManager.shared.localUserId
+        ce.trip = entity
+        markCheckpointsChanged(on: entity)
+        persistenceController.save()
+        return checkpoint
+    }
+
+    /// Отметки едут внутри поездки, поэтому любая их правка — правка поездки:
+    /// без флага `pendingUpload` очередь синка её не увидит, а следующий pull
+    /// заменит локальный список серверным — то есть сотрёт отметку, которую
+    /// человек только что поставил. Ревью 8 сентября нашло ровно это.
+    private func markCheckpointsChanged(on entity: TripEntity) {
+        entity.lastModifiedAt = Date()
+        if Self.shouldFlipPendingUpload(for: entity) {
+            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        }
+    }
+
+    /// Прикреплённые снимки — JSON-массивом строк в одной колонке, как
+    /// `stickersJSON` у поездки: связи с `TripPhotoEntity` нет нарочно, снимок
+    /// может уехать с другого телефона позже, чем отметка.
+    static func encodePhotoIds(_ ids: [UUID]) -> String? {
+        guard !ids.isEmpty,
+              let data = try? JSONEncoder().encode(ids.map(\.uuidString)) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func decodePhotoIds(_ json: String?) -> [UUID] {
+        guard let json, let data = json.data(using: .utf8),
+              let strings = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return strings.compactMap(UUID.init(uuidString:))
+    }
+
+    @discardableResult
+    func updateCheckpoint(id: UUID, name: String?, photoId: UUID?, photoIds: [UUID]) -> UUID? {
+        let request: NSFetchRequest<TripCheckpointEntity> = TripCheckpointEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let ce = try? context.fetch(request).first else { return nil }
+        ce.name = name
+        ce.photoId = photoId
+        ce.photoIdsJSON = Self.encodePhotoIds(photoIds)
+        ce.lastModifiedAt = Date()
+        if let trip = ce.trip { markCheckpointsChanged(on: trip) }
+        persistenceController.save()
+        return ce.trip?.id
+    }
+
+    @discardableResult
+    func deleteCheckpoint(id: UUID) -> UUID? {
+        let request: NSFetchRequest<TripCheckpointEntity> = TripCheckpointEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let ce = try? context.fetch(request).first else { return nil }
+        let tripId = ce.trip?.id
+        if let trip = ce.trip { markCheckpointsChanged(on: trip) }
+        context.delete(ce)
+        persistenceController.save()
+        return tripId
+    }
+
+    /// Снимок был обложкой или прикреплён к отметке — отметка остаётся,
+    /// ссылка снимается. Без этого `photoId` указывал бы в пустоту, а карточка
+    /// рисовала бы заглушку вместо снимка.
+    private func detachPhotoFromCheckpoints(photoId: UUID) {
+        let request: NSFetchRequest<TripCheckpointEntity> = TripCheckpointEntity.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "photoId == %@ OR photoIdsJSON CONTAINS[c] %@",
+            photoId as CVarArg, photoId.uuidString)
+        for ce in (try? context.fetch(request)) ?? [] {
+            if ce.photoId == photoId { ce.photoId = nil }
+            let rest = Self.decodePhotoIds(ce.photoIdsJSON).filter { $0 != photoId }
+            ce.photoIdsJSON = Self.encodePhotoIds(rest)
+            ce.lastModifiedAt = Date()
+        }
+    }
+
     func deletePhoto(id: UUID, from tripId: UUID) {
+        detachPhotoFromCheckpoints(photoId: id)
         let request: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         if let entity = try? context.fetch(request).first {
@@ -757,8 +865,27 @@ final class CoreDataTripRepository: TripRepository {
 
         let photos: [TripPhoto] = (entity.photos?.array as? [TripPhotoEntity])?.compactMap { pe in
             guard let pid = pe.id, let filename = pe.filename, let ts = pe.timestamp else { return nil }
-            return TripPhoto(id: pid, filename: filename, caption: pe.caption, timestamp: ts)
+            return TripPhoto(
+                id: pid, filename: filename, caption: pe.caption, timestamp: ts,
+                capturedAt: pe.capturedAt,
+                exifLatitude: pe.exifLatitude?.doubleValue,
+                exifLongitude: pe.exifLongitude?.doubleValue
+            )
         } ?? []
+
+        let checkpoints: [TripCheckpoint] = (entity.checkpoints?.array as? [TripCheckpointEntity])?
+            .compactMap { ce in
+                guard let cid = ce.id, let ts = ce.timestamp else { return nil }
+                return TripCheckpoint(
+                    id: cid, timestamp: ts,
+                    latitude: ce.latitude, longitude: ce.longitude,
+                    distanceFromStart: ce.distanceFromStart,
+                    elapsedFromStart: ce.elapsedFromStart,
+                    name: ce.name, photoId: ce.photoId,
+                    photoIds: Self.decodePhotoIds(ce.photoIdsJSON), placeId: ce.placeId
+                )
+            }
+            .sorted { $0.elapsedFromStart < $1.elapsedFromStart } ?? []
 
         let badgeIds: [String]
         if let json = entity.badgesJSON,
@@ -782,6 +909,7 @@ final class CoreDataTripRepository: TripRepository {
             id: id, startDate: startDate, endDate: entity.endDate,
             distance: entity.distance, maxSpeed: entity.maxSpeed,
             averageSpeed: entity.averageSpeed, trackPoints: points, photos: photos,
+            checkpoints: checkpoints,
             title: entity.title, titleIsCustom: entity.titleIsCustom,
             tripDescription: entity.tripDescription,
             fuelUsed: entity.fuelUsed, elevation: entity.elevation,
@@ -905,6 +1033,7 @@ final class CoreDataTripRepository: TripRepository {
 
         if let localPhotos = entity.photos?.array as? [TripPhotoEntity] {
             let serverIds = Set((p.photos ?? []).map { $0.id })
+            let serverById = Dictionary((p.photos ?? []).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             for pe in localPhotos {
                 guard let pid = pe.id else { continue }
                 if pe.uploadStatus == PhotoUploadStatus.localOnly.rawValue {
@@ -912,7 +1041,43 @@ final class CoreDataTripRepository: TripRepository {
                 }
                 if !serverIds.contains(pid) {
                     context.delete(pe)
+                    continue
                 }
+                // Время и место съёмки — ТОЛЬКО когда сервер их прислал и у нас
+                // их нет: локальные значения точнее (взяты из PHAsset в момент
+                // выбора), а старый сервер ключей не шлёт вовсе.
+                if let remote = serverById[pid] {
+                    if pe.capturedAt == nil, let at = remote.capturedAt { pe.capturedAt = at }
+                    if pe.exifLatitude == nil, let lat = remote.exifLatitude, let lon = remote.exifLongitude {
+                        pe.exifLatitude = NSNumber(value: lat)
+                        pe.exifLongitude = NSNumber(value: lon)
+                    }
+                }
+            }
+        }
+
+        // Отметки: сервер прислал список — он и есть правда. Ключ отсутствует —
+        // старый сервер, локальные не трогаем (иначе каждый pull стирал бы их).
+        if let serverCheckpoints = p.checkpoints {
+            if let existing = entity.checkpoints?.array as? [TripCheckpointEntity] {
+                for ce in existing { context.delete(ce) }
+            }
+            for c in serverCheckpoints.sorted(by: { $0.sortOrder < $1.sortOrder }) {
+                let ce = TripCheckpointEntity(context: context)
+                ce.id = c.id
+                ce.timestamp = c.timestamp
+                ce.latitude = c.latitude
+                ce.longitude = c.longitude
+                ce.distanceFromStart = c.distanceFromStart
+                ce.elapsedFromStart = c.elapsedFromStart
+                ce.name = c.name
+                ce.photoId = c.photoId
+                ce.photoIdsJSON = Self.encodePhotoIds(c.photoIds ?? [])
+                ce.placeId = c.placeId
+                ce.createdAt = Date()
+                ce.lastModifiedAt = p.lastModifiedAt
+                ce.userId = SettingsManager.shared.localUserId
+                ce.trip = entity
             }
         }
 
@@ -1194,6 +1359,7 @@ final class CoreDataTripRepository: TripRepository {
     }
 
     func deletePhotoHard(id: UUID) {
+        detachPhotoFromCheckpoints(photoId: id)
         let req: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
         req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         if let e = try? context.fetch(req).first {

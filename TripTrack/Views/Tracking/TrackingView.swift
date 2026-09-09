@@ -387,6 +387,42 @@ struct TrackingView: View {
             }
             .buttonStyle(TapOnlyButtonStyle())
             .accessibilityIdentifier("tracking_pause")
+
+            // Отметка на маршруте. Круглой и справа: действие частое и
+            // безобидное, поэтому под большим пальцем, но шириной не спорит с
+            // «Паузой» — та здесь главная, а «Стоп» намеренно отделён слева.
+            //
+            // Число вместо флажка, когда отметки уже есть: кнопка срабатывает
+            // без экрана-подтверждения, и растущий счётчик — единственное, чем
+            // она отвечает на нажатие.
+            Button {
+                Haptics.tap()
+                viewModel.markCheckpoint()
+            } label: {
+                Group {
+                    if viewModel.tripManager.checkpointCount > 0 {
+                        Text("\(viewModel.tripManager.checkpointCount)")
+                            .font(.system(size: 19, weight: .heavy))
+                            .monospacedDigit()
+                    } else {
+                        Image(systemName: "flag.fill")
+                            .font(.system(size: 17, weight: .bold))
+                    }
+                }
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(
+                    Color(red: 40/255, green: 40/255, blue: 42/255).opacity(0.78),
+                    in: Circle()
+                )
+                .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
+                .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+            }
+            .buttonStyle(TapOnlyButtonStyle())
+            .accessibilityIdentifier("tracking_checkpoint")
+            .accessibilityLabel(AppStrings.checkpointAdd(lang.language))
+            .animation(.spring(response: 0.3, dampingFraction: 0.8),
+                       value: viewModel.tripManager.checkpointCount)
         }
     }
 

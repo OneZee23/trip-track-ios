@@ -252,30 +252,17 @@ final class PostTripTrackProcessor {
             ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast)
         }
 
-        var totalDistance: Double = 0
-        var maxSpeed: Double = 0
-
-        for i in 1..<sorted.count {
-            let prev = CLLocation(latitude: sorted[i-1].latitude, longitude: sorted[i-1].longitude)
-            let curr = CLLocation(latitude: sorted[i].latitude, longitude: sorted[i].longitude)
-            let segmentDist = curr.distance(from: prev)
-
-            // Reject only IMPOSSIBLE-speed segments (GPS teleport jumps); keep long
-            // but legitimate sparse-GPS / dead-zone bridges. Shared gate
-            // (TripDistanceGate): implied-speed with a usable dt, absolute-cap else.
-            var dt: TimeInterval = 0
-            if let prevTS = sorted[i-1].timestamp, let currTS = sorted[i].timestamp {
-                dt = currTS.timeIntervalSince(prevTS)
+        // Тот же пятиметровый шаг, что у записи и финализации: три копии этого
+        // цикла расходились бы на плотных точках 0.6.5, а побеждала бы та, что
+        // отработала последней.
+        let totalDistance = TripDistanceGate.totalDistance(
+            sorted.map {
+                TripDistanceGate.Sample(latitude: $0.latitude, longitude: $0.longitude, timestamp: $0.timestamp)
             }
-            if !TripDistanceGate.isPlausibleSegment(meters: segmentDist, dt: dt) { continue }
-
-            totalDistance += segmentDist
-
-            // Only count speed from non-interpolated points
-            if !sorted[i].isInterpolated {
-                maxSpeed = max(maxSpeed, sorted[i].speed)
-            }
-        }
+        )
+        let maxSpeed = sorted.dropFirst()
+            .filter { !$0.isInterpolated }
+            .reduce(0.0) { max($0, $1.speed) }
 
         entity.distance = totalDistance
         entity.maxSpeed = maxSpeed

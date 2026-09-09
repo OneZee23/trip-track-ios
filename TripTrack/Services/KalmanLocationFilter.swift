@@ -30,9 +30,26 @@ final class KalmanLocationFilter {
     /// Maximum prediction duration without GPS (seconds)
     private let predictionTimeout: TimeInterval = 10.0
 
-    /// Process noise acceleration (m/s²) — tuned for automotive
-    /// Lower = filter is stiffer, resists GPS jumps more
-    private let processNoiseAccel: Double = 1.0
+    /// Process noise acceleration (m/s²) on a straight — tuned for automotive.
+    /// Lower = filter is stiffer, resists GPS jumps more.
+    private let processNoiseAccelCruise: Double = 1.0
+
+    /// То же в манёвре. Единица означает «ускорения плавные» — честно для
+    /// трассы и неверно для поворота, где боковое ускорение машины 2–5 м/с².
+    /// С прежним единственным числом фильтр за поворотом не успевал и скруглял
+    /// вершину сам, ДО всяких фильтров расстояния: угол оказывался срезан ещё
+    /// до того, как точка доходила до записи.
+    private let processNoiseAccelManeuver: Double = 4.0
+
+    /// Медленнее этого курс от GPS слишком шумный, чтобы по нему судить.
+    private let maneuverMinSpeed: Double = 1.5
+
+    /// Ниже этой скорости поворота (град/с) ничего не меняем — иначе плавная
+    /// дуга на трассе считалась бы манёвром и фильтр зря пропускал бы шум.
+    private let maneuverTurnRateFloor: Double = 5.0
+
+    /// На этой скорости поворота шум процесса поднят полностью.
+    private let maneuverTurnRateCeiling: Double = 25.0
 
     // MARK: - Internal State
 
@@ -74,7 +91,7 @@ final class KalmanLocationFilter {
         }
 
         // Predict step (advance state to current time)
-        predict(dt: dt)
+        predict(dt: dt, accel: maneuverAccel(for: location, dt: dt))
 
         // Convert measurement to ENU
         let (measE, measN) = latLonToENU(lat: location.coordinate.latitude,
@@ -117,7 +134,8 @@ final class KalmanLocationFilter {
         let dt = now.timeIntervalSince(lastRef)
         guard dt > 0 else { return nil }
 
-        predict(dt: dt)
+        // В разрыве GPS судить о манёвре не по чему — держим спокойное значение.
+        predict(dt: dt, accel: processNoiseAccelCruise)
         lastPredictionTime = now
 
         return filteredLocation(timestamp: now)
@@ -167,7 +185,21 @@ final class KalmanLocationFilter {
 
     // MARK: - Kalman Predict
 
-    private func predict(dt: Double) {
+    /// Насколько резво машина поворачивает прямо сейчас, в единицах шума процесса.
+    private func maneuverAccel(for location: CLLocation, dt: Double) -> Double {
+        guard dt > 0,
+              location.speed >= maneuverMinSpeed,
+              location.course >= 0, lastCourse >= 0 else { return processNoiseAccelCruise }
+
+        let turnRate = GeometryUtils.courseDelta(location.course, lastCourse) / dt
+        guard turnRate > maneuverTurnRateFloor else { return processNoiseAccelCruise }
+
+        let span = maneuverTurnRateCeiling - maneuverTurnRateFloor
+        let t = min(1.0, (turnRate - maneuverTurnRateFloor) / span)
+        return processNoiseAccelCruise + (processNoiseAccelManeuver - processNoiseAccelCruise) * t
+    }
+
+    private func predict(dt: Double, accel: Double) {
         // State prediction: x' = F * x
         // F = [1  0  dt  0 ]
         //     [0  1  0   dt]
@@ -179,7 +211,7 @@ final class KalmanLocationFilter {
 
         // Covariance prediction: P' = F * P * F^T + Q
         // Process noise Q based on acceleration uncertainty
-        let q = processNoiseAccel * processNoiseAccel
+        let q = accel * accel
         let dt2 = dt * dt
         let dt3 = dt2 * dt / 2.0
         let dt4 = dt2 * dt2 / 4.0

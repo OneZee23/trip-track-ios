@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 /// Single source of truth for "should this GPS segment count toward distance?".
 ///
@@ -26,5 +27,68 @@ enum TripDistanceGate {
     static func isPlausibleSegment(meters: Double, dt: TimeInterval) -> Bool {
         if dt > 0 { return meters / dt <= maxPlausibleSpeed }
         return meters < maxSegmentDistance
+    }
+
+    // MARK: - Шаг, которым набегают километры
+
+    /// Ближе этого к предыдущему ЗАЧТЁННОМУ месту точка километров не приносит.
+    ///
+    /// С 0.6.5 форма трека и километры разошлись: точек пишется втрое больше,
+    /// чтобы во дворе был виден каждый манёвр, — а вот считать по ним подряд
+    /// нельзя. На пяти километрах в час машина проезжает за секунду метр с
+    /// небольшим, тогда как GPS шумит на два-три; сложи такие отрезки подряд —
+    /// и одометр вырастет на ровном месте. Это ровно та беда, которую ловили в
+    /// 0.5.7–0.5.8, и возвращать её нельзя.
+    ///
+    /// Поэтому расстояние живёт на своём якоре: он стоит, пока машина не отошла
+    /// на пять метров, и шум внутри этого круга в километры не попадает.
+    static let minStep: Double = 5.0
+
+    /// Точка трека в виде, достаточном для подсчёта расстояния.
+    struct Sample {
+        let latitude: Double
+        let longitude: Double
+        let timestamp: Date?
+
+        init(latitude: Double, longitude: Double, timestamp: Date?) {
+            self.latitude = latitude
+            self.longitude = longitude
+            self.timestamp = timestamp
+        }
+    }
+
+    /// Сумма пути по точкам — тем же шагом, каким её набирает живая запись.
+    ///
+    /// Три места считали расстояние своим циклом «каждая точка минус
+    /// предыдущая»: запись, финализация поездки и пост-обработка. Пока точки
+    /// лежали в пяти метрах друг от друга, три копии давали одно и то же. С
+    /// плотной записью они разъезжаются — причём финализация ПЕРЕЗАПИСЫВАЕТ то,
+    /// что набрала запись, так что победил бы самый шумный из трёх.
+    /// Отсюда одна функция на всех.
+    static func totalDistance(_ samples: [Sample], minStep: Double = minStep) -> Double {
+        guard samples.count > 1 else { return 0 }
+
+        var total: Double = 0
+        var anchor = samples[0]
+
+        for sample in samples.dropFirst() {
+            let from = CLLocation(latitude: anchor.latitude, longitude: anchor.longitude)
+            let to = CLLocation(latitude: sample.latitude, longitude: sample.longitude)
+            let meters = to.distance(from: from)
+            guard meters >= minStep else { continue }
+
+            var dt: TimeInterval = 0
+            if let a = anchor.timestamp, let b = sample.timestamp {
+                dt = b.timeIntervalSince(a)
+            }
+            if isPlausibleSegment(meters: meters, dt: dt) {
+                total += meters
+            }
+            // Якорь переносим и на отклонённом отрезке: телепорт GPS не должен
+            // навсегда приковать счёт к точке, с которой машина давно уехала.
+            anchor = sample
+        }
+
+        return total
     }
 }

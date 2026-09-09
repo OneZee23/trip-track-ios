@@ -4,7 +4,45 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.6.4 — vehicle passport (current submission)
+## v0.6.5 — checkpoints and photos on the route (current submission)
+
+### Короткая версия — вставить в App Store Connect
+
+```
+TripTrack 0.6.5 lets a user mark points on a recorded drive ("checkpoints") to
+see how long and how far it took to reach them, and places the trip's photos on
+the map where they were taken. Nothing new is collected from the device beyond
+what the app already uses: location during a recording the user started, and
+photos the user explicitly picks from their library.
+
+Location (5.1.1): unchanged — recording is started and stopped by the user
+(or by the user's own Bluetooth/Shortcuts automation, opt-in). Track density
+during a recording is higher than before; battery use is unchanged (the
+distance filter never reduced GPS polling).
+
+Photos (5.1.1): when the user picks a photo, the app reads its capture date
+and, if present, its EXIF location to place it on the route. Both stay on the
+device unless Cloud Sync is enabled by the user. No photo is read without an
+explicit pick.
+
+User content (1.2): checkpoint names are user text, private by default and
+visible to others only if the user makes the trip public. Reporting and
+blocking work as in 0.6.4.
+
+Test: record a short drive (or use the simulator's City Run), tap the flag on
+the Lock Screen Live Activity or on the recording screen; open the trip, tap
+the route on the full-screen map — a card shows the time and distance to that
+point; confirm to add. Attach a photo to a checkpoint from its sheet.
+```
+
+### Длинная версия — для нас
+
+Никаких новых разрешений. Фото читаются через `PHAsset` только для выбранных
+снимков (`creationDate`, `location`). Схема CoreData v11, миграция lightweight.
+
+---
+
+## v0.6.4 — vehicle passport
 
 ### Короткая версия — вставить в App Store Connect
 

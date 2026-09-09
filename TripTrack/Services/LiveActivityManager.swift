@@ -50,6 +50,7 @@ final class LiveActivityManager {
                 vehicleName: vehicleName,
                 vehicleAvatar: vehicleAvatar
             )
+            checkpointCount = 0
             let initialState = TripActivityAttributes.ContentState(
                 speedKmh: 0, distanceKm: 0, isPaused: false, pausedDuration: 0,
                 language: currentLanguage, isDarkMode: currentIsDarkMode
@@ -87,9 +88,31 @@ final class LiveActivityManager {
         let state = TripActivityAttributes.ContentState(
             speedKmh: speed, distanceKm: distance, isPaused: isPaused,
             pausedDuration: pausedDuration, elapsedAtPause: elapsedAtPause,
-            language: currentLanguage, isDarkMode: currentIsDarkMode
+            language: currentLanguage, isDarkMode: currentIsDarkMode,
+            checkpointCount: checkpointCount
         )
 
+        Task { await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(Self.staleAfter))) }
+        lastUpdateDate = Date()
+    }
+
+    // MARK: - Отметки
+
+    /// Сколько отметок в текущей записи. Живёт здесь, чтобы КАЖДОЕ обновление
+    /// карточки несло актуальное число, а не только то, что пришло с кнопкой.
+    private(set) var checkpointCount: Int = 0
+
+    /// Отметка поставлена — показать это немедленно.
+    ///
+    /// Мимо тротлинга намеренно. Кнопка на Live Activity срабатывает молча, и
+    /// секундная задержка отклика читается как «не нажалось»: человек жмёт
+    /// второй раз и получает две отметки вместо одной. Правило «отклик в момент
+    /// касания» из CLAUDE.md — оно и здесь.
+    func noteCheckpoint(count: Int) {
+        checkpointCount = count
+        guard let activity = currentActivity else { return }
+        var state = activity.content.state
+        state.checkpointCount = count
         Task { await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(Self.staleAfter))) }
         lastUpdateDate = Date()
     }

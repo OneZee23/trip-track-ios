@@ -8,66 +8,28 @@ import QuartzCore
 class SmoothTrackManager: ObservableObject {
     // Подтверждённые точки трека
     @Published private(set) var confirmedPoints: [CLLocationCoordinate2D] = [] {
-        didSet {
-            cachedSmoothedPrefix = nil // invalidate cache when confirmed points change
-            updateSmoothPoints()
-        }
+        didSet { updateHeadSegment() }
     }
 
     // Анимированная "голова" линии
     @Published private(set) var animatedHeadPosition: CLLocationCoordinate2D?
 
-    // Сглаженные точки для отображения (публичное для SwiftUI)
-    @Published private(set) var smoothDisplayPoints: [CLLocationCoordinate2D] = []
-
     /// Last N confirmed points + animated head — for the glowing head overlay
     @Published private(set) var headSegmentPoints: [CLLocationCoordinate2D] = []
 
-    // Cache for smoothed confirmed points (invalidated only when confirmedPoints change)
-    private var cachedSmoothedPrefix: [CLLocationCoordinate2D]?
-
-    // Обновление сглаженных точек — uses cached prefix + recomputes only the tail
-    private func updateSmoothPoints() {
-        let confirmed = confirmedPoints
-        guard confirmed.count >= 2 else {
-            smoothDisplayPoints = confirmed
-            if let head = animatedHeadPosition {
-                smoothDisplayPoints.append(head)
-            }
-            updateHeadSegment()
-            return
-        }
-
-        // Cache the smoothed prefix (all confirmed points except last 2)
-        if cachedSmoothedPrefix == nil && confirmed.count > 3 {
-            let prefixPoints = Array(confirmed.dropLast(2))
-            cachedSmoothedPrefix = PathSmoother.smooth(points: prefixPoints, segmentsPerPoint: 5)
-        }
-
-        // Only smooth the tail (last 3 confirmed + animated head)
-        let tailStart = max(0, confirmed.count - 3)
-        var tailPoints = Array(confirmed[tailStart...])
-        if let head = animatedHeadPosition {
-            tailPoints.append(head)
-        }
-        let smoothedTail = tailPoints.count >= 2
-            ? PathSmoother.smooth(points: tailPoints, segmentsPerPoint: 5)
-            : tailPoints
-
-        if let prefix = cachedSmoothedPrefix {
-            smoothDisplayPoints = prefix + smoothedTail
-        } else {
-            // Few points — smooth everything
-            var allPoints = confirmed
-            if let head = animatedHeadPosition {
-                allPoints.append(head)
-            }
-            smoothDisplayPoints = PathSmoother.smooth(points: allPoints, segmentsPerPoint: 5)
-        }
-
-        updateHeadSegment()
-    }
-
+    /// Хвост трека. Только он и рисуется — линия целиком идёт мимо, прямо из
+    /// `confirmedPoints`, и сглаживания не просит.
+    ///
+    /// Здесь раньше жила вторая, сглаженная копия всего трека. Её пересчитывал
+    /// и переопубликовывал каждый кадр `animationTick`, то есть до шестидесяти
+    /// раз в секунду, и на каждом кадре копировался ВЕСЬ трек, помноженный на
+    /// пять точек сглаживания: на третьем часу записи это под мегабайт на кадр,
+    /// десятки мегабайт в секунду — на экране, который открыт всю поездку.
+    /// Читала эту копию одна строка в отладочном меню.
+    ///
+    /// Убрано в 0.6.5 не за компанию: версия и так поднимает частоту точек, а
+    /// цена этого места росла вместе с длиной поездки — то есть больнее всего
+    /// било по самым долгим.
     private func updateHeadSegment() {
         let tailCount = min(5, confirmedPoints.count)
         var head = Array(confirmedPoints.suffix(tailCount))
@@ -104,9 +66,7 @@ class SmoothTrackManager: ObservableObject {
         confirmedPoints = []
         animatedHeadPosition = nil
         targetPosition = nil
-        smoothDisplayPoints = []
         headSegmentPoints = []
-        cachedSmoothedPrefix = nil
     }
 
     /// Добавить новую точку (вызывается при обновлении позиции)
@@ -155,7 +115,7 @@ class SmoothTrackManager: ObservableObject {
         }
 
         animatedHeadPosition = CLLocationCoordinate2D(latitude: newLat, longitude: newLon)
-        updateSmoothPoints()
+        updateHeadSegment()
 
         if progress >= 1.0 {
             animationStartTime = nil

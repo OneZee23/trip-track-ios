@@ -73,7 +73,7 @@ struct TripDetailView: View {
     @State private var didLongPressChip = false
     /// The fullscreen cinema replay (canon 117:533).
     @State private var showPhotoPicker = false
-    @State private var pickedImages: [UIImage] = []
+    @State private var pickedImages: [PickedPhoto] = []
     @State private var selectedPhotoIndex: Int?
     @State private var selectedDetailBadge: Badge?
     @State private var badgeLastEarnedDates: [String: Date] = [:]
@@ -110,6 +110,22 @@ struct TripDetailView: View {
     @State private var showDeleteConfirm = false
     /// «…» popover on the poster header.
     @State private var showTripActions = false
+    /// Открытая отметка — лист с именем, снимком и удалением.
+    @State private var selectedCheckpoint: TripCheckpoint?
+    /// Снимки, расставленные по маршруту, вместе с готовыми миниатюрами.
+    @State private var photoPins: [PhotoPin] = []
+    /// Отметки с подписью и миниатюрой прикреплённого снимка — для карты.
+    @State private var checkpointMarkers: [CheckpointMarker] = []
+    @State private var pinsTask: Task<Void, Never>?
+    /// Лента «Моменты» — отметки и стопки снимков по порядку дороги.
+    @State private var tripMoments: [TripMoment] = []
+    /// Нажатый на герое маркер: лента прокручивается к его строке.
+    @State private var momentScrollTarget: UUID?
+    /// Строка, к которой только что приехали, — подсвечена на секунду, чтобы
+    /// глаз нашёл её после прокрутки.
+    @State private var highlightedMomentId: UUID?
+    /// Снимки каждой отметки — выведены по времени и месту, обложка первой.
+    @State private var checkpointPhotoLinks: [UUID: [TripPhoto]] = [:]
     /// 0 while the map fills the hero, 1 once it has scrolled away — drives
     /// the top bar's glass→toolbar morph. Quantized in steps of 0.05 before
     /// it lands here (see `DetailScrollOffsetKey`'s handler).
@@ -186,6 +202,21 @@ struct TripDetailView: View {
 
     /// Scroll target for the «Комментарии» block.
     private static let commentsAnchor = "comments"
+
+    private func jumpToMoment(_ id: UUID?, proxy: ScrollViewProxy) {
+        guard let id else { return }
+        momentScrollTarget = nil
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.9)) {
+            proxy.scrollTo(id, anchor: .center)
+        }
+        highlightedMomentId = id
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1400))
+            if highlightedMomentId == id {
+                withAnimation(.easeOut(duration: 0.4)) { highlightedMomentId = nil }
+            }
+        }
+    }
 
     /// See `SocialTripDetailView.scrollToCommentsIfRequested`.
     private func scrollToCommentsIfRequested(_ proxy: ScrollViewProxy) async {
@@ -265,12 +296,6 @@ struct TripDetailView: View {
                         )
                     }
                 }
-
-            // What the route's colours mean — a line of type in the seam
-            // under the map, not a control on it.
-            if cachedCoordinates.count > 1, !cachedSpeeds.isEmpty {
-                RouteSpeedKeyStrip(language: lang.language)
-            }
 
             infoPanel(trip: trip, c: c)
                 .background(c.bg)
@@ -621,8 +646,51 @@ struct TripDetailView: View {
     }
 
     var body: some View {
+        // Лист отметки вынесен из основного тела намеренно. Тело экрана — это
+        // четыреста строк модификаторов, и вывод типов в SwiftUI на таком
+        // размере перестаёт укладываться в отведённое время: сборка падает по
+        // таймауту, причём в случайном месте, а не там, где добавили строку.
+        // Разбиение на два выражения возвращает компилятору дыхание.
+        tripDetailBody
+        .sheet(item: $selectedCheckpoint) { checkpoint in
+            CheckpointEditorSheet(
+                checkpoint: checkpoint,
+                number: (trip?.checkpoints.firstIndex { $0.id == checkpoint.id } ?? 0) + 1,
+                nearbyPhotos: checkpointPhotoLinks[checkpoint.id] ?? [],
+                otherPhotos: (trip?.photos ?? []).filter { photo in
+                    !(checkpointPhotoLinks[checkpoint.id] ?? []).contains { $0.id == photo.id }
+                },
+                language: lang.language,
+                onSave: { name, nameEdited, photoId, photoIds in
+                    // Нетронутое поле — берём имя, каким оно СЕЙЧАС лежит в базе:
+                    // геокодер мог дописать его, пока лист был открыт.
+                    let currentName = trip?.checkpoints.first { $0.id == checkpoint.id }?.name
+                    mapVM.tripManager.updateCheckpoint(
+                        id: checkpoint.id, name: nameEdited ? name : currentName,
+                        photoId: photoId, photoIds: photoIds)
+                    reloadCheckpoints()
+                },
+                onDelete: {
+                    mapVM.tripManager.deleteCheckpoint(id: checkpoint.id)
+                    reloadCheckpoints()
+                }
+            )
+            .environmentObject(lang)
+            .environmentObject(themeManager)
+            .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
+        }
+    }
+
+    /// Первая половина экрана: содержимое и модификаторы до листов.
+    ///
+    /// Цепочка модификаторов у этого экрана перевалила за три десятка, и
+    /// вывод типов в SwiftUI на такой длине перестаёт укладываться в
+    /// отведённое время — сборка падает по таймауту, причём в случайном
+    /// месте цепочки, а не там, где добавили строку. Разрез посередине
+    /// возвращает компилятору дыхание и ничего не меняет в поведении.
+    private var tripDetailStage: some View {
         let c = AppTheme.colors(for: scheme)
-        ZStack(alignment: .topLeading) {
+        return ZStack(alignment: .topLeading) {
             if accessDenied, !isOwn {
                 noAccessState(c)
             } else if showLoadError {
@@ -631,28 +699,12 @@ struct TripDetailView: View {
                 ScrollViewReader { proxy in
                 detailScroll(trip: trip, c: c)
                 .task { await scrollToCommentsIfRequested(proxy) }
+                .onChange(of: momentScrollTarget) { _, id in jumpToMoment(id, proxy: proxy) }
                 }
 
             } else {
                 // Loading skeleton
-                VStack(spacing: 0) {
-                    c.cardAlt
-                        .frame(height: posterHeight)
-                        .shimmer()
-                        .overlay { CarLoadingView() }
-                    VStack(spacing: 12) {
-                        RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 200, height: 12)
-                        RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 160, height: 20)
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                            ForEach(0..<6, id: \.self) { _ in
-                                RoundedRectangle(cornerRadius: 16).fill(c.cardAlt).frame(height: 80)
-                            }
-                        }
-                    }
-                    .padding(16)
-                    .shimmer()
-                    Spacer()
-                }
+                loadingSkeleton(c)
             }
         }
         .onPreferenceChange(DetailScrollOffsetKey.self) { minY in
@@ -722,6 +774,14 @@ struct TripDetailView: View {
                 distanceMeters: trip?.distance ?? 0,
                 isOwnTrip: isOwn,
                 fogCutoffDate: trip?.endDate,
+                checkpointMarkers: checkpointMarkers,
+                photoPins: photoPins,
+                onPhotoTap: { openPhoto(id: $0) },
+                // Отмечать можно только СВОЮ поездку и только когда есть трек:
+                // «сколько до сюда» считается по нему, а у чужой поездки его нет.
+                trackPoints: isOwn ? (trip?.trackPoints ?? []) : [],
+                tripStartDate: trip?.startDate,
+                onAddCheckpoint: checkpointAdder,
                 showsFog: isOwn,
                 treatAsPreview: isPreviewRoute,
                 language: lang.language
@@ -821,91 +881,24 @@ struct TripDetailView: View {
             // people swiped anyway and could not tell whether it was allowed.
             .presentationDragIndicator(.visible)
         }
-        .onChange(of: pickedImages) { newImages in
-            guard !newImages.isEmpty else { return }
-            // Owner path is UNCHANGED — still writes straight to CoreData via
-            // TripManager. A companion has no local TripEntity for this trip
-            // (and must never get one), so that path is impossible for them;
-            // `isOwn` is exactly the flag that already tells the two apart
-            // everywhere else on this screen.
-            if isOwn {
-                var added = 0
-                for image in newImages {
-                    if let photo = mapVM.tripManager.addPhoto(to: tripId, image: image) {
-                        trip?.photos.append(photo)
-                        added += 1
-                    }
-                }
-                pickedImages = []
-                // Say it landed. The picker shows the whole library — the
-                // photos you just added are in it too — so without this the
-                // only difference between "added two" and "changed nothing"
-                // was counting tiles in the strip.
-                if added > 0 {
-                    toastItem = ToastItem(
-                        type: .success,
-                        message: AppStrings.photosAdded(added, lang.language)
-                    )
-                }
-            } else {
-                let images = newImages
-                pickedImages = []
-                Task { await uploadCompanionPhotos(images) }
-            }
+    }
+
+    private var tripDetailBody: some View {
+        tripDetailStage
+        .onChange(of: pickedImages) { handlePickedPhotos($0) }
+        .task(id: trip?.photos.count) { restartPinsRebuild() }
+        // Имя отметки дозревает из геокодера уже после того, как она встала
+        // на карту, — без этого маркер до выхода с экрана звался бы «#1».
+        .onReceive(NotificationCenter.default.publisher(for: .tripCheckpointsChanged)) { note in
+            guard let changed = note.object as? UUID, changed == tripId else { return }
+            reloadCheckpoints()
         }
         .fullScreenCover(isPresented: Binding(
             get: { selectedPhotoIndex != nil },
             set: { if !$0 { selectedPhotoIndex = nil } }
         )) {
             if let index = selectedPhotoIndex {
-                // Ours from disk, someone else's from the server, and (Fix 1)
-                // a companion's remote-only upload on OUR OWN trip — one
-                // viewer either way, which is what the canon draws
-                // (117:1086 and its social twin 117:1589).
-                let pages: [PhotoFullScreenView.Page] = isOwn
-                    ? ownPhotoItems.map { item in
-                        let source: FullScreenPhotoSource
-                        switch item.source {
-                        case .local(let filename), .missing(let filename):
-                            // A missing row goes in as the local page it is —
-                            // the viewer's own failure state (broken-photo
-                            // glyph) is exactly the right screen, and it is
-                            // the one place that offers the bin, so the user
-                            // can retire the row themselves.
-                            source = .local(filename: filename)
-                        case .remote(let thumbnailURL, let originalURL):
-                            source = .remote(url: originalURL ?? thumbnailURL)
-                        }
-                        return .init(id: item.id, source: source, timestamp: item.timestamp)
-                    }
-                    : remotePhotos.map {
-                        .init(
-                            id: $0.id,
-                            source: .remote(url: $0.originalUrl ?? $0.thumbnailUrl),
-                            timestamp: $0.timestamp
-                        )
-                    }
-                PhotoFullScreenView(
-                    pages: pages,
-                    initialIndex: index,
-                    region: trip?.region,
-                    language: lang.language,
-                    // Deleting was only ever a long press on a thumbnail —
-                    // an affordance with nothing on screen to suggest it,
-                    // which read as "adding is allowed, deleting isn't".
-                    // The viewer is where you actually decide a picture
-                    // isn't worth keeping, so the bin lives here too. Own
-                    // trips only: on someone else's, deleting isn't ours to
-                    // offer (a companion's own upload included — the server
-                    // authorises the TRIP owner).
-                    onDelete: isOwn ? { pageId in
-                        guard let item = ownPhotoItems.first(where: { $0.id == pageId })
-                        else { return }
-                        selectedPhotoIndex = nil
-                        deleteOwnPhoto(item)
-                    } : nil,
-                    onDismiss: { selectedPhotoIndex = nil }
-                )
+                photoViewer(index: index)
             }
         }
         .overlay {
@@ -1200,7 +1193,20 @@ struct TripDetailView: View {
         )
     }
 
-    /// Every Nth point, index-aligned across all three arrays.
+    /// Путевые точки реплея — index-aligned across all three arrays.
+    ///
+    /// Потолок остаётся прежним, меняется то, на ЧТО он тратится. Раньше это
+    /// была каждая N-я точка, и пока запись шла по расстоянию, равномерность
+    /// по счёту примерно совпадала с равномерностью по карте. С 0.6.5 точки
+    /// идут по времени, и «каждая N-я» стала «каждые N секунд»: на часовой
+    /// поездке — одна точка в двенадцать секунд. Разворот в три приёма
+    /// занимает секунд двадцать, то есть две точки, — и реплей проезжал двор
+    /// по прямой, сколько бы точек мы ни записали.
+    ///
+    /// Теперь бюджет раздаётся по значимости формы: прямая берёт одну точку на
+    /// любую длину, а на серию манёвров уходит столько, сколько там углов.
+    /// Потолок не поднят намеренно — след реплея пересобирается на каждой
+    /// путевой точке, и цена растёт с их числом, а не с длиной поездки.
     private static func downsampledForReplay(
         coords: [CLLocationCoordinate2D],
         speeds: [Double],
@@ -1208,9 +1214,7 @@ struct TripDetailView: View {
     ) -> (coords: [CLLocationCoordinate2D], speeds: [Double], timestamps: [Date]) {
         let limit = 300
         guard coords.count > limit else { return (coords, speeds, timestamps) }
-        let step = max(1, coords.count / limit)
-        var idx = Array(stride(from: 0, to: coords.count, by: step))
-        if idx.last != coords.count - 1 { idx.append(coords.count - 1) }
+        let idx = GeometryUtils.significantIndices(coords, budget: limit)
         return (
             idx.map { coords[$0] },
             speeds.count == coords.count ? idx.map { speeds[$0] } : [],
@@ -1386,6 +1390,302 @@ struct TripDetailView: View {
         storyShare = (data, url)
     }
 
+    /// Добавить выбранные снимки к поездке.
+    ///
+    /// Вынесено из `body`: обработчик дорос до размера, на котором вывод типов
+    /// в SwiftUI-выражении перестал укладываться в разумное время, и сборка
+    /// падала не на ошибке, а на таймауте компилятора.
+    private func handlePickedPhotos(_ picked: [PickedPhoto]) {
+        guard !picked.isEmpty else { return }
+        // Owner path writes straight to CoreData via TripManager. A companion
+        // has no local TripEntity for this trip (and must never get one).
+        guard isOwn else {
+            // Путь попутчика грузит снимки на сервер: там ни времени съёмки,
+            // ни координаты пока не принимают.
+            let images = picked.map(\.image)
+            pickedImages = []
+            Task { await uploadCompanionPhotos(images) }
+            return
+        }
+
+        var added = 0
+        for item in picked {
+            let photo = mapVM.tripManager.addPhoto(
+                to: tripId, image: item.image,
+                capturedAt: item.capturedAt,
+                latitude: item.latitude, longitude: item.longitude)
+            if let photo {
+                trip?.photos.append(photo)
+                added += 1
+            }
+        }
+        pickedImages = []
+        // Say it landed. The picker shows the whole library — the photos you
+        // just added are in it too — so without this the only difference
+        // between "added two" and "changed nothing" was counting tiles.
+        if added > 0 {
+            toastItem = ToastItem(
+                type: .success,
+                message: AppStrings.photosAdded(added, lang.language))
+        }
+    }
+
+    /// Страницы полноэкранного просмотра снимков.
+    ///
+    /// Вынесено из `body` по той же причине, что и заготовка загрузки: тело
+    /// экрана переросло порог вывода типов, и компилятор начал падать по
+    /// таймауту в случайных местах.
+    private func fullScreenPhotoPages() -> [PhotoFullScreenView.Page] {
+isOwn
+            ? ownPhotoItems.map { item in
+                let source: FullScreenPhotoSource
+                switch item.source {
+                case .local(let filename), .missing(let filename):
+                    // A missing row goes in as the local page it is —
+                    // the viewer's own failure state (broken-photo
+                    // glyph) is exactly the right screen, and it is
+                    // the one place that offers the bin, so the user
+                    // can retire the row themselves.
+                    source = .local(filename: filename)
+                case .remote(let thumbnailURL, let originalURL):
+                    source = .remote(url: originalURL ?? thumbnailURL)
+                }
+                return .init(id: item.id, source: source, timestamp: item.timestamp)
+            }
+            : remotePhotos.map {
+                .init(
+                    id: $0.id,
+                    source: .remote(url: $0.originalUrl ?? $0.thumbnailUrl),
+                    timestamp: $0.timestamp
+                )
+            }
+    }
+
+    /// Заготовка экрана, пока поездка читается.
+    ///
+    /// Вынесена из `body` не ради красоты: тело выросло до размера, на котором
+    /// вывод типов в SwiftUI перестаёт укладываться в отведённое время, и
+    /// сборка падает по таймауту в случайном месте — не там, где ошибка.
+    @ViewBuilder
+    private func loadingSkeleton(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 0) {
+            c.cardAlt
+                .frame(height: posterHeight)
+                .shimmer()
+                .overlay { CarLoadingView() }
+            VStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 200, height: 12)
+                RoundedRectangle(cornerRadius: 4).fill(c.cardAlt).frame(width: 160, height: 20)
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    ForEach(0..<6, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 16).fill(c.cardAlt).frame(height: 80)
+                    }
+                }
+            }
+            .padding(16)
+            .shimmer()
+            Spacer()
+        }
+    }
+
+    /// Расставить снимки поездки по маршруту и подготовить миниатюры.
+    ///
+    /// Миниатюры готовятся здесь, а не в карте: `MKAnnotationView` берёт
+    /// картинку синхронно, и чтение с диска внутри него подвесило бы карту.
+    private func rebuildPhotoPins() async {
+        guard let trip, isOwn else {
+            photoPins = []
+            checkpointMarkers = []
+            tripMoments = []
+            return
+        }
+
+        // Снимок, относящийся к отметке — прикреплённый или снятый рядом, —
+        // показывается В ней и не должен вторым экземпляром стоять там, где
+        // его поставило время съёмки.
+        let links = TripCheckpointPhotos.link(
+            checkpoints: trip.checkpoints, photos: trip.photos, points: trip.trackPoints)
+        checkpointPhotoLinks = links
+        let attached = Set(links.values.flatMap { $0 }.map(\.id))
+        let placed = TripPhotoPlacement.place(trip.photos, on: trip.trackPoints)
+            .filter { !attached.contains($0.id) }
+        var pins: [PhotoPin] = []
+        for item in placed {
+            let image = await PhotoStorageService.loadThumbnail(filename: item.filename, maxSize: 80)
+            pins.append(PhotoPin(
+                id: item.id, latitude: item.latitude, longitude: item.longitude, image: image,
+                accessibilityLabel: AppStrings.nounPhotos(lang.language, 1)))
+        }
+        guard !Task.isCancelled else { return }
+        photoPins = pins
+
+        var markers: [CheckpointMarker] = []
+        for (index, checkpoint) in trip.checkpoints.enumerated() {
+            var image: UIImage?
+            let linked = links[checkpoint.id] ?? []
+            if let cover = linked.first {
+                image = await PhotoStorageService.loadThumbnail(filename: cover.filename, maxSize: 120)
+            }
+            markers.append(CheckpointMarker(
+                id: checkpoint.id,
+                latitude: checkpoint.latitude, longitude: checkpoint.longitude,
+                number: index + 1,
+                name: checkpoint.name ?? AppStrings.checkpointDefaultName(lang.language, number: index + 1),
+                reading: CheckpointReading.text(
+                    elapsed: checkpoint.elapsedFromStart,
+                    metres: checkpoint.distanceFromStart,
+                    lang: lang.language),
+                image: image,
+                photoCount: linked.count,
+                timestamp: checkpoint.timestamp,
+                coverPhotoId: linked.first?.id))
+        }
+        guard !Task.isCancelled else { return }
+        checkpointMarkers = markers
+
+        // Свободные снимки для ленты — те же, что стоят булавками на карте,
+        // но с «сколько до сюда»: ленте нужны время и километры, не координата.
+        let loose: [TripMoments.PlacedPhoto] = placed.compactMap { item in
+            guard let photo = trip.photos.first(where: { $0.id == item.id }),
+                  let fix = placement(ofPhoto: item.id) else { return nil }
+            return TripMoments.PlacedPhoto(photo: photo, fix: fix)
+        }
+        tripMoments = TripMoments.build(checkpoints: trip.checkpoints, links: links, loose: loose)
+    }
+
+    /// Открыть снимок, нажатый на карте.
+    private func openPhoto(id: UUID) {
+        guard let index = ownPhotoItems.firstIndex(where: { $0.id == id }) else { return }
+        // Просмотрщик — второй fullScreenCover; поверх открытой карты UIKit его
+        // молча отклонит («already presenting»). Сначала опускаем карту и даём
+        // ей доиграть, потом поднимаем снимок.
+        guard isMapFullscreen else {
+            selectedPhotoIndex = index
+            return
+        }
+        isMapFullscreen = false
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(450))
+            selectedPhotoIndex = index
+        }
+    }
+
+    /// Что делать, когда человек подтвердил место на карте.
+    ///
+    /// Отдельным свойством, а не тернарником прямо в вызове: с замыканием
+    /// внутри списка из десятка аргументов вывод типов перестаёт укладываться
+    /// в разумное время, и сборка падает по таймауту компилятора.
+    private var checkpointAdder: ((TripRouteLocator.Fix) -> Void)? {
+        guard isOwn else { return nil }
+        // Имя не запекаем: «Отметка 2» в базе разошлась бы с номером в списке
+        // (он по времени) и с языком телефона. Номер — при показе.
+        return { fix in
+            guard let id = trip?.id else { return }
+            mapVM.tripManager.addCheckpoint(to: id, at: fix)
+            reloadCheckpoints()
+        }
+    }
+
+    /// Где снят этот кадр — по координате в нём или по времени и треку.
+    private func placement(ofPhoto photoId: UUID) -> TripRouteLocator.Fix? {
+        guard let trip, let photo = trip.photos.first(where: { $0.id == photoId }) else { return nil }
+        if let coordinate = photo.exifCoordinate,
+           let pass = TripRouteLocator.passes(
+               near: coordinate, in: trip.trackPoints, radius: 300, startDate: trip.startDate).first {
+            return pass
+        }
+        if let capturedAt = photo.capturedAt {
+            return TripRouteLocator.fix(at: capturedAt, in: trip.trackPoints, startDate: trip.startDate)
+        }
+        return nil
+    }
+
+    private func canMarkPlace(fromPhoto photoId: UUID) -> Bool {
+        placement(ofPhoto: photoId) != nil
+    }
+
+    /// Просмотрщик — отдельным методом. Ours from disk, someone else's from the
+    /// server, and a companion's remote-only upload on OUR OWN trip — one viewer
+    /// either way (canon 117:1086 и его социальный близнец 117:1589).
+    ///
+    /// Вынесено из `body` не для порядка: с двумя новыми замыканиями вызов
+    /// перестал проходить вывод типов за разумное время (см. CLAUDE.md про
+    /// предел `TripDetailView`).
+    private func photoViewer(index: Int) -> PhotoFullScreenView {
+        PhotoFullScreenView(
+            pages: fullScreenPhotoPages(),
+            initialIndex: index,
+            region: trip?.region,
+            language: lang.language,
+            // Deleting was only ever a long press on a thumbnail — an
+            // affordance with nothing on screen to suggest it. The viewer is
+            // where you decide a picture isn't worth keeping, so the bin lives
+            // here too. Own trips only: on someone else's, deleting isn't ours
+            // to offer (the server authorises the TRIP owner).
+            onDelete: deletePhotoHandler,
+            onMarkPlace: markPlaceHandler,
+            canMarkPlace: canMarkPlaceHandler,
+            onDismiss: { selectedPhotoIndex = nil }
+        )
+    }
+
+    private var deletePhotoHandler: ((UUID) -> Void)? {
+        guard isOwn else { return nil }
+        return { [self] pageId in
+            guard let item = ownPhotoItems.first(where: { $0.id == pageId }) else { return }
+            selectedPhotoIndex = nil
+            deleteOwnPhoto(item)
+        }
+    }
+
+    // Замыкания с явными типами — вне вызова просмотрщика. Внутри `body`
+    // компилятор уже на пределе (см. CLAUDE.md), и два лишних безымянных
+    // замыкания в одном вызове роняют его по таймауту.
+    private var markPlaceHandler: ((UUID) -> Void)? {
+        guard isOwn else { return nil }
+        return { [self] pageId in markPlace(fromPhoto: pageId) }
+    }
+
+    private var canMarkPlaceHandler: ((UUID) -> Bool)? {
+        guard isOwn else { return nil }
+        return { [self] pageId in canMarkPlace(fromPhoto: pageId) }
+    }
+
+    /// Снимок становится отметкой. Если отметка в этом месте уже есть — снимок
+    /// становится её обложкой, а не плодит вторую точку в трёх метрах.
+    private func markPlace(fromPhoto photoId: UUID) {
+        guard let trip, let fix = placement(ofPhoto: photoId) else { return }
+        if let existing = trip.checkpoints.first(where: {
+            abs($0.timestamp.timeIntervalSince(fix.timestamp)) <= TripCheckpointPhotos.timeWindow
+        }) {
+            mapVM.tripManager.attachPhoto(photoId, toCheckpoint: existing)
+        } else {
+            mapVM.tripManager.addCheckpoint(to: trip.id, at: fix, photoId: photoId)
+        }
+        reloadCheckpoints()
+        toastItem = ToastItem(type: .success, message: AppStrings.checkpointMarkPlace(lang.language))
+    }
+
+    /// Перечитать отметки после правки.
+    ///
+    /// Отдельной функцией, потому что зовётся из трёх мест, и каждое из них
+    /// однажды забыло бы: экран рисуется из `trip`, и без перечитывания
+    /// переименованная отметка остаётся со старым именем до выхода с экрана.
+    private func reloadCheckpoints() {
+        guard let id = trip?.id,
+              let fresh = mapVM.tripManager.tripDetail(id: id) else { return }
+        trip?.checkpoints = fresh.checkpoints
+        restartPinsRebuild()
+    }
+
+    /// Перестроение булавок и маркеров — всегда одно, последнее. Две задачи
+    /// подряд заканчиваются в случайном порядке, и первая, дольше грузившая
+    /// миниатюры, переписала бы свежий результат второй удалённой отметкой.
+    private func restartPinsRebuild() {
+        pinsTask?.cancel()
+        pinsTask = Task { await rebuildPhotoPins() }
+    }
+
     // MARK: - Map hero
     // Release-style hero restored by explicit user decision (2026-08-06):
     // real interactive street map with the speed-colored route, inline
@@ -1409,6 +1709,17 @@ struct TripDetailView: View {
                         // top exactly where this map is, so the gesture had
                         // nowhere to begin and the refresh looked broken.
                         isInteractive: false,
+                        checkpointMarkers: checkpointMarkers,
+                        checkpointMarkerStyle: .compact,
+                        photoPins: photoPins,
+                        onPhotoTap: { openPhoto(id: $0) },
+                        // Кружок на герое выглядит нажимаемым — и нажимается:
+                        // ведёт к своей строке в «Моментах», а не открывает
+                        // карточку поверх карты, которую нельзя двигать.
+                        onCheckpointTap: { id in
+                            Haptics.selection()
+                            momentScrollTarget = id
+                        },
                         // Our own territory fog has no business over someone
                         // else's route.
                         fogCutoffDate: trip.endDate,
@@ -1520,6 +1831,14 @@ struct TripDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 DetailSectionHeader(text: AppStrings.detailsSection(lang.language))
                 statsGrid(trip: trip, c: c)
+            }
+
+            // «Моменты» есть у каждой своей поездки, даже без отметок: старт и
+            // финиш со временем и итогом уже рассказывают дорогу, а пустая
+            // линия между ними сама зовёт поставить точку. Решение владельца
+            // 8 сентября: «пусть просто старт-финиш будет, красиво и удобно».
+            if isOwn {
+                momentsSection(trip: trip)
             }
 
             if elevationSeries.count > 1 {
@@ -2597,6 +2916,26 @@ struct TripDetailView: View {
             companions: companionsStore.companionsByTrip[tripId] ?? [],
             viewerAccountId: TokenStore.shared.accountId
         )
+    }
+
+    /// Лента «Моменты». Вынесена из тела: `TripDetailView.body` стоит у
+    /// предела вывода типов, и каждый новый вызов с замыканиями режется сюда.
+    private func momentsSection(trip: Trip) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DetailSectionHeader(text: AppStrings.tripMomentsTitle(lang.language))
+            TripMomentsTimeline(
+                moments: tripMoments,
+                startDate: trip.startDate,
+                endDate: trip.endDate,
+                totalElapsed: trip.duration,
+                totalMetres: trip.distance,
+                language: lang.language,
+                highlightedId: highlightedMomentId,
+                onSelectCheckpoint: isOwn ? { selectedCheckpoint = $0 } : nil,
+                onNamePlace: isOwn ? { markPlace(fromPhoto: $0.id) } : nil,
+                onOpenPhoto: { openPhoto(id: $0) }
+            )
+        }
     }
 
     @ViewBuilder

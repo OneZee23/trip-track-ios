@@ -8,6 +8,8 @@ final class TripIntentHandler {
 
     var onPause: (() -> Void)?
     var onStop: (() -> Void)?
+    /// Отметка на маршруте, поставленная кнопкой на Live Activity.
+    var onCheckpoint: (() -> Void)?
     /// Fired by `StartTripIntent` (e.g. via Shortcuts personal automation
     /// "When CarPlay connects → Start Trip with vehicle X"). Optional UUID
     /// is the vehicle id to switch to before recording starts; nil keeps
@@ -22,6 +24,10 @@ final class TripIntentHandler {
 
     func handleStop() {
         onStop?()
+    }
+
+    func handleCheckpoint() {
+        onCheckpoint?()
     }
 
     func handleStart(vehicleId: UUID?) {

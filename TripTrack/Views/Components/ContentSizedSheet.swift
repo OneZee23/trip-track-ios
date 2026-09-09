@@ -68,8 +68,14 @@ struct ContentSizedSheet: ViewModifier {
 
     /// Looked up rather than laid out: the detent is a number, not a view, so
     /// there is no safe area to read from where it is needed.
+    ///
+    /// iOS 26 и новее: лист «плавает» над индикатором «домой» с закруглёнными
+    /// нижними углами, и полосу под ним отступает сама система. Добавлять её
+    /// сюда значило бы отступить дважды — под кнопками появлялась пустая
+    /// полоса в ~30 пунктов, которую человек и заметил.
     private static var bottomInset: CGFloat {
-        UIApplication.shared.connectedScenes
+        if #available(iOS 26, *) { return 0 }
+        return UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow?.safeAreaInsets.bottom }
             .first ?? 0
     }

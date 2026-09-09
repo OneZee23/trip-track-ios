@@ -1633,6 +1633,87 @@ enum AppStrings {
     static func notifSkipAction(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifSkipAction", ru: "Пропустить", en: "Skip")
     }
+    // MARK: - Отметки на маршруте (0.6.5)
+
+    /// Раздел на экране поездки.
+    static func checkpointsTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointsTitle", ru: "Отметки", en: "Checkpoints")
+    }
+    /// Лента на экране поездки: старт, отметки, снимки, финиш — по порядку.
+    static func tripMomentsTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tripMomentsTitle", ru: "Моменты", en: "Moments")
+    }
+    static func momentStart(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "momentStart", ru: "Старт", en: "Start")
+    }
+    static func momentFinish(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "momentFinish", ru: "Финиш", en: "Finish")
+    }
+    /// У стопки снимков без отметки: снимок становится обложкой новой отметки.
+    static func momentNamePlace(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "momentNamePlace", ru: "Назвать место", en: "Name this place")
+    }
+    /// Одна отметка — из неё же собирается имя по умолчанию: «Отметка 2».
+    static func checkpointWord(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointWord", ru: "Отметка", en: "Checkpoint")
+    }
+    static func checkpointDefaultName(_ lang: LanguageManager.Language, number: Int) -> String {
+        "\(checkpointWord(lang)) \(number)"
+    }
+    static func checkpointAdd(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointAdd", ru: "Поставить отметку", en: "Add checkpoint")
+    }
+    /// Главное число отметки: сколько прошло от старта поездки до неё.
+    static func checkpointFromStart(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointFromStart", ru: "От старта", en: "From start")
+    }
+    /// Второе число: сколько заняло от предыдущей отметки.
+    static func checkpointLeg(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointLeg", ru: "Отрезок", en: "Leg")
+    }
+    static func checkpointNamePlaceholder(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointNamePlaceholder", ru: "Например, море", en: "For example, the sea")
+    }
+    static func checkpointDelete(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointDelete", ru: "Удалить отметку", en: "Delete checkpoint")
+    }
+    static func checkpointAttachPhoto(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointAttachPhoto", ru: "Прикрепить фото", en: "Attach photo")
+    }
+    static func checkpointEmpty(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointEmpty", ru: "Отметок пока нет", en: "No checkpoints yet")
+    }
+    static func checkpointEmptyHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointEmptyHint",
+           ru: "Нажмите на маршрут, чтобы отметить место и узнать, сколько до него",
+           en: "Tap the route to mark a place and see how long it took to get there")
+    }
+    /// Дорога «туда и обратно» рисуется по одним улицам, и палец попадает в оба
+    /// проезда. Выбрать за человека нельзя: это разные ответы на его вопрос.
+    static func checkpointChoosePass(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointChoosePass", ru: "Какой проезд?", en: "Which pass?")
+    }
+    /// Снимки, снятые рядом с отметкой по времени или месту, — связь выведена сама.
+    static func checkpointPhotosNearby(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointPhotosNearby", ru: "Снимки отметки", en: "Checkpoint photos")
+    }
+    static func checkpointPhotosOther(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointPhotosOther", ru: "Добавить из поездки", en: "Add from this trip")
+    }
+    /// Подпись на снимке-обложке в редакторе отметки.
+    static func checkpointCover(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointCover", ru: "Обложка", en: "Cover")
+    }
+    /// Из просмотрщика фото: сделать место съёмки отметкой.
+    static func checkpointMarkPlace(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointMarkPlace", ru: "Отметить это место", en: "Mark this place")
+    }
+    static func checkpointChoosePassHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "checkpointChoosePassHint",
+           ru: "Здесь вы проезжали несколько раз",
+           en: "You drove past here more than once")
+    }
+
     static func notifTripStopTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifTripStopTitle", ru: "Поездка закончена?", en: "Trip finished?")
     }
@@ -1640,7 +1721,10 @@ enum AppStrings {
         case bluetooth
         case inactivity
     }
-    static func notifTripStopBody(_ lang: LanguageManager.Language, minutes: Int, reason: TripStopReason) -> String {
+    /// `minutes == nil` — спрашиваем, но сами не завершаем. Хвост про
+    /// автозавершение тогда был бы обещанием, которого код не держит: ровно
+    /// такое обещание и разорвало человеку поездку в сентябре 2026.
+    static func notifTripStopBody(_ lang: LanguageManager.Language, minutes: Int?, reason: TripStopReason) -> String {
         let cause: String
         switch reason {
         case .bluetooth:
@@ -1650,6 +1734,26 @@ enum AppStrings {
             cause = tr(lang, "notifStopCauseInactivity",
                        ru: "Машина не движется.", en: "Vehicle isn't moving.")
         }
+        guard let minutes else {
+            let ask: String
+            switch lang {
+            case .ru: ask = "Завершить запись?"
+            case .en: ask = "Stop recording?"
+            case .de: ask = "Aufzeichnung beenden?"
+            case .es: ask = "¿Detener la grabación?"
+            case .fr: ask = "Arrêter l'enregistrement ?"
+            case .it: ask = "Interrompere la registrazione?"
+            case .pl: ask = "Zakończyć nagrywanie?"
+            case .id: ask = "Hentikan perekaman?"
+            case .tr: ask = "Kayıt durdurulsun mu?"
+            case .fil: ask = "Ihinto ang pag-record?"
+            case .uk: ask = "Завершити запис?"
+            case .kk: ask = "Жазуды аяқтау керек пе?"
+            case .pt: ask = "Parar a gravação?"
+            }
+            return "\(cause) \(ask)"
+        }
+
         let mins = "\(minutes) \(minutesUnitShort(lang))"
         let tail: String
         switch lang {
