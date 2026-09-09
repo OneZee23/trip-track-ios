@@ -22,6 +22,9 @@ struct SyncOperation: Identifiable, Equatable {
         /// машины и уходит только при включённой синхронизации.
         case vehiclePhoto
         case settings
+        /// Путешествие (0.6.6) — личные данные, как машина: никогда не уезжает
+        /// без включённого облака, и публичного шеринга у него ещё нет.
+        case journey
     }
 
     enum Action: String {
@@ -110,7 +113,7 @@ final class SyncQueue: ObservableObject {
 
     /// Priority order: metadata first, then photos (heavier).
     private let entityPriority: [SyncOperation.EntityType] = [
-        .settings, .vehicle, .trip, .photo
+        .settings, .vehicle, .journey, .trip, .photo
     ]
 
     init() {

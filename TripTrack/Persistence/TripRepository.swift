@@ -104,6 +104,8 @@ protocol TripRepository {
     func journeyOverlapping(start: Date, end: Date?, excluding: UUID?) -> Journey?
     func trips(in journey: Journey) -> [Trip]
     func journeySyncStatus(id: UUID) -> Int16?
+    func applyRemoteJourney(_ payload: JourneySyncPayload)
+    func markJourneySynced(id: UUID, conflictVersion: Int)
 }
 
 // MARK: - CoreData Implementation
@@ -1493,5 +1495,29 @@ final class CoreDataTripRepository: TripRepository {
         fetchAllTrips()
             .filter { journey.contains($0) }
             .sorted { $0.startDate < $1.startDate }
+    }
+
+    func applyRemoteJourney(_ p: JourneySyncPayload) {
+        let existing = journeyEntity(id: p.id)
+        // Локальная правка, которая ещё не уехала, старше серверной копии.
+        if existing?.syncStatus == SyncStatus.pendingUpload.rawValue { return }
+        let e = existing ?? { let n = JourneyEntity(context: context); n.id = p.id; n.createdAt = Date(); return n }()
+        e.userId = SettingsManager.shared.localUserId
+        e.title = p.title; e.startDate = p.startDate; e.endDate = p.endDate
+        e.excludedTripIdsJSON = Self.encodePhotoIds(p.excludedTripIds)
+        e.coverPhotoId = p.coverPhotoId; e.isPrivate = p.isPrivate
+        e.conflictVersion = Int32(p.conflictVersion)
+        e.lastModifiedAt = p.lastModifiedAt
+        e.serverCreatedAt = p.serverCreatedAt ?? e.serverCreatedAt ?? Date()
+        e.syncStatus = SyncStatus.synced.rawValue
+        // Сохранение — в PullApplier.flushPendingApplies(), как у всех.
+    }
+
+    func markJourneySynced(id: UUID, conflictVersion: Int) {
+        guard let e = journeyEntity(id: id) else { return }
+        e.syncStatus = SyncStatus.synced.rawValue
+        e.conflictVersion = Int32(conflictVersion)
+        e.serverCreatedAt = e.serverCreatedAt ?? Date()
+        persistenceController.save()
     }
 }

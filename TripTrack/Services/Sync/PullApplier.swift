@@ -32,6 +32,10 @@ final class PullApplier {
         if let s = response.settings {
             repo.applyRemoteSettings(s)
         }
+        if let journeys = response.journeys {
+            for p in journeys.upserted { repo.applyRemoteJourney(p) }
+            for id in journeys.deleted { repo.deleteJourneyHard(id: id) }
+        }
         // One save for the whole batch instead of N saves (one per row).
         // CoreData performance scales linearly with save count, so a
         // pull of 50 trips drops from 50× saveContext() to 1×.

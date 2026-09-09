@@ -16,6 +16,9 @@ enum APIEndpoint {
     static let vehicleUpsert = "/vehicles/upsert"
     static let vehicleDelete = "/vehicles/delete"
 
+    static let journeyUpsert = "/journeys/upsert"
+    static let journeyDelete = "/journeys/delete"
+
     static let settingsUpsert = "/settings/upsert"
 
     static let photoUpload = "/photos/upload"

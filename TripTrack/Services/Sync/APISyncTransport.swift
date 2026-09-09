@@ -33,6 +33,9 @@ struct VehicleDeleteRequest: Codable {
     let id: UUID
 }
 
+struct JourneyUpsertResponse: Codable { let id: UUID; let conflictVersion: Int }
+struct JourneyDeleteRequest: Codable { let id: UUID }
+
 struct SettingsUpsertResponse: Codable {
     let conflictVersion: Int
 }
@@ -65,6 +68,12 @@ final class APISyncTransport: SyncTransport {
             try await deleteVehicle(id: operation.entityId)
         case (.vehicle, .unpublish):
             break  // vehicles are never publishable on their own
+        case (.journey, .upload), (.journey, .update):
+            try await uploadJourney(id: operation.entityId)
+        case (.journey, .delete):
+            try await deleteJourney(id: operation.entityId)
+        case (.journey, .unpublish):
+            break  // публичность путешествия — следующая версия
         case (.photo, .upload), (.photo, .update):
             try await uploadPhoto(id: operation.entityId)
         case (.photo, .delete):
@@ -395,6 +404,23 @@ final class APISyncTransport: SyncTransport {
     private func deleteVehicle(id: UUID) async throws {
         let _: EmptyResponse = try await client.post(APIEndpoint.vehicleDelete, body: VehicleDeleteRequest(id: id))
         repo.deleteVehicleHard(id: id)
+    }
+
+    // MARK: Journey
+
+    private func uploadJourney(id: UUID) async throws {
+        guard let journey = repo.fetchJourney(id: id) else { return }
+        do {
+            let res: JourneyUpsertResponse = try await client.post(APIEndpoint.journeyUpsert, body: JourneySyncPayload(journey: journey))
+            repo.markJourneySynced(id: id, conflictVersion: res.conflictVersion)
+        } catch let err as APIError {
+            if case .conflictDetected = err { /* следующий pull разрулит */ } else { throw err }
+        }
+    }
+
+    private func deleteJourney(id: UUID) async throws {
+        let _: EmptyResponse = try await client.post(APIEndpoint.journeyDelete, body: JourneyDeleteRequest(id: id))
+        repo.deleteJourneyHard(id: id)
     }
 
     // MARK: Settings

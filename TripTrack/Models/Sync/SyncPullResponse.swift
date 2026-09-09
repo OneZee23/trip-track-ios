@@ -13,6 +13,10 @@ struct SyncPullResponse: Codable {
         let upserted: [PhotoSyncPayload]
         let deleted: [UUID]
     }
+    struct JourneysSection: Codable {
+        let upserted: [JourneySyncPayload]
+        let deleted: [UUID]
+    }
 
     /// Count of non-deleted entities the server currently holds for this
     /// account. Client compares against local `synced` count to detect
@@ -22,6 +26,10 @@ struct SyncPullResponse: Codable {
         let trips: Int
         let vehicles: Int
         let photos: Int
+        /// Not wired into reconciliation yet (0.6.6) — the manifest/heal path
+        /// stays trips/vehicles/photos only. Decoded so the struct doesn't
+        /// choke on a server that starts sending it.
+        let journeys: Int?
     }
 
     let trips: TripsSection
@@ -30,6 +38,8 @@ struct SyncPullResponse: Codable {
     let settings: SettingsSyncPayload?
     let serverTime: String
     let ownedCounts: OwnedCounts?
+    /// Optional: сервер до 0.6.6 секции не знает.
+    let journeys: JourneysSection?
 }
 
 /// Full list of entity UUIDs the server currently owns. Fetched only when

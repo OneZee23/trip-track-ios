@@ -62,4 +62,32 @@ final class JourneyRepositoryTests: XCTestCase {
         repo.deleteJourneyHard(id: j.id)
         XCTAssertNil(repo.fetchJourney(id: j.id))
     }
+
+    /// Путешествие, приехавшее с сервера впервые, приземляется как `synced` —
+    /// иначе очередь тут же попыталась бы отправить его обратно.
+    func testApplyRemoteJourneyLandsAsSynced() {
+        let id = UUID()
+        let payload = JourneySyncPayload(journey: Journey(
+            id: id, title: "Юг", startDate: t0, endDate: t0.addingTimeInterval(2 * 86_400)))
+        repo.applyRemoteJourney(payload)
+        repo.flushPendingApplies()
+        XCTAssertEqual(repo.journeySyncStatus(id: id), SyncStatus.synced.rawValue)
+        XCTAssertEqual(repo.fetchJourney(id: id)?.title, "Юг")
+    }
+
+    /// Локальная правка, ещё не уехавшая, старше серверной копии — pull не
+    /// имеет права её переписать (иначе локальные правки терялись бы на
+    /// каждом фоновом пуле, который выигрывает гонку с очередью).
+    func testApplyRemoteJourneyDoesNotOverwritePendingUpload() {
+        let local = repo.saveJourney(Journey(title: "Местное имя", startDate: t0, endDate: t0))
+        XCTAssertEqual(repo.journeySyncStatus(id: local.id), SyncStatus.pendingUpload.rawValue)
+
+        let remote = JourneySyncPayload(journey: Journey(
+            id: local.id, title: "Серверное имя", startDate: t0, endDate: t0))
+        repo.applyRemoteJourney(remote)
+        repo.flushPendingApplies()
+
+        XCTAssertEqual(repo.journeySyncStatus(id: local.id), SyncStatus.pendingUpload.rawValue)
+        XCTAssertEqual(repo.fetchJourney(id: local.id)?.title, "Местное имя")
+    }
 }

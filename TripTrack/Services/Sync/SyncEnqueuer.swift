@@ -80,8 +80,9 @@ enum SyncEnqueuer {
             guard let entity = fetchPhotoEntity(id: op.entityId),
                   let trip = entity.trip else { return false }
             return trip.isPrivate == false
-        case .vehicle, .vehiclePhoto, .settings:
+        case .vehicle, .vehiclePhoto, .settings, .journey:
             // Personal metadata — never leaves device without full sync ON.
+            // Публичный шеринг путешествия — следующая версия.
             return false
         }
     }
