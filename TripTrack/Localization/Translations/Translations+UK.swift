@@ -1215,6 +1215,7 @@ extension Translations {
         "journeyOverlaps": "Ці дати вже зайняті іншою подорожжю",
         "journeyEmptyTitle": "Поки що порожньо",
         "journeyAddFromTrip": "Додати поїздку",
+        "journeyCreated": "Подорож створено",
     ]
 
 }

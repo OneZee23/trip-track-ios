@@ -1215,6 +1215,7 @@ extension Translations {
         "journeyOverlaps": "Kabilang na ang mga petsang ito sa ibang paglalakbay",
         "journeyEmptyTitle": "Wala pa",
         "journeyAddFromTrip": "Magdagdag ng biyahe",
+        "journeyCreated": "Nagawa na ang paglalakbay",
     ]
 
 }

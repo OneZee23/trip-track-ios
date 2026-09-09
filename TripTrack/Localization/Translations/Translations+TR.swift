@@ -1215,6 +1215,7 @@ extension Translations {
         "journeyOverlaps": "Bu tarihler başka bir yolculuğa ait",
         "journeyEmptyTitle": "Henüz boş",
         "journeyAddFromTrip": "Gezi ekle",
+        "journeyCreated": "Yolculuk oluşturuldu",
     ]
 
 }

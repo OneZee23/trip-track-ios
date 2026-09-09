@@ -1215,6 +1215,7 @@ extension Translations {
         "journeyOverlaps": "Essas datas já pertencem a outra viagem",
         "journeyEmptyTitle": "Ainda vazio",
         "journeyAddFromTrip": "Adicionar viagem",
+        "journeyCreated": "Viagem criada",
     ]
 
 }

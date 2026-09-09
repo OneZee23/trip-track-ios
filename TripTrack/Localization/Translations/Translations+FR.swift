@@ -1215,6 +1215,7 @@ extension Translations {
         "journeyOverlaps": "Ces dates appartiennent déjà à un autre voyage",
         "journeyEmptyTitle": "Rien pour l'instant",
         "journeyAddFromTrip": "Ajouter un trajet",
+        "journeyCreated": "Voyage créé",
     ]
 
 }

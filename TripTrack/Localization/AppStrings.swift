@@ -1800,6 +1800,11 @@ enum AppStrings {
     static func journeyAddFromTrip(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyAddFromTrip", ru: "Добавить поездку", en: "Add a trip")
     }
+    /// Тост после создания: лист уже закрылся, и подтвердить, что оно
+    /// случилось, больше нечем.
+    static func journeyCreated(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyCreated", ru: "Путешествие создано", en: "Journey created")
+    }
 
     static func notifTripStopTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifTripStopTitle", ru: "Поездка закончена?", en: "Trip finished?")

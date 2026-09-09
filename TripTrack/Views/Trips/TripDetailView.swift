@@ -112,6 +112,8 @@ struct TripDetailView: View {
     @State private var showTripActions = false
     /// Открытая отметка — лист с именем, снимком и удалением.
     @State private var selectedCheckpoint: TripCheckpoint?
+    /// Лист «Объединить в путешествие» — соседи за ±7 дней и имя.
+    @State private var showJourneyComposer = false
     /// Снимки, расставленные по маршруту, вместе с готовыми миниатюрами.
     @State private var photoPins: [PhotoPin] = []
     /// Отметки с подписью и миниатюрой прикреплённого снимка — для карты.
@@ -410,7 +412,7 @@ struct TripDetailView: View {
                 work()
             }
         }
-        return [
+        var items: [ActionPopoverList.Item] = [
             .init(
                 title: AppStrings.edit(lang.language), systemImage: "pencil",
                 accessibilityId: "detail_action_edit"
@@ -432,19 +434,33 @@ struct TripDetailView: View {
                     if trip.isPrivate { requestPublish() } else { requestUnpublish() }
                 }
             },
-            // Last in the list, and the only destructive entry. It lived as a
-            // red button at the foot of the screen for a while; a screen that
-            // ENDS on «delete» reads as if that were the conclusion of looking
-            // back at a trip.
-            .init(
-                title: AppStrings.deleteTrip(lang.language),
-                systemImage: "trash",
-                isDestructive: true,
-                accessibilityId: "detail_action_delete"
-            ) {
-                present { showDeleteConfirm = true }
-            },
         ]
+        // Поездка, уже лежащая в путешествии, пункта не получает вовсе:
+        // объединять её второй раз некуда, а «Открыть путешествие» ведёт на
+        // экран, которого пока нет. Пункт, который ничего не открывает, хуже
+        // его отсутствия.
+        if JourneyManager.shared.journey(containing: trip.id) == nil {
+            items.append(.init(
+                title: AppStrings.journeyCombine(lang.language),
+                systemImage: "suitcase",
+                accessibilityId: "detail_action_journey"
+            ) {
+                present { showJourneyComposer = true }
+            })
+        }
+        // Last in the list, and the only destructive entry. It lived as a
+        // red button at the foot of the screen for a while; a screen that
+        // ENDS on «delete» reads as if that were the conclusion of looking
+        // back at a trip.
+        items.append(.init(
+            title: AppStrings.deleteTrip(lang.language),
+            systemImage: "trash",
+            isDestructive: true,
+            accessibilityId: "detail_action_delete"
+        ) {
+            present { showDeleteConfirm = true }
+        })
+        return items
     }
 
     /// Fix 3: whether `myAccountId` is an ACCEPTED companion on a trip it
@@ -675,6 +691,28 @@ struct TripDetailView: View {
                     reloadCheckpoints()
                 }
             )
+            .environmentObject(lang)
+            .environmentObject(themeManager)
+            .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
+        }
+        .sheet(isPresented: $showJourneyComposer) { journeyPresentation() }
+    }
+
+    /// Лист «Объединить в путешествие» — отдельным методом по той же причине,
+    /// что и лист отметки выше: каждое лишнее выражение в `body` этого экрана
+    /// приближает таймаут вывода типов.
+    ///
+    /// Путешествие из замыкания нужно ровно на тост: экран путешествия — Task 7,
+    /// и открывать сейчас нечего.
+    @ViewBuilder
+    private func journeyPresentation() -> some View {
+        if let trip {
+            JourneyComposerSheet(anchor: trip) { _ in
+                toastItem = ToastItem(
+                    type: .success,
+                    message: AppStrings.journeyCreated(lang.language)
+                )
+            }
             .environmentObject(lang)
             .environmentObject(themeManager)
             .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)

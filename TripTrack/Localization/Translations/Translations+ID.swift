@@ -1215,6 +1215,7 @@ extension Translations {
         "journeyOverlaps": "Tanggal ini sudah dipakai perjalanan lain",
         "journeyEmptyTitle": "Belum ada apa-apa",
         "journeyAddFromTrip": "Tambah perjalanan",
+        "journeyCreated": "Perjalanan dibuat",
     ]
 
 }

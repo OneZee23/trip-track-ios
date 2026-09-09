@@ -1215,6 +1215,7 @@ extension Translations {
         "journeyOverlaps": "Бұл даталар басқа саяхатқа тиесілі",
         "journeyEmptyTitle": "Әзірге бос",
         "journeyAddFromTrip": "Сапар қосу",
+        "journeyCreated": "Саяхат жасалды",
     ]
 
 }
