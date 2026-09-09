@@ -26,6 +26,10 @@ struct ProfileView: View {
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
+    /// Наблюдается, а не читается разово: путешествие создаётся с экрана
+    /// поездки, и «Мои» обязаны схлопнуть плечи сразу по возвращении, а не
+    /// после следующей перезагрузки ленты.
+    @ObservedObject private var journeys = JourneyManager.shared
 
     /// True when hosted as the «Я» tab (0.6.0) — the floating tab bar needs
     /// scroll clearance. False when presented as the legacy Feed sheet.
@@ -90,6 +94,9 @@ struct ProfileView: View {
         /// reached from `.publicProfile`.
         case followList(UUID, FollowListMode)
         case trip(UUID)
+        /// Путешествие (0.6.6) — по id, а не по значению: даты правятся с
+        /// самого экрана, и копия окна показывала бы прежние плечи.
+        case journey(UUID)
         /// A «Со мной» trip — NOT in the local database (someone else's),
         /// so it carries its own `SocialFeedTrip` payload rather than just
         /// an id, exactly like `ProfilePreviewDest.socialTrip` does for the
@@ -340,6 +347,9 @@ struct ProfileView: View {
                         tripId: id,
                         viewModel: TripsViewModel(tripManager: mapVM.tripManager)
                     )
+                case .journey(let id):
+                    // Экран путешествия сам рисует свою шапку и прячет таб-бар.
+                    JourneyDetailView(journeyId: id)
                 case .companionTrip(let trip):
                     // Same construction FeedView's `.socialTrip` destination
                     // uses: `social:` feeds the screen someone else's trip,
@@ -580,7 +590,7 @@ struct ProfileView: View {
         case .publicGarage(let id, let name): return .publicGarage(id, name)
         case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
         case .garage, .stats, .myProfile, .levels, .country, .achievements,
-             .achievement, .trip, .companionTrip:
+             .achievement, .trip, .journey, .companionTrip:
             return nil
         }
     }
@@ -956,39 +966,88 @@ struct ProfileView: View {
         // ваши поездки» card would be a lie about a library that has trips,
         // and the calendar's own «сбросить» row is already the way out.
         if !trips.isEmpty {
+            // Плечи путешествия схлопываются в одну карточку — и только здесь.
+            // Считается один раз на отрисовку блока: и сетке, и списку нужен
+            // один и тот же ответ о том, что спрятано.
+            let rows = historyRows
+
             switch historyMode {
             case .grid:
-                LazyVGrid(columns: Self.gridColumns, spacing: 8) {
-                    ForEach(trips) { trip in
-                        ProfileTripTile(
-                            trip: trip,
-                            onTap: { push(.trip(trip.id)) }
-                        )
-                    }
-                }
-                .padding(.horizontal, 14)
-                // Breathing room before «Со мной», whose own label only
-                // carries a 4pt top pad.
-                .padding(.bottom, 12)
+                gridHistory(rows)
             case .list:
-                // The level shown is the one held WHEN each trip was driven,
-                // not today's. Same number on every card told the owner what
-                // they already knew; this way the list shows them growing.
-                let historicalLevels = TripLevelHistory.levels(for: trips)
-                LazyVStack(spacing: 12) {
-                    ForEach(trips) { trip in
-                        ProfileTripCardView(
-                            trip: trip,
-                            level: historicalLevels?[trip.id] ?? settings.profileLevel,
-                            vehicle: settings.vehicles.first { $0.id == trip.vehicleId },
-                            onTap: { push(.trip(trip.id)) }
-                        )
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 12)
+                listHistory(rows, trips: trips)
             }
         }
+    }
+
+    /// «История» с учётом путешествий. `visibleTrips` уже отфильтрован
+    /// календарём, так что окно, у которого в отрезке не осталось плеч,
+    /// строкой не станет.
+    private var historyRows: [HistoryRow] {
+        HistoryFolding.fold(trips: visibleTrips, journeys: journeys.journeys)
+    }
+
+    /// Сетка рисуется кусками: подряд идущие поездки — своей решёткой,
+    /// путешествие — карточкой во всю ширину между ними. Растянуть клетку
+    /// `LazyVGrid` на обе колонки нечем, а две половинки путешествия — не
+    /// карточка.
+    private func gridHistory(_ rows: [HistoryRow]) -> some View {
+        LazyVStack(spacing: 12) {
+            // Ключ — id первой строки куска, а не его номер: по номеру SwiftUI
+            // считает вторую решётку той же, что была первой, и после
+            // объединения плечи переезжают между кусками без анимации.
+            ForEach(HistoryFolding.runs(rows), id: \.[0].id) { run in
+                if run.count == 1, case .journey(let journey, let legs) = run[0] {
+                    JourneyCardView(journey: journey, legs: legs) {
+                        push(.journey(journey.id))
+                    }
+                } else {
+                    LazyVGrid(columns: Self.gridColumns, spacing: 8) {
+                        ForEach(run) { row in
+                            if case .trip(let trip) = row {
+                                ProfileTripTile(
+                                    trip: trip,
+                                    onTap: { push(.trip(trip.id)) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        // Breathing room before «Со мной», whose own label only
+        // carries a 4pt top pad.
+        .padding(.bottom, 12)
+    }
+
+    private func listHistory(_ rows: [HistoryRow], trips: [Trip]) -> some View {
+        // The level shown is the one held WHEN each trip was driven,
+        // not today's. Same number on every card told the owner what
+        // they already knew; this way the list shows them growing.
+        // Считается по ВСЕМ видимым поездкам, а не по строкам: плечо внутри
+        // путешествия — такая же поездка, и убрать её из истории уровней
+        // значило бы сдвинуть уровни у соседей.
+        let historicalLevels = TripLevelHistory.levels(for: trips)
+        return LazyVStack(spacing: 12) {
+            ForEach(rows) { row in
+                switch row {
+                case .trip(let trip):
+                    ProfileTripCardView(
+                        trip: trip,
+                        level: historicalLevels?[trip.id] ?? settings.profileLevel,
+                        vehicle: settings.vehicles.first { $0.id == trip.vehicleId },
+                        onTap: { push(.trip(trip.id)) }
+                    )
+                case .journey(let journey, let legs):
+                    JourneyCardView(journey: journey, legs: legs) {
+                        push(.journey(journey.id))
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
     }
 
     /// Two flexible columns inside the 14pt margins. Static so a scroll
