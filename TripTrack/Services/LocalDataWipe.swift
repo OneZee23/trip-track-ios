@@ -30,7 +30,10 @@ enum LocalDataWipe {
             // `vehicleId` — обычный атрибут, поэтому каскад её не заберёт, и
             // после «удалить безвозвратно, везде» снимки машин оставались и
             // строками, и файлами.
-            "VehiclePhotoEntity", "VehicleEntity", "VisitedGeohashEntity", "RoadEntity",
+            "VehiclePhotoEntity", "VehicleEntity",
+            // Путешествие тоже без связи — `JourneyEntity` ссылается на поездки
+            // только косвенно (окном дат), каскад от `TripEntity` её не заберёт.
+            "JourneyEntity", "VisitedGeohashEntity", "RoadEntity",
             "GeocodeCacheEntity",
         ]
         for name in entities {

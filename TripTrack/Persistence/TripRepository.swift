@@ -92,6 +92,18 @@ protocol TripRepository {
     func deleteVehicleHard(id: UUID)
     func deletePhotoHard(id: UUID)
     func markPhotoUploaded(photoId: UUID, remoteURL: String?, thumbnailURL: String, uploadStatus: PhotoUploadStatus)
+
+    // MARK: Journeys (0.6.6)
+    func fetchJourneys() -> [Journey]
+    func fetchJourney(id: UUID) -> Journey?
+    /// Upsert. Взводит `pendingUpload` по тому же правилу, что и у поездок.
+    @discardableResult func saveJourney(_ journey: Journey) -> Journey
+    func markJourneyDeleted(id: UUID)
+    func deleteJourneyHard(id: UUID)
+    func journeyContaining(tripId: UUID) -> Journey?
+    func journeyOverlapping(start: Date, end: Date?, excluding: UUID?) -> Journey?
+    func trips(in journey: Journey) -> [Trip]
+    func journeySyncStatus(id: UUID) -> Int16?
 }
 
 // MARK: - CoreData Implementation
@@ -1392,5 +1404,92 @@ final class CoreDataTripRepository: TripRepository {
                 logger.error("saveIfNeeded failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    // MARK: - Journeys (0.6.6)
+
+    private func journeyEntity(id: UUID) -> JourneyEntity? {
+        let req: NSFetchRequest<JourneyEntity> = JourneyEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        return try? context.fetch(req).first
+    }
+
+    private func journey(from e: JourneyEntity) -> Journey? {
+        guard let id = e.id, let start = e.startDate else { return nil }
+        return Journey(
+            id: id, userId: e.userId, title: e.title, startDate: start, endDate: e.endDate,
+            excludedTripIds: Self.decodePhotoIds(e.excludedTripIdsJSON),
+            coverPhotoId: e.coverPhotoId, isPrivate: e.isPrivate,
+            conflictVersion: Int(e.conflictVersion),
+            lastModifiedAt: e.lastModifiedAt ?? Date(), serverCreatedAt: e.serverCreatedAt)
+    }
+
+    func fetchJourneys() -> [Journey] {
+        let req: NSFetchRequest<JourneyEntity> = JourneyEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "syncStatus != %d", SyncStatus.pendingDelete.rawValue)
+        req.sortDescriptors = [NSSortDescriptor(key: "startDate", ascending: false)]
+        return ((try? context.fetch(req)) ?? []).compactMap(journey(from:))
+    }
+
+    func fetchJourney(id: UUID) -> Journey? { journeyEntity(id: id).flatMap(journey(from:)) }
+
+    @discardableResult
+    func saveJourney(_ j: Journey) -> Journey {
+        let e = journeyEntity(id: j.id) ?? {
+            let n = JourneyEntity(context: context)
+            n.id = j.id
+            n.createdAt = Date()
+            n.userId = SettingsManager.shared.localUserId
+            return n
+        }()
+        e.title = j.title
+        e.startDate = j.startDate
+        e.endDate = j.endDate
+        e.excludedTripIdsJSON = Self.encodePhotoIds(j.excludedTripIds)
+        e.coverPhotoId = j.coverPhotoId
+        e.isPrivate = j.isPrivate
+        e.lastModifiedAt = Date()
+        // Личные данные, как машина: уезжают только при включённом облаке,
+        // но флаг взводим всегда — очередь сама решит, слать ли.
+        e.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        return journey(from: e) ?? j
+    }
+
+    func markJourneyDeleted(id: UUID) {
+        guard let e = journeyEntity(id: id) else { return }
+        e.syncStatus = SyncStatus.pendingDelete.rawValue
+        e.lastModifiedAt = Date()
+        persistenceController.save()
+    }
+
+    func deleteJourneyHard(id: UUID) {
+        guard let e = journeyEntity(id: id) else { return }
+        context.delete(e)
+        persistenceController.save()
+    }
+
+    func journeySyncStatus(id: UUID) -> Int16? { journeyEntity(id: id)?.syncStatus }
+
+    func journeyContaining(tripId: UUID) -> Journey? {
+        guard let trip = fetchTripDetail(id: tripId) else { return nil }
+        return fetchJourneys().first { $0.contains(trip) }
+    }
+
+    func journeyOverlapping(start: Date, end: Date?, excluding: UUID?) -> Journey? {
+        let far = Date.distantFuture
+        return fetchJourneys().first { j in
+            guard j.id != excluding else { return false }
+            return j.startDate <= (end ?? far) && start <= (j.endDate ?? far)
+        }
+    }
+
+    /// Плечи — свои поездки в окне, по времени старта. Трансферы входят: едет
+    /// человек, не машина.
+    func trips(in journey: Journey) -> [Trip] {
+        fetchAllTrips()
+            .filter { journey.contains($0) }
+            .sorted { $0.startDate < $1.startDate }
     }
 }
