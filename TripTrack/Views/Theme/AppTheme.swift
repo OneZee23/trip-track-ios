@@ -240,6 +240,30 @@ struct HoldableCardStyle: ButtonStyle {
     }
 }
 
+/// Что карточка обещает пальцем — обычное нажатие или удержание.
+///
+/// Стиль кнопки нельзя передать параметром, не сделав вид обобщённым (вывести
+/// тип из значения по умолчанию Swift не умеет), поэтому выбор ездит перечислением,
+/// а разворачивает его `cardPressStyle`. Ветки две и обе статические: карточка
+/// не меняет обещание по ходу жизни.
+enum CardPressResponse {
+    /// Тап открывает — быстрое сжатие с притуханием.
+    case tap
+    /// Тап открывает, а удержание открывает ДРУГОЕ: сжатие тянется полсекунды,
+    /// чтобы стало видно, что палец надо задержать.
+    case hold
+}
+
+extension View {
+    @ViewBuilder
+    func cardPressStyle(_ response: CardPressResponse) -> some View {
+        switch response {
+        case .tap: buttonStyle(PressableCardStyle())
+        case .hold: buttonStyle(HoldableCardStyle())
+        }
+    }
+}
+
 // MARK: - Shimmer Modifier
 
 struct ShimmerModifier: ViewModifier {

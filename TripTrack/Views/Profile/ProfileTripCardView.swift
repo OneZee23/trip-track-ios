@@ -14,6 +14,9 @@ struct ProfileTripCardView: View {
     /// The vehicle this trip was driven in, when it still exists in the garage.
     /// Nil for trips recorded without one, and for a vehicle since deleted.
     var vehicle: Vehicle? = nil
+    /// Отклик под пальцем. `.hold` там, где на карточке ещё и долгий тап
+    /// («Мои»): без тянущегося сжатия удержание неотличимо от промаха.
+    var pressResponse: CardPressResponse = .tap
     let onTap: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
@@ -66,7 +69,7 @@ struct ProfileTripCardView: View {
             .surfaceCard(cornerRadius: 16)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .cardPressStyle(pressResponse)
         .accessibilityIdentifier("profile_trip_card")
     }
 

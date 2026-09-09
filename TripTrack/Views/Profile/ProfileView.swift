@@ -159,16 +159,16 @@ struct ProfileView: View {
     /// persists and `historyMode` maps it back (unknown value → canon list).
     @AppStorage("profileHistoryMode") private var historyModeRaw = HistoryMode.list.rawValue
 
-    // MARK: - Мультивыбор (0.6.6) — состояние
+    // MARK: - Объединение в путешествие (0.6.6) — состояние
 
-    /// Отмеченные поездки. Пусто — режима выбора нет; это ЕДИНСТВЕННЫЙ его
-    /// признак, отдельного флага нет специально: два источника правды тут
-    /// разошлись бы на первом же «Отмена».
-    @State private var selectedTripIds: Set<UUID> = []
-    /// Что уехало в лист. Снимок на момент нажатия, а не пересчёт по
-    /// `selectedTripIds`: выбор к тому времени уже сброшен.
-    @State private var composerTrips: [Trip] = []
-    @State private var showJourneyComposer = false
+    /// Опорная поездка листа объединения. Не `nil` — лист открыт: отдельного
+    /// флага нет специально, два источника правды тут разошлись бы на первом
+    /// же закрытии.
+    @State private var composerAnchor: Trip?
+    /// Готовый список для листа — только у подсказки, которая уже собрала
+    /// цепочку сама. `nil` значит «ищи соседей ±7 дней», и это случай долгого
+    /// нажатия на карточку.
+    @State private var composerPreselected: [Trip]?
     /// Лист закрывается сам, и подтвердить, что путешествие создано, больше
     /// нечем — то же решение, что на экране поездки.
     @State private var toastItem: ToastItem?
@@ -325,12 +325,8 @@ struct ProfileView: View {
             }
             .scrollIndicators(.hidden)
             .background(c.bg)
-            // Полоса выбора занимает место таб-бара — см. `JourneySelectionBar`.
-            .hideAppTabBar(isSelecting)
-            .overlay(alignment: .bottom) { selectionBar }
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isSelecting)
             .toast(item: $toastItem)
-            .sheet(isPresented: $showJourneyComposer) { journeyComposer() }
+            .sheet(item: $composerAnchor) { anchor in journeyComposer(anchor: anchor) }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: MeDest.self) { dest in
                 switch dest {
@@ -435,11 +431,8 @@ struct ProfileView: View {
         }
         // The other half of `refreshVisibleTrips`'s contract: the library moves
         // in `loadAggregates`, the range moves here.
-        // Выбор уезжает вместе с фильтром: отмеченная поездка, которой в
-        // отрезке больше нет, осталась бы в счётчике невидимкой.
-        .onChange(of: dateFrom) { _, _ in refreshVisibleTrips(); clearSelection() }
-        .onChange(of: dateTo) { _, _ in refreshVisibleTrips(); clearSelection() }
-        .onDisappear { clearSelection() }
+        .onChange(of: dateFrom) { _, _ in refreshVisibleTrips() }
+        .onChange(of: dateTo) { _, _ in refreshVisibleTrips() }
         .task {
             await loadAggregates()
         }
@@ -605,9 +598,6 @@ struct ProfileView: View {
     /// same screen.
     private func push(_ dest: MeDest) {
         guard mePath.last != dest else { return }
-        // Уходя с экрана, выбор забирают с собой: полоса нарисована на корне
-        // стека и на пушнутом экране не видна, а таб-бар она прячет.
-        clearSelection()
         mePath.append(dest)
     }
 
@@ -1078,24 +1068,21 @@ struct ProfileView: View {
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
                     }
-                    .journeyInertWhileSelecting(isSelecting)
                 } else {
                     LazyVGrid(columns: Self.gridColumns, spacing: 8) {
                         ForEach(run) { row in
                             if case .trip(let trip) = row {
                                 ProfileTripTile(
                                     trip: trip,
-                                    // Кнопка плитки остаётся при своём, а
-                                    // молчать в режиме выбора — забота
-                                    // `openTrip`.
+                                    // Долгий тап открывает лист объединения —
+                                    // значит удержание видно под пальцем
+                                    // (CLAUDE.md, «Нажатие обязано отвечать»).
+                                    pressResponse: .hold,
                                     onTap: { openTrip(trip) }
                                 )
-                                .journeySelectable(
-                                    isSelecting: isSelecting,
-                                    isSelected: selectedTripIds.contains(trip.id),
-                                    onToggle: { toggleSelection(trip) },
-                                    onLongPress: { beginSelection(trip) }
-                                )
+                                .onLongPressGesture(minimumDuration: 0.4) {
+                                    openJourneyComposer(anchor: trip)
+                                }
                             }
                         }
                     }
@@ -1124,19 +1111,19 @@ struct ProfileView: View {
                         trip: trip,
                         level: historicalLevels?[trip.id] ?? settings.profileLevel,
                         vehicle: settings.vehicles.first { $0.id == trip.vehicleId },
+                        // Долгий тап открывает лист объединения — значит
+                        // удержание видно под пальцем (CLAUDE.md, «Нажатие
+                        // обязано отвечать»).
+                        pressResponse: .hold,
                         onTap: { openTrip(trip) }
                     )
-                    .journeySelectable(
-                        isSelecting: isSelecting,
-                        isSelected: selectedTripIds.contains(trip.id),
-                        onToggle: { toggleSelection(trip) },
-                        onLongPress: { beginSelection(trip) }
-                    )
+                    .onLongPressGesture(minimumDuration: 0.4) {
+                        openJourneyComposer(anchor: trip)
+                    }
                 case .journey(let journey, let legs):
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
                     }
-                    .journeyInertWhileSelecting(isSelecting)
                 }
             }
         }
@@ -1241,92 +1228,43 @@ struct ProfileView: View {
         visibleTrips = Self.filter(allTrips, from: dateFrom, to: dateTo)
     }
 
-    // MARK: - Мультивыбор (0.6.6)
+    // MARK: - Объединение в путешествие (0.6.6)
 
-    /// Единственный признак режима: пока что-то отмечено — он включён.
-    private var isSelecting: Bool { !selectedTripIds.isEmpty }
-
-    /// Обычный тап по карточке. В режиме выбора он не открывает НИЧЕГО:
-    /// долгое нажатие срабатывает, пока палец на экране, и карточка успевает
-    /// доложить о нажатии ещё раз — уже на отпускании.
+    /// Обычный тап по карточке. Пока лист объединения открыт, он не открывает
+    /// НИЧЕГО: долгое нажатие срабатывает, пока палец на экране, и кнопка
+    /// карточки успевает доложить о нажатии ещё раз — уже на отпускании. Тогда
+    /// поверх листа уезжал бы ещё и экран поездки.
     private func openTrip(_ trip: Trip) {
-        guard !isSelecting else { return }
+        guard composerAnchor == nil else { return }
         push(.trip(trip.id))
     }
 
-    /// Вход в режим. Отклик — самый заметный из наших: человек нажал дольше,
-    /// чем собирался, и должен понять, что это было нарочно.
-    private func beginSelection(_ trip: Trip) {
-        guard !selectedTripIds.contains(trip.id) else { return }
+    /// Долгое нажатие на карточку в «Мои» — тот же лист, что и с экрана
+    /// поездки: соседей ±7 дней он найдёт сам, а человеку остаётся снять
+    /// лишние. Отклик — самый заметный из наших: человек держал палец дольше,
+    /// чем при обычном тапе, и должен понять, что это было нарочно.
+    private func openJourneyComposer(anchor: Trip) {
         Haptics.action()
-        selectedTripIds.insert(trip.id)
+        composerPreselected = nil
+        composerAnchor = anchor
     }
 
-    private func toggleSelection(_ trip: Trip) {
-        Haptics.selection()
-        if selectedTripIds.contains(trip.id) {
-            selectedTripIds.remove(trip.id)
-        } else {
-            selectedTripIds.insert(trip.id)
-        }
-    }
-
-    private func clearSelection() {
-        guard isSelecting else { return }
-        selectedTripIds.removeAll()
-    }
-
-    @ViewBuilder
-    private var selectionBar: some View {
-        if isSelecting {
-            JourneySelectionBar(
-                count: selectedTripIds.count,
-                onCreate: { openJourneyComposer() },
-                onCancel: { clearSelection() }
+    /// Лист объединения. `preselected` заполнен только у подсказки — она уже
+    /// собрала цепочку, и досыпать ей соседей значит переспросить о том, на
+    /// что человек только что ответил.
+    private func journeyComposer(anchor: Trip) -> some View {
+        JourneyComposerSheet(anchor: anchor, preselected: composerPreselected) { _ in
+            // Тот же лист приходит и из подсказки: путешествие создано,
+            // предлагать его второй раз не о чем.
+            suggestedTrips = []
+            toastItem = ToastItem(
+                type: .success,
+                message: AppStrings.journeyCreated(lang.language)
             )
-            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
-    }
-
-    /// Отмеченные поездки по дате: первая из них — опорная для листа, все
-    /// вместе — его список. Порядок по времени, а не по нажатиям: лист читается
-    /// как будущее путешествие, а оно идёт по дням.
-    private func openJourneyComposer() {
-        let trips = visibleTrips
-            .filter { selectedTripIds.contains($0.id) }
-            .sorted { $0.startDate < $1.startDate }
-        guard !trips.isEmpty else { return }
-        composerTrips = trips
-        showJourneyComposer = true
-    }
-
-    /// Тот же лист, что и с экрана поездки, — только список ему приходит
-    /// готовым, и соседей он не ищет.
-    @ViewBuilder
-    private func journeyComposer() -> some View {
-        if let anchor = composerTrips.first {
-            JourneyComposerSheet(anchor: anchor, preselected: composerTrips) { _ in
-                // Выбор сбрасывается ПОСЛЕ того, как лист уехал вниз. Он
-                // возвращает таб-бар на место полосы выбора, и сделанный тут же
-                // возврат человек видел сквозь щель под закрывающимся листом:
-                // панель выпрыгивала снизу навстречу ему. 450 мс — длина
-                // системной анимации закрытия листа с запасом.
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(450))
-                    clearSelection()
-                }
-                // Тот же лист приходит и из подсказки: путешествие создано,
-                // предлагать его второй раз не о чем.
-                suggestedTrips = []
-                toastItem = ToastItem(
-                    type: .success,
-                    message: AppStrings.journeyCreated(lang.language)
-                )
-            }
-            .environmentObject(lang)
-            .environmentObject(themeManager)
-            .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
-        }
+        .environmentObject(lang)
+        .environmentObject(themeManager)
+        .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
     }
 
     // MARK: - Подсказка путешествия (0.6.6)
@@ -1484,9 +1422,9 @@ struct ProfileView: View {
     }
 
     private func combineSuggestion() {
-        guard !suggestedTrips.isEmpty else { return }
-        composerTrips = suggestedTrips
-        showJourneyComposer = true
+        guard let anchor = suggestedTrips.first else { return }
+        composerPreselected = suggestedTrips
+        composerAnchor = anchor
     }
 
     private func dismissSuggestion() {

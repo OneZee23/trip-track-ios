@@ -1821,21 +1821,6 @@ enum AppStrings {
         tr(lang, "journeyCreated", ru: "Путешествие создано", en: "Journey created")
     }
 
-    /// Кнопка плавающей полосы в «Мои», когда поездки отмечены руками. Число в
-    /// подписи — не украшение: полоса перекрывает часть списка, и без него
-    /// человеку пришлось бы прокручивать историю, чтобы пересчитать галочки.
-    static func journeySelectAction(_ lang: LanguageManager.Language, count: Int) -> String {
-        String(format: tr(lang, "journeySelectAction",
-                          ru: "В путешествие (%d)", en: "Into a journey (%d)"), count)
-    }
-
-    /// Подсказка VoiceOver на карточке, пока идёт выбор. Кнопка карточки в этом
-    /// режиме молчит — нажатие ставит галочку, а не открывает поездку, — и без
-    /// подсказки озвучка обещала бы ровно то, чего не будет.
-    static func journeySelectHint(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "journeySelectHint", ru: "Нажмите, чтобы выбрать", en: "Tap to select")
-    }
-
     // MARK: - Подсказка путешествия (0.6.6)
 
     /// Заголовок карточки-подсказки. «Похоже», а не «Это»: правило считает по
@@ -1848,7 +1833,7 @@ enum AppStrings {
         tr(lang, "journeySuggestCombine", ru: "Объединить", en: "Combine")
     }
     /// «Не сейчас», а не «Нет»: карточка уходит, но человек ничего не терял —
-    /// эти же поездки он соберёт руками мультивыбором.
+    /// эти же поездки он соберёт руками.
     static func journeyNotNow(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyNotNow", ru: "Не сейчас", en: "Not now")
     }

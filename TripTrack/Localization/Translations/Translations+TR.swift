@@ -1218,8 +1218,6 @@ extension Translations {
         "journeyEmptyTitle": "Henüz boş",
         "journeyAddFromTrip": "Gezi ekle",
         "journeyCreated": "Yolculuk oluşturuldu",
-        "journeySelectAction": "Yolculuğa ekle (%d)",
-        "journeySelectHint": "Seçmek için dokunun",
         "journeySuggestTitle": "Yolculuğa benziyor",
         "journeySuggestCombine": "Birleştir",
         "journeyNotNow": "Şimdi değil",

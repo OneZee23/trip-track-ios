@@ -6,6 +6,9 @@ import SwiftUI
 /// «дата · километры» line survive.
 struct ProfileTripTile: View {
     let trip: Trip
+    /// Отклик под пальцем. `.hold` там, где на плитке ещё и долгий тап
+    /// («Мои»): без тянущегося сжатия удержание неотличимо от промаха.
+    var pressResponse: CardPressResponse = .tap
     let onTap: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
@@ -55,7 +58,7 @@ struct ProfileTripTile: View {
             .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .cardPressStyle(pressResponse)
         .accessibilityIdentifier("profile_trip_tile")
     }
 

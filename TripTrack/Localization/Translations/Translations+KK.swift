@@ -1218,8 +1218,6 @@ extension Translations {
         "journeyEmptyTitle": "Әзірге бос",
         "journeyAddFromTrip": "Сапар қосу",
         "journeyCreated": "Саяхат жасалды",
-        "journeySelectAction": "Саяхатқа (%d)",
-        "journeySelectHint": "Таңдау үшін түртіңіз",
         "journeySuggestTitle": "Саяхатқа ұқсайды",
         "journeySuggestCombine": "Біріктіру",
         "journeyNotNow": "Қазір емес",

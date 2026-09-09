@@ -1218,8 +1218,6 @@ extension Translations {
         "journeyEmptyTitle": "Belum ada apa-apa",
         "journeyAddFromTrip": "Tambah perjalanan",
         "journeyCreated": "Perjalanan dibuat",
-        "journeySelectAction": "Jadikan perjalanan (%d)",
-        "journeySelectHint": "Ketuk untuk memilih",
         "journeySuggestTitle": "Sepertinya sebuah perjalanan",
         "journeySuggestCombine": "Gabungkan",
         "journeyNotNow": "Nanti saja",

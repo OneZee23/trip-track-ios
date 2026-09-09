@@ -1218,8 +1218,6 @@ extension Translations {
         "journeyEmptyTitle": "Noch nichts hier",
         "journeyAddFromTrip": "Fahrt hinzufügen",
         "journeyCreated": "Reise erstellt",
-        "journeySelectAction": "Zur Reise (%d)",
-        "journeySelectHint": "Zum Auswählen tippen",
         "journeySuggestTitle": "Sieht nach einer Reise aus",
         "journeySuggestCombine": "Zusammenfassen",
         "journeyNotNow": "Jetzt nicht",

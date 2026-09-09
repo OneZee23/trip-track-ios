@@ -1218,8 +1218,6 @@ extension Translations {
         "journeyEmptyTitle": "Поки що порожньо",
         "journeyAddFromTrip": "Додати поїздку",
         "journeyCreated": "Подорож створено",
-        "journeySelectAction": "У подорож (%d)",
-        "journeySelectHint": "Натисніть, щоб вибрати",
         "journeySuggestTitle": "Схоже на подорож",
         "journeySuggestCombine": "Об'єднати",
         "journeyNotNow": "Не зараз",
