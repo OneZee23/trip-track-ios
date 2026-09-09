@@ -114,6 +114,8 @@ struct TripDetailView: View {
     @State private var selectedCheckpoint: TripCheckpoint?
     /// Лист «Объединить в путешествие» — соседи за ±7 дней и имя.
     @State private var showJourneyComposer = false
+    /// Открытое путешествие этой поездки — пушится в тот же стек.
+    @State private var openedJourneyId: UUID?
     /// Наблюдаем, чтобы меню перестроилось сразу после создания.
     @ObservedObject private var journeyManager = JourneyManager.shared
     /// Снимки, расставленные по маршруту, вместе с готовыми миниатюрами.
@@ -450,11 +452,18 @@ struct TripDetailView: View {
                 }
             },
         ]
-        // Поездка, уже лежащая в путешествии, пункта не получает вовсе:
-        // объединять её второй раз некуда, а «Открыть путешествие» ведёт на
-        // экран, которого пока нет. Пункт, который ничего не открывает, хуже
-        // его отсутствия.
-        if tripJourney == nil {
+        // Ровно один пункт из двух: поездку либо ещё не с чем объединять, либо
+        // она уже лежит в путешествии — и тогда единственное, что с ним можно
+        // сделать отсюда, это открыть. Объединять её второй раз некуда.
+        if let journey = tripJourney {
+            items.append(.init(
+                title: AppStrings.journeyOpen(lang.language),
+                systemImage: "suitcase",
+                accessibilityId: "detail_action_journey"
+            ) {
+                present { openedJourneyId = journey.id }
+            })
+        } else {
             items.append(.init(
                 title: AppStrings.journeyCombine(lang.language),
                 systemImage: "suitcase",
@@ -717,8 +726,10 @@ struct TripDetailView: View {
     /// что и лист отметки выше: каждое лишнее выражение в `body` этого экрана
     /// приближает таймаут вывода типов.
     ///
-    /// Путешествие из замыкания нужно ровно на тост: экран путешествия — Task 7,
-    /// и открывать сейчас нечего.
+    /// Путешествие из замыкания нужно ровно на тост. Открыть его есть чем и
+    /// после 0.6.6 — но человек нажал «Объединить», а не «Открыть»: увозить
+    /// его с экрана поездки, о которой он не договорил, значит решить за него.
+    /// «…» → «Открыть путешествие» стоит на том же экране строкой ниже.
     @ViewBuilder
     private func journeyPresentation() -> some View {
         if let trip {
@@ -1077,6 +1088,10 @@ struct TripDetailView: View {
             VehicleDetailView(vehicleId: id)
                 .environmentObject(lang)
         }
+        // Путешествие — продолжение поездки, а не шторка поверх неё: тот же
+        // стек, что у паспорта машины. Отдельным модификатором, чтобы место
+        // назначения не добавляло выражений в и без того длинную цепочку.
+        .modifier(TripDetailJourneyDestination(journeyId: $openedJourneyId, lang: lang))
         .sheet(isPresented: $showEditSheet) {
             if let t = trip {
                 TripEditSheet(
@@ -3307,6 +3322,22 @@ private struct TripDetailLocalReactorDestination: ViewModifier {
             }
         } else {
             content
+        }
+    }
+}
+
+/// «Открыть путешествие» пушит `JourneyDetailView` в тот же стек.
+///
+/// Своим типом, а не строкой в `body`: у этого экрана вывод типов уже упирался
+/// в таймаут, и всё, что можно вынести за его пределы, туда и выносится.
+private struct TripDetailJourneyDestination: ViewModifier {
+    @Binding var journeyId: UUID?
+    let lang: LanguageManager
+
+    func body(content: Content) -> some View {
+        content.navigationDestination(item: $journeyId) { id in
+            JourneyDetailView(journeyId: id)
+                .environmentObject(lang)
         }
     }
 }

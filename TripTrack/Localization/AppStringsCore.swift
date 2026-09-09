@@ -156,6 +156,28 @@ extension AppStrings {
         }
     }
 
+    /// «2 отметки» — счётчик отметок в строке плеча путешествия.
+    ///
+    /// Слово берётся то же, что у `checkpointsTitle` на экране поездки: одна и
+    /// та же вещь, названная на двух экранах по-разному, читается как две.
+    static func nounCheckpoints(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "отметка", few: "отметки", many: "отметок")
+        case .en: return plural(lang, n, one: "checkpoint", many: "checkpoints")
+        case .de: return plural(lang, n, one: "Markierung", many: "Markierungen")
+        case .es: return plural(lang, n, one: "marca", many: "marcas")
+        case .fr: return plural(lang, n, one: "repère", many: "repères")
+        case .it: return plural(lang, n, one: "segnalibro", many: "segnalibri")
+        case .pl: return plural(lang, n, one: "znacznik", few: "znaczniki", many: "znaczników")
+        case .id: return "penanda"
+        case .tr: return "işaret"
+        case .fil: return "marka"
+        case .uk: return plural(lang, n, one: "позначка", few: "позначки", many: "позначок")
+        case .kk: return "белгі"
+        case .pt: return plural(lang, n, one: "marcação", many: "marcações")
+        }
+    }
+
     static func nounDays(_ lang: LanguageManager.Language, _ n: Int) -> String {
         switch lang {
         case .ru: return plural(lang, n, one: "день", few: "дня", many: "дней")

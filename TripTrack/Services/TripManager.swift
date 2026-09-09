@@ -957,6 +957,17 @@ final class TripManager: ObservableObject {
         let region: String?
     }
 
+    /// Имя места из СВОЕГО кэша — без сети и без ожидания.
+    ///
+    /// Экрану путешествия нужны «Краснодар» и «Тбилиси»: для имени по
+    /// умолчанию и для подписи свёрнутой стоянки. Кэш уже наполнен именами
+    /// поездок, а чего в нём нет — того экран просто не покажет: имя места это
+    /// украшение, ради которого не стоит ни ходить в сеть, ни держать экран.
+    func cachedLocality(for coordinate: CLLocationCoordinate2D) -> String? {
+        guard let name = lookupGeocodeCache(for: coordinate)?.locality, !name.isEmpty else { return nil }
+        return name
+    }
+
     private func lookupGeocodeCache(for coord: CLLocationCoordinate2D) -> GeocodeCacheResult? {
         let geohash = GeohashEncoder.encode(latitude: coord.latitude, longitude: coord.longitude, precision: 5)
         let context = persistenceController.container.viewContext

@@ -175,17 +175,10 @@ struct JourneyComposerSheet: View {
     // MARK: - Строки
 
     /// Тот же ответ, что дают карточки поездок: имя, иначе регион, иначе дата.
-    /// Расходиться им нельзя — это одна и та же поездка на двух экранах.
+    /// Расходиться им нельзя — это одна и та же поездка на двух экранах, а с
+    /// 0.6.6 на трёх: лента путешествия по дням зовёт ту же функцию.
     private func titleText(_ trip: Trip) -> String {
-        if trip.hasDisplayableName,
-           let t = TripAutoTitle.localized(trip.title, startDate: trip.startDate, language: lang.language),
-           !t.isEmpty {
-            return t
-        }
-        if let region = RegionDisplay.localized(trip.region, language: lang.language), !region.isEmpty {
-            return region
-        }
-        return dateText(trip.startDate)
+        JourneyFormat.tripTitle(trip, language: lang.language)
     }
 
     /// «14 сент · 143 км». Километры целыми: разница в сотню метров ничего не

@@ -46,8 +46,13 @@ enum TripDetailFormat {
 
     /// «1 310» — grouped, because a four-digit price without a separator reads
     /// as a number of metres.
-    static func money(_ amount: Double) -> String {
-        Self.grouped.string(from: NSNumber(value: amount.rounded())) ?? String(format: "%.0f", amount)
+    static func money(_ amount: Double) -> String { groupedNumber(amount) }
+
+    /// «1 640» — то же группирование для любого крупного целого числа.
+    /// Километры путешествия четырёхзначны, и без разделителя они читаются
+    /// ровно той же ошибкой, ради которой группирование заводили для цены.
+    static func groupedNumber(_ value: Double) -> String {
+        Self.grouped.string(from: NSNumber(value: value.rounded())) ?? String(format: "%.0f", value)
     }
 
     private static let oneDecimal: NumberFormatter = {
