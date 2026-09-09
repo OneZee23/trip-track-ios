@@ -1714,6 +1714,93 @@ enum AppStrings {
            en: "You drove past here more than once")
     }
 
+    // MARK: - Путешествие (0.6.6)
+
+    static func journeyWord(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyWord", ru: "Путешествие", en: "Journey")
+    }
+    static func journeysTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeysTitle", ru: "Путешествия", en: "Journeys")
+    }
+    /// CTA у выделенных соседних поездок на экране «Мои».
+    static func journeyCombine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyCombine", ru: "Объединить в путешествие", en: "Combine into a journey")
+    }
+    static func journeyOpen(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyOpen", ru: "Открыть путешествие", en: "Open journey")
+    }
+    static func journeyCreate(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyCreate", ru: "Создать путешествие", en: "Create journey")
+    }
+    /// Подсказка на экране подбора плеч: список уже сузило `neighbours(of:)`.
+    static func journeyNeighboursHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyNeighboursHint",
+           ru: "Поездки за неделю до и после. Снимите лишние.",
+           en: "Trips within a week before and after. Untick the ones that don't belong.")
+    }
+    static func journeyTitlePlaceholder(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyTitlePlaceholder", ru: "Например: Грузия 2026", en: "For example: Georgia 2026")
+    }
+    /// Переключатель группировки плеч в путешествии.
+    static func journeyByDays(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyByDays", ru: "По дням", en: "By day")
+    }
+    /// Заголовок дня внутри путешествия: «День 1», «День 2»…
+    static func journeyDay(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        String(format: tr(lang, "journeyDay", ru: "День %d", en: "Day %d"), n)
+    }
+    /// Диапазон дней, когда несколько сгруппированы вместе: «Дни 3–5».
+    static func journeyDays(_ lang: LanguageManager.Language, from: Int, to: Int) -> String {
+        String(format: tr(lang, "journeyDays", ru: "Дни %d–%d", en: "Days %d–%d"), from, to)
+    }
+    /// Ярлык у плеча без выезда из города — вместо расстояния и времени в пути.
+    static func journeyAroundTown(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyAroundTown", ru: "по городу", en: "around town")
+    }
+    static func journeyDurationLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyDurationLabel", ru: "Длительность", en: "Duration")
+    }
+    static func journeyDistanceLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyDistanceLabel", ru: "Дистанция", en: "Distance")
+    }
+    /// Счётчик плеч в карточке итогов — число берётся из `nounTrips`, не отсюда.
+    static func journeyLegsLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyLegsLabel", ru: "Плеч", en: "Legs")
+    }
+    static func journeyDrivingLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyDrivingLabel", ru: "В пути", en: "Driving")
+    }
+    static func journeyEdit(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyEdit", ru: "Изменить путешествие", en: "Edit journey")
+    }
+    static func journeyDates(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyDates", ru: "Даты", en: "Dates")
+    }
+    static func journeyCover(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyCover", ru: "Обложка", en: "Cover")
+    }
+    static func journeyRemoveLeg(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyRemoveLeg", ru: "Убрать из путешествия", en: "Remove from journey")
+    }
+    static func journeyDelete(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyDelete", ru: "Удалить путешествие", en: "Delete journey")
+    }
+    /// Под кнопкой удаления: плечи — свои поездки, они не пропадают вместе с обёрткой.
+    static func journeyDeleteHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyDeleteHint", ru: "Поездки останутся", en: "Trips will stay")
+    }
+    static func journeyOverlaps(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyOverlaps",
+           ru: "Эти даты уже заняты другим путешествием",
+           en: "These dates belong to another journey")
+    }
+    static func journeyEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyEmptyTitle", ru: "Пока пусто", en: "Nothing yet")
+    }
+    static func journeyAddFromTrip(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyAddFromTrip", ru: "Добавить поездку", en: "Add a trip")
+    }
+
     static func notifTripStopTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifTripStopTitle", ru: "Поездка закончена?", en: "Trip finished?")
     }
