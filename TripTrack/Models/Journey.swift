@@ -35,11 +35,17 @@ struct Journey: Identifiable, Codable, Equatable {
     }
 
     /// Поездка внутри окна: старт между границами включительно; открытое окно
-    /// принимает всё после старта.
+    /// принимает всё после старта. Одно правило на оба входа — полная `Trip`
+    /// (плечи, `trips(in:)`) и голая пара id/дата (`journeyContaining`,
+    /// которой доставать трек ради одной даты незачем).
     func contains(_ trip: Trip) -> Bool {
-        guard !excludedTripIds.contains(trip.id) else { return false }
-        guard trip.startDate >= startDate else { return false }
-        if let endDate { return trip.startDate <= endDate }
+        contains(tripId: trip.id, startDate: trip.startDate)
+    }
+
+    func contains(tripId: UUID, startDate tripStartDate: Date) -> Bool {
+        guard !excludedTripIds.contains(tripId) else { return false }
+        guard tripStartDate >= startDate else { return false }
+        if let endDate { return tripStartDate <= endDate }
         return true
     }
 }

@@ -1472,9 +1472,11 @@ final class CoreDataTripRepository: TripRepository {
 
     func journeySyncStatus(id: UUID) -> Int16? { journeyEntity(id: id)?.syncStatus }
 
+    /// `fetchEntity` — не `fetchTripDetail`: только старт нужен для проверки
+    /// окна, а `fetchTripDetail` заодно материализует весь трек поездки.
     func journeyContaining(tripId: UUID) -> Journey? {
-        guard let trip = fetchTripDetail(id: tripId) else { return nil }
-        return fetchJourneys().first { $0.contains(trip) }
+        guard let start = fetchEntity(id: tripId)?.startDate else { return nil }
+        return fetchJourneys().first { $0.contains(tripId: tripId, startDate: start) }
     }
 
     func journeyOverlapping(start: Date, end: Date?, excluding: UUID?) -> Journey? {
