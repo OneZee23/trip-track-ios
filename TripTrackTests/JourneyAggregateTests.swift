@@ -3,7 +3,11 @@ import CoreLocation
 @testable import TripTrack
 
 final class JourneyAggregateTests: XCTestCase {
-    private let t0 = Date(timeIntervalSince1970: 1_760_000_000)   // 09:00 местного условно
+    // Полночь по местному, а не сырой epoch: иначе "hour: 9" означает 9 часов
+    // от случайного момента суток внутри epoch-времени, а не 9:00 утра, и на
+    // машине в другом поясе плечо может уползти за полночь там, где на
+    // авторской машине — нет.
+    private let t0 = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: 1_760_000_000))
     private let krd = CLLocationCoordinate2D(latitude: 45.03, longitude: 38.98)
     private let vld = CLLocationCoordinate2D(latitude: 43.02, longitude: 44.68)
     private let tbs = CLLocationCoordinate2D(latitude: 41.72, longitude: 44.79)
@@ -54,5 +58,12 @@ final class JourneyAggregateTests: XCTestCase {
     func testEmptyInputGivesEmptyAggregate() {
         let a = JourneyAggregate.build(trips: [])
         XCTAssertTrue(a.days.isEmpty); XCTAssertEqual(a.legCount, 0)
+    }
+
+    func testOvernightLegCountsTheDayItFinishesOn() {
+        let night = trip(day: 0, hour: 22, from: krd, to: vld, km: 480, hours: 4)
+        let a = JourneyAggregate.build(trips: [night])
+        XCTAssertEqual(a.calendarDays, 2, "старт в 22:00 + 4 часа — финиш уже на следующий день")
+        XCTAssertEqual(a.days.map(\.number), [1])
     }
 }

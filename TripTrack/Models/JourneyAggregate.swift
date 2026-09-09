@@ -75,13 +75,14 @@ struct JourneyAggregate: Equatable {
                 }
             }
         }
-        // Якорь на startDate, а не endDate: каждый Day.number выше уже считается
-        // от начала поездки, и последняя поездка обязана мерить тем же. Ночной
-        // бросок за 480 км с концом за полночь иначе уводил `calendarDays` от
-        // таймзоны машины — по UTC счёт не переползал полночь, по Москве (+3)
-        // переползал, и один и тот же тест давал 6 и 7 на разных машинах.
+        // Дни считаются от первого СТАРТА до последнего ФИНИША: плечо,
+        // доехавшее за полночь, честно занимает следующий день — человек всё
+        // ещё за рулём. `Day.number` внутри цикла мерит от старта каждой
+        // поездки (это про то, к какому дню отнести карточку), а тут — про то,
+        // сколько календарных дней заняло путешествие целиком; это разные
+        // вопросы, и последнему нужен именно endDate.
         let last = trips.last!
-        let span = calendar.dateComponents([.day], from: day0, to: calendar.startOfDay(for: last.startDate)).day! + 1
+        let span = calendar.dateComponents([.day], from: day0, to: calendar.startOfDay(for: last.endDate ?? last.startDate)).day! + 1
         var regions: [String] = []
         for r in trips.compactMap(\.region) where !regions.contains(r) { regions.append(r) }
         return JourneyAggregate(
