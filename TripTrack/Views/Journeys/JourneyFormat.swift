@@ -9,6 +9,7 @@ import Foundation
 enum JourneyFormat {
     private static let dayMonth = LocalizedDateFormatter.templates("dMMM")
     private static let dayMonthWeekday = LocalizedDateFormatter.templates("dMMMEEE")
+    private static let hourMinute = LocalizedDateFormatter.templates("Hm")
 
     /// «12–17 сен», «30 сен – 2 окт», «12 сен».
     ///
@@ -35,6 +36,13 @@ enum JourneyFormat {
     /// «12 сен, чт» — заголовок дня. Порядок полей выбирает язык.
     static func dayDate(_ date: Date, language: LanguageManager.Language) -> String {
         dayMonthWeekday[language]?.string(from: date) ?? ""
+    }
+
+    /// «15:00» — время старта местной поездки внутри раскрытой стоянки.
+    /// Шаблон, а не жёсткий формат: половина языков пишет «3:00 PM», и решать
+    /// это за них по флагу «ru или нет» мы уже пробовали.
+    static func time(_ date: Date, language: LanguageManager.Language) -> String {
+        hourMinute[language]?.string(from: date) ?? ""
     }
 
     /// «5 ч 20 мин» — те же куски, что на плитках «Детали» поездки, просто

@@ -1,7 +1,13 @@
 import SwiftUI
 
-/// Лента путешествия по дням: «ДЕНЬ 1 · 12 сен», под ним плечи строками, а
-/// стоянка со всеми местными поездками — одной свёрнутой карточкой.
+/// Лента путешествия по дням: одна карточка на день, внутри — шапка «ДЕНЬ 1 ·
+/// Вс, 6 сент.» и строки: плечи дороги и свёрнутые стоянки, разделённые
+/// волоском.
+///
+/// Одна карточка на ДЕНЬ, а не на строку. Прежде плечо рисовалось голой строкой
+/// прямо на фоне страницы, а стоянка — своей рамкой, и один и тот же день
+/// выглядел как два разных списка. Заодно ушёл второй заголовок дня: стоянка
+/// печатала собственный, и над одним днём стояло «ДЕНЬ 1» дважды подряд.
 ///
 /// Про базу и геокодер лента не знает НИЧЕГО: имена мест ей приносит экран
 /// готовым словарём. Спрашивать их отсюда значило бы ходить в CoreData из
@@ -30,75 +36,54 @@ struct JourneyDaysList: View {
     /// длится сжатие в `HoldableCardStyle`: карточка «поддаётся» ровно к тому
     /// моменту, когда меню появляется.
     private static let holdDuration: TimeInterval = 0.5
+    /// Отступ вложенной строки стоянки: кружок домика (26) плюс зазор до
+    /// заголовка. Местная поездка встаёт ровно под именем города, а не под его
+    /// иконкой.
+    private static let nestedInset: CGFloat = 44
+    /// Боковое поле карточки дня. Его же на отрицательный знак берёт волосок,
+    /// чтобы дотянуться до правого края карточки.
+    private static let cardPadding: CGFloat = 14
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         // `LazyVStack`: у месячного путешествия дней три десятка, и каждый
         // день — карточки плеч с миниатюрами фотографий. Обычный `VStack`
         // строил их все до первого кадра, вместе с чтением снимков с диска.
-        LazyVStack(alignment: .leading, spacing: 20) {
+        LazyVStack(alignment: .leading, spacing: 12) {
             DetailSectionHeader(text: AppStrings.journeyByDays(language))
+                .padding(.bottom, 2)
             ForEach(aggregate.days, id: \.number) { day in
-                dayBlock(day, c)
+                dayCard(day, c)
             }
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: expanded)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: expanded)
     }
 
     // MARK: - День
 
-    private func dayBlock(_ day: JourneyAggregate.Day, _ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    /// Карточка дня: шапка и строки под ней. Заголовок здесь ОДИН и всегда
+    /// про этот день — диапазон «Дни 2–4» ушёл на саму стоянку, потому что
+    /// это её свойство, а не дня, в котором она началась.
+    private func dayCard(_ day: JourneyAggregate.Day, _ c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            dayHeader(day, c)
+                .padding(.bottom, 6)
             ForEach(Array(day.items.enumerated()), id: \.offset) { index, item in
-                VStack(alignment: .leading, spacing: 10) {
-                    if let header = header(for: item, in: day, at: index) {
-                        headerRow(header, c)
-                    }
-                    itemView(item, in: day, c: c)
-                }
+                if index > 0 { hairline(c, inset: 0) }
+                itemView(item, in: day, c: c)
             }
         }
+        .padding(.horizontal, Self.cardPadding)
+        .padding(.vertical, 12)
+        .surfaceCard()
     }
 
-    /// Какой заголовок стоит НАД этой строкой — и стоит ли вообще.
-    ///
-    /// Стоянка носит свой: она тянется через несколько дней («ДНИ 2–4»), и
-    /// заголовок дня, в котором она началась, о ней соврал бы. Плечо получает
-    /// заголовок дня, только если оно в дне первое — или если перед ним стояла
-    /// стоянка со своим: иначе строка осталась бы под чужой шапкой.
-    private func header(
-        for item: JourneyAggregate.Item, in day: JourneyAggregate.Day, at index: Int
-    ) -> (badge: String, date: String)? {
-        switch item {
-        case .local(let trips, _, let lastNumber):
-            return localHeader(trips, lastNumber: lastNumber, in: day)
-        case .leg:
-            if index > 0, case .leg = day.items[index - 1] { return nil }
-            return (AppStrings.journeyDay(language, day.number),
-                    JourneyFormat.dayDate(day.date, language: language))
-        }
-    }
-
-    /// Правый конец диапазона «ДНИ 2–4» приходит из `JourneyAggregate` вместе
-    /// со стоянкой. Считать его здесь значило бы держать вторую копию арифметики
-    /// дней — ту самую, что уже посчитала номер каждой поездки при сборке.
-    private func localHeader(
-        _ trips: [Trip], lastNumber: Int, in day: JourneyAggregate.Day
-    ) -> (badge: String, date: String) {
-        guard let first = trips.first, let last = trips.last, lastNumber > day.number else {
-            return (AppStrings.journeyDay(language, day.number),
-                    JourneyFormat.dayDate(day.date, language: language))
-        }
-        return (AppStrings.journeyDays(language, from: day.number, to: lastNumber),
-                JourneyFormat.dateRange(from: first.startDate, to: last.startDate, language: language))
-    }
-
-    private func headerRow(_ header: (badge: String, date: String), _ c: AppTheme.Colors) -> some View {
+    private func dayHeader(_ day: JourneyAggregate.Day, _ c: AppTheme.Colors) -> some View {
         HStack(spacing: 8) {
             // Тёмная плашка на светлой теме и светлая на тёмной: цвет текста
             // как фон, цвет фона как чернила — иначе в тёмной теме белый номер
             // ложился на почти белую плашку.
-            Text(header.badge)
+            Text(AppStrings.journeyDay(language, day.number))
                 .font(.system(size: 10, weight: .heavy))
                 .tracking(0.3)
                 .textCase(.uppercase)
@@ -106,12 +91,24 @@ struct JourneyDaysList: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(c.text, in: Capsule())
-            Text(header.date)
+            Text(JourneyFormat.dayDate(day.date, language: language))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// Волосок между строками: слева отступ (у вложенных — больше), справа
+    /// дотягивается до самого края карточки. Так видно, что строки — соседи по
+    /// одному списку, а не отдельные плитки.
+    private func hairline(_ c: AppTheme.Colors, inset: CGFloat) -> some View {
+        Rectangle()
+            .fill(c.border)
+            .frame(height: 0.5)
+            .padding(.leading, inset)
+            .padding(.trailing, -Self.cardPadding)
+            .padding(.vertical, 9)
     }
 
     @ViewBuilder
@@ -121,8 +118,8 @@ struct JourneyDaysList: View {
         switch item {
         case .leg(let trip):
             legRow(trip, c: c)
-        case .local(let trips, _, _):
-            localCard(trips, in: day, c: c)
+        case .local(let trips, _, let lastDayNumber):
+            stayRows(trips, in: day, lastDayNumber: lastDayNumber, c: c)
         }
     }
 
@@ -133,14 +130,7 @@ struct JourneyDaysList: View {
     /// удержанием — «Убрать из путешествия», поэтому стиль `Holdable`: сжатие
     /// идёт полсекунды и видно, что палец надо задержать.
     private func legRow(_ trip: Trip, c: AppTheme.Colors) -> some View {
-        Button {
-            // Меню уже открыто долгим тапом — но кнопка всё равно получит своё
-            // нажатие на отпускании, и без этой проверки поездка открывалась бы
-            // «сама», поверх только что показанного поповера.
-            guard menuTripId == nil else { return }
-            Haptics.tap()
-            onOpenTrip(trip)
-        } label: {
+        tripButton(trip, accessibilityId: "journey_leg_row") {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 8) {
                     Text(JourneyFormat.tripTitle(trip, language: language))
@@ -149,19 +139,36 @@ struct JourneyDaysList: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(c.textTertiary)
+                    chevron(c)
                 }
                 Text(legMeta(trip))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(c.textTertiary)
                 momentsRow(trip, c: c)
             }
-            .contentShape(Rectangle())
+        }
+    }
+
+    /// Кнопка поездки — одна на плечо и на местную строку внутри стоянки.
+    /// Убрать из путешествия можно и ту и другую, и меню у них одно на список,
+    /// поэтому вся оснастка (удержание, поповер, действие для VoiceOver) живёт
+    /// в одном месте: разъедься эти две копии — и половина строк молча
+    /// перестала бы убираться.
+    private func tripButton<Label: View>(
+        _ trip: Trip, accessibilityId: String, @ViewBuilder label: () -> Label
+    ) -> some View {
+        Button {
+            // Меню уже открыто долгим тапом — но кнопка всё равно получит своё
+            // нажатие на отпускании, и без этой проверки поездка открывалась бы
+            // «сама», поверх только что показанного поповера.
+            guard menuTripId == nil else { return }
+            Haptics.tap()
+            onOpenTrip(trip)
+        } label: {
+            label().contentShape(Rectangle())
         }
         .buttonStyle(HoldableCardStyle())
-        .accessibilityIdentifier("journey_leg_row")
+        .accessibilityIdentifier(accessibilityId)
         .simultaneousGesture(
             LongPressGesture(minimumDuration: Self.holdDuration).onEnded { _ in
                 Haptics.action()
@@ -196,6 +203,12 @@ struct JourneyDaysList: View {
         .accessibilityAction(named: Text(AppStrings.journeyRemoveLeg(language))) {
             onRemoveLeg(trip)
         }
+    }
+
+    private func chevron(_ c: AppTheme.Colors) -> some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(c.textTertiary)
     }
 
     /// «5 ч 20 мин · 480 км · 2 отметки».
@@ -257,66 +270,105 @@ struct JourneyDaysList: View {
     // MARK: - Стоянка
 
     /// Свёрнутая стоянка: пять поездок по Тбилиси — это не пять строк истории,
-    /// а одна. Раскрывается на месте теми же строками плеч.
-    private func localCard(
-        _ trips: [Trip], in day: JourneyAggregate.Day, c: AppTheme.Colors
+    /// а одна. Раскрывается на месте вложенными строками, в той же карточке
+    /// дня: своя рамка вокруг стоянки делала из одного дня два списка.
+    private func stayRows(
+        _ trips: [Trip], in day: JourneyAggregate.Day, lastDayNumber: Int, c: AppTheme.Colors
     ) -> some View {
         // Стоянка без единой поездки не существует: `JourneyAggregate` заводит
         // её только вокруг первой. Пустой ключ — заглушка, до которой не дойти.
         let key = trips.first?.id ?? UUID()
         let isOpen = expanded.contains(key)
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 0) {
             Button {
                 Haptics.selection()
                 if isOpen { expanded.remove(key) } else { expanded.insert(key) }
             } label: {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "house")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(c.textSecondary)
-                            .frame(width: 26, height: 26)
-                            .background(c.card, in: Circle())
-                        // Имени места нет (геокодер ещё не доехал до этих
-                        // координат) — «Стоянка», а не «по городу»: иначе в
-                        // заголовке и в строке под ним стояло бы одно и то же
-                        // «по городу» дважды подряд.
-                        Text(localNames[key] ?? AppStrings.journeyStayFallback(language))
-                            .font(.system(size: 15, weight: .heavy))
-                            .foregroundStyle(c.text)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                        Image(systemName: isOpen ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(c.textTertiary)
-                    }
-                    Text(localMeta(trips))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(c.textTertiary)
-                }
-                .contentShape(Rectangle())
+                stayHeading(trips, key: key, in: day, lastDayNumber: lastDayNumber,
+                            isOpen: isOpen, c: c)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(PressableCardStyle())
             .accessibilityIdentifier("journey_local_group")
             .accessibilityAddTraits(isOpen ? .isSelected : [])
 
             if isOpen {
-                Rectangle()
-                    .fill(c.border)
-                    .frame(height: 0.5)
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(trips) { legRow($0, c: c) }
+                ForEach(trips) { trip in
+                    hairline(c, inset: Self.nestedInset)
+                    localTripRow(trip, c: c)
                 }
             }
         }
-        .padding(14)
-        .background {
-            RoundedRectangle(cornerRadius: 14)
-                .fill(c.bg)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(c.border, lineWidth: 1)
+    }
+
+    private func stayHeading(
+        _ trips: [Trip], key: UUID, in day: JourneyAggregate.Day, lastDayNumber: Int,
+        isOpen: Bool, c: AppTheme.Colors
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "house")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(c.textSecondary)
+                .frame(width: 26, height: 26)
+                .background(c.cardAlt, in: Circle())
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 7) {
+                    // Имени места нет (геокодер ещё не доехал до этих
+                    // координат) — «Стоянка», а не «по городу»: иначе в
+                    // заголовке и в строке под ним стояло бы одно и то же
+                    // «по городу» дважды подряд.
+                    Text(localNames[key] ?? AppStrings.journeyStayFallback(language))
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    // Диапазон — только когда стоянка и правда тянется дальше
+                    // своего дня. Иначе он повторял бы шапку карточки слово в
+                    // слово, а повтор читается как ошибка вёрстки.
+                    if lastDayNumber > day.number {
+                        Text(AppStrings.journeyDays(language, from: day.number, to: lastDayNumber))
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(0.3)
+                            .textCase(.uppercase)
+                            .foregroundStyle(c.textSecondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(c.cardAlt, in: Capsule())
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: isOpen ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
                 }
+                Text(localMeta(trips))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(c.textTertiary)
+            }
+        }
+    }
+
+    /// Местная поездка внутри раскрытой стоянки: «15:00 · Геленджик ·
+    /// 14 мин · 9 км». Время слева, потому что за один день таких строк бывает
+    /// пять и различает их именно оно — города у всех одинаковые.
+    private func localTripRow(_ trip: Trip, c: AppTheme.Colors) -> some View {
+        tripButton(trip, accessibilityId: "journey_local_trip_row") {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(JourneyFormat.time(trip.startDate, language: language))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(JourneyFormat.tripTitle(trip, language: language))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                    Text(legMeta(trip))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(c.textTertiary)
+                }
+                Spacer(minLength: 0)
+                chevron(c)
+            }
+            .padding(.leading, Self.nestedInset)
         }
     }
 
