@@ -70,10 +70,12 @@ final class JourneyManager: ObservableObject {
     func journey(containing tripId: UUID) -> Journey? { repository.journeyContaining(tripId: tripId) }
     func trips(in journey: Journey) -> [Trip] { repository.trips(in: journey) }
 
-    /// Соседи по времени, ещё ни в каком путешествии: кандидаты в плечи.
+    /// Соседи по времени, ещё ни в каком путешествии: кандидаты в плечи —
+    /// соседи, без самой поездки: её экран ставит первой сам.
     func neighbours(of trip: Trip, days: Int = 7) -> [Trip] {
         let window = TimeInterval(days * 86_400)
         return repository.fetchAllTrips()
+            .filter { $0.id != trip.id }
             .filter { abs($0.startDate.timeIntervalSince(trip.startDate)) <= window }
             .filter { repository.journeyContaining(tripId: $0.id) == nil }
             .sorted { $0.startDate < $1.startDate }

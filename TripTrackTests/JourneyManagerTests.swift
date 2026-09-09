@@ -58,6 +58,7 @@ final class JourneyManagerTests: XCTestCase {
         XCTAssertTrue(neighbourIds.contains(afterId), "+3 дня — сосед")
         XCTAssertFalse(neighbourIds.contains(farId), "+20 дней — вне недели")
         XCTAssertFalse(neighbourIds.contains(takenId), "уже в путешествии — не кандидат")
+        XCTAssertFalse(neighbourIds.contains(anchorId), "сама поездка — не сосед себе")
     }
 
     func testCreateBuildsTheWindowFromFirstStartToLastEnd() throws {
