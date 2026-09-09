@@ -6,6 +6,30 @@ struct TripPhotoMetadataPayload: Codable {
     let caption: String?
     let timestamp: Date
     let sortOrder: Int
+    /// 0.6.5: когда и где снят кадр — чтобы на новом телефоне снимки встали
+    /// на маршрут так же, как на старом. Опционально в обе стороны: старый
+    /// сервер ключей не шлёт, старый клиент их не понимает, и ни тот ни другой
+    /// не имеют права уронить синхронизацию целиком.
+    var capturedAt: Date?
+    var exifLatitude: Double?
+    var exifLongitude: Double?
+}
+
+/// Отметка на маршруте в проводе (0.6.5). Зеркало `TripCheckpoint`.
+struct TripCheckpointPayload: Codable {
+    let id: UUID
+    let timestamp: Date
+    let latitude: Double
+    let longitude: Double
+    let distanceFromStart: Double
+    let elapsedFromStart: Double
+    let name: String?
+    let photoId: UUID?
+    /// Прикреплённые рукой снимки. Опционально в обе стороны: старый сервер
+    /// ключа не знает и не отдаёт — тогда пусто, а не ошибка.
+    let photoIds: [UUID]?
+    let placeId: UUID?
+    let sortOrder: Int
 }
 
 struct TripSyncPayload: Codable {
@@ -52,6 +76,10 @@ struct TripSyncPayload: Codable {
     // Present on upload (client → server) and on /trips/detail response.
     let trackPoints: [TrackPointPayload]?
     let photos: [TripPhotoMetadataPayload]?
+    /// Отметки едут внутри поездки, а не отдельной очередью: их единицы, они
+    /// бессмысленны без неё, и отдельный тип синк-операции ради них — это
+    /// второй диалект того же разговора.
+    var checkpoints: [TripCheckpointPayload]?
 }
 
 extension TripSyncPayload {
@@ -96,7 +124,17 @@ extension TripSyncPayload {
             guard let pid = pe.id, let fn = pe.filename, let ts = pe.timestamp else { return nil }
             return TripPhotoMetadataPayload(
                 id: pid, filename: fn, caption: pe.caption,
-                timestamp: ts, sortOrder: Int(pe.sortOrder))
+                timestamp: ts, sortOrder: Int(pe.sortOrder),
+                capturedAt: pe.capturedAt,
+                exifLatitude: pe.exifLatitude?.doubleValue,
+                exifLongitude: pe.exifLongitude?.doubleValue)
+        }
+        self.checkpoints = trip.checkpoints.enumerated().map { index, c in
+            TripCheckpointPayload(
+                id: c.id, timestamp: c.timestamp,
+                latitude: c.latitude, longitude: c.longitude,
+                distanceFromStart: c.distanceFromStart, elapsedFromStart: c.elapsedFromStart,
+                name: c.name, photoId: c.photoId, photoIds: c.photoIds, placeId: c.placeId, sortOrder: index)
         }
     }
 

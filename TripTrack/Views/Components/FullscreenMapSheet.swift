@@ -52,6 +52,20 @@ struct FullscreenMapSheet: View {
     /// own and «Смотреть» on someone else's.
     var isOwnTrip: Bool = true
     var fogCutoffDate: Date?
+    /// Отметки маршрута — с подписью: это карта, с которой снимают ролик.
+    var checkpointMarkers: [CheckpointMarker] = []
+    /// Снимки, расставленные по маршруту, с готовыми миниатюрами.
+    var photoPins: [PhotoPin] = []
+    /// Нажатие на снимок на карте.
+    var onPhotoTap: ((UUID) -> Void)?
+    /// Точки трека для «поставить отметку пальцем». Пусто — палец ничего не
+    /// делает: считать «сколько до сюда» не по чему.
+    var trackPoints: [TrackPoint] = []
+    /// Старт поездки как его знает сама поездка — от него считается «сколько
+    /// до сюда», чтобы сходиться с отметками, поставленными на ходу.
+    var tripStartDate: Date?
+    /// Человек подтвердил место. Пусто — режим отметок выключен (чужая поездка).
+    var onAddCheckpoint: ((TripRouteLocator.Fix) -> Void)?
     /// Forwarded to the map — someone else's trip carries no fog of mine.
     var showsFog: Bool = true
     /// Social trips pass `true` — their preview polyline is sparsely sampled
@@ -113,6 +127,19 @@ struct FullscreenMapSheet: View {
                 coordinates: coordinates,
                 speeds: speeds,
                 isInteractive: true,
+                checkpointMarkers: checkpointMarkers,
+                checkpointMarkerStyle: .labelled,
+                photoPins: photoPins,
+                onPhotoTap: onPhotoTap,
+                onCheckpointTap: { id in
+                    Haptics.selection()
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                        selectedMarkerId = selectedMarkerId == id ? nil : id
+                    }
+                },
+                focusCoordinate: selectedMarker?.coordinate,
+                checkpointCandidates: checkpointCandidates,
+                onRouteTap: onAddCheckpoint == nil ? nil : { handleTap($0, metersPerPoint: $1) },
                 fogCutoffDate: fogCutoffDate,
                 showsFog: showsFog,
                 treatAsPreview: treatAsPreview,
@@ -181,7 +208,22 @@ struct FullscreenMapSheet: View {
                     zoomControls
                 }
 
-                if canReplay || canCrawl {
+                // Карточка отметки — над плашкой, не вместо неё: во время
+                // реплея она мелькает на пару секунд, и прыгающие под ней
+                // кнопки были бы хуже, чем лишние 70 пунктов высоты.
+                // Подтверждение отметки — в этой же колонке, на месте плашки:
+                // отдельный слой поверх карты накрывал кнопки зума, а колонка
+                // их сдвигает.
+                if !tappedPasses.isEmpty {
+                    checkpointConfirmBar
+                        .padding(.top, 12)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else if let marker = shownMarker {
+                    checkpointCard(marker)
+                        .padding(.top, 12)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                if canReplay || canCrawl, tappedPasses.isEmpty {
                     transportPlaque
                         .padding(.top, 12)
                 }
@@ -189,10 +231,20 @@ struct FullscreenMapSheet: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
+            .animation(.spring(response: 0.32, dampingFraction: 0.86), value: shownMarker?.id)
+            .animation(.spring(response: 0.32, dampingFraction: 0.86), value: tappedPasses.count)
             // Clears the «Apple Maps · Legal» strip along the bottom edge,
             // which Apple requires to stay visible and which the speed key was
             // sitting directly on top of.
             .padding(.bottom, 36)
+
+            // Подсказка «нажмите на маршрут» — под верхней полосой.
+            VStack {
+                checkpointHint
+                    .padding(.top, 64)
+                Spacer()
+            }
+            .animation(.spring(response: 0.32, dampingFraction: 0.86), value: hintDismissed)
         }
         .task {
             // Seeded, not started: the sheet opens as a map — the drive plays
@@ -204,6 +256,13 @@ struct FullscreenMapSheet: View {
                 timestamps: timestamps,
                 speeds: replaySpeeds.count == playbackSeries.count ? replaySpeeds : []
             )
+            engine.setHolds(at: checkpointMarkers.map(\.timestamp))
+        }
+        .onChange(of: checkpointMarkers) { _, markers in
+            engine.setHolds(at: markers.map(\.timestamp))
+        }
+        .onChange(of: engine.holdingIndex) { _, index in
+            if index != nil { Haptics.selection() }
         }
         .onDisappear {
             engine.stop()
@@ -468,6 +527,15 @@ struct FullscreenMapSheet: View {
                 Capsule()
                     .fill(AppTheme.accent)
                     .frame(width: max(x, 5), height: 5)
+                // Отметки на шкале — там реплей задержится. Видно, что
+                // впереди есть остановки, и где именно.
+                ForEach(Array(engine.holdFractions.enumerated()), id: \.offset) { pair in
+                    Circle()
+                        .fill(c.card)
+                        .frame(width: 7, height: 7)
+                        .overlay(Circle().strokeBorder(AppTheme.accent, lineWidth: 1.5))
+                        .position(x: min(max(CGFloat(pair.element) * w, 3.5), w - 3.5), y: g.size.height / 2)
+                }
                 Circle()
                     .fill(AppTheme.accent)
                     .frame(width: 13, height: 13)
@@ -589,6 +657,246 @@ struct FullscreenMapSheet: View {
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
+
+    // MARK: - Отметка пальцем по маршруту
+
+    /// Найденные проезды под пальцем. Один — показываем подтверждение,
+    /// несколько — сначала спрашиваем какой.
+    @State private var tappedPasses: [TripRouteLocator.Fix] = []
+
+    /// Кандидаты для карты — те же проезды, что и строки в карточке, с теми
+    /// же номерами. Один — без номера: нумеровать единственный вариант незачем.
+    private var checkpointCandidates: [CheckpointCandidate] {
+        tappedPasses.enumerated().map { index, fix in
+            CheckpointCandidate(
+                id: fix.index,
+                latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude,
+                number: tappedPasses.count > 1 ? index + 1 : nil,
+                accessibilityLabel: "\(AppStrings.checkpointAdd(language)), \(passReading(fix))")
+        }
+    }
+
+    private func handleTap(_ coordinate: CLLocationCoordinate2D, metersPerPoint: Double) {
+        guard !trackPoints.isEmpty else { return }
+        hintDismissed = true
+        // Радиус — про палец, не про метры: 28 пунктов экрана на любом зуме,
+        // но не меньше 40 м (дрожание GPS) и не больше 300 м (обзор страны —
+        // там палец всё равно не про конкретный поворот).
+        let radius = min(300, max(40, 28 * metersPerPoint))
+        let passes = TripRouteLocator.passes(
+            near: coordinate, in: trackPoints, radius: radius, startDate: tripStartDate)
+        guard !passes.isEmpty else {
+            // Мимо маршрута — кандидаты убираем, но молча: карта большая,
+            // промахнуться легко, и ругаться на это было бы придиркой.
+            tappedPasses = []
+            return
+        }
+        Haptics.selection()
+        selectedMarkerId = nil
+        // Реплей на паузу и камеру — с поводка: иначе карта подъезжает к
+        // кандидату и тут же уезжает за машиной, покадрово.
+        if canReplay, engine.isPlaying { engine.pause() }
+        if followsCar { withAnimation(.easeInOut(duration: 0.25)) { followsCar = false } }
+        tappedPasses = passes
+    }
+
+    /// Подсказка «нажмите на маршрут» — только своей поездке, только пока нет
+    /// ни одной отметки, и уходит сама: после первого касания или через
+    /// несколько секунд. Постоянная подсказка — это шум; отсутствие подсказки —
+    /// это фича, о которой никто не узнает.
+    @State private var hintDismissed = false
+
+    @ViewBuilder
+    private var checkpointHint: some View {
+        let c = AppTheme.colors(for: scheme)
+        if onAddCheckpoint != nil, checkpointMarkers.isEmpty, tappedPasses.isEmpty, !hintDismissed {
+            HStack(spacing: 8) {
+                Image(systemName: "hand.tap.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+                Text(AppStrings.checkpointEmptyHint(language))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.text)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(c.card, in: Capsule())
+            .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
+            .padding(.horizontal, 24)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .task {
+                try? await Task.sleep(for: .seconds(6))
+                hintDismissed = true
+            }
+        }
+    }
+
+    /// Подтверждение под пальцем: сначала показываем ЧИСЛО, потом спрашиваем.
+    ///
+    /// Наоборот было бы нечестно: человек ставит отметку ради «сколько до сюда»,
+    /// и узнать ответ он должен до того, как согласится, а не после.
+    @ViewBuilder
+    private var checkpointConfirmBar: some View {
+        let c = AppTheme.colors(for: scheme)
+        if !tappedPasses.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                if tappedPasses.count > 1 {
+                    Text(AppStrings.checkpointChoosePass(language))
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundStyle(c.text)
+                    Text(AppStrings.checkpointChoosePassHint(language))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(c.textTertiary)
+                }
+                ForEach(Array(tappedPasses.enumerated()), id: \.offset) { pair in
+                    Button {
+                        Haptics.success()
+                        onAddCheckpoint?(pair.element)
+                        tappedPasses = []
+                    } label: {
+                        HStack(spacing: 10) {
+                            if tappedPasses.count > 1 {
+                                // Тот же номер, что на кандидате на карте.
+                                Text("\(pair.offset + 1)")
+                                    .font(.system(size: 12, weight: .heavy))
+                                    .foregroundStyle(AppTheme.accent)
+                                    .frame(width: 22, height: 22)
+                                    .background(.white, in: Circle())
+                            } else {
+                                Image(systemName: "flag.fill")
+                                    .font(.system(size: 13, weight: .bold))
+                            }
+                            Text(passReading(pair.element))
+                                .font(.system(size: 15, weight: .heavy))
+                                .monospacedDigit()
+                            Spacer(minLength: 8)
+                            Text(AppStrings.checkpointAdd(language))
+                                .font(.system(size: 13, weight: .semibold))
+                                .opacity(0.85)
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .frame(height: 46)
+                        .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(PressableCardStyle())
+                }
+                // Видимая кнопка, а не голый текст с зоной нажатия вокруг:
+                // невидимая зона читалась как пустое место в карточке.
+                Button {
+                    Haptics.tap()
+                    tappedPasses = []
+                } label: {
+                    Text(AppStrings.cancel(language))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(PressableCardStyle())
+            }
+            .padding(12)
+            .background(c.card, in: RoundedRectangle(cornerRadius: 18))
+            .shadow(color: .black.opacity(0.22), radius: 14, y: 4)
+        }
+    }
+
+    private func passReading(_ fix: TripRouteLocator.Fix) -> String {
+        CheckpointReading.text(elapsed: fix.elapsedFromStart, metres: fix.distanceFromStart, lang: language)
+    }
+
+    // MARK: - Выбранная отметка
+
+    /// Отметка, на которую нажали. Реплей на задержке показывает ту, у
+    /// которой стоит, — тем же кодом и той же карточкой.
+    @State private var selectedMarkerId: UUID?
+
+    private var selectedMarker: CheckpointMarker? {
+        checkpointMarkers.first { $0.id == selectedMarkerId }
+    }
+
+    private var shownMarker: CheckpointMarker? {
+        if let selectedMarker { return selectedMarker }
+        guard let index = engine.holdingIndex, checkpointMarkers.indices.contains(index) else { return nil }
+        return checkpointMarkers[index]
+    }
+
+    /// Карточка внизу: обложка, имя, «1 ч 19 мин · 106 км». Маркер на карте
+    /// говорит то же самое, но мелко и подписью — здесь это можно прочитать,
+    /// а обложку — открыть.
+    private func checkpointCard(_ marker: CheckpointMarker) -> some View {
+        let c = AppTheme.colors(for: scheme)
+        return HStack(spacing: 12) {
+            Button {
+                if let id = marker.coverPhotoId { onPhotoTap?(id) }
+            } label: {
+                ZStack {
+                    if let image = marker.image {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Image(systemName: "flag.fill")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(AppTheme.accent)
+                    }
+                }
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(alignment: .bottomTrailing) {
+                    if marker.photoCount > 1 {
+                        Text("+\(marker.photoCount - 1)")
+                            .font(.system(size: 10, weight: .heavy))
+                            .monospacedDigit()
+                            .foregroundStyle(c.card)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(c.text, in: Capsule())
+                            .offset(x: 4, y: 4)
+                    }
+                }
+            }
+            .buttonStyle(PressableCardStyle())
+            .disabled(marker.coverPhotoId == nil)
+            .accessibilityLabel(AppStrings.nounPhotos(language, max(1, marker.photoCount)))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(marker.name ?? "")
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundStyle(c.text)
+                    .lineLimit(1)
+                Text(marker.reading)
+                    .font(.system(size: 13, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(c.textSecondary)
+            }
+            Spacer(minLength: 8)
+
+            if selectedMarkerId != nil {
+                Button {
+                    Haptics.tap()
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { selectedMarkerId = nil }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(c.textSecondary)
+                        .frame(width: 32, height: 32)
+                        .background(c.cardAlt, in: Circle())
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityLabel(AppStrings.closeSheet(language))
+            }
+        }
+        .padding(12)
+        .background(c.card, in: RoundedRectangle(cornerRadius: 18))
+        .shadow(color: .black.opacity(0.22), radius: 14, y: 4)
+    }
+
 }
 
 // MARK: - Engine
@@ -651,6 +959,27 @@ final class TripReplayEngine: NSObject, ObservableObject {
     /// Monotonic segment cursor — reset on seeks/backward jumps.
     private var cursor = 0
 
+    /// Доли шкалы, на которых реплей задерживается: отметки маршрута. Ролик
+    /// «до моря за полтора часа» без остановки у моря — не ролик.
+    @Published private(set) var holdFractions: [Double] = []
+    /// Индекс отметки, у которой стоим сейчас; nil — едем.
+    @Published private(set) var holdingIndex: Int?
+    private var holdUntil: CFTimeInterval = 0
+    /// Достаточно, чтобы прочитать имя и число; мало, чтобы захотеть промотать.
+    static let holdDuration: Double = 1.8
+
+    func setHolds(at dates: [Date]) {
+        guard timestamps.count >= 2 else { holdFractions = []; return }
+        let t0 = timestamps[0]
+        let span = timestamps[timestamps.count - 1].timeIntervalSince(t0)
+        guard span > 0 else { holdFractions = []; return }
+        holdFractions = dates
+            .map { $0.timeIntervalSince(t0) / span }
+            .filter { $0 > 0 && $0 < 1 }
+            .sorted()
+        holdingIndex = nil
+    }
+
     /// Seeds the series and renders frame 0 (car at the start dot).
     /// No-ops on malformed input (fewer than 2 points or misaligned
     /// timestamps) — the map simply shows the route and no car.
@@ -701,6 +1030,7 @@ final class TripReplayEngine: NSObject, ObservableObject {
         displayLink?.invalidate()
         displayLink = nil
         isPlaying = false
+        holdingIndex = nil
     }
 
     func togglePlay() {
@@ -729,6 +1059,7 @@ final class TripReplayEngine: NSObject, ObservableObject {
         guard coords.count >= 2 else { return }
         progress = min(max(p, 0), 1)
         cursor = 0
+        holdingIndex = nil
         applyFrame()
     }
 
@@ -739,7 +1070,19 @@ final class TripReplayEngine: NSObject, ObservableObject {
         // would jump the playhead to the end in one frame.
         let dt = min(now - lastTick, 0.5)
         lastTick = now
-        progress = min(1, progress + dt * rate / baseDuration)
+        if holdingIndex != nil {
+            guard now >= holdUntil else { return }
+            holdingIndex = nil
+        }
+        let before = progress
+        progress = min(1, before + dt * rate / baseDuration)
+        // Проехали отметку за этот кадр — откатываемся ровно на неё и стоим.
+        // Задержка не зависит от скорости: на 5× у моря стоят столько же.
+        if let hit = holdFractions.enumerated().first(where: { $0.element > before && $0.element <= progress }) {
+            progress = hit.element
+            holdingIndex = hit.offset
+            holdUntil = now + Self.holdDuration
+        }
         applyFrame()
         if progress >= 1 {
             // Hold the final frame — the play button restarts from zero.

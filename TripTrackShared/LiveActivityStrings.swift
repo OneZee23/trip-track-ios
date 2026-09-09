@@ -87,6 +87,13 @@ enum LiveActivityStrings {
     }
 
     /// The Dynamic Island's version of `finish` — one word, tighter.
+    /// Кнопка-флажок «поставить отметку» — подпись для VoiceOver.
+    static func checkpoint(_ c: String) -> String {
+        pick(c, ru: "Отметка", en: "Checkpoint", de: "Markierung", es: "Marca",
+             fr: "Repère", it: "Segnalibro", pl: "Znacznik",
+             id: "Penanda", tr: "İşaret", fil: "Marka", uk: "Позначка", kk: "Белгі", pt: "Marcação")
+    }
+
     static func end(_ c: String) -> String {
         pick(c, ru: "Завершить", en: "End", de: "Ende", es: "Fin",
              fr: "Fin", it: "Fine", pl: "Koniec",

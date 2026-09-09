@@ -48,6 +48,11 @@ struct PhotoFullScreenView: View {
     /// держим», и главное: с плитки было не видно, на что жалуешься. Здесь
     /// снимок открыт целиком, и сомнений нет.
     var onReport: ((UUID) -> Void)? = nil
+    /// Снимок — это момент. Сделать место съёмки отметкой в один тап, из
+    /// просмотрщика: «вот здесь было море» — и сразу «сколько до сюда».
+    var onMarkPlace: ((UUID) -> Void)? = nil
+    /// Кнопка есть только у снимков, у которых известно, где они сняты.
+    var canMarkPlace: ((UUID) -> Bool)? = nil
     let onDismiss: () -> Void
 
     /// Which page the pager has actually LANDED on. Driving the pager by
@@ -87,6 +92,8 @@ struct PhotoFullScreenView: View {
         onSetMain: ((UUID) -> Void)? = nil,
         onReport: ((UUID) -> Void)? = nil,
         isMain: ((UUID) -> Bool)? = nil,
+        onMarkPlace: ((UUID) -> Void)? = nil,
+        canMarkPlace: ((UUID) -> Bool)? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.pages = pages
@@ -97,6 +104,8 @@ struct PhotoFullScreenView: View {
         self.onSetMain = onSetMain
         self.onReport = onReport
         self.isMain = isMain
+        self.onMarkPlace = onMarkPlace
+        self.canMarkPlace = canMarkPlace
         self.onDismiss = onDismiss
         let start = pages.indices.contains(initialIndex) ? initialIndex : 0
         _livePages = State(initialValue: pages)
@@ -344,6 +353,13 @@ struct PhotoFullScreenView: View {
                     guard !already else { return }
                     Haptics.tap()
                     onSetMain(livePages[currentIndex].id)
+                }
+            }
+            if let onMarkPlace, canMarkPlace?(livePages[currentIndex].id) ?? false {
+                circleButton("mappin.and.ellipse", label: AppStrings.checkpointMarkPlace(language),
+                             id: "photo_viewer_mark_place") {
+                    Haptics.success()
+                    onMarkPlace(livePages[currentIndex].id)
                 }
             }
             if onDelete != nil {

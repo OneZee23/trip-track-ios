@@ -21,5 +21,11 @@ struct TripActivityAttributes: ActivityAttributes {
         var language: String = "en"
         /// Dynamic — follows map dark mode (sun-based)
         var isDarkMode: Bool = false
+        /// Сколько отметок поставлено за эту поездку.
+        ///
+        /// Нужно ради отклика: кнопка на Live Activity срабатывает молча, и без
+        /// растущего числа нажатие неотличимо от промаха — а промахнуться за
+        /// рулём легко.
+        var checkpointCount: Int = 0
     }
 }
