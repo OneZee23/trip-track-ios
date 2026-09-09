@@ -47,7 +47,14 @@ enum HistoryFolding {
         var rows: [HistoryRow] = []
         var taken: Set<UUID> = []
         for j in journeys {
-            let legs = trips.filter { j.contains($0) }.sorted { $0.startDate > $1.startDate }
+            // `!taken.contains` — не украшение: локально окна пересечься не
+            // могут (проверка стоит и на создании, и на правке), но приезжают
+            // они с сервера, где эту проверку однажды может не пройти чужой
+            // клиент. Поездка, попавшая в два окна, без этой строки нарисовалась
+            // бы дважды — и километры в глазах человека удвоились бы.
+            let legs = trips
+                .filter { j.contains($0) && !taken.contains($0.id) }
+                .sorted { $0.startDate > $1.startDate }
             // Окно, целиком лежащее вне отрезка календаря, — не строка:
             // человек смотрит сентябрь, и августовское путешествие в нём
             // висело бы пустой карточкой.
@@ -71,15 +78,25 @@ enum HistoryFolding {
     /// тянется вперёд до конца времён.
     private static func intersects(_ j: Journey, _ range: ClosedRange<Date>?) -> Bool {
         guard let range else { return true }
-        return j.startDate <= range.upperBound && (j.endDate ?? .distantFuture) >= range.lowerBound
+        // Верхняя граница — начало СЛЕДУЮЩИХ суток, поэтому сравнение строгое:
+        // сама она в отрезок не входит (см. `dayRange`).
+        return j.startDate < range.upperBound && (j.endDate ?? .distantFuture) >= range.lowerBound
     }
 
     /// Отрезок календаря в том же виде, в каком его понимает фильтр «Моих»:
-    /// оба конца включительно, по началу суток, один тап — один день.
+    /// от начала первых суток до начала суток, СЛЕДУЮЩИХ за последними, — один
+    /// тап по-прежнему один день.
+    ///
+    /// Верхний конец исключающий (`intersects` сравнивает строго), а не
+    /// «полночь минус секунда»: та секунда — щель, в которую проваливалось
+    /// окно, начавшееся в последние 999 миллисекунд суток. Секунда до полуночи
+    /// вычиталась ради того, чтобы конец отрезка попадал в те же сутки, что и
+    /// его дата, — но проверка тут одна, и ей достаточно знать, где сутки
+    /// кончаются.
     static func dayRange(from: Date?, to: Date?, calendar: Calendar = .current) -> ClosedRange<Date>? {
         guard let from else { return nil }
         let start = calendar.startOfDay(for: from)
-        let end = calendar.startOfDay(for: to ?? from).addingTimeInterval(86_400 - 1)
+        let end = calendar.startOfDay(for: to ?? from).addingTimeInterval(86_400)
         return start...max(start, end)
     }
 

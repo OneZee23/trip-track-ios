@@ -1491,16 +1491,43 @@ final class CoreDataTripRepository: TripRepository {
 
     /// Плечи — свои поездки в окне, по времени старта. Трансферы входят: едет
     /// человек, не машина.
+    ///
+    /// Окно отрезает БАЗА, а не фильтр в памяти: `fetchAllTrips()` поднимал всю
+    /// библиотеку — тысячу поездок за пять лет — ради шести внутри недели, и
+    /// делал это на каждый вход в экран, на каждое «убрать плечо» и на каждую
+    /// перерисовку карточки. Снятые галочки (`excludedTripIds`) остаются в
+    /// памяти: их горстка, и правило членства всё равно живёт в одном месте —
+    /// `Journey.contains`.
     func trips(in journey: Journey) -> [Trip] {
-        fetchAllTrips()
+        var predicates = [
+            completedTripPredicate,
+            NSPredicate(format: "startDate >= %@", journey.startDate as NSDate),
+        ]
+        // Открытое окно (`endDate == nil`) тянется вперёд до конца времён —
+        // верхней границы у запроса тогда нет вовсе.
+        if let end = journey.endDate {
+            predicates.append(NSPredicate(format: "startDate <= %@", end as NSDate))
+        }
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: true)]
+        request.fetchBatchSize = 25
+        guard let entities = try? context.fetch(request) else { return [] }
+        return entities
+            .compactMap { tripFromEntity($0, includeTrackPoints: false) }
             .filter { journey.contains($0) }
-            .sorted { $0.startDate < $1.startDate }
     }
 
     func applyRemoteJourney(_ p: JourneySyncPayload) {
         let existing = journeyEntity(id: p.id)
         // Локальная правка, которая ещё не уехала, старше серверной копии.
         if existing?.syncStatus == SyncStatus.pendingUpload.rawValue { return }
+        // Удалённое здесь и ещё не подтверждённое сервером — тем более: pull
+        // приходит из того же обмена, в котором DELETE только стоит в очереди,
+        // и без этой строки путешествие ВОСКРЕСАЛО бы, вернувшись строкой
+        // `synced`, — а очередь потом сносила бы его во второй раз, уже с
+        // мигающей карточкой в «Моих».
+        if existing?.syncStatus == SyncStatus.pendingDelete.rawValue { return }
         let e = existing ?? { let n = JourneyEntity(context: context); n.id = p.id; n.createdAt = Date(); return n }()
         e.userId = SettingsManager.shared.localUserId
         e.title = p.title; e.startDate = p.startDate; e.endDate = p.endDate

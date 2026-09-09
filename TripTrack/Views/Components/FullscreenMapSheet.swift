@@ -300,18 +300,10 @@ struct FullscreenMapSheet: View {
     }
 
     /// The insets go to a UIKit map that ignores the safe area, so the numbers
-    /// have to be looked up rather than laid out.
-    private var safeAreaTop: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.safeAreaInsets.top ?? 47
-    }
+    /// have to be looked up rather than laid out (see `tt_safeAreaInsets`).
+    private var safeAreaTop: CGFloat { UIApplication.tt_safeAreaInsets?.top ?? 47 }
 
-    private var safeAreaBottom: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.safeAreaInsets.bottom ?? 34
-    }
+    private var safeAreaBottom: CGFloat { UIApplication.tt_safeAreaInsets?.bottom ?? 34 }
 
     /// A button says what it will DO, not what is already true.
     ///

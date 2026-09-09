@@ -1,15 +1,6 @@
 import Foundation
 import CoreLocation
 
-/// SDK не даёт `CLLocationCoordinate2D` сравнение из коробки, а без него
-/// `JourneyAggregate` и `Item` не синтезируют `Equatable` (нужен тестам и
-/// экрану путешествия для сравнения снапшотов).
-extension CLLocationCoordinate2D: Equatable {
-    public static func == (lhs: CLLocationCoordinate2D, rhs: CLLocationCoordinate2D) -> Bool {
-        lhs.latitude == rhs.latitude && lhs.longitude == rhs.longitude
-    }
-}
-
 /// Что путешествие показывает: плечи по дням, местные поездки свёрнуты,
 /// итог. Чистая функция от поездок — ничего не хранится дважды.
 struct JourneyAggregate: Equatable {
@@ -18,7 +9,13 @@ struct JourneyAggregate: Equatable {
         case leg(Trip)
         /// Местные поездки у ночёвки: оба конца в `localRadius` от якоря.
         /// Второй параметр — якорь (координата ночёвки) для имени «Тбилиси».
-        case local([Trip], anchor: CLLocationCoordinate2D)
+        ///
+        /// `lastDayNumber` — номер дня ПОСЛЕДНЕЙ поездки стоянки: она тянется
+        /// через несколько дней («ДНИ 2–4»), и правый конец этого диапазона
+        /// известен только здесь, где стоянка и собиралась. Экран считал его
+        /// сам, своей копией той же арифметики дней, — две копии одного
+        /// правила, которые расходятся молча.
+        case local([Trip], anchor: CLLocationCoordinate2D, lastDayNumber: Int)
     }
     struct Day: Equatable {
         let number: Int
@@ -36,6 +33,15 @@ struct JourneyAggregate: Equatable {
     let calendarDays: Int
     let regions: [String]
     let firstStart: CLLocationCoordinate2D?
+    /// Самый дальний от старта финиш — вторая половина имени «Краснодар —
+    /// Тбилиси».
+    ///
+    /// Считается ТОЛЬКО по плечам: местные поездки в счёт не идут. Оба их конца
+    /// лежат в `localRadius` от ночёвки, то есть дальше плеча, которое туда
+    /// привезло, они не уедут никогда, — а вот перебить его на пару километров
+    /// вполне могут. Тогда «дальней точкой» стала бы поездка в тбилисский
+    /// супермаркет, и геокодер подписал бы путешествие его районом вместо
+    /// города.
     let farthestEnd: CLLocationCoordinate2D?
 
     static func build(trips input: [Trip], calendar: Calendar = .current) -> JourneyAggregate {
@@ -60,10 +66,12 @@ struct JourneyAggregate: Equatable {
             if isLocal, let anchor {
                 // Свёрнутая стоянка живёт в дне, где началась, и копит все местные
                 // поездки до следующего плеча — «Дни 2–4 · Тбилиси».
-                if let i = days.indices.last, case .local(var list, let a) = days[i].items.last {
-                    list.append(trip); days[i].items[days[i].items.count - 1] = .local(list, anchor: a)
+                if let i = days.indices.last, case .local(var list, let a, _) = days[i].items.last {
+                    list.append(trip)
+                    days[i].items[days[i].items.count - 1] = .local(list, anchor: a, lastDayNumber: number)
                 } else {
-                    appendItem(.local([trip], anchor: anchor), number: number, date: trip.startDate, to: &days)
+                    appendItem(.local([trip], anchor: anchor, lastDayNumber: number),
+                               number: number, date: trip.startDate, to: &days)
                 }
             } else {
                 legCount += 1
@@ -93,6 +101,17 @@ struct JourneyAggregate: Equatable {
             firstStart: origin, farthestEnd: farthest?.0)
     }
 
+    /// Сколько поездок свёрнуто по стоянкам — «6 поездок · 2 по городу» на
+    /// карточке. Не `legCount`: тот про дорогу, этот про то, что дорогой не был.
+    var localTripCount: Int {
+        days.reduce(0) { total, day in
+            total + day.items.reduce(0) { acc, item in
+                if case .local(let trips, _, _) = item { return acc + trips.count }
+                return acc
+            }
+        }
+    }
+
     /// «Краснодар — Тбилиси»; без имён — nil, экран покажет даты.
     func defaultTitle(startName: String?, farthestName: String?) -> String? {
         guard let s = startName, let f = farthestName, !s.isEmpty, !f.isEmpty, s != f else { return startName ?? farthestName }
@@ -107,13 +126,17 @@ struct JourneyAggregate: Equatable {
         }
     }
 
+    /// Точки трека, если поездка их несёт, иначе — упрощённая полилиния ЧЕРЕЗ
+    /// КЭШ (`Trip.previewCoordinates`): `decodePolyline` напрямую разбирал одни
+    /// и те же байты заново на каждый вход в экран и на каждую карточку в
+    /// списке, хотя ответ уже лежал в `NSCache` рядом.
     static func startCoordinate(of trip: Trip) -> CLLocationCoordinate2D? {
         if let p = trip.trackPoints.first { return p.coordinate }
-        return trip.previewPolyline.flatMap { Trip.decodePolyline($0).first }
+        return trip.previewCoordinates.first
     }
     static func endCoordinate(of trip: Trip) -> CLLocationCoordinate2D? {
         if let p = trip.trackPoints.last { return p.coordinate }
-        return trip.previewPolyline.flatMap { Trip.decodePolyline($0).last }
+        return trip.previewCoordinates.last
     }
     private static func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> CLLocationDistance {
         CLLocation(latitude: a.latitude, longitude: a.longitude)

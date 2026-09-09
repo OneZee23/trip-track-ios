@@ -17,9 +17,12 @@ struct JourneyCardView: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
 
-    /// Итог считается на создании карточки, а не в `body`: `body` зовётся на
-    /// каждый кадр прокрутки, а `JourneyAggregate.build` перебирает все точки
-    /// всех плеч.
+    /// Итог считается на создании карточки, а не в `body`.
+    ///
+    /// «Мои» наблюдают `MapViewModel`, и во время записи он публикует
+    /// изменения по нескольку раз в секунду — тело каждой карточки истории
+    /// пересчитывается вместе с экраном. `JourneyAggregate.build` перебирает
+    /// все точки всех плеч, и в `body` эта работа шла бы в такт с GPS.
     private let aggregate: JourneyAggregate
     /// Ниточки плеч в общей рамке. Каждое плечо своим маршрутом — склейка
     /// одной линией дорисовала бы прямую через пустоту между городами.
@@ -28,6 +31,9 @@ struct JourneyCardView: View {
     /// маленькой стопке читается как ошибка вёрстки.
     private let thumbs: [Trip]
     private let windowEnd: Date
+    /// Сколько поездок свёрнуто по стоянкам — второе число подписи. Считается
+    /// здесь по той же причине, что и `aggregate`: перебор дней в `body`.
+    private let localCount: Int
     /// Обложка, выбранная руками: снимок ИЗ ПЛЕЧ, а не любой из библиотеки.
     /// Плечи приходят снаружи, поэтому и обложка ищется по ним: снимок,
     /// уехавший вместе с убранным плечом, молча возвращает карту — карточка
@@ -46,7 +52,9 @@ struct JourneyCardView: View {
         self.journey = journey
         self.legs = legs
         self.onTap = onTap
-        self.aggregate = JourneyAggregate.build(trips: legs)
+        let aggregate = JourneyAggregate.build(trips: legs)
+        self.aggregate = aggregate
+        self.localCount = aggregate.localTripCount
         self.routes = legs.map(\.previewCoordinates).filter { $0.count > 1 }
         self.thumbs = Array(legs.sorted { $0.startDate > $1.startDate }.prefix(4))
         self.windowEnd = journey.endDate
@@ -205,21 +213,35 @@ struct JourneyCardView: View {
     /// «ПУТЕШЕСТВИЕ · 4 ДНЯ».
     private var pillText: String {
         let l = lang.language
-        let days = max(aggregate.calendarDays, 1)
+        let days = windowDays
         return "\(AppStrings.journeyWord(l)) · \(days) \(AppStrings.nounDays(l, days))"
             .uppercased(l)
     }
 
-    /// Имя человека, иначе «Краснодар — Тбилиси», иначе даты — тот же порядок,
-    /// что на экране путешествия: одна запись не может называться на двух
-    /// экранах по-разному.
+    /// Дни путешествия: по плечам, а без плеч — по САМОМУ ОКНУ.
+    ///
+    /// `max(calendarDays, 1)` здесь стоял затычкой и врал ровно там, где
+    /// человеку нужнее всего понять, что это за карточка: у окна без единого
+    /// плеча `calendarDays == 0`, и плашка обещала «1 ДЕНЬ» пятидневной
+    /// поездке в Грузию. Даты у окна есть всегда — они и есть ответ.
+    private var windowDays: Int {
+        if aggregate.calendarDays > 0 { return aggregate.calendarDays }
+        let calendar = Calendar.current
+        let span = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: journey.startDate),
+            to: calendar.startOfDay(for: windowEnd)
+        ).day ?? 0
+        return max(span + 1, 1)
+    }
+
+    /// Имя человека, иначе «Краснодар — Тбилиси», иначе даты — общая лестница
+    /// с экраном путешествия (`JourneyTitle`): одна запись не может называться
+    /// на двух экранах по-разному.
     private var titleText: String {
-        if let title = journey.title, !title.isEmpty { return title }
-        if let auto = aggregate.defaultTitle(startName: startName, farthestName: farthestName),
-           !auto.isEmpty {
-            return auto
-        }
-        return dateRangeText
+        JourneyTitle.text(journey, aggregate: aggregate,
+                          startName: startName, farthestName: farthestName,
+                          dateRange: dateRangeText)
     }
 
     /// «12–17 сен · 1 640 км · 6 поездок · 19 ч в пути». Числа — те же, что в
@@ -237,6 +259,12 @@ struct JourneyCardView: View {
         var parts = titleText == dateRangeText ? [] : [dateRangeText]
         parts.append("\(TripDetailFormat.groupedNumber(aggregate.totalMetres / 1000)) \(AppStrings.km(l))")
         parts.append("\(aggregate.legCount) \(AppStrings.nounTrips(l, aggregate.legCount))")
+        // Первое число — плечи дороги; местные поездки в него не входят и без
+        // второго числа просто исчезали: восемь записей, «6 поездок» в подписи
+        // и никакого объяснения, куда делись две.
+        if localCount > 0 {
+            parts.append(AppStrings.journeyAroundTownCount(l, count: localCount))
+        }
         let driving = JourneyFormat.duration(aggregate.drivingSeconds, language: l)
         if !driving.isEmpty {
             parts.append("\(driving) \(AppStrings.journeyDrivingLabel(l).lowercased(l))")

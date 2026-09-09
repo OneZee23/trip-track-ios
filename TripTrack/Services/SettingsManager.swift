@@ -120,11 +120,30 @@ final class SettingsManager: ObservableObject {
             }
         }
     }
-    /// Спрашивали ли уже «Это твой дом?». Вопрос задаётся ОДИН раз: человек,
-    /// ответивший «нет», не должен получать его снова на каждой ночёвке.
+    /// Ответил ли человек «Да». Тогда вопрос закрыт навсегда: дом известен,
+    /// и спрашивать больше не о чем.
     @Published var homeAsked: Bool =
         UserDefaults.standard.bool(forKey: "com.triptrack.settings.homeAsked") {
         didSet { UserDefaults.standard.set(homeAsked, forKey: "com.triptrack.settings.homeAsked") }
+    }
+
+    /// Когда человек ответил «Нет». nil — не отвечал.
+    ///
+    /// Дата, а не флаг «спрашивали»: «нет» раньше гасило подсказки НАВСЕГДА, и
+    /// вернуть их было нечем — задать дом руками в 0.6.6 нельзя. А ответ этот
+    /// чаще всего про данные, а не про решение: на третьей неделе записи вывод
+    /// показывал работу вместо двора, человек честно отвечал «нет» — и терял
+    /// всю ветку путешествий до конца жизни приложения. Через месяц ночей
+    /// накопится вдвое больше, и вывод будет другим; вопрос стоит задать
+    /// снова — но именно через месяц, а не завтра.
+    private static let homeDeclinedAtKey = "com.triptrack.settings.homeDeclinedAt"
+    @Published var homeDeclinedAt: Date? =
+        UserDefaults.standard.object(forKey: SettingsManager.homeDeclinedAtKey) as? Date {
+        didSet {
+            let d = UserDefaults.standard
+            if let at = homeDeclinedAt { d.set(at, forKey: SettingsManager.homeDeclinedAtKey) }
+            else { d.removeObject(forKey: SettingsManager.homeDeclinedAtKey) }
+        }
     }
 
     /// Ключ отказа от подсказки. Живёт здесь, а не в экране, который его
@@ -142,6 +161,7 @@ final class SettingsManager: ObservableObject {
     func wipeJourneyPrivateState() {
         homeLocation = nil   // didSet уберёт обе координаты из UserDefaults
         homeAsked = false
+        homeDeclinedAt = nil
         UserDefaults.standard.removeObject(forKey: Self.dismissedJourneySuggestionKey)
     }
 

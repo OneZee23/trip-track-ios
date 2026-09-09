@@ -33,8 +33,14 @@ struct VehicleDeleteRequest: Codable {
     let id: UUID
 }
 
-struct JourneyUpsertResponse: Codable { let id: UUID; let conflictVersion: Int }
-struct JourneyDeleteRequest: Codable { let id: UUID }
+struct JourneyUpsertResponse: Codable {
+    let id: UUID
+    let conflictVersion: Int
+}
+
+struct JourneyDeleteRequest: Codable {
+    let id: UUID
+}
 
 struct SettingsUpsertResponse: Codable {
     let conflictVersion: Int

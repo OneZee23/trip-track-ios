@@ -61,3 +61,23 @@ enum JourneyFormat {
         return ProfileDateFormat.dayMonth(trip.startDate, lang: language)
     }
 }
+
+/// Заголовок путешествия — ОДНА лестница из трёх ступеней на всё приложение.
+///
+/// Имя, данное рукой; иначе «Краснодар — Тбилиси», собранное из имён мест;
+/// иначе даты окна, которые есть у путешествия всегда. Экран и карточка
+/// считали её каждый по своей копии — а одна запись не может называться на
+/// двух экранах по-разному, и первое же расхождение копий читалось бы как два
+/// разных путешествия.
+enum JourneyTitle {
+    static func text(_ journey: Journey, aggregate: JourneyAggregate,
+                     startName: String?, farthestName: String?,
+                     dateRange: String) -> String {
+        if let title = journey.title, !title.isEmpty { return title }
+        if let auto = aggregate.defaultTitle(startName: startName, farthestName: farthestName),
+           !auto.isEmpty {
+            return auto
+        }
+        return dateRange
+    }
+}

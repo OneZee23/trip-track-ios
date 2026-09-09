@@ -57,6 +57,10 @@ struct JourneySelectionBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
+        // Ровно как у `CustomTabBar`, чьё место полоса занимает: без потолка
+        // она растягивалась на всю ширину и на 430-точечном телефоне выходила
+        // заметно шире таб-бара, который только что стоял на её месте.
+        .frame(maxWidth: 380)
         .background {
             // Та же стеклянная пилюля, что у таб-бара: полоса занимает его
             // место, и другой материал читался бы как чужая панель.
@@ -103,6 +107,7 @@ struct JourneySelectable: ViewModifier {
     /// Долгое нажатие — вход в режим выбора.
     let onLongPress: () -> Void
 
+    @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     /// Палец на карточке. `@GestureState`, а не `@State`: прокрутка забирает
     /// жест себе, и сбросить сжатие вручную было бы уже некому.
@@ -148,6 +153,10 @@ struct JourneySelectable: ViewModifier {
             if isSelecting { tick }
         }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        // Кнопка карточки в режиме выбора молчит — нажатие ставит галочку, а
+        // не открывает поездку. Без подсказки озвучка обещала бы «открыть»:
+        // текст кнопки остался прежним, а делает она другое.
+        .accessibilityHint(isSelecting ? Text(AppStrings.journeySelectHint(lang.language)) : Text(""))
     }
 
     /// Галочка в верхнем углу. Под ней сплошной кружок цвета карточки: без
@@ -196,5 +205,15 @@ struct JourneyInertWhileSelecting: ViewModifier {
         content
             .opacity(isSelecting ? 0.5 : 1)
             .allowsHitTesting(!isSelecting)
+    }
+}
+
+extension View {
+    /// Карточка путешествия, приглушённая на время выбора. Своим методом, как
+    /// у `journeySelectable`: `.modifier(JourneyInertWhileSelecting(...))` в
+    /// двух местах «Моих» — та же запись, только через тип, о котором экрану
+    /// знать незачем.
+    func journeyInertWhileSelecting(_ isSelecting: Bool) -> some View {
+        modifier(JourneyInertWhileSelecting(isSelecting: isSelecting))
     }
 }

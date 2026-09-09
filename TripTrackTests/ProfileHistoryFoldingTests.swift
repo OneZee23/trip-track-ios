@@ -68,6 +68,68 @@ final class ProfileHistoryFoldingTests: XCTestCase {
         XCTAssertTrue(legs.isEmpty)
     }
 
+    /// «По последнему плечу, а не по первому» — и это РАЗНЫЕ места в списке.
+    ///
+    /// Плечи 13 и 15 сентября, между ними чужая поездка 14-го. По последнему
+    /// плечу карточка встаёт НАД ней, по первому — под: путешествие уезжало бы
+    /// вниз ровно на столько дней, сколько длилось, а самая свежая история
+    /// пряталась бы за поездками, которые случились раньше её конца.
+    func testJourneySortsByItsLatestLegNotItsEarliest() {
+        let t15 = trip(day: 15)
+        let t14 = trip(day: 14)
+        let t13 = trip(day: 13)
+        // 14-е внутри окна по датам, но человек убрал его руками — значит это
+        // ЧУЖАЯ поездка, и различить порядок она может.
+        let journey = Journey(startDate: date(12, hour: 0), endDate: date(16, hour: 23),
+                              excludedTripIds: [t14.id])
+
+        let rows = HistoryFolding.fold(trips: [t15, t14, t13], journeys: [journey])
+
+        XCTAssertEqual(rows.count, 2)
+        guard case .journey(let j, let legs) = rows[0] else {
+            return XCTFail("путешествие стоит НАД поездкой 14-го — по своему последнему плечу")
+        }
+        XCTAssertEqual(j.id, journey.id)
+        XCTAssertEqual(legs.map(\.id), [t15.id, t13.id])
+        guard case .trip(let alien) = rows[1] else { return XCTFail("вторым — 14 сентября") }
+        XCTAssertEqual(alien.id, t14.id)
+    }
+
+    /// Пустое окно и отрезок календаря: внутри — видно, снаружи — нет. Два
+    /// случая одной строки `intersects`, и различить их может только отрезок.
+    func testEmptyJourneyFollowsTheCalendarRange() {
+        let september = [trip(day: 20), trip(day: 9)]
+        let emptied = Journey(startDate: date(12, hour: 0), endDate: date(16, hour: 23))
+
+        let inside = HistoryFolding.fold(
+            trips: september, journeys: [emptied],
+            range: HistoryFolding.dayRange(from: date(12), to: date(16)))
+        XCTAssertEqual(inside.count, 3, "окно внутри отрезка — карточка на месте")
+
+        let outside = HistoryFolding.fold(
+            trips: september, journeys: [emptied],
+            range: HistoryFolding.dayRange(from: date(1), to: date(5)))
+        XCTAssertEqual(outside.count, 2, "окно вне отрезка — карточки нет")
+        XCTAssertTrue(outside.allSatisfy { if case .trip = $0 { return true } else { return false } })
+    }
+
+    /// Одна поездка не может лежать в двух путешествиях сразу. Локально это
+    /// невозможно — окна не пересекаются по построению, — но приезжают они с
+    /// сервера, где чужой клиент мог не проверить.
+    func testOverlappingJourneysNeverShowATripTwice() {
+        let t14 = trip(day: 14)
+        let first = Journey(startDate: date(12, hour: 0), endDate: date(16, hour: 23))
+        let second = Journey(startDate: date(13, hour: 0), endDate: date(18, hour: 23))
+
+        let rows = HistoryFolding.fold(trips: [t14], journeys: [first, second])
+
+        XCTAssertEqual(rows.count, 2, "две карточки — но поездка внутри одна")
+        let legIds = rows.flatMap { row -> [UUID] in
+            if case .journey(_, let legs) = row { return legs.map(\.id) } else { return [] }
+        }
+        XCTAssertEqual(legIds, [t14.id], "во второе окно та же поездка не попадает")
+    }
+
     /// Сетка рисуется кусками: подряд идущие поездки — одной решёткой,
     /// путешествие — во всю ширину между ними.
     func testRunsSplitTripsAroundJourneys() {

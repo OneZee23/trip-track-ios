@@ -86,8 +86,16 @@ struct JourneyDetailView: View {
             .task(id: journeyId) { reload() }
             // Удаление (своё или прилетевшее синком) не оставляет экрана,
             // которому нечего показать.
-            .onChange(of: manager.journeys) { _, _ in
-                if journey == nil { dismiss() } else { reload() }
+            //
+            // Сравниваются СВОИ записи из старого и нового списка, а не списки
+            // целиком: `journeys` меняется от любой чужой правки и от каждого
+            // пула, а `reload()` перечитывает поездки окна и пересчитывает
+            // итог. Без этой проверки экран одного путешествия перебирал бы
+            // базу всякий раз, когда меняется соседнее.
+            .onChange(of: manager.journeys) { old, new in
+                let before = old.first { $0.id == journeyId }
+                let after = new.first { $0.id == journeyId }
+                if after == nil { dismiss() } else if before != after { reload() }
             }
     }
 
@@ -195,10 +203,8 @@ struct JourneyDetailView: View {
 
     private var heroCaption: some View {
         let caption = captionText
-        // Одни и те же даты дважды подряд — это не подпись, а сбой: заголовок
-        // сам становится датами, когда имени взять неоткуда.
         return VStack(alignment: .leading, spacing: 6) {
-            if caption != titleText.uppercased(lang.language) {
+            if !caption.isEmpty {
                 Text(caption)
                     .font(.system(size: 10, weight: .heavy))
                     .tracking(0.4)
@@ -359,7 +365,9 @@ struct JourneyDetailView: View {
         let agg = JourneyAggregate.build(trips: legs)
         trips = legs
         aggregate = agg
-        coordinates = legs.flatMap { Trip.decodePolyline($0.previewPolyline ?? Data()) }
+        // Через `previewCoordinates`, а не `decodePolyline` напрямую: те же
+        // байты уже разобраны для карточки в «Моих» и лежат в `NSCache`.
+        coordinates = legs.flatMap(\.previewCoordinates)
         checkpointMarkers = legs.flatMap(markers(of:))
         coverPhoto = journey.coverPhotoId.flatMap { id in
             legs.lazy.flatMap(\.photos).first { $0.id == id }
@@ -373,7 +381,7 @@ struct JourneyDetailView: View {
         var names: [UUID: String] = [:]
         for day in agg.days {
             for item in day.items {
-                guard case .local(let group, let anchor) = item, let key = group.first?.id else { continue }
+                guard case .local(let group, let anchor, _) = item, let key = group.first?.id else { continue }
                 if let name = geocoder.cachedLocality(for: anchor) { names[key] = name }
             }
         }
@@ -418,20 +426,26 @@ struct JourneyDetailView: View {
 
     // MARK: - Строки
 
-    /// Имя человека, иначе «Краснодар — Тбилиси», иначе даты. Ни одного из трёх
-    /// не бывает пусто: даты у окна есть всегда.
+    /// Имя человека, иначе «Краснодар — Тбилиси», иначе даты — общая лестница
+    /// с карточкой в «Моих» (`JourneyTitle`). Ни одного из трёх не бывает
+    /// пусто: даты у окна есть всегда.
     private var titleText: String {
-        if let title = journey?.title, !title.isEmpty { return title }
-        if let auto = aggregate.defaultTitle(startName: startName, farthestName: farthestName),
-           !auto.isEmpty {
-            return auto
-        }
-        return dateRangeText
+        guard let journey else { return dateRangeText }
+        return JourneyTitle.text(journey, aggregate: aggregate,
+                                 startName: startName, farthestName: farthestName,
+                                 dateRange: dateRangeText)
     }
 
     /// «12–17 сен · Краснодарский край, Северная Осетия».
+    ///
+    /// Даты уходят из подписи, когда заголовок САМ стал датами (имени взять
+    /// неоткуда) — но только они: регионы остаются. Сравнение было по всей
+    /// строке, и подпись целиком считалась не совпавшей, стоило появиться
+    /// хоть одному региону, — «12–17 СЕН · КРАСНОДАРСКИЙ КРАЙ» над заголовком
+    /// «12–17 сен».
     private var captionText: String {
-        var parts = [dateRangeText]
+        var parts: [String] = []
+        if titleText != dateRangeText { parts.append(dateRangeText) }
         let regions = aggregate.regions
             .compactMap { RegionDisplay.localized($0, language: lang.language) }
             .filter { !$0.isEmpty }
@@ -445,11 +459,7 @@ struct JourneyDetailView: View {
         return JourneyFormat.dateRange(from: journey.startDate, to: end, language: lang.language)
     }
 
-    private var safeAreaTop: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.safeAreaInsets.top ?? 59
-    }
+    private var safeAreaTop: CGFloat { UIApplication.tt_safeAreaInsets?.top ?? 59 }
 
     private static let scrollSpace = "journeyScroll"
 }

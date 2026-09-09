@@ -167,6 +167,48 @@ final class JourneySuggesterTests: XCTestCase {
         XCTAssertNil(s, "поездка уже в путешествии — цепочка через неё не идёт")
     }
 
+    // MARK: - Спрашивать ли про дом
+
+    /// «Нет» — это на месяц, а не навсегда.
+    ///
+    /// Правило стояло тремя `if` внутри экрана и звучало «спросили — больше не
+    /// спрашиваем», из-за чего человек, ответивший «нет» на третьей неделе
+    /// записи (когда вывод показывал работу вместо двора), терял подсказки
+    /// насовсем — задать дом руками в 0.6.6 нечем.
+    func testHomeQuestionComesBackAMonthAfterNo() {
+        let now = Date()
+        let declined = now.addingTimeInterval(-JourneySuggester.homeReaskDelay - 60)
+        XCTAssertTrue(JourneySuggester.shouldAskHome(homeLocation: nil, homeAsked: false,
+                                                     declinedAt: declined, now: now))
+    }
+
+    func testHomeQuestionStaysAwayRightAfterNo() {
+        let now = Date()
+        XCTAssertFalse(JourneySuggester.shouldAskHome(
+            homeLocation: nil, homeAsked: false,
+            declinedAt: now.addingTimeInterval(-2 * 86_400), now: now))
+    }
+
+    func testHomeQuestionNeverComesBackAfterYes() {
+        let now = Date()
+        // «Да» закрывает вопрос навсегда, даже если дом потом стёрли: человек
+        // уже ответил, и переспрашивать — навязчиво.
+        XCTAssertFalse(JourneySuggester.shouldAskHome(homeLocation: nil, homeAsked: true,
+                                                      declinedAt: nil, now: now))
+        XCTAssertFalse(JourneySuggester.shouldAskHome(homeLocation: krd, homeAsked: true,
+                                                      declinedAt: nil, now: now))
+    }
+
+    func testHomeQuestionIsAskedWhenNobodyAnsweredYet() {
+        XCTAssertTrue(JourneySuggester.shouldAskHome(homeLocation: nil, homeAsked: false,
+                                                     declinedAt: nil, now: Date()))
+    }
+
+    func testHomeQuestionIsSilentWhenHomeIsAlreadyKnown() {
+        XCTAssertFalse(JourneySuggester.shouldAskHome(homeLocation: krd, homeAsked: false,
+                                                      declinedAt: nil, now: Date()))
+    }
+
     func testOldChainIsNotOfferedForever() {
         // Вернулись месяц назад: подсказка «Похоже на путешествие» уместна
         // по горячим следам, а не при каждом входе в «Мои» до конца времён.

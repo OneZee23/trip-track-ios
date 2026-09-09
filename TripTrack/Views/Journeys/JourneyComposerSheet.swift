@@ -22,7 +22,11 @@ struct JourneyComposerSheet: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var manager = JourneyManager.shared
+    /// Не `@ObservedObject`: у менеджера лист спрашивает соседей ОДИН раз в
+    /// `.task` и создаёт путешествие по кнопке. Ни одного `@Published` он не
+    /// читает, а наблюдение за ним перерисовывало бы лист на каждую чужую
+    /// правку — и на ту, которую делает он сам, прямо перед закрытием.
+    private let manager = JourneyManager.shared
     @State private var candidates: [Trip] = []
     @State private var selected: Set<UUID> = []
     @State private var title = ""
@@ -199,10 +203,14 @@ struct JourneyComposerSheet: View {
         JourneyFormat.tripTitle(trip, language: lang.language)
     }
 
-    /// «14 сент · 143 км». Километры целыми: разница в сотню метров ничего не
+    /// «14 сент · 1 143 км». Километры целыми: разница в сотню метров ничего не
     /// решает в выборе, из каких поездок сложить историю.
+    ///
+    /// Через `GarageFormat.odometer`, как везде: своё `Int(distance / 1000)`
+    /// и разряды не разбивало (на четырёхзначных «1143» читается как год), и
+    /// округляло вниз — 999,9 км показывались как «999».
     private func metaText(_ trip: Trip) -> String {
-        let km = Int(trip.distance / 1000)
+        let km = GarageFormat.odometer(trip.distanceKm, lng: lang.language)
         return "\(dateText(trip.startDate)) · \(km) \(AppStrings.km(lang.language))"
     }
 

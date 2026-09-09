@@ -31,6 +31,32 @@ enum JourneySuggester {
     /// Обычная среда: работа, дача, родители — места, куда возвращаются.
     static let usualVisits = 3
     static let usualWindow: TimeInterval = 30 * 86_400
+    /// Через столько после «Нет» вопрос про дом задаётся снова.
+    ///
+    /// Месяц, а не «никогда» и не «завтра»: «нет» чаще всего означает, что
+    /// данных было мало и вывод показал работу вместо двора, — а не что
+    /// человек отказался от дома навсегда. За месяц ночей накопится вдвое
+    /// больше, и вывод будет уже другим. Переспросить назавтра тем же ответом
+    /// значило бы не услышать его.
+    static let homeReaskDelay: TimeInterval = 30 * 86_400
+
+    /// Задавать ли вопрос «Это твой дом?».
+    ///
+    /// Чистая функция от четырёх фактов, а не три `if` внутри экрана: правило
+    /// «нет — это на месяц, да — это навсегда» проверяется тестом.
+    static func shouldAskHome(homeLocation: CLLocationCoordinate2D?,
+                              homeAsked: Bool,
+                              declinedAt: Date?,
+                              now: Date) -> Bool {
+        // Дом уже известен — спрашивать не о чем.
+        guard homeLocation == nil else { return false }
+        // «Да» закрывает вопрос навсегда: дом либо стоит в настройках, либо
+        // его оттуда стёрли руками, и переспрашивать про стёртое — навязчиво.
+        guard !homeAsked else { return false }
+        guard let declinedAt else { return true }
+        return now.timeIntervalSince(declinedAt) >= homeReaskDelay
+    }
+
     /// Подсказка уместна по горячим следам. Без этого окна каждое открытие
     /// «Моих» предлагало бы объединить поездку двухлетней давности — человек
     /// один раз ответил «не сейчас» другой цепочке, и следом получил бы
@@ -76,14 +102,15 @@ enum JourneySuggester {
         // меньшая по коду: иначе ответ зависел бы от порядка словаря и
         // «дом» прыгал бы между двумя дворами от запуска к запуску.
         guard let winner = nightsByCell.keys.max(by: { a, b in
-            let (na, nb) = (nightsByCell[a]!.count, nightsByCell[b]!.count)
+            let (na, nb) = (nightsByCell[a]?.count ?? 0, nightsByCell[b]?.count ?? 0)
             if na != nb { return na < nb }
-            let (pa, pb) = (pointsByCell[a]!.count, pointsByCell[b]!.count)
+            let (pa, pb) = (pointsByCell[a]?.count ?? 0, pointsByCell[b]?.count ?? 0)
             if pa != pb { return pa < pb }
             return a > b
-        }), nightsByCell[winner]!.count >= minHomeNights else { return nil }
+        }), (nightsByCell[winner]?.count ?? 0) >= minHomeNights else { return nil }
 
-        let points = pointsByCell[winner]!
+        let points = pointsByCell[winner] ?? []
+        guard !points.isEmpty else { return nil }
         return CLLocationCoordinate2D(
             latitude: points.reduce(0) { $0 + $1.latitude } / Double(points.count),
             longitude: points.reduce(0) { $0 + $1.longitude } / Double(points.count))
@@ -181,6 +208,9 @@ enum JourneySuggester {
             guard distance(spot, home) >= awayRadius,
                   !isSettled(spot, home: home, usual: usual) else { continue }
             let from = a.endDate ?? a.startDate
+            // «02:00 местного» — по поясу ТЕЛЕФОНА, нарочно: человек ночует
+            // там, где стоит его телефон, а поясов поездка пересекает сколько
+            // угодно. Календарь берётся с часовым поясом устройства.
             guard let night = calendar.nextDate(after: from, matching: DateComponents(hour: 2, minute: 0),
                                                 matchingPolicy: .nextTime) else { continue }
             if night <= b.startDate { return true }

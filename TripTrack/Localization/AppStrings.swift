@@ -1757,6 +1757,15 @@ enum AppStrings {
     static func journeyAroundTown(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyAroundTown", ru: "по городу", en: "around town")
     }
+    /// Второе число в подписи карточки: «6 поездок · 2 по городу».
+    ///
+    /// Первое число — плечи дороги, местные поездки в него не входят
+    /// (`legCount`). Без этой строки подпись врала вычитанием: человек видел
+    /// «6 поездок» там, где записей было восемь, и не понимал, куда делись две.
+    static func journeyAroundTownCount(_ lang: LanguageManager.Language, count: Int) -> String {
+        String(format: tr(lang, "journeyAroundTownCount",
+                          ru: "%d по городу", en: "%d around town"), count)
+    }
     /// Заголовок свёрнутой стоянки, когда имени места ещё нет: кэш геокодера
     /// холодный или координата в него не попала. Раньше сюда падало «по
     /// городу» — то же самое, что и в строке под заголовком, дважды подряд.
@@ -1818,6 +1827,13 @@ enum AppStrings {
     static func journeySelectAction(_ lang: LanguageManager.Language, count: Int) -> String {
         String(format: tr(lang, "journeySelectAction",
                           ru: "В путешествие (%d)", en: "Into a journey (%d)"), count)
+    }
+
+    /// Подсказка VoiceOver на карточке, пока идёт выбор. Кнопка карточки в этом
+    /// режиме молчит — нажатие ставит галочку, а не открывает поездку, — и без
+    /// подсказки озвучка обещала бы ровно то, чего не будет.
+    static func journeySelectHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeySelectHint", ru: "Нажмите, чтобы выбрать", en: "Tap to select")
     }
 
     // MARK: - Подсказка путешествия (0.6.6)

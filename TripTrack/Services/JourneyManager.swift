@@ -86,6 +86,12 @@ final class JourneyManager: ObservableObject {
     /// когда ждать подтверждения всё равно не от кого.
     func delete(id: UUID) {
         repository.markJourneyDeleted(id: id)
+        // Очередь — FIFO, и невыстрелившая `.upload`/`.update` того же
+        // путешествия ушла бы на сервер за мгновение до его же `.delete`:
+        // сервер увидел бы запись, которой у человека уже нет, а на втором
+        // телефоне она успела бы моргнуть карточкой. Ровно то же делает
+        // удаление поездки (`TripManager.deleteTrip`).
+        SyncQueue.shared.cancelOperations(for: id, entityType: .journey)
         enqueue(id, .delete)
         if !SettingsManager.shared.cloudSyncEnabled {
             repository.deleteJourneyHard(id: id)

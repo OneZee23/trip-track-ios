@@ -37,7 +37,7 @@ final class JourneyAggregateTests: XCTestCase {
         XCTAssertEqual(a.calendarDays, 6)
         XCTAssertEqual(Int(a.totalMetres / 1000), 1_410)
         let local = a.days.flatMap(\.items).compactMap { item -> [Trip]? in
-            if case .local(let trips, _) = item { return trips } else { return nil }
+            if case .local(let trips, _, _) = item { return trips } else { return nil }
         }
         XCTAssertEqual(local.count, 1)
         XCTAssertEqual(local[0].count, 2)
@@ -72,13 +72,60 @@ final class JourneyAggregateTests: XCTestCase {
         ])
         XCTAssertEqual(a.days.count, 1)
         let groups = a.days[0].items.compactMap { item -> [Trip]? in
-            if case .local(let trips, _) = item { return trips } else { return nil }
+            if case .local(let trips, _, _) = item { return trips } else { return nil }
         }
         XCTAssertEqual(groups.count, 2, "две стоянки в одном дне — два отдельных пункта")
         XCTAssertEqual(groups[0].count, 2)
         XCTAssertEqual(groups[1].count, 2)
         // Ключ, которым экран различает стоянки: id первой поездки каждой.
         XCTAssertNotEqual(groups[0].first?.id, groups[1].first?.id)
+    }
+
+    /// Номер последнего дня стоянки считает СБОРКА, а не экран: у грузинской
+    /// поездки местные катания приходятся на дни 3 и 4, и заголовок «ДНИ 3–4»
+    /// рисуется по этому числу.
+    func testLocalGroupCarriesTheDayNumberOfItsLastTrip() {
+        let a = JourneyAggregate.build(trips: georgia)
+        let numbers = a.days.flatMap(\.items).compactMap { item -> Int? in
+            if case .local(_, _, let last) = item { return last } else { return nil }
+        }
+        XCTAssertEqual(numbers, [4], "стоянка кончается на четвёртый день путешествия")
+        XCTAssertEqual(a.localTripCount, 2, "две поездки по Тбилиси — не плечи, но и не ноль")
+    }
+
+    /// Поездка без единой координаты — плечо, и ничего не роняет.
+    ///
+    /// «Местная» она быть не может по определению: местная — это про два конца
+    /// в тридцати километрах от ночёвки, а концов у неё нет. Такие записи в
+    /// базе есть: поездка, у которой трек не поднят (`includeTrackPoints:
+    /// false`), а `previewPolyline` не успела посчитаться.
+    func testTripWithNeitherTrackNorPolylineIsStillALeg() {
+        let start = t0.addingTimeInterval(9 * 3_600)
+        let bare = Trip(id: UUID(), startDate: start, endDate: start.addingTimeInterval(3_600),
+                        distance: 42_000, maxSpeed: 30, averageSpeed: 25, trackPoints: [], photos: [],
+                        title: nil, fuelUsed: 0, elevation: 0, region: nil, isPrivate: true,
+                        earnedBadgeIds: [], xpEarned: 0)
+
+        let a = JourneyAggregate.build(trips: [bare])
+
+        XCTAssertEqual(a.legCount, 1)
+        XCTAssertEqual(a.localTripCount, 0)
+        XCTAssertNil(a.firstStart)
+        XCTAssertNil(a.farthestEnd, "дальней точки без координат не бывает — но и падать тут нечему")
+        XCTAssertEqual(Int(a.totalMetres), 42_000, "километры считаются по одометру, а не по точкам")
+    }
+
+    /// Дальняя точка считается по ПЛЕЧАМ. Местная поездка по Тбилиси уезжает
+    /// от старта дальше, чем плечо, которое туда привезло, — на те же
+    /// несколько километров, — и без этого правила имя путешествия
+    /// подписывалось бы окраиной вместо города.
+    func testFarthestEndIgnoresLocalTrips() {
+        let farSuburb = CLLocationCoordinate2D(latitude: 41.62, longitude: 44.90)
+        let a = JourneyAggregate.build(trips: [
+            trip(day: 0, hour: 9, from: krd, to: tbs, km: 690, hours: 10),
+            trip(day: 1, hour: 11, from: tbs, to: farSuburb, km: 14, hours: 0.5),
+        ])
+        XCTAssertEqual(a.farthestEnd?.latitude ?? 0, tbs.latitude, accuracy: 0.001)
     }
 
     func testEmptyInputGivesEmptyAggregate() {

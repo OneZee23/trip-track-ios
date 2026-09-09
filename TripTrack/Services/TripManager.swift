@@ -968,6 +968,47 @@ final class TripManager: ObservableObject {
         return name
     }
 
+    /// Имена мест сразу для пачки координат — ОДНИМ запросом и не на главном
+    /// потоке. Ключ ответа — geohash-5 той же точности, что и кэш.
+    ///
+    /// `cachedLocality(for:)` спрашивает `viewContext`, то есть главный поток,
+    /// и по одной координате за раз. Подсказке «Похоже на путешествие» это
+    /// стоило похода в базу на КАЖДОЕ плечо цепочки — ровно в тот момент,
+    /// когда «Мои» рисуются. Здесь свой фоновый контекст и один `IN`-запрос.
+    ///
+    /// Протухшая запись просто не попадает в ответ, а не удаляется: чистка —
+    /// дело `lookupGeocodeCache`, и удалять из фонового контекста то, что
+    /// главный, возможно, держит в этот же миг, незачем.
+    func cachedLocalities(for coordinates: [CLLocationCoordinate2D]) async -> [String: String] {
+        let geohashes = Set(coordinates.map {
+            GeohashEncoder.encode(latitude: $0.latitude, longitude: $0.longitude, precision: 5)
+        })
+        guard !geohashes.isEmpty else { return [:] }
+        let context = persistenceController.container.newBackgroundContext()
+        let ttl = Self.geocodeCacheTTL
+        return await withCheckedContinuation { (cont: CheckedContinuation<[String: String], Never>) in
+            context.perform {
+                let request: NSFetchRequest<GeocodeCacheEntity> = GeocodeCacheEntity.fetchRequest()
+                request.predicate = NSPredicate(format: "geohash5 IN %@", geohashes)
+                var names: [String: String] = [:]
+                for entity in (try? context.fetch(request)) ?? [] {
+                    guard let hash = entity.geohash5,
+                          let locality = entity.locality, !locality.isEmpty else { continue }
+                    if let cachedAt = entity.cachedAt,
+                       Date().timeIntervalSince(cachedAt) > ttl { continue }
+                    names[hash] = locality
+                }
+                cont.resume(returning: names)
+            }
+        }
+    }
+
+    /// Ключ, которым `cachedLocalities` подписывает координату.
+    static func geocodeCacheKey(for coordinate: CLLocationCoordinate2D) -> String {
+        GeohashEncoder.encode(latitude: coordinate.latitude,
+                              longitude: coordinate.longitude, precision: 5)
+    }
+
     private func lookupGeocodeCache(for coord: CLLocationCoordinate2D) -> GeocodeCacheResult? {
         let geohash = GeohashEncoder.encode(latitude: coord.latitude, longitude: coord.longitude, precision: 5)
         let context = persistenceController.container.viewContext

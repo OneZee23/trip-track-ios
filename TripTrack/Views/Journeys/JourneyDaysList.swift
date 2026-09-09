@@ -33,7 +33,10 @@ struct JourneyDaysList: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
-        VStack(alignment: .leading, spacing: 20) {
+        // `LazyVStack`: у месячного путешествия дней три десятка, и каждый
+        // день — карточки плеч с миниатюрами фотографий. Обычный `VStack`
+        // строил их все до первого кадра, вместе с чтением снимков с диска.
+        LazyVStack(alignment: .leading, spacing: 20) {
             DetailSectionHeader(text: AppStrings.journeyByDays(language))
             ForEach(aggregate.days, id: \.number) { day in
                 dayBlock(day, c)
@@ -67,8 +70,8 @@ struct JourneyDaysList: View {
         for item: JourneyAggregate.Item, in day: JourneyAggregate.Day, at index: Int
     ) -> (badge: String, date: String)? {
         switch item {
-        case .local(let trips, _):
-            return localHeader(trips, in: day)
+        case .local(let trips, _, let lastNumber):
+            return localHeader(trips, lastNumber: lastNumber, in: day)
         case .leg:
             if index > 0, case .leg = day.items[index - 1] { return nil }
             return (AppStrings.journeyDay(language, day.number),
@@ -76,32 +79,18 @@ struct JourneyDaysList: View {
         }
     }
 
+    /// Правый конец диапазона «ДНИ 2–4» приходит из `JourneyAggregate` вместе
+    /// со стоянкой. Считать его здесь значило бы держать вторую копию арифметики
+    /// дней — ту самую, что уже посчитала номер каждой поездки при сборке.
     private func localHeader(
-        _ trips: [Trip], in day: JourneyAggregate.Day
+        _ trips: [Trip], lastNumber: Int, in day: JourneyAggregate.Day
     ) -> (badge: String, date: String) {
-        guard let first = trips.first, let last = trips.last else {
-            return (AppStrings.journeyDay(language, day.number),
-                    JourneyFormat.dayDate(day.date, language: language))
-        }
-        let lastNumber = Self.dayNumber(of: last.startDate, dayOne: day.date, number: day.number)
-        guard lastNumber > day.number else {
+        guard let first = trips.first, let last = trips.last, lastNumber > day.number else {
             return (AppStrings.journeyDay(language, day.number),
                     JourneyFormat.dayDate(day.date, language: language))
         }
         return (AppStrings.journeyDays(language, from: day.number, to: lastNumber),
                 JourneyFormat.dateRange(from: first.startDate, to: last.startDate, language: language))
-    }
-
-    /// Та же арифметика дней, что в `JourneyAggregate`: календарные сутки от
-    /// начала дня до начала дня, а не деление секунд на 86 400.
-    private static func dayNumber(of date: Date, dayOne: Date, number: Int) -> Int {
-        let calendar = Calendar.current
-        let delta = calendar.dateComponents(
-            [.day],
-            from: calendar.startOfDay(for: dayOne),
-            to: calendar.startOfDay(for: date)
-        ).day ?? 0
-        return number + delta
     }
 
     private func headerRow(_ header: (badge: String, date: String), _ c: AppTheme.Colors) -> some View {
@@ -132,7 +121,7 @@ struct JourneyDaysList: View {
         switch item {
         case .leg(let trip):
             legRow(trip, c: c)
-        case .local(let trips, _):
+        case .local(let trips, _, _):
             localCard(trips, in: day, c: c)
         }
     }
@@ -190,8 +179,15 @@ struct JourneyDaysList: View {
                       systemImage: "minus.circle",
                       isDestructive: true,
                       accessibilityId: "journey_remove_leg") {
+                    // Поповер закрывается ДО правки: убранное плечо исчезает из
+                    // ленты, и UIKit роняет поповер вместе со строкой, к которой
+                    // тот был привязан, — тем же приёмом, что `present {}` на
+                    // экране путешествия.
                     menuTripId = nil
-                    onRemoveLeg(trip)
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 260_000_000)
+                        onRemoveLeg(trip)
+                    }
                 }
             ])
         }
@@ -222,6 +218,10 @@ struct JourneyDaysList: View {
         let text = momentsText(trip)
         if !text.isEmpty {
             HStack(spacing: 7) {
+                // Первый снимок, а не «обложка»: обложки у ПОЕЗДКИ нет —
+                // `coverPhotoId` есть только у путешествия и у отметки. Тот же
+                // первый снимок показывают карточки ленты, и заводить здесь
+                // своё правило значило бы разойтись с ними.
                 if let photo = trip.photos.first {
                     AsyncThumbnailView(filename: photo.filename, maxSize: 48)
                         .frame(width: 22, height: 22)
@@ -242,9 +242,11 @@ struct JourneyDaysList: View {
             let name = checkpoint.name?.trimmingCharacters(in: .whitespacesAndNewlines)
             // Имя по умолчанию собирается по НОМЕРУ ВО ВРЕМЕНИ и не хранится —
             // то же правило, что у «Моментов» на экране поездки.
-            parts.append(name?.isEmpty == false
-                ? name!
-                : AppStrings.checkpointDefaultName(language, number: index + 1))
+            if let name, !name.isEmpty {
+                parts.append(name)
+            } else {
+                parts.append(AppStrings.checkpointDefaultName(language, number: index + 1))
+            }
         }
         if !trip.photos.isEmpty {
             parts.append("\(trip.photos.count) \(AppStrings.nounPhotos(language, trip.photos.count))")

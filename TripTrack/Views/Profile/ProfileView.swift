@@ -185,6 +185,11 @@ struct ProfileView: View {
     /// либо дом известен, либо уже спрашивали, либо данных мало.
     @State private var homeCandidate: CLLocationCoordinate2D?
     @State private var homeCandidateName = ""
+    /// Счётчик ответов «Да» про дом. Единственное, ради чего он есть, — ключ
+    /// `.task(id:)`: пересчёт подсказки после подтверждения дома живёт в
+    /// структурированной задаче экрана, а не в `Task {}`, который экран не
+    /// отменит.
+    @State private var homeAcceptedTick = 0
 
     /// Тело разрезано надвое, как у `TripDetailView`: цепочка модификаторов
     /// «Моих» уже упиралась в предел вывода типов SwiftUI, и следующий
@@ -200,6 +205,11 @@ struct ProfileView: View {
             // записанной поездки.
             .onChange(of: journeys.journeys) { _, _ in
                 Task { await refreshJourneyPrompts(trips: allTrips) }
+            }
+            // Человек подтвердил дом — подсказка может быть готова уже сейчас.
+            .task(id: homeAcceptedTick) {
+                guard homeAcceptedTick > 0 else { return }
+                await refreshJourneyPrompts(trips: allTrips)
             }
     }
 
@@ -1068,7 +1078,7 @@ struct ProfileView: View {
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
                     }
-                    .modifier(JourneyInertWhileSelecting(isSelecting: isSelecting))
+                    .journeyInertWhileSelecting(isSelecting)
                 } else {
                     LazyVGrid(columns: Self.gridColumns, spacing: 8) {
                         ForEach(run) { row in
@@ -1126,7 +1136,7 @@ struct ProfileView: View {
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
                     }
-                    .modifier(JourneyInertWhileSelecting(isSelecting: isSelecting))
+                    .journeyInertWhileSelecting(isSelecting)
                 }
             }
         }
@@ -1296,7 +1306,15 @@ struct ProfileView: View {
     private func journeyComposer() -> some View {
         if let anchor = composerTrips.first {
             JourneyComposerSheet(anchor: anchor, preselected: composerTrips) { _ in
-                clearSelection()
+                // Выбор сбрасывается ПОСЛЕ того, как лист уехал вниз. Он
+                // возвращает таб-бар на место полосы выбора, и сделанный тут же
+                // возврат человек видел сквозь щель под закрывающимся листом:
+                // панель выпрыгивала снизу навстречу ему. 450 мс — длина
+                // системной анимации закрытия листа с запасом.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(450))
+                    clearSelection()
+                }
                 // Тот же лист приходит и из подсказки: путешествие создано,
                 // предлагать его второй раз не о чем.
                 suggestedTrips = []
@@ -1321,30 +1339,42 @@ struct ProfileView: View {
     /// аккаунт», и второй литерал там разошёлся бы с этим молча.
     private static let dismissedSuggestionKey = SettingsManager.dismissedJourneySuggestionKey
 
-    @ViewBuilder
+    /// Контейнер стоит ВСЕГДА, а карточки появляются и исчезают внутри него.
+    ///
+    /// Пружина висит здесь, а не в обработчиках: `withAnimation` в них
+    /// анимировал только исчезновение — появление приходило из фонового счёта,
+    /// мимо любого `withAnimation`, и карточка возникала рывком. Пустой
+    /// контейнер ничего не занимает: нижний отступ он берёт только когда
+    /// внутри что-то есть.
     private func journeyPrompts() -> some View {
-        if homeCandidate != nil || !suggestedTrips.isEmpty {
-            VStack(spacing: 12) {
-                if let home = homeCandidate {
-                    HomeQuestionCard(
-                        place: homeCandidateName,
-                        onYes: { acceptHome(home) },
-                        onNo: { declineHome() }
-                    )
-                }
-                if !suggestedTrips.isEmpty {
-                    JourneySuggestionBanner(
-                        subtitle: suggestionSubtitle,
-                        onCombine: { combineSuggestion() },
-                        onDismiss: { dismissSuggestion() }
-                    )
-                }
+        let hasPrompts = homeCandidate != nil || !suggestedTrips.isEmpty
+        return VStack(spacing: 12) {
+            if let home = homeCandidate {
+                HomeQuestionCard(
+                    place: homeCandidateName,
+                    onYes: { acceptHome(home) },
+                    onNo: { declineHome() }
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-            .transition(.opacity)
+            if !suggestedTrips.isEmpty {
+                JourneySuggestionBanner(
+                    subtitle: suggestionSubtitle,
+                    onCombine: { combineSuggestion() },
+                    onDismiss: { dismissSuggestion() }
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
+        .padding(.horizontal, 16)
+        .padding(.bottom, hasPrompts ? 12 : 0)
+        .animation(Self.promptSpring, value: homeCandidate != nil)
+        .animation(Self.promptSpring, value: suggestedTrips.isEmpty)
     }
+
+    /// Одна пружина на обе карточки: они задают вопрос одной формы и уезжать
+    /// обязаны одинаково.
+    private static let promptSpring = Animation.spring(response: 0.32, dampingFraction: 0.86)
 
     /// Считает вопрос про дом и подсказку. Зовётся из `loadAggregates` — то
     /// есть на входе в «Мои» и на `.tripRecordingEnded`. Не из `MapViewModel`:
@@ -1358,7 +1388,14 @@ struct ProfileView: View {
             // Дом неизвестен — подсказок нет: без него «ночь не дома»
             // неотличима от ночи дома, и любая подсказка была бы монеткой.
             suggestedTrips = []
-            guard !settings.homeAsked else { homeCandidate = nil; return }
+            // Спрашивать ли — решает `JourneySuggester.shouldAskHome`: «нет»
+            // держится месяц, «да» навсегда.
+            guard JourneySuggester.shouldAskHome(
+                homeLocation: nil,
+                homeAsked: settings.homeAsked,
+                declinedAt: settings.homeDeclinedAt,
+                now: Date()
+            ) else { homeCandidate = nil; return }
             let candidate = await Task.detached(priority: .utility) {
                 JourneySuggester.inferHome(trips: trips)
             }.value
@@ -1379,7 +1416,13 @@ struct ProfileView: View {
             suggestedTrips = []
             return
         }
-        suggestionSubtitle = suggestionSubtitle(for: chain)
+        // Имена мест — одним запросом в фоновом контексте, ДО того как
+        // подпись соберётся: своя выборка на каждое плечо шла бы в главный
+        // `viewContext` ровно в тот момент, когда экран рисуется.
+        let ends = chain.dropLast().compactMap { JourneyAggregate.endCoordinate(of: $0) }
+        let localities = await mapVM.tripManager.cachedLocalities(for: ends)
+        guard !Task.isCancelled else { return }
+        suggestionSubtitle = subtitleText(for: chain, localities: localities)
         suggestedTrips = chain
     }
 
@@ -1389,11 +1432,11 @@ struct ProfileView: View {
     /// «Краснодар» в списке того, КУДА ездили, — не ответ, а шум. Дальше двух
     /// имён строка не растёт: карточка про то, узнал человек свою поездку или
     /// нет, а не про маршрутный лист.
-    private func suggestionSubtitle(for chain: [Trip]) -> String {
+    private func subtitleText(for chain: [Trip], localities: [String: String]) -> String {
         var names: [String] = []
         for trip in chain.dropLast() {
             guard let end = JourneyAggregate.endCoordinate(of: trip),
-                  let name = mapVM.tripManager.cachedLocality(for: end),
+                  let name = localities[TripManager.geocodeCacheKey(for: end)],
                   !names.contains(name) else { continue }
             names.append(name)
             if names.count == 2 { break }
@@ -1413,18 +1456,21 @@ struct ProfileView: View {
     private func acceptHome(_ home: CLLocationCoordinate2D) {
         settings.homeLocation = home
         settings.homeAsked = true
-        withAnimation(.easeOut(duration: 0.2)) { homeCandidate = nil }
+        homeCandidate = nil
         // Дом появился — подсказка может быть готова прямо сейчас, и ждать
-        // следующей поездки, чтобы её показать, незачем.
-        Task { await refreshJourneyPrompts(trips: allTrips) }
+        // следующей поездки, чтобы её показать, незачем. Счётчик, а не
+        // `Task {}`: работа висит на `.task(id:)` экрана и умирает вместе с
+        // ним, а не догоняет ушедшего человека фоновым перебором библиотеки.
+        homeAcceptedTick += 1
     }
 
     private func declineHome() {
-        // Ответ «нет» закрывает вопрос навсегда: спросить тем же выводом ещё
-        // раз — значит не услышать его. Дом останется неизвестным, и подсказок
-        // не будет, пока человек не задаст его сам (не в этой версии).
-        settings.homeAsked = true
-        withAnimation(.easeOut(duration: 0.2)) { homeCandidate = nil }
+        // «Нет» — это на месяц, а не навсегда (`JourneySuggester.homeReaskDelay`).
+        // Чаще всего он означает, что ночей ещё мало и вывод показал работу
+        // вместо двора; вернуть вопрос человеку было бы нечем — задать дом
+        // руками в 0.6.6 нельзя.
+        settings.homeDeclinedAt = Date()
+        homeCandidate = nil
     }
 
     private func combineSuggestion() {
@@ -1437,7 +1483,7 @@ struct ProfileView: View {
         if let last = suggestedTrips.last {
             UserDefaults.standard.set(last.id.uuidString, forKey: Self.dismissedSuggestionKey)
         }
-        withAnimation(.easeOut(duration: 0.2)) { suggestedTrips = [] }
+        suggestedTrips = []
     }
 
     // MARK: - Guest sign-in card (Figma 424:128 — kept byte-identical)
