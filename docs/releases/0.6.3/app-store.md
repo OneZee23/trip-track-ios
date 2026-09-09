@@ -1,7 +1,7 @@
 # App Store Connect — 0.6.3
 
 Всё, что нужно вставить при выкладке билда **0.6.3 (54)**. Заметки для ревьюера —
-отдельно, в [app-review-notes.md](app-review-notes.md), секция «current submission».
+отдельно, в [app-review-notes.md](../app-review-notes.md), секция «current submission».
 
 **В карточке ДВЕНАДЦАТЬ локализаций, и «What's New» обязателен в каждой.**
 Сабмит 0.6.2 был отклонён ровно из-за этого. Тексты ниже покрывают все двенадцать.
@@ -180,7 +180,7 @@ Gizlilik'te dört anahtarlı yeni bir «Başkaları ne görüyor» bölümü var
 
 > ⚠️ В приложении финского языка НЕТ — тринадцатый язык у нас Filipino (`fil`).
 > Похоже на путаницу `fil`/`fi` при заведении локализаций (см.
-> [app-store-0.6.2-locales.md](app-store-0.6.2-locales.md)). Текст написан,
+> [0.6.2/app-store-locales.md](../0.6.2/app-store-locales.md)). Текст написан,
 > чтобы не блокировать сабмит; разобраться с локалью стоит отдельно.
 
 ```

@@ -160,7 +160,7 @@ For users in the EU/EEA:
 - **Article 33 breach notification:** any breach of cloud-synced data is reported via email to affected users within 72 hours
 - **Data Protection Officer:** TripTrack is below the threshold requiring a formal DPO. Privacy questions: `privacy@trip-track.app`
 
-Full privacy policy: [docs/privacy-policy.html](privacy-policy.html) (RU: [privacy-policy-ru.html](privacy-policy-ru.html))
+Full privacy policy: [docs/privacy-policy.html](../privacy-policy.html) (RU: [privacy-policy-ru.html](../privacy-policy-ru.html))
 
 ---
 

@@ -1,7 +1,7 @@
 # App Store Connect — 0.6.2
 
 Всё, что нужно вставить при выкладке билда **0.6.2 (53)**. Заметки для ревьюера —
-отдельно, в [app-review-notes.md](app-review-notes.md), секция «current submission».
+отдельно, в [app-review-notes.md](../app-review-notes.md), секция «current submission».
 
 Релиз больше **не чисто клиентский**: 24.08 в него вошёл фикс ночного
 разлогина, и его серверная половина (orphan replay ротации refresh-токенов)
@@ -19,7 +19,7 @@ master → GitLab CI задеплоит сам, колонку `last_used_at` п
 принимает версию, пока поле пустое хотя бы в одной локали. Кроме English (U.S.)
 и Russian это German, Indonesian, Turkish, Polish, Italian, Ukrainian, Finnish,
 Portuguese (Brazil), French, Spanish (Spain) — их тексты лежат в
-[app-store-0.6.2-locales.md](app-store-0.6.2-locales.md).
+[app-store-locales.md](app-store-locales.md).
 
 Новых локализаций заводить не надо; ключевые слова, подзаголовок и описание
 остаются от 0.6.1 — ASO этот релиз не меняет. Заполняются только «What's New»
@@ -176,7 +176,7 @@ RU: Десять машин, девять цветов, один гараж. З�
 1. Билд **0.6.2 (53)**. Сайт не трогаем.
 2. «What's New» вставлен во ВСЕ ДВЕНАДЦАТЬ локалей карточки — англ. и рус. из
    раздела 1 выше, остальные десять из
-   [app-store-0.6.2-locales.md](app-store-0.6.2-locales.md). Пустое поле хотя
+   [app-store-locales.md](app-store-locales.md). Пустое поле хотя
    бы в одной = отказ на сабмите. Ключевые слова и описание не меняются.
 3. Промо-текст обновлён в обеих (необязательно, но он про этот релиз).
 4. `02-tap-start.png` переснят, гараж добавлен седьмым.

@@ -205,7 +205,7 @@ Keywords:  kilometrage,compteur,moto,voiture,trajet,gps,carte,voyage,itineraire,
 самое дешёвое, что можно сделать для конверсии, дороже любого ключевого слова.
 В 0.6.2 один кадр из него уже устарел (`02-tap-start.png`: машина на карте
 бледно-янтарная, этот цвет переделан) и стоит добавить седьмой — гараж. См.
-[app-store-0.6.2.md](app-store-0.6.2.md), §3.
+[releases/0.6.2/app-store.md](../releases/0.6.2/app-store.md), §3.
 
 Порядок под холодного человека из поиска:
 

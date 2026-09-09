@@ -1,7 +1,7 @@
 # App Store Connect — 0.6.4
 
 Всё, что нужно вставить при выкладке билда **0.6.4 (55)**. Заметки для ревьюера —
-отдельно, в [app-review-notes.md](app-review-notes.md), секция «current submission».
+отдельно, в [app-review-notes.md](../app-review-notes.md), секция «current submission».
 
 **В карточке ДВЕНАДЦАТЬ локализаций, и «What's New» обязателен в каждой.**
 Сабмит 0.6.2 был отклонён ровно из-за этого. Тексты ниже покрывают все двенадцать.

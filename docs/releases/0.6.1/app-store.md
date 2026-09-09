@@ -1,7 +1,7 @@
 # App Store Connect — 0.6.1
 
 Всё, что нужно вставить при выкладке билда **0.6.1 (52)**. Заметки для ревьюера —
-отдельно, в [app-review-notes.md](app-review-notes.md), секция «current submission».
+отдельно, в [app-review-notes.md](../app-review-notes.md), секция «current submission».
 
 0.6.0 добавил функциональность — 0.6.1 добавляет **языки**: с двух до тринадцати. Это значит, что в
 App Store Connect надо не просто вписать «What's New», а **завести одиннадцать новых
@@ -291,7 +291,7 @@ listahan ng wika sa telepono mo.
 
 ## 3. Описание (Description) для новых локалей
 
-EN и RU остаются как в [app-store-0.6.0.md](app-store-0.6.0.md) — приложение с
+EN и RU остаются как в [0.6.0/app-store.md](../0.6.0/app-store.md) — приложение с
 0.6.0 не изменилось, изменился только его язык.
 
 ### Deutsch
