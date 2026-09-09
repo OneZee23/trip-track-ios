@@ -87,6 +87,14 @@ struct JourneySelectionBar: View {
 /// Кнопка карточки доложит о нажатии и тогда, когда человек просто отпустил
 /// палец после долгого нажатия, — и без этого молчания каждый вход в режим
 /// выбора увозил бы на экран поездки.
+///
+/// Цена этого решения — ОДИН лишний тактильный щелчок на входе в режим: кнопка
+/// карточки бьёт свой `Haptics.tap()` до того, как позовёт `onTap`, и мы этот
+/// вызов уже не отменим — накладка появляется, когда нажатие кнопки уже
+/// началось. Убрать щелчок можно было бы только внутри самих карточек, то есть
+/// поменяв их поведение вне режима выбора; за одну поездку из десятков это
+/// плохая сделка. Дальше, на каждой следующей галочке, откликов ровно по
+/// одному: накладка не пускает нажатие до кнопки.
 struct JourneySelectable: ViewModifier {
     let isSelecting: Bool
     let isSelected: Bool
@@ -113,17 +121,30 @@ struct JourneySelectable: ViewModifier {
                 .animation(.easeOut(duration: holding ? 0.5 : 0.18), value: holding)
                 // Долгий тап здесь что-то открывает — значит это видно под
                 // пальцем (CLAUDE.md, «Нажатие обязано отвечать»).
+                //
+                // В самом режиме выбора жест выключен маской `.subviews`:
+                // делать ему там нечего, а вреда от него ровно столько,
+                // сколько было — на полусекунде он ставил галочку, а на
+                // отпускании накладка снимала её обратно, и удержание
+                // выглядело как промах.
                 .simultaneousGesture(
                     LongPressGesture(minimumDuration: Self.holdDuration)
                         .updating($holding) { pressing, state, _ in state = pressing }
-                        .onEnded { _ in onLongPress() }
+                        .onEnded { _ in onLongPress() },
+                    including: isSelecting ? .subviews : .all
                 )
-                // Вне режима выбора жест выключен маской `.subviews`: тап
-                // остаётся кнопке карточки, как и был.
-                .simultaneousGesture(
-                    TapGesture().onEnded { onToggle() },
-                    including: isSelecting ? .all : .subviews
-                )
+                // Отметку ловит ПРОЗРАЧНАЯ накладка, а не жест рядом с кнопкой
+                // карточки: жест срабатывал бы вместе с ней, и на каждую
+                // галочку приходилось бы два отклика — свой и её `Haptics.tap`.
+                // Накладка забирает нажатие целиком, кнопка карточки в режиме
+                // выбора не срабатывает вовсе.
+                .overlay {
+                    if isSelecting {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { onToggle() }
+                    }
+                }
             if isSelecting { tick }
         }
         .accessibilityAddTraits(isSelected ? .isSelected : [])
