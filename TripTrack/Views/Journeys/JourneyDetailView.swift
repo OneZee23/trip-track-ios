@@ -32,6 +32,10 @@ struct JourneyDetailView: View {
     @State private var checkpointMarkers: [CheckpointMarker] = []
     @State private var startName: String?
     @State private var farthestName: String?
+    /// Обложка, выбранная руками, — снимок из плеч. Считается на загрузке, а не
+    /// в `body`: `body` перебирал бы фотографии всех плеч на каждый кадр
+    /// прокрутки. Снимок, уехавший вместе с плечом, молча возвращает карту.
+    @State private var coverPhoto: TripPhoto?
     /// Имя стоянки по id ПЕРВОЙ её поездки, а не по номеру дня: в одном дне
     /// стоянок бывает две (город → трасса → город), и номер дня склеил бы их.
     @State private var localNames: [UUID: String] = [:]
@@ -129,7 +133,8 @@ struct JourneyDetailView: View {
                     aggregate: aggregate,
                     language: lang.language,
                     localNames: localNames,
-                    onOpenTrip: { openTripId = $0.id }
+                    onOpenTrip: { openTripId = $0.id },
+                    onRemoveLeg: { removeLeg($0) }
                 )
             }
         }
@@ -159,7 +164,16 @@ struct JourneyDetailView: View {
 
     @ViewBuilder
     private var heroMap: some View {
-        if coordinates.count > 1 {
+        if let photo = coverPhoto {
+            // Выбранная обложка — вместо карты, под тем же градиентом: имя и
+            // даты обязаны читаться и на светлом снимке. Кнопка «во весь
+            // экран» при этом остаётся: маршрут никуда не делся, и это
+            // единственный способ его посмотреть.
+            AsyncThumbnailView(filename: photo.filename, maxSize: 1_200)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .accessibilityIdentifier("journey_hero_cover")
+        } else if coordinates.count > 1 {
             // Не интерактивная нарочно: панорама живёт на полном экране, а
             // жест по карте внутри прокрутки съедает саму прокрутку.
             RouteMapView(
@@ -347,6 +361,9 @@ struct JourneyDetailView: View {
         aggregate = agg
         coordinates = legs.flatMap { Trip.decodePolyline($0.previewPolyline ?? Data()) }
         checkpointMarkers = legs.flatMap(markers(of:))
+        coverPhoto = journey.coverPhotoId.flatMap { id in
+            legs.lazy.flatMap(\.photos).first { $0.id == id }
+        }
         // Кэш геокодера живёт у `TripManager`, а тот — один на приложение и
         // лежит в `MapViewModel`: своего заводить нельзя, у него внутри
         // очередь записи поездки.
@@ -362,6 +379,22 @@ struct JourneyDetailView: View {
         }
         localNames = names
         loaded = true
+    }
+
+    /// «Убрать из путешествия»: поездка выходит из окна, но остаётся в
+    /// истории — обёртка правится, запись о дороге не трогается вовсе.
+    ///
+    /// Пишется именно исключение, а не сдвиг дат: сосед может лежать в
+    /// середине окна, и подвинуть границу так, чтобы он выпал, значило бы
+    /// выкинуть заодно всё, что стоит за ним.
+    private func removeLeg(_ trip: Trip) {
+        guard var updated = journey, !updated.excludedTripIds.contains(trip.id) else { return }
+        updated.excludedTripIds.append(trip.id)
+        // Даты не двигаются — пересечься с соседним окном нечем, и `.overlaps`
+        // здесь недостижим. Молчим о нём вместо того, чтобы показывать ошибку,
+        // которой не бывает.
+        try? manager.update(updated)
+        reload()
     }
 
     /// Отметки одного плеча в том виде, в каком их рисует карта. Номера

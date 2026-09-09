@@ -1202,6 +1202,7 @@ extension Translations {
         "journeyDay": "Hari %d",
         "journeyDays": "Hari %d–%d",
         "journeyAroundTown": "di dalam kota",
+        "journeyStayFallback": "Menginap",
         "journeyDurationLabel": "Durasi",
         "journeyDistanceLabel": "Jarak",
         "journeyLegsLabel": "Etape",

@@ -1202,6 +1202,7 @@ extension Translations {
         "journeyDay": "Tag %d",
         "journeyDays": "Tage %d–%d",
         "journeyAroundTown": "in der Stadt",
+        "journeyStayFallback": "Aufenthalt",
         "journeyDurationLabel": "Dauer",
         "journeyDistanceLabel": "Strecke",
         "journeyLegsLabel": "Etappen",

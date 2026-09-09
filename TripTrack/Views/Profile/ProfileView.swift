@@ -186,7 +186,25 @@ struct ProfileView: View {
     @State private var homeCandidate: CLLocationCoordinate2D?
     @State private var homeCandidateName = ""
 
+    /// Тело разрезано надвое, как у `TripDetailView`: цепочка модификаторов
+    /// «Моих» уже упиралась в предел вывода типов SwiftUI, и следующий
+    /// добавленный `.onChange` ронял компилятор по таймауту — в случайном
+    /// месте, а не там, где его дописали.
     var body: some View {
+        stage
+            // Путешествия меняются и без перезагрузки библиотеки: пул с
+            // другого телефона, стирание данных, удаление обёртки с её экрана.
+            // Подсказка считается по ним (`existing` в
+            // `JourneySuggester.suggestion`), и без этой строки она продолжала
+            // бы предлагать объединить то, что уже объединено, — до следующей
+            // записанной поездки.
+            .onChange(of: journeys.journeys) { _, _ in
+                Task { await refreshJourneyPrompts(trips: allTrips) }
+            }
+    }
+
+    @ViewBuilder
+    private var stage: some View {
         let c = AppTheme.colors(for: scheme)
 
         NavigationStack(path: $mePath) {
@@ -1026,10 +1044,14 @@ struct ProfileView: View {
     }
 
     /// «История» с учётом путешествий. `visibleTrips` уже отфильтрован
-    /// календарём, так что окно, у которого в отрезке не осталось плеч,
-    /// строкой не станет.
+    /// календарём — и отрезок передаётся отдельно: по одному списку поездок
+    /// «плечи отрезал фильтр» неотличимо от «плеч не осталось».
     private var historyRows: [HistoryRow] {
-        HistoryFolding.fold(trips: visibleTrips, journeys: journeys.journeys)
+        HistoryFolding.fold(
+            trips: visibleTrips,
+            journeys: journeys.journeys,
+            range: HistoryFolding.dayRange(from: dateFrom, to: dateTo)
+        )
     }
 
     /// Сетка рисуется кусками: подряд идущие поездки — своей решёткой,

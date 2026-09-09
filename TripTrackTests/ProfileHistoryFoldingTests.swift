@@ -35,17 +35,37 @@ final class ProfileHistoryFoldingTests: XCTestCase {
         XCTAssertEqual(last.id, t9.id)
     }
 
-    func testJourneyWithoutLegsInTheRangeIsHidden() {
+    func testJourneyOutsideTheCalendarRangeIsHidden() {
         let september = [trip(day: 20), trip(day: 9)]
-        // Фильтр календаря отрезал все плечи: показывать пустую карточку не о чем.
+        // Фильтр календаря отрезал август целиком — вместе с окном: карточка
+        // висела бы в сентябре пустой, не про то, что человек смотрит.
         let august = Journey(
             startDate: Calendar.current.date(from: DateComponents(year: 2026, month: 8, day: 1))!,
             endDate: Calendar.current.date(from: DateComponents(year: 2026, month: 8, day: 10))!)
 
-        let rows = HistoryFolding.fold(trips: september, journeys: [august])
+        let rows = HistoryFolding.fold(
+            trips: september, journeys: [august],
+            range: HistoryFolding.dayRange(from: date(1), to: date(30)))
 
         XCTAssertEqual(rows.count, 2)
         XCTAssertTrue(rows.allSatisfy { if case .trip = $0 { return true } else { return false } })
+    }
+
+    /// Плечи можно удалить все до одного — окно от этого не исчезает: даты оно
+    /// продолжает занимать, и без карточки до него было бы не дойти.
+    func testJourneyWithNoLegsAtAllIsShown() {
+        let september = [trip(day: 20), trip(day: 9)]
+        let emptied = Journey(startDate: date(12, hour: 0), endDate: date(16, hour: 23))
+
+        let rows = HistoryFolding.fold(trips: september, journeys: [emptied])
+
+        XCTAssertEqual(rows.count, 3)
+        // Стоит по началу окна: между 20-м и 9-м, а не в конце истории.
+        guard case .journey(let j, let legs) = rows[1] else {
+            return XCTFail("пустое путешествие — строка на своём месте по датам")
+        }
+        XCTAssertEqual(j.id, emptied.id)
+        XCTAssertTrue(legs.isEmpty)
     }
 
     /// Сетка рисуется кусками: подряд идущие поездки — одной решёткой,

@@ -19,10 +19,14 @@ enum HistoryRow: Identifiable {
     /// Дата, по которой строка встаёт в список. У путешествия это дата его
     /// ПОСЛЕДНЕГО плеча — карточка занимает место, где стояло бы самое новое
     /// из спрятанных плеч, и история не подпрыгивает от объединения.
+    ///
+    /// Плеч не осталось вовсе — по началу окна: `.distantPast` уводил такую
+    /// карточку в самый низ истории, на много лет от своих дат, где её уже не
+    /// найти.
     var date: Date {
         switch self {
         case .trip(let t): return t.startDate
-        case .journey(_, let legs): return legs.first?.startDate ?? .distantPast
+        case .journey(let j, let legs): return legs.first?.startDate ?? j.startDate
         }
     }
 }
@@ -34,20 +38,49 @@ enum HistoryRow: Identifiable {
 /// плечо — обычная поездка, и спрятать его значило бы стереть километры,
 /// которые человек проехал.
 enum HistoryFolding {
-    static func fold(trips: [Trip], journeys: [Journey]) -> [HistoryRow] {
+    /// `range` — отрезок календаря, которым уже отфильтрован `trips`. Нужен
+    /// ровно для одного вопроса: пустое путешествие — это «плечи отрезал
+    /// фильтр» или «плеч не осталось»? По одному списку поездок эти два случая
+    /// неотличимы, а поступать с ними надо противоположно.
+    static func fold(trips: [Trip], journeys: [Journey],
+                     range: ClosedRange<Date>? = nil) -> [HistoryRow] {
         var rows: [HistoryRow] = []
         var taken: Set<UUID> = []
         for j in journeys {
             let legs = trips.filter { j.contains($0) }.sorted { $0.startDate > $1.startDate }
-            // Окно без единого плеча в видимом отрезке — не строка: календарь
-            // отрезал сентябрь, а карточка августовского путешествия осталась
-            // бы висеть пустой.
-            guard !legs.isEmpty else { continue }
+            // Окно, целиком лежащее вне отрезка календаря, — не строка:
+            // человек смотрит сентябрь, и августовское путешествие в нём
+            // висело бы пустой карточкой.
+            //
+            // А вот окно ВНУТРИ отрезка, у которого не осталось ни одного
+            // плеча, строкой быть обязано. Плечи удаляются и убираются руками,
+            // и раньше такое путешествие исчезало из истории насовсем — при
+            // том, что даты оно продолжало занимать (`journeyOverlapping`), и
+            // объединить те же дни заново уже не давало. Пустая карточка —
+            // единственный способ до него дойти и удалить.
+            guard !legs.isEmpty || intersects(j, range) else { continue }
             taken.formUnion(legs.map(\.id))
             rows.append(.journey(j, legs: legs))
         }
         rows += trips.filter { !taken.contains($0.id) }.map(HistoryRow.trip)
         return rows.sorted { $0.date > $1.date }
+    }
+
+    /// Пересекается ли окно с отрезком календаря. Отрезка нет — видно всё,
+    /// значит пересекается по определению. Открытое окно (`endDate == nil`)
+    /// тянется вперёд до конца времён.
+    private static func intersects(_ j: Journey, _ range: ClosedRange<Date>?) -> Bool {
+        guard let range else { return true }
+        return j.startDate <= range.upperBound && (j.endDate ?? .distantFuture) >= range.lowerBound
+    }
+
+    /// Отрезок календаря в том же виде, в каком его понимает фильтр «Моих»:
+    /// оба конца включительно, по началу суток, один тап — один день.
+    static func dayRange(from: Date?, to: Date?, calendar: Calendar = .current) -> ClosedRange<Date>? {
+        guard let from else { return nil }
+        let start = calendar.startOfDay(for: from)
+        let end = calendar.startOfDay(for: to ?? from).addingTimeInterval(86_400 - 1)
+        return start...max(start, end)
     }
 
     /// Куски для сетки: подряд идущие поездки — одной решёткой, каждое

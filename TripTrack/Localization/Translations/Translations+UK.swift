@@ -1202,6 +1202,7 @@ extension Translations {
         "journeyDay": "День %d",
         "journeyDays": "Дні %d–%d",
         "journeyAroundTown": "по місту",
+        "journeyStayFallback": "Стоянка",
         "journeyDurationLabel": "Тривалість",
         "journeyDistanceLabel": "Дистанція",
         "journeyLegsLabel": "Відрізків",

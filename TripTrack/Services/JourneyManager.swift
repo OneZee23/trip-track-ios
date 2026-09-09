@@ -9,6 +9,7 @@ final class JourneyManager: ObservableObject {
     static let shared = JourneyManager()
     @Published private(set) var journeys: [Journey] = []
     private let repository: TripRepository
+    private var cancellables = Set<AnyCancellable>()
 
     enum JourneyError: Error, Equatable {
         case empty
@@ -18,11 +19,29 @@ final class JourneyManager: ObservableObject {
     init(repository: TripRepository = CoreDataTripRepository()) {
         self.repository = repository
         reload()
+        // Путешествие, созданное на другом телефоне, приезжает пулом прямо в
+        // CoreData — минуя всё, что зовёт `reload()` руками. Без этой строки
+        // список в памяти оставался бы вчерашним до перезапуска: карточки нет,
+        // а окно дат уже занято, и «Объединить» на тех же поездках отвечает
+        // «даты заняты другим путешествием», которого человек не видит.
+        NotificationCenter.default.publisher(for: .syncPullCompleted)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reload()
+            }
+            .store(in: &cancellables)
     }
 
     func reload() { journeys = repository.fetchJourneys() }
 
     /// Окно — от первого старта до последнего финиша выбранных поездок.
+    ///
+    /// Снятая галочка — это ответ, а не пустое место. Окно берёт ВСЕ свои
+    /// поездки внутри границ, поэтому сосед, которого человек только что убрал
+    /// в листе создания, вернулся бы плечом сразу после сохранения. Он и
+    /// возвращался: список приходит уже отфильтрованным, а в базу уезжали одни
+    /// даты. Поэтому здесь же, на создании, снятые пишутся в `excludedTripIds`
+    /// — единственное место, где «внутри окна» и «в путешествии» расходятся.
     func create(from trips: [Trip], title: String?) throws -> Journey {
         let sorted = trips.sorted { $0.startDate < $1.startDate }
         guard let first = sorted.first, let last = sorted.last else { throw JourneyError.empty }
@@ -30,10 +49,17 @@ final class JourneyManager: ObservableObject {
         if let clash = repository.journeyOverlapping(start: first.startDate, end: end, excluding: nil) {
             throw JourneyError.overlaps(clash.id)
         }
+        let chosen = Set(sorted.map(\.id))
+        let excluded = repository.fetchAllTrips()
+            .filter { !chosen.contains($0.id) }
+            .filter { $0.startDate >= first.startDate && $0.startDate <= end }
+            .sorted { $0.startDate < $1.startDate }
+            .map(\.id)
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
         let saved = repository.saveJourney(Journey(
             title: (trimmed?.isEmpty ?? true) ? nil : trimmed,
-            startDate: first.startDate, endDate: end))
+            startDate: first.startDate, endDate: end,
+            excludedTripIds: excluded))
         enqueue(saved.id, .upload)
         reload()
         return saved

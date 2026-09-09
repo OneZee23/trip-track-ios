@@ -1757,6 +1757,12 @@ enum AppStrings {
     static func journeyAroundTown(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyAroundTown", ru: "по городу", en: "around town")
     }
+    /// Заголовок свёрнутой стоянки, когда имени места ещё нет: кэш геокодера
+    /// холодный или координата в него не попала. Раньше сюда падало «по
+    /// городу» — то же самое, что и в строке под заголовком, дважды подряд.
+    static func journeyStayFallback(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyStayFallback", ru: "Стоянка", en: "Stay")
+    }
     static func journeyDurationLabel(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyDurationLabel", ru: "Длительность", en: "Duration")
     }

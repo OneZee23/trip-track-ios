@@ -1202,6 +1202,7 @@ extension Translations {
         "journeyDay": "Күн %d",
         "journeyDays": "Күндер %d–%d",
         "journeyAroundTown": "қала ішінде",
+        "journeyStayFallback": "Аялдама",
         "journeyDurationLabel": "Ұзақтығы",
         "journeyDistanceLabel": "Қашықтық",
         "journeyLegsLabel": "Аралықтар",

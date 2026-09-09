@@ -76,6 +76,22 @@ final class JourneyManagerTests: XCTestCase {
         XCTAssertNil(journey.title, "пустой (пробельный) заголовок сохраняется как nil")
     }
 
+    /// Снятая галочка обязана пережить сохранение: окно берёт ВСЕ поездки
+    /// внутри границ, и без записанного исключения сосед вернулся бы плечом
+    /// сразу после создания — при том, что человек его только что убрал.
+    func testCreateExcludesTripsInsideTheWindowThatWereNotChosen() throws {
+        let aId = trip(daysFromT0: 0)
+        let bId = trip(daysFromT0: 1)
+        let cId = trip(daysFromT0: 2)
+        let manager = JourneyManager(repository: repo)
+
+        let journey = try manager.create(from: [fetchTrip(aId), fetchTrip(cId)], title: nil)
+
+        XCTAssertEqual(journey.excludedTripIds, [bId], "средний сосед снят — значит исключён")
+        XCTAssertEqual(manager.trips(in: journey).map(\.id), [aId, cId],
+                       "плечи — только отмеченные")
+    }
+
     func testCreateRefusesOverlap() throws {
         let aId = trip(daysFromT0: 0)
         let bId = trip(daysFromT0: 1)

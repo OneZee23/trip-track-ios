@@ -1202,6 +1202,7 @@ extension Translations {
         "journeyDay": "Gün %d",
         "journeyDays": "Gün %d–%d",
         "journeyAroundTown": "şehir içinde",
+        "journeyStayFallback": "Konaklama",
         "journeyDurationLabel": "Süre",
         "journeyDistanceLabel": "Mesafe",
         "journeyLegsLabel": "Etap",

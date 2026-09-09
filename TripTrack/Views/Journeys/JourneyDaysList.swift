@@ -16,10 +16,20 @@ struct JourneyDaysList: View {
     /// имена и раскрытие в одно.
     var localNames: [UUID: String] = [:]
     var onOpenTrip: (Trip) -> Void
+    /// «Убрать из путешествия»: поездка остаётся в истории, из окна уходит.
+    var onRemoveLeg: (Trip) -> Void
 
     @Environment(\.colorScheme) private var scheme
     /// Раскрытые стоянки, по id первой поездки каждой.
     @State private var expanded: Set<UUID> = []
+    /// Плечо, у которого открыто меню действий. Одно на весь список: два
+    /// поповера разом система всё равно не покажет.
+    @State private var menuTripId: UUID?
+
+    /// Полсекунды — столько же ждёт система до контекстного меню и столько же
+    /// длится сжатие в `HoldableCardStyle`: карточка «поддаётся» ровно к тому
+    /// моменту, когда меню появляется.
+    private static let holdDuration: TimeInterval = 0.5
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -130,9 +140,15 @@ struct JourneyDaysList: View {
     // MARK: - Плечо
 
     /// Строка плеча. Открывает поездку — потому и шеврон, и отклик под пальцем:
-    /// строка, которая ведёт куда-то, обязана об этом сказать до нажатия.
+    /// строка, которая ведёт куда-то, обязана об этом сказать до нажатия. За
+    /// удержанием — «Убрать из путешествия», поэтому стиль `Holdable`: сжатие
+    /// идёт полсекунды и видно, что палец надо задержать.
     private func legRow(_ trip: Trip, c: AppTheme.Colors) -> some View {
         Button {
+            // Меню уже открыто долгим тапом — но кнопка всё равно получит своё
+            // нажатие на отпускании, и без этой проверки поездка открывалась бы
+            // «сама», поверх только что показанного поповера.
+            guard menuTripId == nil else { return }
             Haptics.tap()
             onOpenTrip(trip)
         } label: {
@@ -155,8 +171,35 @@ struct JourneyDaysList: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(PressableCardStyle())
+        .buttonStyle(HoldableCardStyle())
         .accessibilityIdentifier("journey_leg_row")
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: Self.holdDuration).onEnded { _ in
+                Haptics.action()
+                menuTripId = trip.id
+            }
+        )
+        // Поповер, а не системное меню: `Menu` роняет чужую плашку поверх
+        // нашей карточки (см. `ActionPopoverList`).
+        .popover(isPresented: Binding(
+            get: { menuTripId == trip.id },
+            set: { if !$0 { menuTripId = nil } }
+        )) {
+            ActionPopoverList(items: [
+                .init(title: AppStrings.journeyRemoveLeg(language),
+                      systemImage: "minus.circle",
+                      isDestructive: true,
+                      accessibilityId: "journey_remove_leg") {
+                    menuTripId = nil
+                    onRemoveLeg(trip)
+                }
+            ])
+        }
+        // Удержание — жест, которого VoiceOver не знает: без этого действия
+        // убрать плечо с озвучкой было бы нечем вовсе.
+        .accessibilityAction(named: Text(AppStrings.journeyRemoveLeg(language))) {
+            onRemoveLeg(trip)
+        }
     }
 
     /// «5 ч 20 мин · 480 км · 2 отметки».
@@ -232,7 +275,11 @@ struct JourneyDaysList: View {
                             .foregroundStyle(c.textSecondary)
                             .frame(width: 26, height: 26)
                             .background(c.card, in: Circle())
-                        Text(localNames[key] ?? AppStrings.journeyAroundTown(language))
+                        // Имени места нет (геокодер ещё не доехал до этих
+                        // координат) — «Стоянка», а не «по городу»: иначе в
+                        // заголовке и в строке под ним стояло бы одно и то же
+                        // «по городу» дважды подряд.
+                        Text(localNames[key] ?? AppStrings.journeyStayFallback(language))
                             .font(.system(size: 15, weight: .heavy))
                             .foregroundStyle(c.text)
                             .lineLimit(1)

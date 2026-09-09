@@ -47,8 +47,11 @@ How to test:
    cards, then "To journey" in the bar at the bottom.
 4. The journey card replaces its legs in the "Mine" list. Open it: one map with
    all legs, the totals (days, km, drives, time), then the road day by day.
-   "..." → "Edit journey" changes the name and the date window; "Delete
-   journey" removes only the journey — the trips stay in the list.
+   "..." → "Edit journey" changes the name, the date window and the cover photo
+   (picked from the legs' own photos; it then replaces the map on the card and
+   on the screen header). Press and hold a leg row → "Remove from journey":
+   the trip leaves the journey and stays in the trip list. "Delete journey"
+   removes only the journey — the trips stay in the list.
 ```
 
 ### Длинная версия — для нас

@@ -28,6 +28,11 @@ struct JourneyCardView: View {
     /// маленькой стопке читается как ошибка вёрстки.
     private let thumbs: [Trip]
     private let windowEnd: Date
+    /// Обложка, выбранная руками: снимок ИЗ ПЛЕЧ, а не любой из библиотеки.
+    /// Плечи приходят снаружи, поэтому и обложка ищется по ним: снимок,
+    /// уехавший вместе с убранным плечом, молча возвращает карту — карточка
+    /// про поездки, которые в путешествии остались.
+    private let coverPhoto: TripPhoto?
 
     /// Имена мест для имени по умолчанию. Кэш геокодера живёт в CoreData, так
     /// что читается он один раз в `.task`, а не из `body`.
@@ -47,6 +52,9 @@ struct JourneyCardView: View {
         self.windowEnd = journey.endDate
             ?? legs.map { $0.endDate ?? $0.startDate }.max()
             ?? journey.startDate
+        self.coverPhoto = journey.coverPhotoId.flatMap { id in
+            legs.lazy.flatMap(\.photos).first { $0.id == id }
+        }
     }
 
     var body: some View {
@@ -93,7 +101,16 @@ struct JourneyCardView: View {
 
     @ViewBuilder
     private func mapSection(_ c: AppTheme.Colors) -> some View {
-        if routes.isEmpty {
+        if let coverPhoto {
+            // Обложка стоит НА МЕСТЕ карты, а не рядом: карточка одна, и второй
+            // ряд под ней увёл бы «Историю» в бесконечную прокрутку. Плашка и
+            // стопка миниатюр остаются — они наложены поверх этого же слота.
+            AsyncThumbnailView(filename: coverPhoto.filename, maxSize: 600)
+                .frame(maxWidth: .infinity)
+                .frame(height: Self.mapHeight)
+                .clipped()
+                .accessibilityIdentifier("journey_card_cover")
+        } else if routes.isEmpty {
             // Ни одного трека (плечи без `previewPolyline`) — та же «карты
             // нет», что на карточке поездки, а не вечный шиммер.
             ZStack {
@@ -210,6 +227,11 @@ struct JourneyCardView: View {
     /// считаются плечи дороги, а местные поездки у ночёвки свёрнуты.
     private var metaText: String {
         let l = lang.language
+        // Плечей не осталось: «0 км · 0 поездок» — не итог, а издевательство
+        // над человеком, который их только что убрал. Карточка при этом
+        // остаётся: окно продолжает занимать даты, и удалить его можно только
+        // отсюда.
+        if legs.isEmpty { return AppStrings.journeyEmptyTitle(l) }
         // Одни и те же даты заголовком и первым словом подписи — не строка
         // итога, а сбой: имени взять неоткуда, и заголовок сам стал датами.
         var parts = titleText == dateRangeText ? [] : [dateRangeText]

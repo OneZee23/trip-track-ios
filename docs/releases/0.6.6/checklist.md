@@ -9,7 +9,7 @@
 | Бэкенд | gitlab.com/triptrack1/triptrack-backend | модуль `journeys`, миграция `1788600000000-AddJourneys`; коммиты `0630c40`, `c26ad58` на `master`, **не запушены** |
 | Версия | `project.yml` | 0.6.6, билд **58** |
 | Схема CoreData | `TripTrack.xcdatamodeld` | **v12** — `JourneyEntity`; после добавления версии `xcodegen generate` ДВАЖДЫ |
-| Тесты | локально | 892 iOS · 379 бэкенд |
+| Тесты | локально | 896 iOS · 379 бэкенд |
 | Спека | `docs/superpowers/specs/2026-09-08-journeys-design.md` | решения приняты 8 сен |
 | План | `docs/superpowers/plans/2026-09-09-journeys-066.md` | 11 задач, все закрыты |
 | Макеты | Figma `8AlZTuVAZueffBsXs0QBuz`, страница `2848:1307` | A и C — канон |
@@ -64,6 +64,21 @@
 - [ ] **«Это твой дом?»** показывается ОДИН раз; «Нет» гасит подсказки навсегда.
 - [ ] **Джанхот туда-обратно в один день** подсказку НЕ вызывает: путешествие
       делает ночь не дома, а не 200 км.
+- [ ] **Прогнать `JourneySuggester` по своей базе: после Джанхота (6 сен)
+      подсказки нет; после Тбилиси — есть.**
+
+### Полевая проверка финального ревью
+
+- [ ] Composer: untick a middle neighbour → the trip is NOT a leg.
+- [ ] Edit → cover → card and hero show the photo.
+- [ ] Second phone with Cloud Sync: card appears after pull without relaunch.
+- [ ] Delete all legs → empty card remains, can be deleted.
+- [ ] Edit sheet → «Удалить путешествие» → no stuck sheet during the pop.
+- [ ] Cold cache: stay card heading reads «Стоянка».
+- [ ] Long-press a card: one haptic; release does not open the trip.
+- [ ] 430-pt phone: selection bar width; dark theme day badge.
+- [ ] Turkish: uppercase pill/badges.
+- [ ] Home card with empty cache shows coordinates — acceptable?
 
 ## 3. Сабмит
 

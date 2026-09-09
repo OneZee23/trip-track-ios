@@ -84,6 +84,28 @@ final class JourneySuggesterTests: XCTestCase {
         XCTAssertEqual(s?.map(\.id), trips.map(\.id))
     }
 
+    /// Неделя в одном отеле: каждый вечер машина возвращается в один и тот же
+    /// двор. По общему счёту «обычной среды» этих вечеров хватало, чтобы отель
+    /// стал местом, куда человек «всегда ездит», — и поездка отменяла сама
+    /// себя. Свои ночи цепочка не считает.
+    func testSameHotelEveryNightIsStillAJourney() {
+        // 300 км строго на север: и «не дома», и дальше `awayRadius`.
+        let hotel = CLLocationCoordinate2D(latitude: 47.73, longitude: 38.98)
+        // Двор в двух километрах — оттуда машина возвращается в отель.
+        let nearby = CLLocationCoordinate2D(latitude: 47.75, longitude: 38.98)
+        var trips = [trip(day: 0, hour: 9, from: krd, to: hotel, km: 300, hours: 4)]
+        for day in 1...4 {
+            trips.append(trip(day: day, hour: 19, from: nearby, to: hotel, km: 12, hours: 1))
+        }
+        trips.append(trip(day: 5, hour: 9, from: hotel, to: krd, km: 300, hours: 4))
+
+        let s = JourneySuggester.suggestion(trips: trips, home: krd, existing: [],
+                                            now: end(of: trips).addingTimeInterval(3_600))
+
+        XCTAssertEqual(s?.map(\.id), trips.map(\.id),
+                       "цепочка целиком: четыре ночи в одном отеле не делают отель домом")
+    }
+
     func testSuggestionWaitsForTheWayBack() {
         // Человек ещё в Тбилиси: путешествие не кончилось, предлагать нечего.
         let trips = Array(georgia.prefix(4))

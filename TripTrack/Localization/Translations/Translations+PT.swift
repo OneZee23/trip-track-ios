@@ -1202,6 +1202,7 @@ extension Translations {
         "journeyDay": "Dia %d",
         "journeyDays": "Dias %d–%d",
         "journeyAroundTown": "pela cidade",
+        "journeyStayFallback": "Estadia",
         "journeyDurationLabel": "Duração",
         "journeyDistanceLabel": "Distância",
         "journeyLegsLabel": "Trechos",

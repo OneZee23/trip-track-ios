@@ -100,7 +100,6 @@ enum JourneySuggester {
                            existing: [Journey], now: Date,
                            calendar: Calendar = .current) -> [Trip]? {
         let ordered = trips.sorted { $0.startDate < $1.startDate }
-        let usual = usualCells(ordered, now: now)
         // Поездка, уже лежащая в путешествии, — стена, а не пустое место:
         // сцепить через её голову соседей значило бы предложить объединить
         // то, что человек уже разложил руками.
@@ -112,10 +111,20 @@ enum JourneySuggester {
             let finish = last.endDate ?? last.startDate
             guard now.timeIntervalSince(finish) <= recency else { return nil }
             if !taken.contains(last.id), let end = JourneyAggregate.endCoordinate(of: last),
-               isSettled(end, home: home, usual: usual),
-               let chain = chain(endingAt: index, in: ordered, home: home, usual: usual,
-                                 taken: taken, calendar: calendar) {
-                return chain
+               let chain = chain(endingAt: index, in: ordered, home: home, taken: taken) {
+                // Обычная среда считается по поездкам ВНЕ самой цепочки —
+                // потому и считается здесь, когда цепочка уже собрана, а не
+                // один раз до цикла. Четыре вечера, возвращённые в один и тот
+                // же отель, — это три «визита» в его ячейку, и по общему счёту
+                // отель становился «обычной средой» сам себе: ночи поездки
+                // отменяли поездку. Из чужих поездок ячейка отеля не наберёт
+                // ничего, а работа и дача наберут — они на то и обычные, что
+                // человек ездит туда и вне этой недели.
+                let usual = usualCells(ordered, excluding: Set(chain.map(\.id)), now: now)
+                if isSettled(end, home: home, usual: usual),
+                   hasNightAway(chain, home: home, usual: usual, calendar: calendar) {
+                    return chain
+                }
             }
             index -= 1
         }
@@ -123,9 +132,12 @@ enum JourneySuggester {
     }
 
     /// Цепочка назад от закрывающей поездки, если она вообще складывается.
+    ///
+    /// Только геометрия и время: про «обычную среду» здесь не спрашивают —
+    /// её нельзя посчитать, пока не известно, из чего цепочка состоит.
     private static func chain(endingAt last: Int, in ordered: [Trip],
-                              home: CLLocationCoordinate2D, usual: Set<String>,
-                              taken: Set<UUID>, calendar: Calendar) -> [Trip]? {
+                              home: CLLocationCoordinate2D,
+                              taken: Set<UUID>) -> [Trip]? {
         var chain = [ordered[last]]
         var i = last
         while true {
@@ -133,8 +145,7 @@ enum JourneySuggester {
             if let start = JourneyAggregate.startCoordinate(of: front),
                distance(start, home) <= homeRadius {
                 // Цепочка открылась выездом из дома — дальше назад не идём.
-                guard chain.count >= 2, hasNightAway(chain, home: home, usual: usual,
-                                                    calendar: calendar) else { return nil }
+                guard chain.count >= 2 else { return nil }
                 return chain
             }
             guard i > 0 else { return nil }
@@ -188,9 +199,14 @@ enum JourneySuggester {
 
     /// Обычная среда: ячейки, где поездки кончались ≥3 раз за 30 дней —
     /// работа, дача, родители. Ночёвка там — не путешествие.
-    private static func usualCells(_ trips: [Trip], now: Date) -> Set<String> {
+    ///
+    /// `excluding` — поездки самой цепочки-кандидата. Своими ночами цепочка не
+    /// голосует: иначе достаточно четырёх вечеров, возвращённых в один отель,
+    /// чтобы отель стал «обычной средой» и путешествие отменило само себя.
+    private static func usualCells(_ trips: [Trip], excluding chain: Set<UUID>,
+                                   now: Date) -> Set<String> {
         var counts: [String: Int] = [:]
-        for trip in trips {
+        for trip in trips where !chain.contains(trip.id) {
             let finish = trip.endDate ?? trip.startDate
             guard now.timeIntervalSince(finish) <= usualWindow, now >= finish,
                   let end = JourneyAggregate.endCoordinate(of: trip) else { continue }

@@ -1202,6 +1202,7 @@ extension Translations {
         "journeyDay": "Araw %d",
         "journeyDays": "Araw %d–%d",
         "journeyAroundTown": "sa loob ng bayan",
+        "journeyStayFallback": "Pananatili",
         "journeyDurationLabel": "Tagal",
         "journeyDistanceLabel": "Distansya",
         "journeyLegsLabel": "Bahagi",
