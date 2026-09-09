@@ -114,6 +114,8 @@ struct TripDetailView: View {
     @State private var selectedCheckpoint: TripCheckpoint?
     /// Лист «Объединить в путешествие» — соседи за ±7 дней и имя.
     @State private var showJourneyComposer = false
+    /// Наблюдаем, чтобы меню перестроилось сразу после создания.
+    @ObservedObject private var journeyManager = JourneyManager.shared
     /// Снимки, расставленные по маршруту, вместе с готовыми миниатюрами.
     @State private var photoPins: [PhotoPin] = []
     /// Отметки с подписью и миниатюрой прикреплённого снимка — для карты.
@@ -398,6 +400,19 @@ struct TripDetailView: View {
         }
     }
 
+    /// Путешествие, внутри которого лежит эта поездка.
+    ///
+    /// По опубликованному списку менеджера, а НЕ через
+    /// `journey(containing:)`: поповер «…» — хранимое `@ViewBuilder`-свойство
+    /// шапки, и `ownerActions` пересчитывается на каждой перерисовке героя
+    /// (на прокрутке — два десятка раз). Поход в базу на этом пути стоил бы
+    /// двух выборок в главном потоке за кадр; `Journey.contains` отвечает на
+    /// тот же вопрос тем же правилом и без базы.
+    private var tripJourney: Journey? {
+        guard let trip else { return nil }
+        return journeyManager.journeys.first { $0.contains(trip) }
+    }
+
     /// Edit · publish/hide · delete, in that order: the two reversible ones
     /// first, the irreversible one last and in red.
     ///
@@ -439,7 +454,7 @@ struct TripDetailView: View {
         // объединять её второй раз некуда, а «Открыть путешествие» ведёт на
         // экран, которого пока нет. Пункт, который ничего не открывает, хуже
         // его отсутствия.
-        if JourneyManager.shared.journey(containing: trip.id) == nil {
+        if tripJourney == nil {
             items.append(.init(
                 title: AppStrings.journeyCombine(lang.language),
                 systemImage: "suitcase",

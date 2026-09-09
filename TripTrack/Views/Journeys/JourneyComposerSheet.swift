@@ -20,14 +20,20 @@ struct JourneyComposerSheet: View {
     @State private var selected: Set<UUID> = []
     @State private var title = ""
     @State private var error: String?
-    /// Высота списка кандидатов. `ScrollView` жадный по вертикали и без этого
-    /// забирает все 320 пунктов даже под одну строку — под единственной
-    /// поездкой зияла пустая треть листа.
-    @State private var listHeight: CGFloat = 0
 
-    /// Потолок списка: дальше он листается. Больше половины экрана лист
-    /// кандидатов не заслуживает — под ним ещё имя и кнопка.
-    private static let maxListHeight: CGFloat = 320
+    /// Высота строки, посчитанная, а не измеренная: `ScrollView` гибкий по
+    /// вертикали и растягивается на всё, что ему дали, — поэтому под одной
+    /// поездкой зияла пустая треть листа. Мерить его собственную высоту
+    /// `GeometryReader`-ом, которым же и задавать ему рамку, — петля, от
+    /// которой предостерегает `VehiclePickerSheet`. Кандидаты ограничены
+    /// окном ±7 дней, так что до пяти строк список рисуется целиком, а
+    /// дальше листается в счётной рамке.
+    private static let rowHeight: CGFloat = 60
+    private static let rowSpacing: CGFloat = 8
+    private static let maxVisibleRows = 5
+    private static var maxListHeight: CGFloat {
+        CGFloat(maxVisibleRows) * rowHeight + CGFloat(maxVisibleRows - 1) * rowSpacing
+    }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -36,24 +42,14 @@ struct JourneyComposerSheet: View {
             Text(AppStrings.journeyNeighboursHint(lang.language))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(c.textTertiary)
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(candidates) { row($0, c: c) }
-                }
-                .background {
-                    GeometryReader { geo in
-                        Color.clear.preference(key: ListHeightKey.self, value: geo.size.height)
-                    }
-                }
-            }
-            .frame(height: min(max(listHeight, 1), Self.maxListHeight))
-            .onPreferenceChange(ListHeightKey.self) { listHeight = $0 }
+            candidateList(c)
             TextField(AppStrings.journeyTitlePlaceholder(lang.language), text: $title)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(c.text)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+                .onChange(of: title) { _, _ in error = nil }
             if let error {
                 Text(error)
                     .font(.system(size: 12, weight: .semibold))
@@ -77,6 +73,24 @@ struct JourneyComposerSheet: View {
     }
 
     // MARK: - Куски
+
+    /// До пяти кандидатов — обычный `VStack`: он сам говорит листу, сколько
+    /// места ему нужно. Больше — прокрутка в рамке ровно на пять строк.
+    @ViewBuilder
+    private func candidateList(_ c: AppTheme.Colors) -> some View {
+        if candidates.count <= Self.maxVisibleRows {
+            VStack(spacing: Self.rowSpacing) {
+                ForEach(candidates) { row($0, c: c) }
+            }
+        } else {
+            ScrollView {
+                LazyVStack(spacing: Self.rowSpacing) {
+                    ForEach(candidates) { row($0, c: c) }
+                }
+            }
+            .frame(height: Self.maxListHeight)
+        }
+    }
 
     private func header(_ c: AppTheme.Colors) -> some View {
         HStack(spacing: 10) {
@@ -109,6 +123,9 @@ struct JourneyComposerSheet: View {
         let isOn = selected.contains(trip.id)
         return Button {
             Haptics.selection()
+            // Отказ описывал ПРЕЖНИЙ выбор: оставить его на экране, где выбор
+            // уже другой, значит соврать про даты, которых больше нет.
+            error = nil
             if isOn { selected.remove(trip.id) } else { selected.insert(trip.id) }
         } label: {
             HStack(spacing: 12) {
@@ -127,8 +144,7 @@ struct JourneyComposerSheet: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: Self.rowHeight, alignment: .leading)
             .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(PressableCardStyle())
@@ -202,13 +218,5 @@ struct JourneyComposerSheet: View {
             Haptics.error()
             self.error = AppStrings.journeyOverlaps(lang.language)
         }
-    }
-}
-
-/// Высота содержимого списка — чтобы лист был ровно такой, какой нужен.
-private struct ListHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }
