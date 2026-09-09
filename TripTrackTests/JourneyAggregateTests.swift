@@ -55,6 +55,32 @@ final class JourneyAggregateTests: XCTestCase {
         XCTAssertEqual(a.farthestEnd?.latitude ?? 0, tbs.latitude, accuracy: 0.2)
     }
 
+    /// Город → трасса → город в ОДИН день: две отдельные стоянки в одном дне.
+    ///
+    /// Экран путешествия держит и имя стоянки, и её раскрытие по ключу, и ключ
+    /// этот однажды был номером дня — то есть у обеих стоянок одинаковый.
+    /// Раскрывалась бы одна, раскрывались бы обе, а имя второго города
+    /// подписывало бы первый.
+    func testTwoLocalGroupsCanShareOneDay() {
+        let near = CLLocationCoordinate2D(latitude: 45.06, longitude: 39.02)
+        let a = JourneyAggregate.build(trips: [
+            trip(day: 0, hour: 8, from: krd, to: krd, km: 6, hours: 0.3),
+            trip(day: 0, hour: 10, from: krd, to: near, km: 9, hours: 0.4),
+            trip(day: 0, hour: 12, from: krd, to: vld, km: 480, hours: 5),
+            trip(day: 0, hour: 19, from: vld, to: vld, km: 7, hours: 0.3),
+            trip(day: 0, hour: 21, from: vld, to: vld, km: 5, hours: 0.2),
+        ])
+        XCTAssertEqual(a.days.count, 1)
+        let groups = a.days[0].items.compactMap { item -> [Trip]? in
+            if case .local(let trips, _) = item { return trips } else { return nil }
+        }
+        XCTAssertEqual(groups.count, 2, "две стоянки в одном дне — два отдельных пункта")
+        XCTAssertEqual(groups[0].count, 2)
+        XCTAssertEqual(groups[1].count, 2)
+        // Ключ, которым экран различает стоянки: id первой поездки каждой.
+        XCTAssertNotEqual(groups[0].first?.id, groups[1].first?.id)
+    }
+
     func testEmptyInputGivesEmptyAggregate() {
         let a = JourneyAggregate.build(trips: [])
         XCTAssertTrue(a.days.isEmpty); XCTAssertEqual(a.legCount, 0)

@@ -229,14 +229,27 @@ struct JourneyEditSheet: View {
         updated.title = trimmed.isEmpty ? nil : trimmed
         // Границы, перепутанные местами, — это не отказ, а описка: окно
         // разворачивается само, потому что человек всё равно имел в виду его.
-        //
-        // Конец окна — КОНЕЦ выбранных суток, а не их полночь: выбрав «17
-        // сентября», человек имеет в виду весь день, а полночь отрезала бы от
-        // путешествия всё, что в этот день ездилось.
         let calendar = Calendar.current
-        updated.startDate = calendar.startOfDay(for: min(startDate, endDate))
-        updated.endDate = calendar.startOfDay(for: max(startDate, endDate))
-            .addingTimeInterval(86_400 - 1)
+        let pickedStart = min(startDate, endDate)
+        let pickedEnd = max(startDate, endDate)
+        // День НЕ трогали — граница остаётся ровно та, что в базе.
+        //
+        // Иначе переименование двигало бы даты: выборы дат отдают полночь, и
+        // сохранение имени растягивало окно на целые сутки в обе стороны. Оно
+        // могло прихватить чужую поездку или упереться в соседнее путешествие
+        // — то есть отказать в сохранении ИМЕНИ из-за дат, которых никто не
+        // менял.
+        //
+        // Тронули — конец окна становится КОНЦОМ выбранных суток: выбрав «17
+        // сентября», человек имеет в виду весь день, а полночь отрезала бы всё,
+        // что в этот день ездилось.
+        if !calendar.isDate(pickedStart, inSameDayAs: journey.startDate) {
+            updated.startDate = calendar.startOfDay(for: pickedStart)
+        }
+        let endDayUntouched = journey.endDate.map { calendar.isDate(pickedEnd, inSameDayAs: $0) } ?? false
+        if !endDayUntouched {
+            updated.endDate = calendar.startOfDay(for: pickedEnd).addingTimeInterval(86_400 - 1)
+        }
         updated.coverPhotoId = coverPhotoId
         updated.lastModifiedAt = Date()
         do {

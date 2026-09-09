@@ -9,13 +9,17 @@ import SwiftUI
 struct JourneyDaysList: View {
     let aggregate: JourneyAggregate
     let language: LanguageManager.Language
-    /// Номер дня стоянки → «Тбилиси». Пусто — покажем «по городу» и без имени.
-    var localNames: [Int: String] = [:]
+    /// id первой поездки стоянки → «Тбилиси». Пусто — покажем «по городу».
+    ///
+    /// Не по номеру дня: в одном дне стоянок бывает ДВЕ — покатались по
+    /// городу, съездили в соседний, вернулись, — и номер дня склеил бы их
+    /// имена и раскрытие в одно.
+    var localNames: [UUID: String] = [:]
     var onOpenTrip: (Trip) -> Void
 
     @Environment(\.colorScheme) private var scheme
-    /// Раскрытые стоянки, по номеру дня, с которого они начались.
-    @State private var expanded: Set<Int> = []
+    /// Раскрытые стоянки, по id первой поездки каждой.
+    @State private var expanded: Set<UUID> = []
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -212,11 +216,14 @@ struct JourneyDaysList: View {
     private func localCard(
         _ trips: [Trip], in day: JourneyAggregate.Day, c: AppTheme.Colors
     ) -> some View {
-        let isOpen = expanded.contains(day.number)
+        // Стоянка без единой поездки не существует: `JourneyAggregate` заводит
+        // её только вокруг первой. Пустой ключ — заглушка, до которой не дойти.
+        let key = trips.first?.id ?? UUID()
+        let isOpen = expanded.contains(key)
         return VStack(alignment: .leading, spacing: 10) {
             Button {
                 Haptics.selection()
-                if isOpen { expanded.remove(day.number) } else { expanded.insert(day.number) }
+                if isOpen { expanded.remove(key) } else { expanded.insert(key) }
             } label: {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 10) {
@@ -225,7 +232,7 @@ struct JourneyDaysList: View {
                             .foregroundStyle(c.textSecondary)
                             .frame(width: 26, height: 26)
                             .background(c.card, in: Circle())
-                        Text(localNames[day.number] ?? AppStrings.journeyAroundTown(language))
+                        Text(localNames[key] ?? AppStrings.journeyAroundTown(language))
                             .font(.system(size: 15, weight: .heavy))
                             .foregroundStyle(c.text)
                             .lineLimit(1)

@@ -1091,7 +1091,8 @@ struct TripDetailView: View {
         // Путешествие — продолжение поездки, а не шторка поверх неё: тот же
         // стек, что у паспорта машины. Отдельным модификатором, чтобы место
         // назначения не добавляло выражений в и без того длинную цепочку.
-        .modifier(TripDetailJourneyDestination(journeyId: $openedJourneyId, lang: lang))
+        .modifier(TripDetailJourneyDestination(
+            journeyId: $openedJourneyId, lang: lang, enabled: isOwn))
         .sheet(isPresented: $showEditSheet) {
             if let t = trip {
                 TripEditSheet(
@@ -3330,14 +3331,27 @@ private struct TripDetailLocalReactorDestination: ViewModifier {
 ///
 /// Своим типом, а не строкой в `body`: у этого экрана вывод типов уже упирался
 /// в таймаут, и всё, что можно вынести за его пределы, туда и выносится.
+///
+/// `enabled` — по той же причине, по какой гейт есть у
+/// `TripDetailLocalReactorDestination`: два безусловных места назначения на
+/// одном экране этот `NavigationStack` уже ронял вспышкой на глубине 4+.
+/// Спрашиваем `isOwn`, а не «открыто ли сейчас»: пункт «Открыть путешествие»
+/// живёт только в меню владельца, а само значение выставляется при загрузке и
+/// больше не меняется — то есть регистрация не появляется и не исчезает в том
+/// же обновлении, в котором ставится id (именно это и ломает переход).
 private struct TripDetailJourneyDestination: ViewModifier {
     @Binding var journeyId: UUID?
     let lang: LanguageManager
+    let enabled: Bool
 
     func body(content: Content) -> some View {
-        content.navigationDestination(item: $journeyId) { id in
-            JourneyDetailView(journeyId: id)
-                .environmentObject(lang)
+        if enabled {
+            content.navigationDestination(item: $journeyId) { id in
+                JourneyDetailView(journeyId: id)
+                    .environmentObject(lang)
+            }
+        } else {
+            content
         }
     }
 }

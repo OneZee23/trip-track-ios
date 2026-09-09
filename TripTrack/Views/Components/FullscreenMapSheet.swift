@@ -74,6 +74,14 @@ struct FullscreenMapSheet: View {
     /// Used for the speed plaque's "km/h" unit and the replay readout. Default
     /// keeps the social call site (speeds empty → no plaque) unchanged.
     var language: LanguageManager.Language = .en
+    /// Можно ли вообще проигрывать этот маршрут.
+    ///
+    /// Замедленный проход (`canCrawl`) выводится из одних координат, а
+    /// путешествие отдаёт сюда СКЛЕЙКУ плеч: машинка поехала бы через пустоту
+    /// между Владикавказом и Тбилиси, потому что для неё это соседние точки
+    /// одного массива. Реплей живёт у поездки, где время есть у каждой точки;
+    /// путешествие ставит здесь `false` и кнопки «играть» не получает.
+    var allowsPlayback: Bool = true
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -112,12 +120,12 @@ struct FullscreenMapSheet: View {
     }
 
     private var canReplay: Bool {
-        playbackSeries.count > 1 && timestamps.count > 1
+        allowsPlayback && playbackSeries.count > 1 && timestamps.count > 1
             && timestamps.count == playbackSeries.count
     }
 
     /// No usable times, but a route worth watching — the crawl's case.
-    private var canCrawl: Bool { !canReplay && playbackSeries.count > 1 }
+    private var canCrawl: Bool { allowsPlayback && !canReplay && playbackSeries.count > 1 }
 
     private var isPlaying: Bool { canReplay ? engine.isPlaying : crawl.isPlaying }
 

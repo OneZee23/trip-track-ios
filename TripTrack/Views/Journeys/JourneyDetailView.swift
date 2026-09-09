@@ -26,9 +26,15 @@ struct JourneyDetailView: View {
     @State private var coordinates: [CLLocationCoordinate2D] = []
     /// Имена мест из кэша геокодера, посчитанные один раз на загрузку: ходить
     /// в CoreData из `body` — значит ходить туда на каждый кадр прокрутки.
+    /// Отметки всех плеч кружками. Без миниатюр: снимок грузится с диска, а
+    /// кружок на обзорной карте его всё равно не показывает — на герое стоит
+    /// `.compact`.
+    @State private var checkpointMarkers: [CheckpointMarker] = []
     @State private var startName: String?
     @State private var farthestName: String?
-    @State private var localNames: [Int: String] = [:]
+    /// Имя стоянки по id ПЕРВОЙ её поездки, а не по номеру дня: в одном дне
+    /// стоянок бывает две (город → трасса → город), и номер дня склеил бы их.
+    @State private var localNames: [UUID: String] = [:]
 
     @State private var showEdit = false
     @State private var showActions = false
@@ -156,7 +162,13 @@ struct JourneyDetailView: View {
         if coordinates.count > 1 {
             // Не интерактивная нарочно: панорама живёт на полном экране, а
             // жест по карте внутри прокрутки съедает саму прокрутку.
-            RouteMapView(coordinates: coordinates, isInteractive: false, showsFog: false)
+            RouteMapView(
+                coordinates: coordinates,
+                isInteractive: false,
+                checkpointMarkers: checkpointMarkers,
+                checkpointMarkerStyle: .compact,
+                showsFog: false
+            )
         } else {
             Color.black.opacity(0.88)
                 .overlay {
@@ -315,8 +327,12 @@ struct JourneyDetailView: View {
         FullscreenMapSheet(
             coordinates: coordinates,
             distanceMeters: aggregate.totalMetres,
+            checkpointMarkers: checkpointMarkers,
             showsFog: false,
-            language: lang.language
+            language: lang.language,
+            // Проигрывать нечего: склейка плеч — не маршрут, и машинка пошла
+            // бы напрямик через пустоту между городами.
+            allowsPlayback: false
         )
         .environmentObject(lang)
     }
@@ -330,21 +346,41 @@ struct JourneyDetailView: View {
         trips = legs
         aggregate = agg
         coordinates = legs.flatMap { Trip.decodePolyline($0.previewPolyline ?? Data()) }
+        checkpointMarkers = legs.flatMap(markers(of:))
         // Кэш геокодера живёт у `TripManager`, а тот — один на приложение и
         // лежит в `MapViewModel`: своего заводить нельзя, у него внутри
         // очередь записи поездки.
         let geocoder = mapVM.tripManager
         startName = agg.firstStart.flatMap { geocoder.cachedLocality(for: $0) }
         farthestName = agg.farthestEnd.flatMap { geocoder.cachedLocality(for: $0) }
-        var names: [Int: String] = [:]
+        var names: [UUID: String] = [:]
         for day in agg.days {
             for item in day.items {
-                guard case .local(_, let anchor) = item else { continue }
-                if let name = geocoder.cachedLocality(for: anchor) { names[day.number] = name }
+                guard case .local(let group, let anchor) = item, let key = group.first?.id else { continue }
+                if let name = geocoder.cachedLocality(for: anchor) { names[key] = name }
             }
         }
         localNames = names
         loaded = true
+    }
+
+    /// Отметки одного плеча в том виде, в каком их рисует карта. Номера
+    /// считаются ВНУТРИ плеча — как на экране самой поездки: «вторая отметка
+    /// на дороге к морю», а не «седьмая отметка путешествия».
+    private func markers(of trip: Trip) -> [CheckpointMarker] {
+        trip.checkpoints.enumerated().map { index, checkpoint in
+            CheckpointMarker(
+                id: checkpoint.id,
+                latitude: checkpoint.latitude, longitude: checkpoint.longitude,
+                number: index + 1,
+                name: checkpoint.name ?? AppStrings.checkpointDefaultName(lang.language, number: index + 1),
+                reading: CheckpointReading.text(
+                    elapsed: checkpoint.elapsedFromStart,
+                    metres: checkpoint.distanceFromStart,
+                    lang: lang.language),
+                image: nil,
+                timestamp: checkpoint.timestamp)
+        }
     }
 
     // MARK: - Строки
