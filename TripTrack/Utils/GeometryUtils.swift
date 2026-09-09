@@ -3,6 +3,17 @@ import CoreLocation
 /// Shared geometry utilities for route simplification.
 enum GeometryUtils {
 
+    // MARK: - Курс
+
+    /// Насколько разошлись два курса, с учётом того, что 359° и 1° — соседи.
+    /// Отрицательный курс у CoreLocation значит «не знаю»; тогда разницы нет.
+    static func courseDelta(_ a: Double, _ b: Double) -> Double {
+        guard a >= 0, b >= 0 else { return 0 }
+        var delta = abs(a - b).truncatingRemainder(dividingBy: 360)
+        if delta > 180 { delta = 360 - delta }
+        return delta
+    }
+
     // MARK: - Ramer-Douglas-Peucker
 
     /// Simplify a polyline using the Ramer-Douglas-Peucker algorithm.
@@ -33,6 +44,72 @@ enum GeometryUtils {
         } else {
             return [first, last]
         }
+    }
+
+    // MARK: - Выборка по значимости формы
+
+    /// Выбрать ровно `budget` точек так, чтобы форма пострадала меньше всего.
+    ///
+    /// Отличается от «каждой N-й» тем, на что тратит бюджет. Равномерная
+    /// выборка отмеряет точки по счёту, а счёт с 0.6.5 идёт по времени — то
+    /// есть прямая и разворот получают поровну. На часовой поездке это одна
+    /// точка в двенадцать секунд: разворот в три приёма укладывается в две,
+    /// и в реплее двор пролетает по прямой.
+    ///
+    /// Здесь точки раздаются туда, где линия ВЫГИБАЕТСЯ. Берём самый
+    /// выпирающий участок, ставим точку в его вершину, участок распадается на
+    /// два — и так пока не кончится бюджет. Прямая съедает одну точку на
+    /// любую длину, а на серию манёвров уходит столько, сколько там углов.
+    ///
+    /// Тот же приём, что у Дугласа-Пёкера, но с другого конца: тот отвечает на
+    /// «какая ошибка допустима», а здесь ответ нужен на «сколько точек можно» —
+    /// когда потолок задан не глазом, а ценой отрисовки.
+    static func significantIndices(
+        _ coords: [CLLocationCoordinate2D],
+        budget: Int
+    ) -> [Int] {
+        guard coords.count > budget, budget >= 2 else { return Array(coords.indices) }
+
+        struct Segment {
+            let start: Int
+            let end: Int
+            let peak: Int
+            let deviation: Double
+        }
+
+        func segment(from start: Int, to end: Int) -> Segment? {
+            guard end - start > 1 else { return nil }
+            var peak = start + 1
+            var deviation = -1.0
+            for i in (start + 1)..<end {
+                let d = perpendicularDistance(point: coords[i], lineStart: coords[start], lineEnd: coords[end])
+                if d > deviation {
+                    deviation = d
+                    peak = i
+                }
+            }
+            return Segment(start: start, end: end, peak: peak, deviation: deviation)
+        }
+
+        var kept: Set<Int> = [0, coords.count - 1]
+        var pending: [Segment] = []
+        if let whole = segment(from: 0, to: coords.count - 1) { pending.append(whole) }
+
+        while kept.count < budget, !pending.isEmpty {
+            var worst = 0
+            for i in 1..<pending.count where pending[i].deviation > pending[worst].deviation {
+                worst = i
+            }
+            let chosen = pending.remove(at: worst)
+            // Ровная линия: делить дальше нечего, остаток бюджета не нужен.
+            guard chosen.deviation > 0 else { break }
+
+            kept.insert(chosen.peak)
+            if let left = segment(from: chosen.start, to: chosen.peak) { pending.append(left) }
+            if let right = segment(from: chosen.peak, to: chosen.end) { pending.append(right) }
+        }
+
+        return kept.sorted()
     }
 
     /// Simplify coordinates and return the kept indices (useful when parallel arrays like speeds must stay aligned).

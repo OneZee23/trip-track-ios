@@ -112,11 +112,6 @@ struct DevMenuView: View {
                             value: "\(viewModel.trackManager.confirmedPoints.count + (viewModel.trackManager.animatedHeadPosition != nil ? 1 : 0))",
                             icon: "point.topleft.down.curvedto.point.bottomright.up"
                         )
-                        LocationInfoRow(
-                            title: "Smooth Points",
-                            value: "\(viewModel.trackManager.smoothDisplayPoints.count)",
-                            icon: "waveform.path"
-                        )
                     }
                 }
 

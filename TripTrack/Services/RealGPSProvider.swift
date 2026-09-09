@@ -77,11 +77,26 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
     /// High-accuracy mode for active trip recording
     func setRecordingMode() {
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        manager.distanceFilter = 5.0
+        // Без фильтра расстояния — по двум причинам, и обе весомые.
+        //
+        // Точность: фильтр в пять метров резал не поровну. На трассе машина
+        // проходит их за пятую долю секунды, и фильтр не мешал ничему; во дворе
+        // на пяти километрах в час — за три с половиной секунды, за которые
+        // разворот успевал случиться целиком и не попасть в трек.
+        //
+        // Фон: с iOS 16.4 приложение, которое просит и обычные обновления, и
+        // significant location changes (а мы просим оба — запись и автозапуск),
+        // может быть усыплено в фоне, если задан фильтр расстояния. Наш
+        // showsBackgroundLocationIndicator это смягчал, но играть против явного
+        // требования платформы незачем.
+        //
+        // Батарею это не трогает: фильтр работает НАД драйвером и лишь
+        // подавляет доставку, чип опрашивается с той же частотой в обоих случаях.
+        manager.distanceFilter = kCLDistanceFilterNone
         manager.pausesLocationUpdatesAutomatically = false
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
-        gpsLog.notice("mode=RECORDING accuracy=bestForNavigation distanceFilter=5m bg=on auth=\(self.authString, privacy: .public)")
+        gpsLog.notice("mode=RECORDING accuracy=bestForNavigation distanceFilter=none bg=on auth=\(self.authString, privacy: .public)")
 
         // GPS needs ~2 seconds to recalibrate after accuracy change
         isWarmingUp = true
