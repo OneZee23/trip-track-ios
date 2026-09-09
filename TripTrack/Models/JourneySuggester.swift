@@ -159,6 +159,59 @@ enum JourneySuggester {
         return nil
     }
 
+    // MARK: - Цепочка вокруг опорной
+
+    /// Разрыв, который цепочку ещё не рвёт: полторы суток.
+    ///
+    /// Не `silence` (неделя): та отвечает на вопрос подсказки — «одна ли это
+    /// история», и неделя молчания внутри поездки в Грузию бывает. Здесь
+    /// вопрос другой и куда более узкий: какие поездки предотметить человеку,
+    /// который открыл лист сборки. Тридцать шесть часов — это «уехал вчера и
+    /// доехал сегодня», с запасом на ночь и на полдня стоянки; неделя же
+    /// предотметила бы ему весь месяц, и он снова не понял бы, что происходит.
+    static let chainGap: TimeInterval = 36 * 3_600
+
+    /// Поездки, сцепленные с опорной: конец одной там же, где начало
+    /// следующей, и между ними не больше `chainGap`.
+    ///
+    /// Это НЕ `suggestion`: там правило решает, стоит ли заговорить первым, и
+    /// потому спрашивает про дом и про ночь не дома. Здесь человек уже пришёл
+    /// сам и показал пальцем на поездку — остаётся угадать, что ещё было той
+    /// же дорогой. Дом в этом вопросе не участвует: «Краснодар → Геленджик» и
+    /// «Геленджик → Дивноморское» — одна дорога независимо от того, где живёт
+    /// человек и знает ли приложение его двор вообще.
+    ///
+    /// Возвращает цепочку по времени, вместе с опорной; поездка без координат
+    /// в цепочку не входит и обрывает её — про неё нечего утверждать, а
+    /// предотметить лишнее хуже, чем недоотметить: снятую галочку человек не
+    /// заметит, а лишнее плечо уедет в путешествие молча.
+    static func chainAround(_ anchor: Trip, in trips: [Trip]) -> [Trip] {
+        let ordered = trips.sorted { $0.startDate < $1.startDate }
+        guard let index = ordered.firstIndex(where: { $0.id == anchor.id }) else { return [anchor] }
+
+        var chain = [ordered[index]]
+        var back = index
+        while back > 0, joins(ordered[back - 1], ordered[back]) {
+            chain.insert(ordered[back - 1], at: 0)
+            back -= 1
+        }
+        var forward = index
+        while forward < ordered.count - 1, joins(ordered[forward], ordered[forward + 1]) {
+            chain.append(ordered[forward + 1])
+            forward += 1
+        }
+        return chain
+    }
+
+    /// Сцепляются ли две соседние по времени поездки.
+    private static func joins(_ earlier: Trip, _ later: Trip) -> Bool {
+        guard let end = JourneyAggregate.endCoordinate(of: earlier),
+              let start = JourneyAggregate.startCoordinate(of: later) else { return false }
+        let gap = later.startDate.timeIntervalSince(earlier.endDate ?? earlier.startDate)
+        guard gap <= chainGap else { return false }
+        return distance(start, end) <= homeRadius
+    }
+
     /// Цепочка назад от закрывающей поездки, если она вообще складывается.
     ///
     /// Только геометрия и время: про «обычную среду» здесь не спрашивают —

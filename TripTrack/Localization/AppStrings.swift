@@ -1732,11 +1732,23 @@ enum AppStrings {
     static func journeyCreate(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyCreate", ru: "Создать путешествие", en: "Create journey")
     }
-    /// Подсказка на экране подбора плеч: список уже сузило `neighbours(of:)`.
-    static func journeyNeighboursHint(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "journeyNeighboursHint",
-           ru: "Поездки за неделю до и после. Снимите лишние.",
-           en: "Trips within a week before and after. Untick the ones that don't belong.")
+    /// Заголовок листа сборки. Не «Объединить в путешествие» (это пункт меню,
+    /// с которого сюда приходят): открыв лист, человек уже согласился — здесь
+    /// он собирает, а не решает заново.
+    static func journeyComposeTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyComposeTitle", ru: "Собрать путешествие", en: "Build a journey")
+    }
+    /// Подсказка над списком. Прежняя («Снимите лишние») описывала работу,
+    /// которую лист сам себе создал, отметив всё подряд; эта называет вопрос,
+    /// на который отвечают галочки.
+    static func journeyComposeHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyComposeHint",
+           ru: "Отметьте поездки, которые были одной дорогой",
+           en: "Tick the trips that were one road")
+    }
+    /// Подпись у той поездки, с которой лист открыли.
+    static func journeyComposeAnchor(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyComposeAnchor", ru: "Эта поездка", en: "This trip")
     }
     static func journeyTitlePlaceholder(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyTitlePlaceholder", ru: "Например: Грузия 2026", en: "For example: Georgia 2026")

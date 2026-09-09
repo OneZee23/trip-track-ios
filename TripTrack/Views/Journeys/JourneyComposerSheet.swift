@@ -1,22 +1,31 @@
 import SwiftUI
 
-/// «Объединить в путешествие»: соседи за ±7 дней, все отмечены, лишние
-/// снимаются; имя — по желанию, иначе «Краснодар — Тбилиси» соберётся само.
+/// «Собрать путешествие»: из каких поездок сложить одну историю.
 ///
-/// Список приходит уже суженным (`JourneyManager.neighbours`), и опорная
-/// поездка в нём НЕ лежит — её лист ставит первой сам. Особенной она при этом
-/// не становится: снять галочку можно и с неё. Человек пришёл сюда с экрана
-/// одной поездки, но собирает историю, а не список её спутников — запрет
-/// «эту нельзя» был бы правилом, которого он не просил.
+/// Лист открывается двумя входами — «…» на экране поездки и долгое нажатие на
+/// карточку в «Моих», — и оба приносят одну опорную поездку. Соседей за ±7
+/// дней достаёт `JourneyManager.neighbours`, но **отмечена по умолчанию
+/// только цепочка** (`JourneySuggester.chainAround`): поездки, у которых конец
+/// одной там же, где начало следующей, и между ними не больше полутора суток.
 ///
-/// Второй вход — долгое нажатие на карточку в «Мои» (0.6.6) — приходит сюда
-/// ровно так же: опорная поездка и соседи ±7 дней. Готовый список
-/// (`preselected`) ставит только подсказка, и тогда соседей лист не ищет вовсе.
+/// Так было не всегда. До 0.6.6 лист отмечал ВСЁ окно и просил «снять лишние»
+/// — и владелец, открыв его на девятикилометровом куске дороги домой, сказал
+/// «не понимаю, что происходит»: экран показал ему десяток городских поездок с
+/// галочками и работу по их снятию, вместо ответа на вопрос, с которым он
+/// пришёл. Отмеченная цепочка — это готовый ответ, который можно поправить;
+/// отмеченное окно — это заготовка чужой работы.
+///
+/// Опорная поездка особенной при этом не становится: у неё есть рамка и
+/// подпись «Эта поездка», но галочку можно снять и с неё. Человек пришёл с
+/// экрана одной поездки, а собирает историю — запрет «эту нельзя» был бы
+/// правилом, которого он не просил.
+///
+/// Третий вход — подсказка «Похоже на путешествие» — приносит готовый список
+/// (`preselected`). Он уже собран правилом целиком, и досыпать ему соседей
+/// значит переспросить о том, на что человек только что ответил.
 struct JourneyComposerSheet: View {
     let anchor: Trip
-    /// Готовый список — подсказка «Похоже на путешествие» (0.6.6). Цепочка уже
-    /// собрана правилом, и досыпать ей соседей ±7 дней значит переспросить о
-    /// том, на что человек только что ответил.
+    /// Готовый список — подсказка «Похоже на путешествие» (0.6.6).
     var preselected: [Trip]? = nil
     let onCreated: (Journey) -> Void
 
@@ -28,38 +37,61 @@ struct JourneyComposerSheet: View {
     /// читает, а наблюдение за ним перерисовывало бы лист на каждую чужую
     /// правку — и на ту, которую делает он сам, прямо перед закрытием.
     private let manager = JourneyManager.shared
-    @State private var candidates: [Trip] = []
-    @State private var selected: Set<UUID> = []
+    @State private var candidates: [Trip]
+    @State private var selected: Set<UUID>
     @State private var title = ""
     @State private var error: String?
+
+    /// Готовый список известен уже при создании листа, и ждать `.task` ему
+    /// незачем: подсказка открывалась бы кадром с пустым списком и выключенной
+    /// кнопкой. Соседей — только в `.task`: за ними надо в базу.
+    init(anchor: Trip, preselected: [Trip]? = nil, onCreated: @escaping (Journey) -> Void) {
+        self.anchor = anchor
+        self.preselected = preselected
+        self.onCreated = onCreated
+        // По дате, а не в порядке нажатий: список читается как будущее
+        // путешествие, а оно идёт по дням.
+        let seed = (preselected ?? []).sorted { $0.startDate < $1.startDate }
+        _candidates = State(initialValue: seed)
+        _selected = State(initialValue: Set(seed.map(\.id)))
+    }
 
     /// Высота строки, посчитанная, а не измеренная: `ScrollView` гибкий по
     /// вертикали и растягивается на всё, что ему дали, — поэтому под одной
     /// поездкой зияла пустая треть листа. Мерить его собственную высоту
     /// `GeometryReader`-ом, которым же и задавать ему рамку, — петля, от
-    /// которой предостерегает `VehiclePickerSheet`. Кандидаты ограничены
-    /// окном ±7 дней, так что до пяти строк список рисуется целиком, а
-    /// дальше листается в счётной рамке.
-    private static let rowHeight: CGFloat = 60
+    /// которой предостерегает `VehiclePickerSheet`.
+    private static let thumbWidth: CGFloat = 56
+    private static let thumbHeight: CGFloat = 44
+    private static let rowHeight: CGFloat = thumbHeight + 16
     private static let rowSpacing: CGFloat = 8
-    private static let maxVisibleRows = 5
+    /// Подпись дня вместе с отступом над ней.
+    private static let dayHeaderHeight: CGFloat = 26
+    /// До скольких строк список рисуется целиком, без прокрутки.
+    private static let maxVisibleRows = 6
+    /// А сколько их видно в прокрутке. Меньше порога нарочно: рамка ровно в
+    /// шесть строк была бы выше, чем список из шести строк без рамки, и лист
+    /// становился бы ВЫШЕ ровно в тот момент, когда прячет содержимое.
+    private static let scrollRows = 5
     private static var maxListHeight: CGFloat {
-        CGFloat(maxVisibleRows) * rowHeight + CGFloat(maxVisibleRows - 1) * rowSpacing
+        CGFloat(scrollRows) * rowHeight
+            + CGFloat(scrollRows - 1) * rowSpacing
+            + 2 * dayHeaderHeight
     }
+
+    /// Собран один раз: `LocalizedDateFormatter.templates` строит тринадцать
+    /// `DateFormatter` за вызов, а время спрашивает каждая строка списка.
+    private static let timeFormatters = LocalizedDateFormatter.templates("Hm")
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         VStack(alignment: .leading, spacing: 16) {
             header(c)
-            // Подсказка про «неделю до и после» правдива только для соседей.
-            // Над списком, собранным руками, она обещала бы не то, что здесь
-            // лежит, — и лист сам себя оговорил бы.
-            if preselected == nil {
-                Text(AppStrings.journeyNeighboursHint(lang.language))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(c.textTertiary)
-            }
+            Text(AppStrings.journeyComposeHint(lang.language))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(c.textTertiary)
             candidateList(c)
+            summary(c)
             TextField(AppStrings.journeyTitlePlaceholder(lang.language), text: $title)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(c.text)
@@ -78,40 +110,73 @@ struct JourneyComposerSheet: View {
         .background(c.bg)
         .animation(.easeInOut(duration: 0.15), value: error)
         .task {
-            if let preselected {
-                // По дате, а не в порядке нажатий: список читается как
-                // будущее путешествие, а оно идёт по дням.
-                candidates = preselected.sorted { $0.startDate < $1.startDate }
-            } else {
-                candidates = manager.neighbours(of: anchor)
-                // Опорная поездка — первой и с запасом на случай, если менеджер
-                // однажды начнёт возвращать её сам: дважды в списке она хуже, чем
-                // не первой.
-                if !candidates.contains(where: { $0.id == anchor.id }) {
-                    candidates.insert(anchor, at: 0)
-                }
-            }
-            selected = Set(candidates.map(\.id))
+            guard preselected == nil else { return }
+            var window = manager.neighbours(of: anchor)
+            // Опорная поездка — с запасом на случай, если менеджер однажды
+            // начнёт возвращать её сам: дважды в списке она хуже, чем не
+            // первой.
+            if !window.contains(where: { $0.id == anchor.id }) { window.append(anchor) }
+            candidates = window.sorted { $0.startDate < $1.startDate }
+            // Отмечена ЦЕПОЧКА, а не окно: см. заголовочный комментарий.
+            selected = Set(JourneySuggester.chainAround(anchor, in: candidates).map(\.id))
         }
+    }
+
+    // MARK: - Дни
+
+    /// Кандидаты, разложенные по календарным дням старта: подписи «6 сен, сб»
+    /// над строками. Без них список из десятка поездок читается как свалка —
+    /// а вопрос листа («что было одной дорогой») отвечается по дням.
+    private struct DayGroup: Identifiable {
+        let id: Date
+        var trips: [Trip]
+    }
+
+    private var groups: [DayGroup] {
+        let calendar = Calendar.current
+        var out: [DayGroup] = []
+        for trip in candidates {
+            let day = calendar.startOfDay(for: trip.startDate)
+            if let i = out.indices.last, out[i].id == day {
+                out[i].trips.append(trip)
+            } else {
+                out.append(DayGroup(id: day, trips: [trip]))
+            }
+        }
+        return out
     }
 
     // MARK: - Куски
 
-    /// До пяти кандидатов — обычный `VStack`: он сам говорит листу, сколько
-    /// места ему нужно. Больше — прокрутка в рамке ровно на пять строк.
+    /// До шести кандидатов — обычный `VStack`: он сам говорит листу, сколько
+    /// места ему нужно. Больше — прокрутка в счётной рамке.
     @ViewBuilder
     private func candidateList(_ c: AppTheme.Colors) -> some View {
         if candidates.count <= Self.maxVisibleRows {
-            VStack(spacing: Self.rowSpacing) {
-                ForEach(candidates) { row($0, c: c) }
+            VStack(alignment: .leading, spacing: Self.rowSpacing) {
+                listContent(c)
             }
         } else {
             ScrollView {
-                LazyVStack(spacing: Self.rowSpacing) {
-                    ForEach(candidates) { row($0, c: c) }
+                LazyVStack(alignment: .leading, spacing: Self.rowSpacing) {
+                    listContent(c)
                 }
             }
             .frame(height: Self.maxListHeight)
+        }
+    }
+
+    @ViewBuilder
+    private func listContent(_ c: AppTheme.Colors) -> some View {
+        let all = groups
+        ForEach(all) { group in
+            Text(JourneyFormat.dayDate(group.id, language: lang.language))
+                .textCase(.uppercase)
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.4)
+                .foregroundStyle(c.textTertiary)
+                .padding(.top, group.id == all.first?.id ? 0 : 6)
+            ForEach(group.trips) { row($0, c: c) }
         }
     }
 
@@ -122,7 +187,7 @@ struct JourneyComposerSheet: View {
                 .foregroundStyle(.white)
                 .frame(width: 28, height: 28)
                 .background(AppTheme.accent, in: Circle())
-            Text(AppStrings.journeyCombine(lang.language))
+            Text(AppStrings.journeyComposeTitle(lang.language))
                 .font(.system(size: 19, weight: .heavy))
                 .foregroundStyle(c.text)
                 .lineLimit(2)
@@ -139,11 +204,34 @@ struct JourneyComposerSheet: View {
         }
     }
 
-    /// Строка кандидата: галочка, название, дата и километры. Ничего больше —
-    /// человек выбирает, какие поездки составляют одну историю, а не изучает
-    /// каждую из них заново.
+    /// Что получится из отмеченного — прямо над полем имени.
+    ///
+    /// Итог считает `JourneyAggregate.build`, тот же, что рисует экран
+    /// путешествия: цифра, которую человек увидит здесь, обязана совпасть с
+    /// цифрой, которую он увидит после «Создать».
+    private func summary(_ c: AppTheme.Colors) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "map")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(selected.isEmpty ? c.textTertiary : AppTheme.accent)
+            Text(summaryText())
+                .font(.system(size: 13.5, weight: .bold))
+                .foregroundStyle(selected.isEmpty ? c.textTertiary : c.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+        }
+        .animation(.easeInOut(duration: 0.18), value: selected)
+    }
+
+    /// Строка кандидата: карта, имя, «10:32–12:58 · 177 км», галочка справа.
+    ///
+    /// Карта — тот же `MapSnapshotPreview`, что на плитках «Моих»: по названию
+    /// «Дивноморское» и «Дивноморское» две половины одной дороги не отличить,
+    /// а по ниткам маршрута — сразу.
     private func row(_ trip: Trip, c: AppTheme.Colors) -> some View {
         let isOn = selected.contains(trip.id)
+        let isAnchor = trip.id == anchor.id
         return Button {
             Haptics.selection()
             // Отказ описывал ПРЕЖНИЙ выбор: оставить его на экране, где выбор
@@ -152,26 +240,68 @@ struct JourneyComposerSheet: View {
             if isOn { selected.remove(trip.id) } else { selected.insert(trip.id) }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(isOn ? AppTheme.accent : c.textTertiary)
+                thumbnail(trip, c: c)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(titleText(trip))
+                    Text(JourneyFormat.tripTitle(trip, language: lang.language))
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
                     Text(metaText(trip))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(c.textTertiary)
+                        .lineLimit(1)
+                    if isAnchor {
+                        Text(AppStrings.journeyComposeAnchor(lang.language))
+                            .font(.system(size: 10.5, weight: .heavy))
+                            .foregroundStyle(AppTheme.accent)
+                    }
                 }
                 Spacer(minLength: 0)
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(isOn ? AppTheme.accent : c.textTertiary)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, minHeight: Self.rowHeight, alignment: .leading)
             .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                if isAnchor {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(AppTheme.accent.opacity(0.55), lineWidth: 1)
+                }
+            }
         }
         .buttonStyle(PressableCardStyle())
         .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    /// Меньше двух точек — `MapSnapshotPreview` возвращается ДО того, как
+    /// успевает признать себя неудачей, и мерцает вечно: целая колонка такого
+    /// читается как экран, который всё ещё грузится. Та же заглушка, что на
+    /// плитках «Моих», уменьшенная до миниатюры.
+    @ViewBuilder
+    private func thumbnail(_ trip: Trip, c: AppTheme.Colors) -> some View {
+        let coords = trip.previewCoordinates
+        Group {
+            if coords.count > 1 {
+                MapSnapshotPreview(
+                    coordinates: coords,
+                    tripId: trip.id,
+                    height: Self.thumbHeight,
+                    width: Self.thumbWidth
+                )
+            } else {
+                ZStack {
+                    Rectangle().fill(c.card)
+                    Image(systemName: "map.slash")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
+            }
+        }
+        .frame(width: Self.thumbWidth, height: Self.thumbHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private func createButton(_ c: AppTheme.Colors) -> some View {
@@ -197,28 +327,37 @@ struct JourneyComposerSheet: View {
 
     // MARK: - Строки
 
-    /// Тот же ответ, что дают карточки поездок: имя, иначе регион, иначе дата.
-    /// Расходиться им нельзя — это одна и та же поездка на двух экранах, а с
-    /// 0.6.6 на трёх: лента путешествия по дням зовёт ту же функцию.
-    private func titleText(_ trip: Trip) -> String {
-        JourneyFormat.tripTitle(trip, language: lang.language)
+    /// «2 поездки · 187 км · 6 сен». Число берётся по головам, а не из
+    /// `legCount`: тот считает только плечи, а свёрнутые местные поездки в
+    /// путешествие входят наравне — человек отметил их галочкой и ждёт их в
+    /// счёте. Километры — `totalMetres` того же агрегата, чтобы итог листа и
+    /// итог экрана путешествия не разошлись ни на метр.
+    private func summaryText() -> String {
+        let ticked = candidates.filter { selected.contains($0.id) }
+        guard let first = ticked.map(\.startDate).min(),
+              let last = ticked.map({ $0.endDate ?? $0.startDate }).max() else {
+            return AppStrings.journeyEmptyTitle(lang.language)
+        }
+        let l = lang.language
+        let aggregate = JourneyAggregate.build(trips: ticked)
+        let count = "\(ticked.count) \(AppStrings.nounTrips(l, ticked.count))"
+        let km = "\(GarageFormat.odometer(aggregate.totalMetres / 1_000, lng: l)) \(AppStrings.km(l))"
+        let dates = JourneyFormat.dateRange(from: first, to: last, language: l)
+        return "\(count) · \(km) · \(dates)"
     }
 
-    /// «14 сент · 1 143 км». Километры целыми: разница в сотню метров ничего не
-    /// решает в выборе, из каких поездок сложить историю.
-    ///
-    /// Через `GarageFormat.odometer`, как везде: своё `Int(distance / 1000)`
-    /// и разряды не разбивало (на четырёхзначных «1143» читается как год), и
-    /// округляло вниз — 999,9 км показывались как «999».
+    /// «10:32–12:58 · 177 км». Часы своим порядком у каждого языка
+    /// (`templates`), а не жёстким `HH:mm`: половина мира пишет время с AM/PM.
+    /// Километры целыми и через `GarageFormat.odometer`, как везде: своё
+    /// `Int(distance / 1000)` и разряды не разбивало, и округляло вниз.
     private func metaText(_ trip: Trip) -> String {
-        let km = GarageFormat.odometer(trip.distanceKm, lng: lang.language)
-        return "\(dateText(trip.startDate)) · \(km) \(AppStrings.km(lang.language))"
-    }
-
-    /// Тот же «14 сент» без точки, что на карточках поездок, — своим
-    /// формирователем он вышел бы «14 сент.» и разошёлся бы с лентой.
-    private func dateText(_ date: Date) -> String {
-        ProfileDateFormat.dayMonth(date, lang: lang.language)
+        let l = lang.language
+        let formatter = Self.timeFormatters[l]
+        let start = formatter?.string(from: trip.startDate) ?? ""
+        let finish = trip.endDate.flatMap { formatter?.string(from: $0) }
+        let time = finish.map { "\(start)\u{2013}\($0)" } ?? start
+        let km = GarageFormat.odometer(trip.distanceKm, lng: l)
+        return "\(time) · \(km) \(AppStrings.km(l))"
     }
 
     // MARK: - Создание

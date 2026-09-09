@@ -217,4 +217,57 @@ final class JourneySuggesterTests: XCTestCase {
                                             now: end(of: trips).addingTimeInterval(30 * 86_400))
         XCTAssertNil(s)
     }
+
+    // MARK: - Цепочка вокруг опорной (лист сборки)
+
+    /// Геленджик и Дивноморское — та самая дорога 6 сентября, с которой
+    /// владелец и открыл лист сборки.
+    private let gelendzhik = CLLocationCoordinate2D(latitude: 44.56, longitude: 38.08)
+    private let divnomorskoye = CLLocationCoordinate2D(latitude: 44.50, longitude: 38.13)
+    /// 60 км строго на север от дома: город, но НЕ тот же город.
+    private let otherTown = CLLocationCoordinate2D(latitude: 45.57, longitude: 38.98)
+
+    /// Автозавершение разрезало дорогу домой пополам, и обе половины —
+    /// одно путешествие: конец первой и начало второй совпадают.
+    func testChainJoinsTwoLegsOfTheSameDay() {
+        let leg1 = trip(day: 0, hour: 10, from: krd, to: gelendzhik, km: 177, hours: 2.5)
+        let leg2 = trip(day: 0, hour: 15, from: gelendzhik, to: divnomorskoye, km: 9.6, hours: 0.23)
+
+        let chain = JourneySuggester.chainAround(leg2, in: [leg1, leg2])
+
+        XCTAssertEqual(chain.map(\.id), [leg1.id, leg2.id])
+    }
+
+    /// Поездка накануне по другому городу лежит в окне ±7 дней и потому
+    /// попадает в лист — но галочки не получает: её конец в шестидесяти
+    /// километрах от места, откуда началась дорога.
+    func testChainSkipsAYesterdayTripSomewhereElse() {
+        let city = trip(day: -1, hour: 18, from: otherTown, to: otherTown, km: 12, hours: 0.5)
+        let leg1 = trip(day: 0, hour: 10, from: krd, to: gelendzhik, km: 177, hours: 2.5)
+        let leg2 = trip(day: 0, hour: 15, from: gelendzhik, to: divnomorskoye, km: 9.6, hours: 0.23)
+
+        let chain = JourneySuggester.chainAround(leg2, in: [city, leg1, leg2])
+
+        XCTAssertEqual(chain.map(\.id), [leg1.id, leg2.id], "вчерашний город — не эта дорога")
+    }
+
+    /// Через три дня машина поехала ровно оттуда же, где встала. Место то же,
+    /// история другая — рвёт её время, а не геометрия.
+    func testChainBreaksOnALongGapAtTheSameSpot() {
+        let leg1 = trip(day: 0, hour: 10, from: krd, to: gelendzhik, km: 177, hours: 2.5)
+        let leg2 = trip(day: 0, hour: 15, from: gelendzhik, to: divnomorskoye, km: 9.6, hours: 0.23)
+        let later = trip(day: 3, hour: 12, from: divnomorskoye, to: krd, km: 190, hours: 3)
+
+        let chain = JourneySuggester.chainAround(leg2, in: [leg1, leg2, later])
+
+        XCTAssertEqual(chain.map(\.id), [leg1.id, leg2.id])
+    }
+
+    /// Опорная поездка возвращается всегда, даже когда сцеплять не с чем:
+    /// лист открывают, чтобы собрать путешествие, а не чтобы получить пустой
+    /// список галочек.
+    func testChainKeepsTheAnchorAlone() {
+        let alone = trip(day: 0, hour: 10, from: krd, to: gelendzhik, km: 177, hours: 2.5)
+        XCTAssertEqual(JourneySuggester.chainAround(alone, in: [alone]).map(\.id), [alone.id])
+    }
 }
