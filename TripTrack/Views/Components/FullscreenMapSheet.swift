@@ -161,6 +161,10 @@ struct FullscreenMapSheet: View {
                 fitInsets: (canReplay || canCrawl) ? replayFitInsets : nil
             )
             .ignoresSafeArea()
+            // На самой карте, а не на всём экране: хром рисуется следующими
+            // слоями ZStack и остаётся поверх затемнения. Низ не трогаем — там
+            // и так стоит своя плашка (зум, транспорт, карточка отметки).
+            .edgeScrims(top: true)
 
             // Pinned to the MAP's centre, not the chrome's: the map ignores
             // the safe area, so the two centres are ~12pt apart and the bubble

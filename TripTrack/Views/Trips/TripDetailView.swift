@@ -779,6 +779,10 @@ struct TripDetailView: View {
             let stepped = (raw * 20).rounded() / 20
             if stepped != heroProgress { heroProgress = stepped }
         }
+        // Затемнение под статус-бар — НИЖЕ шапки: кружки «Назад» и «…» должны
+        // остаться чёткими, темнеет карта под ними. Когда экран прокручен,
+        // шапка становится непрозрачной и закрывает накладку собой.
+        .edgeScrims(top: true)
         // The one top bar. Pinned to the screen, not to the map, so «Назад»
         // survives scrolling; declared before `PublishStatusOverlay` so the
         // publish toast still stacks above it.

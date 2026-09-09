@@ -79,6 +79,10 @@ struct JourneyDetailView: View {
     private var stage: some View {
         scroll
             .background(colors.bg)
+            // Экран уходит под статус-бар (`.ignoresSafeArea` ниже), и на
+            // светлой карте-склейке часы со связью пропадали. Накладка — под
+            // шапкой: её кнопки остаются чёткими.
+            .edgeScrims(top: true)
             .overlay(alignment: .top) { topBar }
             .navigationBarHidden(true)
             .hideAppTabBar()
