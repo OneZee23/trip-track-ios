@@ -58,7 +58,7 @@ struct TrackingView: View {
             .ignoresSafeArea()
             .allowsHitTesting(!viewModel.isRecording)
             // На карте, а не на экране: HUD и верхний ряд — следующие слои
-            // ZStack, и затемнение остаётся под ними.
+            // ZStack, и дымка остаётся под ними.
             .edgeScrims(top: true)
 
             // Loading overlay until the map reports its first render. Never
