@@ -1217,6 +1217,13 @@ extension Translations {
         "journeyAddFromTrip": "Tambah perjalanan",
         "journeyCreated": "Perjalanan dibuat",
         "journeySelectAction": "Jadikan perjalanan (%d)",
+        "journeySuggestTitle": "Sepertinya sebuah perjalanan",
+        "journeySuggestCombine": "Gabungkan",
+        "journeyNotNow": "Nanti saja",
+        "homeQuestionTitle": "Ini rumahmu?",
+        "homeQuestionHint": "Agar aplikasi tahu dari mana perjalanan dimulai",
+        "homeYes": "Ya, ini rumahku",
+        "homeNo": "Bukan",
     ]
 
 }

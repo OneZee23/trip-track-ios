@@ -1814,6 +1814,38 @@ enum AppStrings {
                           ru: "В путешествие (%d)", en: "Into a journey (%d)"), count)
     }
 
+    // MARK: - Подсказка путешествия (0.6.6)
+
+    /// Заголовок карточки-подсказки. «Похоже», а не «Это»: правило считает по
+    /// ночёвкам и иногда ошибается, и карточка не должна звучать увереннее,
+    /// чем она есть.
+    static func journeySuggestTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeySuggestTitle", ru: "Похоже на путешествие", en: "Looks like a journey")
+    }
+    static func journeySuggestCombine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeySuggestCombine", ru: "Объединить", en: "Combine")
+    }
+    /// «Не сейчас», а не «Нет»: карточка уходит, но человек ничего не терял —
+    /// эти же поездки он соберёт руками мультивыбором.
+    static func journeyNotNow(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyNotNow", ru: "Не сейчас", en: "Not now")
+    }
+    /// Вопрос про дом задаётся ОДИН раз: без дома подсказок нет вовсе.
+    static func homeQuestionTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeQuestionTitle", ru: "Это твой дом?", en: "Is this your home?")
+    }
+    static func homeQuestionHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeQuestionHint",
+           ru: "Так приложение поймёт, где начинаются путешествия",
+           en: "So the app knows where journeys begin")
+    }
+    static func homeYes(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeYes", ru: "Да, это дом", en: "Yes, that's home")
+    }
+    static func homeNo(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "homeNo", ru: "Нет", en: "No")
+    }
+
     static func notifTripStopTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifTripStopTitle", ru: "Поездка закончена?", en: "Trip finished?")
     }

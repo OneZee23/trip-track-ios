@@ -1217,6 +1217,13 @@ extension Translations {
         "journeyAddFromTrip": "Додати поїздку",
         "journeyCreated": "Подорож створено",
         "journeySelectAction": "У подорож (%d)",
+        "journeySuggestTitle": "Схоже на подорож",
+        "journeySuggestCombine": "Об'єднати",
+        "journeyNotNow": "Не зараз",
+        "homeQuestionTitle": "Це твій дім?",
+        "homeQuestionHint": "Так застосунок зрозуміє, де починаються подорожі",
+        "homeYes": "Так, це дім",
+        "homeNo": "Ні",
     ]
 
 }

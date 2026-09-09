@@ -1217,6 +1217,13 @@ extension Translations {
         "journeyAddFromTrip": "Сапар қосу",
         "journeyCreated": "Саяхат жасалды",
         "journeySelectAction": "Саяхатқа (%d)",
+        "journeySuggestTitle": "Саяхатқа ұқсайды",
+        "journeySuggestCombine": "Біріктіру",
+        "journeyNotNow": "Қазір емес",
+        "homeQuestionTitle": "Бұл сенің үйің бе?",
+        "homeQuestionHint": "Осылай қолданба саяхаттардың қайдан басталатынын біледі",
+        "homeYes": "Иә, бұл үй",
+        "homeNo": "Жоқ",
     ]
 
 }

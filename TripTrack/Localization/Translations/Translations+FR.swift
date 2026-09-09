@@ -1217,6 +1217,13 @@ extension Translations {
         "journeyAddFromTrip": "Ajouter un trajet",
         "journeyCreated": "Voyage créé",
         "journeySelectAction": "En voyage (%d)",
+        "journeySuggestTitle": "On dirait un voyage",
+        "journeySuggestCombine": "Regrouper",
+        "journeyNotNow": "Pas maintenant",
+        "homeQuestionTitle": "C'est chez toi ?",
+        "homeQuestionHint": "Pour que l'app sache où commencent les voyages",
+        "homeYes": "Oui, c'est chez moi",
+        "homeNo": "Non",
     ]
 
 }

@@ -1217,6 +1217,13 @@ extension Translations {
         "journeyAddFromTrip": "Gezi ekle",
         "journeyCreated": "Yolculuk oluşturuldu",
         "journeySelectAction": "Yolculuğa ekle (%d)",
+        "journeySuggestTitle": "Yolculuğa benziyor",
+        "journeySuggestCombine": "Birleştir",
+        "journeyNotNow": "Şimdi değil",
+        "homeQuestionTitle": "Burası evin mi?",
+        "homeQuestionHint": "Böylece uygulama yolculukların nerede başladığını bilir",
+        "homeYes": "Evet, burası evim",
+        "homeNo": "Hayır",
     ]
 
 }

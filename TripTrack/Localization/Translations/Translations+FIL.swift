@@ -1217,6 +1217,13 @@ extension Translations {
         "journeyAddFromTrip": "Magdagdag ng biyahe",
         "journeyCreated": "Nagawa na ang paglalakbay",
         "journeySelectAction": "Gawing paglalakbay (%d)",
+        "journeySuggestTitle": "Mukhang isang paglalakbay",
+        "journeySuggestCombine": "Pagsamahin",
+        "journeyNotNow": "Hindi muna",
+        "homeQuestionTitle": "Ito ba ang tahanan mo?",
+        "homeQuestionHint": "Para malaman ng app kung saan nagsisimula ang mga paglalakbay",
+        "homeYes": "Oo, tahanan ko ito",
+        "homeNo": "Hindi",
     ]
 
 }

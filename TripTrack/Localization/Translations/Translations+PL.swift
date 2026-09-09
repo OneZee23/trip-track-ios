@@ -1217,6 +1217,13 @@ extension Translations {
         "journeyAddFromTrip": "Dodaj trasę",
         "journeyCreated": "Podróż utworzona",
         "journeySelectAction": "Do podróży (%d)",
+        "journeySuggestTitle": "Wygląda na podróż",
+        "journeySuggestCombine": "Połącz",
+        "journeyNotNow": "Nie teraz",
+        "homeQuestionTitle": "Czy to twój dom?",
+        "homeQuestionHint": "Dzięki temu aplikacja wie, gdzie zaczynają się podróże",
+        "homeYes": "Tak, to mój dom",
+        "homeNo": "Nie",
     ]
 
 }

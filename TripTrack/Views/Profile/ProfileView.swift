@@ -1,5 +1,6 @@
 import SwiftUI
 import OSLog
+import CoreLocation
 
 private let navLog = Logger(subsystem: "com.triptrack", category: "nav")
 
@@ -172,6 +173,19 @@ struct ProfileView: View {
     /// нечем — то же решение, что на экране поездки.
     @State private var toastItem: ToastItem?
 
+    // MARK: - Подсказка путешествия (0.6.6) — состояние
+
+    /// Цепочка, которую предлагает `JourneySuggester`. Пусто — баннера нет.
+    @State private var suggestedTrips: [Trip] = []
+    /// «Владикавказ, Тбилиси · 6 поездок» — считается один раз на подсказку,
+    /// а не в `body`: имена мест лежат в CoreData, и ходить туда на каждой
+    /// перерисовке (а этот экран наблюдает `SyncQueue`) незачем.
+    @State private var suggestionSubtitle = ""
+    /// Догадка про дом, пока человек её не подтвердил. nil — вопроса нет:
+    /// либо дом известен, либо уже спрашивали, либо данных мало.
+    @State private var homeCandidate: CLLocationCoordinate2D?
+    @State private var homeCandidateName = ""
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
 
@@ -244,6 +258,11 @@ struct ProfileView: View {
                         // its place whether the library is empty, loading, or
                         // full.
                         garageSection(c)
+
+                        // Над «Историей», а не под ней: подсказка про только
+                        // что законченное путешествие теряет смысл, если её
+                        // надо доскроллить.
+                        journeyPrompts()
 
                         if !allTrips.isEmpty {
                             historyBlock(c)
@@ -1256,6 +1275,9 @@ struct ProfileView: View {
         if let anchor = composerTrips.first {
             JourneyComposerSheet(anchor: anchor, preselected: composerTrips) { _ in
                 clearSelection()
+                // Тот же лист приходит и из подсказки: путешествие создано,
+                // предлагать его второй раз не о чем.
+                suggestedTrips = []
                 toastItem = ToastItem(
                     type: .success,
                     message: AppStrings.journeyCreated(lang.language)
@@ -1265,6 +1287,134 @@ struct ProfileView: View {
             .environmentObject(themeManager)
             .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
         }
+    }
+
+    // MARK: - Подсказка путешествия (0.6.6)
+
+    /// Отказ помнится по id ПОСЛЕДНЕЙ поездки цепочки: она же и закрывает
+    /// цепочку возвращением домой, то есть не изменится, даже если человек
+    /// потом допишет поездку внутрь окна. По первой поездке ключ уезжал бы
+    /// вместе с любой более ранней записью, и «не сейчас» пришлось бы жать
+    /// снова.
+    private static let dismissedSuggestionKey = "com.triptrack.journeys.dismissedSuggestionTripId"
+
+    @ViewBuilder
+    private func journeyPrompts() -> some View {
+        if homeCandidate != nil || !suggestedTrips.isEmpty {
+            VStack(spacing: 12) {
+                if let home = homeCandidate {
+                    HomeQuestionCard(
+                        place: homeCandidateName,
+                        onYes: { acceptHome(home) },
+                        onNo: { declineHome() }
+                    )
+                }
+                if !suggestedTrips.isEmpty {
+                    JourneySuggestionBanner(
+                        subtitle: suggestionSubtitle,
+                        onCombine: { combineSuggestion() },
+                        onDismiss: { dismissSuggestion() }
+                    )
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .transition(.opacity)
+        }
+    }
+
+    /// Считает вопрос про дом и подсказку. Зовётся из `loadAggregates` — то
+    /// есть на входе в «Мои» и на `.tripRecordingEnded`. Не из `MapViewModel`:
+    /// запись поездки не обязана знать про путешествия, а человек всё равно
+    /// увидит карточку только здесь.
+    ///
+    /// Оба правила ходят по ВСЕЙ библиотеке, поэтому считаются в стороне от
+    /// главного потока — рядом с `loadAggregates`, по тем же причинам.
+    private func refreshJourneyPrompts(trips: [Trip]) async {
+        guard let home = settings.homeLocation else {
+            // Дом неизвестен — подсказок нет: без него «ночь не дома»
+            // неотличима от ночи дома, и любая подсказка была бы монеткой.
+            suggestedTrips = []
+            guard !settings.homeAsked else { homeCandidate = nil; return }
+            let candidate = await Task.detached(priority: .utility) {
+                JourneySuggester.inferHome(trips: trips)
+            }.value
+            guard !Task.isCancelled else { return }
+            homeCandidate = candidate
+            homeCandidateName = candidate.map { placeName($0) } ?? ""
+            return
+        }
+        homeCandidate = nil
+        let existing = journeys.journeys
+        let now = Date()
+        let chain = await Task.detached(priority: .utility) {
+            JourneySuggester.suggestion(trips: trips, home: home, existing: existing, now: now)
+        }.value
+        guard !Task.isCancelled else { return }
+        let dismissed = UserDefaults.standard.string(forKey: Self.dismissedSuggestionKey)
+        guard let chain, chain.last?.id.uuidString != dismissed else {
+            suggestedTrips = []
+            return
+        }
+        suggestionSubtitle = suggestionSubtitle(for: chain)
+        suggestedTrips = chain
+    }
+
+    /// «Владикавказ, Тбилиси · 6 поездок».
+    ///
+    /// Имена берутся у концов поездок, кроме последней: она кончилась дома, и
+    /// «Краснодар» в списке того, КУДА ездили, — не ответ, а шум. Дальше двух
+    /// имён строка не растёт: карточка про то, узнал человек свою поездку или
+    /// нет, а не про маршрутный лист.
+    private func suggestionSubtitle(for chain: [Trip]) -> String {
+        var names: [String] = []
+        for trip in chain.dropLast() {
+            guard let end = JourneyAggregate.endCoordinate(of: trip),
+                  let name = mapVM.tripManager.cachedLocality(for: end),
+                  !names.contains(name) else { continue }
+            names.append(name)
+            if names.count == 2 { break }
+        }
+        let count = "\(chain.count) \(AppStrings.nounTrips(lang.language, chain.count))"
+        return names.isEmpty ? count : names.joined(separator: ", ") + " · " + count
+    }
+
+    /// Имя места из кэша, иначе координата. Точка вместо запятой намеренно:
+    /// координата — техническое число, а не «45,03» в русской записи, где
+    /// разделитель пары стал бы неотличим от разделителя дробной части.
+    private func placeName(_ coordinate: CLLocationCoordinate2D) -> String {
+        if let name = mapVM.tripManager.cachedLocality(for: coordinate) { return name }
+        return String(format: "%.3f, %.3f", coordinate.latitude, coordinate.longitude)
+    }
+
+    private func acceptHome(_ home: CLLocationCoordinate2D) {
+        settings.homeLocation = home
+        settings.homeAsked = true
+        withAnimation(.easeOut(duration: 0.2)) { homeCandidate = nil }
+        // Дом появился — подсказка может быть готова прямо сейчас, и ждать
+        // следующей поездки, чтобы её показать, незачем.
+        Task { await refreshJourneyPrompts(trips: allTrips) }
+    }
+
+    private func declineHome() {
+        // Ответ «нет» закрывает вопрос навсегда: спросить тем же выводом ещё
+        // раз — значит не услышать его. Дом останется неизвестным, и подсказок
+        // не будет, пока человек не задаст его сам (не в этой версии).
+        settings.homeAsked = true
+        withAnimation(.easeOut(duration: 0.2)) { homeCandidate = nil }
+    }
+
+    private func combineSuggestion() {
+        guard !suggestedTrips.isEmpty else { return }
+        composerTrips = suggestedTrips
+        showJourneyComposer = true
+    }
+
+    private func dismissSuggestion() {
+        if let last = suggestedTrips.last {
+            UserDefaults.standard.set(last.id.uuidString, forKey: Self.dismissedSuggestionKey)
+        }
+        withAnimation(.easeOut(duration: 0.2)) { suggestedTrips = [] }
     }
 
     // MARK: - Guest sign-in card (Figma 424:128 — kept byte-identical)
@@ -1529,5 +1679,9 @@ struct ProfileView: View {
         // to leave the filtered list too, or its card stays and opens an empty
         // detail screen.
         refreshVisibleTrips()
+        // Подсказка считается по ВСЕЙ библиотеке, а не по отрезку календаря:
+        // цепочка «туда и обратно» не должна рваться из-за фильтра, который
+        // человек поставил совсем для другого.
+        await refreshJourneyPrompts(trips: crunched.history.trips)
     }
 }

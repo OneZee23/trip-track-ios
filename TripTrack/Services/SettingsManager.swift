@@ -1,6 +1,7 @@
 import Foundation
 import CoreData
 import Combine
+import CoreLocation
 
 /// How a trip's average speed is reported.
 /// - `overall`: distance / total elapsed time (includes stops & pauses).
@@ -92,6 +93,45 @@ final class SettingsManager: ObservableObject {
     @Published var showOnPublicMap: Bool =
         UserDefaults.standard.object(forKey: "com.triptrack.settings.showOnPublicMap") as? Bool ?? false {
         didSet { UserDefaults.standard.set(showOnPublicMap, forKey: "com.triptrack.settings.showOnPublicMap") }
+    }
+
+    // MARK: - Дом (0.6.6)
+    //
+    // Дом — единственное, что отличает путешествие от поездки: подсказка
+    // «Похоже на путешествие» стоит на ночёвке НЕ ДОМА, и без этой точки её
+    // нет вовсе. Выводится из истории (`JourneySuggester.inferHome`), но
+    // хранится только после того, как человек подтвердил догадку: вывод —
+    // предположение, а тут лежит ответ.
+    //
+    // Двумя числами, а не `Codable`-структурой: `CLLocationCoordinate2D` в
+    // UserDefaults не кладётся, а заводить ради двух double архивацию —
+    // лишний слой, который сломается молча.
+    private static let homeLatitudeKey = "com.triptrack.settings.homeLatitude"
+    private static let homeLongitudeKey = "com.triptrack.settings.homeLongitude"
+    @Published var homeLocation: CLLocationCoordinate2D? = SettingsManager.storedHome() {
+        didSet {
+            let d = UserDefaults.standard
+            if let home = homeLocation {
+                d.set(home.latitude, forKey: SettingsManager.homeLatitudeKey)
+                d.set(home.longitude, forKey: SettingsManager.homeLongitudeKey)
+            } else {
+                d.removeObject(forKey: SettingsManager.homeLatitudeKey)
+                d.removeObject(forKey: SettingsManager.homeLongitudeKey)
+            }
+        }
+    }
+    /// Спрашивали ли уже «Это твой дом?». Вопрос задаётся ОДИН раз: человек,
+    /// ответивший «нет», не должен получать его снова на каждой ночёвке.
+    @Published var homeAsked: Bool =
+        UserDefaults.standard.bool(forKey: "com.triptrack.settings.homeAsked") {
+        didSet { UserDefaults.standard.set(homeAsked, forKey: "com.triptrack.settings.homeAsked") }
+    }
+
+    private static func storedHome() -> CLLocationCoordinate2D? {
+        let d = UserDefaults.standard
+        guard let lat = d.object(forKey: homeLatitudeKey) as? Double,
+              let lon = d.object(forKey: homeLongitudeKey) as? Double else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
     }
 
     // Gamification
