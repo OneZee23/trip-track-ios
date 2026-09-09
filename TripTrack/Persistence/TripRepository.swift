@@ -1011,6 +1011,8 @@ final class CoreDataTripRepository: TripRepository {
         if let remoteTransfer = p.isTransfer { entity.isTransfer = remoteTransfer }
         entity.fuelCurrency = p.fuelCurrency
         entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
+        // Кэш держал старую форму до перезапуска приложения.
+        Trip.invalidatePreviewCache(for: p.id)
         entity.badgesJSON = p.badgesJson
         entity.xpEarned = Int32(p.xpEarned ?? 0)
         entity.conflictVersion = Int32(p.conflictVersion)

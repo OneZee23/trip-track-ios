@@ -130,6 +130,28 @@ final class ProfileHistoryFoldingTests: XCTestCase {
         XCTAssertEqual(legIds, [t14.id], "во второе окно та же поездка не попадает")
     }
 
+    /// 26 октября 2014 в Москве длилось 25 часов — тогда часы перевели с
+    /// постоянного «летнего» на постоянное «зимнее» время. Старый
+    /// `addingTimeInterval(86_400)` добавлял ровно 24 обычных часа и промахивался
+    /// мимо полуночи на час, роняя из окна последний час суток; в путешествии
+    /// это стирало карточку, чьи ЕДИНСТВЕННЫЕ 23:30 попадали ровно в этот час.
+    func testDayRangeUpperBoundSurvivesDSTFallBack() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Moscow")!
+
+        let fallBackDay = calendar.date(from: DateComponents(year: 2014, month: 10, day: 26))!
+        let range = HistoryFolding.dayRange(from: fallBackDay, to: fallBackDay, calendar: calendar)!
+        let lateStart = calendar.date(from: DateComponents(
+            year: 2014, month: 10, day: 26, hour: 23, minute: 30))!
+        let journey = Journey(startDate: lateStart, endDate: lateStart.addingTimeInterval(600))
+
+        let rows = HistoryFolding.fold(trips: [], journeys: [journey], range: range)
+
+        XCTAssertEqual(rows.count, 1, "путешествие, начавшееся в 23:30 суток range, должно быть видно")
+        guard case .journey(let j, _) = rows[0] else { return XCTFail("это путешествие, не поездка") }
+        XCTAssertEqual(j.id, journey.id)
+    }
+
     /// Сетка рисуется кусками: подряд идущие поездки — одной решёткой,
     /// путешествие — во всю ширину между ними.
     func testRunsSplitTripsAroundJourneys() {

@@ -372,21 +372,40 @@ struct JourneyDetailView: View {
         coverPhoto = journey.coverPhotoId.flatMap { id in
             legs.lazy.flatMap(\.photos).first { $0.id == id }
         }
+        loaded = true
+        loadLocalityNames(agg: agg)
+    }
+
+    /// Имена мест — отдельным шагом, после того как остальное уже нарисовано.
+    /// `cachedLocalities` берёт ВСЮ пачку координат одним фоновым запросом; по
+    /// одной синхронной `cachedLocality` на шапку и на каждую стоянку экран
+    /// ходил бы в CoreData на главном потоке столько раз, сколько у путешествия
+    /// стоянок. Экран показывает карту и ленту сразу, а подписи мест
+    /// проступают, когда придёт ответ.
+    private func loadLocalityNames(agg: JourneyAggregate) {
+        var anchorByKey: [UUID: CLLocationCoordinate2D] = [:]
+        for day in agg.days {
+            for item in day.items {
+                guard case .local(let group, let anchor, _) = item, let key = group.first?.id else { continue }
+                anchorByKey[key] = anchor
+            }
+        }
+        var coords: [CLLocationCoordinate2D] = []
+        if let start = agg.firstStart { coords.append(start) }
+        if let farthest = agg.farthestEnd { coords.append(farthest) }
+        coords.append(contentsOf: anchorByKey.values)
+        guard !coords.isEmpty else { return }
+
         // Кэш геокодера живёт у `TripManager`, а тот — один на приложение и
         // лежит в `MapViewModel`: своего заводить нельзя, у него внутри
         // очередь записи поездки.
         let geocoder = mapVM.tripManager
-        startName = agg.firstStart.flatMap { geocoder.cachedLocality(for: $0) }
-        farthestName = agg.farthestEnd.flatMap { geocoder.cachedLocality(for: $0) }
-        var names: [UUID: String] = [:]
-        for day in agg.days {
-            for item in day.items {
-                guard case .local(let group, let anchor, _) = item, let key = group.first?.id else { continue }
-                if let name = geocoder.cachedLocality(for: anchor) { names[key] = name }
-            }
+        Task { @MainActor in
+            let names = await geocoder.cachedLocalities(for: coords)
+            startName = agg.firstStart.flatMap { names[TripManager.geocodeCacheKey(for: $0)] }
+            farthestName = agg.farthestEnd.flatMap { names[TripManager.geocodeCacheKey(for: $0)] }
+            localNames = anchorByKey.compactMapValues { names[TripManager.geocodeCacheKey(for: $0)] }
         }
-        localNames = names
-        loaded = true
     }
 
     /// «Убрать из путешествия»: поездка выходит из окна, но остаётся в

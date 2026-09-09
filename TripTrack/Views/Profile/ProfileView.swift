@@ -1401,7 +1401,16 @@ struct ProfileView: View {
             }.value
             guard !Task.isCancelled else { return }
             homeCandidate = candidate
-            homeCandidateName = candidate.map { placeName($0) } ?? ""
+            // Батч из одной координаты — не крюк ради экономии: та же очередь
+            // в фоновый контекст, что и у подписи цепочки ниже, а не свой
+            // синхронный `cachedLocality` на главном потоке.
+            if let candidate {
+                let localities = await mapVM.tripManager.cachedLocalities(for: [candidate])
+                guard !Task.isCancelled else { return }
+                homeCandidateName = placeName(candidate, localities: localities)
+            } else {
+                homeCandidateName = ""
+            }
             return
         }
         homeCandidate = nil
@@ -1445,11 +1454,12 @@ struct ProfileView: View {
         return names.isEmpty ? count : names.joined(separator: ", ") + " · " + count
     }
 
-    /// Имя места из кэша, иначе координата. Точка вместо запятой намеренно:
-    /// координата — техническое число, а не «45,03» в русской записи, где
-    /// разделитель пары стал бы неотличим от разделителя дробной части.
-    private func placeName(_ coordinate: CLLocationCoordinate2D) -> String {
-        if let name = mapVM.tripManager.cachedLocality(for: coordinate) { return name }
+    /// Имя места из батч-словаря `cachedLocalities`, иначе координата. Точка
+    /// вместо запятой намеренно: координата — техническое число, а не «45,03»
+    /// в русской записи, где разделитель пары стал бы неотличим от
+    /// разделителя дробной части.
+    private func placeName(_ coordinate: CLLocationCoordinate2D, localities: [String: String]) -> String {
+        if let name = localities[TripManager.geocodeCacheKey(for: coordinate)] { return name }
         return String(format: "%.3f, %.3f", coordinate.latitude, coordinate.longitude)
     }
 

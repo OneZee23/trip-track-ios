@@ -240,6 +240,8 @@ final class PostTripTrackProcessor {
         guard coordinates.count >= 2 else { return }
         let simplified = GeometryUtils.simplifyRDP(coordinates, epsilon: 0.00003)
         entity.previewPolyline = Trip.encodePolyline(simplified)
+        // Кэш держал старую форму до перезапуска приложения.
+        if let id = entity.id { Trip.invalidatePreviewCache(for: id) }
     }
 
     // MARK: - Stats Recalculation

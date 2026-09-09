@@ -96,7 +96,12 @@ enum HistoryFolding {
     static func dayRange(from: Date?, to: Date?, calendar: Calendar = .current) -> ClosedRange<Date>? {
         guard let from else { return nil }
         let start = calendar.startOfDay(for: from)
-        let end = calendar.startOfDay(for: to ?? from).addingTimeInterval(86_400)
+        // `addingTimeInterval(86_400)` — ровно 24 часа, но не ровно сутки: в
+        // день перевода часов граница съезжала на час и роняла последний час
+        // суток из окна. `calendar.date(byAdding:)` считает календарными
+        // сутками, а не секундами.
+        let dayAfter = calendar.startOfDay(for: to ?? from)
+        let end = calendar.date(byAdding: .day, value: 1, to: dayAfter) ?? dayAfter.addingTimeInterval(86_400)
         return start...max(start, end)
     }
 
