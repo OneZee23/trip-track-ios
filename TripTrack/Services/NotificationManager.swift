@@ -127,7 +127,9 @@ final class NotificationManager: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
-    func sendTripStopPrompt(minutes: Int, reason: AppStrings.TripStopReason) {
+    /// `minutes == nil` — режим «напоминания»: спрашиваем и ничего не делаем
+    /// сами, поэтому и обещать автозавершение в тексте нельзя.
+    func sendTripStopPrompt(minutes: Int?, reason: AppStrings.TripStopReason) {
         let lang = currentLang()
         let content = UNMutableNotificationContent()
         content.title = AppStrings.notifTripStopTitle(lang)

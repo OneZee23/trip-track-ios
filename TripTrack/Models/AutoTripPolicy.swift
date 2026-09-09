@@ -6,6 +6,76 @@ import Foundation
 /// place instead of grepping for `5 * 60` across seven files.
 enum AutoTripPolicy {
 
+    // MARK: - Что делать, когда магнитола отключилась
+
+    /// Решение об отключении Bluetooth, вынесенное из `AutoTripService`.
+    ///
+    /// Вынесено не для красоты. Правило «поставленную на паузу поездку не
+    /// завершает никто» записано в этом коде прямым текстом и соблюдалось в
+    /// двух дверях из четырёх: путь по бездействию и восстановление стоячей
+    /// поездки паузу проверяли, а отключение магнитолы — нет. В сентябре 2026
+    /// это дважды за одну поездку разорвало человеку маршрут: он глушил мотор
+    /// у магазина, магнитола отваливалась, и через три минуты запись
+    /// закрывалась — при том что пауза была нажата вручную.
+    ///
+    /// Чистая функция затем, чтобы правило можно было проверить тестом, а не
+    /// поездкой в Джанхот.
+    enum BluetoothDisconnectDecision: Equatable {
+        /// Не трогаем запись вовсе.
+        case ignore
+        /// Завершить сразу — только полная автоматика и только при двойном
+        /// подтверждении, что человек приехал.
+        case stopNow
+        /// Спросить и НЕ действовать самим.
+        case promptOnly
+        /// Спросить и завершить, если не ответят.
+        case promptThenStop(afterMinutes: Int)
+    }
+
+    static func onBluetoothDisconnect(
+        mode: AutoRecordMode,
+        isRecording: Bool,
+        isPaused: Bool,
+        isIdleBeyondFastStop: Bool,
+        tripDistance: Double,
+        tripDuration: TimeInterval,
+        autoStopTimeout: Int
+    ) -> BluetoothDisconnectDecision {
+        guard isRecording else { return .ignore }
+
+        // Пауза — самое сильное «я остановился нарочно», какое человек может
+        // дать приложению. Сильнее любого датчика: магнитола знает только про
+        // зажигание, а пауза — про намерение.
+        guard !isPaused else { return .ignore }
+
+        switch mode {
+        case .off:
+            return .ignore
+
+        case .remind:
+            // Режим называется «напоминания». Раньше он спрашивал и всё равно
+            // завершал через три минуты — то есть был автоматикой с отсрочкой,
+            // а человек выбирал не её.
+            return .promptOnly
+
+        case .auto:
+            // Магнитола выключена И поездка уже стояла — двойное подтверждение,
+            // что приехали. Трёхминутная отсрочка нужна против дребезга
+            // Bluetooth, а не против очевидно законченной поездки.
+            if isIdleBeyondFastStop { return .stopNow }
+
+            // Магнитола выключена после НАСТОЯЩЕЙ поездки — человек вышел и
+            // пошёл пешком. Ждать отсрочку значит дописать в поездку двести
+            // метров ходьбы.
+            if tripDistance >= immediateEndOnBtDisconnectMinDistance,
+               tripDuration >= immediateEndOnBtDisconnectMinDuration {
+                return .stopNow
+            }
+
+            return .promptThenStop(afterMinutes: autoStopTimeout)
+        }
+    }
+
     // MARK: - Trigger debounce
 
     /// Window in which a duplicate BT/audio event with the same `(type, name)`
