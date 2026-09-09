@@ -1080,9 +1080,15 @@ struct ProfileView: View {
                                     pressResponse: .hold,
                                     onTap: { openTrip(trip) }
                                 )
-                                .onLongPressGesture(minimumDuration: 0.4) {
-                                    openJourneyComposer(anchor: trip)
-                                }
+                                // `simultaneousGesture`, а не `.onLongPressGesture`:
+                                // карточка — `Button`, и он забирает касание
+                                // раньше, чем сработает жест сверху. Вместе с
+                                // кнопкой жест доходит; тап после удержания
+                                // гасит `openTrip` по `composerAnchor`.
+                                .simultaneousGesture(
+                                    LongPressGesture(minimumDuration: 0.4)
+                                        .onEnded { _ in openJourneyComposer(anchor: trip) }
+                                )
                             }
                         }
                     }
@@ -1117,9 +1123,12 @@ struct ProfileView: View {
                         pressResponse: .hold,
                         onTap: { openTrip(trip) }
                     )
-                    .onLongPressGesture(minimumDuration: 0.4) {
-                        openJourneyComposer(anchor: trip)
-                    }
+                    // См. комментарий у плитки выше: кнопка съедает
+                    // `.onLongPressGesture`, `simultaneousGesture` — нет.
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.4)
+                            .onEnded { _ in openJourneyComposer(anchor: trip) }
+                    )
                 case .journey(let journey, let legs):
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
