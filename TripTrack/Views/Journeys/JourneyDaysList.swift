@@ -364,6 +364,10 @@ struct JourneyDaysList: View {
                     Text(legMeta(trip))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(c.textTertiary)
+                    // Моменты и у поездок по городу: снимок у моря сделан как
+                    // раз на такой, и прятать его под стоянкой значило бы
+                    // терять то, ради чего лента вообще есть.
+                    momentsRow(trip, c: c)
                 }
                 Spacer(minLength: 0)
                 chevron(c)
