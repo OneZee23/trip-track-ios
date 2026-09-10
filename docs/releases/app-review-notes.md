@@ -41,9 +41,10 @@ published to other users in this version. Reporting and blocking work as in
 How to test:
 1. Have two or more recorded trips that join up. Record two short drives, or
    run the app in the Simulator: start recording, then Features → Location →
-   City Run, let it run a minute or two, stop — and repeat once. A phone left
-   on a desk produces nothing: a recording longer than three minutes that never
-   goes above 15 km/h is discarded as a walking misfire.
+   Freeway Drive, let it run a minute or two, stop — and repeat once. Pick
+   Freeway Drive, not City Run: anything that never goes above 15 km/h is
+   discarded as a walking misfire, so a jogging route (and a phone left on a
+   desk) produces no trip at all.
 2. Open a trip → "..." in the header → "Combine into a journey". A sheet
    ("Build a journey") lists the neighbouring trips (±7 days) grouped by day.
    The trips that join up — one ends where the next begins, less than 36 hours
