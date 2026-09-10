@@ -824,7 +824,11 @@ struct VehicleEditFormView: View {
         // One setting, not two. The trip screen prints fuel volume from this
         // key, so leaving it behind would have a trip say gallons while the
         // garage says litres.
-        volumeUnit = unit.volumeUnit.rawValue
+        //
+        // Через `SettingsManager`, а не голым присваиванием `@AppStorage`:
+        // тому же ключу место в `UserSettingsEntity`, иначе выбор галлонов не
+        // уедет ни на сервер, ни на второй телефон.
+        SettingsManager.shared.setVolumeUnit(unit.volumeUnit)
     }
 
     private func priceCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {

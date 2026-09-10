@@ -152,7 +152,10 @@ struct AppPreferencesView: View {
             // still uses the localized word, as canon draws it.
             badge: { $0 == .miles ? "mi" : "km" },
             label: { $0.labelFull(l) },
-            onSelect: { distanceUnit = $0.rawValue },
+            // Через `SettingsManager`, а не голым присваиванием `@AppStorage`:
+            // выбор обязан доехать до `UserSettingsEntity`, иначе он не уедет с
+            // телефона (та же ошибка, что была у `selectedVehicleId`).
+            onSelect: { settings.setDistanceUnit($0) },
             accessibilityPrefix: "settings_units"
         )
     }

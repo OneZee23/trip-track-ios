@@ -571,25 +571,7 @@ final class APISyncTransport: SyncTransport {
         req.fetchLimit = 1
         guard let entity = try? ctx.fetch(req).first else { return }
 
-        let payload = SettingsSyncPayload(
-            id: sm.localUserId,
-            avatarEmoji: sm.avatarEmoji,
-            themeMode: entity.themeMode ?? "dark",
-            language: entity.language ?? "ru",
-            distanceUnit: entity.distanceUnit ?? "km",
-            volumeUnit: entity.volumeUnit ?? "liters",
-            fuelConsumption: entity.fuelConsumption,
-            fuelPrice: entity.fuelPrice,
-            fuelCurrency: entity.fuelCurrency ?? "€",
-            selectedVehicleId: sm.selectedVehicleId,
-            profileLevel: Int(entity.profileLevel),
-            profileXp: Int(entity.profileXP),
-            currentStreak: Int(entity.currentStreak),
-            bestStreak: Int(entity.bestStreak),
-            lastTripDate: entity.lastTripDate,
-            conflictVersion: Int(entity.conflictVersion),
-            lastModifiedAt: entity.lastModifiedAt ?? Date()
-        )
+        let payload = SettingsSyncPayload(entity: entity, settings: sm)
         do {
             let res: SettingsUpsertResponse = try await client.post(APIEndpoint.settingsUpsert, body: payload)
             entity.conflictVersion = Int32(res.conflictVersion)

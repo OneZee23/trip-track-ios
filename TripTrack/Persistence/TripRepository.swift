@@ -1247,6 +1247,16 @@ final class CoreDataTripRepository: TripRepository {
     /// the 0.6.1 upgrade would have zeroed the whole fleet's level in one day,
     /// which is the same failure the release exists to fix, pointed the other
     /// way.
+    ///
+    /// Правило «preferences follow `lastModifiedAt`» до 0.6.7 работало вхолостую
+    /// в одну сторону: отметку времени на строке настроек ставил ТОЛЬКО сервер
+    /// (`saveSettings` её не трогал), поэтому свежая местная правка выглядела
+    /// прошлогодней и любой пул её затирал. Отметку теперь ставит `saveSettings`
+    /// — и именно она, а не флаг `syncStatus`, отличает здесь «правку, ждущую
+    /// отправки» от «своей же старой копии». Флаг бы не подошёл: у строки
+    /// настроек он равен нулю (`pendingUpload`) с рождения, и первый же пул на
+    /// новом телефоне не применился бы вовсе — то есть восстановление
+    /// аккаунта. Держит `SettingsUnitWireTests`.
     func applyRemoteSettings(_ p: SettingsSyncPayload) {
         let req: NSFetchRequest<UserSettingsEntity> = UserSettingsEntity.fetchRequest()
         req.fetchLimit = 1

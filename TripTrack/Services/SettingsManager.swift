@@ -204,6 +204,8 @@ final class SettingsManager: ObservableObject {
     private let persistenceController: PersistenceController
     private var settingsEntity: UserSettingsEntity?
     private var settingsEnqueueDebouncer: Timer?
+    private var cancellables = Set<AnyCancellable>()
+    private let unitStore: UserDefaults
 
     func scheduleSettingsSync() {
         settingsEnqueueDebouncer?.invalidate()
@@ -216,14 +218,32 @@ final class SettingsManager: ObservableObject {
         }
     }
 
-    init(persistenceController: PersistenceController = .shared) {
+    /// - Parameter unitStore: где лежит выбор единиц. В приложении это
+    ///   `UserDefaults.standard` — тот же, из которого единицу читает
+    ///   `@AppStorage` на экранах. Отдельным параметром он сделан ради тестов:
+    ///   свой сьют не переписывает настоящий выбор человека и не дерётся с
+    ///   синглтоном за один и тот же ключ (оба подписаны на один пул).
+    init(persistenceController: PersistenceController = .shared,
+         unitStore: UserDefaults = .standard) {
         self.persistenceController = persistenceController
+        self.unitStore = unitStore
         migrateCloudSyncToOptIn()
         migrateTripsToPrivateByDefault()
         migrateVehicleMapToOptIn()
         migrateArchiveAway()
         loadAutoRecordSettings()
         loadSettings()
+        // Выбор единиц со второго телефона приезжает пулом прямо в CoreData —
+        // мимо всех, кто зовёт `loadSettings()` руками, и мимо `@AppStorage`,
+        // из которого экраны его читают. Без этой подписки приехавший выбор
+        // лежал бы в базе невидимым до перезапуска приложения: та же причина,
+        // по которой на пул подписан `JourneyManager`.
+        NotificationCenter.default.publisher(for: .syncPullCompleted)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reloadUnitsFromStore()
+            }
+            .store(in: &cancellables)
         persistenceController.migrateUserIdIfNeeded(userId: localUserId)
         loadVehicles()
         // No default vehicle is created. A fresh garage is empty on purpose:
@@ -414,6 +434,67 @@ final class SettingsManager: ObservableObject {
 
     private static let vehicleEmojis: Set<String> = ["🏎️", "🚗", "🏍️", "🚙", "🛻", "🚐", "🏁", "⛽"]
 
+    // MARK: - Единицы измерения
+
+    /// Ключи в `UserDefaults`, которыми пользуются `@AppStorage` на экранах.
+    ///
+    /// Менять их НЕЛЬЗЯ никогда: те же самые строки лежат в колонке
+    /// `UserSettingsEntity.distanceUnit` и в поле
+    /// `SettingsSyncPayload.distanceUnit`, то есть это контракт и с сервером,
+    /// и со вторым телефоном.
+    static let distanceUnitKey = "distanceUnit"
+    static let volumeUnitKey = "volumeUnit"
+
+    /// В чём человек считает расстояние ПРЯМО СЕЙЧАС. Нераспознанное значение
+    /// (чужой клиент, будущая версия) читается как километры, а не как пустота.
+    var distanceUnit: DistanceUnit {
+        DistanceUnit(rawValue: unitStore.string(forKey: Self.distanceUnitKey) ?? "") ?? .km
+    }
+
+    var volumeUnit: VolumeUnit {
+        VolumeUnit(rawValue: unitStore.string(forKey: Self.volumeUnitKey) ?? "") ?? .liters
+    }
+
+    /// Единственная дверь для записи выбора — по образцу `selectVehicle`.
+    ///
+    /// Голое присваивание `@AppStorage` меняло только `UserDefaults`, а
+    /// `UserSettingsEntity` и пейлоад синка читаются из базы. Ровно поэтому
+    /// выбор миль до 0.6.7 не уезжал с телефона ВООБЩЕ: колонка оставалась
+    /// пустой, и `APISyncTransport` каждый раз честно слал `"km"`.
+    func setDistanceUnit(_ unit: DistanceUnit) {
+        unitStore.set(unit.rawValue, forKey: Self.distanceUnitKey)
+        saveSettings()
+    }
+
+    func setVolumeUnit(_ unit: VolumeUnit) {
+        unitStore.set(unit.rawValue, forKey: Self.volumeUnitKey)
+        saveSettings()
+    }
+
+    /// База → `UserDefaults`. Обратная половина провода: пул кладёт выбор в
+    /// колонку, а читают его экраны через `@AppStorage`.
+    ///
+    /// Нераспознанное значение НЕ записывается: пустая строка или «kilometers»
+    /// с чужого клиента молча стёрли бы выбор человека, а так остаётся то, что
+    /// стояло.
+    private func adoptUnits(from entity: UserSettingsEntity) {
+        if let raw = entity.distanceUnit, DistanceUnit(rawValue: raw) != nil {
+            unitStore.set(raw, forKey: Self.distanceUnitKey)
+        }
+        if let raw = entity.volumeUnit, VolumeUnit(rawValue: raw) != nil {
+            unitStore.set(raw, forKey: Self.volumeUnitKey)
+        }
+    }
+
+    /// Перечитать единицы из хранилища. Зовётся по `.syncPullCompleted`.
+    func reloadUnitsFromStore() {
+        let request: NSFetchRequest<UserSettingsEntity> = UserSettingsEntity.fetchRequest()
+        request.fetchLimit = 1
+        guard let entity = try? persistenceController.container.viewContext.fetch(request).first else { return }
+        settingsEntity = entity
+        adoptUnits(from: entity)
+    }
+
     private func syncFromEntity(_ entity: UserSettingsEntity) {
         if let id = entity.id {
             localUserId = id
@@ -431,6 +512,7 @@ final class SettingsManager: ObservableObject {
         profileLevel = Int(entity.profileLevel)
         currentStreak = Int(entity.currentStreak)
         bestStreak = Int(entity.bestStreak)
+        adoptUnits(from: entity)
     }
 
     func saveSettings() {
@@ -441,6 +523,19 @@ final class SettingsManager: ObservableObject {
         entity.fuelConsumption = fuelConsumption
         entity.fuelPrice = fuelPrice
         entity.selectedVehicleId = selectedVehicleId
+        // Единицы живут в `UserDefaults` (их читает `@AppStorage` на экранах),
+        // а уезжают из колонки. Списываются здесь, а не в сеттере, чтобы любой
+        // путь к сохранению донёс их до базы — включая тот, который забудут
+        // провести через `setDistanceUnit`.
+        entity.distanceUnit = distanceUnit.rawValue
+        entity.volumeUnit = volumeUnit.rawValue
+        // Отметка времени — то, чем входящий пул отличает свежую правку от
+        // своей же старой копии (`applyRemoteSettings`). Её здесь не ставил
+        // НИКТО: строка настроек была единственной, у которой `lastModifiedAt`
+        // трогал только сервер. Из-за этого локальная правка выглядела вечно
+        // прошлогодней — пул её затирал, а сервер на апсерте видел свою
+        // собственную дату и отвечал конфликтом.
+        entity.lastModifiedAt = Date()
         persistenceController.save()
         scheduleSettingsSync()
     }
