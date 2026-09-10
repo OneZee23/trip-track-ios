@@ -26,9 +26,11 @@
 ONE STORY, NOT FOUR RECORDINGS
 
 Krasnodar → Vladikavkaz → Tbilisi and back is four recordings and one story.
-Now they hold together: open a trip, tap "Combine into a journey" and pick
-which of the neighbouring drives belong to it. Or press and hold a card in
-"Mine" and choose them by hand.
+Now they hold together: open a trip and tap "Combine into a journey", or press
+and hold its card in "Mine". Either way the same sheet opens — the neighbouring
+drives laid out day by day, and the ones that join up, where one ends and the
+next begins, already ticked. A tap corrects it, and the total at the bottom
+follows along.
 
 THE JOURNEY SCREEN
 
@@ -61,9 +63,11 @@ trip stays exactly where it was.
 ОДНА ИСТОРИЯ, А НЕ ЧЕТЫРЕ ЗАПИСИ
 
 Краснодар → Владикавказ → Тбилиси и обратно — четыре записи и одна история.
-Теперь они держатся вместе: откройте поездку, нажмите «Объединить в
-путешествие» и отметьте, какие из соседних поездок в него входят. Или
-задержите палец на карточке в «Моих» и выберите их руками.
+Теперь они держатся вместе: откройте поездку и нажмите «Объединить в
+путешествие» — или просто задержите палец на её карточке в «Моих». Откроется
+один и тот же лист: соседние поездки по дням, и уже отмечены те, что сцепляются
+друг с другом: конец одной там, где начало следующей. Галочка поправит, итог
+внизу пересчитается сам.
 
 ЭКРАН ПУТЕШЕСТВИЯ
 
@@ -75,7 +79,7 @@ trip stays exactly where it was.
 В «МОИХ» — ОДНА КАРТОЧКА
 
 Плечи больше не забивают список: они убираются под одну карточку путешествия с
-картой всего маршрута. Везде остальном они остаются там же, где были.
+картой всего маршрута. В остальном приложении они лежат там же, где лежали.
 
 ЗАМЕЧАЕТ САМО
 
@@ -96,9 +100,11 @@ trip stays exactly where it was.
 EINE GESCHICHTE STATT VIER AUFZEICHNUNGEN
 
 Krasnodar → Wladikawkas → Tiflis und zurück: vier Aufzeichnungen, eine
-Geschichte. Jetzt halten sie zusammen — Fahrt öffnen, „Zu einer Reise
-zusammenfassen“ tippen und auswählen, welche der benachbarten Fahrten dazu
-gehören. Oder in „Meine“ eine Karte gedrückt halten und von Hand wählen.
+Geschichte. Jetzt halten sie zusammen — Fahrt öffnen und „Zu einer Reise
+zusammenfassen“ tippen, oder in „Meine“ ihre Karte gedrückt halten. Beides
+öffnet dasselbe Blatt: die benachbarten Fahrten Tag für Tag, und die, die
+aneinander anschließen — wo eine endet und die nächste beginnt —, sind schon
+ausgewählt. Ein Tippen korrigiert das, die Summe unten rechnet mit.
 
 DER REISE-BILDSCHIRM
 
@@ -131,9 +137,11 @@ bleibt jede Fahrt an ihrem Platz.
 UNA HISTORIA, NO CUATRO GRABACIONES
 
 Krasnodar → Vladikavkaz → Tbilisi y vuelta son cuatro grabaciones y una sola
-historia. Ahora se mantienen juntas: abre un trayecto, toca «Combinar en un
-viaje» y marca cuáles de los trayectos vecinos entran. O mantén pulsada una
-tarjeta en «Míos» y elígelos a mano.
+historia. Ahora se mantienen juntas: abre un trayecto y toca «Combinar en un
+viaje», o mantén pulsada su tarjeta en «Míos». Se abre la misma hoja: los
+trayectos vecinos día a día, y ya vienen marcados los que se enlazan, donde uno
+termina y empieza el siguiente. Un toque lo corrige y el total de abajo se
+recalcula.
 
 LA PANTALLA DEL VIAJE
 
@@ -166,10 +174,11 @@ cada uno sigue en su sitio.
 UNE HISTOIRE, PAS QUATRE ENREGISTREMENTS
 
 Krasnodar → Vladikavkaz → Tbilissi et retour : quatre enregistrements, une
-seule histoire. Ils tiennent désormais ensemble — ouvrez un trajet, touchez
-« Regrouper en un voyage » et choisissez les trajets voisins qui en font
-partie. Ou appuyez longuement sur une carte dans « Mes trajets » et
-sélectionnez-les à la main.
+seule histoire. Ils tiennent désormais ensemble — ouvrez un trajet et touchez
+« Regrouper en un voyage », ou appuyez longuement sur sa carte dans
+« Mes trajets ». La même feuille s'ouvre : les trajets voisins jour par jour,
+et ceux qui s'enchaînent — là où l'un finit et l'autre commence — sont déjà
+cochés. Une touche corrige, et le total en bas suit.
 
 L'ÉCRAN DU VOYAGE
 
@@ -203,9 +212,11 @@ Supprimez-le : chaque trajet reste à sa place.
 UNA STORIA, NON QUATTRO REGISTRAZIONI
 
 Krasnodar → Vladikavkaz → Tbilisi e ritorno: quattro registrazioni e una sola
-storia. Ora stanno insieme — apri un viaggio, tocca «Unisci in un viaggio» e
-scegli quali dei viaggi vicini ne fanno parte. Oppure tieni premuta una scheda
-in «I miei» e selezionali a mano.
+storia. Ora stanno insieme — apri un viaggio e tocca «Unisci in un viaggio»,
+oppure tieni premuta la sua scheda in «I miei». Si apre lo stesso foglio: i
+viaggi vicini giorno per giorno, e sono già spuntati quelli che si agganciano,
+dove uno finisce e comincia il successivo. Un tocco corregge e il totale in
+basso si aggiorna.
 
 LA SCHERMATA DEL VIAGGIO
 
@@ -238,9 +249,11 @@ ognuno resta al suo posto.
 JEDNA HISTORIA, A NIE CZTERY NAGRANIA
 
 Krasnodar → Władykaukaz → Tbilisi i z powrotem to cztery nagrania i jedna
-historia. Teraz trzymają się razem: otwórz przejazd, dotknij „Połącz w podróż”
-i zaznacz, które z sąsiednich przejazdów do niej należą. Albo przytrzymaj
-kartę w „Moje” i wybierz je ręcznie.
+historia. Teraz trzymają się razem: otwórz przejazd i dotknij „Połącz w
+podróż” albo przytrzymaj jego kartę w „Moje”. Otworzy się ten sam arkusz:
+sąsiednie przejazdy dzień po dniu, a te, które się ze sobą łączą — gdzie
+jeden się kończy, a zaczyna następny — są już zaznaczone. Jedno dotknięcie
+poprawia, podsumowanie na dole przelicza się samo.
 
 EKRAN PODRÓŻY
 
@@ -273,9 +286,11 @@ zostanie na swoim miejscu.
 SATU CERITA, BUKAN EMPAT REKAMAN
 
 Krasnodar → Vladikavkaz → Tbilisi dan kembali: empat rekaman, satu cerita.
-Kini mereka menyatu — buka satu perjalanan, ketuk «Gabungkan menjadi
-perjalanan», lalu pilih perjalanan tetangga mana yang termasuk. Atau tekan
-lama sebuah kartu di «Milikku» dan pilih sendiri.
+Kini mereka menyatu — buka satu perjalanan lalu ketuk «Gabungkan menjadi
+perjalanan», atau tekan lama kartunya di «Milikku». Lembar yang sama terbuka:
+perjalanan tetangga disusun hari demi hari, dan yang saling menyambung — tempat
+satu berakhir dan berikutnya dimulai — sudah tercentang. Satu ketukan
+memperbaikinya, total di bawah ikut berubah.
 
 LAYAR PERJALANAN
 
@@ -309,9 +324,10 @@ setiap perjalanan tetap di tempatnya.
 DÖRT KAYIT DEĞİL, TEK BİR HİKÂYE
 
 Krasnodar → Vladikavkaz → Tiflis ve dönüş: dört kayıt, tek hikâye. Artık bir
-arada duruyorlar — bir yolculuğu aç, «Yolculukta birleştir»e dokun ve komşu
-sürüşlerden hangilerinin dâhil olduğunu seç. Ya da «Benimkiler»de bir karta
-uzun bas ve elle seç.
+arada duruyorlar — bir yolculuğu aç ve «Yolculukta birleştir»e dokun ya da
+«Benimkiler»de kartına uzun bas. Aynı sayfa açılır: komşu sürüşler gün gün
+sıralanır, birbirine eklenenler — biri nerede bittiyse diğeri orada başlayanlar
+— zaten işaretlidir. Bir dokunuş düzeltir, alttaki toplam da ona uyar.
 
 YOLCULUK EKRANI
 
@@ -344,36 +360,36 @@ silersen her sürüş yerinde kalır.
 ISANG KUWENTO, HINDI APAT NA RECORDING
 
 Krasnodar → Vladikavkaz → Tbilisi at pabalik: apat na recording, isang
-kuwento. Magkasama na sila ngayon — buksan ang isang biyahe, i-tap ang
-«Pagsamahin sa isang paglalakbay» at piliin kung alin sa mga katabing biyahe
-ang kasama. O pindutin nang matagal ang isang card sa «Akin» at piliin sila
-nang mano-mano.
+kuwento. Magkasama na sila ngayon — buksan ang isang biyahe at i-tap ang
+«Pagsamahin sa isang paglalakbay», o pindutin nang matagal ang card nito sa
+«Akin». Iisang sheet ang bubukas: mga katabing biyahe ayon sa araw, at
+nakatsek na ang magkakadugtong — kung saan natapos ang isa, doon nagsimula ang
+susunod. Isang tap ang magtatama; susunod ang kabuuan sa ibaba.
 
 ANG SCREEN NG PAGLALAKBAY
 
 Isang mapa na may lahat ng bahagi, at nananatili ang mga marka ng bawat isa.
 Sa ilalim ang kabuuan — araw, kilometro, biyahe, oras sa daan — at pagkatapos
-ang daan araw-araw: mga bahagi kasama ang kanilang mga marka at larawan, habang
-ang mga maiikling biyahe sa destinasyon ay tiniklop sa isang linya.
+ang daan araw-araw: mga bahagi kasama ang marka at larawan nila, habang ang
+maiikling biyahe sa destinasyon ay tiniklop sa isang linya.
 
 SA «AKIN» — ISANG CARD
 
-Hindi na sumisikip ang listahan: pumapasok ang mga bahagi sa iisang card ng
-paglalakbay na may mapa ng buong ruta. Sa ibang lugar, nananatili sila kung
-saan sila dati.
+Hindi na sumisikip ang listahan: pumapasok ang mga bahagi sa iisang card na
+may mapa ng buong ruta. Sa ibang lugar, nananatili sila kung saan sila dati.
 
 NAPAPANSIN NIYA MAG-ISA
 
 Natulog sa labas ng bahay at umuwi? Ipapanukala ng app na pagsamahin ang mga
-biyaheng iyon. Ang gumagawa ng paglalakbay ay gabing wala ka sa bahay, hindi
-ang layo — kaya hindi kailanman mabibilang ang mahabang araw-araw na biyahe sa
-trabaho. Ang tahanan ay hinihinuha sa telepono mula sa sarili mong mga biyahe
-at itinatanong nang isang beses: «Ito ba ang tahanan mo?».
+biyaheng iyon. Gabing wala ka sa bahay ang gumagawa ng paglalakbay, hindi ang
+layo — kaya hindi kailanman mabibilang ang biyahe papasok sa trabaho. Ang
+tahanan ay hinihinuha sa telepono mula sa sarili mong mga biyahe at
+itinatanong nang isang beses: «Ito ba ang tahanan mo?».
 
 WALANG KINOKOPYA
 
-Ang paglalakbay ay isang bintana ng mga petsa sa ibabaw ng mga naitalang
-biyahe. Burahin mo ito at mananatili sa lugar nito ang bawat biyahe.
+Ang paglalakbay ay bintana ng mga petsa sa ibabaw ng mga naitalang biyahe.
+Burahin mo ito — mananatili sa lugar ang bawat biyahe.
 ```
 
 ### Ukrainian
@@ -382,9 +398,11 @@ biyahe. Burahin mo ito at mananatili sa lugar nito ang bawat biyahe.
 ОДНА ІСТОРІЯ, А НЕ ЧОТИРИ ЗАПИСИ
 
 Краснодар → Владикавказ → Тбілісі й назад — чотири записи й одна історія.
-Тепер вони тримаються разом: відкрийте поїздку, натисніть «Об'єднати в
-подорож» і позначте, які із сусідніх поїздок до неї входять. Або затримайте
-палець на картці в «Моїх» і виберіть їх руками.
+Тепер вони тримаються разом: відкрийте поїздку й натисніть «Об'єднати в
+подорож» або затримайте палець на її картці в «Моїх». Відкриється той
+самий аркуш: сусідні поїздки по днях, і вже позначені ті, що зчіплюються:
+кінець однієї там, де початок наступної. Позначка виправить, підсумок унизу
+перерахується сам.
 
 ЕКРАН ПОДОРОЖІ
 
@@ -417,9 +435,11 @@ biyahe. Burahin mo ito at mananatili sa lugar nito ang bawat biyahe.
 ТӨРТ ЖАЗБА ЕМЕС, БІР ӘҢГІМЕ
 
 Краснодар → Владикавказ → Тбилиси және кері — төрт жазба, бір әңгіме. Енді
-олар бірге тұрады: сапарды ашыңыз, «Саяхатқа біріктіру» дегенді басып, көрші
-сапарлардың қайсысы кіретінін белгілеңіз. Немесе «Менікі» бөлімінде картаны
-басып ұстап, оларды қолмен таңдаңыз.
+олар бірге тұрады: сапарды ашып, «Саяхатқа біріктіру» дегенді басыңыз
+немесе «Менікі» бөлімінде оның карточкасын басып ұстаңыз. Сол бір парақ
+ашылады: көрші сапарлар күн бойынша, ал бір-бірімен тіркесетіндері — біреуі
+аяқталған жерде келесісі басталатындары — бұрыннан белгіленген. Бір түрту
+түзетеді, төмендегі қорытынды өзі қайта саналады.
 
 САЯХАТ ЭКРАНЫ
 
@@ -452,9 +472,10 @@ biyahe. Burahin mo ito at mananatili sa lugar nito ang bawat biyahe.
 UMA HISTÓRIA, NÃO QUATRO GRAVAÇÕES
 
 Krasnodar → Vladikavkaz → Tbilisi e volta: quatro gravações e uma só história.
-Agora elas ficam juntas — abra um percurso, toque em «Combinar em uma viagem»
-e marque quais dos percursos vizinhos entram. Ou mantenha o dedo em um cartão
-em «Meus» e escolha na mão.
+Agora elas ficam juntas — abra um percurso e toque em «Combinar em uma
+viagem», ou mantenha o dedo no cartão dele em «Meus». Abre a mesma folha: os
+percursos vizinhos dia a dia, e já vêm marcados os que se encaixam, onde um
+termina e o seguinte começa. Um toque corrige, e o total lá embaixo acompanha.
 
 A TELA DA VIAGEM
 

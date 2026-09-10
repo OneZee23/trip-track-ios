@@ -28,9 +28,10 @@ The "home" suggestion: to offer "these drives look like one journey", the app
 needs to know where the user sleeps normally, because what makes a journey is a
 night away from home. That location is inferred ON DEVICE from the user's own
 recorded trips (the ends of evening/night drives), stored locally in app
-settings, shown to the user once as "Is this your home?", and NEVER sent to our
-server or to anyone else. Answering "No" simply turns the suggestions off. No
-new permission is requested for this.
+settings, shown to the user as "Is this your home?", and NEVER sent to our
+server or to anyone else. "Yes" closes the question for good; "No" turns the
+suggestions off and the app may ask once more after 30 days. No new permission
+is requested for this.
 
 User content (1.2): a journey has a user-typed name and an optional cover photo
 chosen from the trip's own photos. Both are private; nothing about a journey is
@@ -40,18 +41,23 @@ published to other users in this version. Reporting and blocking work as in
 How to test:
 1. Have two or more recorded trips (record short drives, or use the built-in
    simulated location in Settings → Developer).
-2. Open a trip → "..." in the header → "Combine into a journey". The sheet
-   lists the neighbouring trips (±7 days), all ticked; untick any, then
-   "Create journey".
-3. Alternatively, on the "Mine" tab press and hold any trip card, tick several
-   cards, then "To journey" in the bar at the bottom.
+2. Open a trip → "..." in the header → "Combine into a journey". A sheet
+   ("Build a journey") lists the neighbouring trips (±7 days) grouped by day.
+   The trips that join up — one ends where the next begins, less than 36 hours
+   apart — are already ticked; the rest are not. Tick or untick any row, watch
+   the total at the bottom, then "Create journey".
+3. The same sheet opens by pressing and holding a trip card on the "Mine" tab
+   — the card you held is the one the sheet starts from. There is no
+   multi-select mode.
 4. The journey card replaces its legs in the "Mine" list. Open it: one map with
-   all legs, the totals (days, km, drives, time), then the road day by day.
-   "..." → "Edit journey" changes the name, the date window and the cover photo
-   (picked from the legs' own photos; it then replaces the map on the card and
-   on the screen header). Press and hold a leg row → "Remove from journey":
-   the trip leaves the journey and stays in the trip list. "Delete journey"
-   removes only the journey — the trips stay in the list.
+   all legs, the totals (days, km, drives, time), then the road day by day —
+   one card per day, legs and the local-driving stop as rows inside it.
+   "..." → "Edit journey" changes the name, the date window (past dates only;
+   the count of trips that fall inside is shown live under the pickers) and the
+   cover photo (picked from the legs' own photos; it then replaces the map on
+   the card and on the screen header). Press and hold a leg row → "Remove from
+   journey": the trip leaves the journey and stays in the trip list. "Delete
+   journey" removes only the journey — the trips stay in the list.
 ```
 
 ### Длинная версия — для нас
@@ -59,9 +65,11 @@ How to test:
 Никаких новых разрешений и никакого нового сбора. Схема CoreData v12 —
 `JourneyEntity` (окно дат, исключённые поездки, обложка), миграция lightweight.
 Дом — два `Double` в `UserDefaults` приложения (`homeLatitude/homeLongitude`)
-плюс флаг «спрашивали»; в синк-пейлоаде его нет вовсе, `git grep homeLatitude`
-по сетевому слою пуст. Публичной страницы путешествия в 0.6.6 нет намеренно —
-она ждёт подъёма сайта.
+плюс флаг «спрашивали»; в синк-пейлоаде его нет вовсе. Проверено перед
+сабмитом 0.6.6: `grep -ri home TripTrack/Models/Sync TripTrack/Networking`
+пуст, единственные упоминания координат дома — `SettingsManager` (запись и
+чтение `UserDefaults`) и `LocalDataWipe` (стирание). Публичной страницы
+путешествия в 0.6.6 нет намеренно — она ждёт подъёма сайта.
 
 ---
 
