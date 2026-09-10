@@ -70,8 +70,11 @@ enum SentryService {
 
             // Network breadcrumbs: keep them, but `beforeBreadcrumb`
             // strips URL paths so per-trip / per-photo identifiers
-            // don't end up in event payloads.
+            // don't end up in event payloads. Сетевыми крошками правит
+            // отдельный флаг — пишем и его, чтобы ни одно сетевое
+            // умолчание SDK не осталось неявным (см. шапку файла).
             options.enableAutoBreadcrumbTracking = true
+            options.enableNetworkBreadcrumbs = true
 
             // ПОЧЕМУ выключено: спаны сетевых запросов кладут в `data`
             // полный URL, `http.query` и `http.fragment`
@@ -143,7 +146,7 @@ enum SentryService {
     private static func scrub(event: Event) {
         // Tags & extras: drop sensitive entries entirely.
         if let tags = event.tags {
-            event.tags = tags.filter { !PIISensitiveKeys.all.contains($0.key) }
+            event.tags = tags.filter { !PIISensitiveKeys.matches($0.key) }
         }
         if let extra = event.extra {
             event.extra = PIIScrubber.redact(dict: extra)
@@ -158,9 +161,20 @@ enum SentryService {
         // headers in case automatic instrumentation gets enabled later.
         if let request = event.request {
             request.cookies = nil
-            request.headers = (request.headers ?? [:]).filter {
-                !$0.key.lowercased().contains("authorization") &&
-                !$0.key.lowercased().contains("cookie")
+            // ПОЧЕМУ «token», а не только «authorization»: наш токен
+            // доступа ходит в заголовке `x-access-token`
+            // (`APIClient.swift`), и его не знает ни этот фильтр, ни
+            // собственный `HTTPHeaderSanitizer` у SDK — в его списке
+            // Authorization, Cookie, X-API-KEY и прочее, но не наш.
+            // Событие на 5xx уносит `allHTTPHeaderFields` целиком, то
+            // есть живой ключ к чужим поездкам до истечения срока.
+            request.headers = (request.headers ?? [:]).filter { header in
+                let key = header.key.lowercased()
+                return !key.contains("authorization")
+                    && !key.contains("cookie")
+                    && !key.contains("token")
+                    && !key.contains("secret")
+                    && !key.contains("api-key")
             }
             // ПОЧЕМУ обязательно: `enableCaptureFailedRequests` (включён
             // по умолчанию в SDK) на каждый 5xx строит событие с

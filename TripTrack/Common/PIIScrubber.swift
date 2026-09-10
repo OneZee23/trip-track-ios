@@ -17,7 +17,7 @@ enum PIIScrubber {
     static func redact(dict: [String: Any]) -> [String: Any] {
         var out: [String: Any] = [:]
         for (k, v) in dict {
-            if PIISensitiveKeys.all.contains(k) {
+            if PIISensitiveKeys.matches(k) {
                 out[k] = redactedMarker
             } else {
                 out[k] = redact(value: v)

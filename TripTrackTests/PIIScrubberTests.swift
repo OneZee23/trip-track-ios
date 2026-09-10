@@ -111,4 +111,27 @@ final class PIIScrubberTests: XCTestCase {
         XCTAssertTrue(PIISensitiveKeys.all.contains("url"))
         XCTAssertTrue(PIISensitiveKeys.all.contains("homeLatitude"))
     }
+
+    /// Ключ в UserDefaults лежит с префиксом, а имя поля то же — строгое
+    /// равенство пропускало бы ровно тот дамп настроек, ради которого
+    /// координаты дома в списке и стоят.
+    func testPrefixedUserDefaultsKeyIsRedacted() {
+        let out = PIIScrubber.redact(dict: [
+            "com.triptrack.settings.homeLatitude": 45.03,
+            "com.triptrack.settings.homeLongitude": 38.98,
+            "com.triptrack.settings.appLanguage": "ru",
+        ])
+        XCTAssertEqual(out["com.triptrack.settings.homeLatitude"] as? String, PIIScrubber.redactedMarker)
+        XCTAssertEqual(out["com.triptrack.settings.homeLongitude"] as? String, PIIScrubber.redactedMarker)
+        XCTAssertEqual(out["com.triptrack.settings.appLanguage"] as? String, "ru",
+                       "безобидная настройка не должна прятаться")
+    }
+
+    /// Регистр приходит разный: сервер пишет camelCase, SDK — как получится.
+    func testMatchIsCaseInsensitive() {
+        XCTAssertTrue(PIISensitiveKeys.matches("AccessToken"))
+        XCTAssertTrue(PIISensitiveKeys.matches("user_email"))
+        XCTAssertFalse(PIISensitiveKeys.matches("tokenizer"),
+                       "совпадать должно ИМЯ поля, а не подстрока внутри чужого слова")
+    }
 }

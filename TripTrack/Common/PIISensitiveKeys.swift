@@ -31,4 +31,17 @@ enum PIISensitiveKeys {
         // цена страховки — две строки.
         "homeLatitude", "homeLongitude",
     ]
+
+    /// Совпадение по ИМЕНИ, а не по точному ключу: в UserDefaults те же
+    /// поля лежат с префиксом (`com.triptrack.settings.homeLatitude`), и
+    /// строгое равенство пропустило бы ровно тот дамп настроек, ради
+    /// которого имена сюда и вписаны. Регистр не важен — сервер и SDK
+    /// пишут ключи по-разному.
+    static func matches(_ key: String) -> Bool {
+        let lowered = key.lowercased()
+        return all.contains { name in
+            let n = name.lowercased()
+            return lowered == n || lowered.hasSuffix("." + n) || lowered.hasSuffix("_" + n)
+        }
+    }
 }
