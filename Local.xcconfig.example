@@ -27,5 +27,16 @@ API_BASE_URL[config=Release] = https:/$()/api.your-domain.com
 // Public DSNs are safe to ship in the binary (Sentry rate-limits per
 // project), but treat the project as exposed: don't enable PII capture,
 // don't enable session replay. Project setup at https://sentry.io.
+//
+// The `$()` slash escape applies here too — xcconfig reads a bare `//`
+// as the start of a comment, so `https://key@…` would silently truncate
+// to `https:` and the SDK would refuse the DSN at launch. Write it as
+// `https:/$()/key@oNNN.ingest.sentry.io/NNN`.
+//
+// An EMPTY value is a valid, supported state: `SentryService.start()`
+// returns before `SentrySDK.start`, logs «SENTRY_DSN пуст» to the system
+// log, and the app behaves exactly as if Sentry were not linked. Never
+// put a made-up DSN here to "fill the blank" — an invalid one makes the
+// SDK complain at every launch.
 SENTRY_DSN[config=Debug]   =
 SENTRY_DSN[config=Release] = https:/$()/your-key@o0.ingest.sentry.io/0

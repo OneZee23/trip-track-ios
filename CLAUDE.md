@@ -202,6 +202,20 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   Добавляешь модификатор — режь дальше, а не гоняйся за сообщением.
   **`ProfileView.body` нашёл тот же предел в 0.6.6** — на ОДНОМ добавленном
   `.onChange`. Разрезано так же: `body` + `stage`.
+- **Sentry молчит, пока `SENTRY_DSN` пуст, и так уехало ДЕСЯТЬ релизов.**
+  Ключ живёт в `Local.xcconfig` (файла нет в гите), подставляется в
+  `Info.plist` и читается `AppConfig.sentryDSN`; пусто — `SentryService.start()`
+  выходит на первом `guard`. Наличие SDK в проекте, `import Sentry` и вызов
+  `SentryService.start()` в `TripTrackApp` при этом на месте — поэтому по коду
+  всё выглядит рабочим, а в кабинете пусто. Проверять ТОЛЬКО по собранному
+  артефакту: `/usr/libexec/PlistBuddy -c "Print :SENTRY_DSN" …/TripTrack.app/Info.plist`
+  (в архивах 0.5.5, 0.5.8, 0.6.1, 0.6.4, 0.6.5 — пустая строка). С 0.6.6 пустой
+  ключ пишет `notice` в системный лог, чтобы следующий раз это заметили за
+  секунду. И отдельно: что именно уезжает в отчёт, решает не наш код, а
+  автоматика SDK — `enableCaptureFailedRequests`, `enableNetworkTracking`,
+  `enableFileIOTracing` приходят ВКЛЮЧЁННЫМИ и уносят URL с `accountId` в пути
+  и курсором в query. Поэтому в `SentryService` они выставлены явно, а чистка
+  живёт в `PIIScrubber` под тестами.
 - **`a...b` из двух дат — не пустой диапазон, а падение.** `ClosedRange`
   требует `lowerBound <= upperBound` и роняет процесс, а не возвращает пустоту.
   Так умирал лист правки путешествия: `DatePicker(in: startDate...Date())` при

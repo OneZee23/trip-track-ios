@@ -101,15 +101,23 @@
 
 ## 3. Сабмит
 
-1. `xcodegen generate` **дважды** и проверить `.xccurrentversion` = `TripTrack v12`
+1. **Sentry: вставить `SENTRY_DSN[config=Release]` в `Local.xcconfig`** — кабинет
+   sentry.io → Projects → проект iOS → Settings → Client Keys (DSN), слеши через
+   `$()`. Затем `xcodegen generate`. Без этого релиз уедет **без краш-репортов**:
+   ключ был пуст во ВСЕХ прошлых версиях (0.5.5, 0.5.8, 0.6.1, 0.6.4, 0.6.5 —
+   проверено по архивам), то есть Sentry не работал ни в одном выпущенном билде.
+   Проверка после архива:
+   `/usr/libexec/PlistBuddy -c "Print :SENTRY_DSN" <архив>/…/TripTrack.app/Info.plist`
+   — должен вернуть DSN, а не пустую строку.
+2. `xcodegen generate` **дважды** и проверить `.xccurrentversion` = `TripTrack v12`
    (первый прогон после новой версии модели откатывает файл — см. CLAUDE.md).
-2. Xcode → Product → Archive → Distribute → App Store Connect.
-3. «What's New» во **все** локализации карточки из [app-store.md](app-store.md)
+3. Xcode → Product → Archive → Distribute → App Store Connect.
+4. «What's New» во **все** локализации карточки из [app-store.md](app-store.md)
    — тринадцать блоков. Сабмит 0.6.2 отклонили ровно за одну пропущенную.
-4. Notes для ревьюера — блок 0.6.6 из [app-review-notes.md](../app-review-notes.md).
+5. Notes для ревьюера — блок 0.6.6 из [app-review-notes.md](../app-review-notes.md).
    Там же ответ про «дом»: выводится на телефоне, хранится локально, никуда не
    отправляется.
-5. Скриншоты: экран путешествия — лучший кадр релиза.
+6. Скриншоты: экран путешествия — лучший кадр релиза.
 
 ## 4. После аппрува
 

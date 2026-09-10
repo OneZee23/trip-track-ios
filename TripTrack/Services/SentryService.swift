@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Sentry
 
 /// Thin wrapper around `SentrySDK.start` that bakes in TripTrack's
@@ -8,21 +9,34 @@ import Sentry
 ///   - No screenshot, no view-hierarchy, no session replay. Privacy
 ///     surfaces stay strictly off — driving routes & photos must NEVER
 ///     leak via diagnostic snapshots.
-///   - PII scrubber on `beforeSend` and `beforeBreadcrumb` mirrors the
-///     existing `APILogger.redact` whitelist (auth tokens, email, names,
-///     remote URLs).
+///   - PII scrubber on `beforeSend`, `beforeBreadcrumb` и `beforeSendSpan`
+///     mirrors the existing `APILogger.redact` whitelist (auth tokens,
+///     email, names, remote URLs) через общий `PIIScrubber`.
 ///   - Auto-instrumentation kept lean: crashes + unhandled exceptions
 ///     ON, network performance OFF (URL paths can carry trip ids).
+///
+/// **ПОЧЕМУ так подробно про автоматику SDK.** Опасное здесь — не то, что
+/// мы отправляем руками (ручных `capture` в приложении НЕТ ни одного), а
+/// то, что SDK включает сам, по умолчанию, без единой строки у нас:
+/// `enableCaptureFailedRequests`, `enableNetworkTracking`,
+/// `enableFileIOTracing` — все три в 8.58 приходят включёнными. Каждая
+/// уносит URL или путь к файлу. Поэтому ниже выключено и отфильтровано
+/// ЯВНО: значение по умолчанию — не решение, а то, что кто-то другой
+/// решил за нас и может поменять в следующей минорной версии.
 enum SentryService {
-    /// Keys whose values get nuked anywhere they appear in the event
-    /// payload. Shared with `APILogger.redact` via `PIISensitiveKeys.all`
-    /// so diagnostic surfaces evolve in lockstep.
-    private static var sensitiveKeys: Set<String> { PIISensitiveKeys.all }
+    private static let log = Logger(subsystem: "com.triptrack", category: "sentry")
 
     static func start() {
         guard let dsn = AppConfig.sentryDSN else {
-            // Dev / simulator with empty DSN — Sentry never starts. No
-            // network, no overhead, breadcrumbs are local-no-ops.
+            // ПОЧЕМУ вслух, а не молча: пустой DSN — не «дев-режим», а
+            // состояние, в котором приложение уехало в App Store ДЕСЯТЬ
+            // релизов подряд. В архивах 0.5.5, 0.5.8, 0.6.1, 0.6.4 и 0.6.5
+            // `SENTRY_DSN` пуст — то есть краш-репортов не было ни у одной
+            // выпущенной версии, и именно тихий `return` сделал это
+            // незаметным. Строка в системном логе ничего не меняет в
+            // поведении сборки, но следующему человеку отвечает на вопрос
+            // «почему в Sentry пусто» за секунду, а не за вечер.
+            log.notice("Sentry выключен: SENTRY_DSN пуст")
             return
         }
 
@@ -33,7 +47,9 @@ enum SentryService {
 
             // Bound transaction sampling — for an early-stage app the
             // free tier is plenty at 10%, and we don't have user-load
-            // worth profiling beyond that.
+            // worth profiling beyond that. Профайлер выключен совсем:
+            // он стоит батареи на реальном телефоне, который и так пишет
+            // GPS в фоне.
             options.tracesSampleRate = 0.1
             options.profilesSampleRate = 0.0
 
@@ -46,13 +62,46 @@ enum SentryService {
 
             // We attach our own user scope (only the anonymous account
             // id, no name / email). Disable Sentry's default user info
-            // collection so device identifiers don't leak.
+            // collection so device identifiers don't leak. По умолчанию в
+            // SDK это тоже `false` — пишем явно, потому что от значения
+            // зависит ещё и автоподстановка IP-адреса на сервере
+            // (`SentrySDKSettings.autoInferIP`).
             options.sendDefaultPii = false
 
             // Network breadcrumbs: keep them, but `beforeBreadcrumb`
             // strips URL paths so per-trip / per-photo identifiers
             // don't end up in event payloads.
             options.enableAutoBreadcrumbTracking = true
+
+            // ПОЧЕМУ выключено: спаны сетевых запросов кладут в `data`
+            // полный URL, `http.query` и `http.fragment`
+            // (`SentryNetworkTracker`), а описание спана — это «GET /путь».
+            // Доккоммент этого файла обещал «network performance OFF» с
+            // самого начала, но строки не было — и SDK держал своё
+            // умолчание (включено). Форму запроса нам отдают крошки, они
+            // проходят через `beforeBreadcrumb`.
+            options.enableNetworkTracking = false
+
+            // ПОЧЕМУ выключено: спан файловой операции описывается ПУТЁМ к
+            // файлу, а у нас это `…/Documents/…/<id фотографии>.jpg` —
+            // идентификаторы личных снимков. Диагностической ценности при
+            // 10% трейсов ноль, цена — утечка.
+            options.enableFileIOTracing = false
+
+            // CoreData-трейсинг оставлен: `SentryPredicateDescriptor`
+            // подставляет вместо КОНСТАНТ предиката `%@`, то есть в спан
+            // уезжает форма запроса («startDate >= %@»), а не даты, id и
+            // координаты. Проверено по исходникам 8.58.2.
+            options.enableCoreDataTracing = true
+
+            // Ошибочные HTTP-ответы оставлены включёнными — это половина
+            // пользы Sentry для нас (прод-каскад USER_NOT_AUTH был виден
+            // только в серверных логах). Но событие несёт `request.url`,
+            // `request.queryString` и `request.fragment` целиком —
+            // вычищаются в `scrub(event:)` ниже. Тела запроса и ответа SDK
+            // не прикладывает (только `bodySize`), поэтому заметки, имена
+            // отметок и координаты поездок в событие не попадают.
+            options.enableCaptureFailedRequests = true
 
             options.beforeSend = { event in
                 Self.scrub(event: event)
@@ -62,6 +111,13 @@ enum SentryService {
             options.beforeBreadcrumb = { breadcrumb in
                 Self.scrub(breadcrumb: breadcrumb)
                 return breadcrumb
+            }
+
+            // Страховка на случай, если сетевой трейсинг когда-нибудь
+            // включат обратно: спан тоже чистится.
+            options.beforeSendSpan = { span in
+                Self.scrub(span: span)
+                return span
             }
         }
     }
@@ -87,10 +143,15 @@ enum SentryService {
     private static func scrub(event: Event) {
         // Tags & extras: drop sensitive entries entirely.
         if let tags = event.tags {
-            event.tags = tags.filter { !sensitiveKeys.contains($0.key) }
+            event.tags = tags.filter { !PIISensitiveKeys.all.contains($0.key) }
         }
         if let extra = event.extra {
-            event.extra = redactDict(extra)
+            event.extra = PIIScrubber.redact(dict: extra)
+        }
+        // `context` наполняет сам SDK, и туда же складывается ответ
+        // сервера у событий HTTPClientError. Ходим тем же ситом.
+        if let context = event.context {
+            event.context = context.mapValues { PIIScrubber.redact(dict: $0) }
         }
         // Request cookies / auth headers — defense in depth. The SDK
         // doesn't capture HTTP bodies by default; we still strip auth
@@ -101,44 +162,65 @@ enum SentryService {
                 !$0.key.lowercased().contains("authorization") &&
                 !$0.key.lowercased().contains("cookie")
             }
+            // ПОЧЕМУ обязательно: `enableCaptureFailedRequests` (включён
+            // по умолчанию в SDK) на каждый 5xx строит событие с
+            // `url` = путь целиком и `queryString` = query целиком. То
+            // есть `/users/<accountId>/trips?cursor=<дата>|<id поездки>`
+            // уезжает в Sentry без единой нашей строки кода. Оставляем
+            // форму пути — «какой эндпоинт упал» видно, «кто и куда
+            // ездил» нет.
+            if let url = request.url {
+                request.url = PIIScrubber.redactURL(url)
+            }
+            request.queryString = nil
+            request.fragment = nil
         }
     }
 
     private static func scrub(breadcrumb: Breadcrumb) {
+        // Оригинальный URL берём ДО общей чистки: `url` есть в списке
+        // чувствительных имён (там же живут presigned-ссылки на фото), и
+        // общий проход заменит его целиком.
+        let originalURL = breadcrumb.data?["url"] as? String
+
         if let data = breadcrumb.data {
-            breadcrumb.data = redactDict(data)
+            breadcrumb.data = PIIScrubber.redact(dict: data)
         }
-        // URL breadcrumbs: keep host + scheme so we know which API got
-        // hit, drop the path (per-trip ids, account ids, share codes
-        // live in path segments).
-        if breadcrumb.category == "http", let url = breadcrumb.data?["url"] as? String,
-           let parsed = URL(string: url), let host = parsed.host {
-            var redacted = (breadcrumb.data ?? [:]) as [String: Any]
-            redacted["url"] = "\(parsed.scheme ?? "https")://\(host)/<path>"
-            breadcrumb.data = redacted
+
+        guard breadcrumb.category == "http" || breadcrumb.type == "http" else { return }
+
+        var data = breadcrumb.data ?? [:]
+        // Крошки сетевого слоя (`SentryNetworkTracker`) кладут сюда три
+        // ключа: `url`, `http.query`, `http.fragment`. Первый возвращаем в
+        // безопасной форме (схема + хост + форма пути) — без него крошка
+        // бесполезна; два других выкидываем: в query у нас курсор ленты
+        // (`дата|id поездки`) и `vehicleId`.
+        if let originalURL {
+            data["url"] = PIIScrubber.redactURL(originalURL)
         }
+        data.removeValue(forKey: "http.query")
+        data.removeValue(forKey: "http.fragment")
+        breadcrumb.data = data
     }
 
-    private static func redactDict(_ dict: [String: Any]) -> [String: Any] {
-        var out: [String: Any] = [:]
-        for (k, v) in dict {
-            if sensitiveKeys.contains(k) {
-                out[k] = "<redacted>"
+    private static func scrub(span: Span) {
+        for key in ["http.query", "http.fragment"] where span.data[key] != nil {
+            span.removeData(key: key)
+        }
+        if let url = span.data["url"] as? String {
+            span.setData(value: PIIScrubber.redactURL(url), key: "url")
+        }
+        // Описание сетевого спана — «GET https://host/путь/<id>»; у
+        // файлового — путь к файлу. Прогоняем через ту же чистку, если в
+        // нём вообще есть URL.
+        if let desc = span.spanDescription, desc.contains("://") {
+            let parts = desc.split(separator: " ", maxSplits: 1).map(String.init)
+            if parts.count == 2 {
+                span.spanDescription = "\(parts[0]) \(PIIScrubber.redactURL(parts[1]))"
             } else {
-                out[k] = redactValue(v)
+                span.spanDescription = PIIScrubber.redactURL(desc)
             }
         }
-        return out
-    }
-
-    /// Walks dicts AND arrays. Without the array branch a payload
-    /// shaped like `[{"accessToken": "..."}]` would slip through —
-    /// Sentry breadcrumb `data` and event `extra` regularly carry
-    /// arrays-of-dicts (request lists, tag chains).
-    private static func redactValue(_ v: Any) -> Any {
-        if let dict = v as? [String: Any] { return redactDict(dict) }
-        if let arr = v as? [Any] { return arr.map(redactValue) }
-        return v
     }
 
     // MARK: - Release string

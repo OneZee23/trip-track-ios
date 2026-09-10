@@ -24,5 +24,11 @@ enum PIISensitiveKeys {
         // Server-issued presigned URLs — whoever sees them sees the
         // photo until expiry.
         "thumbnailUrl", "originalUrl", "remoteUrl", "url",
+        // Координаты дома (0.6.6). Хранятся только в UserDefaults и на
+        // сервер не уезжают вовсе, поэтому в диагностику попасть сейчас
+        // неоткуда — имена стоят здесь ЗАРАНЕЕ. Домашний адрес человека
+        // это худшее, что можно случайно приложить к отчёту об ошибке, и
+        // цена страховки — две строки.
+        "homeLatitude", "homeLongitude",
     ]
 }
