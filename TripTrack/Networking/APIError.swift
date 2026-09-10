@@ -10,6 +10,7 @@ enum APIError: Error, Equatable {
     case tooManyRequests
     case tripNotFound
     case vehicleNotFound
+    case journeyNotFound
     case photoNotFound
     case unknownServer(code: String, message: String)
     case network(URLError)
@@ -28,6 +29,7 @@ enum APIError: Error, Equatable {
         case "TOO_MANY_REQUESTS":      return .tooManyRequests
         case "TRIP_NOT_FOUND":         return .tripNotFound
         case "VEHICLE_NOT_FOUND":      return .vehicleNotFound
+        case "JOURNEY_NOT_FOUND":      return .journeyNotFound
         case "PHOTO_NOT_FOUND":        return .photoNotFound
         default:                        return .unknownServer(code: code, message: message)
         }

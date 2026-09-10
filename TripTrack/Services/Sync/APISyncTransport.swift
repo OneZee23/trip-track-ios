@@ -38,6 +38,11 @@ struct JourneyUpsertResponse: Codable {
     let conflictVersion: Int
 }
 
+/// Ответ `/journeys/list` — весь список аккаунта одной строкой каждая.
+struct JourneyListResponse: Codable {
+    let journeys: [JourneySyncPayload]
+}
+
 struct JourneyDeleteRequest: Codable {
     let id: UUID
 }
@@ -420,12 +425,75 @@ final class APISyncTransport: SyncTransport {
             let res: JourneyUpsertResponse = try await client.post(APIEndpoint.journeyUpsert, body: JourneySyncPayload(journey: journey))
             repo.markJourneySynced(id: id, conflictVersion: res.conflictVersion)
         } catch let err as APIError {
-            if case .conflictDetected = err { /* следующий pull разрулит */ } else { throw err }
+            if case .conflictDetected = err {
+                // Ровно то же, что делает поездка (`uploadTrip`): забрать
+                // серверную версию и лечь под неё. Здесь стояло «следующий
+                // pull разрулит», и это было неправдой — см. ниже.
+                try await pullAndOverwriteJourney(id: id)
+            } else {
+                throw err
+            }
         }
     }
 
+    /// Серверная версия поверх локальной — как `pullAndOverwriteTrip` у поездки.
+    ///
+    /// ПОЧЕМУ побеждает сервер. Правка путешествия — это имя, пара дат или
+    /// снятая галочка на плече: минута работы, результат виден сразу, и
+    /// переделать её человеку дёшево. Разошедшиеся телефоны стоят дорого и
+    /// молча: экрана, на котором было бы видно «здесь окно до 12-го, а там до
+    /// 14-го», в приложении нет и быть не может, а плечи от этого разъезжаются
+    /// вместе с километрами и обложкой. Из двух зол выбирается то, о котором
+    /// человек узнаёт сразу и своими глазами.
+    ///
+    /// ПОЧЕМУ не «просто снять `pendingUpload`, пул применит». Пул —
+    /// дельта: он спрашивает «что изменилось с такого-то часа». Пока запись
+    /// стояла `pendingUpload`, входящие строки отбрасывал guard
+    /// `applyRemoteJourney`, а курсор при этом уезжал вперёд — значит серверная
+    /// строка уже осталась ПОЗАДИ курсора, и «ближайший pull» не привезёт её
+    /// никогда. Снять флаг и разойтись — это тот же молчаливый раскол, только
+    /// с виду синхронизированный.
+    ///
+    /// Списком, а не отдельным маршрутом: `/journeys/detail` не существует, и
+    /// он не нужен — весь список аккаунта это десяток строк из имени и дат,
+    /// без трека и снимков, то есть дешевле одной поездки.
+    ///
+    /// Двери ДВЕ, и одной мало. `markJourneySynced` снимает «моя правка
+    /// новее» — без него `applyRemoteJourney` выйдет на своём guard и не
+    /// применит ничего. `applyRemoteJourney` кладёт серверные поля — без него
+    /// запись осталась бы с локальным текстом под видом `synced`, то есть
+    /// расколом, который уже никто не чинит.
+    private func pullAndOverwriteJourney(id: UUID) async throws {
+        let res: JourneyListResponse = try await client.post(APIEndpoint.journeyList, body: EmptyRequest())
+        guard let fresh = res.journeys.first(where: { $0.id == id }) else {
+            // Сервер про это путешествие больше не знает: его удалили с
+            // другого телефона между нашим upsert и этим запросом. Локальную
+            // запись НЕ трогаем — удаление, выведенное из молчания, стёрло бы
+            // чужую работу по догадке. Строка остаётся `pendingUpload`, и её
+            // судьбу решит ближайший пул: надгробием в `journeys.deleted` или
+            // повторной отправкой, которая на сервере уже создаст, а не
+            // столкнётся.
+            return
+        }
+        repo.markJourneySynced(id: id, conflictVersion: fresh.conflictVersion)
+        repo.applyRemoteJourney(fresh)
+        repo.flushPendingApplies()
+    }
+
     private func deleteJourney(id: UUID) async throws {
-        let _: EmptyResponse = try await client.post(APIEndpoint.journeyDelete, body: JourneyDeleteRequest(id: id))
+        do {
+            let _: EmptyResponse = try await client.post(APIEndpoint.journeyDelete, body: JourneyDeleteRequest(id: id))
+        } catch APIError.journeyNotFound {
+            // Сервер путешествия не знает — потому что оно туда не доехало
+            // (заведено и удалено в самолёте) или его уже удалили с другого
+            // телефона. Это УСПЕХ, а не ошибка: цели «на сервере записи нет»
+            // мы достигли. Без этой ветки строка навсегда оставалась бы
+            // `pendingDelete` — из «Моих» она спрятана, но каждый запуск
+            // приложения заново ставит её в очередь (`pendingJourneyOperations`),
+            // и та же 404 снова роняет операцию в `failedQueue`. Тот же запертый
+            // угол, что и у конфликта, только с другой стороны. Ровно так же
+            // поступает `deleteTrip` с `tripNotFound`.
+        }
         repo.deleteJourneyHard(id: id)
     }
 

@@ -17,6 +17,11 @@ enum APIEndpoint {
     static let vehicleDelete = "/vehicles/delete"
 
     static let journeyUpsert = "/journeys/upsert"
+    /// Весь список путешествий аккаунта. У путешествия нет `/detail`, как у
+    /// поездки, и он не нужен: строка — это имя, две даты и горстка id, так
+    /// что список из десятка таких дешевле одного трека. Спрашивается он в
+    /// одном месте — при разрешении конфликта загрузки.
+    static let journeyList = "/journeys/list"
     static let journeyDelete = "/journeys/delete"
 
     static let settingsUpsert = "/settings/upsert"

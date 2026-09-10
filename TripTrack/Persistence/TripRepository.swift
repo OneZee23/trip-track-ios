@@ -1549,6 +1549,13 @@ final class CoreDataTripRepository: TripRepository {
     func applyRemoteJourney(_ p: JourneySyncPayload) {
         let existing = journeyEntity(id: p.id)
         // Локальная правка, которая ещё не уехала, старше серверной копии.
+        //
+        // Это защита от гонки «фоновый пул обогнал очередь», а НЕ замок: если
+        // правка честно проиграла конфликт, флаг с неё снимает
+        // `APISyncTransport.pullAndOverwriteJourney` — и тогда серверная версия
+        // приезжает сюда и применяется. Пока обе двери были закрыты
+        // одновременно (здесь guard, а конфликт при загрузке молча проглатывался),
+        // путешествие после конфликта не уезжало и не обновлялось никогда.
         if existing?.syncStatus == SyncStatus.pendingUpload.rawValue { return }
         // Удалённое здесь и ещё не подтверждённое сервером — тем более: pull
         // приходит из того же обмена, в котором DELETE только стоит в очереди,
@@ -1568,6 +1575,11 @@ final class CoreDataTripRepository: TripRepository {
         // Сохранение — в PullApplier.flushPendingApplies(), как у всех.
     }
 
+    /// «Отправлено и подтверждено»: снимает `pendingUpload` и берёт версию
+    /// сервера. Полей записи не трогает — их и незачем, когда сервер принял
+    /// именно то, что мы послали. При КОНФЛИКТЕ этого мало: содержимое-то у
+    /// сервера другое, поэтому там за ним сразу идёт `applyRemoteJourney`
+    /// (см. `APISyncTransport.pullAndOverwriteJourney`).
     func markJourneySynced(id: UUID, conflictVersion: Int) {
         guard let e = journeyEntity(id: id) else { return }
         e.syncStatus = SyncStatus.synced.rawValue
