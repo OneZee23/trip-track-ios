@@ -1294,6 +1294,13 @@ final class CoreDataTripRepository: TripRepository {
     func deleteTripHard(id: UUID) {
         if let e = fetchEntity(id: id) {
             let vehicleId = e.vehicleId
+            // Каскад забирает строки снимков, но не сами кадры: они лежат
+            // файлами в `Documents/TripPhotos/<id>/`, и каталог исключён из
+            // резервной копии. Убрать их умел только `purgeSoftDeletedTrips`,
+            // а сюда приходят три пути мимо него — своё удаление поездки, ещё
+            // не доехавшей до сервера, и два подтверждения удаления с
+            // сервера, — то есть кадры оставались на диске насовсем.
+            PhotoStorageService.deletePhotos(for: id)
             context.delete(e)
             if let vehicleId { recomputeOdometers(forVehicles: [vehicleId]) }
             saveIfNeeded()
@@ -1319,6 +1326,9 @@ final class CoreDataTripRepository: TripRepository {
                 .notice("tombstone ignored — trip is not mirrored from the server")
             return false
         }
+        // Та же уборка, что и в `deleteTripHard`: надгробие с другого телефона
+        // тоже означает «поездки больше нет», а кадры каскад не заберёт.
+        PhotoStorageService.deletePhotos(for: id)
         context.delete(entity)
         saveIfNeeded()
         return true

@@ -375,7 +375,12 @@ final class SyncCoordinator {
         let journeys = Self.pendingJourneyOperations(in: ctx, userId: userId)
         for op in journeys { SyncEnqueuer.enqueue(op) }
 
-        let total = trips.count + vehicles.count + photos.count + journeys.count
+        // Снимки машин — тем же способом и по той же причине.
+        let vehiclePhotos = Self.pendingVehiclePhotoOperations(in: ctx)
+        for op in vehiclePhotos { SyncEnqueuer.enqueue(op) }
+
+        let total = trips.count + vehicles.count + photos.count
+            + journeys.count + vehiclePhotos.count
         if total > 0 {
             coordinatorLog.debug("recovered \(total) pending entities after relaunch")
         }
@@ -412,6 +417,64 @@ final class SyncCoordinator {
             return SyncOperation(entityType: .journey, entityId: id, action: action)
         }
     }
+
+    /// Снимки машины, которым ещё некому было переотправиться.
+    ///
+    /// ПОЧЕМУ ветка вообще нужна. `.vehiclePhoto` попадает в очередь ровно из
+    /// двух мест (`VehiclePhotoStore.add` и `makeMain`), очередь живёт в памяти
+    /// и умирает вместе с процессом, а привратник (`SyncEnqueuer`) держит
+    /// снимок машины в личных данных и с выключенным облаком не выпускает
+    /// вовсе. Значит снимок, добавленный в самолёте, до входа или при
+    /// выключенной синхронизации, не уезжал НИКОГДА — ни на следующем запуске,
+    /// ни при включении облака. А каталог `VehiclePhotos/` исключён из
+    /// резервной копии: смена телефона стирала такой снимок насовсем.
+    ///
+    /// «Ещё не уехал» спрашивается не у `syncStatus`, а у ссылок: у снимка два
+    /// размера и две колонки, и пока пуста хоть одна — на сервере лежит не весь
+    /// снимок. Тот же признак читает `uploadVehiclePhoto`, и он идемпотентен:
+    /// размер, который уже уехал, второй раз не грузится.
+    ///
+    /// Строки МЁРТВОЙ машины отсеиваются, и это не украшение: сервер ответит на
+    /// такую загрузку отказом в доступе, операция уйдёт в `failedQueue` и
+    /// останется там навсегда — лечение стало бы новой болезнью.
+    ///
+    /// А вот по `userId` здесь не сужаем, в отличие от поездок и машин.
+    /// У `VehiclePhotoEntity` своего `userId` нет, а у `VehicleEntity` он
+    /// проставляется ОДНОЙ разовой миграцией (`migrateUserIdIfNeeded`) и у
+    /// машин, заведённых после неё, пуст. Фильтр по нему отсеял бы почти весь
+    /// гараж — то есть ровно те снимки, ради которых этот проход и написан.
+    nonisolated static func pendingVehiclePhotoOperations(
+        in ctx: NSManagedObjectContext
+    ) -> [SyncOperation] {
+        let vehReq = NSFetchRequest<NSManagedObject>(entityName: "VehicleEntity")
+        let alive = Set(((try? ctx.fetch(vehReq)) ?? [])
+            .compactMap { $0.value(forKey: "id") as? UUID })
+        guard !alive.isEmpty else { return [] }
+
+        let req = NSFetchRequest<NSManagedObject>(entityName: "VehiclePhotoEntity")
+        req.predicate = NSPredicate(format: "remoteURL == nil OR thumbnailURL == nil")
+        let rows = (try? ctx.fetch(req)) ?? []
+        let ops = rows.compactMap { row -> SyncOperation? in
+            guard let id = row.value(forKey: "id") as? UUID,
+                  let vehicleId = row.value(forKey: "vehicleId") as? UUID,
+                  alive.contains(vehicleId) else { return nil }
+            return SyncOperation(entityType: .vehiclePhoto, entityId: id, action: .upload)
+        }
+        return Array(ops.prefix(maxVehiclePhotosPerPass))
+    }
+
+    /// Потолок за один проход. Не про выборку — она стоит копейки (6 мс на
+    /// двух тысячах строк), а про `SyncQueue.enqueue`: тот на каждой операции
+    /// линейно ищет дубль и заново публикует снимок очереди, то есть растёт
+    /// квадратично. Замерено на симуляторе, Debug: 500 операций — 32 мс,
+    /// 2000 — 462 мс, и это главный поток на запуске приложения.
+    ///
+    /// Урезать здесь ничего не теряет: это ОПРОС, а не разовая пометка.
+    /// Признак «ещё не уехал» живёт в самой строке (пустая ссылка), уехавший
+    /// снимок из выборки уходит навсегда, и остаток подберётся следующим
+    /// проходом. Очередь всё равно разбирается по одной операции, так что
+    /// поставить две тысячи разом быстрее, чем двести, не сделало бы ничего.
+    private static let maxVehiclePhotosPerPass = 200
 
     private func startForegroundTimer() {
         foregroundTimer?.invalidate()

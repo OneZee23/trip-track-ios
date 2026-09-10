@@ -278,6 +278,14 @@ final class AuthService: ObservableObject {
                 SyncEnqueuer.enqueue(op)
             }
 
+            // Снимки машин — та же причина, что у путешествий выше: до входа
+            // привратник не выпускал их вовсе, и без этих строк они уехали бы
+            // не сейчас, а после следующего запуска приложения.
+            for op in SyncCoordinator.pendingVehiclePhotoOperations(
+                in: PersistenceController.shared.container.viewContext) {
+                SyncEnqueuer.enqueue(op)
+            }
+
             // Photos not fully on R2 yet. Mirrors the predicate in
             // `CloudSyncView.enableCloudSync`.
             let ctx = PersistenceController.shared.container.viewContext

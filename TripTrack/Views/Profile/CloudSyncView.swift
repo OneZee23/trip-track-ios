@@ -375,6 +375,16 @@ struct CloudSyncView: View {
                 SyncEnqueuer.enqueue(op)
             }
 
+            // Снимки машин — по той же причине, что и путешествия: привратник
+            // держит их в личных данных, поэтому всё, что человек снял до
+            // этого переключателя, лежит на телефоне и ждёт. Без этих строк
+            // «включил синхронизацию» не означало бы «снимки уехали»: их
+            // подобрал бы только `recoverPendingEntities` следующего ЗАПУСКА.
+            for op in SyncCoordinator.pendingVehiclePhotoOperations(
+                in: PersistenceController.shared.container.viewContext) {
+                SyncEnqueuer.enqueue(op)
+            }
+
             // Photos are gated by their own `uploadStatus` (separate from
             // `syncStatus`). Enqueue every photo that isn't already fully on
             // R2 — `localOnly` (never uploaded), `uploading`

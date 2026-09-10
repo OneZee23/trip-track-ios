@@ -1,4 +1,5 @@
 import Foundation
+import CoreData
 
 @MainActor
 final class PullApplier {
@@ -16,7 +17,10 @@ final class PullApplier {
         }
 
         for p in response.vehicles.upserted { repo.applyRemoteVehicle(p) }
-        for id in response.vehicles.deleted { repo.deleteVehicleHard(id: id) }
+        for id in response.vehicles.deleted {
+            Self.purgeLocalRemains(ofVehicle: id)
+            repo.deleteVehicleHard(id: id)
+        }
         for p in response.photos.upserted { repo.applyRemotePhoto(p) }
 
         // `/trips/delete` cascades `isDeleted` onto every photo row of the
@@ -51,5 +55,31 @@ final class PullApplier {
         if response.settings != nil || vehiclesChanged {
             SettingsManager.shared.reloadFromCoreData()
         }
+    }
+
+    /// То же, что называет руками `SettingsManager.deleteVehicle`, — но для
+    /// машины, удалённой на ДРУГОМ телефоне.
+    ///
+    /// `deleteVehicleHard` удаляет ровно `VehicleEntity`, и этого мало.
+    /// Связи с машиной у `VehiclePhotoEntity` нет — `vehicleId` там обычный
+    /// атрибут, значит каскад её не заберёт: и строки, и сами JPEG остались бы
+    /// в Documents навсегда, а каталог исключён из резервной копии, и добраться
+    /// до них уже нечем. Привязка магнитолы пережила бы машину и продолжила
+    /// указывать в мёртвый id: при следующем подключении `AutoTripService`
+    /// сохранил бы выбранной несуществующую машину, и поездка молча записалась
+    /// бы «Без транспорта». А забытый вопрос о видимости снимков не задался бы
+    /// заново, если бы машина с тем же id вернулась синком.
+    ///
+    /// Порядок важен: снимки убираются ДО `deleteVehicleHard`, пока по
+    /// `vehicleId` ещё есть что искать.
+    static func purgeLocalRemains(
+        ofVehicle id: UUID,
+        context: NSManagedObjectContext = PersistenceController.shared.container.viewContext,
+        settings: SettingsManager = .shared,
+        defaults: UserDefaults = .standard
+    ) {
+        VehiclePhotoStore.deleteAllLocally(of: id, context: context)
+        settings.removeBluetoothDevice(forVehicle: id)
+        VehiclePhotoVisibilityAsk.forget(id, defaults)
     }
 }

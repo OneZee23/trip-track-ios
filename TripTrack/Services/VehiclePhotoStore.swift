@@ -231,6 +231,36 @@ enum VehiclePhotoStore {
         }
     }
 
+    /// Стереть снимки машины, НЕ трогая сервер.
+    ///
+    /// ПОЧЕМУ отдельно от `deleteAll`. Сюда приходит удаление, случившееся на
+    /// ДРУГОМ телефоне (надгробие машины в пуле): серверную копию снёс уже он,
+    /// вместе с самой машиной. `delete(_:of:)` по признаку «была серверная
+    /// копия» поставил бы в очередь `.delete` на каждый снимок — телефон
+    /// принялся бы удалять то, чего на сервере нет, и в лучшем случае впустую,
+    /// а в худшем каждая такая операция села бы в отказ и висела у человека как
+    /// «не синхронизировано».
+    ///
+    /// Главную здесь тоже не переназначаем: машины, у которой могло бы быть
+    /// лицо, больше нет.
+    static func deleteAllLocally(of vehicleId: UUID,
+                                 context: NSManagedObjectContext = PersistenceController.shared.container.viewContext) {
+        let req = NSFetchRequest<NSManagedObject>(entityName: "VehiclePhotoEntity")
+        req.predicate = NSPredicate(format: "vehicleId == %@", vehicleId as CVarArg)
+        guard let rows = try? context.fetch(req), !rows.isEmpty else { return }
+        for row in rows {
+            // Файл — руками: каскад CoreData про Documents не знает, а каталог
+            // исключён из резервной копии, и брошенный там кадр не достанется
+            // уже ничему и никогда.
+            if let name = row.value(forKey: "filename") as? String {
+                try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+            }
+            context.delete(row)
+        }
+        try? context.save()
+        invalidateMainCache()
+    }
+
     private static func excludeFromBackup(_ url: URL) {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         var url = url
