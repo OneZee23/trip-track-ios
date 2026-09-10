@@ -93,6 +93,8 @@ protocol TripRepository {
     /// Whole-garage version, for when the library changes wholesale.
     func recomputeAllVehicleOdometers()
     func deleteVehicleHard(id: UUID)
+    /// «Отправлено и подтверждено» для машины. См. реализацию.
+    func markVehicleSynced(id: UUID, conflictVersion: Int)
     func deletePhotoHard(id: UUID)
     func markPhotoUploaded(photoId: UUID, remoteURL: String?, thumbnailURL: String, uploadStatus: PhotoUploadStatus)
 
@@ -1137,6 +1139,14 @@ final class CoreDataTripRepository: TripRepository {
         // ДО присваиваний и только для уже существующей строки: у новой
         // `syncStatus` равен нулю (`pendingUpload`) по умолчанию, и без этой
         // оговорки ни одна приехавшая машина не применилась бы вовсе.
+        //
+        // Это защита от гонки «фоновый пул обогнал очередь», а НЕ замок: если
+        // правка честно проиграла конфликт, флаг с неё снимает
+        // `APISyncTransport.pullAndOverwriteVehicle` — и тогда сюда приезжает
+        // серверная версия целиком, включая четыре оси видимости ниже. Пока
+        // обе двери были закрыты одновременно (здесь `hasLocalEdits`, а
+        // конфликт при загрузке молча проглатывался), машина после конфликта не
+        // уезжала и не обновлялась никогда.
         let hasLocalEdits = existing?.syncStatus == SyncStatus.pendingUpload.rawValue
         entity.id = p.id
         entity.name = p.name
@@ -1398,6 +1408,21 @@ final class CoreDataTripRepository: TripRepository {
             context.delete(e)
             saveIfNeeded()
         }
+    }
+
+    /// «Отправлено и подтверждено»: снимает `pendingUpload` и берёт версию
+    /// сервера. Полей машины не трогает — их и незачем, когда сервер принял
+    /// именно то, что мы послали. При КОНФЛИКТЕ этого мало: содержимое-то у
+    /// сервера другое, поэтому там за ним сразу идёт `applyRemoteVehicle`
+    /// (см. `APISyncTransport.pullAndOverwriteVehicle`).
+    func markVehicleSynced(id: UUID, conflictVersion: Int) {
+        let req: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        guard let e = try? context.fetch(req).first else { return }
+        e.syncStatus = SyncStatus.synced.rawValue
+        e.conflictVersion = Int32(conflictVersion)
+        persistenceController.save()
     }
 
     func deletePhotoHard(id: UUID) {

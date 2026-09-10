@@ -33,6 +33,11 @@ struct VehicleDeleteRequest: Codable {
     let id: UUID
 }
 
+/// Ответ `/vehicles/list` — весь гараж аккаунта, по строке на машину.
+struct VehicleListResponse: Codable {
+    let vehicles: [VehicleSyncPayload]
+}
+
 struct JourneyUpsertResponse: Codable {
     let id: UUID
     let conflictVersion: Int
@@ -405,15 +410,75 @@ final class APISyncTransport: SyncTransport {
             try? ctx.save()
         } catch let err as APIError {
             if case .conflictDetected = err {
-                // Next sync/pull reconciles
+                // Ровно то же, что делают поездка и путешествие: забрать
+                // серверную версию и лечь под неё. Здесь стояло «следующий
+                // pull разрулит», и это было неправдой — см. ниже.
+                try await pullAndOverwriteVehicle(id: id)
             } else {
                 throw err
             }
         }
     }
 
+    /// Серверная версия поверх локальной — как `pullAndOverwriteJourney` у
+    /// путешествия и `pullAndOverwriteTrip` у поездки.
+    ///
+    /// ПОЧЕМУ побеждает сервер. Правка машины — это имя, пробег или снимок:
+    /// минута работы, результат виден сразу, переделать дёшево. Разошедшиеся
+    /// телефоны стоят дорого и молча: экрана, на котором было бы видно «здесь
+    /// пробег 120 тысяч, а там 118», в приложении нет и быть не может, а от
+    /// машины зависит и одометр, и то, на что уедет следующая поездка.
+    ///
+    /// ПОЧЕМУ не «просто оставить как есть, пул применит». Пул — дельта: он
+    /// спрашивает «что изменилось с такого-то часа». Машина оставалась
+    /// `pendingUpload`, серверная строка проезжала мимо (четыре оси видимости
+    /// в `applyRemoteVehicle` при местной правке не применяются), а курсор
+    /// уезжал вперёд — значит та строка осталась ПОЗАДИ курсора, и «ближайший
+    /// pull» не привезёт её никогда.
+    ///
+    /// Списком, а не отдельным маршрутом: `/vehicles/detail` не существует, и
+    /// он не нужен — весь гараж аккаунта это единицы строк без трека и
+    /// снимков.
+    ///
+    /// Двери ДВЕ, и одной мало. `markVehicleSynced` снимает «моя правка
+    /// новее» — без него `applyRemoteVehicle` посчитает `hasLocalEdits` и
+    /// оставит серверную видимость за бортом. `applyRemoteVehicle` кладёт
+    /// серверные поля — без него запись осталась бы с локальным текстом под
+    /// видом `synced`, то есть расколом, который уже никто не чинит.
+    private func pullAndOverwriteVehicle(id: UUID) async throws {
+        let res: VehicleListResponse = try await client.post(APIEndpoint.vehicleList, body: EmptyRequest())
+        guard let fresh = res.vehicles.first(where: { $0.id == id }) else {
+            // Сервер про эту машину больше не знает: её удалили с другого
+            // телефона между нашим upsert и этим запросом. Локальную запись НЕ
+            // трогаем — удаление, выведенное из молчания, стёрло бы чужую
+            // работу по догадке. Строка остаётся `pendingUpload`, и её судьбу
+            // решит ближайший пул: надгробием в `vehicles.deleted` или
+            // повторной отправкой, которая на сервере уже создаст, а не
+            // столкнётся.
+            return
+        }
+        repo.markVehicleSynced(id: id, conflictVersion: fresh.conflictVersion)
+        repo.applyRemoteVehicle(fresh)
+        repo.flushPendingApplies()
+        // По той же причине, по которой это делает `PullApplier`: архив,
+        // продажа и видимость приезжают в записи МАШИНЫ, а список в памяти
+        // сам не перечитывается — без этого CoreData уже знала бы новое, а
+        // гараж и экран записи до конца сеанса показывали старое.
+        SettingsManager.shared.reloadFromCoreData()
+    }
+
     private func deleteVehicle(id: UUID) async throws {
-        let _: EmptyResponse = try await client.post(APIEndpoint.vehicleDelete, body: VehicleDeleteRequest(id: id))
+        do {
+            let _: EmptyResponse = try await client.post(APIEndpoint.vehicleDelete, body: VehicleDeleteRequest(id: id))
+        } catch APIError.vehicleNotFound {
+            // Сервер машины не знает — потому что она туда не доехала (заведена
+            // и удалена в самолёте) или её уже удалили с другого телефона. Это
+            // УСПЕХ, а не ошибка: цели «на сервере записи нет» мы достигли. Без
+            // этой ветки операция падала бы вечно — каждый запуск заново ставит
+            // её в очередь, и та же 404 снова роняет её в `failedQueue`. Ровно
+            // так же поступают `deleteTrip` с `tripNotFound` и `deleteJourney`
+            // с `journeyNotFound`.
+        }
         repo.deleteVehicleHard(id: id)
     }
 

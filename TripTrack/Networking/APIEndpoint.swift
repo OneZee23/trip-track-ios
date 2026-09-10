@@ -14,6 +14,11 @@ enum APIEndpoint {
     static let tripDelete = "/trips/delete"
 
     static let vehicleUpsert = "/vehicles/upsert"
+    /// Весь гараж аккаунта одним ответом. `/vehicles/detail` не существует и не
+    /// нужен: машин у человека единицы, а строка — это имя, пробег и горстка
+    /// флагов. Спрашивается там же, где список путешествий, — при разрешении
+    /// конфликта загрузки.
+    static let vehicleList = "/vehicles/list"
     static let vehicleDelete = "/vehicles/delete"
 
     static let journeyUpsert = "/journeys/upsert"
