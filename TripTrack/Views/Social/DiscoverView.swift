@@ -7,6 +7,7 @@ struct DiscoverView: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
 
     @State private var query: String = ""
@@ -311,7 +312,7 @@ struct DiscoverView: View {
     private func levelLine(_ level: Int, totalKm: Double?) -> String {
         let head = "LVL \(level)"
         guard let km = totalKm, km > 0 else { return head }
-        return "\(head) · \(GarageFormat.odometer(km, lng: lang.language)) \(AppStrings.km(lang.language))"
+        return "\(head) · \(Measure.distance(km: km, unit: distanceUnit, lang: lang.language))"
     }
 
     private func followButton(for user: SocialAuthor, c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {

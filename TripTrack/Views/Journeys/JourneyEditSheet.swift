@@ -14,6 +14,7 @@ struct JourneyEditSheet: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var manager = JourneyManager.shared
 
@@ -408,7 +409,8 @@ struct JourneyEditSheet: View {
                         .font(.system(size: 12.5, weight: .bold))
                         .foregroundStyle(c.text)
                         .lineLimit(1)
-                    Text("\(GarageFormat.odometer(trip.distanceKm, lng: l)) \(AppStrings.km(l))")
+                    Text(Measure.distance(
+                        metres: trip.distance, unit: distanceUnit, lang: l, style: .grouped))
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)

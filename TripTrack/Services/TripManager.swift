@@ -378,12 +378,12 @@ final class TripManager: ObservableObject {
 
                 let lastTimestamp = points.compactMap { $0.timestamp }.max() ?? Date()
                 let actualDuration = max(0, entity.startDate.map { lastTimestamp.timeIntervalSince($0) } ?? 0)
-                // entity.maxSpeed is m/s — convert to km/h for the shared classifier.
-                let maxSpeedKmh = entity.maxSpeed * 3.6
+                // Классификатор говорит в СИ — как и сама сущность, у которой
+                // `maxSpeed` метры в секунду. Перевода между ними больше нет.
                 let isJunk = TripJunkClassifier.isJunk(
                     distanceMeters: entity.distance,
                     durationSeconds: actualDuration,
-                    maxSpeedKmh: maxSpeedKmh
+                    maxSpeedMS: entity.maxSpeed
                 )
 
                 if isJunk {

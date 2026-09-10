@@ -27,6 +27,7 @@ struct OnboardingView: View {
     /// silently do nothing.
     @State private var notificationsGranted = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     // Initial page can be pinned via launch argument (-onboardingStartPage N)
     // so UI tests / simulator screenshot runs can open any page directly.
     @State private var currentPage = UserDefaults.standard.integer(forKey: "onboardingStartPage")
@@ -409,26 +410,48 @@ struct OnboardingView: View {
         // genuinely nothing to show.
         let metrics: [(icon: String, value: String, unit: String, color: Color, label: String)] =
             realTrip.map { trip in
-                let fuel = trip.distanceKm > 0 ? trip.fuelUsed / trip.distanceKm * 100 : 0
+                // Расход считается по КИЛОМЕТРАМ, а показывается пересчитанным
+                // (`ConsumptionUnit`): «л/100» — это литры на сотню того, в чём
+                // человек меряет дорогу, и подставленные сюда мили дали бы
+                // +60 % без единой ошибки компилятора.
+                let fuel = trip.distance > 0
+                    ? trip.fuelUsed / (trip.distance / 1000) * 100
+                    : 0
+                let distance = Measure.distanceParts(
+                    metres: trip.distance, unit: distanceUnit, lang: lng, style: .adaptive)
+                let avg = Measure.speedParts(
+                    ms: trip.averageSpeed, unit: distanceUnit, lang: lng)
+                let max = Measure.speedParts(ms: trip.maxSpeed, unit: distanceUnit, lang: lng)
                 return [
                     ("point.topleft.down.curvedto.point.bottomright.up",
-                     Self.number(trip.distanceKm, decimals: trip.distanceKm < 100 ? 1 : 0, lng: lng),
-                     AppStrings.km(l), AppTheme.green, AppStrings.distance(l)),
+                     distance.value, distance.unit, AppTheme.green, AppStrings.distance(l)),
                     ("clock", trip.formattedDuration, "", AppTheme.accent, AppStrings.duration(l)),
-                    ("gauge", Self.number(trip.averageSpeedKmh, decimals: 0, lng: lng),
-                     AppStrings.kmh(l), AppTheme.blue, AppStrings.onboardingStatAvg(l)),
-                    ("bolt.fill", Self.number(trip.maxSpeedKmh, decimals: 0, lng: lng),
-                     AppStrings.kmh(l), AppTheme.red, AppStrings.onboardingStatMax(l)),
+                    ("gauge", avg.value, avg.unit, AppTheme.blue, AppStrings.onboardingStatAvg(l)),
+                    ("bolt.fill", max.value, max.unit, AppTheme.red, AppStrings.onboardingStatMax(l)),
                     ("drop", Self.number(fuel, decimals: 1, lng: lng),
                      AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
                     ("mountain.2", Self.number(trip.elevation, decimals: 0, lng: lng),
                      AppStrings.unitMeters(l), AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
                 ]
             } ?? [
-            ("point.topleft.down.curvedto.point.bottomright.up", "246", AppStrings.km(l), AppTheme.green, AppStrings.distance(l)),
+            // Канонические числа демо-карточки — 246 км, 82 и 150 км/ч —
+            // записаны в СИ и проходят через тот же `Measure`. Первый запуск —
+            // единственный экран, который человек видит ДО того, как у него
+            // появится хоть одна поездка, и мильная карточка с подписью «км»
+            // была бы первым, что приложение о себе соврало.
+            ("point.topleft.down.curvedto.point.bottomright.up",
+             Measure.distanceParts(metres: 246_000, unit: distanceUnit, lang: l).value,
+             Measure.distanceParts(metres: 246_000, unit: distanceUnit, lang: l).unit,
+             AppTheme.green, AppStrings.distance(l)),
             ("clock", "2:59", "", AppTheme.accent, AppStrings.duration(l)),
-            ("gauge", "82", AppStrings.kmh(l), AppTheme.blue, AppStrings.onboardingStatAvg(l)),
-            ("bolt.fill", "150", AppStrings.kmh(l), AppTheme.red, AppStrings.onboardingStatMax(l)),
+            ("gauge",
+             Measure.speedParts(ms: 82 / 3.6, unit: distanceUnit, lang: l).value,
+             Measure.speedParts(ms: 82 / 3.6, unit: distanceUnit, lang: l).unit,
+             AppTheme.blue, AppStrings.onboardingStatAvg(l)),
+            ("bolt.fill",
+             Measure.speedParts(ms: 150 / 3.6, unit: distanceUnit, lang: l).value,
+             Measure.speedParts(ms: 150 / 3.6, unit: distanceUnit, lang: l).unit,
+             AppTheme.red, AppStrings.onboardingStatMax(l)),
             ("drop", Self.number(7.4, decimals: 1, lng: l), AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
             ("mountain.2", "340", AppStrings.unitMeters(l), AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
         ]

@@ -274,7 +274,7 @@ struct TrackingView: View {
                         .foregroundStyle(speedDimmed ? mapDimmedText : AppTheme.accent)
                         .contentTransition(.numericText())
                         .animation(.easeInOut(duration: 0.2), value: speedText)
-                    Text(AppStrings.kmh(lang.language).uppercased(lang.language))
+                    Text(currentSpeed.unit.uppercased(lang.language))
                         .font(.inter(13, weight: .medium))
                         .kerning(0.78)
                         .foregroundStyle(mapSecondaryText)
@@ -576,7 +576,7 @@ struct TrackingView: View {
     /// сантиметрах друг от друга.
     private var recordedDistance: Measure.Parts {
         Measure.distanceParts(
-            metres: viewModel.distance * 1000,
+            metres: viewModel.distance,
             unit: distanceUnit,
             lang: lang.language,
             style: .tenths
@@ -799,7 +799,16 @@ struct TrackingView: View {
     private var speedText: String {
         if viewModel.isPaused { return "0" }
         if viewModel.gpsSignalStale { return "–" }
-        return "\(Int(viewModel.speed))"
+        return currentSpeed.value
+    }
+
+    /// Живая скорость под спидометром — число и подпись из одних рук.
+    ///
+    /// `viewModel.speed` с 0.6.7 в метрах в секунду, как всё, что приезжает от
+    /// CoreLocation. Печатать её прямо, как раньше, значило бы показать «19»
+    /// там, где машина едет 68.
+    private var currentSpeed: Measure.Parts {
+        Measure.speedParts(ms: viewModel.speed, unit: distanceUnit, lang: lang.language)
     }
 
     private var speedDimmed: Bool {

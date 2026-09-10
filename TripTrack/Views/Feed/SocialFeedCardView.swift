@@ -34,6 +34,7 @@ struct SocialFeedCardView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     // Report flow paused until moderation UI exists; state intentionally omitted.
     /// «…» popover. Not a `Menu` — see `ActionPopoverList`.
     @State private var showActions = false
@@ -326,8 +327,8 @@ struct SocialFeedCardView: View {
         // (user call 2026-08-06: «нет Your car… нет списка ачивок»).
         HStack(spacing: 4) {
             metricBlock(
-                value: oneDecimal(trip.distanceKm),
-                unit: AppStrings.km(lang.language),
+                value: tripDistance.value,
+                unit: tripDistance.unit,
                 label: AppStrings.distance(lang.language),
                 c: c
             )
@@ -337,8 +338,8 @@ struct SocialFeedCardView: View {
                 c: c
             )
             metricBlock(
-                value: String(format: "%.0f", trip.averageSpeedKmh),
-                unit: AppStrings.kmh(lang.language),
+                value: tripAvgSpeed.value,
+                unit: tripAvgSpeed.unit,
                 label: AppStrings.avgSpeedShort(lang.language),
                 c: c
             )
@@ -543,11 +544,19 @@ struct SocialFeedCardView: View {
 
     // MARK: - Formatters
 
-    /// Always a DOT decimal — FeedCard canon 115:61 renders «316.4» and the
-    /// user explicitly confirmed the dot for this card (2026-08-06), so no
-    /// RU-comma localization here.
-    private func oneDecimal(_ value: Double) -> String {
-        String(format: "%.1f", value)
+    /// Дистанция и средняя чужой поездки — из `Measure`, как у своей.
+    ///
+    /// Свой `oneDecimal` с точкой в любом языке (канон 115:61, подписано
+    /// 2026-08-06) отсюда ушёл вместе с километрами: единицу выбирает
+    /// смотрящий, и число, которое надо перевести, не может остаться
+    /// собранным вручную.
+    private var tripDistance: Measure.Parts {
+        Measure.distanceParts(
+            metres: trip.distance, unit: distanceUnit, lang: lang.language, style: .tenths)
+    }
+
+    private var tripAvgSpeed: Measure.Parts {
+        Measure.speedParts(ms: trip.averageSpeedMS, unit: distanceUnit, lang: lang.language)
     }
 
     private func dateRegionText(lng: LanguageManager.Language) -> String {

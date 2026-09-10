@@ -103,15 +103,52 @@ enum Measure {
         number(unit.distance(fromMetres: metres), style: style, unit: unit, lang: lang).text
     }
 
-    /// «38 420 км» — пробег машины. Единственная дверь, куда километры входят
-    /// как километры: `Vehicle.odometerKm` хранится в них и в 0.6.7 в метры не
-    /// мигрирует.
+    /// Расстояние, которое пришло сюда УЖЕ в километрах.
+    ///
+    /// Мест, где так бывает, ровно два, и оба названы вслух: пробег машины
+    /// (`Vehicle.odometerKm` хранится в километрах и в 0.6.7 в метры не
+    /// мигрирует — против него уже записаны уровни машин в базе) и сводные
+    /// счётчики статистики (`MeAggregates`, `StatsSlice`), которые копят
+    /// километры десятком полей сразу.
+    ///
+    /// Оба входа МЕТРИЧЕСКИЕ по определению: километр здесь — внутренняя
+    /// единица хранения, а не то, что человек выбрал. Перевод, как и везде,
+    /// случается ровно здесь, на выходе.
+    static func distance(
+        km: Double,
+        unit: DistanceUnit,
+        lang: LanguageManager.Language,
+        style: Style = .grouped
+    ) -> String {
+        distance(metres: km * 1000, unit: unit, lang: lang, style: style)
+    }
+
+    static func distanceValue(
+        km: Double,
+        unit: DistanceUnit,
+        lang: LanguageManager.Language,
+        style: Style = .grouped
+    ) -> String {
+        distanceValue(metres: km * 1000, unit: unit, lang: lang, style: style)
+    }
+
+    static func distanceParts(
+        km: Double,
+        unit: DistanceUnit,
+        lang: LanguageManager.Language,
+        style: Style = .grouped
+    ) -> Parts {
+        distanceParts(metres: km * 1000, unit: unit, lang: lang, style: style)
+    }
+
+    /// «38 420 км» — пробег машины, названный своим именем: в гараже это не
+    /// «расстояние», а одометр, и читается он как одометр.
     static func odometer(
         km: Double,
         unit: DistanceUnit,
         lang: LanguageManager.Language
     ) -> String {
-        distance(metres: km * 1000, unit: unit, lang: lang, style: .grouped)
+        distance(km: km, unit: unit, lang: lang, style: .grouped)
     }
 
     // MARK: - Скорость

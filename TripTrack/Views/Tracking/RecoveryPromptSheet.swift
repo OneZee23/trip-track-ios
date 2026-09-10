@@ -18,7 +18,7 @@ struct RecoveryPromptSheet: View {
     /// написанной не так, как её пишут в этой стране.
     private var recoveredDistance: String {
         Measure.distance(
-            metres: mapVM.recoveryDistanceKm * 1000,
+            metres: mapVM.recoveryDistanceMetres,
             unit: distanceUnit,
             lang: lang.language,
             style: .tenths

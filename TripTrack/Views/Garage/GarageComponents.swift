@@ -207,17 +207,14 @@ enum GarageFormat {
             : AppStrings.unitLitresShort(lng)
     }
 
-    static func distanceShort(_ rawUnit: String, lng: LanguageManager.Language) -> String {
-        rawUnit == DistanceUnit.miles.rawValue
-            ? AppStrings.unitMilesShort(lng)
-            : AppStrings.km(lng)
-    }
-
     /// Per-100 consumption unit («л/100км» / "gal/100mi") — the stored
     /// values are ALWAYS metric-style per-100 consumption; "mpg" would be
     /// both unconverted and inverse-scaled (higher = better), so the label
     /// must stay a per-100 unit regardless of the volume setting.
-    static func consumptionUnit(volumeRaw: String, distanceRaw: String, lng: LanguageManager.Language) -> String {
-        "\(volumeShort(volumeRaw, lng: lng))/100\(distanceShort(distanceRaw, lng: lng))"
+    static func consumptionUnit(volumeRaw: String, distance: DistanceUnit, lng: LanguageManager.Language) -> String {
+        // Сотня — это уже показанное число, и подпись склоняется по нему:
+        // «л/100 миль», а не «л/100 миля».
+        let d = AppStrings.unitDistanceShort(lng, unit: distance, value: 100, fractionDigits: 0)
+        return "\(volumeShort(volumeRaw, lng: lng))/100\(d)"
     }
 }

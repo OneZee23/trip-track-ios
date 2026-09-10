@@ -91,7 +91,8 @@ struct MyMapSheet: View {
                 Text(AppStrings.mapSummary(
                     lang.language,
                     regions: vm.exploration.regionCount,
-                    km: Int(vm.exploration.totalKm.rounded()),
+                    distance: Measure.distance(
+                        km: vm.exploration.totalKm, unit: distanceUnit, lang: lang.language),
                     trips: vm.exploration.tripCount
                 ))
                 .font(.inter(15, weight: .bold))
@@ -173,7 +174,7 @@ struct MyMapSheet: View {
     }
 
     private func regionRowSubtitle(_ region: MapRegionStat) -> String {
-        let km = "\(AppStrings.groupedNumber(Int(region.km.rounded()), lang.language)) \(AppStrings.km(lang.language))"
+        let km = Measure.distance(km: region.km, unit: distanceUnit, lang: lang.language)
         let trips = "\(region.tripCount) \(AppStrings.tripsGenitive(lang.language, count: region.tripCount))"
         guard region.totalCities > 0 else { return "\(km) · \(trips)" }
         let cities = AppStrings.mapCitiesOfTotal(
@@ -205,7 +206,8 @@ struct MyMapSheet: View {
                 Text(AppStrings.mapSummary(
                     lang.language,
                     regions: vm.exploration.regionCount,
-                    km: Int(vm.exploration.totalKm.rounded()),
+                    distance: Measure.distance(
+                        km: vm.exploration.totalKm, unit: distanceUnit, lang: lang.language),
                     trips: vm.exploration.tripCount
                 ))
                 .font(.inter(13, weight: .semibold))
@@ -392,7 +394,7 @@ struct MyMapSheet: View {
 
         HStack(spacing: 0) {
             statColumn(AppStrings.groupedNumber(Int(region.km.rounded()), lang.language),
-                       AppStrings.mapKmDriven(lang.language), c)
+                       AppStrings.mapKmDriven(lang.language, unit: distanceUnit), c)
             statColumn("\(region.tripCount)",
                        AppStrings.tripsGenitive(lang.language, count: region.tripCount), c)
             statColumn(region.totalCities > 0
@@ -594,9 +596,8 @@ struct MyMapSheet: View {
 
     private func tripSubtitle(_ trip: MapTripPin) -> String {
         let when = RelativeTripDate.string(from: trip.startDate, language: lang.language)
-        let km = String(format: "%.1f", trip.distanceKm)
-            .replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lang.language))
-            + " " + AppStrings.km(lang.language)
+        let km = Measure.distance(
+            metres: trip.distance, unit: distanceUnit, lang: lang.language, style: .tenths)
         return "\(when) · \(km)"
     }
 
@@ -718,16 +719,18 @@ struct MyMapSheet: View {
 
     private func tripHeadline(_ trip: MapTripPin) -> String {
         let when = RelativeTripDate.string(from: trip.startDate, language: lang.language)
-        let km = String(format: "%.0f", trip.distanceKm) + " " + AppStrings.km(lang.language)
+        let km = Measure.distance(
+            metres: trip.distance, unit: distanceUnit, lang: lang.language, style: .grouped)
         let time = Trip.formattedTimeHuman(trip.duration, lang: lang.language)
         return "\(when) · \(km) · \(time)"
     }
 
     private func tripSpeeds(_ trip: MapTripPin) -> String {
-        let unit = AppStrings.kmh(lang.language)
         let avg = AppStrings.myMapAvg(lang.language)
         let max = AppStrings.myMapMax(lang.language)
-        return "\(avg) \(Int(trip.avgSpeedKmh.rounded())) \(unit) · \(max) \(Int(trip.maxSpeedKmh.rounded())) \(unit)"
+        let a = Measure.speed(ms: trip.avgSpeedMS, unit: distanceUnit, lang: lang.language)
+        let m = Measure.speed(ms: trip.maxSpeedMS, unit: distanceUnit, lang: lang.language)
+        return "\(avg) \(a) · \(max) \(m)"
     }
 
     // MARK: - Locked region
@@ -761,7 +764,9 @@ struct MyMapSheet: View {
         if let trace = vm.nearestTrace(to: region) {
             Text(AppStrings.mapLockedTeaser(
                 lang.language,
-                km: trace.distanceKm,
+                distance: Measure.distance(
+                    metres: trace.distanceMetres, unit: distanceUnit,
+                    lang: lang.language, style: .grouped),
                 bearing: AppStrings.mapBearing(lang.language, trace.bearing),
                 city: trace.cityName,
                 when: trace.date.map { AppStrings.monthYear(lang.language, $0) }

@@ -21,10 +21,10 @@ final class GamificationManager {
         var breakdown = XPBreakdown()
 
         // Base: 1 XP per km
-        breakdown.base = max(1, Int(trip.distanceKm))
+        breakdown.base = max(1, Int(trip.scoringKm))
 
         // Long trip bonus: x2 for 200+ km (adds extra base amount)
-        if trip.distanceKm >= 200 {
+        if trip.scoringKm >= 200 {
             breakdown.longTripBonus = breakdown.base
         }
 
@@ -87,7 +87,7 @@ final class GamificationManager {
         let vehicleLevelBefore = Int(vehicleEntity?.vehicleLevel ?? 1)
 
         if let vehicle = vehicleEntity {
-            let newOdometer = vehicleOdometerBefore + trip.distanceKm
+            let newOdometer = vehicleOdometerBefore + trip.scoringKm
             vehicle.odometerKm = newOdometer
             let newVehicleLevel = VehicleLevelSystem.level(for: newOdometer)
             vehicle.vehicleLevel = Int32(newVehicleLevel)
@@ -232,17 +232,17 @@ final class GamificationManager {
 
         for trip in sortedTrips {
             // Base XP
-            var tripXP = max(1, Int(trip.distanceKm))
+            var tripXP = max(1, Int(trip.scoringKm))
 
             // Long trip bonus
-            if trip.distanceKm >= 200 {
-                tripXP += max(1, Int(trip.distanceKm))
+            if trip.scoringKm >= 200 {
+                tripXP += max(1, Int(trip.scoringKm))
             }
 
             // Region discovery
             if let region = trip.region, !seenRegions.contains(region) {
                 seenRegions.insert(region)
-                tripXP += 50 + max(1, Int(trip.distanceKm)) / 2
+                tripXP += 50 + max(1, Int(trip.scoringKm)) / 2
             }
 
             totalXP += tripXP

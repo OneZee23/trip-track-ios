@@ -26,6 +26,7 @@ struct StatsScreenView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
 
     @State private var agg: MeAggregates?
@@ -318,7 +319,7 @@ struct StatsScreenView: View {
 
     /// «118 км · 3 фото» — the photo half disappears on a trip without any.
     private func memoryMeta(_ trip: Trip, _ l: LanguageManager.Language) -> String {
-        let km = "\(GarageFormat.odometer(trip.distanceKm, lng: l)) \(AppStrings.km(l))"
+        let km = Measure.distance(metres: trip.distance, unit: distanceUnit, lang: l, style: .grouped)
         guard !trip.photos.isEmpty else { return km }
         return "\(km) · \(AppStrings.photosCount(l, n: trip.photos.count))"
     }
@@ -448,8 +449,8 @@ struct StatsScreenView: View {
     ) -> some View {
         HStack(spacing: 0) {
             totalsColumn(
-                value: GarageFormat.odometer(slice.km, lng: l),
-                label: AppStrings.km(l),
+                value: Measure.distanceValue(km: slice.km, unit: distanceUnit, lang: l),
+                label: Measure.distanceParts(km: slice.km, unit: distanceUnit, lang: l).unit,
                 valueColor: AppTheme.accent, size: 26, c: c
             )
             totalsColumn(
@@ -508,8 +509,8 @@ struct StatsScreenView: View {
             Text(AppStrings.statsVsLastPeriod(
                 l, more: more,
                 period: comparisonPeriod(l),
-                current: GarageFormat.odometer(current.km, lng: l),
-                previous: GarageFormat.odometer(previous.km, lng: l)
+                current: Measure.distance(km: current.km, unit: distanceUnit, lang: l),
+                previous: Measure.distanceValue(km: previous.km, unit: distanceUnit, lang: l)
             ))
             .font(.system(size: 12))
             .foregroundStyle(c.textSecondary)
@@ -664,7 +665,7 @@ struct StatsScreenView: View {
     private func popoverMeta(
         index: Int, model: ChartModel, l: LanguageManager.Language
     ) -> String {
-        let km = "\(GarageFormat.odometer(model.km[index], lng: l)) \(AppStrings.km(l))"
+        let km = Measure.distance(km: model.km[index], unit: distanceUnit, lang: l)
         return "\(km) · \(AppStrings.tripsCount(l, n: model.trips[index]))"
     }
 
@@ -769,16 +770,16 @@ struct StatsScreenView: View {
                 id: "longest", icon: "arrow.up.right", tint: AppTheme.green,
                 label: AppStrings.statsRecordLongest(l),
                 subject: longestTripName(agg, l),
-                value: "\(GarageFormat.odometer(agg.longestTripKm, lng: l)) \(AppStrings.km(l))",
+                value: Measure.distance(km: agg.longestTripKm, unit: distanceUnit, lang: l),
                 tripId: agg.longestTripId
             ))
         }
         if agg.bestDayKm > 0, let date = agg.bestDayDate {
             rows.append(RecordRow(
                 id: "bestDay", icon: "clock.fill", tint: AppTheme.accent,
-                label: AppStrings.statsRecordBestDay(l),
+                label: AppStrings.statsRecordBestDay(l, unit: distanceUnit),
                 subject: StatsPeriodFormat.dayMonth(date, l),
-                value: "\(GarageFormat.odometer(agg.bestDayKm, lng: l)) \(AppStrings.km(l))",
+                value: Measure.distance(km: agg.bestDayKm, unit: distanceUnit, lang: l),
                 tripId: agg.bestDayTripId
             ))
         }
@@ -806,7 +807,7 @@ struct StatsScreenView: View {
                 id: "farthest", icon: "mappin.and.ellipse", tint: AppTheme.green,
                 label: AppStrings.statsRecordFarthest(l),
                 subject: place,
-                value: "\(GarageFormat.odometer(agg.farthestKm, lng: l)) \(AppStrings.km(l))",
+                value: Measure.distance(km: agg.farthestKm, unit: distanceUnit, lang: l),
                 tripId: agg.farthestTripId
             ))
         }
@@ -880,7 +881,7 @@ struct StatsScreenView: View {
                 .foregroundStyle(c.text)
                 Text(AppStrings.statsMemoriesLine(
                     l,
-                    km: GarageFormat.odometer(agg.totalKm, lng: l),
+                    distance: Measure.distance(km: agg.totalKm, unit: distanceUnit, lang: l),
                     // Trips that actually carry a photo or a note — the line
                     // says «фото и заметки в N поездках», and the total trip
                     // count answers a different question.
@@ -1458,7 +1459,7 @@ struct MeAggregates {
         var photosByPlace: [String: Int] = [:]
         var longest: Trip?
         for t in trips {
-            a.totalKm += t.distanceKm
+            a.totalKm += t.distance / 1000
             if !t.photos.isEmpty || (t.tripDescription?.isEmpty == false) {
                 a.tripsWithMemories += 1
             }
@@ -1466,14 +1467,14 @@ struct MeAggregates {
             if let r = t.region, !r.isEmpty { regionsAll.insert(r) }
             let day = cal.startOfDay(for: t.startDate)
             durationByDay[day, default: 0] += t.duration
-            kmByDayAll[day, default: 0] += t.distanceKm
-            if t.distanceKm > (bestTripOfDay[day]?.km ?? -1) {
-                bestTripOfDay[day] = (t.distanceKm, t.id)
+            kmByDayAll[day, default: 0] += t.distance / 1000
+            if t.distance / 1000 > (bestTripOfDay[day]?.km ?? -1) {
+                bestTripOfDay[day] = (t.distance / 1000, t.id)
             }
-            if t.distanceKm > (longest?.distanceKm ?? -1) { longest = t }
+            if t.distance > (longest?.distance ?? -1) { longest = t }
 
             a.monthTotals[monthKey(t.startDate, cal), default: StatsSlice()]
-                .add(km: t.distanceKm, hours: t.duration / 3600)
+                .add(km: t.distance / 1000, hours: t.duration / 3600)
 
             if a.firstTripDate == nil || t.startDate < (a.firstTripDate ?? t.startDate) {
                 a.firstTripDate = t.startDate
@@ -1498,7 +1499,7 @@ struct MeAggregates {
         a.regionsAllTime = regionsAll.count
         a.maxDayDuration = durationByDay.values.max() ?? 0
         if let longest {
-            a.longestTripKm = longest.distanceKm
+            a.longestTripKm = longest.distance / 1000
             a.longestTripTitle = longest.title
             a.longestTripRegion = longest.region
             a.longestTripDate = longest.startDate
@@ -1542,14 +1543,14 @@ struct MeAggregates {
         var yearRegionSet = Set<String>()
         var regionCounts: [String: Int] = [:]
         for t in yearTrips {
-            a.yearKm += t.distanceKm
+            a.yearKm += t.distance / 1000
             a.yearHours += t.duration / 3600
             a.yearPhotoCount += t.photos.count
             let month = cal.component(.month, from: t.startDate)
             if (1...12).contains(month) {
-                a.monthlyKm[month - 1] += t.distanceKm
+                a.monthlyKm[month - 1] += t.distance / 1000
             }
-            kmByDay[cal.startOfDay(for: t.startDate), default: 0] += t.distanceKm
+            kmByDay[cal.startOfDay(for: t.startDate), default: 0] += t.distance / 1000
             if let r = t.region, !r.isEmpty {
                 yearRegionSet.insert(r)
                 regionCounts[r, default: 0] += 1
@@ -1562,7 +1563,7 @@ struct MeAggregates {
             lhs.value == rhs.value ? lhs.key > rhs.key : lhs.value < rhs.value
         }?.key
         a.yearStreak = Self.longestStreak(days: Set(kmByDay.keys), calendar: cal)
-        a.longestYearTrip = yearTrips.max { $0.distanceKm < $1.distanceKm }
+        a.longestYearTrip = yearTrips.max { $0.distance < $1.distance }
 
         // «Год назад в этот день» — best trip within ±3 days of now − 1y.
         // The window is deliberate and locked by
@@ -1572,7 +1573,7 @@ struct MeAggregates {
         if let target = cal.date(byAdding: .year, value: -1, to: now) {
             a.yearAgoTrip = trips
                 .filter { abs($0.startDate.timeIntervalSince(target)) < 3 * 86_400 }
-                .max { $0.distanceKm < $1.distanceKm }
+                .max { $0.distance < $1.distance }
         }
 
         // «Новый регион» — the most recent first-visit that happened this

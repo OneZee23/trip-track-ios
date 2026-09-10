@@ -9,6 +9,25 @@ struct TripCompleteSummaryView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
+    @Environment(\.distanceUnit) private var distanceUnit
+
+    /// Три числа итога — расстояние, средняя, максимум — из одного места и в
+    /// одной единице. Врозь их печатает вёрстка (число крупно, подпись мелко),
+    /// но собирает всё равно `Measure`: подпись склоняется по числу.
+    private var tripDistance: Measure.Parts {
+        Measure.distanceParts(
+            metres: trip.distance, unit: distanceUnit, lang: lang.language, style: .tenths)
+    }
+
+    private var tripAvgSpeed: Measure.Parts {
+        Measure.speedParts(
+            ms: trip.displayAverageSpeedMS(SettingsManager.shared.avgSpeedMode),
+            unit: distanceUnit, lang: lang.language)
+    }
+
+    private var tripMaxSpeed: Measure.Parts {
+        Measure.speedParts(ms: trip.maxSpeed, unit: distanceUnit, lang: lang.language)
+    }
     @State private var showXP = false
     /// Multi-selection, kept for the life of the screen.
     ///
@@ -79,8 +98,8 @@ struct TripCompleteSummaryView: View {
                 GridItem(.flexible(), spacing: 12)
             ], spacing: 12) {
                 summaryStatCard(
-                    value: String(format: "%.1f", trip.distanceKm),
-                    unit: AppStrings.km(lang.language),
+                    value: tripDistance.value,
+                    unit: tripDistance.unit,
                     label: AppStrings.distance(lang.language),
                     color: AppTheme.green,
                     c: c
@@ -97,15 +116,15 @@ struct TripCompleteSummaryView: View {
                     c: c
                 )
                 summaryStatCard(
-                    value: String(format: "%.0f", trip.displayAverageSpeedKmh(SettingsManager.shared.avgSpeedMode)),
-                    unit: AppStrings.kmh(lang.language),
+                    value: tripAvgSpeed.value,
+                    unit: tripAvgSpeed.unit,
                     label: AppStrings.avgSpeed(lang.language),
                     color: AppTheme.blue,
                     c: c
                 )
                 summaryStatCard(
-                    value: String(format: "%.0f", trip.maxSpeedKmh),
-                    unit: AppStrings.kmh(lang.language),
+                    value: tripMaxSpeed.value,
+                    unit: tripMaxSpeed.unit,
                     label: AppStrings.maxShort(lang.language),
                     color: AppTheme.red,
                     c: c
@@ -163,7 +182,7 @@ struct TripCompleteSummaryView: View {
                     // The drive that just ended is the one that earned it, so
                     // the card can print what it actually took («47.3 км»
                     // under «проедьте 42.2 км») instead of the rule alone.
-                    recordValue: badge.recordValue(for: trip, language: lang.language),
+                    recordValue: badge.recordValue(for: trip, unit: distanceUnit, language: lang.language),
                     onDismiss: { selectedBadge = nil }
                 )
             }

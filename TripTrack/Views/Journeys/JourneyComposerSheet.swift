@@ -31,6 +31,7 @@ struct JourneyComposerSheet: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
     /// Не `@ObservedObject`: у менеджера лист спрашивает соседей ОДИН раз в
     /// `.task` и создаёт путешествие по кнопке. Ни одного `@Published` он не
@@ -388,23 +389,25 @@ struct JourneyComposerSheet: View {
         let l = lang.language
         let aggregate = JourneyAggregate.build(trips: ticked)
         let count = "\(ticked.count) \(AppStrings.nounTrips(l, ticked.count))"
-        let km = "\(GarageFormat.odometer(aggregate.totalMetres / 1_000, lng: l)) \(AppStrings.km(l))"
+        let km = Measure.distance(
+            metres: aggregate.totalMetres, unit: distanceUnit, lang: l, style: .grouped)
         let dates = JourneyFormat.dateRange(from: first, to: last, language: l)
         return "\(count) · \(km) · \(dates)"
     }
 
     /// «10:32–12:58 · 177 км». Часы своим порядком у каждого языка
     /// (`templates`), а не жёстким `HH:mm`: половина мира пишет время с AM/PM.
-    /// Километры целыми и через `GarageFormat.odometer`, как везде: своё
-    /// `Int(distance / 1000)` и разряды не разбивало, и округляло вниз.
+    /// Километры целыми и через `Measure`, как везде: своё `Int(distance /
+    /// 1000)` и разряды не разбивало, и округляло вниз.
     private func metaText(_ trip: Trip) -> String {
         let l = lang.language
         let formatter = Self.timeFormatters[l]
         let start = formatter?.string(from: trip.startDate) ?? ""
         let finish = trip.endDate.flatMap { formatter?.string(from: $0) }
         let time = finish.map { "\(start)\u{2013}\($0)" } ?? start
-        let km = GarageFormat.odometer(trip.distanceKm, lng: l)
-        return "\(time) · \(km) \(AppStrings.km(l))"
+        let km = Measure.distance(
+            metres: trip.distance, unit: distanceUnit, lang: l, style: .grouped)
+        return "\(time) · \(km)"
     }
 
     // MARK: - Создание

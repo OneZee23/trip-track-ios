@@ -149,16 +149,23 @@ struct Trip: Identifiable, Codable {
         return end.timeIntervalSince(startDate)
     }
 
-    var distanceKm: Double {
+    /// Километры для НАГРАД и одометра. Всегда метрические, при любой
+    /// настройке. На экран не показывать: для показа есть `Measure`.
+    ///
+    /// Это единственный наследник удалённого `distanceKm`, и назван он так
+    /// нарочно — чтобы в наградном коде нельзя было написать «расстояние», не
+    /// сказав вслух, ЗАЧЕМ оно берётся. Опыт (`Int(scoringKm)`), порог бонуса
+    /// в 200 км, «марафон» на 42.195, «железная задница» на 500, шаг уровня
+    /// машины в 100 — это правила игры, одинаковые для всех. Число, приехавшее
+    /// сюда в милях, сдвинуло бы их у ВСЕХ задним числом, а опыт и уровень
+    /// лежат в базе: следующий релиз это не чинит.
+    ///
+    /// Звать её имеют право только награды и одометр: `GamificationManager`,
+    /// `BadgeManager`, `VehicleOdometer`. Место, которому нужны ПОКАЗАННЫЕ
+    /// метры, соберётся с ней молча и будет врать — компилятор разницы не
+    /// видит, её видит только читатель.
+    var scoringKm: Double {
         distance / 1000.0
-    }
-
-    var maxSpeedKmh: Double {
-        maxSpeed * 3.6
-    }
-
-    var averageSpeedKmh: Double {
-        averageSpeed * 3.6
     }
 
     /// Time spent actually moving vs sitting stationary (engine running but
@@ -173,7 +180,11 @@ struct Trip: Identifiable, Codable {
     /// honest data the user calibrates their own intuition against.
     private var movementSplit: (driving: TimeInterval, stopped: TimeInterval, movingDistance: Double) {
         guard trackPoints.count >= 2 else { return (0, 0, 0) }
-        let idleSpeedKmh = 5.0
+        // 5 км/ч, записанные в СИ: порог остаётся тем же физическим, а сравнение
+        // идёт с тем, в чём скорость лежит в точке — метрами в секунду. Умножать
+        // каждую пару точек на 3.6, чтобы сравнить с числом «5», значило бы
+        // держать в модели единицу показа.
+        let idleSpeedMS = 5.0 / 3.6
         let maxGap: TimeInterval = 60
         var drv: TimeInterval = 0
         var stp: TimeInterval = 0
@@ -188,8 +199,8 @@ struct Trip: Identifiable, Codable {
         for i in 1..<trackPoints.count {
             let dt = trackPoints[i].timestamp.timeIntervalSince(trackPoints[i - 1].timestamp)
             guard dt > 0, dt <= maxGap else { movingAnchor = nil; continue }
-            let avgKmh = ((trackPoints[i].speed + trackPoints[i - 1].speed) / 2.0) * 3.6
-            if avgKmh < idleSpeedKmh {
+            let avgMS = (trackPoints[i].speed + trackPoints[i - 1].speed) / 2.0
+            if avgMS < idleSpeedMS {
                 stp += dt
                 movingAnchor = nil
             } else {
@@ -238,14 +249,15 @@ struct Trip: Identifiable, Codable {
     /// "технической / чистого хода" speed. Falls back to the overall average when
     /// there are no track points to split (e.g. a trip synced from another device
     /// with preview-only geometry).
-    var movingAverageSpeedKmh: Double {
+    var movingAverageSpeedMS: Double {
         let split = movementSplit
-        return split.driving > 0 ? (split.movingDistance / split.driving) * 3.6 : averageSpeedKmh
+        return split.driving > 0 ? split.movingDistance / split.driving : averageSpeed
     }
 
-    /// Average speed for display, honoring the user's chosen mode.
-    func displayAverageSpeedKmh(_ mode: AvgSpeedMode) -> Double {
-        mode == .moving ? movingAverageSpeedKmh : averageSpeedKmh
+    /// Average speed for display, honoring the user's chosen mode. Метры в
+    /// секунду — в чём её и показывать, решает `Measure` на границе экрана.
+    func displayAverageSpeedMS(_ mode: AvgSpeedMode) -> Double {
+        mode == .moving ? movingAverageSpeedMS : averageSpeed
     }
 
     var formattedDuration: String {
@@ -362,7 +374,7 @@ extension Trip {
         TripJunkClassifier.isJunk(
             distanceMeters: distance,
             durationSeconds: duration,
-            maxSpeedKmh: maxSpeedKmh
+            maxSpeedMS: maxSpeed
         )
     }
 }
@@ -370,10 +382,13 @@ extension Trip {
 /// Shared classifier so post-trip cleanup (MapViewModel.stopRecording) and
 /// orphan recovery (TripManager.cleanupOrphanedTrips) can't drift apart.
 enum TripJunkClassifier {
-    static func isJunk(distanceMeters: Double, durationSeconds: TimeInterval, maxSpeedKmh: Double) -> Bool {
+    /// Всё в СИ: это ПОРОГИ ЗАПИСИ, а не показ. Мусорная поездка одинакова у
+    /// всех, и её границы человеку нигде не называются — тост про удаление
+    /// чисел не приводит.
+    static func isJunk(distanceMeters: Double, durationSeconds: TimeInterval, maxSpeedMS: Double) -> Bool {
         let isParkingManeuver = distanceMeters < AutoTripPolicy.junkTripMinDistance
             && durationSeconds < AutoTripPolicy.junkTripMinDuration
-        let isWalkingMisfire = maxSpeedKmh < AutoTripPolicy.junkTripWalkingSpeedKmh
+        let isWalkingMisfire = maxSpeedMS * 3.6 < AutoTripPolicy.junkTripWalkingSpeedKmh
             && durationSeconds > AutoTripPolicy.junkTripWalkingMinDuration
         return isParkingManeuver || isWalkingMisfire
     }

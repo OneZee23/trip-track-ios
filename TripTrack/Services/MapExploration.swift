@@ -98,10 +98,12 @@ struct MapTripPin: Identifiable, Equatable {
     let route: [CLLocationCoordinate2D]
     let title: String?
     let startDate: Date
-    let distanceKm: Double
+    /// Всё в СИ, как в самой поездке: пин — это данные, а не подпись.
+    /// Переводит их `Measure` на экране, и только там.
+    let distance: Double
     let duration: TimeInterval
-    let avgSpeedKmh: Double
-    let maxSpeedKmh: Double
+    let avgSpeedMS: Double
+    let maxSpeedMS: Double
     let photoFilename: String?
     let regionId: String?
 
@@ -179,14 +181,14 @@ extension MapExploration {
             // proportion the path spent in each. Summing simplified segments
             // directly would quietly under-count every bend in the road.
             if pathMetres > 0 {
-                let realMetres = trip.distanceKm * 1000
+                let realMetres = trip.distance
                 for (index, metres) in metresHere {
                     kmByRegion[index, default: 0] += realMetres * (metres / pathMetres)
                     tripIdsByRegion[index, default: []].append(trip.id)
                 }
             }
 
-            totalKm += trip.distanceKm
+            totalKm += trip.distance / 1000
             routes.append((trip.id, coords))
             pins.append(MapTripPin(
                 id: trip.id,
@@ -194,10 +196,10 @@ extension MapExploration {
                 route: coords,
                 title: trip.title,
                 startDate: trip.startDate,
-                distanceKm: trip.distanceKm,
+                distance: trip.distance,
                 duration: trip.duration,
-                avgSpeedKmh: trip.averageSpeedKmh,
-                maxSpeedKmh: trip.maxSpeedKmh,
+                avgSpeedMS: trip.averageSpeed,
+                maxSpeedMS: trip.maxSpeed,
                 photoFilename: trip.photos.first?.filename,
                 regionId: homeRegion.map { atlas.regions[$0].id }
             ))

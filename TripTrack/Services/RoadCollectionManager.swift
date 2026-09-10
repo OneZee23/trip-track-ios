@@ -46,9 +46,12 @@ final class RoadCollectionManager {
         entity.startGeohash = startHash
         entity.endGeohash = endHash
         entity.geohashSequence = fingerprint.joined(separator: ",")
-        entity.distanceKm = trip.distanceKm
+        // Километры в базу и в редкость дороги — МЕТРИЧЕСКИЕ, как и всё,
+        // что решает правила игры: пороги редкости (20/100/300/1000) одинаковы
+        // для всех, и мили сделали бы «эпической» дорогу вдвое короче.
+        entity.distanceKm = trip.distance / 1000
         entity.timesDriven = 1
-        let rarity = RoadRarity.from(distanceKm: trip.distanceKm)
+        let rarity = RoadRarity.from(distanceKm: trip.distance / 1000)
         entity.rarity = rarity.rawValue
         entity.level = Int32(RoadLevel.discovered.rawValue)
         entity.firstDriven = Date()

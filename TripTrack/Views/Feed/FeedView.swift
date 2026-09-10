@@ -20,6 +20,7 @@ struct FeedView: View {
     @ObservedObject private var network = CacheManager.shared.networkMonitor
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
+    @Environment(\.distanceUnit) private var distanceUnit
     @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.scenePhase) private var scenePhase
@@ -515,7 +516,7 @@ struct FeedView: View {
         // Recording banner overlay
         if mapVM.isRecording {
             RecordingBanner(
-                metres: mapVM.distance * 1000,
+                metres: mapVM.distance,
                 duration: mapVM.duration,
                 onTap: { selectedTab = .record }
             )
@@ -1302,7 +1303,7 @@ struct FeedView: View {
             let link = url
             await MainActor.run {
                 if isOwn {
-                    shareSheetData = (StoryShareData.from(trip, lang: lang.language), link)
+                    shareSheetData = (StoryShareData.from(trip, unit: distanceUnit, lang: lang.language), link)
                 } else {
                     linkShareData = LinkShare(trip: trip, url: link)
                 }

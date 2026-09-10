@@ -66,6 +66,7 @@ struct VehiclePickerSheet: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = SettingsManager.shared
 
@@ -307,7 +308,7 @@ struct VehiclePickerSheet: View {
                             VehiclePlateChip(plate: vehicle.plate, size: 10)
                         }
                     }
-                    Text("\(GarageFormat.odometer(vehicle.displayOdometerKm, lng: lang.language)) \(AppStrings.km(lang.language))")
+                    Text(Measure.odometer(km: vehicle.displayOdometerKm, unit: distanceUnit, lang: lang.language))
                         .font(.system(size: 12))
                         .foregroundStyle(c.textTertiary)
                 }

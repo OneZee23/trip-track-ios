@@ -11,6 +11,7 @@ import MapKit
 struct MyMapView: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
+    @Environment(\.distanceUnit) private var distanceUnit
     // Singleton by design — survives tab switches (see MyMapViewModel.shared).
     @ObservedObject private var vm = MyMapViewModel.shared
     @State private var zoomLevel: MapZoomLevel = .far
@@ -183,7 +184,8 @@ struct MyMapView: View {
         let text = AppStrings.mapSummary(
             lang.language,
             regions: vm.exploration.regionCount,
-            km: Int(vm.exploration.totalKm.rounded()),
+            distance: Measure.distance(
+                km: vm.exploration.totalKm, unit: distanceUnit, lang: lang.language),
             trips: vm.exploration.tripCount
         )
         let activity = UIActivityViewController(activityItems: [text], applicationActivities: nil)

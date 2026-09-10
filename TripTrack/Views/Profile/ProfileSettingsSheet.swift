@@ -49,7 +49,10 @@ struct ProfileSettingsSheet: View {
     /// Feeds the live marker on «Аккаунт и синхронизация» — see `SyncState`.
     @ObservedObject private var syncQueue = SyncQueue.shared
 
-    @AppStorage("distanceUnit") private var distanceUnit: String = "km"
+    /// Не `@Environment`, а сам писатель: этот экран и есть тот, кто меняет
+    /// единицу, а лист поверх листа своего окружения не наследует — строка
+    /// показала бы прежнюю единицу до закрытия экрана.
+    @ObservedObject private var units = UnitsManager.shared
 
     /// The «Уведомления» master over the server's notification prefs. Created
     /// here and owned here — nothing outside this sheet reads it.
@@ -171,6 +174,17 @@ struct ProfileSettingsSheet: View {
     /// is off and «×» is the one control (same shape as Discover). ProfileView
     /// hands the bar `navBarInSheet`, which is what lifts the row clear of the
     /// grabber UIKit draws over the sheet's top edge.
+    /// «км» / «миль» справа в строке «Единицы и формат» — короткая подпись
+    /// ТЕКУЩЕЙ единицы.
+    ///
+    /// Форму выбирает `AppStrings.unitDistanceShort` по числу 100: у мили в
+    /// русском она зависит от числа, а строка настроек числа не показывает —
+    /// значит выбрать одну надо здесь, и «100 миль» это та форма, которую
+    /// человек чаще всего увидит на своих расстояниях.
+    private func unitRowValue(_ l: LanguageManager.Language) -> String {
+        AppStrings.unitDistanceShort(l, unit: units.distance, value: 100, fractionDigits: 0)
+    }
+
     private func navRow(_ l: LanguageManager.Language) -> some View {
         // NOT `CustomNavBar`: that bar centres its title and carries the 40pt
         // white nav circle with a shadow, which is right for a PUSHED screen
@@ -315,7 +329,7 @@ struct ProfileSettingsSheet: View {
                 action: { showAppPrefs = true }
             ) {
                 HStack(spacing: 6) {
-                    SettingsRowValue(text: GarageFormat.distanceShort(distanceUnit, lng: lng))
+                    SettingsRowValue(text: unitRowValue(lng))
                     SettingsRowChevron()
                 }
             }

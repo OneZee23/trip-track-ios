@@ -28,6 +28,7 @@ struct ProfileTripCardView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     /// Which average speed the user asked for (overall vs moving-only) is a
     /// setting, and the trip detail this card opens honours it. Observing the
     /// singleton — ProfileView's own pattern for it — keeps the card from
@@ -185,8 +186,8 @@ struct ProfileTripCardView: View {
         // scroll from the feed into your own history.
         HStack(spacing: 4) {
             metricBlock(
-                value: oneDecimal(trip.distanceKm),
-                unit: AppStrings.km(lang.language),
+                value: tripDistance.value,
+                unit: tripDistance.unit,
                 label: AppStrings.distance(lang.language),
                 c: c
             )
@@ -196,8 +197,8 @@ struct ProfileTripCardView: View {
                 c: c
             )
             metricBlock(
-                value: String(format: "%.0f", trip.displayAverageSpeedKmh(settings.avgSpeedMode)),
-                unit: AppStrings.kmh(lang.language),
+                value: tripAvgSpeed.value,
+                unit: tripAvgSpeed.unit,
                 label: AppStrings.avgSpeedShort(lang.language),
                 c: c
             )
@@ -272,11 +273,22 @@ struct ProfileTripCardView: View {
 
     // MARK: - Text
 
-    /// Dot decimal even in RU: the feed card prints «316.4» for the very same
-    /// trip after the user signed that off (2026-08-06), and the two cards
-    /// must not disagree over one glyph.
-    private func oneDecimal(_ value: Double) -> String {
-        String(format: "%.1f", value)
+    /// Дистанция и средняя карточки — из `Measure`, как везде.
+    ///
+    /// Здесь стоял свой `oneDecimal` с ТОЧКОЙ в любом языке: «316.4» нарисован
+    /// в каноне, и владелец подписал его 2026-08-06, чтобы эта карточка и
+    /// карточка ленты не разошлись на один глиф. Разойтись они и не могут —
+    /// обе теперь считает одна функция, — но разделитель с 0.6.7 берёт язык,
+    /// как и во всём остальном приложении, а число ещё и переводится в мили.
+    private var tripDistance: Measure.Parts {
+        Measure.distanceParts(
+            metres: trip.distance, unit: distanceUnit, lang: lang.language, style: .tenths)
+    }
+
+    private var tripAvgSpeed: Measure.Parts {
+        Measure.speedParts(
+            ms: trip.displayAverageSpeedMS(settings.avgSpeedMode),
+            unit: distanceUnit, lang: lang.language)
     }
 
     /// The same answer `TripDetailView` gives, so a card and the screen it opens

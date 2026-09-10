@@ -74,7 +74,12 @@ final class LiveActivityManager {
 
     // MARK: - Update
 
-    func updateActivity(speed: Double, distance: Double, isPaused: Bool, pausedDuration: TimeInterval, elapsedAtPause: TimeInterval? = nil) {
+    /// Провод остаётся МЕТРИЧЕСКИМ и в 0.6.7: `speedKmh`/`distanceKm` везут
+    /// километры, единицу показа виджет получит отдельным полем (шаг 6).
+    /// Переименовать поля нельзя — активность, начатая старым бинарником и
+    /// пережившая обновление, перестала бы декодироваться и умерла посреди
+    /// поездки; параметры названы так же, чтобы это было видно на вызове.
+    func updateActivity(speedKmh: Double, distanceKm: Double, isPaused: Bool, pausedDuration: TimeInterval, elapsedAtPause: TimeInterval? = nil) {
         guard let activity = currentActivity else { return }
 
         // Throttle, but always push pause state changes
@@ -86,7 +91,7 @@ final class LiveActivityManager {
         }
 
         let state = TripActivityAttributes.ContentState(
-            speedKmh: speed, distanceKm: distance, isPaused: isPaused,
+            speedKmh: speedKmh, distanceKm: distanceKm, isPaused: isPaused,
             pausedDuration: pausedDuration, elapsedAtPause: elapsedAtPause,
             language: currentLanguage, isDarkMode: currentIsDarkMode,
             checkpointCount: checkpointCount
@@ -136,12 +141,12 @@ final class LiveActivityManager {
         }
     }
 
-    func endActivityWithSummary(distance: Double, duration: String, avgSpeed: Double) {
+    func endActivityWithSummary(distanceKm: Double, duration: String, avgSpeedKmh: Double) {
         guard let activity = currentActivity else { return }
 
         let finalState = TripActivityAttributes.ContentState(
-            speedKmh: 0, distanceKm: distance, isPaused: false, pausedDuration: 0,
-            isFinished: true, finalDuration: duration, averageSpeedKmh: avgSpeed,
+            speedKmh: 0, distanceKm: distanceKm, isPaused: false, pausedDuration: 0,
+            isFinished: true, finalDuration: duration, averageSpeedKmh: avgSpeedKmh,
             language: currentLanguage, isDarkMode: currentIsDarkMode
         )
 

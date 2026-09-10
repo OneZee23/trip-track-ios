@@ -47,6 +47,7 @@ struct ProfileStatsStrip: View {
     let onTap: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -58,7 +59,8 @@ struct ProfileStatsStrip: View {
             HStack(spacing: 0) {
                 column(value: "\(trips)", label: AppStrings.trips(lang.language), c: c)
                 divider(c)
-                column(value: GarageFormat.odometer(km, lng: lang.language), label: AppStrings.statsKmTotal(lang.language), c: c)
+                column(value: Measure.distanceValue(km: km, unit: distanceUnit, lang: lang.language),
+                       label: AppStrings.statsKmTotal(lang.language, unit: distanceUnit), c: c)
                 divider(c)
                 column(value: "\(regions)", label: AppStrings.statsRegions(lang.language), c: c)
             }
@@ -110,6 +112,7 @@ struct ProfileTripRow: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -165,7 +168,8 @@ struct ProfileTripRow: View {
         } else if let vehicleName, !vehicleName.isEmpty {
             parts.append(vehicleName)
         }
-        parts.append("\(GarageFormat.odometer(trip.distanceKm, lng: lang.language)) \(AppStrings.km(lang.language))")
+        parts.append(Measure.distance(
+            metres: trip.distance, unit: distanceUnit, lang: lang.language, style: .grouped))
         return parts.joined(separator: " · ")
     }
 }

@@ -180,12 +180,27 @@ struct Vehicle: Identifiable, Codable {
         soldAt = try c.decodeIfPresent(Date.self, forKey: .soldAt)
     }
 
-    /// Calculate fuel cost for a trip based on speed-weighted city/highway ratio
-    func fuelCost(distanceKm: Double, avgSpeedKmh: Double) -> (liters: Double, cost: Double) {
+    /// Литры и деньги за поездку — по доле трассы, выведенной из средней
+    /// скорости.
+    ///
+    /// **Вход в СИ, и это не стиль, а защита.** Расстояние входит в расход
+    /// ДВАЖДЫ: делителем на сто и через долю трассы от средней скорости.
+    /// Прежняя сигнатура принимала километры и километры в час, то есть ровно
+    /// те два числа, которые с 0.6.7 бывают милями и милями в час, — и
+    /// подставленные туда мили дают плюс шестьдесят процентов литров и денег
+    /// без единой ошибки компилятора. Метры и метры в секунду милями не
+    /// бывают.
+    ///
+    /// Пороги 30 и 80 км/ч внутри — физика двигателя, а не показ: город
+    /// кончается на одной и той же скорости в любой стране. Записаны они
+    /// по-прежнему в км/ч и переводятся здесь, чтобы число в коде совпадало с
+    /// числом в разговоре про двигатель.
+    func fuelCost(metres: Double, avgSpeedMS: Double) -> (liters: Double, cost: Double) {
         // Highway ratio: 0% at ≤30 km/h, 100% at ≥80 km/h, linear between
-        let highwayRatio = min(1.0, max(0.0, (avgSpeedKmh - 30) / 50))
+        let avgKmh = avgSpeedMS * 3.6
+        let highwayRatio = min(1.0, max(0.0, (avgKmh - 30) / 50))
         let consumption = cityConsumption * (1 - highwayRatio) + highwayConsumption * highwayRatio
-        let liters = distanceKm / 100 * consumption
+        let liters = metres / 1000 / 100 * consumption
         let cost = liters * fuelPrice
         return (liters, cost)
     }

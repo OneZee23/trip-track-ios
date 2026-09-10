@@ -67,7 +67,7 @@ struct VehicleEditFormView: View {
     @State private var initialPrice: String
 
     @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
-    @AppStorage("distanceUnit") private var distanceUnit: String = "km"
+    @Environment(\.distanceUnit) private var distanceUnit
     @AppStorage(ConsumptionUnit.storageKey)
     private var consumptionUnitRaw: String = ConsumptionUnit.per100.rawValue
 
@@ -1216,6 +1216,6 @@ struct VehicleEditFormView: View {
 
     private func consumptionUnitLabel(_ l: LanguageManager.Language) -> String {
         consumptionUnit.valueUnit(
-            volumeRaw: volumeUnit, distanceRaw: distanceUnit, lng: l)
+            volumeRaw: volumeUnit, distance: distanceUnit, lng: l)
     }
 }

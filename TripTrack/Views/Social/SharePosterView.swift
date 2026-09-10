@@ -248,9 +248,12 @@ struct SharePosterView: View {
             // One line, always: at preview scale the row used to wrap and
             // drop «68.0» onto two lines as «68.» + «0».
             HStack(alignment: .firstTextBaseline, spacing: 10 * s) {
-                metric(data.distanceKmText, unit: AppStrings.km(data.language), s: s)
+                // Подпись приезжает ВМЕСТЕ с числом (`Measure.Parts`), а не
+                // дописывается здесь: постер — то самое место, где число и
+                // слово разъехались первыми.
+                metric(data.distance.value, unit: data.distance.unit, s: s)
                 metric(data.durationText, unit: nil, s: s)
-                metric(data.avgSpeedKmhText, unit: AppStrings.kmh(data.language), s: s)
+                metric(data.avgSpeed.value, unit: data.avgSpeed.unit, s: s)
             }
             .lineLimit(1)
             .minimumScaleFactor(0.7)

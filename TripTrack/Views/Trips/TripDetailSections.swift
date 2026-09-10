@@ -23,12 +23,13 @@ enum TripDetailFormat {
         return "\(value) · \(chartClock.string(from: date))"
     }
 
-    /// «94 км/ч · 14:05».
+    /// «94 км/ч · 14:05». `pt.y` — метры в секунду, как везде в треке.
     static func chartSpeedReadout(
         _ pt: DetailChartPoint,
+        unit: DistanceUnit,
         lang: LanguageManager.Language
     ) -> String {
-        let value = "\(Int(pt.y.rounded())) \(AppStrings.kmh(lang))"
+        let value = Measure.speed(ms: pt.y, unit: unit, lang: lang)
         guard let date = pt.date else { return value }
         return "\(value) · \(chartClock.string(from: date))"
     }
@@ -634,15 +635,20 @@ struct ElevationChartCard: View {
 /// «Скорость» — line chart colored by the same speed→color scale as the
 /// route polyline (gradient stops at each sample).
 struct SpeedChartCard: View {
+    /// `y` — МЕТРЫ В СЕКУНДУ. Ровно то, в чём скорость лежит в треке; в чём
+    /// её напечатать, решает `Measure` в подсказке под пальцем.
     let series: [DetailChartPoint]
     let language: LanguageManager.Language
     /// e.g. «макс 132 · ср 64»
     let summary: String
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @State private var selection: ChartScrubSelection?
 
     private var yDomain: ClosedRange<Double> {
-        let hi = max(series.map { $0.hasBand ? $0.yMax : $0.y }.max() ?? 1, 10)
+        // Пол шкалы — те же 10 км/ч, что и были, записанные в СИ: серия
+        // теперь метры в секунду, а не километры в час.
+        let hi = max(series.map { $0.hasBand ? $0.yMax : $0.y }.max() ?? 1, 10 / 3.6)
         return 0...(hi * 1.1)
     }
 
@@ -654,7 +660,7 @@ struct SpeedChartCard: View {
         let span = last.x - first.x
         let stops = series.map { pt in
             Gradient.Stop(
-                color: SpeedColorScale.bands[SpeedColorScale.zone(forSpeedMS: pt.y / 3.6)].color,
+                color: SpeedColorScale.bands[SpeedColorScale.zone(forSpeedMS: pt.y)].color,
                 location: (pt.x - first.x) / span
             )
         }
@@ -715,7 +721,8 @@ struct SpeedChartCard: View {
             .frame(height: 80)
             .chartScrub(series: series, selection: $selection) { pt in
                 ChartScrubTooltip(
-                    primary: TripDetailFormat.chartSpeedReadout(pt, lang: language),
+                    primary: TripDetailFormat.chartSpeedReadout(
+                        pt, unit: distanceUnit, lang: language),
                     secondary: AppStrings.chartKmMark(language, km: pt.x)
                 )
             }

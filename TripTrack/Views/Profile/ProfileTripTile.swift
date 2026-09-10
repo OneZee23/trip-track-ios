@@ -20,6 +20,7 @@ struct ProfileTripTile: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
 
     /// The grid is two columns inside the screen's 16pt margins, so a real
     /// tile measures ~157–190pt across every supported device. Snapshotting at
@@ -127,7 +128,8 @@ struct ProfileTripTile: View {
     /// has no room at 10pt in a half-width tile.
     private var metaText: String {
         let date = ProfileDateFormat.dayMonth(trip.startDate, lang: lang.language)
-        let km = "\(GarageFormat.odometer(trip.distanceKm, lng: lang.language)) \(AppStrings.km(lang.language))"
+        let km = Measure.distance(
+            metres: trip.distance, unit: distanceUnit, lang: lang.language, style: .grouped)
         return "\(date) · \(km)"
     }
 }

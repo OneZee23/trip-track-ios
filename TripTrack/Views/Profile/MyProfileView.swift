@@ -31,6 +31,7 @@ struct MyProfileView: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
@@ -544,7 +545,8 @@ struct MyProfileView: View {
                     value: AppStrings.myProfileStatsSummary(
                         l,
                         trips: mapVM.cachedTripCount,
-                        km: GarageFormat.odometer(mapVM.cachedTotalKm, lng: l)
+                        distance: Measure.distance(
+                            km: mapVM.cachedTotalKm, unit: distanceUnit, lang: l)
                     ),
                     isUnset: false,
                     identifier: "my_profile_row_stats",

@@ -227,15 +227,22 @@ struct Badge: Identifiable {
     /// 42.2 км» is the badge, «47.3 км» is the memory. `nil` when the badge is
     /// not about a single drive, or when this trip carries no figure for it
     /// (a feed-adapted trip has no track points, so no altitude).
-    func recordValue(for trip: Trip, language: LanguageManager.Language) -> String? {
+    /// - Parameter unit: в чём ПОКАЗАТЬ личное число. Пороги самого значка при
+    ///   этом остаются метрическими: «марафон» — это 42.195 км у всех, и
+    ///   американец читает его как «26,2 mi», а не получает свой марафон на
+    ///   сорока двух милях.
+    func recordValue(
+        for trip: Trip, unit: DistanceUnit, language: LanguageManager.Language
+    ) -> String? {
         guard let recordMetric else { return nil }
         switch recordMetric {
         case .tripDistance:
-            guard trip.distanceKm > 0 else { return nil }
-            return "\(Self.oneDecimal(trip.distanceKm, language)) \(AppStrings.km(language))"
+            guard trip.distance > 0 else { return nil }
+            return Measure.distance(
+                metres: trip.distance, unit: unit, lang: language, style: .tenths)
         case .tripMaxSpeed:
-            guard trip.maxSpeedKmh > 0 else { return nil }
-            return "\(Int(trip.maxSpeedKmh.rounded())) \(AppStrings.kmh(language))"
+            guard trip.maxSpeed > 0 else { return nil }
+            return Measure.speed(ms: trip.maxSpeed, unit: unit, lang: language)
         case .tripDuration:
             guard trip.duration > 0 else { return nil }
             return trip.formattedDurationHuman(language)
@@ -251,11 +258,6 @@ struct Badge: Identifiable {
 
     /// RU writes decimals with a comma, and the app's language is not the
     /// device's — a device on en_US showing the RU card still owes «47,3».
-    private static func oneDecimal(_ value: Double, _ lang: LanguageManager.Language) -> String {
-        let s = String(format: "%.1f", value)
-        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lang))
-    }
-
     private static func metres(_ value: Double, _ lang: LanguageManager.Language) -> String {
         "\(AppStrings.groupedNumber(Int(value.rounded()), lang)) \(AppStrings.unitMeters(lang))"
     }

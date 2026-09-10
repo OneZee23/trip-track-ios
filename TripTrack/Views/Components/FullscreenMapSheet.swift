@@ -357,9 +357,10 @@ struct FullscreenMapSheet: View {
         let elapsed = Self.hmm(engine.progress * trackDuration)
         let total = Self.hmm(trackDuration)
         guard distanceMeters > 0 else { return "\(elapsed) / \(total)" }
-        let km = distanceMeters * engine.distanceFraction / 1000
-        let covered = GarageFormat.oneDecimal(km, lng: language)
-        return "\(elapsed) / \(total) · \(covered) \(AppStrings.km(language))"
+        let covered = Measure.distance(
+            metres: distanceMeters * engine.distanceFraction,
+            unit: distanceUnit, lang: language, style: .tenths)
+        return "\(elapsed) / \(total) · \(covered)"
     }
 
     private var trackDuration: TimeInterval {
@@ -380,10 +381,12 @@ struct FullscreenMapSheet: View {
         if canReplay, followsCar, engine.headCoord != nil, engine.hasSpeeds {
             let c = AppTheme.colors(for: scheme)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("\(Int(engine.currentSpeedKmh.rounded()))")
+                let speed = Measure.speedParts(
+                    ms: engine.currentSpeedMS, unit: distanceUnit, lang: language)
+                Text(speed.value)
                     .font(.system(size: 15, weight: .heavy).monospacedDigit())
                     .foregroundStyle(AppTheme.accent)
-                Text(AppStrings.kmh(language))
+                Text(speed.unit)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(c.textSecondary)
             }
@@ -929,7 +932,9 @@ final class TripReplayEngine: NSObject, ObservableObject {
     /// Last passed original coordinate — feeds the map's trail.
     @Published private(set) var trailIndex: Int = -1
     /// Interpolated speed at the head, km/h.
-    @Published private(set) var currentSpeedKmh: Double = 0
+    /// Метры в секунду — как в самом треке. Переводит их `Measure` на
+    /// экране: движок реплея про выбор единицы не знает и знать не должен.
+    @Published private(set) var currentSpeedMS: Double = 0
     /// Whether this playback carries speeds at all — the readout is hidden
     /// rather than parked at zero when it does not.
     var hasSpeeds: Bool { !speeds.isEmpty }
@@ -1128,7 +1133,7 @@ final class TripReplayEngine: NSObject, ObservableObject {
         trailIndex = lo
         if !speeds.isEmpty {
             let s = speeds[lo] + (speeds[hi] - speeds[lo]) * frac
-            currentSpeedKmh = max(0, s * 3.6)
+            currentSpeedMS = max(0, s)
         }
         if cumulativeMetres.count == coords.count, let total = cumulativeMetres.last, total > 0 {
             let covered = cumulativeMetres[lo] + (cumulativeMetres[hi] - cumulativeMetres[lo]) * frac

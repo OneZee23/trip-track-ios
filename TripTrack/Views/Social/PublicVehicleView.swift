@@ -20,6 +20,7 @@ struct PublicVehicleView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
 
     @State private var vehicle: PublicVehicle?
@@ -435,7 +436,7 @@ struct PublicVehicleView: View {
             GarageSectionLabel(text: AppStrings.statsRecords(l), color: c.textSecondary)
             record(AppStrings.recordLongest(l),
                    a.longestTripTitle ?? a.longestTripRegion ?? "—",
-                   GarageFormat.odometer(a.longestTripKm, lng: l) + " " + AppStrings.km(l),
+                   Measure.distance(km: a.longestTripKm, unit: distanceUnit, lang: l),
                    dot: AppTheme.green, c: c)
             if let peak = trips.max(by: { $0.elevation < $1.elevation }), peak.elevation > 0 {
                 record(AppStrings.recordHighest(l),

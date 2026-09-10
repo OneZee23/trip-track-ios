@@ -107,8 +107,10 @@ final class FeedViewModel: ObservableObject {
 
     var totalTripCount: Int { filteredTrips.count }
 
+    /// Метрические километры для внутреннего счёта. Показывает их `Measure`,
+    /// и только он: делится на тысячу один раз в конце, а не по поездке.
     var totalKm: Double {
-        filteredTrips.reduce(0) { $0 + $1.distanceKm }
+        filteredTrips.reduce(0) { $0 + $1.distance } / 1000
     }
 
     var totalDuration: TimeInterval {
@@ -231,7 +233,7 @@ final class FeedViewModel: ObservableObject {
         var dayTotals: [Date: Double] = [:]
         for trip in allTrips {
             let day = cal.startOfDay(for: trip.startDate)
-            dayTotals[day, default: 0] += trip.distanceKm
+            dayTotals[day, default: 0] += trip.distance / 1000
         }
         cachedMaxKmDay = dayTotals.values.max() ?? 1
 
@@ -266,7 +268,7 @@ final class FeedViewModel: ObservableObject {
         for trip in allTrips {
             guard trip.startDate >= monthStart && trip.startDate < monthEnd else { continue }
             let day = cal.startOfDay(for: trip.startDate)
-            result[day, default: 0] += trip.distanceKm
+            result[day, default: 0] += trip.distance / 1000
         }
 
         kmByDayCache[monthKey] = result

@@ -24,6 +24,7 @@ struct ProfileView: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var themeManager: ThemeManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
@@ -937,7 +938,7 @@ struct ProfileView: View {
                         }
                     }
 
-                    Text("\(GarageFormat.odometer(vehicle.displayOdometerKm, lng: l)) \(AppStrings.km(l))")
+                    Text(Measure.odometer(km: vehicle.displayOdometerKm, unit: distanceUnit, lang: l))
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)
@@ -1683,7 +1684,7 @@ struct ProfileView: View {
             self.trips = trips.sorted { $0.startDate > $1.startDate }
             var byDay: [Date: Double] = [:]
             for trip in self.trips {
-                byDay[calendar.startOfDay(for: trip.startDate), default: 0] += trip.distanceKm
+                byDay[calendar.startOfDay(for: trip.startDate), default: 0] += trip.distance / 1000
             }
             self.kmByDay = byDay
             self.maxKmDay = byDay.values.max() ?? 0

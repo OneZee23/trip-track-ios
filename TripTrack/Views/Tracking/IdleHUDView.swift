@@ -18,6 +18,7 @@ struct IdleHUDView: View {
     /// «Управлять в Гараже» — открывает хозяин экрана, поверх записи.
     var onManageGarage: () -> Void = {}
     @EnvironmentObject private var lang: LanguageManager
+    @Environment(\.distanceUnit) private var distanceUnit
     @ObservedObject private var settings = SettingsManager.shared
     @State private var showVehiclePicker = false
     /// Гараж открывается ПОСЛЕ того, как шторка закрылась.
@@ -124,7 +125,7 @@ struct IdleHUDView: View {
                     .foregroundStyle(.white.opacity(0.42))
                     .padding(.bottom, 24)
             } else if totalKm > 0 || tripCount > 0 {
-                Text("\(formatKmWithSeparator(totalKm)) \(AppStrings.totalKm(lang.language)) · \(tripCount) \(AppStrings.tripsGenitive(lang.language, count: tripCount))")
+                Text("\(formatKmWithSeparator(totalKm)) \(AppStrings.totalKm(lang.language, unit: distanceUnit)) · \(tripCount) \(AppStrings.tripsGenitive(lang.language, count: tripCount))")
                     .font(.inter(13).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.42))
                     .padding(.bottom, 14)
@@ -201,7 +202,7 @@ struct IdleHUDView: View {
     }()
 
     private func formatKmWithSeparator(_ km: Double) -> String {
-        AppStrings.groupedNumber(Int(km.rounded()), lang.language)
+        Measure.distanceValue(km: km, unit: distanceUnit, lang: lang.language)
     }
 
 }

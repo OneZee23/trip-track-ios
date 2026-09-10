@@ -636,7 +636,7 @@ final class AutoTripService: ObservableObject {
         let lastChangeAgo = lastChange.map { Int(Date().timeIntervalSince($0)) }
         if let trip = vm.tripManager.activeTrip {
             autoLog.notice("[auto.trip_stop] dist_m=\(Int(trip.distance), privacy: .public) dur_s=\(Int(trip.duration), privacy: .public) last_change_s_ago=\(lastChangeAgo.map(String.init) ?? "nil", privacy: .public)")
-            notificationManager.sendAutoStopNotification(distanceKm: trip.distanceKm, duration: trip.formattedDuration)
+            notificationManager.sendAutoStopNotification(metres: trip.distance, duration: trip.formattedDuration)
         } else {
             autoLog.notice("[auto.trip_stop] active_trip=nil")
         }

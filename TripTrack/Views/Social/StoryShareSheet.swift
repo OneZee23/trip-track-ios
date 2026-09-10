@@ -18,9 +18,15 @@ struct StoryShareData {
     let tripId: UUID
     let title: String
     let dateText: String
-    let distanceKmText: String
+    /// Число И подпись, собранные вместе `Measure`.
+    ///
+    /// Вместе — потому что до 0.6.7 они собирались врозь: число здесь,
+    /// «км» дописывалось в `SharePosterView`. Пока единица была одна, это
+    /// сходилось; на второй постер напечатал бы мили со словом «км». Плюс
+    /// подпись мили склоняется по числу, а число живёт здесь.
+    let distance: Measure.Parts
     let durationText: String
-    let avgSpeedKmhText: String
+    let avgSpeed: Measure.Parts
     let region: String?
     let coordinates: [CLLocationCoordinate2D]
     let authorEmoji: String
@@ -34,7 +40,9 @@ struct StoryShareData {
 }
 
 extension StoryShareData {
-    static func from(_ trip: SocialFeedTrip, lang: LanguageManager.Language) -> StoryShareData {
+    static func from(
+        _ trip: SocialFeedTrip, unit: DistanceUnit, lang: LanguageManager.Language
+    ) -> StoryShareData {
         let df = DateFormatter()
         df.locale = lang.locale
         df.dateFormat = "d MMM yyyy"
@@ -42,11 +50,12 @@ extension StoryShareData {
             tripId: trip.id,
             title: trip.title ?? df.string(from: trip.startDate),
             dateText: df.string(from: trip.startDate),
-            distanceKmText: String(format: "%.1f", trip.distanceKm),
+            distance: Measure.distanceParts(
+                metres: trip.distance, unit: unit, lang: lang, style: .tenths),
             // Compact format ("1ч 19м") fits the story card's metric strip
             // without the wider "1 ч 19 мин" wrapping or auto-shrinking.
             durationText: trip.formattedDurationCompact(lang),
-            avgSpeedKmhText: String(format: "%.0f", trip.averageSpeedKmh),
+            avgSpeed: Measure.speedParts(ms: trip.averageSpeedMS, unit: unit, lang: lang),
             region: trip.region,
             coordinates: trip.previewCoordinates,
             authorEmoji: trip.author.avatarEmoji ?? "🚗",
@@ -62,7 +71,10 @@ extension StoryShareData {
     }
 
     /// Build share data from a local `Trip` (own trip from TripDetail).
-    static func from(_ trip: Trip, authorName: String, authorEmoji: String, lang: LanguageManager.Language) -> StoryShareData {
+    static func from(
+        _ trip: Trip, authorName: String, authorEmoji: String,
+        unit: DistanceUnit, lang: LanguageManager.Language
+    ) -> StoryShareData {
         let df = DateFormatter()
         df.locale = lang.locale
         df.dateFormat = "d MMM yyyy"
@@ -70,9 +82,10 @@ extension StoryShareData {
             tripId: trip.id,
             title: trip.title ?? df.string(from: trip.startDate),
             dateText: df.string(from: trip.startDate),
-            distanceKmText: String(format: "%.1f", trip.distanceKm),
+            distance: Measure.distanceParts(
+                metres: trip.distance, unit: unit, lang: lang, style: .tenths),
             durationText: trip.formattedDuration,
-            avgSpeedKmhText: String(format: "%.0f", trip.averageSpeedKmh),
+            avgSpeed: Measure.speedParts(ms: trip.averageSpeed, unit: unit, lang: lang),
             region: trip.region,
             coordinates: trip.previewCoordinates,
             authorEmoji: authorEmoji,

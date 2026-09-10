@@ -446,6 +446,14 @@ enum AppStrings {
         // Казахский считает одной формой — как `nounTrips` для него же.
         case .kk: return "миля"
         // Остальные пишут символ, и он не меняется ни от числа, ни от падежа.
+        //
+        // Оговорка про турецкий и индонезийский: удалённая таблица
+        // `unitMilesShort` держала для них «mil» — слово, а не символ, — и у
+        // турецкой скорости слово стоит до сих пор («mil/sa» строкой ниже).
+        // Здесь оставлен символ, как решено спекой 0.6.7 и как это держит
+        // `UnitLabelTests`; те строки на экран не попадали ни разу (мили не
+        // работали), так что шипнутого решения за ними нет. Если владелец
+        // решит иначе — менять надо ЗДЕСЬ и вместе с тестом, а не в таблицах.
         case .en, .de, .es, .fr, .it, .pl, .pt, .fil, .id, .tr: return "mi"
         }
     }
@@ -667,8 +675,29 @@ enum AppStrings {
            ru: "Начните первую поездку чтобы увидеть её здесь",
            en: "Start your first trip to see it here")
     }
-    static func totalKm(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "totalKm", ru: "км всего", en: "total km")
+    /// «км всего» / «миль всего» — подпись под суммой на экране записи.
+    ///
+    /// Переехала из таблиц в inline-переключатель вместе с остальными
+    /// строками, у которых единица стоит ВНУТРИ слова: порядок слов у языков
+    /// разный («км всего» против «total km»), и склейкой из двух кусков он не
+    /// собирается. Сама единица — параметр, а не слово.
+    static func totalKm(_ lang: LanguageManager.Language, unit: DistanceUnit) -> String {
+        let u = unitDistanceShort(lang, unit: unit, value: 100, fractionDigits: 0)
+        switch lang {
+        case .ru: return "\(u) всего"
+        case .en: return "total \(u)"
+        case .de: return "\(u) gesamt"
+        case .es: return "\(u) en total"
+        case .fr: return "\(u) au total"
+        case .it: return "\(u) in totale"
+        case .pl: return "\(u) łącznie"
+        case .pt: return "\(u) no total"
+        case .id: return "total \(u)"
+        case .tr: return "toplam \(u)"
+        case .fil: return "kabuuang \(u)"
+        case .uk: return "\(u) усього"
+        case .kk: return "барлығы \(u)"
+        }
     }
     static func regionsCount(_ lang: LanguageManager.Language) -> String {
         tr(lang, "regionsCount", ru: "регионов", en: "regions")
@@ -877,16 +906,34 @@ enum AppStrings {
     // trips share one layer, and depth comes from zoom instead.
 
     /// Collapsed sheet: «8 регионов · 12 890 км · 47 поездок».
+    /// - Parameter distance: уже собранное `Measure` расстояние ВМЕСТЕ с
+    ///   подписью. Строка, а не число: единицу выбирает человек, и склонять
+    ///   милю приходится по этому самому числу.
     static func mapSummary(
-        _ lang: LanguageManager.Language, regions: Int, km: Int, trips: Int
+        _ lang: LanguageManager.Language, regions: Int, distance: String, trips: Int
     ) -> String {
         let r = "\(groupedNumber(regions, lang)) \(nounRegions(lang, regions))"
-        let k = "\(groupedNumber(km, lang)) \(AppStrings.km(lang))"
         let t = "\(groupedNumber(trips, lang)) \(nounTrips(lang, trips))"
-        return "\(r) · \(k) · \(t)"
+        return "\(r) · \(distance) · \(t)"
     }
-    static func mapKmDriven(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "mapKmDriven", ru: "км проехано", en: "km driven")
+    /// «км проехано» / «миль проехано» — подпись под цифрой на «Моей карте».
+    static func mapKmDriven(_ lang: LanguageManager.Language, unit: DistanceUnit) -> String {
+        let u = unitDistanceShort(lang, unit: unit, value: 100, fractionDigits: 0)
+        switch lang {
+        case .ru: return "\(u) проехано"
+        case .en: return "\(u) driven"
+        case .de: return "\(u) gefahren"
+        case .es: return "\(u) recorridos"
+        case .fr: return "\(u) parcourus"
+        case .it: return "\(u) percorsi"
+        case .pl: return "\(u) przejechane"
+        case .pt: return "\(u) percorridos"
+        case .id: return "\(u) ditempuh"
+        case .tr: return "\(u) gidildi"
+        case .fil: return "\(u) na nabiyahe"
+        case .uk: return "\(u) проїхано"
+        case .kk: return "\(u) жүрілді"
+        }
     }
     /// «9 из 44» — the region's opened cities over its whole list.
     static func mapCitiesOfTotal(
@@ -1036,11 +1083,15 @@ enum AppStrings {
     }
     /// «Ближайший твой след — 40 км западнее: Кропоткин, май 2026.
     /// Заедешь — регион загорится на карте.»
+    /// - Parameter distance: уже собранное `Measure` расстояние ВМЕСТЕ с
+    ///   подписью — «40 км», «25 mi». Строка, а не число: единицу выбирает
+    ///   смотрящий, а форма слова у мили зависит от этого самого числа.
     static func mapLockedTeaser(
-        _ lang: LanguageManager.Language, km: Int, bearing: String, city: String, when: String?
+        _ lang: LanguageManager.Language, distance: String, bearing: String,
+        city: String, when: String?
     ) -> String {
         let place = when.map { "\(city), \($0)" } ?? city
-        let head = "\(km) \(AppStrings.km(lang)) \(bearing): \(place)"
+        let head = "\(distance) \(bearing): \(place)"
         switch lang {
         case .ru: return "Ближайший твой след — \(head). Заедешь — регион загорится на карте."
         case .en: return "Your nearest trace — \(head). Drive in and the region lights up."
@@ -3215,8 +3266,11 @@ enum AppStrings {
     static func vehicleLevelTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "vehicleLevelTitle", ru: "Уровень машины", en: "Vehicle level")
     }
-    static func vehicleLevelToNext(_ lang: LanguageManager.Language, km: String, level: Int) -> String {
-        let d = "\(km) \(AppStrings.km(lang))"
+    /// - Parameter distance: расстояние вместе с подписью, из `Measure`.
+    static func vehicleLevelToNext(
+        _ lang: LanguageManager.Language, distance: String, level: Int
+    ) -> String {
+        let d = distance
         switch lang {
         case .ru: return "\(d) до уровня \(level)"
         case .en: return "\(d) to level \(level)"
@@ -3816,8 +3870,24 @@ enum AppStrings {
     static func calendarFilterActive(_ lang: LanguageManager.Language, count: Int) -> String {
         tripsCount(lang, n: count)
     }
-    static func statsKmTotal(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statsKmTotal", ru: "км всего", en: "km total")
+    /// «км всего» / «миль всего» — подпись колонки в профиле.
+    static func statsKmTotal(_ lang: LanguageManager.Language, unit: DistanceUnit) -> String {
+        let u = unitDistanceShort(lang, unit: unit, value: 100, fractionDigits: 0)
+        switch lang {
+        case .ru: return "\(u) всего"
+        case .en: return "\(u) total"
+        case .de: return "\(u) gesamt"
+        case .es: return "\(u) en total"
+        case .fr: return "\(u) au total"
+        case .it: return "\(u) in totale"
+        case .pl: return "\(u) łącznie"
+        case .pt: return "\(u) no total"
+        case .id: return "total \(u)"
+        case .tr: return "toplam \(u)"
+        case .fil: return "kabuuang \(u)"
+        case .uk: return "\(u) усього"
+        case .kk: return "барлығы \(u)"
+        }
     }
     static func statsRegions(_ lang: LanguageManager.Language) -> String {
         tr(lang, "statsRegions", ru: "регионов", en: "regions")
@@ -4778,9 +4848,9 @@ enum AppStrings {
     /// «47 поездок · 2 430 км». `km` arrives grouped for the locale — the
     /// caller owns the separator, this owns the unit and the trip plural.
     static func myProfileStatsSummary(
-        _ lang: LanguageManager.Language, trips: Int, km: String
+        _ lang: LanguageManager.Language, trips: Int, distance: String
     ) -> String {
-        "\(tripsCount(lang, n: trips)) · \(km) \(AppStrings.km(lang))"
+        "\(tripsCount(lang, n: trips)) · \(distance)"
     }
 
     // MARK: - Username editor (0.6.0, Figma 1833:6714)
@@ -5111,11 +5181,14 @@ enum AppStrings {
     /// «Больше, чем в прошлом июне — 840 км против 610». The caller owns the
     /// declined period («июне», «году») and both already-grouped numbers; the
     /// arrow glyph is the view's, not the copy's.
+    /// - Parameter current: расстояние текущего периода вместе с подписью, из
+    ///   `Measure`. `previous` — только число: единица у них одна, и повторять
+    ///   её дважды в одной строке незачем.
     static func statsVsLastPeriod(
         _ lang: LanguageManager.Language, more: Bool, period: String,
         current: String, previous: String
     ) -> String {
-        let numbers = "\(current) \(AppStrings.km(lang))"
+        let numbers = current
         switch lang {
         case .ru:
             return "\(more ? "Больше" : "Меньше"), чем в прошлом \(period) — \(numbers) против \(previous)"
@@ -5218,8 +5291,38 @@ enum AppStrings {
     static func statsRecordLongest(_ lang: LanguageManager.Language) -> String {
         recordLongest(lang)
     }
-    static func statsRecordBestDay(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statsRecordBestDay", ru: "Лучший день по км", en: "Best day by km")
+    /// «Лучший день по км» / «Лучший день по милям» — строка рекордов, под
+    /// которой стоит уже переведённое число.
+    static func statsRecordBestDay(_ lang: LanguageManager.Language, unit: DistanceUnit) -> String {
+        let u = unitDistanceShort(lang, unit: unit, value: 100, fractionDigits: 0)
+        switch lang {
+        case .ru: return unit == .miles ? "Лучший день по милям" : "Лучший день по км"
+        case .en: return "Best day by \(u)"
+        case .de: return "Bester Tag nach \(u)"
+        case .es: return "Mejor día por \(u)"
+        case .fr: return "Meilleure journée en \(u)"
+        case .it: return "Giornata migliore per \(u)"
+        case .pl: return "Najlepszy dzień pod względem \(u)"
+        case .pt: return "Melhor dia em \(u)"
+        case .id: return "Hari terbaik menurut \(u)"
+        case .tr: return "\(capitalizedFirst(u, lang)) olarak en iyi gün"
+        case .fil: return "Pinakamagandang araw sa \(u)"
+        case .uk: return unit == .miles ? "Найкращий день за милями" : "Найкращий день за км"
+        case .kk: return "\(capitalizedFirst(u, lang)) бойынша ең жақсы күн"
+        }
+    }
+
+    /// Первая буква заглавной ПО ПРАВИЛАМ ЯЗЫКА.
+    ///
+    /// Не `String.capitalized` и не голое `uppercased()`: турецкая «i» в
+    /// верхнем регистре пишется «İ», и безъязыкий вызов испортил бы её ровно
+    /// там, где эта функция и нужна — единица стоит первым словом в турецком
+    /// и в казахском.
+    private static func capitalizedFirst(
+        _ s: String, _ lang: LanguageManager.Language
+    ) -> String {
+        guard let first = s.first else { return s }
+        return String(first).uppercased(with: lang.locale) + s.dropFirst()
     }
     /// Подпись к рекорду «дольше всего за рулём»: сам рекорд — часы, и надо
     /// сказать, за какой отрезок они набраны.
@@ -5268,9 +5371,9 @@ enum AppStrings {
     /// clause needs the prepositional case, which no existing plural helper
     /// produces (they are all genitive).
     static func statsMemoriesLine(
-        _ lang: LanguageManager.Language, km: String, trips: Int
+        _ lang: LanguageManager.Language, distance: String, trips: Int
     ) -> String {
-        let head = "\(km) \(AppStrings.km(lang))"
+        let head = distance
         switch lang {
         case .ru:
             let noun = plural(lang, trips, one: "поездке", few: "поездках", many: "поездках")
@@ -5695,9 +5798,6 @@ enum AppStrings {
     }
     static func unitLitresShort(_ lang: LanguageManager.Language) -> String {
         tr(lang, "unitLitresShort", ru: "л", en: "L")
-    }
-    static func unitMilesShort(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "unitMilesShort", ru: "миль", en: "mi")
     }
     static func tripEditAPublicTrip(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tripEditAPublicTrip",

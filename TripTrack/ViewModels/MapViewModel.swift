@@ -24,9 +24,15 @@ final class MapViewModel: ObservableObject {
     /// Живёт до старта записи и гасится в момент штампа: это свойство ОДНОЙ
     /// поездки, а не настройка. Поэтому и не `SettingsManager`.
     @Published var pendingTransfer: Bool = false
-    @Published var speed: Double = 0        // km/h
+    /// Скорость и путь ЗАПИСИ — в СИ, как и всё, что кладётся в поездку.
+    ///
+    /// Были километры в час и километры: экран брал их и печатал как есть, то
+    /// есть выбор миль до него не доезжал в принципе. Перевод теперь один и на
+    /// границе показа (`Measure`), а модель говорит на том же языке, что
+    /// CoreLocation и `Trip.distance`.
+    @Published var speed: Double = 0        // m/s
     @Published var altitude: Double = 0     // meters
-    @Published var distance: Double = 0     // km
+    @Published var distance: Double = 0     // meters
     @Published var duration: String = "00:00"
     @Published var gpsAccuracy: Double = 0  // meters
     /// No accepted fix for >10s while recording — the GPS pill flips to
@@ -72,7 +78,7 @@ final class MapViewModel: ObservableObject {
     /// that was already drawn — a little car driving back and forth on a
     /// perfectly good map, which reads as the app being broken.
     @Published var trackingMapDidRender = false
-    var recoveryDistanceKm: Double = 0
+    var recoveryDistanceMetres: Double = 0
     var recoveryDuration: String = "0:00"
     @Published var trackOverlays: [MKOverlay] = []
     @Published var pendingBadges: [(badge: Badge, count: Int)] = []
@@ -381,7 +387,7 @@ final class MapViewModel: ObservableObject {
         // on a cold lock).
         PhoneConnectivityManager.shared.publish(
             isRecording: isRecording, isPaused: isPaused,
-            speedKmh: speed, distanceKm: distance,
+            speedKmh: speed * 3.6, distanceKm: distance / 1000,
             elapsedSeconds: Int(recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0)
         )
     }
@@ -422,7 +428,7 @@ final class MapViewModel: ObservableObject {
         tripManager.isPaused = isPaused
         PhoneConnectivityManager.shared.publish(
             isRecording: true, isPaused: isPaused,
-            speedKmh: speed, distanceKm: distance,
+            speedKmh: speed * 3.6, distanceKm: distance / 1000,
             elapsedSeconds: Int(recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0)
         )
         if isPaused {
@@ -450,8 +456,8 @@ final class MapViewModel: ObservableObject {
             elapsed = Date().timeIntervalSince(start) - pausedAccumulated
         }
         LiveActivityManager.shared.updateActivity(
-            speed: speed,
-            distance: distance,
+            speedKmh: speed * 3.6,
+            distanceKm: distance / 1000,
             isPaused: isPaused,
             pausedDuration: pausedAccumulated,
             elapsedAtPause: elapsed
@@ -482,7 +488,7 @@ final class MapViewModel: ObservableObject {
             return
         }
 
-        recoveryDistanceKm = orphan.distance / 1000
+        recoveryDistanceMetres = orphan.distance
         recoveryDuration = Self.formatRecoveryDuration(tripManager.recoverableOrphanDuration)
         showRecoveryPrompt = true
     }
@@ -587,7 +593,9 @@ final class MapViewModel: ObservableObject {
                 guard self.speed > 0 else { return }
                 if sinceLastFix > 2.0 {
                     let decayed = self.speed * 0.4
-                    self.speed = decayed < 1 ? 0 : decayed
+                    // Тот же порог «ниже километра в час — считаем нулём»,
+                    // записанный в СИ. Число другое, физика та же.
+                    self.speed = decayed < 1 / 3.6 ? 0 : decayed
                     self.smoothedSpeed = self.speed
                 }
             }
@@ -838,9 +846,9 @@ final class MapViewModel: ObservableObject {
         // End Live Activity with trip summary (stays on lock screen for 5 min)
         if let trip = completedTrip {
             LiveActivityManager.shared.endActivityWithSummary(
-                distance: trip.distanceKm,
+                distanceKm: trip.distance / 1000,
                 duration: trip.formattedDuration,
-                avgSpeed: trip.averageSpeedKmh
+                avgSpeedKmh: trip.averageSpeed * 3.6
             )
         } else {
             LiveActivityManager.shared.endActivity()
@@ -960,10 +968,14 @@ final class MapViewModel: ObservableObject {
                 if self.locationManager.realGPS.isWarmingUp { return }
 
                 let rawSpeed = max(0, update.speed)
-                let speedKmh = rawSpeed < 1.0 ? 0 : rawSpeed * 3.6
+                // Порог «стоим» — метр в секунду, как и был: он сравнивается с
+                // сырой скоростью GPS, а та приезжает в СИ. Раньше сразу после
+                // него шло умножение на 3.6, и дальше вся ветка считала в
+                // километрах в час без всякой на то причины.
+                let sampleMS = rawSpeed < 1.0 ? 0 : rawSpeed
 
                 let gap = Date().timeIntervalSince(self.lastSpeedUpdate)
-                if speedKmh == 0 {
+                if sampleMS == 0 {
                     // Sub-floor sample (<1 m/s). This is EITHER a genuine stop OR
                     // an unknown-speed fix — CLLocation.speed == -1 is clamped to
                     // 0 upstream and such fixes are deliberately KEPT in degraded
@@ -984,14 +996,14 @@ final class MapViewModel: ObservableObject {
                     self.consecutiveZeroSpeed = 0
                     if gap > 3.0 {
                         // After a background/GPS gap, jump straight to the real value.
-                        self.smoothedSpeed = speedKmh
+                        self.smoothedSpeed = sampleMS
                     } else {
                         let alpha = Self.speedEMAAlpha
-                        self.smoothedSpeed = alpha * speedKmh + (1 - alpha) * self.smoothedSpeed
+                        self.smoothedSpeed = alpha * sampleMS + (1 - alpha) * self.smoothedSpeed
                     }
                 }
                 self.speed = self.smoothedSpeed
-                speedLog.debug("speed: raw=\(Int(rawSpeed * 3.6))km/h hud=\(Int(self.smoothedSpeed))km/h gap=\(String(format: "%.1f", gap))s zeros=\(self.consecutiveZeroSpeed)")
+                speedLog.debug("speed: raw=\(Int(rawSpeed * 3.6))km/h hud=\(Int(self.smoothedSpeed * 3.6))km/h gap=\(String(format: "%.1f", gap))s zeros=\(self.consecutiveZeroSpeed)")
                 AutoTripService.shared.updateMovementForInactivity()
 
                 self.lastSpeedUpdate = Date()
@@ -1010,8 +1022,8 @@ final class MapViewModel: ObservableObject {
 
                     // Update Live Activity with current tracking data
                     LiveActivityManager.shared.updateActivity(
-                        speed: self.speed,
-                        distance: self.distance,
+                        speedKmh: self.speed * 3.6,
+                        distanceKm: self.distance / 1000,
                         isPaused: false,
                         pausedDuration: self.pausedAccumulated
                     )
@@ -1023,8 +1035,8 @@ final class MapViewModel: ObservableObject {
                     PhoneConnectivityManager.shared.publish(
                         isRecording: true,
                         isPaused: false,
-                        speedKmh: self.speed,
-                        distanceKm: self.distance,
+                        speedKmh: self.speed * 3.6,
+                        distanceKm: self.distance / 1000,
                         elapsedSeconds: elapsed
                     )
                 }
@@ -1069,7 +1081,7 @@ final class MapViewModel: ObservableObject {
 
         // Trip distance
         tripManager.$activeTrip
-            .compactMap { $0?.distanceKm }
+            .compactMap { $0?.distance }
             .receive(on: DispatchQueue.main)
             .assign(to: &$distance)
     }

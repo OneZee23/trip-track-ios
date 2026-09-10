@@ -62,11 +62,11 @@ enum ConsumptionUnit: String, CaseIterable, Identifiable {
     /// volume/distance settings — «л/100 км», "gal/100mi" — because that pair
     /// is a real, converted unit; mpg is its own thing and reads the same in
     /// both languages.
-    func valueUnit(volumeRaw: String, distanceRaw: String, lng: LanguageManager.Language) -> String {
+    func valueUnit(volumeRaw: String, distance: DistanceUnit, lng: LanguageManager.Language) -> String {
         switch self {
         case .per100:
             return GarageFormat.consumptionUnit(
-                volumeRaw: volumeRaw, distanceRaw: distanceRaw, lng: lng)
+                volumeRaw: volumeRaw, distance: distance, lng: lng)
         case .mpg:
             return "mpg"
         }

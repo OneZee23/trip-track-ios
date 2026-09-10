@@ -84,7 +84,8 @@ final class TripDistanceGateTests: XCTestCase {
                        "One idle (speed 0) segment")
         // Real moving avg here is ~12 km/h. WITHOUT the gate the 6.3 km teleport
         // would be added → ~1000+ km/h. So a low value proves the gate held.
-        XCTAssertLessThan(trip.movingAverageSpeedKmh, 50,
+        // Порог записан в СИ вместе со сплитом: 50 км/ч — это 13.9 м/с.
+        XCTAssertLessThan(trip.movingAverageSpeedMS, 50 / 3.6,
                           "Teleport segment must not inflate the moving average")
     }
 }

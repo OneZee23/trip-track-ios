@@ -30,6 +30,7 @@ struct PublicProfileView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @ObservedObject private var auth = AuthService.shared
     /// Only ever read in the own-profile preview: username, country and bio
     /// live on the device (the profile DTO carries none of the first two), so
@@ -867,7 +868,13 @@ struct PublicProfileView: View {
         let tripsValue = privacy ? dots : (stats.map { String($0.tripCount) } ?? "—")
         // Grouped like every other km figure in the app — a bare "%.0f"
         // printed «38420» beside «2 430» two cards away.
-        let kmValue = privacy ? dots : (stats.map { GarageFormat.odometer($0.totalKm, lng: lng) } ?? "—")
+        let kmValue = privacy ? dots : (stats.map {
+            Measure.distanceValue(km: $0.totalKm, unit: distanceUnit, lang: lng) } ?? "—")
+        // Подпись — от той же единицы, что и число: скрытая за точками
+        // статистика всё равно должна называть километры километрами, а мили
+        // милями, иначе «•••• км» обещает не то, что покажется.
+        let kmLabel = Measure.distanceParts(
+            km: stats?.totalKm ?? 0, unit: distanceUnit, lang: lng).unit
         let regionsValue = privacy ? dots : (stats.map { String($0.regionsCount) } ?? "—")
         // Trace what the UI is ACTUALLY rendering right now. Compare with the
         // `loadProfile decoded` line to spot the stale-state / wrong-field
@@ -890,7 +897,7 @@ struct PublicProfileView: View {
                     HStack(spacing: 0) {
                         statCell(value: tripsValue, label: AppStrings.trips(lang.language), c: c)
                         columnRule(c)
-                        statCell(value: kmValue, label: AppStrings.km(lang.language), c: c)
+                        statCell(value: kmValue, label: kmLabel, c: c)
                         columnRule(c)
                         statCell(value: regionsValue, label: AppStrings.statsRegions(lang.language), c: c)
                     }
@@ -1547,10 +1554,6 @@ struct PublicProfileView: View {
 
     /// «142», «21,5» — a trailing «.0» on a whole number is the thing that
     /// makes a card look machine-printed.
-    private func distanceText(_ km: Double, lng: LanguageManager.Language) -> String {
-        GarageFormat.fuel(km, lng: lng)
-    }
-
     /// Wraps a trip tile in a button where a trip can actually be opened, and
     /// leaves it exactly as it is where it can't — see `canOpenTrips`.
     @ViewBuilder
@@ -1638,7 +1641,8 @@ struct PublicProfileView: View {
                 Text(RelativeTripDate.string(from: trip.startDate, language: lang.language))
                     .foregroundStyle(c.textTertiary)
                 Text("·").foregroundStyle(c.textTertiary)
-                Text("\(distanceText(trip.distanceKm, lng: lng)) \(AppStrings.km(lang.language))")
+                Text(Measure.distance(
+                    metres: trip.distance, unit: distanceUnit, lang: lng, style: .tenths))
                     .foregroundStyle(c.textSecondary)
             }
             .font(.system(size: 10.5, weight: .semibold).monospacedDigit())

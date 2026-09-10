@@ -15,6 +15,7 @@ struct PublicGarageView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
 
     @State private var vehicles: [PublicVehicle] = []
@@ -160,7 +161,7 @@ struct PublicGarageView: View {
                         VehicleLevelPill(level: v.level, size: 9)
                     }
                     .padding(.top, 2)
-                    Text(GarageFormat.odometer(v.odometerKm, lng: l) + " " + AppStrings.km(l))
+                    Text(Measure.odometer(km: v.odometerKm, unit: distanceUnit, lang: l))
                         .font(.system(size: 11))
                         .foregroundStyle(c.textTertiary)
                 }
@@ -181,7 +182,7 @@ struct PublicGarageView: View {
     private func subtitle(_ v: PublicVehicle, _ l: LanguageManager.Language) -> String {
         var parts: [String] = []
         if let line = v.modelLine(l) { parts.append(line) }
-        parts.append(GarageFormat.odometer(v.odometerKm, lng: l) + " " + AppStrings.km(l))
+        parts.append(Measure.odometer(km: v.odometerKm, unit: distanceUnit, lang: l))
         return parts.joined(separator: " · ")
     }
 

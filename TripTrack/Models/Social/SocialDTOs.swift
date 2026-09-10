@@ -126,11 +126,13 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
         case commentCountRaw = "commentCount"
     }
 
-    var distanceKm: Double { distance / 1000.0 }
-    var maxSpeedKmh: Double { (maxSpeed ?? 0) * 3.6 }
-    var averageSpeedKmh: Double {
+    /// Средняя за поездку, в метрах в секунду — как у своей поездки
+    /// (`Trip.averageSpeed`). Лента не возит среднюю отдельным полем: она
+    /// выводится из расстояния и времени, и выводить её надо в том же СИ, в
+    /// котором приезжает и то и другое.
+    var averageSpeedMS: Double {
         guard duration > 0 else { return 0 }
-        return distanceKm / (Double(duration) / 3600.0)
+        return distance / Double(duration)
     }
     /// Human-readable duration formatter that matches the owner-side
     /// `Trip.formattedDurationHuman(lang:)` — "1 ч 19 мин" / "1 h 19 min"
@@ -296,8 +298,6 @@ struct SocialProfileRecentTrip: Codable, Identifiable, Hashable {
     /// km/h, and ONLY sent by the pre-feed-shape mapper. The feed item derives
     /// average speed from distance ÷ duration instead of carrying one.
     var averageSpeed: Double? = nil
-
-    var distanceKm: Double { distance / 1000.0 }
 
     /// The feed's item for this trip. `fallbackAuthor` is the profile being
     /// looked at — it only gets used against a server that predates the

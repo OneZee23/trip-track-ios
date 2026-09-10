@@ -25,7 +25,10 @@ struct AppPreferencesView: View {
 
     @ObservedObject private var settings = SettingsManager.shared
 
-    @AppStorage("distanceUnit") private var distanceUnit: String = "km"
+    /// Не `@Environment`, а сам писатель: этот экран и есть тот, кто меняет
+    /// единицу, а лист поверх листа своего окружения не наследует — строка
+    /// показала бы прежнюю единицу до закрытия экрана.
+    @ObservedObject private var units = UnitsManager.shared
 
     @State private var showUnitsPicker = false
     @State private var showAvgSpeedPicker = false
@@ -98,6 +101,11 @@ struct AppPreferencesView: View {
 
     // MARK: - Card
 
+    /// «км» / «миль» справа в строке — короткая подпись ТЕКУЩЕЙ единицы.
+    private func unitRowValue(_ l: LanguageManager.Language) -> String {
+        AppStrings.unitDistanceShort(l, unit: units.distance, value: 100, fractionDigits: 0)
+    }
+
     private func card(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
         let lng = l
         return VStack(spacing: 0) {
@@ -106,7 +114,7 @@ struct AppPreferencesView: View {
                 title: AppStrings.settingsUnits(l),
                 action: { showUnitsPicker = true }
             ) {
-                SettingsRowValue(text: GarageFormat.distanceShort(distanceUnit, lng: lng))
+                SettingsRowValue(text: unitRowValue(lng))
             }
             .accessibilityIdentifier("settings_units")
 
@@ -145,11 +153,11 @@ struct AppPreferencesView: View {
         SettingsOptionPicker(
             title: AppStrings.settingsUnits(l),
             options: DistanceUnit.allCases,
-            selection: DistanceUnit(rawValue: distanceUnit) ?? .km,
+            selection: units.distance,
             footnote: AppStrings.unitsPickerFootnote(l),
-            // The SYMBOL, not the word: `distanceShort` answers «миль» in RU, and
-            // four glyphs do not fit a 32pt badge. The row's own value below
-            // still uses the localized word, as canon draws it.
+            // The SYMBOL, not the word: the row's value answers «миль» in RU,
+            // and four glyphs do not fit a 32pt badge. The row's own value
+            // below still uses the localized word, as canon draws it.
             badge: { $0 == .miles ? "mi" : "km" },
             label: { $0.labelFull(l) },
             // Через `SettingsManager`, а не голым присваиванием `@AppStorage`:

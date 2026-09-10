@@ -333,7 +333,9 @@ final class MyMapViewModel: ObservableObject {
     /// distance to a bare coordinate says nothing — the point of the line is
     /// to name a place you remember and make the gap feel crossable.
     struct NearestTrace {
-        let distanceKm: Int
+        /// Метры — потому что показать их надо будет в том, что выбрал
+        /// человек, а округление до целого километра уже съело бы мили.
+        let distanceMetres: Double
         let bearing: Bearing
         let cityName: String
         let date: Date?
@@ -377,7 +379,7 @@ final class MyMapViewModel: ObservableObject {
         }
 
         return NearestTrace(
-            distanceKm: max(1, Int((edge / 1000).rounded())),
+            distanceMetres: max(1000, edge),
             bearing: bearing,
             cityName: best.city.name,
             date: latestTrip?.startDate

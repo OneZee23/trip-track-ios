@@ -155,7 +155,8 @@ enum NotificationInviteRowModel {
         return DecisionLine(
             dateText: RelativeTripDate.string(from: preview.startDate, language: lang),
             regionText: (region?.isEmpty == false) ? region : nil,
-            distanceText: "\(oneDecimal(preview.distance / 1000)) \(AppStrings.km(lang))",
+            distanceText: Measure.distance(
+                metres: preview.distance, unit: DistanceUnit.current, lang: lang, style: .tenths),
             durationText: preview.formattedDurationHuman(lang)
         )
     }

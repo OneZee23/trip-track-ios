@@ -71,9 +71,6 @@ struct VehicleDetailView: View {
     @State private var connectedStereo: String?
 
     @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
-    /// Сырая строка выбора — её ждёт подпись расхода («л/100км»). Единица для
-    /// ПОКАЗА расстояния приезжает из окружения, не отсюда.
-    @AppStorage("distanceUnit") private var distanceUnitRaw: String = "km"
     @AppStorage(ConsumptionUnit.storageKey)
     private var consumptionUnitRaw: String = ConsumptionUnit.per100.rawValue
     @AppStorage(FuelCurrency.storageKey) private var currency: String = FuelCurrency.defaultSymbol
@@ -473,12 +470,12 @@ struct VehicleDetailView: View {
         if vehicle.manualOdometerKm != nil {
             VStack(alignment: .leading, spacing: 2) {
                 Text(AppStrings.odometerTrackedLine(
-                    l, km: "\(GarageFormat.odometer(vehicle.odometerKm, lng: l)) \(AppStrings.km(l))"))
+                    l, km: Measure.odometer(km: vehicle.odometerKm, unit: distanceUnit, lang: l)))
                     .font(.system(size: 11.5))
                     .foregroundStyle(c.textTertiary)
                 if let gap = vehicle.untrackedKm {
                     Text(AppStrings.odometerUntrackedLine(
-                        l, km: "\(GarageFormat.odometer(gap, lng: l)) \(AppStrings.km(l))"))
+                        l, km: Measure.odometer(km: gap, unit: distanceUnit, lang: l)))
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                 }
@@ -492,14 +489,21 @@ struct VehicleDetailView: View {
     /// была сетка из двух плиток (пробег + расход), и пробег в ней читался
     /// наравне с расходом, хотя он и есть биография машины. Расход никуда не
     /// делся: он живёт в топливной секции ниже, где ему и место.
+    /// Пробег машины — число и подпись. Одометр хранится в километрах и в
+    /// 0.6.7 в метры не мигрирует (против него уже записаны уровни машин в
+    /// базе), поэтому вход у `Measure` тут километровый и назван вслух.
+    private func odometerParts(_ vehicle: Vehicle, _ l: LanguageManager.Language) -> Measure.Parts {
+        Measure.distanceParts(km: vehicle.displayOdometerKm, unit: distanceUnit, lang: l)
+    }
+
     private func odometerCard(_ vehicle: Vehicle, c: AppTheme.Colors,
                               l: LanguageManager.Language) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(GarageFormat.odometer(vehicle.displayOdometerKm, lng: l))
+                Text(odometerParts(vehicle, l).value)
                     .font(.system(size: 26, weight: .heavy))
                     .foregroundStyle(c.text)
-                Text(AppStrings.km(l))
+                Text(odometerParts(vehicle, l).unit)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(c.textTertiary)
                 Spacer(minLength: 8)
@@ -533,9 +537,9 @@ struct VehicleDetailView: View {
             statCard(
                 // Главный — реальный, если введён (решение владельца 02.09).
                 // Именно он живёт на приборке, и именно его человек сверяет.
-                value: GarageFormat.odometer(vehicle.displayOdometerKm, lng: l),
+                value: odometerParts(vehicle, l).value,
                 valueColor: c.text,
-                unit: AppStrings.km(l),
+                unit: odometerParts(vehicle, l).unit,
                 label: vehicle.manualOdometerKm == nil
                     ? AppStrings.odometerLabel(l)
                     : AppStrings.odometerRealLabel(l),
@@ -790,7 +794,7 @@ struct VehicleDetailView: View {
 
                     if agg.maxDayKm > 0 {
                         rowDivider(c)
-                        recordRow(AppStrings.statsRecordBestDay(l),
+                        recordRow(AppStrings.statsRecordBestDay(l, unit: distanceUnit),
                                   agg.longestTripDate.map { Self.dayFormatter(l).string(from: $0) } ?? "—",
                                   kmValue(agg.maxDayKm, l), c: c)
                     }
@@ -820,7 +824,7 @@ struct VehicleDetailView: View {
     }
 
     private func kmValue(_ km: Double, _ l: LanguageManager.Language) -> String {
-        GarageFormat.odometer(km, lng: l) + " " + AppStrings.km(l)
+        Measure.distance(km: km, unit: distanceUnit, lang: l)
     }
 
     private func metersValue(_ m: Double, _ l: LanguageManager.Language) -> String {
@@ -1203,7 +1207,7 @@ struct VehicleDetailView: View {
 
     private func consumptionUnitLabel(_ l: LanguageManager.Language) -> String {
         shownConsumptionUnit.valueUnit(
-            volumeRaw: volumeUnit, distanceRaw: distanceUnitRaw, lng: l)
+            volumeRaw: volumeUnit, distance: distanceUnit, lng: l)
     }
 
     /// A stored per-100 figure, expressed in whatever unit is on screen.

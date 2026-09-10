@@ -6,6 +6,7 @@ struct GarageView: View {
     /// Garage sheet itself (ProfileView) does not reach a sheet presented
     /// from HERE, so the add-vehicle form must re-apply it.
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
     /// Главные снимки всего гаража, снятые разом. Не в теле вью: там это была
     /// бы выборка на карточку на каждый кадр прокрутки.
@@ -367,8 +368,7 @@ struct GarageView: View {
         _ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language
     ) -> some View {
         HStack(spacing: 14) {
-            fact("mappin", GarageFormat.odometer(vehicle.displayOdometerKm, lng: l)
-                 + " " + AppStrings.km(l), c: c)
+            fact("mappin", Measure.odometer(km: vehicle.displayOdometerKm, unit: distanceUnit, lang: l), c: c)
             if let trips = tripCounts[vehicle.id], trips > 0 {
                 fact("flag.checkered", "\(trips) " + AppStrings.nounTrips(l, trips), c: c)
             }

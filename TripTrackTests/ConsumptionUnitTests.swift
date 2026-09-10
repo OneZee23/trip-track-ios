@@ -72,11 +72,19 @@ final class ConsumptionUnitTests: XCTestCase {
     /// mpg is a fixed word.
     func testValueUnitFollowsTheOtherSettings() {
         XCTAssertEqual(
-            ConsumptionUnit.per100.valueUnit(volumeRaw: "liters", distanceRaw: "km", lng: .ru),
+            ConsumptionUnit.per100.valueUnit(volumeRaw: "liters", distance: .km, lng: .ru),
             "л/100км")
         XCTAssertEqual(
-            ConsumptionUnit.mpg.valueUnit(volumeRaw: "liters", distanceRaw: "km", lng: .ru),
+            ConsumptionUnit.mpg.valueUnit(volumeRaw: "liters", distance: .km, lng: .ru),
             "mpg")
+        // Мили — существительное, и подпись их склоняет по сотне: «л/100 миль»
+        // читается, «л/100 миля» — машинный перевод.
+        XCTAssertEqual(
+            ConsumptionUnit.per100.valueUnit(volumeRaw: "liters", distance: .miles, lng: .ru),
+            "л/100миль")
+        XCTAssertEqual(
+            ConsumptionUnit.per100.valueUnit(volumeRaw: "liters", distance: .miles, lng: .en),
+            "L/100mi")
     }
 
     // MARK: - Fuel price

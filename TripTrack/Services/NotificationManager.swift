@@ -180,11 +180,21 @@ final class NotificationManager: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
-    func sendAutoStopNotification(distanceKm: Double, duration: String) {
+    /// «Поездка сохранена: 12,4 км · 23 мин».
+    ///
+    /// Единица читается СВЕЖО, а не запоминается в поле: уведомление
+    /// собирается через минуты после того, как сервис проснулся, и человек мог
+    /// за это время переключить настройку — или её мог привезти пул со второго
+    /// телефона. Строка на экране блокировки правится потом только удалением.
+    func sendAutoStopNotification(metres: Double, duration: String) {
         let lang = currentLang()
+        let unit = DistanceUnit.current
         let content = UNMutableNotificationContent()
         content.title = AppStrings.notifAutoStopTitle(lang)
-        content.body = AppStrings.notifAutoStopSummary(lang, km: String(format: "%.1f", distanceKm), time: duration)
+        content.body = AppStrings.notifAutoStopSummary(
+            lang,
+            km: Measure.distanceValue(metres: metres, unit: unit, lang: lang, style: .tenths),
+            time: duration)
         content.sound = .default
 
         let request = UNNotificationRequest(

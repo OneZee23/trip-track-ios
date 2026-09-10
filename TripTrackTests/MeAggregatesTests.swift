@@ -78,7 +78,7 @@ final class MeAggregatesTests: XCTestCase {
         XCTAssertEqual(a.monthlyKm[11], 50, accuracy: 0.001)
         XCTAssertEqual(a.monthlyKm[1...10].reduce(0, +), 0, accuracy: 0.001)
         // Longest year trip is the 100 km one — the 999 km trip is last year.
-        XCTAssertEqual(a.longestYearTrip?.distanceKm ?? 0, 100, accuracy: 0.001)
+        XCTAssertEqual((a.longestYearTrip?.distance ?? 0) / 1000, 100, accuracy: 0.001)
         // All-time longest IS the 999 km one.
         XCTAssertEqual(a.longestTripKm, 999, accuracy: 0.001)
     }
@@ -172,7 +172,7 @@ final class MeAggregatesTests: XCTestCase {
         let nearer = trip(start: cal.date(byAdding: .day, value: -2, to: target)!, km: 90)
         let far = trip(start: cal.date(byAdding: .day, value: 10, to: target)!, km: 500)
         let a = MeAggregates.compute(trips: [near, nearer, far], now: now, calendar: cal)
-        XCTAssertEqual(a.yearAgoTrip?.distanceKm ?? 0, 90, accuracy: 0.001)
+        XCTAssertEqual((a.yearAgoTrip?.distance ?? 0) / 1000, 90, accuracy: 0.001)
     }
 
     func testTopRegionByTripCount() {
@@ -194,8 +194,8 @@ final class MeAggregatesTests: XCTestCase {
         let a = MeAggregates.compute(trips: trips.shuffled(), now: now, calendar: cal)
         XCTAssertEqual(a.recentTrips.count, 10)
         // Newest first: March 15 down to March 6.
-        XCTAssertEqual(a.recentTrips.first?.distanceKm ?? 0, 15, accuracy: 0.001)
-        XCTAssertEqual(a.recentTrips.last?.distanceKm ?? 0, 6, accuracy: 0.001)
+        XCTAssertEqual((a.recentTrips.first?.distance ?? 0) / 1000, 15, accuracy: 0.001)
+        XCTAssertEqual((a.recentTrips.last?.distance ?? 0) / 1000, 6, accuracy: 0.001)
     }
 
     func testMaxDayAggregates() {

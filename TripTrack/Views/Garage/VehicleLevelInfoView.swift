@@ -17,6 +17,7 @@ struct VehicleLevelInfoView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
 
     /// One row per decade of `VehicleLevelSystem`'s ramp: 0 stands for 1–9,
@@ -87,7 +88,7 @@ struct VehicleLevelInfoView: View {
             Text(
                 AppStrings.vehicleLevelToNext(
                     l,
-                    km: GarageFormat.odometer(remaining, lng: l),
+                    distance: Measure.distance(km: remaining, unit: distanceUnit, lang: l),
                     level: level + 1
                 )
             )

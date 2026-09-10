@@ -16,10 +16,6 @@ struct TrackPoint: Identifiable, Codable {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
-    var speedKmh: Double {
-        speed * 3.6
-    }
-
     init(id: UUID = UUID(), latitude: Double, longitude: Double, altitude: Double = 0,
          speed: Double = 0, course: Double = -1, horizontalAccuracy: Double = 0,
          timestamp: Date = Date(), isInterpolated: Bool = false) {

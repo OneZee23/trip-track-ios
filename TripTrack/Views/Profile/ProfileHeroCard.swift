@@ -39,6 +39,7 @@ struct ProfileHeroCard: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
 
     private static let avatarSize: CGFloat = 64
 
@@ -169,7 +170,8 @@ struct ProfileHeroCard: View {
             HStack(spacing: 0) {
                 column(value: "\(trips)", label: AppStrings.trips(lang.language))
                 divider
-                column(value: GarageFormat.odometer(km, lng: lang.language), label: AppStrings.statsKmTotal(lang.language))
+                column(value: Measure.distanceValue(km: km, unit: distanceUnit, lang: lang.language),
+                       label: AppStrings.statsKmTotal(lang.language, unit: distanceUnit))
                 divider
                 column(value: "\(regions)", label: AppStrings.statsRegions(lang.language))
             }

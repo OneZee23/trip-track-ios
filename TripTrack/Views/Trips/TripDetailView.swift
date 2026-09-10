@@ -1001,7 +1001,7 @@ struct TripDetailView: View {
                     // passed a value — and this is one of the two screens that
                     // holds the earning trip, so it can.
                     recordValue: trip.flatMap {
-                        badge.recordValue(for: $0, language: lang.language)
+                        badge.recordValue(for: $0, unit: distanceUnit, language: lang.language)
                     },
                     // The trip is what earned it, and it is the trip we are
                     // standing on — so the card can name it.
@@ -1183,7 +1183,10 @@ struct TripDetailView: View {
             let totalKm = running / 1000
 
             let altitudes = pts.map(\.altitude)
-            let speedsKmh = pts.map { max(0, $0.speed * 3.6) }
+            // Метры в секунду, а не километры в час: график красится по
+            // `SpeedColorScale` (СИ) и подписывается `Measure` (СИ), и
+            // переводить туда-обратно ради хранения в середине незачем.
+            let speedsMS = pts.map { max(0, $0.speed) }
             // The timestamps ride along so a touch on either chart can say
             // when that kilometre happened.
             let elevBuckets = ChartSeriesBuilder.buckets(
@@ -1191,7 +1194,7 @@ struct TripDetailView: View {
                 dates: cachedTimestamps, totalKm: totalKm
             )
             let speedBuckets = ChartSeriesBuilder.buckets(
-                cumulativeKm: cumulativeKm, values: speedsKmh,
+                cumulativeKm: cumulativeKm, values: speedsMS,
                 dates: cachedTimestamps, totalKm: totalKm
             )
             let elev = elevBuckets.enumerated().map { i, b in
@@ -1445,7 +1448,7 @@ struct TripDetailView: View {
         let authorName = AuthService.shared.userName
             ?? (AppStrings.tripDetailMyTrip(lang.language))
         let authorEmoji = settings.avatarEmoji
-        let data = StoryShareData.from(trip, authorName: authorName, authorEmoji: authorEmoji, lang: lang.language)
+        let data = StoryShareData.from(trip, authorName: authorName, authorEmoji: authorEmoji, unit: distanceUnit, lang: lang.language)
 
         // If signed in, try to generate a public share link via the server.
         // If offline or not signed in — fall back to image-only share.
@@ -1928,7 +1931,9 @@ isOwn
                             gain: "\(Int(cachedElevationGain)) \(AppStrings.m(lang.language))"
                         ),
                         leftLabel: trip.region ?? "",
-                        rightLabel: "\(Int(trip.distanceKm.rounded())) \(AppStrings.km(lang.language))"
+                        rightLabel: Measure.distance(
+                            metres: trip.distance, unit: distanceUnit,
+                            lang: lang.language, style: .grouped)
                     )
                 }
             }
@@ -1941,8 +1946,11 @@ isOwn
                         language: lang.language,
                         summary: AppStrings.chartMaxAvg(
                             lang.language,
-                            max: "\(Int(trip.maxSpeedKmh))",
-                            avg: "\(Int(trip.displayAverageSpeedKmh(settings.avgSpeedMode)))"
+                            max: Measure.speedValue(
+                                ms: trip.maxSpeed, unit: distanceUnit, lang: lang.language),
+                            avg: Measure.speedValue(
+                                ms: trip.displayAverageSpeedMS(settings.avgSpeedMode),
+                                unit: distanceUnit, lang: lang.language)
                         )
                     )
                 }
@@ -2849,6 +2857,24 @@ isOwn
 
     // MARK: - Stats grid («Детали»)
 
+    /// Три плитки «Детали» — расстояние, средняя, максимум. Число и подпись
+    /// стоят в разных `Text`, но собирает их одна функция: подпись склоняется
+    /// по показанному числу, и разлучить их значит однажды сложить «5» с
+    /// «мили».
+    private func tripDistance(_ trip: Trip, _ l: LanguageManager.Language) -> Measure.Parts {
+        Measure.distanceParts(
+            metres: trip.distance, unit: distanceUnit, lang: l, style: .tenths)
+    }
+
+    private func tripAvgSpeed(_ trip: Trip, _ l: LanguageManager.Language) -> Measure.Parts {
+        Measure.speedParts(
+            ms: trip.displayAverageSpeedMS(settings.avgSpeedMode), unit: distanceUnit, lang: l)
+    }
+
+    private func tripMaxSpeed(_ trip: Trip, _ l: LanguageManager.Language) -> Measure.Parts {
+        Measure.speedParts(ms: trip.maxSpeed, unit: distanceUnit, lang: l)
+    }
+
     private func statsGrid(trip: Trip, c: AppTheme.Colors) -> some View {
         let l = lang.language
         return LazyVGrid(columns: [
@@ -2856,8 +2882,8 @@ isOwn
             GridItem(.flexible(), spacing: 10)
         ], spacing: 10) {
             DetailStatCard(
-                value: String(format: "%.1f", trip.distanceKm),
-                unit: AppStrings.km(l),
+                value: tripDistance(trip, l).value,
+                unit: tripDistance(trip, l).unit,
                 label: AppStrings.distance(l),
                 color: AppTheme.green,
                 staggerIndex: 0
@@ -2887,15 +2913,15 @@ isOwn
                 )
             }
             DetailStatCard(
-                value: String(format: "%.0f", trip.displayAverageSpeedKmh(settings.avgSpeedMode)),
-                unit: AppStrings.kmh(l),
+                value: tripAvgSpeed(trip, l).value,
+                unit: tripAvgSpeed(trip, l).unit,
                 label: AppStrings.statAvg(l),
                 color: AppTheme.blue,
                 staggerIndex: 4
             )
             DetailStatCard(
-                value: String(format: "%.0f", trip.maxSpeedKmh),
-                unit: AppStrings.kmh(l),
+                value: tripMaxSpeed(trip, l).value,
+                unit: tripMaxSpeed(trip, l).unit,
                 label: AppStrings.statMax(l),
                 color: AppTheme.red,
                 staggerIndex: 5
@@ -2945,19 +2971,24 @@ isOwn
         } else {
             vehicle = nil
         }
-        guard let v = vehicle, v.cityConsumption > 0, trip.distanceKm > 0.1 else { return nil }
-        let fuel = v.fuelCost(distanceKm: trip.distanceKm, avgSpeedKmh: trip.averageSpeedKmh)
+        // Сто метров — та же граница «ехали или маневрировали», что стояла
+        // здесь как «0.1 км». В метрах, потому что её сосед по строке —
+        // `trip.distance`, а не показанное число.
+        guard let v = vehicle, v.cityConsumption > 0, trip.distance > 100 else { return nil }
+        // Метры и метры в секунду: мили, протёкшие в расход, дают +60 % литров
+        // и денег молча — расстояние входит в него дважды.
+        let fuel = v.fuelCost(metres: trip.distance, avgSpeedMS: trip.averageSpeed)
 
         let volumeUnit = UserDefaults.standard.string(forKey: "volumeUnit") ?? "liters"
         let currency = trip.fuelCurrency ?? FuelCurrency.current
         let volShort = volumeUnit == "gallons" ? (AppStrings.unitGallonsShort(lang.language)) : (AppStrings.unitLitresShort(lang.language))
 
-        let volume: Double
-        if volumeUnit == "gallons" {
-            volume = fuel.liters / 3.78541
-        } else {
-            volume = fuel.liters
-        }
+        // Константа галлона живёт в `ConsumptionUnit` и больше нигде: здесь
+        // стояла её ЧЕТВЁРТАЯ копия, и записана она была с обрезанной пятой
+        // цифрой — 3.78541 против точных 3.785411784.
+        let volume = volumeUnit == "gallons"
+            ? fuel.liters / ConsumptionUnit.litresPerGallon
+            : fuel.liters
 
         return (volume, fuel.cost, volShort, currency)
     }

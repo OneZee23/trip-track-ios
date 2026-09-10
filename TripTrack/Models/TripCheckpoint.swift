@@ -48,8 +48,6 @@ struct TripCheckpoint: Identifiable, Codable, Equatable {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
-    var distanceKm: Double { distanceFromStart / 1000 }
-
     init(
         id: UUID = UUID(),
         timestamp: Date,

@@ -30,6 +30,7 @@ struct JourneyDaysList: View {
     var onRemoveLeg: (Trip) -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     /// Раскрытые стоянки, по id первой поездки каждой.
     @State private var expanded: Set<UUID> = []
     /// Плечо, у которого открыто меню действий. Одно на весь список: два
@@ -218,7 +219,7 @@ struct JourneyDaysList: View {
 
     /// «5 ч 20 мин · 480 км · 2 отметки».
     ///
-    /// Километры — через `GarageFormat.odometer`, как везде: своё
+    /// Километры — через `Measure`, как везде: своё
     /// `Int(distance / 1000)` и разряды не разбивало («1000 км» вместо
     /// «1 000 км», а на немецком телефоне — вместо «1.000 km»), и округляло
     /// ВНИЗ, из-за чего три плеча по 100,6 км стояли под итогом «303 км»
@@ -226,7 +227,7 @@ struct JourneyDaysList: View {
     private func legMeta(_ trip: Trip) -> String {
         var parts = [
             JourneyFormat.duration(trip.duration, language: language),
-            "\(GarageFormat.odometer(trip.distance / 1000, lng: language)) \(AppStrings.km(language))",
+            Measure.distance(metres: trip.distance, unit: distanceUnit, lang: language, style: .grouped),
         ]
         if !trip.checkpoints.isEmpty {
             parts.append("\(trip.checkpoints.count) \(AppStrings.nounCheckpoints(language, trip.checkpoints.count))")
@@ -394,7 +395,7 @@ struct JourneyDaysList: View {
         let photos = trips.reduce(0) { $0 + $1.photos.count }
         var parts = [
             "\(trips.count) \(AppStrings.nounTrips(language, trips.count)) \(AppStrings.journeyAroundTown(language))",
-            "\(GarageFormat.odometer(metres / 1000, lng: language)) \(AppStrings.km(language))",
+            Measure.distance(metres: metres, unit: distanceUnit, lang: language, style: .grouped),
             JourneyFormat.duration(seconds, language: language),
         ]
         if photos > 0 {

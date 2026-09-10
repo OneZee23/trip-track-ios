@@ -16,7 +16,7 @@ final class TripTrackTests: XCTestCase {
         let end = Date()
         let trip = Trip(startDate: start, endDate: end, distance: 50000)
         XCTAssertEqual(trip.duration, 3600, accuracy: 1)
-        XCTAssertEqual(trip.distanceKm, 50)
+        XCTAssertEqual(trip.scoringKm, 50)
         XCTAssertFalse(trip.isActive)
     }
 
@@ -24,7 +24,7 @@ final class TripTrackTests: XCTestCase {
         let point = TrackPoint(latitude: 55.7558, longitude: 37.6173, altitude: 150, speed: 16.7)
         XCTAssertEqual(point.latitude, 55.7558)
         XCTAssertEqual(point.longitude, 37.6173)
-        XCTAssertEqual(point.speedKmh, 16.7 * 3.6, accuracy: 0.1)
+        XCTAssertEqual(point.speed, 16.7, accuracy: 0.1)
     }
 
     func testTripFormattedDuration() {

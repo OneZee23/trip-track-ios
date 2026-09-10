@@ -21,6 +21,7 @@ struct PublicMapView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @StateObject private var vm: MyMapViewModel
 
     init(accountId: UUID, ownerName: String?, vehicleId: UUID? = nil) {
@@ -158,8 +159,8 @@ struct PublicMapView: View {
                     cell(String(vm.exploration.trips.count),
                          AppStrings.publicRoutesCaption(l), c)
                     rule(c)
-                    cell(GarageFormat.odometer(vm.exploration.totalKm, lng: l),
-                         AppStrings.km(l), c)
+                    cell(Measure.distanceValue(km: vm.exploration.totalKm, unit: distanceUnit, lang: l),
+                         Measure.distanceParts(km: vm.exploration.totalKm, unit: distanceUnit, lang: l).unit, c)
                     rule(c)
                     cell(String(vm.exploration.regions.count),
                          AppStrings.statsRegions(l), c)
