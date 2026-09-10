@@ -1,9 +1,20 @@
 import SwiftUI
 
+/// Плашка «REC» поверх ленты, пока идёт запись.
+///
+/// Расстояние приезжает сюда в МЕТРАХ и подписывается `Measure`. До 0.6.7
+/// строка собиралась как `String(format: "%.1f km", distance)`: английское
+/// «km» и английская точка мимо всех тринадцати языков — на немецком телефоне
+/// «12.4 km» вместо «12,4 км», и ни одна таблица переводов об этой строке не
+/// знала, потому что её там не было.
 struct RecordingBanner: View {
-    let distance: Double    // km
+    /// Метры, а не километры: единица выбирается на показе, и хранить её
+    /// внутри параметра значило бы решить за экран.
+    let metres: Double
     let duration: String
     let onTap: () -> Void
+    @EnvironmentObject private var lang: LanguageManager
+    @Environment(\.distanceUnit) private var distanceUnit
     @State private var pulse = false
 
     var body: some View {
@@ -21,7 +32,8 @@ struct RecordingBanner: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(AppTheme.red)
 
-                Text(String(format: "%.1f km", distance))
+                Text(Measure.distance(
+                    metres: metres, unit: distanceUnit, lang: lang.language, style: .tenths))
                     .font(.system(size: 13, weight: .semibold).monospacedDigit())
                     .foregroundStyle(AppTheme.textPrimary)
 

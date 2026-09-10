@@ -17,6 +17,7 @@ struct VehicleTripsView: View {
     /// из которого нельзя открыть поездку, — это витрина, а не список.
     @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
 
     enum Sort: CaseIterable {
@@ -180,7 +181,7 @@ struct VehicleTripsView: View {
                 }
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(TripRowText.km(trip, l))
+                    Text(TripRowText.distance(trip, l, unit: distanceUnit))
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(trip.isPrivate ? c.textSecondary : c.text)
                     if trip.elevation > 0 {

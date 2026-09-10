@@ -515,7 +515,7 @@ struct FeedView: View {
         // Recording banner overlay
         if mapVM.isRecording {
             RecordingBanner(
-                distance: mapVM.distance,
+                metres: mapVM.distance * 1000,
                 duration: mapVM.duration,
                 onTap: { selectedTab = .record }
             )

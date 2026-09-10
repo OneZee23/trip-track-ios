@@ -16,6 +16,7 @@ struct VehicleDetailView: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
@@ -70,7 +71,9 @@ struct VehicleDetailView: View {
     @State private var connectedStereo: String?
 
     @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
-    @AppStorage("distanceUnit") private var distanceUnit: String = "km"
+    /// Сырая строка выбора — её ждёт подпись расхода («л/100км»). Единица для
+    /// ПОКАЗА расстояния приезжает из окружения, не отсюда.
+    @AppStorage("distanceUnit") private var distanceUnitRaw: String = "km"
     @AppStorage(ConsumptionUnit.storageKey)
     private var consumptionUnitRaw: String = ConsumptionUnit.per100.rawValue
     @AppStorage(FuelCurrency.storageKey) private var currency: String = FuelCurrency.defaultSymbol
@@ -741,7 +744,7 @@ struct VehicleDetailView: View {
                                 .foregroundStyle(c.textTertiary)
                         }
                         Spacer(minLength: 8)
-                        Text(TripRowText.km(trip, l))
+                        Text(TripRowText.distance(trip, l, unit: distanceUnit))
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(c.text)
                         Image(systemName: "chevron.right")
@@ -1200,7 +1203,7 @@ struct VehicleDetailView: View {
 
     private func consumptionUnitLabel(_ l: LanguageManager.Language) -> String {
         shownConsumptionUnit.valueUnit(
-            volumeRaw: volumeUnit, distanceRaw: distanceUnit, lng: l)
+            volumeRaw: volumeUnit, distanceRaw: distanceUnitRaw, lng: l)
     }
 
     /// A stored per-100 figure, expressed in whatever unit is on screen.

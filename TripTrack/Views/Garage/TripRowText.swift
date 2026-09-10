@@ -37,11 +37,12 @@ enum TripRowText {
 
     /// Короткая поездка не должна показывать «0 км»: четыреста метров — это
     /// «0,4», а ноль читается как сломанная запись.
-    static func km(_ t: Trip, _ l: LanguageManager.Language) -> String {
-        let value = t.distanceKm < 10
-            ? GarageFormat.fuel(t.distanceKm, lng: l)
-            : GarageFormat.odometer(t.distanceKm, lng: l)
-        return value + " " + AppStrings.km(l)
+    ///
+    /// Ровно это и есть `Measure.Style.adaptive`, и с 0.6.7 правило берётся
+    /// оттуда: своя копия «до десяти — с десятыми» разошлась бы с отметками и
+    /// с виджетом на первой же миле, где порог не десять, а шесть.
+    static func distance(_ t: Trip, _ l: LanguageManager.Language, unit: DistanceUnit) -> String {
+        Measure.distance(metres: t.distance, unit: unit, lang: l, style: .adaptive)
     }
 
     static func elevation(_ t: Trip, _ l: LanguageManager.Language) -> String {

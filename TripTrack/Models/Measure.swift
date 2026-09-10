@@ -26,6 +26,17 @@ import Foundation
 /// три живых бага локали (точка вместо запятой на немецком телефоне).
 enum Measure {
 
+    /// Число и подпись врозь — но собранные вместе.
+    ///
+    /// Склеиваются они через ОБЫЧНЫЙ пробел, не через неразрывный: неразрывный
+    /// уже стоит ВНУТРИ числа (в разрядах), и «12 000 км» с двумя разными
+    /// пробелами выглядит одинаково, а сравнивается по-разному — на этом
+    /// однажды разойдутся тест и экран.
+    struct Parts {
+        let value: String
+        let unit: String
+    }
+
     /// Сколько знаков показывать. Округление у каждой точки вызова остаётся
     /// сегодняшним — три стиля описывают то, что уже нарисовано, а не новую
     /// вёрстку.
@@ -54,10 +65,28 @@ enum Measure {
         lang: LanguageManager.Language,
         style: Style = .adaptive
     ) -> String {
+        let p = distanceParts(metres: metres, unit: unit, lang: lang, style: style)
+        return "\(p.value) \(p.unit)"
+    }
+
+    /// То же самое, но врозь — для вёрстки, где число и подпись стоят разными
+    /// `Text`: плитки итога поездки, плашка REC, спидометр, постер.
+    ///
+    /// Врозь их СОБИРАЕТ всё равно одна функция, и это не формальность:
+    /// подпись склоняется по показанному числу («8,4 мили», но «5 миль»), а
+    /// значит знать его она должна после округления, а не до. Сегодняшний
+    /// постер — пример того, что бывает иначе: число считается на одном
+    /// экране, подпись дописывается на другом, и они разъезжаются.
+    static func distanceParts(
+        metres: Double,
+        unit: DistanceUnit,
+        lang: LanguageManager.Language,
+        style: Style = .adaptive
+    ) -> Parts {
         let shown = number(unit.distance(fromMetres: metres), style: style, unit: unit, lang: lang)
-        return label(
-            shown,
-            AppStrings.unitDistanceShort(
+        return Parts(
+            value: shown.text,
+            unit: AppStrings.unitDistanceShort(
                 lang, unit: unit, value: shown.value, fractionDigits: shown.fractionDigits)
         )
     }
@@ -94,8 +123,19 @@ enum Measure {
         unit: DistanceUnit,
         lang: LanguageManager.Language
     ) -> String {
-        let shown = number(unit.speed(fromMetresPerSecond: ms), style: .grouped, unit: unit, lang: lang)
-        return label(shown, AppStrings.unitSpeedShort(lang, unit: unit))
+        let p = speedParts(ms: ms, unit: unit, lang: lang)
+        return "\(p.value) \(p.unit)"
+    }
+
+    static func speedParts(
+        ms: Double,
+        unit: DistanceUnit,
+        lang: LanguageManager.Language
+    ) -> Parts {
+        Parts(
+            value: number(unit.speed(fromMetresPerSecond: ms), style: .grouped, unit: unit, lang: lang).text,
+            unit: AppStrings.unitSpeedShort(lang, unit: unit)
+        )
     }
 
     static func speedValue(
@@ -116,10 +156,19 @@ enum Measure {
         unit: DistanceUnit,
         lang: LanguageManager.Language
     ) -> String {
+        let p = elevationParts(metres: metres, unit: unit, lang: lang)
+        return "\(p.value) \(p.unit)"
+    }
+
+    static func elevationParts(
+        metres: Double,
+        unit: DistanceUnit,
+        lang: LanguageManager.Language
+    ) -> Parts {
         let shown = number(unit.elevation(fromMetres: metres), style: .grouped, unit: unit, lang: lang)
-        return label(
-            shown,
-            AppStrings.unitElevationShort(
+        return Parts(
+            value: shown.text,
+            unit: AppStrings.unitElevationShort(
                 lang, unit: unit, value: shown.value, fractionDigits: shown.fractionDigits)
         )
     }
@@ -160,7 +209,7 @@ enum Measure {
         case .grouped:
             return grouped(value, lang)
         case .adaptive:
-            return value < unit.tenthsBelow ? tenths(value, lang) : grouped(value, lang)
+            return unit.showsTenths(value) ? tenths(value, lang) : grouped(value, lang)
         }
     }
 
@@ -186,11 +235,5 @@ enum Measure {
         )
     }
 
-    /// Число и подпись через обычный пробел — ровно так их сегодня и склеивают
-    /// на экранах. Неразрывным здесь пробел не делаем: он уже стоит ВНУТРИ
-    /// числа (в разрядах), и «12 000 км» с двумя разными пробелами выглядит
-    /// одинаково, а сравнивается по-разному.
-    private static func label(_ shown: Shown, _ unit: String) -> String {
-        "\(shown.text) \(unit)"
-    }
+
 }

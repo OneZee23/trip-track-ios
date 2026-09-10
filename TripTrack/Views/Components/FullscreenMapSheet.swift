@@ -85,6 +85,7 @@ struct FullscreenMapSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     /// Bumped by the zoom buttons; the map reads the change, not the value.
     @State private var zoomTick = 0
     @StateObject private var engine = TripReplayEngine()
@@ -809,7 +810,11 @@ struct FullscreenMapSheet: View {
     }
 
     private func passReading(_ fix: TripRouteLocator.Fix) -> String {
-        CheckpointReading.text(elapsed: fix.elapsedFromStart, metres: fix.distanceFromStart, lang: language)
+        CheckpointReading.text(
+            elapsed: fix.elapsedFromStart,
+            metres: fix.distanceFromStart,
+            unit: distanceUnit,
+            lang: language)
     }
 
     // MARK: - Выбранная отметка

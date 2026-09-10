@@ -8,6 +8,22 @@ struct RecoveryPromptSheet: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
+
+    /// «12,4 км» — сколько успела записать оборванная поездка.
+    ///
+    /// До 0.6.7 здесь стоял `String(format: "%.1f")`, то есть точка вместо
+    /// запятой на всех тринадцати языках, кроме английского и филиппинского.
+    /// Экран, который просит доверия к спасённой записи, начинался с цифры,
+    /// написанной не так, как её пишут в этой стране.
+    private var recoveredDistance: String {
+        Measure.distance(
+            metres: mapVM.recoveryDistanceKm * 1000,
+            unit: distanceUnit,
+            lang: lang.language,
+            style: .tenths
+        )
+    }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -41,7 +57,7 @@ struct RecoveryPromptSheet: View {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 13))
-                Text("\(AppStrings.recoveryChip(lang.language)) · \(String(format: "%.1f", mapVM.recoveryDistanceKm)) \(AppStrings.km(lang.language)) · \(mapVM.recoveryDuration)")
+                Text("\(AppStrings.recoveryChip(lang.language)) · \(recoveredDistance) · \(mapVM.recoveryDuration)")
                     .font(.system(size: 13, weight: .semibold).monospacedDigit())
             }
             .foregroundStyle(AppTheme.accent)

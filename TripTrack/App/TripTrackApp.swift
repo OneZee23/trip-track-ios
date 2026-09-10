@@ -6,6 +6,12 @@ struct TripTrackApp: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var themeManager = ThemeManager()
     @StateObject private var languageManager = LanguageManager()
+    /// Выбранная единица расстояния. Живёт рядом с языком и по той же причине:
+    /// это выбор, который меняет КАЖДЫЙ экран, а не состояние одного из них.
+    ///
+    /// Синглтон, а не свежий объект: ту же единицу читают сервисы вне SwiftUI
+    /// (`DistanceUnit.current`), и второе зеркало разошлось бы с первым.
+    @StateObject private var unitsManager = UnitsManager.shared
     /// Gates the whole window. See `StoreHealth` — the app must not draw a
     /// library it could not open.
     @StateObject private var storeHealth = StoreHealth.shared
@@ -75,6 +81,7 @@ struct TripTrackApp: App {
                     .environmentObject(themeManager)
                     .environmentObject(languageManager)
                     .environment(\.locale, languageManager.language.locale)
+                    .environment(\.distanceUnit, unitsManager.distance)
                     .onAppear { themeManager.applyToWindows() }
             } else if hasCompletedOnboarding {
                 ContentView()
@@ -88,6 +95,11 @@ struct TripTrackApp: App {
                     // visible: `.uppercase` on the device locale turns «i»
                     // into «I» instead of «İ».
                     .environment(\.locale, languageManager.language.locale)
+                    // Единица расстояния — из окружения, ровно как язык. Экран
+                    // без явного инжекта (лист, всплывший поверх) прочитает её
+                    // из умолчания ключа, то есть из `UserDefaults`: покажет
+                    // ПРАВИЛЬНОЕ, просто не перерисуется на смене.
+                    .environment(\.distanceUnit, unitsManager.distance)
                     // The theme is painted onto the WINDOW, not handed down as
                     // `preferredColorScheme` — see `ThemeManager.paint` for why
                     // the environment could not carry it. `init` runs before
@@ -121,6 +133,7 @@ struct TripTrackApp: App {
                     .environmentObject(themeManager)
                     .environmentObject(languageManager)
                     .environment(\.locale, languageManager.language.locale)
+                    .environment(\.distanceUnit, unitsManager.distance)
                     .onAppear { themeManager.applyToWindows() }
             }
         }

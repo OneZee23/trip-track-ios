@@ -192,6 +192,7 @@ struct TripDetailView: View {
     @State private var signInPrompt: SignInPromptSheet.Action?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var themeManager: ThemeManager
@@ -1607,6 +1608,7 @@ isOwn
                 reading: CheckpointReading.text(
                     elapsed: checkpoint.elapsedFromStart,
                     metres: checkpoint.distanceFromStart,
+                    unit: distanceUnit,
                     lang: lang.language),
                 image: image,
                 photoCount: linked.count,

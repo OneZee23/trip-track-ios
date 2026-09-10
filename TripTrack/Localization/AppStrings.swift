@@ -920,14 +920,18 @@ enum AppStrings {
         tr(lang, "mapRoadsProgress", ru: "Дороги края", en: "Roads opened")
     }
     /// «84 км · 8%» — the kilometres first, because they are the honest part.
+    /// «143 км · 12 %» — сколько дорог края открыто.
+    ///
+    /// Число и подпись собирает `Measure`, а не эта функция: своя копия
+    /// правила «до десяти — с десятыми» стояла здесь четвёртой в проекте, и
+    /// на милях, где порог шесть, все четыре разъехались бы.
     static func mapRoadsValue(
-        _ lang: LanguageManager.Language, km: Double, percent: String
+        _ lang: LanguageManager.Language,
+        metres: Double,
+        unit: DistanceUnit,
+        percent: String
     ) -> String {
-        let value = km < 10
-            ? String(format: "%.1f", km)
-                .replacingOccurrences(of: ".", with: decimalSeparator(lang))
-            : groupedNumber(Int(km.rounded()), lang)
-        return "\(value) \(AppStrings.km(lang)) · \(percent)"
+        "\(Measure.distance(metres: metres, unit: unit, lang: lang)) · \(percent)"
     }
 
     /// English is the only one of the seven that puts a dot before the tenths.

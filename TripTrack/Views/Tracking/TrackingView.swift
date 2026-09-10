@@ -19,6 +19,7 @@ private let controlBlockBottomInset: CGFloat = 24
 struct TrackingView: View {
     @EnvironmentObject var viewModel: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
+    @Environment(\.distanceUnit) private var distanceUnit
     @State private var safeAreaTop: CGFloat = 59
     @State private var tabBarHeight: CGFloat = 88
     /// Mirrors `viewModel.trackingMapDidRender` so the fade animates locally;
@@ -282,8 +283,8 @@ struct TrackingView: View {
                 // Metrics glass panel: distance | time | altitude.
                 HStack(spacing: 0) {
                     statItem(
-                        value: String(format: "%.1f", viewModel.distance),
-                        unit: AppStrings.km(lang.language),
+                        value: recordedDistance.value,
+                        unit: recordedDistance.unit,
                         icon: "point.topleft.down.curvedto.point.bottomright.up"
                     )
                     Rectangle()
@@ -566,11 +567,24 @@ struct TrackingView: View {
         }
     }
 
-    /// Recorded distance with the separator the language actually uses.
+    /// Пройденное за эту запись — число и подпись врозь, для плитки, и вместе,
+    /// для подтверждения остановки.
+    ///
+    /// До 0.6.7 плитка печатала `String(format: "%.1f")` с точкой внутри — на
+    /// немецком и русском телефоне там ждут запятую, и подтверждение прямо
+    /// под ней её уже ставило. Один экран показывал «12.4» и «12,4 км» в двух
+    /// сантиметрах друг от друга.
+    private var recordedDistance: Measure.Parts {
+        Measure.distanceParts(
+            metres: viewModel.distance * 1000,
+            unit: distanceUnit,
+            lang: lang.language,
+            style: .tenths
+        )
+    }
+
     private var confirmDistanceText: String {
-        let s = String(format: "%.1f", viewModel.distance)
-        let n = s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lang.language))
-        return "\(n) \(AppStrings.km(lang.language))"
+        "\(recordedDistance.value) \(recordedDistance.unit)"
     }
 
     // MARK: - Recording status pills / banners (Figma 146:1178, 477:119, 435:119, 494:119)

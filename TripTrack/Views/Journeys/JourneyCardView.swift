@@ -16,6 +16,7 @@ struct JourneyCardView: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
 
     /// Итог считается на создании карточки, а не в `body`.
     ///
@@ -257,7 +258,8 @@ struct JourneyCardView: View {
         // Одни и те же даты заголовком и первым словом подписи — не строка
         // итога, а сбой: имени взять неоткуда, и заголовок сам стал датами.
         var parts = titleText == dateRangeText ? [] : [dateRangeText]
-        parts.append("\(TripDetailFormat.groupedNumber(aggregate.totalMetres / 1000)) \(AppStrings.km(l))")
+        parts.append(Measure.distance(
+            metres: aggregate.totalMetres, unit: distanceUnit, lang: l, style: .grouped))
         parts.append("\(aggregate.legCount) \(AppStrings.nounTrips(l, aggregate.legCount))")
         // Первое число — плечи дороги; местные поездки в него не входят и без
         // второго числа просто исчезали: восемь записей, «6 поездок» в подписи

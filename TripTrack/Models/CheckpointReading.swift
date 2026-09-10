@@ -10,9 +10,19 @@ import CoreLocation
 ///
 /// Время впереди, потому что спрашивают обычно про него: «до моря — за
 /// сколько?», и только потом «а сколько это километров».
+///
+/// Само расстояние с 0.6.7 считает и подписывает `Measure` — своя копия
+/// правила «до десяти показываем десятые» жила здесь ровно до тех пор, пока
+/// единица была одна.
 enum CheckpointReading {
-    static func text(elapsed: TimeInterval, metres: Double, lang: LanguageManager.Language) -> String {
-        "\(clock(elapsed, lang: lang)) · \(kilometres(metres, lang: lang)) \(AppStrings.km(lang))"
+    static func text(
+        elapsed: TimeInterval,
+        metres: Double,
+        unit: DistanceUnit,
+        lang: LanguageManager.Language
+    ) -> String {
+        let distance = Measure.distance(metres: max(0, metres), unit: unit, lang: lang)
+        return "\(clock(elapsed, lang: lang)) · \(distance)"
     }
 
     /// «1 ч 19 мин», «2 ч», «48 мин» — словами, как везде в приложении.
@@ -33,15 +43,6 @@ enum CheckpointReading {
         }
     }
 
-    /// До десяти километров — с десятыми, дальше целые: «8,4» и «128».
-    /// Разделитель берётся у локали, не пишется руками.
-    static func kilometres(_ metres: Double, lang: LanguageManager.Language) -> String {
-        let km = max(0, metres) / 1000
-        return km < 10
-            ? String(format: "%.1f", km)
-                .replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lang))
-            : String(Int(km.rounded()))
-    }
 }
 
 extension Notification.Name {

@@ -16,6 +16,7 @@ struct JourneyDetailView: View {
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var manager = JourneyManager.shared
 
@@ -332,8 +333,8 @@ struct JourneyDetailView: View {
                 color: AppTheme.accent, staggerIndex: 0
             )
             DetailStatCard(
-                value: TripDetailFormat.groupedNumber(aggregate.totalMetres / 1000),
-                unit: AppStrings.km(l),
+                value: journeyDistance(l).value,
+                unit: journeyDistance(l).unit,
                 label: AppStrings.journeyDistanceLabel(l),
                 color: AppTheme.green, staggerIndex: 1
             )
@@ -498,6 +499,12 @@ struct JourneyDetailView: View {
     /// Отметки одного плеча в том виде, в каком их рисует карта. Номера
     /// считаются ВНУТРИ плеча — как на экране самой поездки: «вторая отметка
     /// на дороге к морю», а не «седьмая отметка путешествия».
+    /// Километры путешествия — число и подпись из одних рук.
+    private func journeyDistance(_ l: LanguageManager.Language) -> Measure.Parts {
+        Measure.distanceParts(
+            metres: aggregate.totalMetres, unit: distanceUnit, lang: l, style: .grouped)
+    }
+
     private func markers(of trip: Trip) -> [CheckpointMarker] {
         trip.checkpoints.enumerated().map { index, checkpoint in
             CheckpointMarker(
@@ -508,6 +515,7 @@ struct JourneyDetailView: View {
                 reading: CheckpointReading.text(
                     elapsed: checkpoint.elapsedFromStart,
                     metres: checkpoint.distanceFromStart,
+                    unit: distanceUnit,
                     lang: lang.language),
                 image: nil,
                 timestamp: checkpoint.timestamp)

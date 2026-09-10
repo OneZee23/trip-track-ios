@@ -11,6 +11,21 @@ private let accentRed = Color(red: 1.0, green: 0.231, blue: 0.188)
 private let lightBg = Color(red: 248/255, green: 246/255, blue: 242/255)
 private let darkBg = Color(red: 25/255, green: 25/255, blue: 31/255)
 
+// MARK: - Числа
+
+/// Пройденное расстояние на локскрине — ОДНА функция на весь виджет.
+///
+/// Их было три: две одинаковых приватных копии в двух экранах активности и
+/// третья, написанная прямо в строке итога. Правило «до десяти показываем
+/// десятые» они повторяли слово в слово, поэтому и не расходились — пока
+/// граница была десять километров. У миль она шесть, и живёт эта граница в
+/// `DistanceUnit.showsTenths` (папка `TripTrackShared` — единственная, которую
+/// компилируют оба таргета): `Measure` из приложения сюда не дотянуться, а
+/// считать те же мили теми же числами виджет обязан.
+private func fmtDist(_ value: Double, unit: DistanceUnit = .km) -> String {
+    unit.showsTenths(value) ? String(format: "%.1f", value) : String(format: "%.0f", value)
+}
+
 // MARK: - Adaptive colors
 
 private struct WidgetColors {
@@ -325,10 +340,6 @@ struct TripTrackLiveActivity: Widget {
         }
     }
 
-    private func fmtDist(_ km: Double) -> String {
-        km < 10 ? String(format: "%.1f", km) : String(format: "%.0f", km)
-    }
-
     private func fmtTime(_ s: TimeInterval) -> String {
         let t = max(0, Int(s)); let h = t / 3600, m = (t % 3600) / 60, sec = t % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
@@ -526,10 +537,6 @@ private struct LiveLockScreenView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func fmtDist(_ km: Double) -> String {
-        km < 10 ? String(format: "%.1f", km) : String(format: "%.0f", km)
-    }
-
     private func fmtTime(_ s: TimeInterval) -> String {
         let t = max(0, Int(s)); let h = t / 3600, m = (t % 3600) / 60, sec = t % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
@@ -611,9 +618,7 @@ private struct FinishedLockScreenView: View {
     }
 
     private var summaryText: String {
-        let d = context.state.distanceKm < 10
-            ? String(format: "%.1f", context.state.distanceKm)
-            : String(format: "%.0f", context.state.distanceKm)
+        let d = fmtDist(context.state.distanceKm)
         let u = LiveActivityStrings.km(lng)
         return "\(context.attributes.vehicleName) • \(d) \(u) • \(context.state.finalDuration ?? "--:--")"
     }

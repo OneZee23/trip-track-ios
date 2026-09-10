@@ -25,6 +25,7 @@ struct TripMomentsTimeline: View {
     var onOpenPhoto: ((UUID) -> Void)?
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
 
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -313,7 +314,7 @@ struct TripMomentsTimeline: View {
     }
 
     private func reading(time: TimeInterval, metres: Double) -> String {
-        CheckpointReading.text(elapsed: time, metres: metres, lang: language)
+        CheckpointReading.text(elapsed: time, metres: metres, unit: distanceUnit, lang: language)
     }
 }
 

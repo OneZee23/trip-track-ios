@@ -17,6 +17,7 @@ struct MyMapSheet: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
 
     /// `CustomTabBar` caps its pill at 380; Figma draws the collapsed card
     /// 10 pt narrower than the bar, so the card caps 10 lower.
@@ -464,7 +465,10 @@ struct MyMapSheet: View {
                     .foregroundStyle(c.textTertiary)
                 Spacer()
                 Text(AppStrings.mapRoadsValue(
-                    lang.language, km: region.openedRoadKm, percent: percentText(value)))
+                    lang.language,
+                    metres: region.openedRoadKm * 1000,
+                    unit: distanceUnit,
+                    percent: percentText(value)))
                     .font(.inter(11, weight: .bold))
                     .foregroundStyle(AppTheme.accent)
             }

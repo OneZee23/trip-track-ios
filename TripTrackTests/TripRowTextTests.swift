@@ -62,12 +62,12 @@ final class TripRowTextTests: XCTestCase {
     // MARK: - Сколько
 
     func testShortTripDoesNotReadAsZero() {
-        let s = TripRowText.km(trip(km: 0.4), .ru)
+        let s = TripRowText.distance(trip(km: 0.4), .ru, unit: .km)
         XCTAssertTrue(s.hasPrefix("0,4"), "четыреста метров показаны как «\(s)»")
     }
 
     func testLongTripIsWhole() {
-        XCTAssertTrue(TripRowText.km(trip(km: 137.4), .ru).hasPrefix("137"))
+        XCTAssertTrue(TripRowText.distance(trip(km: 137.4), .ru, unit: .km).hasPrefix("137"))
     }
 
     func testEveryLanguageProducesAllThreeParts() {
@@ -75,7 +75,7 @@ final class TripRowTextTests: XCTestCase {
             let t = trip(region: "Krasnodar Krai")
             XCTAssertFalse(TripRowText.title(t, lang).isEmpty, "\(lang)")
             XCTAssertFalse(TripRowText.when(t, lang).isEmpty, "\(lang)")
-            XCTAssertFalse(TripRowText.km(t, lang).isEmpty, "\(lang)")
+            XCTAssertFalse(TripRowText.distance(t, lang, unit: .km).isEmpty, "\(lang)")
         }
     }
 }
