@@ -40,10 +40,20 @@ extension AppStrings {
 
     // MARK: - Plurals
 
-    /// CLDR plural categories, cut down to the three shapes our seven
-    /// languages actually need.
+    /// CLDR plural categories, cut down to the shapes our thirteen languages
+    /// actually need.
     enum PluralForm {
         case one, few, many
+        /// CLDR `other` при ВИДИМОЙ дробной части: «1,5 мили», «2,0 фута».
+        ///
+        /// Отдельным случаем, а не «сойдёт за `few`», потому что совпадение
+        /// форм языко-зависимо. В русском при дробном числительном стоит
+        /// родительный падеж единственного числа, и он у наших слов совпал с
+        /// формой для двух-четырёх («2 фута» / «1,5 фута»). В украинском не
+        /// совпал: два-чотири берут називний множини («2 фути»), а дробное —
+        /// той же родительный однини («1,5 фута»). Категория — про число,
+        /// слово — про язык, и решает его тот, кто пишет слова.
+        case fraction
     }
 
     /// Which form a count takes. The two Slavic languages disagree in exactly
@@ -77,6 +87,27 @@ extension AppStrings {
         }
     }
 
+    /// Какую форму берёт УЖЕ ПОКАЗАННОЕ число — то есть число вместе с теми
+    /// десятыми, которые человек видит на экране.
+    ///
+    /// CLDR смотрит не на значение, а на ЗАПИСЬ: у «2,0» есть видимая дробная
+    /// часть, и правило `one` (`v = 0 and i % 10 = 1`) до неё не достаёт —
+    /// категория выходит `other`, и по-русски это «2,0 мили», а не «2,0
+    /// миля». Поэтому решает `fractionDigits`, а не остаток от деления: у
+    /// стиля «всегда одна десятая» дробная часть видна даже когда она ноль.
+    ///
+    /// Дробную часть язык не спрашивается: она даёт `other` во всех тринадцати.
+    /// А какое слово этой категории отвечает, знает тот, кто пишет слова
+    /// (см. `plural(form:…)`). Целое число, наоборот, без языка не разобрать:
+    /// 21 — это «21 миля» по-русски и «21 mil» по-польски.
+    static func pluralForm(
+        shown value: Double,
+        fractionDigits: Int,
+        _ lang: LanguageManager.Language
+    ) -> PluralForm {
+        fractionDigits > 0 ? .fraction : pluralForm(Int(value.rounded()), lang)
+    }
+
     /// Picks a form. `few` is only ever read for ru/pl, so the two-form
     /// languages can leave it out.
     static func plural(
@@ -86,10 +117,26 @@ extension AppStrings {
         few: String? = nil,
         many: String
     ) -> String {
-        switch pluralForm(n, lang) {
-        case .one:  return one
-        case .few:  return few ?? many
-        case .many: return many
+        plural(form: pluralForm(n, lang), one: one, few: few, many: many)
+    }
+
+    /// Тот же выбор, когда форма уже посчитана — например по показанному
+    /// числу с десятыми (`pluralForm(shown:fractionDigits:)`).
+    ///
+    /// `fraction` не назван — берётся `few`: в русском формы совпали, а языки,
+    /// у которых не совпали, обязаны назвать её сами.
+    static func plural(
+        form: PluralForm,
+        one: String,
+        few: String? = nil,
+        many: String,
+        fraction: String? = nil
+    ) -> String {
+        switch form {
+        case .one:      return one
+        case .few:      return few ?? many
+        case .many:     return many
+        case .fraction: return fraction ?? few ?? many
         }
     }
 

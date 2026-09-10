@@ -406,6 +406,93 @@ enum AppStrings {
         tr(lang, "unitMeters", ru: "м", en: "m")
     }
 
+    // MARK: - Подписи единиц (0.6.7)
+    //
+    // Три функции, которые зовёт ОДИН `Measure` и больше никто. Так и задумано:
+    // подпись обязана приезжать вместе с числом, из того же места и по тому же
+    // выбору. Сегодняшний постер — пример обратного: число форматируется на
+    // одном экране, подпись дописывается на другом, и они разъезжаются.
+    //
+    // Строки написаны здесь inline-переключателем на тринадцать языков, а не
+    // через `tr` с одиннадцатью таблицами, по той же причине, по которой так
+    // устроены `nounTrips` и `mapSeeAll`: это не одна строка на язык, а форма,
+    // которую выбирает число. Таблица «ключ → строка» такое не выражает.
+
+    /// «км» / «mi» / «миль» — подпись у показанного расстояния.
+    ///
+    /// Между километром и милей структурная разница, а не подстановка слова:
+    /// «км» — символ и не склоняется НИГДЕ, а миля в русском и украинском —
+    /// обычное существительное женского рода, и «5 миля» читается как
+    /// машинный перевод. Поэтому функция берёт уже показанное число (вместе с
+    /// его десятыми) и сама решает форму.
+    ///
+    /// - Parameters:
+    ///   - value: число, которое УЖЕ напечатано рядом, после округления.
+    ///   - fractionDigits: сколько десятых у него на экране. Не значение, а
+    ///     запись: «2,0» — это дробное число, «2» — целое, и по-русски это
+    ///     «2,0 мили» против «2 мили»… совпало, а вот «21,0 мили» против
+    ///     «21 миля» уже нет.
+    static func unitDistanceShort(
+        _ lang: LanguageManager.Language,
+        unit: DistanceUnit,
+        value: Double,
+        fractionDigits: Int
+    ) -> String {
+        guard unit == .miles else { return km(lang) }
+        let form = pluralForm(shown: value, fractionDigits: fractionDigits, lang)
+        switch lang {
+        case .ru: return plural(form: form, one: "миля", few: "мили", many: "миль")
+        case .uk: return plural(form: form, one: "миля", few: "милі", many: "миль")
+        // Казахский считает одной формой — как `nounTrips` для него же.
+        case .kk: return "миля"
+        // Остальные пишут символ, и он не меняется ни от числа, ни от падежа.
+        case .en, .de, .es, .fr, .it, .pl, .pt, .fil, .id, .tr: return "mi"
+        }
+    }
+
+    /// «км/ч» / «mph» — подпись у показанной скорости.
+    ///
+    /// Здесь проблемы склонения нет вовсе: mph — символ. Зато есть разнобой в
+    /// сокращении часа, и он ровно тот же, что у метрической таблицы рядом
+    /// («км/год» в украинском, «км/сағ» в казахском, «km/s» в турецком).
+    static func unitSpeedShort(
+        _ lang: LanguageManager.Language,
+        unit: DistanceUnit
+    ) -> String {
+        guard unit == .miles else { return kmh(lang) }
+        switch lang {
+        case .ru: return "миль/ч"
+        case .uk: return "миль/год"
+        case .kk: return "миль/сағ"
+        case .tr: return "mil/sa"
+        case .en, .de, .es, .fr, .it, .pl, .pt, .fil, .id: return "mph"
+        }
+    }
+
+    /// «м» / «ft» / «фута» — подпись у показанной высоты.
+    ///
+    /// Высота идёт той же настройкой, что и расстояние: «26.2 mi · ↑ 640 m» —
+    /// тот же смешанный грех, что «79 mi · 68 км/ч». Пороги бейджей при этом
+    /// остаются метрическими — это правила игры, одинаковые для всех.
+    static func unitElevationShort(
+        _ lang: LanguageManager.Language,
+        unit: DistanceUnit,
+        value: Double,
+        fractionDigits: Int
+    ) -> String {
+        guard unit == .miles else { return unitMeters(lang) }
+        let form = pluralForm(shown: value, fractionDigits: fractionDigits, lang)
+        switch lang {
+        case .ru: return plural(form: form, one: "фут", few: "фута", many: "футов")
+        // Украинский — единственное место, где дробная форма НЕ совпала с
+        // формой для двох-чотирьох: «2 фути», но «1,5 фута».
+        case .uk: return plural(form: form, one: "фут", few: "фути", many: "футів",
+                                fraction: "фута")
+        case .kk: return "фут"
+        case .en, .de, .es, .fr, .it, .pl, .pt, .fil, .id, .tr: return "ft"
+        }
+    }
+
     // MARK: - Regions
     static func regionsExplored(_ lang: LanguageManager.Language) -> String {
         tr(lang, "regionsExplored", ru: "регионов", en: "regions")

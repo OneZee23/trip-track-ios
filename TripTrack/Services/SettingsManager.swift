@@ -442,7 +442,10 @@ final class SettingsManager: ObservableObject {
     /// `UserSettingsEntity.distanceUnit` и в поле
     /// `SettingsSyncPayload.distanceUnit`, то есть это контракт и с сервером,
     /// и со вторым телефоном.
-    static let distanceUnitKey = "distanceUnit"
+    /// Строка одна на весь проект и лежит у типа: два одинаковых литерала в
+    /// двух файлах — это два ключа, которые однажды разойдутся на опечатке, а
+    /// разъехавшись, они не сломают сборку, а молча потеряют выбор.
+    static let distanceUnitKey = DistanceUnit.storageKey
     static let volumeUnitKey = "volumeUnit"
 
     /// В чём человек считает расстояние ПРЯМО СЕЙЧАС. Нераспознанное значение

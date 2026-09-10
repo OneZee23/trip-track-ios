@@ -2,24 +2,9 @@ import SwiftUI
 
 // MARK: - Units
 
-enum DistanceUnit: String, CaseIterable {
-    case km = "km"
-    case miles = "miles"
-
-    var label: String {
-        switch self {
-        case .km: return "km"
-        case .miles: return "mi"
-        }
-    }
-
-    func labelFull(_ lang: LanguageManager.Language) -> String {
-        switch self {
-        case .km: return AppStrings.tr(lang, "unitKilometersFull", ru: "Километры", en: "Kilometers")
-        case .miles: return AppStrings.tr(lang, "unitMilesFull", ru: "Мили", en: "Miles")
-        }
-    }
-}
+// `DistanceUnit` живёт в `TripTrackShared/DistanceUnit.swift`: его арифметику
+// обязаны считать оба таргета одинаково, а этот файл компилирует только
+// приложение. Чтение выбора и имя для пикера — в `DistanceUnit+Current.swift`.
 
 enum VolumeUnit: String, CaseIterable {
     case liters = "liters"
