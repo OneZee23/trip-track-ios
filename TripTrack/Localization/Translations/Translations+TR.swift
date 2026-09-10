@@ -1217,6 +1217,7 @@ extension Translations {
         "journeyDatesEmpty": "Bu tarihlerde yolculuk yok",
         "journeyCover": "Kapak",
         "journeyRemoveLeg": "Yolculuktan çıkar",
+        "journeyRemoveLegHint": "Sürüş geçmişinde kalır ama geri eklemenin bir yolu yok",
         "journeyDelete": "Yolculuğu sil",
         "journeyDeleteHint": "Geziler kalır",
         "journeyOverlaps": "Bu tarihler başka bir yolculuğa ait",

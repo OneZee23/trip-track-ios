@@ -1217,6 +1217,7 @@ extension Translations {
         "journeyDatesEmpty": "У цих датах немає поїздок",
         "journeyCover": "Обкладинка",
         "journeyRemoveLeg": "Прибрати з подорожі",
+        "journeyRemoveLegHint": "Поїздка залишиться в історії, але повернути її до подорожі буде нічим",
         "journeyDelete": "Видалити подорож",
         "journeyDeleteHint": "Поїздки залишаться",
         "journeyOverlaps": "Ці дати вже зайняті іншою подорожжю",

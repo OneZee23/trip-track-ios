@@ -56,28 +56,38 @@ struct JourneyComposerSheet: View {
         _selected = State(initialValue: Set(seed.map(\.id)))
     }
 
-    /// Высота строки, посчитанная, а не измеренная: `ScrollView` гибкий по
+    /// Высота списка, ПОСЧИТАННАЯ, а не измеренная: `ScrollView` гибкий по
     /// вертикали и растягивается на всё, что ему дали, — поэтому под одной
     /// поездкой зияла пустая треть листа. Мерить его собственную высоту
     /// `GeometryReader`-ом, которым же и задавать ему рамку, — петля, от
     /// которой предостерегает `VehiclePickerSheet`.
+    ///
+    /// Считать надо ВСЁ, что в списке лежит, а не одни строки. Формула знала
+    /// только их — а в лист с тех пор добавились подписи дней и рамка опорной
+    /// поездки, и ветка «мало кандидатов» рисовала голый `VStack` вообще без
+    /// потолка. Шесть кандидатов в разные дни давали лист в 849 пунктов при
+    /// потолке телефона в 783, и кнопка «Создать» уезжала за нижний край —
+    /// обычная неделя разъездов делала лист неработающим.
     private static let thumbWidth: CGFloat = 56
     private static let thumbHeight: CGFloat = 44
     private static let rowHeight: CGFloat = thumbHeight + 16
+    /// Строка опорной поездки выше на подпись «Эта поездка».
+    private static let anchorRowHeight: CGFloat = rowHeight + 6
     private static let rowSpacing: CGFloat = 8
-    /// Подпись дня вместе с отступом над ней.
-    private static let dayHeaderHeight: CGFloat = 26
-    /// До скольких строк список рисуется целиком, без прокрутки.
-    private static let maxVisibleRows = 6
-    /// А сколько их видно в прокрутке. Меньше порога нарочно: рамка ровно в
-    /// шесть строк была бы выше, чем список из шести строк без рамки, и лист
-    /// становился бы ВЫШЕ ровно в тот момент, когда прячет содержимое.
-    private static let scrollRows = 5
-    private static var maxListHeight: CGFloat {
-        CGFloat(scrollRows) * rowHeight
-            + CGFloat(scrollRows - 1) * rowSpacing
-            + 2 * dayHeaderHeight
-    }
+    /// Подпись дня — сама по себе, без отступа над ней. 13.5 при строке в
+    /// 13.1: слагаемые округляются ВВЕРХ, потому что промах в плюс — это
+    /// пункт пустоты внизу, а промах в минус — обрезанная строка.
+    private static let dayHeaderHeight: CGFloat = 13.5
+    /// Отступ над подписью КАЖДОГО СЛЕДУЮЩЕГО дня (`padding(.top, 6)`).
+    private static let dayHeaderGap: CGFloat = 6
+    /// Сколько пунктов списку разрешено занять.
+    ///
+    /// Считается от конца: всё остальное в листе (шапка, подсказка, итог, поле
+    /// имени, строка отказа, кнопка и поля по 20) занимает около 315 пунктов в
+    /// худшем случае, а лист обязан влезать и в маленький телефон, где потолок
+    /// ~637. Отсюда 280: полная высота листа не переваливает за 600 ни при
+    /// каком числе кандидатов, и «Создать» видно всегда.
+    private static let listBudget: CGFloat = 280
 
     /// Собран один раз: `LocalizedDateFormatter.templates` строит тринадцать
     /// `DateFormatter` за вызов, а время спрашивает каждая строка списка.
@@ -148,22 +158,46 @@ struct JourneyComposerSheet: View {
 
     // MARK: - Куски
 
-    /// До шести кандидатов — обычный `VStack`: он сам говорит листу, сколько
-    /// места ему нужно. Больше — прокрутка в счётной рамке.
-    @ViewBuilder
+    /// Список ВСЕГДА в прокрутке и ВСЕГДА с точной высотой.
+    ///
+    /// Высота — `frame(height:)`, а не `maxHeight`: `ScrollView` жадный по
+    /// вертикали и под `maxHeight` занял бы весь бюджет даже под одну строку
+    /// (та же ловушка расписана в `VehiclePickerSheet` и
+    /// `CompanionsPickerSheet`). Поэтому короткий список ровно такой, каким
+    /// его посчитали, а длинный упирается в потолок и прокручивается.
+    ///
+    /// Второй ветки — «мало кандидатов, рисуем голым стеком» — больше нет:
+    /// это она пускала лист за край экрана, и она же означала, что потолок
+    /// проверяется по числу строк вместо пунктов.
     private func candidateList(_ c: AppTheme.Colors) -> some View {
-        if candidates.count <= Self.maxVisibleRows {
-            VStack(alignment: .leading, spacing: Self.rowSpacing) {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Self.rowSpacing) {
                 listContent(c)
             }
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: Self.rowSpacing) {
-                    listContent(c)
-                }
-            }
-            .frame(height: Self.maxListHeight)
         }
+        .frame(height: min(listHeight, Self.listBudget))
+        // Прокрутка не пружинит там, где прокручивать нечего: короткий список
+        // стоит ровно на своём месте, а не отскакивает от края.
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    /// Ровно та высота, которую займёт `listContent`: строки (у опорной —
+    /// своя), подписи дней, отступы над ними и зазоры между всеми соседями.
+    /// Разойдётся с содержимым — лист снова поедет за край, поэтому меняешь
+    /// строку списка, меняй и слагаемое.
+    private var listHeight: CGFloat {
+        let days = groups
+        guard !days.isEmpty else { return 0 }
+        let rows = days.reduce(0) { $0 + $1.trips.count }
+        let anchors = days.reduce(0) { $0 + $1.trips.filter { $0.id == anchor.id }.count }
+        let rowsHeight = CGFloat(rows - anchors) * Self.rowHeight
+            + CGFloat(anchors) * Self.anchorRowHeight
+        let headersHeight = CGFloat(days.count) * Self.dayHeaderHeight
+            + CGFloat(days.count - 1) * Self.dayHeaderGap
+        // Зазор стоит между КАЖДОЙ парой соседей стека, а подписи дней — такие
+        // же его дети, как строки.
+        let gaps = CGFloat(rows + days.count - 1) * Self.rowSpacing
+        return rowsHeight + headersHeight + gaps
     }
 
     @ViewBuilder

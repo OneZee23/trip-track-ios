@@ -9,6 +9,13 @@ struct ProfileTripTile: View {
     /// Отклик под пальцем. `.hold` там, где на плитке ещё и долгий тап
     /// («Мои»): без тянущегося сжатия удержание неотличимо от промаха.
     var pressResponse: CardPressResponse = .tap
+    /// Нажатие ЦЕЛИКОМ, вместе с щелчком.
+    ///
+    /// Щелчок раньше бился здесь, а вызывающий решал уже после него, открывать
+    /// ли поездку, — и в «Моих», где тап после долгого нажатия погашен,
+    /// одно нажатие отвечало дважды: раз на удержании (`Haptics.action`) и
+    /// второй раз на отпускании, о переходе, которого не было. Отклик обязан
+    /// описывать то, что произошло, поэтому его бьёт тот, кто знает.
     let onTap: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
@@ -26,7 +33,6 @@ struct ProfileTripTile: View {
         let c = AppTheme.colors(for: scheme)
 
         Button {
-            Haptics.tap()
             onTap()
         } label: {
             VStack(alignment: .leading, spacing: 0) {

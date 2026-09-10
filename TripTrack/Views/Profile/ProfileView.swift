@@ -1085,10 +1085,20 @@ struct ProfileView: View {
                                 // раньше, чем сработает жест сверху. Вместе с
                                 // кнопкой жест доходит; тап после удержания
                                 // гасит `openTrip` по `composerAnchor`.
+                                //
+                                // Длительность — у стиля кнопки: жест обязан
+                                // сработать ровно тогда, когда плитка дожалась.
                                 .simultaneousGesture(
-                                    LongPressGesture(minimumDuration: 0.4)
+                                    LongPressGesture(minimumDuration: HoldableCardStyle.holdDuration)
                                         .onEnded { _ in openJourneyComposer(anchor: trip) }
                                 )
+                                // Удержание — жест, которого VoiceOver не
+                                // знает: без этого действия лист объединения
+                                // с озвучкой недостижим вовсе. Та же строка,
+                                // что у плеча путешествия.
+                                .accessibilityAction(named: Text(AppStrings.journeyCombine(lang.language))) {
+                                    openJourneyComposer(anchor: trip)
+                                }
                             }
                         }
                     }
@@ -1124,11 +1134,15 @@ struct ProfileView: View {
                         onTap: { openTrip(trip) }
                     )
                     // См. комментарий у плитки выше: кнопка съедает
-                    // `.onLongPressGesture`, `simultaneousGesture` — нет.
+                    // `.onLongPressGesture`, `simultaneousGesture` — нет, а
+                    // длительность приходит от стиля карточки.
                     .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.4)
+                        LongPressGesture(minimumDuration: HoldableCardStyle.holdDuration)
                             .onEnded { _ in openJourneyComposer(anchor: trip) }
                     )
+                    .accessibilityAction(named: Text(AppStrings.journeyCombine(lang.language))) {
+                        openJourneyComposer(anchor: trip)
+                    }
                 case .journey(let journey, let legs):
                     JourneyCardView(journey: journey, legs: legs) {
                         push(.journey(journey.id))
@@ -1243,8 +1257,14 @@ struct ProfileView: View {
     /// НИЧЕГО: долгое нажатие срабатывает, пока палец на экране, и кнопка
     /// карточки успевает доложить о нажатии ещё раз — уже на отпускании. Тогда
     /// поверх листа уезжал бы ещё и экран поездки.
+    ///
+    /// Щелчок бьётся ЗДЕСЬ, после проверки, а не внутри карточки: удержание
+    /// уже отдало свой (`Haptics.action`), и второй щелчок на отпускании
+    /// докладывал о переходе, которого не будет, — одно нажатие отвечало
+    /// дважды.
     private func openTrip(_ trip: Trip) {
         guard composerAnchor == nil else { return }
+        Haptics.tap()
         push(.trip(trip.id))
     }
 

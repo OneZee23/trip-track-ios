@@ -23,6 +23,10 @@ struct JourneyDaysList: View {
     var localNames: [UUID: String] = [:]
     var onOpenTrip: (Trip) -> Void
     /// «Убрать из путешествия»: поездка остаётся в истории, из окна уходит.
+    ///
+    /// Лента только СООБЩАЕТ, о чём попросили, — и из поповера, и из действия
+    /// для VoiceOver. Вопрос («вернуть будет нечем») задаёт экран на своём
+    /// корне: накладка размером с эту ленту уехала бы вместе с прокруткой.
     var onRemoveLeg: (Trip) -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -34,8 +38,9 @@ struct JourneyDaysList: View {
 
     /// Полсекунды — столько же ждёт система до контекстного меню и столько же
     /// длится сжатие в `HoldableCardStyle`: карточка «поддаётся» ровно к тому
-    /// моменту, когда меню появляется.
-    private static let holdDuration: TimeInterval = 0.5
+    /// моменту, когда меню появляется. Значение берётся у самого стиля, чтобы
+    /// два числа не разъехались (в «Моих» они уже разъезжались).
+    private static let holdDuration: TimeInterval = HoldableCardStyle.holdDuration
     /// Отступ вложенной строки стоянки: кружок домика (26) плюс зазор до
     /// заголовка. Местная поездка встаёт ровно под именем города, а не под его
     /// иконкой.
@@ -212,10 +217,16 @@ struct JourneyDaysList: View {
     }
 
     /// «5 ч 20 мин · 480 км · 2 отметки».
+    ///
+    /// Километры — через `GarageFormat.odometer`, как везде: своё
+    /// `Int(distance / 1000)` и разряды не разбивало («1000 км» вместо
+    /// «1 000 км», а на немецком телефоне — вместо «1.000 km»), и округляло
+    /// ВНИЗ, из-за чего три плеча по 100,6 км стояли под итогом «303 км»
+    /// тремя сотнями.
     private func legMeta(_ trip: Trip) -> String {
         var parts = [
             JourneyFormat.duration(trip.duration, language: language),
-            "\(Int(trip.distance / 1000)) \(AppStrings.km(language))",
+            "\(GarageFormat.odometer(trip.distance / 1000, lng: language)) \(AppStrings.km(language))",
         ]
         if !trip.checkpoints.isEmpty {
             parts.append("\(trip.checkpoints.count) \(AppStrings.nounCheckpoints(language, trip.checkpoints.count))")
@@ -383,7 +394,7 @@ struct JourneyDaysList: View {
         let photos = trips.reduce(0) { $0 + $1.photos.count }
         var parts = [
             "\(trips.count) \(AppStrings.nounTrips(language, trips.count)) \(AppStrings.journeyAroundTown(language))",
-            "\(Int(metres / 1000)) \(AppStrings.km(language))",
+            "\(GarageFormat.odometer(metres / 1000, lng: language)) \(AppStrings.km(language))",
             JourneyFormat.duration(seconds, language: language),
         ]
         if photos > 0 {

@@ -1816,6 +1816,14 @@ enum AppStrings {
     static func journeyRemoveLeg(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyRemoveLeg", ru: "Убрать из путешествия", en: "Remove from journey")
     }
+    /// В подтверждении «Убрать из путешествия». Говорит обе половины правды:
+    /// сама поездка никуда не денется, но обратно в путешествие её не вернуть
+    /// — способа нет (`excludedTripIds` только растёт).
+    static func journeyRemoveLegHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyRemoveLegHint",
+           ru: "Поездка останется в истории, но вернуть её в путешествие будет нечем",
+           en: "The trip stays in your history, but there's no way to put it back")
+    }
     static func journeyDelete(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyDelete", ru: "Удалить путешествие", en: "Delete journey")
     }

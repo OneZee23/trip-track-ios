@@ -1217,6 +1217,7 @@ extension Translations {
         "journeyDatesEmpty": "Осы күндерде сапар жоқ",
         "journeyCover": "Мұқаба",
         "journeyRemoveLeg": "Саяхаттан алып тастау",
+        "journeyRemoveLegHint": "Сапар тарихта қалады, бірақ оны саяхатқа қайтару мүмкін болмайды",
         "journeyDelete": "Саяхатты жою",
         "journeyDeleteHint": "Сапарлар қалады",
         "journeyOverlaps": "Бұл даталар басқа саяхатқа тиесілі",

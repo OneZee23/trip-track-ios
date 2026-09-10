@@ -232,10 +232,20 @@ struct PressableCardStyle: ButtonStyle {
 /// система ждёт до контекстного меню, — поэтому карточка на глазах «поддаётся»,
 /// пока держишь, и становится ясно, что произойдёт, если не отпускать.
 struct HoldableCardStyle: ButtonStyle {
+    /// Сколько тянется сжатие — и ровно столько же должен ждать сам жест.
+    ///
+    /// Живёт ЗДЕСЬ, потому что стиль и жест — две половины одного обещания:
+    /// карточка «поддаётся» полсекунды, и если удержание срабатывает раньше,
+    /// лист открывается на недожатой карточке. Так и было в «Моих» — жест
+    /// стоял на 0.4, стиль на 0.5, а в ленте путешествия на 0.5 оба, — и одно
+    /// и то же удержание отвечало на двух экранах по-разному. Заводишь новый
+    /// долгий тап на карточке — бери длительность отсюда, а не числом.
+    static let holdDuration: TimeInterval = 0.5
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.945 : 1.0)
-            .animation(.easeOut(duration: configuration.isPressed ? 0.5 : 0.18),
+            .animation(.easeOut(duration: configuration.isPressed ? Self.holdDuration : 0.18),
                        value: configuration.isPressed)
     }
 }

@@ -43,6 +43,11 @@ struct JourneyDetailView: View {
     @State private var showEdit = false
     @State private var showActions = false
     @State private var confirmDelete = false
+    /// Плечо, которое просят убрать. Спрашиваем ДО правки: `excludedTripIds`
+    /// только растёт, и вернуть плечо в путешествие в 0.6.6 нечем — ни
+    /// кнопкой, ни отменой. Необратимое без вопроса — это то же самое
+    /// удаление, только молча.
+    @State private var legToRemove: Trip?
     @State private var isMapFullscreen = false
     @State private var openTripId: UUID?
     @State private var heroProgress: Double = 0
@@ -73,6 +78,22 @@ struct JourneyDetailView: View {
                         manager.delete(id: journeyId)
                     }
                 ]
+            )
+            // На КОРНЕ экрана, а не внутри ленты: накладка размером с секцию
+            // уезжала бы вместе с прокруткой (см. `AppConfirmDialog`). Поездка
+            // приходит аргументом замыкания — читать её из состояния после
+            // закрытия диалога нельзя, он гасит себя первым.
+            .appConfirm(
+                item: $legToRemove,
+                title: { _ in AppStrings.journeyRemoveLeg(lang.language) },
+                message: { _ in AppStrings.journeyRemoveLegHint(lang.language) },
+                actions: { trip in
+                    [AppDialogAction(AppStrings.journeyRemoveLeg(lang.language),
+                                     kind: .destructive,
+                                     identifier: "journey_remove_leg_confirm") {
+                        removeLeg(trip)
+                    }]
+                }
             )
     }
 
@@ -146,7 +167,9 @@ struct JourneyDetailView: View {
                     language: lang.language,
                     localNames: localNames,
                     onOpenTrip: { openTripId = $0.id },
-                    onRemoveLeg: { removeLeg($0) }
+                    // Лента только сообщает, о чём попросили: вопрос задаёт
+                    // экран, на его корне.
+                    onRemoveLeg: { legToRemove = $0 }
                 )
             }
         }
@@ -336,13 +359,21 @@ struct JourneyDetailView: View {
 
     // MARK: - Листы
 
-    @ViewBuilder
+    /// Лист правки. `.contentSizedSheet` — СНАРУЖИ `if let`, а не внутри.
+    ///
+    /// Модификатор меряет содержимое и держит замер в своём `@State`. Внутри
+    /// ветки он пропадает вместе с ней: в тот момент, когда путешествие
+    /// исчезает из списка (удалили прямо из листа), детент теряется, и лист
+    /// на прощание раздувается во весь экран. Снаружи он переживает пустую
+    /// ветку и закрывается той высотой, которой стоял.
     private var editSheet: some View {
-        if let journey {
-            JourneyEditSheet(journey: journey, photos: trips.flatMap(\.photos))
-                .environmentObject(lang)
-                .contentSizedSheet(background: colors.bg)
+        Group {
+            if let journey {
+                JourneyEditSheet(journey: journey, photos: trips.flatMap(\.photos))
+                    .environmentObject(lang)
+            }
         }
+        .contentSizedSheet(background: colors.bg)
     }
 
     /// Полная карта — та же склейка и без реплея: реплей живёт у поездки, где
@@ -414,6 +445,9 @@ struct JourneyDetailView: View {
 
     /// «Убрать из путешествия»: поездка выходит из окна, но остаётся в
     /// истории — обёртка правится, запись о дороге не трогается вовсе.
+    ///
+    /// Зовётся только из подтверждения (`legToRemove`): вернуть плечо обратно
+    /// в 0.6.6 нечем.
     ///
     /// Пишется именно исключение, а не сдвиг дат: сосед может лежать в
     /// середине окна, и подвинуть границу так, чтобы он выпал, значило бы

@@ -131,7 +131,11 @@ private struct CardChoiceButton: View {
         } label: {
             Text(title)
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(isPrimary ? c.card : c.text)
+                // Белый, а не `c.card`: на оранжевой заливке светлая карточка
+                // даёт 3.3:1 — ниже минимума, и в тёмной теме подпись главной
+                // кнопки читается хуже, чем второстепенной. Все остальные
+                // акцентные кнопки приложения пишут по акценту белым.
+                .foregroundStyle(isPrimary ? Color.white : c.text)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
                 .frame(maxWidth: .infinity)

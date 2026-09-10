@@ -1217,6 +1217,7 @@ extension Translations {
         "journeyDatesEmpty": "Keine Fahrten in diesen Daten",
         "journeyCover": "Titelbild",
         "journeyRemoveLeg": "Aus der Reise entfernen",
+        "journeyRemoveLegHint": "Die Fahrt bleibt in deiner Historie, lässt sich aber nicht zurückholen",
         "journeyDelete": "Reise löschen",
         "journeyDeleteHint": "Fahrten bleiben erhalten",
         "journeyOverlaps": "Diese Daten gehören bereits zu einer anderen Reise",

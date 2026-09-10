@@ -88,6 +88,20 @@ struct JourneyEditSheet: View {
         calendar.isDate(date, inSameDayAs: now) ? date : min(date, now)
     }
 
+    /// Последнее мгновение суток — календарём, а не `+ 86_400 - 1`.
+    ///
+    /// Ровно 24 часа — это не ровно сутки: в день перевода часов их 23 или 25,
+    /// и арифметическая граница съезжала на час — то отрезая последний час
+    /// суток от окна, то прихватывая первый час следующих. `HistoryFolding`
+    /// на эти же грабли уже наступил (см. `dayRange`); правило одно на оба
+    /// места — сутки считает календарь.
+    static func endOfDay(_ date: Date, calendar: Calendar = .current) -> Date {
+        let start = calendar.startOfDay(for: date)
+        let next = calendar.date(byAdding: .day, value: 1, to: start)
+            ?? start.addingTimeInterval(86_400)
+        return next.addingTimeInterval(-1)
+    }
+
     /// Диапазоны, которые невозможно перевернуть.
     ///
     /// `a...b` из двух произвольных дат — не пустой диапазон, а падение
@@ -258,7 +272,10 @@ struct JourneyEditSheet: View {
                     .foregroundStyle(c.textTertiary)
                     .textCase(.uppercase)
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    // `LazyHStack`: снимки здесь — ВСЕ снимки всех плеч, а у
+                    // месячного путешествия их сотни, и обычный стек читал бы
+                    // с диска каждую миниатюру до первого кадра листа.
+                    LazyHStack(spacing: 8) {
                         ForEach(photos) { coverChip($0, c) }
                     }
                     .padding(.vertical, 2)
@@ -302,6 +319,8 @@ struct JourneyEditSheet: View {
         .accessibilityAddTraits(isCover ? .isSelected : [])
     }
 
+    private var saveDisabled: Bool { datesTouched && windowTripCount == 0 }
+
     private func saveButton(_ c: AppTheme.Colors) -> some View {
         Button {
             save()
@@ -314,8 +333,14 @@ struct JourneyEditSheet: View {
                 .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(PressableCardStyle())
-        .disabled(windowTripCount == 0)
-        .opacity(windowTripCount == 0 ? 0.5 : 1)
+        // Гаснет только когда ДАТЫ ТРОГАЛИ и в новом окне пусто: сдвинуть
+        // границу в никуда нельзя. Путешествие БЕЗ плеч при этом остаётся
+        // живой записью (CLAUDE.md, «Путешествие БЕЗ плеч — тоже строка») —
+        // убрал последнее плечо, а переименовать и сменить обложку по-прежнему
+        // можно. Прежняя проверка по одному счёту оставляла такому
+        // путешествию единственное действие: удалить.
+        .disabled(saveDisabled)
+        .opacity(saveDisabled ? 0.5 : 1)
         .accessibilityIdentifier("journey_edit_save")
     }
 
@@ -337,50 +362,66 @@ struct JourneyEditSheet: View {
 
     // MARK: - Сохранение
 
-    /// Окно с выбранными датами, как его посчитает `save()`: границы дней,
-    /// те же исключённые поездки.
-    private func recountWindow() {
-        let calendar = Calendar.current
-        var probe = journey
-        probe.startDate = calendar.startOfDay(for: min(startDate, endDate))
-        probe.endDate = calendar.startOfDay(for: max(startDate, endDate)).addingTimeInterval(86_400 - 1)
-        windowTripCount = manager.trips(in: probe).count
-    }
-
-    private func save() {
-        var updated = journey
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        updated.title = trimmed.isEmpty ? nil : trimmed
+    /// Окно, которое запишет `save()`, — и ровно его же меряет счёт под
+    /// пикерами.
+    ///
+    /// Одна функция на оба вопроса нарочно. Раньше счёт всегда брал полные
+    /// сутки, а `save()` при нетронутом дне оставлял хранимое время: «3
+    /// поездки в этих датах» сохранялись двумя, потому что мерили разные окна.
+    ///
+    /// День НЕ трогали — граница остаётся ровно та, что в базе. Иначе
+    /// переименование двигало бы даты: выборы дат отдают полночь, и сохранение
+    /// имени растягивало окно на целые сутки в обе стороны. Оно могло
+    /// прихватить чужую поездку или упереться в соседнее путешествие — то есть
+    /// отказать в сохранении ИМЕНИ из-за дат, которых никто не менял.
+    ///
+    /// Тронули — конец окна становится КОНЦОМ выбранных суток: выбрав «17
+    /// сентября», человек имеет в виду весь день, а полночь отрезала бы всё,
+    /// что в этот день ездилось.
+    ///
+    /// У окна, залезающего в будущее, «не трогали» не выполняется вовсе:
+    /// границу уже сдвинул в сегодня `clampedWindow` при открытии листа, и
+    /// первое же сохранение — хоть бы и одного имени — перепишет дату в базе
+    /// на сегодняшнюю. Это НАМЕРЕННО. Вернуть будущую границу как было значило
+    /// бы сохранить окно, которое пикер не умеет показать, то есть починить
+    /// лист ровно до следующего открытия.
+    private func plannedWindow() -> Journey {
         // Границы, перепутанные местами, — это не отказ, а описка: окно
         // разворачивается само, потому что человек всё равно имел в виду его.
         let calendar = Calendar.current
-        let pickedStart = min(startDate, endDate)
-        let pickedEnd = max(startDate, endDate)
-        // День НЕ трогали — граница остаётся ровно та, что в базе.
-        //
-        // Иначе переименование двигало бы даты: выборы дат отдают полночь, и
-        // сохранение имени растягивало окно на целые сутки в обе стороны. Оно
-        // могло прихватить чужую поездку или упереться в соседнее путешествие
-        // — то есть отказать в сохранении ИМЕНИ из-за дат, которых никто не
-        // менял.
-        //
-        // Тронули — конец окна становится КОНЦОМ выбранных суток: выбрав «17
-        // сентября», человек имеет в виду весь день, а полночь отрезала бы всё,
-        // что в этот день ездилось.
-        //
-        // У окна, залезающего в будущее, «не трогали» не выполняется вовсе:
-        // границу уже сдвинул в сегодня `clampedWindow` при открытии листа, и
-        // первое же сохранение — хоть бы и одного имени — перепишет дату в
-        // базе на сегодняшнюю. Это НАМЕРЕННО. Вернуть будущую границу как было
-        // значило бы сохранить окно, которое пикер не умеет показать, то есть
-        // починить лист ровно до следующего открытия.
-        if !calendar.isDate(pickedStart, inSameDayAs: journey.startDate) {
-            updated.startDate = calendar.startOfDay(for: pickedStart)
+        var window = journey
+        if !calendar.isDate(min(startDate, endDate), inSameDayAs: journey.startDate) {
+            window.startDate = calendar.startOfDay(for: min(startDate, endDate))
         }
-        let endDayUntouched = journey.endDate.map { calendar.isDate(pickedEnd, inSameDayAs: $0) } ?? false
         if !endDayUntouched {
-            updated.endDate = calendar.startOfDay(for: pickedEnd).addingTimeInterval(86_400 - 1)
+            window.endDate = Self.endOfDay(max(startDate, endDate), calendar: calendar)
         }
+        return window
+    }
+
+    /// Конец окна остаётся хранимым: выбранный день — тот же, что в базе.
+    /// Открытое окно (`endDate == nil`) считается тронутым: `save()` его
+    /// закроет, второй даты у листа быть не может.
+    private var endDayUntouched: Bool {
+        guard let stored = journey.endDate else { return false }
+        return Calendar.current.isDate(max(startDate, endDate), inSameDayAs: stored)
+    }
+
+    /// Двигали ли даты. Ровно тот же вопрос, на который отвечает
+    /// `plannedWindow()`: границы поедут — значит трогали.
+    private var datesTouched: Bool {
+        !Calendar.current.isDate(min(startDate, endDate), inSameDayAs: journey.startDate)
+            || !endDayUntouched
+    }
+
+    private func recountWindow() {
+        windowTripCount = manager.trips(in: plannedWindow()).count
+    }
+
+    private func save() {
+        var updated = plannedWindow()
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.title = trimmed.isEmpty ? nil : trimmed
         updated.coverPhotoId = coverPhotoId
         updated.lastModifiedAt = Date()
         do {

@@ -1217,6 +1217,7 @@ extension Translations {
         "journeyDatesEmpty": "Tidak ada perjalanan di tanggal ini",
         "journeyCover": "Sampul",
         "journeyRemoveLeg": "Hapus dari perjalanan",
+        "journeyRemoveLegHint": "Perjalanan tetap ada di riwayat, tapi tidak bisa dikembalikan",
         "journeyDelete": "Hapus perjalanan",
         "journeyDeleteHint": "Perjalanan akan tetap ada",
         "journeyOverlaps": "Tanggal ini sudah dipakai perjalanan lain",

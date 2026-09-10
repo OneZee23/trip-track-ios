@@ -176,10 +176,18 @@ final class SyncCoordinator {
         UserDefaults.standard.set(identity, forKey: Self.healLatchKey)
         LastSyncedAtStore.reset(for: accountId)
 
-        // Trips, vehicles and photos only. A full pull always carries the
+        // Trips, vehicles, photos AND journeys. A full pull always carries the
         // settings row — `applyRemoteSettings` merges monotonically now, so it
         // would be survivable, but there is no reason to ask for it here.
-        let req = SyncPullRequest(lastSyncedAt: nil, entityTypes: ["trip", "vehicle", "photo"])
+        //
+        // Anything left OUT of this list is lost for good, not merely delayed:
+        // the cursor below jumps to the server's clock, so the rows the server
+        // filtered away land BEFORE it and no later pull ever asks for them
+        // again. Journeys learned that the hard way — a healed library came
+        // back without a single one of them. Add an entity type to sync and
+        // you add it here, or heal quietly eats it.
+        let req = SyncPullRequest(
+            lastSyncedAt: nil, entityTypes: ["trip", "vehicle", "photo", "journey"])
         do {
             let res: SyncPullResponse = try await client.post(APIEndpoint.syncPull, body: req)
             pullApplier.apply(res)

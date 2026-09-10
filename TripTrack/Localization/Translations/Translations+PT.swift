@@ -1217,6 +1217,7 @@ extension Translations {
         "journeyDatesEmpty": "Nenhuma viagem nestas datas",
         "journeyCover": "Capa",
         "journeyRemoveLeg": "Remover da viagem",
+        "journeyRemoveLegHint": "A viagem fica no seu histórico, mas não dá para colocá-la de volta",
         "journeyDelete": "Excluir viagem",
         "journeyDeleteHint": "As viagens permanecem",
         "journeyOverlaps": "Essas datas já pertencem a outra viagem",

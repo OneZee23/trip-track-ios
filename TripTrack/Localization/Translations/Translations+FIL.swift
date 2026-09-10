@@ -1217,6 +1217,7 @@ extension Translations {
         "journeyDatesEmpty": "Walang biyahe sa mga petsang ito",
         "journeyCover": "Pabalat",
         "journeyRemoveLeg": "Alisin sa paglalakbay",
+        "journeyRemoveLegHint": "Mananatili sa history ang biyahe, pero hindi na ito maibabalik",
         "journeyDelete": "Burahin ang paglalakbay",
         "journeyDeleteHint": "Mananatili ang mga biyahe",
         "journeyOverlaps": "Kabilang na ang mga petsang ito sa ibang paglalakbay",

@@ -1217,6 +1217,7 @@ extension Translations {
         "journeyDatesEmpty": "Aucun trajet à ces dates",
         "journeyCover": "Couverture",
         "journeyRemoveLeg": "Retirer du voyage",
+        "journeyRemoveLegHint": "Le trajet reste dans votre historique, mais impossible de le remettre",
         "journeyDelete": "Supprimer le voyage",
         "journeyDeleteHint": "Les trajets restent",
         "journeyOverlaps": "Ces dates appartiennent déjà à un autre voyage",
