@@ -58,7 +58,12 @@ struct JourneyAggregate: Equatable {
         let origin = startCoordinate(of: first)
 
         for trip in trips {
-            let number = calendar.dateComponents([.day], from: day0, to: calendar.startOfDay(for: trip.startDate)).day! + 1
+            // `?? 0` — «тот же день», а не падение: обе даты уже приведены к
+            // полуночи одним календарём, так что разницу в днях он посчитает
+            // всегда. Force-unwrap здесь платил бы вылетом за случай, которого
+            // нет.
+            let daysFromStart = calendar.dateComponents([.day], from: day0, to: calendar.startOfDay(for: trip.startDate)).day ?? 0
+            let number = daysFromStart + 1
             let isLocal: Bool = {
                 guard let anchor, let s = startCoordinate(of: trip), let e = endCoordinate(of: trip) else { return false }
                 return distance(s, anchor) <= localRadius && distance(e, anchor) <= localRadius
@@ -89,8 +94,13 @@ struct JourneyAggregate: Equatable {
         // поездки (это про то, к какому дню отнести карточку), а тут — про то,
         // сколько календарных дней заняло путешествие целиком; это разные
         // вопросы, и последнему нужен именно endDate.
+        //
+        // `?? 0` — по той же причине, что и у номера дня выше: обе даты
+        // приведены к полуночи одним календарём, разница в днях у него есть
+        // всегда, и падать тут не за что.
         let last = trips.last!
-        let span = calendar.dateComponents([.day], from: day0, to: calendar.startOfDay(for: last.endDate ?? last.startDate)).day! + 1
+        let spanDays = calendar.dateComponents([.day], from: day0, to: calendar.startOfDay(for: last.endDate ?? last.startDate)).day ?? 0
+        let span = spanDays + 1
         var regions: [String] = []
         for r in trips.compactMap(\.region) where !regions.contains(r) { regions.append(r) }
         return JourneyAggregate(

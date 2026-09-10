@@ -35,6 +35,19 @@ final class JourneyRepositoryTests: XCTestCase {
         XCTAssertEqual(repo.fetchJourneys().map(\.id), [j.id])
     }
 
+    /// Окно отрезает БАЗА, а не фильтр в памяти — и отрезает ровно по
+    /// границам: поездка, стартовавшая в тот самый день, что и край окна,
+    /// внутри, а соседи снаружи остаются снаружи.
+    func testFetchTripsInWindowKeepsTheBoundariesAndDropsTheNeighbours() {
+        let ids = (0..<10).map { trip(daysFromT0: Double($0)) }
+
+        let window = repo.fetchTrips(from: t0.addingTimeInterval(3 * 86_400),
+                                     to: t0.addingTimeInterval(5 * 86_400))
+
+        XCTAssertEqual(window.map(\.id), [ids[3], ids[4], ids[5]],
+                       "три дня окна включительно, по старту и по возрастанию")
+    }
+
     func testExcludedTripLeavesTheJourney() {
         let a = trip(daysFromT0: 0), b = trip(daysFromT0: 1)
         var j = repo.saveJourney(Journey(startDate: t0, endDate: t0.addingTimeInterval(2 * 86_400)))

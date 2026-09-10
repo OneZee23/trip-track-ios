@@ -50,9 +50,10 @@ final class JourneyManager: ObservableObject {
             throw JourneyError.overlaps(clash.id)
         }
         let chosen = Set(sorted.map(\.id))
-        let excluded = repository.fetchAllTrips()
+        // Окно уже известно — значит и спрашивать надо его, а не библиотеку:
+        // выборка режется предикатом в базе (`fetchTrips(from:to:)`).
+        let excluded = repository.fetchTrips(from: first.startDate, to: end)
             .filter { !chosen.contains($0.id) }
-            .filter { $0.startDate >= first.startDate && $0.startDate <= end }
             .sorted { $0.startDate < $1.startDate }
             .map(\.id)
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -104,12 +105,22 @@ final class JourneyManager: ObservableObject {
 
     /// Соседи по времени, ещё ни в каком путешествии: кандидаты в плечи —
     /// соседи, без самой поездки: её экран ставит первой сам.
+    ///
+    /// Обе выборки — по разу на весь список, и это существенно. Раньше сюда
+    /// поднималась ВСЯ библиотека (`fetchAllTrips`, со снимками и отметками
+    /// каждой поездки), а потом на каждого уцелевшего кандидата звался
+    /// `journeyContaining`, который внутри заново перечитывал путешествия. Всё
+    /// это — синхронно, на главном потоке: лист объединения замирал ровно у
+    /// тех, кто ездит давно. Теперь окно отрезает база, а членство считает
+    /// `Journey.contains` по одному разу вычитанному списку путешествий —
+    /// правило то же самое, что было у `journeyContaining`.
     func neighbours(of trip: Trip, days: Int = 7) -> [Trip] {
         let window = TimeInterval(days * 86_400)
-        return repository.fetchAllTrips()
+        let existing = repository.fetchJourneys()
+        return repository.fetchTrips(from: trip.startDate.addingTimeInterval(-window),
+                                     to: trip.startDate.addingTimeInterval(window))
             .filter { $0.id != trip.id }
-            .filter { abs($0.startDate.timeIntervalSince(trip.startDate)) <= window }
-            .filter { repository.journeyContaining(tripId: $0.id) == nil }
+            .filter { candidate in !existing.contains { $0.contains(candidate) } }
             .sorted { $0.startDate < $1.startDate }
     }
 

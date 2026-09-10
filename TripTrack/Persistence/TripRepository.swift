@@ -9,6 +9,9 @@ import OSLog
 protocol TripRepository {
     func fetchTrips(limit: Int, offset: Int) -> [Trip]
     func fetchAllTrips() -> [Trip]
+    /// Свои поездки, стартовавшие внутри окна дат. См. реализацию: окно режет
+    /// база, а не фильтр в памяти.
+    func fetchTrips(from start: Date, to end: Date) -> [Trip]
     func hasAnyPrivateTrip() -> Bool
     /// Every completed trip, carrying the simplified preview polyline but NOT
     /// its track points. See the implementation for why that matters.
@@ -125,6 +128,29 @@ final class CoreDataTripRepository: TripRepository {
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = completedTripPredicate
         request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
+        request.fetchBatchSize = 25
+        guard let entities = try? context.fetch(request) else { return [] }
+        return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
+    }
+
+    /// Свои поездки, стартовавшие в окне — включительно с обоих концов, по
+    /// времени старта.
+    ///
+    /// Окно отрезает БАЗА, а не фильтр в памяти. `fetchAllTrips()` поднимает
+    /// всю библиотеку и у КАЖДОЙ поездки материализует связи — снимки, отметки
+    /// и разбор `photoIdsJSON` (см. `tripFromEntity`): тысяча записей за пять
+    /// лет ради шести внутри недели. Лист объединения зовёт это с главного
+    /// потока при каждом открытии, и замирал тем сильнее, чем дольше человек
+    /// ездит, — то есть у самых своих людей хуже всего. Предикат тот же, что у
+    /// `trips(in:)`: одно правило «поездка в окне», два вызывающих.
+    func fetchTrips(from start: Date, to end: Date) -> [Trip] {
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            completedTripPredicate,
+            NSPredicate(format: "startDate >= %@", start as NSDate),
+            NSPredicate(format: "startDate <= %@", end as NSDate),
+        ])
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: true)]
         request.fetchBatchSize = 25
         guard let entities = try? context.fetch(request) else { return [] }
         return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }

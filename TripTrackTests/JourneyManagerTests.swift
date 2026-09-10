@@ -61,6 +61,28 @@ final class JourneyManagerTests: XCTestCase {
         XCTAssertFalse(neighbourIds.contains(anchorId), "сама поездка — не сосед себе")
     }
 
+    /// Раньше «уже в путешествии» проверялось `journeyContaining` на КАЖДОГО
+    /// кандидата — то есть перечитыванием всех путешествий поездка за
+    /// поездкой. Теперь список путешествий берётся один раз, а членство
+    /// считает `Journey.contains`. Правило обязано остаться тем же — вместе
+    /// со снятой галочкой: убранная из чужого окна поездка в нём не состоит,
+    /// значит снова кандидат.
+    func testNeighbourAlreadyInAnotherJourneyIsNotACandidate() {
+        let anchorId = trip(daysFromT0: 0)
+        let takenId = trip(daysFromT0: 1)
+        let releasedId = trip(daysFromT0: 2)
+        repo.saveJourney(Journey(
+            startDate: t0.addingTimeInterval(86_400),
+            endDate: t0.addingTimeInterval(2 * 86_400 + 3_600),
+            excludedTripIds: [releasedId]))
+
+        let manager = JourneyManager(repository: repo)
+        let ids = Set(manager.neighbours(of: fetchTrip(anchorId)).map(\.id))
+
+        XCTAssertFalse(ids.contains(takenId), "плечо чужого путешествия — не кандидат")
+        XCTAssertTrue(ids.contains(releasedId), "убранная из чужого окна — снова кандидат")
+    }
+
     func testCreateBuildsTheWindowFromFirstStartToLastEnd() throws {
         let firstId = trip(daysFromT0: 0)
         let lastId = trip(daysFromT0: 2)
