@@ -416,6 +416,7 @@ extension Translations {
         "actionUpload": "Pag-upload",
         "actionUpdate": "Pag-update",
         "actionDelete": "Pagbura",
+        "actionUnpublish": "Pag-aalis sa publiko",
         "vehicleMainLabel": "Pangunahin",
         "myVehicle": "Sasakyan ko",
         "renameVehicle": "Palitan ang pangalan",

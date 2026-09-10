@@ -2419,11 +2419,17 @@ enum AppStrings {
         default:         return type.capitalized
         }
     }
+    /// Действие в листе синка. Правило то же, что у `entityLabel` выше:
+    /// существующие действия через `default` проходить не должны — так
+    /// `.unpublish` писался «Unpublish» на всех тринадцати языках.
     static func actionLabel(_ action: String, _ lang: LanguageManager.Language) -> String {
         switch action {
         case "upload": return tr(lang, "actionUpload", ru: "Загрузка", en: "Upload")
         case "update": return tr(lang, "actionUpdate", ru: "Обновление", en: "Update")
         case "delete": return tr(lang, "actionDelete", ru: "Удаление", en: "Delete")
+        // Не «удаление»: поездка остаётся на телефоне, уходит только её
+        // публичная копия с сервера.
+        case "unpublish": return tr(lang, "actionUnpublish", ru: "Снятие с публикации", en: "Unpublishing")
         default:       return action.capitalized
         }
     }

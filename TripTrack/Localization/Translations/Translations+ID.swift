@@ -416,6 +416,7 @@ extension Translations {
         "actionUpload": "Unggah",
         "actionUpdate": "Pembaruan",
         "actionDelete": "Penghapusan",
+        "actionUnpublish": "Membatalkan publikasi",
         "vehicleMainLabel": "Utama",
         "myVehicle": "Kendaraan saya",
         "renameVehicle": "Ganti nama",

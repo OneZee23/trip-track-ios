@@ -416,6 +416,7 @@ extension Translations {
         "actionUpload": "Жүктеу",
         "actionUpdate": "Жаңарту",
         "actionDelete": "Жою",
+        "actionUnpublish": "Жарияланымнан алу",
         "vehicleMainLabel": "Негізгі",
         "myVehicle": "Менің көлігім",
         "renameVehicle": "Атауын өзгерту",

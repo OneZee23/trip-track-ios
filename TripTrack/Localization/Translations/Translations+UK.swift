@@ -416,6 +416,7 @@ extension Translations {
         "actionUpload": "Завантаження",
         "actionUpdate": "Оновлення",
         "actionDelete": "Видалення",
+        "actionUnpublish": "Зняття з публікації",
         "vehicleMainLabel": "Основна",
         "myVehicle": "Мій автомобіль",
         "renameVehicle": "Перейменувати",

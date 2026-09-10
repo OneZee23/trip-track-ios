@@ -416,6 +416,7 @@ extension Translations {
         "actionUpload": "Yükleme",
         "actionUpdate": "Güncelleme",
         "actionDelete": "Silme",
+        "actionUnpublish": "Yayından kaldırma",
         "vehicleMainLabel": "Ana",
         "myVehicle": "Aracım",
         "renameVehicle": "Yeniden adlandır",
