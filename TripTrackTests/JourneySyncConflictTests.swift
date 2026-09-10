@@ -18,6 +18,7 @@ final class JourneySyncConflictTests: XCTestCase {
     private var pc: PersistenceController!
     private var repo: CoreDataTripRepository!
     private var transport: APISyncTransport!
+    private var session: URLSession!
     private let t0 = Date(timeIntervalSince1970: 1_760_000_000)
 
     override func setUp() async throws {
@@ -27,12 +28,28 @@ final class JourneySyncConflictTests: XCTestCase {
         repo = CoreDataTripRepository(persistenceController: pc)
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
-        let client = APIClient(session: URLSession(configuration: config), tokenStore: TokenStore.shared)
+        session = URLSession(configuration: config)
+        let client = APIClient(session: session, tokenStore: TokenStore.shared)
         transport = APISyncTransport(client: client, photos: R2PhotoStorage.shared, repo: repo)
     }
 
+    /// Отпускать здесь ОБЯЗАТЕЛЬНО, и это не вежливость.
+    ///
+    /// XCTest держит все свои экземпляры до конца прогона, поэтому каждое поле,
+    /// оставленное непустым, живёт до последнего теста в наборе. Хранилище в
+    /// памяти тянет за собой свою `NSManagedObjectModel` (в логе это «Multiple
+    /// NSEntityDescriptions claim TripEntity»), а `URLSession` без
+    /// `invalidateAndCancel` не отпускает ни свою очередь, ни `MockURLProtocol`.
+    /// Шесть таких хвостов на набор из девятисот тестов роняли раннер целиком —
+    /// причём в чужом классе и каждый раз в другом месте, так что по симптому
+    /// виновника не найти.
     override func tearDown() async throws {
         MockURLProtocol.reset()
+        session?.invalidateAndCancel()
+        session = nil
+        transport = nil
+        repo = nil
+        pc = nil
         try await super.tearDown()
     }
 

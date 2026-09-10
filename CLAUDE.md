@@ -216,6 +216,18 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   `enableFileIOTracing` приходят ВКЛЮЧЁННЫМИ и уносят URL с `accountId` в пути
   и курсором в query. Поэтому в `SentryService` они выставлены явно, а чистка
   живёт в `PIIScrubber` под тестами.
+- **Тест, не отпустивший фикстуру, роняет ЧУЖОЙ класс.** XCTest держит все свои
+  экземпляры до конца прогона, поэтому каждое поле, не обнулённое в `tearDown`,
+  живёт до последнего теста в наборе: `PersistenceController(inMemory:)` тянет
+  свою `NSManagedObjectModel` (в логе — «Multiple NSEntityDescriptions claim
+  TripEntity»), `URLSession` без `invalidateAndCancel` не отпускает ни очередь,
+  ни `MockURLProtocol`. Шесть таких хвостов в `JourneySyncConflictTests` роняли
+  весь прогон — «Restarting after unexpected exit», три раза из трёх, каждый
+  раз в другом методе `PostTripTrackProcessorTests`. По симптому виновника не
+  найти: он в классе, который отработал раньше и зелёным. Ищется
+  `-skip-testing:` по подозреваемому, лечится обнулением полей — как в
+  `PrivacyFlowE2ETests` и `RemoteSettingsMergeTests`.
+
 - **`a...b` из двух дат — не пустой диапазон, а падение.** `ClosedRange`
   требует `lowerBound <= upperBound` и роняет процесс, а не возвращает пустоту.
   Так умирал лист правки путешествия: `DatePicker(in: startDate...Date())` при
