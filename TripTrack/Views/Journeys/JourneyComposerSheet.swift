@@ -110,7 +110,18 @@ struct JourneyComposerSheet: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
-                .onChange(of: title) { _, _ in error = nil }
+                // Тот же предел, что в `JourneyEditSheet`. Два разных предела
+                // на двух листах означают, что правка молча съедает хвост
+                // имени, которое приняло создание: длинную строку лист сборки
+                // брал целиком, а первое же нажатие клавиши в листе правки
+                // резало её до шестидесяти символов — без предупреждения и без
+                // отмены.
+                .onChange(of: title) { _, new in
+                    error = nil
+                    if new.count > JourneyEditSheet.titleLimit {
+                        title = String(new.prefix(JourneyEditSheet.titleLimit))
+                    }
+                }
             if let error {
                 Text(error)
                     .font(.system(size: 12, weight: .semibold))

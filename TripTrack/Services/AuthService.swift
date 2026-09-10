@@ -267,6 +267,17 @@ final class AuthService: ObservableObject {
             SyncEnqueuer.enqueue(SyncOperation(
                 entityType: .settings, entityId: SettingsManager.shared.localUserId, action: .upload))
 
+            // Journeys — same reason as in `CloudSyncView.enableCloudSync`:
+            // the privacy gate keeps them on the phone while Cloud Sync is
+            // off, so everything built before this sign-in sits pendingUpload.
+            // Without this the first sync skips them and they leave only after
+            // the next app LAUNCH, via `recoverPendingEntities`.
+            for op in SyncCoordinator.pendingJourneyOperations(
+                in: PersistenceController.shared.container.viewContext,
+                userId: SettingsManager.shared.localUserId) {
+                SyncEnqueuer.enqueue(op)
+            }
+
             // Photos not fully on R2 yet. Mirrors the predicate in
             // `CloudSyncView.enableCloudSync`.
             let ctx = PersistenceController.shared.container.viewContext

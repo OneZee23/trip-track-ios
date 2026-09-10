@@ -45,16 +45,21 @@ final class JourneyEditWindowTests: XCTestCase {
         XCTAssertEqual(w.end, later, "большая — конец")
     }
 
-    func testOpenWindowTakesEndFromStart() {
+    /// Открытое окно (`end == nil`) закрывается СЕГОДНЯ, а не собственным
+    /// началом. По `Journey.contains` оно тянется вперёд до конца времён, и
+    /// свернуть его в одни сутки значило бы выбросить все плечи, кроме
+    /// первого дня, — при сохранении одного лишь ИМЕНИ. Такая запись приезжает
+    /// пулом со второго телефона: `endDate` optional и в схеме, и в проводе.
+    func testOpenWindowClosesAtToday() {
         let start = day(-3)
         let w = JourneyEditSheet.clampedWindow(start: start, end: nil, now: now)
-        XCTAssertEqual(w.start, start)
-        XCTAssertEqual(w.end, start, "открытое окно закрывается своим же началом")
+        XCTAssertEqual(w.start, start, "начало не трогаем")
+        XCTAssertEqual(w.end, now, "конец — сегодня: поездок из будущего не бывает")
     }
 
-    func testOpenWindowInFutureTakesEndFromClampedStart() {
-        // nil-конец берёт начало ПОСЛЕ зажима, иначе будущее вернулось бы
-        // через вторую границу.
+    func testOpenWindowInFutureCollapsesToToday() {
+        // Будущее начало зажимается, а `now` в роли конца зажимать не за что:
+        // обе границы сходятся в сегодняшний день.
         let w = JourneyEditSheet.clampedWindow(start: day(7), end: nil, now: now)
         XCTAssertEqual(w.start, now)
         XCTAssertEqual(w.end, now)
@@ -110,5 +115,58 @@ final class JourneyEditWindowTests: XCTestCase {
         let end = day(-4)
         XCTAssertEqual(JourneyEditSheet.startBounds(start: start, end: end, now: now).upperBound, end,
                        "начало по-прежнему не заезжает за конец")
+    }
+
+    // MARK: - Двигал ли даты ЧЕЛОВЕК
+
+    func testDatesUntouchedWhenNothingWasPicked() {
+        let opened = (start: day(-6), end: day(-2))
+        XCTAssertFalse(JourneyEditSheet.datesMoved(start: opened.start, end: opened.end, opened: opened))
+    }
+
+    /// Пикер отдаёт свой час, а в базе лежат утро и вечер тех же суток. День
+    /// тот же — значит границу человек не двигал, и «Сохранить» не имеет права
+    /// гаснуть. Часы у `day()` отсчитываются от полудня, поэтому 07:00 это
+    /// `hour: -5`, а 21:00 — `hour: 9`.
+    func testDatesUntouchedWhenOnlyTheTimeOfDayDiffers() {
+        let opened = (start: day(-6, hour: -5), end: day(-2, hour: 9))
+        XCTAssertFalse(JourneyEditSheet.datesMoved(start: day(-6), end: day(-2), opened: opened))
+    }
+
+    func testEachBoundaryIsNoticedSeparately() {
+        let opened = (start: day(-6), end: day(-2))
+        XCTAssertTrue(JourneyEditSheet.datesMoved(start: day(-7), end: opened.end, opened: opened),
+                      "уехало начало")
+        XCTAssertTrue(JourneyEditSheet.datesMoved(start: opened.start, end: day(-1), opened: opened),
+                      "уехал конец")
+    }
+
+    func testSwappedPickersAreNotAMove() {
+        // Перепутанные местами границы — описка, а не правка: окно
+        // разворачивается само, ровно как в `plannedWindow()`.
+        let opened = (start: day(-6), end: day(-2))
+        XCTAssertFalse(JourneyEditSheet.datesMoved(start: opened.end, end: opened.start, opened: opened))
+    }
+
+    /// Тот самый узкий случай. Признак «даты трогали» раньше сравнивал пикеры
+    /// с ХРАНИМОЙ записью, а её границы к тому моменту уже подвинул
+    /// `clampedWindow` в `init`. У окна с будущими датами (и у окна с
+    /// `endDate == nil`) он оказывался истинным ещё до того, как человек
+    /// коснулся экрана, — и такая запись БЕЗ плеч не переименовывалась вовсе:
+    /// «Сохранить» гасло, оставляя единственное действие «Удалить».
+    func testClampAtOpeningIsNotAMoveByTheUser() {
+        let storedStart = day(5)          // «15–30 сентября» при «сегодня» 10-м
+        let storedEnd = day(20)
+        let opened = JourneyEditSheet.clampedWindow(start: storedStart, end: storedEnd, now: now)
+
+        XCTAssertFalse(JourneyEditSheet.datesMoved(start: opened.start, end: opened.end, opened: opened),
+                       "лист открылся — человек ещё ничего не трогал")
+        XCTAssertTrue(!Calendar.current.isDate(opened.start, inSameDayAs: storedStart),
+                      "зажим и правда подвинул границу — иначе тест ничего не проверяет")
+    }
+
+    func testOpenWindowClampIsNotAMoveByTheUser() {
+        let opened = JourneyEditSheet.clampedWindow(start: day(-10), end: nil, now: now)
+        XCTAssertFalse(JourneyEditSheet.datesMoved(start: opened.start, end: opened.end, opened: opened))
     }
 }

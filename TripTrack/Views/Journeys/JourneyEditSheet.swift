@@ -26,10 +26,25 @@ struct JourneyEditSheet: View {
     /// Сколько поездок попадёт в окно с выбранными датами. Считается при
     /// каждой смене даты, а не в `body`: это выборка из базы.
     @State private var windowTripCount: Int = 0
+    /// Убранные рукой плечи, которые лежат внутри выбранного окна, — полка
+    /// возврата. Читается из базы вместе со счётом, а не в `body`.
+    @State private var removedLegs: [Trip] = []
+    /// Отмеченные к возврату. Применяются в `save()`, как обложка и имя: в
+    /// этом листе до нажатия «Сохранить» не меняется НИЧЕГО, и возврат — не
+    /// исключение из правила.
+    @State private var returningIds: Set<UUID> = []
+    /// Окно, которым лист ОТКРЫЛСЯ (после зажима). От него меряется
+    /// `datesMoved` — см. её доку.
+    @State private var openedStart: Date
+    @State private var openedEnd: Date
 
     /// Имя длиннее этого не помещается ни в шапку, ни в карточку ленты, а
     /// обрезать его при показе значило бы принять то, что нельзя прочитать.
-    private static let titleLimit = 60
+    ///
+    /// Не `private`: тот же предел стоит в листе СОЗДАНИЯ
+    /// (`JourneyComposerSheet`). Два разных предела на двух листах означали
+    /// бы, что правка молча съедает хвост имени, которое приняло создание.
+    static let titleLimit = 60
 
     /// «Сейчас» — снимок времени, взятый при сборке листа.
     ///
@@ -50,10 +65,15 @@ struct JourneyEditSheet: View {
         self.journey = journey
         self.photos = photos
         self.now = now
-        _title = State(initialValue: journey.title ?? "")
+        // Обрезается ЗДЕСЬ, а не первым нажатием клавиши: длинное имя,
+        // принятое прежней сборкой, иначе исчезало бы хвостом молча, посреди
+        // правки одной буквы.
+        _title = State(initialValue: String((journey.title ?? "").prefix(Self.titleLimit)))
         let window = Self.clampedWindow(start: journey.startDate, end: journey.endDate, now: now)
         _startDate = State(initialValue: window.start)
         _endDate = State(initialValue: window.end)
+        _openedStart = State(initialValue: window.start)
+        _openedEnd = State(initialValue: window.end)
         _coverPhotoId = State(initialValue: journey.coverPhotoId)
     }
 
@@ -70,12 +90,18 @@ struct JourneyEditSheet: View {
     ///
     /// Открытое окно (`end == nil`) закрывается первой же правкой: два выбора
     /// дат — это две даты, и притворяться, будто вторая ещё не выбрана, некуда.
+    /// Закрывается СЕГОДНЯШНИМ днём, а не собственным началом: по
+    /// `Journey.contains` открытое окно тянется вперёд до конца времён, и
+    /// свернуть его в одни сутки значило бы выбросить все плечи, кроме
+    /// первого дня, — при сохранении одного лишь ИМЕНИ. Сегодня — ближайшая
+    /// граница, которая не теряет ни одного уже записанного плеча: поездок из
+    /// будущего не бывает.
     static func clampedWindow(start: Date, end: Date?, now: Date,
                               calendar: Calendar = .current) -> (start: Date, end: Date) {
         let cappedStart = notFuture(start, now: now, calendar: calendar)
-        // Конец берётся от УЖЕ зажатого начала, иначе будущее вернулось бы
-        // через него.
-        let cappedEnd = notFuture(end ?? cappedStart, now: now, calendar: calendar)
+        // Конец берётся от `now`, а тот всё равно проходит через зажим: у
+        // будущего начала оба конца сходятся в сегодня.
+        let cappedEnd = notFuture(end ?? now, now: now, calendar: calendar)
         // Перепутанные местами границы — не отказ, а описка: окно
         // разворачивается само, ровно как в `save()`.
         return (min(cappedStart, cappedEnd), max(cappedStart, cappedEnd))
@@ -136,6 +162,7 @@ struct JourneyEditSheet: View {
             header(c)
             nameField(c)
             datesBlock(c)
+            removedShelf(c)
             coverShelf(c)
             saveButton(c)
             deleteButton(c)
@@ -144,6 +171,7 @@ struct JourneyEditSheet: View {
         .background(c.bg)
         .animation(.easeInOut(duration: 0.15), value: error)
         .animation(.easeInOut(duration: 0.15), value: windowTripCount)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: returningIds)
         .task { recountWindow() }
         .onChange(of: startDate) { _, new in adjustStart(new) }
         .onChange(of: endDate) { _, new in adjustEnd(new) }
@@ -319,7 +347,150 @@ struct JourneyEditSheet: View {
         .accessibilityAddTraits(isCover ? .isSelected : [])
     }
 
-    private var saveDisabled: Bool { datesTouched && windowTripCount == 0 }
+    // MARK: - Полка возврата
+
+    /// Убранные плечи — и единственный способ вернуть их обратно.
+    ///
+    /// До этой правки `excludedTripIds` только рос: «Убрать из путешествия»
+    /// спрашивало «точно?», зная, что назад хода нет. Сдвиг дат исключение не
+    /// отменяет (оно сильнее окна), а собрать новое путешествие вокруг
+    /// убранной поездки не даёт проверка пересечения окон — старое окно эти
+    /// даты занимает. Оставалось удалить путешествие и собрать заново, потеряв
+    /// имя и обложку.
+    ///
+    /// Полка стоит ЗДЕСЬ, а не отменой в тосте. Тост живёт три с половиной
+    /// секунды: он закрывает промах пальцем, но не решение, о котором человек
+    /// передумал назавтра, — а односторонней дверь остаётся и с ним. Своего
+    /// экрана она не стоит: рядом уже правятся окно и обложка, то есть весь
+    /// остальной состав путешествия, и живой счёт под датами уже отвечает на
+    /// тот же вопрос — сколько поездок останется внутри.
+    ///
+    /// Карточка показывает ровно то же, что строка листа сборки: миниатюру
+    /// маршрута, день и километры. «Владикавказ» и «Владикавказ» по имени не
+    /// различить, а по нитке маршрута — сразу.
+    @ViewBuilder
+    private func removedShelf(_ c: AppTheme.Colors) -> some View {
+        if !removedLegs.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(AppStrings.journeyRemovedLegs(lang.language))
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(c.textTertiary)
+                    .textCase(.uppercase)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    // `LazyHStack` и горизонтальная полка по той же причине,
+                    // что у обложек: убранных бывает сколько угодно, а высота
+                    // листа от их числа зависеть не должна — он без прокрутки,
+                    // и «Сохранить» обязано остаться на экране.
+                    LazyHStack(spacing: 8) {
+                        ForEach(removedLegs) { removedCard($0, c) }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+        }
+    }
+
+    private func removedCard(_ trip: Trip, _ c: AppTheme.Colors) -> some View {
+        let returning = returningIds.contains(trip.id)
+        let l = lang.language
+        return Button {
+            Haptics.selection()
+            if returning { returningIds.remove(trip.id) } else { returningIds.insert(trip.id) }
+            // Счёт под датами отвечает сразу: возврат меняет состав окна
+            // ровно так же, как сдвиг границы.
+            recountWindow()
+        } label: {
+            HStack(spacing: 9) {
+                legThumbnail(trip, c)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(JourneyFormat.dayDate(trip.startDate, language: l))
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    Text("\(GarageFormat.odometer(trip.distanceKm, lng: l)) \(AppStrings.km(l))")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(c.textTertiary)
+                        .lineLimit(1)
+                }
+                returnPill(returning, l)
+            }
+            .padding(8)
+            .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(returning ? AppTheme.accent : .clear, lineWidth: 2)
+            }
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityLabel("\(AppStrings.journeyReturnLeg(l)), \(JourneyFormat.tripTitle(trip, language: l))")
+        .accessibilityAddTraits(returning ? .isSelected : [])
+        .accessibilityIdentifier("journey_edit_return_leg")
+    }
+
+    /// Слово, а не одна иконка: «вернуть» — это то, что случится, и нажатие
+    /// обязано сказать об этом до, а не после (CLAUDE.md, «Нажатие обязано
+    /// отвечать»). Залитая пилюля означает «вернётся при сохранении».
+    private func returnPill(_ on: Bool, _ l: LanguageManager.Language) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: on ? "checkmark" : "arrow.uturn.backward")
+                .font(.system(size: 9, weight: .heavy))
+            Text(AppStrings.journeyReturnLeg(l))
+                .font(.system(size: 10.5, weight: .heavy))
+                .lineLimit(1)
+        }
+        .foregroundStyle(on ? Color.white : AppTheme.accent)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(on ? AppTheme.accent : AppTheme.accent.opacity(0.14), in: Capsule())
+    }
+
+    /// Меньше двух точек — `MapSnapshotPreview` мерцает вечно и читается как
+    /// вечная загрузка; та же заглушка, что в листе сборки.
+    @ViewBuilder
+    private func legThumbnail(_ trip: Trip, _ c: AppTheme.Colors) -> some View {
+        let coords = trip.previewCoordinates
+        Group {
+            if coords.count > 1 {
+                MapSnapshotPreview(coordinates: coords, tripId: trip.id, height: 44, width: 56)
+            } else {
+                ZStack {
+                    Rectangle().fill(c.card)
+                    Image(systemName: "map.slash")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
+            }
+        }
+        .frame(width: 56, height: 44)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    // MARK: - Гейт сохранения
+
+    /// Двигал ли даты ЧЕЛОВЕК. Не то же самое, что «поедут ли границы в базе»,
+    /// на что отвечает `plannedWindow()`.
+    ///
+    /// Гейт сохранения спрашивал именно второе — сравнивал пикеры с ХРАНИМОЙ
+    /// записью. Но границы к тому моменту уже подвинул `clampedWindow` в
+    /// `init`: у окна с `endDate == nil` и у окна, залезающего в будущее,
+    /// «даты тронуты» выходило истинным ещё до того, как человек коснулся
+    /// экрана. Такая запись БЕЗ плеч оставалась с единственным действием
+    /// «Удалить» — тот самый тупик, который для обычного пустого путешествия
+    /// уже закрыли, просто с другого входа.
+    ///
+    /// Поэтому меряется от окна, которым лист ОТКРЫЛСЯ, а не от хранимой
+    /// записи. Чистой функцией — чтобы это держал тест, а не открытый лист.
+    static func datesMoved(start: Date, end: Date, opened: (start: Date, end: Date),
+                           calendar: Calendar = .current) -> Bool {
+        !calendar.isDate(min(start, end), inSameDayAs: opened.start)
+            || !calendar.isDate(max(start, end), inSameDayAs: opened.end)
+    }
+
+    private var saveDisabled: Bool {
+        Self.datesMoved(start: startDate, end: endDate, opened: (openedStart, openedEnd))
+            && windowTripCount == 0
+    }
 
     private func saveButton(_ c: AppTheme.Colors) -> some View {
         Button {
@@ -396,6 +567,12 @@ struct JourneyEditSheet: View {
         if !endDayUntouched {
             window.endDate = Self.endOfDay(max(startDate, endDate), calendar: calendar)
         }
+        // Единственное место, где список исключений УМЕНЬШАЕТСЯ. Считается
+        // здесь, а не в `save()`, чтобы живой счёт под датами мерил ровно то
+        // окно, которое сохранится.
+        if !returningIds.isEmpty {
+            window.excludedTripIds.removeAll { returningIds.contains($0) }
+        }
         return window
     }
 
@@ -407,15 +584,17 @@ struct JourneyEditSheet: View {
         return Calendar.current.isDate(max(startDate, endDate), inSameDayAs: stored)
     }
 
-    /// Двигали ли даты. Ровно тот же вопрос, на который отвечает
-    /// `plannedWindow()`: границы поедут — значит трогали.
-    private var datesTouched: Bool {
-        !Calendar.current.isDate(min(startDate, endDate), inSameDayAs: journey.startDate)
-            || !endDayUntouched
-    }
-
     private func recountWindow() {
-        windowTripCount = manager.trips(in: plannedWindow()).count
+        let planned = plannedWindow()
+        windowTripCount = manager.trips(in: planned).count
+        // Полка спрашивает ТЕ ЖЕ даты, но ПОЛНЫЙ список исключений: карточка
+        // отмеченного к возврату плеча обязана остаться на месте, иначе
+        // передумать было бы негде. И наоборот — плечо само уходит с полки,
+        // если человек увёл границу так, что оно оказалось вне окна: возврат
+        // ему уже не помог бы, а карточка обещала бы.
+        var shelf = planned
+        shelf.excludedTripIds = journey.excludedTripIds
+        removedLegs = manager.excludedTrips(in: shelf)
     }
 
     private func save() {

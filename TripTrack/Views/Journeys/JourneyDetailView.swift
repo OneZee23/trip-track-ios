@@ -43,10 +43,11 @@ struct JourneyDetailView: View {
     @State private var showEdit = false
     @State private var showActions = false
     @State private var confirmDelete = false
-    /// Плечо, которое просят убрать. Спрашиваем ДО правки: `excludedTripIds`
-    /// только растёт, и вернуть плечо в путешествие в 0.6.6 нечем — ни
-    /// кнопкой, ни отменой. Необратимое без вопроса — это то же самое
-    /// удаление, только молча.
+    /// Плечо, которое просят убрать. Спрашиваем ДО правки: из ленты пропадает
+    /// целый день дороги, и молча такое не делается. Вернуть плечо есть чем —
+    /// полка «Убранные поездки» в листе правки, — но вопрос всё равно задаём:
+    /// возврат живёт на другом экране, и знать о нём в момент нажатия человек
+    /// не обязан.
     @State private var legToRemove: Trip?
     @State private var isMapFullscreen = false
     @State private var openTripId: UUID?
@@ -109,6 +110,16 @@ struct JourneyDetailView: View {
             .hideAppTabBar()
             .ignoresSafeArea(.container, edges: .top)
             .task(id: journeyId) { reload() }
+            // Поездку удаляют с ЕЁ экрана, открытого отсюда же. Без этой
+            // строки плечо остаётся строкой ленты и километрами в итоге, а
+            // нажатие на него уводит в `TripDetailView` без поездки — а там
+            // без поездки нет ни шапки, ни кружка «Назад»: экран без выхода.
+            // Тот же случай и то же лечение, что в `ProfileView`.
+            .onReceive(NotificationCenter.default.publisher(for: .tripDeleted)) { _ in reload() }
+            // Возврат с экрана плеча. Там же его переименовывают, добавляют
+            // снимки и ставят отметки — всё это лента дня показывает своими
+            // строками, миниатюрами и кружками на карте.
+            .onChange(of: openTripId) { _, new in if new == nil { reload() } }
             // Удаление (своё или прилетевшее синком) не оставляет экрана,
             // которому нечего показать.
             //
@@ -342,18 +353,39 @@ struct JourneyDetailView: View {
 
     /// Окно без единой поездки — законное состояние, а не поломка: даты можно
     /// сдвинуть куда угодно, и путешествие переживёт удаление своих плеч.
+    ///
+    /// Карточка НАЖИМАЕТСЯ и ведёт в лист правки. Раньше она печатала
+    /// «Добавить поездку» обычным текстом внутри мёртвой рамки: кнопки «+» на
+    /// экране путешествия нет и не будет — плечи набираются датами, потому что
+    /// членство это окно, — и человек тыкал в надпись, которая ничего не
+    /// делала. Обещать действие и не давать его — ровно то, чего не велит
+    /// CLAUDE.md («если нажатие что-то открывает — это видно; если не
+    /// открывает — не притворяемся»).
     private func emptyCard(_ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(AppStrings.journeyEmptyTitle(lang.language))
-                .font(.system(size: 17, weight: .heavy))
-                .foregroundStyle(c.text)
-            Text(AppStrings.journeyAddFromTrip(lang.language))
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(c.textTertiary)
+        Button {
+            Haptics.tap()
+            showEdit = true
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(AppStrings.journeyEmptyTitle(lang.language))
+                    .font(.system(size: 17, weight: .heavy))
+                    .foregroundStyle(c.text)
+                HStack(spacing: 6) {
+                    // Ведём туда, где правят окно, и называем это тем же
+                    // словом, что стоит на самом листе.
+                    Text(AppStrings.journeyEdit(lang.language))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppTheme.accent)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .heavy))
+                        .foregroundStyle(AppTheme.accent)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background(c.card, in: RoundedRectangle(cornerRadius: 16))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(c.card, in: RoundedRectangle(cornerRadius: 16))
+        .buttonStyle(PressableCardStyle())
         .accessibilityIdentifier("journey_empty")
     }
 
@@ -446,8 +478,9 @@ struct JourneyDetailView: View {
     /// «Убрать из путешествия»: поездка выходит из окна, но остаётся в
     /// истории — обёртка правится, запись о дороге не трогается вовсе.
     ///
-    /// Зовётся только из подтверждения (`legToRemove`): вернуть плечо обратно
-    /// в 0.6.6 нечем.
+    /// Зовётся только из подтверждения (`legToRemove`). Обратный ход — полка
+    /// «Убранные поездки» в листе правки: она и есть единственное место, где
+    /// `excludedTripIds` уменьшается.
     ///
     /// Пишется именно исключение, а не сдвиг дат: сосед может лежать в
     /// середине окна, и подвинуть границу так, чтобы он выпал, значило бы

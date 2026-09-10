@@ -362,6 +362,19 @@ struct CloudSyncView: View {
             SyncEnqueuer.enqueue(SyncOperation(
                 entityType: .settings, entityId: settings.localUserId, action: .upload))
 
+            // Путешествия. Привратник (`SyncEnqueuer`) держит их как личные
+            // данные и с выключенным облаком не выпускает ВООБЩЕ — значит
+            // всё, что человек собрал до этого переключателя, лежит
+            // `pendingUpload` и ждёт. Без этих двух строк оно уезжало не
+            // сейчас, а после следующего ЗАПУСКА приложения, когда до него
+            // добирался `recoverPendingEntities`: «включил синхронизацию» не
+            // означало «синхронизировалось».
+            for op in SyncCoordinator.pendingJourneyOperations(
+                in: PersistenceController.shared.container.viewContext,
+                userId: settings.localUserId) {
+                SyncEnqueuer.enqueue(op)
+            }
+
             // Photos are gated by their own `uploadStatus` (separate from
             // `syncStatus`). Enqueue every photo that isn't already fully on
             // R2 — `localOnly` (never uploaded), `uploading`

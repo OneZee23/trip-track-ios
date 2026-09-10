@@ -1817,12 +1817,21 @@ enum AppStrings {
         tr(lang, "journeyRemoveLeg", ru: "Убрать из путешествия", en: "Remove from journey")
     }
     /// В подтверждении «Убрать из путешествия». Говорит обе половины правды:
-    /// сама поездка никуда не денется, но обратно в путешествие её не вернуть
-    /// — способа нет (`excludedTripIds` только растёт).
+    /// сама поездка никуда не денется, а вернуть её обратно есть чем — полка
+    /// «Убранные поездки» в листе правки. До 0.6.6 здесь стояло «вернуть её
+    /// будет нечем», и это было правдой: `excludedTripIds` только рос.
     static func journeyRemoveLegHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyRemoveLegHint",
-           ru: "Поездка останется в истории, но вернуть её в путешествие будет нечем",
-           en: "The trip stays in your history, but there's no way to put it back")
+           ru: "Поездка останется в истории, а вернуть её можно в «Изменить путешествие»",
+           en: "The trip stays in your history; you can put it back in Edit journey")
+    }
+    /// Заголовок полки убранных плеч в листе правки.
+    static func journeyRemovedLegs(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyRemovedLegs", ru: "Убранные поездки", en: "Removed trips")
+    }
+    /// Подпись на карточке убранного плеча: нажатие возвращает его в окно.
+    static func journeyReturnLeg(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyReturnLeg", ru: "Вернуть", en: "Put back")
     }
     static func journeyDelete(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyDelete", ru: "Удалить путешествие", en: "Delete journey")

@@ -103,6 +103,21 @@ final class JourneyManager: ObservableObject {
     func journey(containing tripId: UUID) -> Journey? { repository.journeyContaining(tripId: tripId) }
     func trips(in journey: Journey) -> [Trip] { repository.trips(in: journey) }
 
+    /// Плечи, убранные рукой: те, что ВЕРНУТСЯ в окно, если снять исключение.
+    ///
+    /// Окно то же самое, что у `trips(in:)`, — потому что оно и спрашивается,
+    /// у той же функции, с пустым списком исключений. Убранная поездка, чей
+    /// старт лежит за границами, в ответ не попадает: снятие исключения ей
+    /// уже не поможет (`Journey.contains` отрежет её датой), а карточка в
+    /// листе правки обещала бы возврат, которого не будет.
+    func excludedTrips(in journey: Journey) -> [Trip] {
+        guard !journey.excludedTripIds.isEmpty else { return [] }
+        let removed = Set(journey.excludedTripIds)
+        var window = journey
+        window.excludedTripIds = []
+        return repository.trips(in: window).filter { removed.contains($0.id) }
+    }
+
     /// Соседи по времени, ещё ни в каком путешествии: кандидаты в плечи —
     /// соседи, без самой поездки: её экран ставит первой сам.
     ///
