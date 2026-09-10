@@ -134,4 +134,48 @@ final class PIIScrubberTests: XCTestCase {
         XCTAssertFalse(PIISensitiveKeys.matches("tokenizer"),
                        "совпадать должно ИМЯ поля, а не подстрока внутри чужого слова")
     }
+
+    // MARK: - Контекст, который кладёт сам SDK
+
+    /// `device_app_hash` — производная от Apple `identifierForVendor`, и
+    /// кладёт её в контекст `app` сам Sentry, без единой нашей строки. Рядом
+    /// в том же событии стоит `user.id`, то есть «кто» и «с какой установки»
+    /// склеиваются без нашего участия.
+    ///
+    /// ПОЧЕМУ тестом по СЛОВАРЮ, а не по глазам: чистка контекста в
+    /// `SentryService.scrub(event:)` идёт ровно этим проходом
+    /// (`context.mapValues { PIIScrubber.redact(dict: $0) }`), а форма
+    /// контекста — не наша, она меняется от версии SDK. Здесь повторена
+    /// именно она.
+    func testSDKDeviceAppHashIsRedactedFromAppContext() {
+        let sdkContext: [String: [String: Any]] = [
+            "app": [
+                "app_identifier": "app.trip-track.ios",
+                "app_version": "0.6.6",
+                "app_build": "58",
+                "device_app_hash": "7b1c9a0f4e2d6853a1b0c9d8e7f60514",
+            ],
+            "device": ["model": "iPhone15,2", "free_memory": 812_345_678],
+        ]
+
+        let out = sdkContext.mapValues { PIIScrubber.redact(dict: $0) }
+        let app = out["app"]
+
+        XCTAssertEqual(app?["device_app_hash"] as? String, PIIScrubber.redactedMarker)
+        XCTAssertEqual(app?["app_version"] as? String, "0.6.6",
+                       "версия сборки — половина ценности отчёта, она остаётся")
+        XCTAssertEqual((out["device"]?["model"]) as? String, "iPhone15,2")
+
+        // Значение не должно пережить чистку НИГДЕ в событии: событие
+        // уезжает целиком, а не по одному полю.
+        XCTAssertFalse("\(out)".contains("7b1c9a0f4e2d6853a1b0c9d8e7f60514"))
+    }
+
+    /// Имя пришло из SDK в snake_case, а список у нас в основном camelCase —
+    /// проверяем, что оно опознаётся и само, и с префиксом.
+    func testDeviceAppHashIsInTheSharedList() {
+        XCTAssertTrue(PIISensitiveKeys.all.contains("device_app_hash"))
+        XCTAssertTrue(PIISensitiveKeys.matches("device_app_hash"))
+        XCTAssertTrue(PIISensitiveKeys.matches("contexts.device_app_hash"))
+    }
 }

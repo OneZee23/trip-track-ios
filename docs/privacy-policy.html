@@ -81,7 +81,7 @@
         <div class="lang-switch">English · <a href="privacy-policy-ru.html">Русский</a></div>
 
         <h1>Privacy Policy</h1>
-        <p class="updated">Last updated: April 20, 2026</p>
+        <p class="updated">Last updated: September 10, 2026</p>
 
         <h2>1. Overview</h2>
         <p>TripTrack is an iOS application for recording personal car trips. This Privacy Policy explains what information we collect, how we use it, and the choices you have. It applies to the TripTrack mobile app and any server infrastructure we operate ("Service").</p>
@@ -91,7 +91,13 @@
         <p>TripTrack works in two distinct modes. The data we process depends on which mode you use.</p>
 
         <h3>2.1 Guest mode (offline, default)</h3>
-        <p>If you do not sign in, TripTrack stores all your data — trips, GPS tracks, photos, vehicle profiles, preferences — <strong>exclusively on your device</strong> using Apple's CoreData framework. No data leaves the device. In this mode we do not process any personal data on our servers.</p>
+        <p>If you do not sign in, TripTrack stores all your data — trips, GPS tracks, photos, vehicle profiles, preferences — <strong>exclusively on your device</strong> using Apple's CoreData framework. Your trips, tracks, photos and preferences do not leave the device, and we do not create an account for you.</p>
+        <p>Three things do leave the device even in guest mode, and we would rather name them than claim otherwise:</p>
+        <ul>
+            <li><strong>Diagnostics</strong> — crash reports and the other diagnostic events described in §3.5 are sent from the first launch, before and without any sign-in.</li>
+            <li><strong>Clubs waiting list</strong> — when you open the Clubs tab, the app sends a random installation identifier so we can count how many people are waiting for that feature. It carries no name, email, or trip data.</li>
+            <li><strong>Search</strong> — a query you type in Discover is sent to our server to be answered. We do not store it and do not write it to our logs.</li>
+        </ul>
 
         <h3>2.2 Signed-in mode (cloud sync)</h3>
         <p>If you sign in with Apple, your data can be synchronized with our server so it is available on your other devices. Cloud sync is opt-in and can be disabled at any time in the app (Profile → Cloud Sync).</p>
@@ -110,10 +116,11 @@
         <ul>
             <li><strong>GPS trajectories</strong> — coordinates, speed, altitude, and timestamps captured during trip recording you initiated.</li>
             <li><strong>Trip metadata</strong> — start/end time, distance, duration, auto-geocoded place names, user-provided titles and notes.</li>
-            <li><strong>Photos you attach</strong> — uploaded to Cloudflare R2 storage. Before upload, all metadata (EXIF, including GPS tags) is stripped.</li>
+            <li><strong>Photos you attach</strong> — uploaded to Cloudflare R2 storage. All metadata is stripped from the image file itself (EXIF, including GPS tags). The capture time and the coordinates of the frame, if the photo had them, are transmitted as separate fields alongside it and stored with the photo record — they are what places the photo on the route.</li>
             <li><strong>Vehicle profiles</strong> — make, model, avatar, odometer.</li>
             <li><strong>App settings</strong> — theme, language, unit system, gamification progress.</li>
         </ul>
+        <p><strong>One case does not depend on cloud sync.</strong> A trip you choose to publish, and the photos attached to it, are uploaded to our server even when cloud sync is off — that is what publishing means. New trips are private by default, and a private trip is uploaded only when cloud sync is on.</p>
 
         <h3>3.3 Technical data</h3>
         <ul>
@@ -125,14 +132,21 @@
         <ul>
             <li>Recent 48 hours of diagnostic logs (you can export them via Profile → Send debug logs).</li>
             <li>Geocode cache, map tiles, fog-of-war state.</li>
+            <li><strong>Approximate home location</strong> — derived on the device from your own trip history. It is stored only in this app's settings on this device and is <strong>never sent to our servers</strong>. It serves one purpose: to notice that a group of trips looked like a journey. One honest caveat: device settings are included in an iCloud backup, so they reach Apple — but not us.</li>
         </ul>
+
+        <h3>3.5 Diagnostics (crash reporting)</h3>
+        <p>The app sends crash reports, app-hang and watchdog-termination events, session start/stop records and a 10&nbsp;% sample of performance traces to <strong>Sentry</strong> (Functional Software, Inc.), acting as our data processor. Events are ingested and stored in Sentry's <strong>European region</strong> (<code>ingest.de.sentry.io</code>).</p>
+        <p>Each event carries: your account identifier (a UUID — no name, no email), an installation identifier generated by the SDK, device model, OS version, free memory, battery level, locale, calendar and time-zone name, and a trail of network requests in redacted form — the method, the status code, and the <em>shape</em> of the URL, with query strings, fragments and every identifier inside the path removed before the event leaves the device.</p>
+        <p>We do <strong>not</strong> send screenshots, view hierarchies, session replays, performance profiles, request or response bodies, file paths, access tokens, or your home location. The device-and-app hash that the SDK derives from Apple's <code>identifierForVendor</code> is removed before sending as well.</p>
+        <p>Diagnostics are sent in both modes, including guest mode, and they do not depend on cloud sync; the app has no separate switch for them. Legal basis: legitimate interest (GDPR Art. 6(1)(f)) in keeping the app working. Retention: events are deleted automatically once the retention period configured in our Sentry organisation expires. To object, write to <a href="mailto:privacy@trip-track.app">privacy@trip-track.app</a>.</p>
 
         <h2>4. Location Data — Detail</h2>
         <ul>
             <li>Location is accessed <strong>only during active trip recording</strong> that you start manually, or when you opt in to automatic recording via Bluetooth/motion triggers.</li>
             <li>Background location permission is used solely to continue an in-progress recording.</li>
             <li>You can revoke location access at any time in iOS Settings.</li>
-            <li>Reverse geocoding (coordinates → place names) is performed via Apple MapKit on your device. We do not use third-party geocoding services.</li>
+            <li>Reverse geocoding (coordinates → place names) is performed by Apple's own service: the coordinates are sent to Apple as the platform provider, and in that exchange they are not available to us. We do not use any third-party geocoding service. The place name Apple returns is stored with the trip and, with cloud sync on, is synchronised like the rest of the trip.</li>
         </ul>
 
         <h2>5. Purposes and Legal Bases (GDPR)</h2>
@@ -142,8 +156,9 @@
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">Apple user ID, account UUID, device UUID</td><td style="padding:8px; border:1px solid #d2d2d7;">Create and authenticate your account</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">Email, display name</td><td style="padding:8px; border:1px solid #d2d2d7;">Account identification, social features, account recovery</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">GPS trips (uploaded on opt-in)</td><td style="padding:8px; border:1px solid #d2d2d7;">Deliver the sync service you enabled</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
-            <tr><td style="padding:8px; border:1px solid #d2d2d7;">Photos (EXIF stripped)</td><td style="padding:8px; border:1px solid #d2d2d7;">Deliver the sync service</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
+            <tr><td style="padding:8px; border:1px solid #d2d2d7;">Photos (file metadata stripped)</td><td style="padding:8px; border:1px solid #d2d2d7;">Deliver the sync service</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">Public profile, follows, reactions, trip shares</td><td style="padding:8px; border:1px solid #d2d2d7;">Deliver social features you enabled</td><td style="padding:8px; border:1px solid #d2d2d7;">Contract — Art. 6(1)(b)</td></tr>
+            <tr><td style="padding:8px; border:1px solid #d2d2d7;">Crash, performance and session diagnostics (§3.5)</td><td style="padding:8px; border:1px solid #d2d2d7;">Find and fix defects; keep the app working</td><td style="padding:8px; border:1px solid #d2d2d7;">Legitimate interests — Art. 6(1)(f)</td></tr>
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">Server access logs, IP addresses, abuse-report records</td><td style="padding:8px; border:1px solid #d2d2d7;">Security, abuse prevention, accountability</td><td style="padding:8px; border:1px solid #d2d2d7;">Legitimate interests — Art. 6(1)(f), Recital 49</td></tr>
             <tr><td style="padding:8px; border:1px solid #d2d2d7;">Account-deletion audit record (timestamp + opaque hash only)</td><td style="padding:8px; border:1px solid #d2d2d7;">Demonstrate compliance with Art. 17 requests</td><td style="padding:8px; border:1px solid #d2d2d7;">Legal obligation + legitimate interests — Art. 6(1)(c)+(f)</td></tr>
         </table>
@@ -151,21 +166,24 @@
         <p><strong>Precise location and special category data.</strong> GPS coordinates are not special-category data under GDPR Art. 9 per se. We do not derive, infer, or cluster users by visited-place type (e.g., health, religion, sexuality). We do not run machine-learning inference on trip coordinates. If our practice changes, this policy will be updated in advance.</p>
 
         <h2>6. Sub-processors</h2>
-        <p>When you use cloud sync, the following parties process data on our behalf or alongside us:</p>
+        <p>The following parties process data on our behalf or alongside us. Sentry does so from the first launch, in guest mode too; the others only once you sign in or turn cloud sync on:</p>
         <ul>
             <li><strong>Apple Inc.</strong> (United States) — Sign in with Apple identity-token verification. Apple is an independent controller of your Apple ID; we only receive a limited identity token. Apple is certified under the EU-US Data Privacy Framework.</li>
             <li><strong>Cloudflare, Inc.</strong> (United States / EU data centers) — photo object storage (Cloudflare R2), in an EU-jurisdiction bucket. Cloudflare is certified under the EU-US Data Privacy Framework and our processing is governed by Cloudflare's Data Processing Addendum incorporating EU Standard Contractual Clauses (2021/914).</li>
-            <li><strong>Our hosting provider</strong> — runs the application server and PostgreSQL database. Currently an EU-based VPS provider; the exact name will be published here before the first public release. Data center in the European Economic Area. Governed by the provider's GDPR-compliant DPA.</li>
+            <li><strong>Functional Software, Inc. (Sentry)</strong> (United States, EU data region) — crash and performance diagnostics, as described in §3.5. Events are ingested and stored in Sentry's European region; processing is governed by Sentry's Data Processing Addendum.</li>
+            <li><strong>Our hosting provider</strong> — runs the application server and PostgreSQL database. An EU-based VPS provider, with the data centre in the European Economic Area, governed by the provider's GDPR-compliant DPA. We will name the provider on request at <a href="mailto:privacy@trip-track.app">privacy@trip-track.app</a>.</li>
         </ul>
-        <p><strong>We do not sell or share your personal information.</strong> We do not use analytics SDKs, advertising networks, cross-app/site tracking, or any third-party trackers. We do not share data with advertisers. We do not use your content to train machine-learning models.</p>
+        <p><strong>We do not sell or share your personal information.</strong> There are no advertising or tracking SDKs in the app, no advertising networks, and no cross-app or cross-site tracking. We use exactly one third-party SDK, and it is diagnostic: Sentry (§3.5). It also records session starts and stops, which amounts to a count of app launches — so we no longer claim that we run no analytics at all. We do not share data with advertisers. We do not use your content to train machine-learning models.</p>
 
         <h2>7. International Data Transfers</h2>
+        <p>Diagnostic events (§3.5) are ingested and stored in Sentry's European region and are not transferred outside it by us; Sentry itself is a US-headquartered company, and our processing is governed by its Data Processing Addendum.</p>
         <p>Our primary hosting is in the European Economic Area. Photo storage on Cloudflare R2 uses an EU-jurisdiction bucket; however, as a US-headquartered company, Cloudflare is subject to US law. We rely on Cloudflare's EU-US Data Privacy Framework certification and Standard Contractual Clauses as transfer mechanisms. Sign in with Apple authentication routes through Apple Inc. (United States) under the EU-US DPF. If you are in a jurisdiction with stricter cross-border rules, using cloud sync constitutes your informed consent to this transfer.</p>
 
         <h2>8. Data Retention</h2>
         <ul>
-            <li><strong>Account data and synced content</strong> — retained for as long as your account is active. If you don't sign in for 3 years, we may delete the account after notifying you via the email on file.</li>
-            <li><strong>Deleted trips, photos, vehicles, and account data</strong> — removed from our primary database and from Cloudflare R2 immediately upon deletion.</li>
+            <li><strong>Account data and synced content</strong> — retained for as long as your account is active. If you do not sign in for 3 years, we may delete the account at our discretion after notifying you via the email on file. Inactive accounts are not deleted automatically.</li>
+            <li><strong>Trips, photos and vehicles you delete</strong> — marked as deleted and hidden everywhere immediately; physically erased from our primary database and from Cloudflare R2 within 30 days.</li>
+            <li><strong>Account deletion</strong> — when you confirm it in the app, the account and the server-side data belonging to it are erased at once, not on the 30-day schedule above.</li>
             <li><strong>Encrypted database backups</strong> — retained for no more than 30 days. Deleted user data is purged from backups within this window by backup rotation.</li>
             <li><strong>Server access logs</strong> — up to 14 days, then deleted.</li>
             <li><strong>Account-deletion audit record</strong> — a non-identifying record (timestamp + opaque hash, no name, email, or content) may be retained indefinitely to demonstrate compliance with deletion requests.</li>
@@ -191,7 +209,7 @@
             <li>All network communication is over HTTPS.</li>
             <li>Authentication credentials are stored in iOS Keychain (hardware-backed on most devices).</li>
             <li>Passwords are never used — authentication is via Sign in with Apple only.</li>
-            <li>Photos are stripped of metadata (EXIF including GPS) before upload.</li>
+            <li>Photos are stripped of file metadata (EXIF including GPS tags) before upload; the capture time and frame coordinates travel as separate fields, as described in §3.2.</li>
             <li>Database access is restricted to the application service.</li>
         </ul>
         <p>No system is perfectly secure. If you believe your account has been compromised, contact us immediately.</p>
