@@ -1024,12 +1024,6 @@ enum AppStrings {
     private static let enGrouping: NumberFormatter = {
         let f = NumberFormatter(); f.numberStyle = .decimal; f.groupingSeparator = ","; return f
     }()
-    static func km2ExploredLabel(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "km2ExploredLabel", ru: "км² освоено", en: "km² explored")
-    }
-    static func km2Short(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "km2Short", ru: "км²", en: "km²")
-    }
     /// Bare genitive plate labels («8 регионов», «24 города» etc.).
     static func regionsGenitive(_ lang: LanguageManager.Language, count: Int) -> String {
         nounRegions(lang, count)
@@ -3912,33 +3906,6 @@ enum AppStrings {
         tr(lang, "followDepthNote",
            ru: "Глубина списка ограничена 3 уровнями связей",
            en: "List depth is limited to 3 levels of connections")
-    }
-    static func wrappedKmYear(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "wrappedKmYear", ru: "км за год", en: "km this year")
-    }
-    static func wrappedBestDay(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "wrappedBestDay", ru: "лучший день", en: "best day")
-    }
-    static func wrappedTopRegion(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "wrappedTopRegion", ru: "топ-регион", en: "top region")
-    }
-    static func wrappedShareText(_ lang: LanguageManager.Language, year: Int, km: String, trips: Int) -> String {
-        let tail = "\(tripsCount(lang, n: trips)), \(km) \(AppStrings.km(lang)) — TripTrack"
-        switch lang {
-        case .ru: return "Мой \(year) на дорогах: \(tail)"
-        case .en: return "My \(year) on the road: \(tail)"
-        case .de: return "Mein \(year) auf der Straße: \(tail)"
-        case .es: return "Mi \(year) en la carretera: \(tail)"
-        case .fr: return "Mon \(year) sur la route : \(tail)"
-        case .it: return "Il mio \(year) in strada: \(tail)"
-        case .pl: return "Mój \(year) na drogach: \(tail)"
-        case .id: return "\(year) saya di jalan: \(tail)"
-        case .tr: return "Yollardaki \(year) yılım: \(tail)"
-        case .fil: return "Ang \(year) ko sa kalsada: \(tail)"
-        case .uk: return "Мій \(year) на дорогах: \(tail)"
-        case .kk: return "Жолдағы \(year) жылым: \(tail)"
-        case .pt: return "Meu \(year) na estrada: \(tail)"
-        }
     }
 
     // MARK: - Audit-fix additions (0.6.0 post-release pass)

@@ -53,10 +53,4 @@ final class SpeedColorScaleTests: XCTestCase {
         XCTAssertEqual(SpeedColorScale.uiColor(forSpeedMS: 36.111),
                        SpeedColorScale.bands[3].uiColor)
     }
-
-    func testLegendRowsCoverEveryBandSlowToFast() {
-        let rows = SpeedColorScale.legendRows()
-        XCTAssertEqual(rows.count, SpeedColorScale.bands.count)
-        XCTAssertEqual(rows.map(\.range), ["0–50", "50–90", "90–110", "110+"])
-    }
 }

@@ -951,7 +951,7 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         /// Maps speed (m/s) to a stroke colour. Thresholds + colours live in
-        /// `SpeedColorScale` (shared with the on-map `SpeedLegendView`):
+        /// `SpeedColorScale`, shared with every other renderer of the track:
         ///  0-50 green · 50-90 yellow · 90-110 orange · 110+ red (km/h).
         private static func color(forSpeedMS speed: Double) -> UIColor {
             SpeedColorScale.uiColor(forSpeedMS: speed)

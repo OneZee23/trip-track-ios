@@ -2,12 +2,19 @@ import SwiftUI
 import UIKit
 
 /// Single source of truth for the speed→colour scale used to paint route
-/// polylines (`RouteMapView`) **and** the legend drawn over the map
-/// (`SpeedLegendView`). Keeping the thresholds in one place means the legend
-/// can never drift from what's actually drawn — that drift was the gap the
-/// user hit ("the track is red/yellow/green, but which colour is which speed?").
+/// polylines (`RouteMapView`, `PosterRouteCanvas`, the speed chart in
+/// `TripDetailSections`). Keeping the thresholds in one place means no two
+/// renderers can disagree about which colour a speed is.
 ///
 /// Thresholds (km/h): 0–50 green · 50–90 yellow · 90–110 orange · 110+ red.
+/// They **paint**, they never get printed — so they stay metric, like every
+/// other threshold in the app.
+///
+/// A `legendRows()` used to live here, building "0–50 / 50–90 / 90–110 / 110+"
+/// labels for an on-map `SpeedLegendView` that no longer exists (0.6.7 removed
+/// both). If a legend ever comes back: for miles it needs a **redrawn scale**
+/// of 30/60/70, not these numbers divided by 1.609 into 31/56/68. Printing
+/// these thresholds under an "mph" header would be a lie.
 enum SpeedColorScale {
     /// One colour band of the scale. `upperKmh == nil` is the open-ended top.
     struct Band {
@@ -37,22 +44,5 @@ enum SpeedColorScale {
     /// Stroke colour for a polyline segment recorded at `speedMS` (m/s).
     static func uiColor(forSpeedMS speedMS: Double) -> UIColor {
         bands[zone(forSpeedMS: speedMS)].uiColor
-    }
-
-    /// Legend rows slow→fast: colour swatch + a unit-less km/h range label
-    /// ("0–50", "50–90", … "110+"). Numbers are language-neutral; the caller
-    /// supplies the "km/h" unit header.
-    static func legendRows() -> [(color: Color, range: String)] {
-        var rows: [(Color, String)] = []
-        var lower = 0
-        for band in bands {
-            if let upper = band.upperKmh {
-                rows.append((band.color, "\(lower)–\(Int(upper))"))
-                lower = Int(upper)
-            } else {
-                rows.append((band.color, "\(lower)+"))
-            }
-        }
-        return rows
     }
 }
