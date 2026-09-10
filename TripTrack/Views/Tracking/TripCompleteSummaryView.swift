@@ -5,7 +5,6 @@ import PhotosUI
 struct TripCompleteSummaryView: View {
     let trip: Trip
     var completionData: TripCompletionData?
-    let onPhotoSaved: (UIImage) -> Void
     let onDone: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
@@ -249,7 +248,23 @@ struct TripCompleteSummaryView: View {
             for item in fresh {
                 guard let data = try? await item.loadTransferable(type: Data.self),
                       let image = UIImage(data: data) else { continue }
-                if let photo = mapVM.tripManager.addPhoto(to: trip.id, image: image) {
+                // Метаданные читаем из БАЙТОВ, пока они есть.
+                //
+                // Системный `PhotosPicker` не просит доступа к библиотеке — и
+                // не должен: человек выбрал кадр, приложение получило файл, а
+                // время съёмки и координата лежат в нём. Спросить вместо этого
+                // `PHAsset` (как делает свой пикер) тут нельзя дважды:
+                // `itemIdentifier` у этого пикера пуст, а доступ к галерее
+                // ради уже полученных данных — регрессия приватности.
+                //
+                // Ниже `savePhoto` пересжимает кадр в свой JPEG, и спросить
+                // будет уже не у чего: без этих двух строк снимок с финиша
+                // навсегда оставался без места на карте и без отметки.
+                let meta = PhotoMetadata.read(fromImageData: data)
+                if let photo = mapVM.tripManager.addPhoto(
+                    to: trip.id, image: image,
+                    capturedAt: meta.capturedAt,
+                    latitude: meta.latitude, longitude: meta.longitude) {
                     await MainActor.run { savedPhotoIds[item] = photo.id }
                 }
             }

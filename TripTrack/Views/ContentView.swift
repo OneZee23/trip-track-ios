@@ -160,9 +160,6 @@ struct ContentView: View {
             TripCompleteSummaryView(
                 trip: trip,
                 completionData: mapVM.lastCompletionData,
-                onPhotoSaved: { image in
-                    _ = mapVM.tripManager.addPhoto(to: trip.id, image: image)
-                },
                 onDone: { dismissSummary() }
             )
             .environmentObject(lang)

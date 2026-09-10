@@ -1485,8 +1485,8 @@ struct TripDetailView: View {
         for item in picked {
             let photo = mapVM.tripManager.addPhoto(
                 to: tripId, image: item.image,
-                capturedAt: item.capturedAt,
-                latitude: item.latitude, longitude: item.longitude)
+                capturedAt: item.meta.capturedAt,
+                latitude: item.meta.latitude, longitude: item.meta.longitude)
             if let photo {
                 trip?.photos.append(photo)
                 added += 1

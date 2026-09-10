@@ -13,18 +13,6 @@ import Photos
 /// permission, where the system picker needs none. So this asks for read access
 /// only, works in «limited» mode without complaint, and never touches anything
 /// the user has not shared with it.
-/// Снимок вместе с тем, что о нём знает библиотека фотографий.
-///
-/// Координата и время съёмки живут в `PHAsset` и доступны ровно в момент
-/// выбора. Дальше остаётся файл в Documents, из которого ни того, ни другого
-/// уже не достать, — поэтому забрать их надо здесь.
-struct PickedPhoto: Equatable {
-    let image: UIImage
-    let capturedAt: Date?
-    let latitude: Double?
-    let longitude: Double?
-}
-
 struct TripPhotoPicker: View {
     /// Выбранные снимки вместе с тем, что о них знает библиотека.
     let onPick: ([PickedPhoto]) -> Void
@@ -281,15 +269,11 @@ struct TripPhotoPicker: View {
             guard !isCancelled else { return }
             guard let asset = byId[id] else { continue }
             if let image = await Self.fullSizeImage(for: asset) {
-                // Время съёмки и место кадра берём здесь и только здесь: после
-                // выхода из пикера `PHAsset` уже не спросишь, а по файлу в
-                // Documents этого не восстановить.
-                images.append(PickedPhoto(
-                    image: image,
-                    capturedAt: asset.creationDate,
-                    latitude: asset.location?.coordinate.latitude,
-                    longitude: asset.location?.coordinate.longitude
-                ))
+                // Время съёмки и место кадра забираем здесь: после выхода из
+                // пикера `PHAsset` уже не спросишь, а по файлу в Documents
+                // этого не восстановить. Читает их `PhotoMetadata` — тот же,
+                // что разбирает байты кадра на экране финиша.
+                images.append(PickedPhoto(image: image, meta: PhotoMetadata.read(from: asset)))
             }
         }
         guard !isCancelled else { return }
