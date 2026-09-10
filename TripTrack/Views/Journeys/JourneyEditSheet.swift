@@ -31,15 +31,79 @@ struct JourneyEditSheet: View {
     /// обрезать его при показе значило бы принять то, что нельзя прочитать.
     private static let titleLimit = 60
 
-    init(journey: Journey, photos: [TripPhoto]) {
+    /// «Сейчас» берётся ОДИН раз, при открытии листа. Считать его в `body`
+    /// значит получать на каждом кадре чуть другой диапазон, а у полуночи —
+    /// другой день, и выбранная дата вдруг оказывалась бы вне границ.
+    private let now: Date
+
+    init(journey: Journey, photos: [TripPhoto], now: Date = Date()) {
         self.journey = journey
         self.photos = photos
+        self.now = now
         _title = State(initialValue: journey.title ?? "")
-        _startDate = State(initialValue: journey.startDate)
-        // Открытое окно закрывается первой же правкой: два выбора дат — это
-        // две даты, и притворяться, будто вторая ещё не выбрана, некуда.
-        _endDate = State(initialValue: journey.endDate ?? journey.startDate)
+        let window = Self.clampedWindow(start: journey.startDate, end: journey.endDate, now: now)
+        _startDate = State(initialValue: window.start)
+        _endDate = State(initialValue: window.end)
         _coverPhotoId = State(initialValue: journey.coverPhotoId)
+    }
+
+    // MARK: - Окно, которым безопасно открыть пикеры
+
+    /// Границы, приведённые к тому, что пикеры вообще могут показать.
+    ///
+    /// Путешествие — это то, что уже проехали, поэтому будущего в границах
+    /// быть не должно. Но в базе оно БЫВАЕТ: окно «15–30 сентября» завёл
+    /// прежней сборкой человек, которому будущее ещё не запрещали. Открывать
+    /// такую запись надо чем-то валидным — зажатым в прошлое и в правильном
+    /// порядке, — а не падать на построении диапазона `start...now`, у
+    /// которого нижняя граница больше верхней.
+    ///
+    /// Открытое окно (`end == nil`) закрывается первой же правкой: два выбора
+    /// дат — это две даты, и притворяться, будто вторая ещё не выбрана, некуда.
+    static func clampedWindow(start: Date, end: Date?, now: Date,
+                              calendar: Calendar = .current) -> (start: Date, end: Date) {
+        let cappedStart = notFuture(start, now: now, calendar: calendar)
+        // Конец берётся от УЖЕ зажатого начала, иначе будущее вернулось бы
+        // через него.
+        let cappedEnd = notFuture(end ?? cappedStart, now: now, calendar: calendar)
+        // Перепутанные местами границы — не отказ, а описка: окно
+        // разворачивается само, ровно как в `save()`.
+        return (min(cappedStart, cappedEnd), max(cappedStart, cappedEnd))
+    }
+
+    /// «Не в будущем» с точностью до ДНЯ: пикер выбирает дни, и подрезать
+    /// сегодняшние 23:59 до текущих 10:00 значит менять хранимое значение там,
+    /// где человек не увидит разницы.
+    static func notFuture(_ date: Date, now: Date, calendar: Calendar = .current) -> Date {
+        calendar.isDate(date, inSameDayAs: now) ? date : min(date, now)
+    }
+
+    /// Диапазоны, которые невозможно перевернуть.
+    ///
+    /// `a...b` из двух произвольных дат — не пустой диапазон, а падение
+    /// («Range requires lowerBound <= upperBound»). Именно так лист и умирал:
+    /// `startDate...Date()` при старте 15 сентября и «сегодня» 10-м. Поэтому
+    /// верхняя граница всегда поднимается и до нижней, и до ТЕКУЩЕГО значения
+    /// — диапазон валиден и содержит выбор при любых данных. Будущее при этом
+    /// закрыто: выше `now` граница уходит только вслед за уже выбранным
+    /// значением, которое пикер обязан уметь показать.
+    ///
+    /// Считаются чистыми функциями, чтобы «перевернуть нельзя» проверялось
+    /// тестом, а не открытым листом на телефоне владельца.
+    static func startBounds(start: Date, end: Date, now: Date) -> ClosedRange<Date> {
+        Date.distantPast...max(start, min(end, now))
+    }
+
+    static func endBounds(start: Date, end: Date, now: Date) -> ClosedRange<Date> {
+        min(start, end)...max(end, now)
+    }
+
+    private var startRange: ClosedRange<Date> {
+        Self.startBounds(start: startDate, end: endDate, now: now)
+    }
+
+    private var endRange: ClosedRange<Date> {
+        Self.endBounds(start: startDate, end: endDate, now: now)
     }
 
     var body: some View {
@@ -57,8 +121,8 @@ struct JourneyEditSheet: View {
         .animation(.easeInOut(duration: 0.15), value: error)
         .animation(.easeInOut(duration: 0.15), value: windowTripCount)
         .task { recountWindow() }
-        .onChange(of: startDate) { _, _ in recountWindow() }
-        .onChange(of: endDate) { _, _ in recountWindow() }
+        .onChange(of: startDate) { _, new in adjustStart(new) }
+        .onChange(of: endDate) { _, new in adjustEnd(new) }
         .appConfirm(
             isPresented: $confirmDelete,
             title: AppStrings.journeyDelete(lang.language),
@@ -117,13 +181,15 @@ struct JourneyEditSheet: View {
                 .textCase(.uppercase)
             // Даты — только прошедшие и в порядке: путешествие это то, что
             // уже проехали, а «с 15 по 30 сентября» в будущем давало пустое
-            // окно с картой-заглушкой.
+            // окно с картой-заглушкой. Границы сюда приходят готовыми
+            // (`startRange`/`endRange`) — сырое `a...b` из двух дат здесь
+            // однажды уже уронило лист.
             HStack(spacing: 10) {
-                datePicker($startDate, in: Date.distantPast...min(endDate, Date()), id: "journey_edit_start")
+                datePicker($startDate, in: startRange, id: "journey_edit_start")
                 Text("\u{2013}")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(c.textTertiary)
-                datePicker($endDate, in: startDate...Date(), id: "journey_edit_end")
+                datePicker($endDate, in: endRange, id: "journey_edit_end")
                 Spacer(minLength: 0)
             }
             // Живой счёт: сколько поездок окажется внутри. Ноль — сохранять
@@ -149,7 +215,25 @@ struct JourneyEditSheet: View {
             .labelsHidden()
             .tint(AppTheme.accent)
             .accessibilityIdentifier(id)
-            .onChange(of: value.wrappedValue) { _, _ in error = nil }
+    }
+
+    /// Инвариант держится и при правке, а не только при открытии: пикер отдаёт
+    /// значение из своего диапазона, но диапазоны у двух дат разные, и,
+    /// уведя начало за конец, человек оставил бы конец по ту сторону.
+    private func adjustStart(_ new: Date) {
+        let fixed = Self.notFuture(new, now: now)
+        if new != fixed { startDate = fixed }
+        if endDate < fixed { endDate = fixed }
+        error = nil
+        recountWindow()
+    }
+
+    private func adjustEnd(_ new: Date) {
+        let fixed = Self.notFuture(new, now: now)
+        if new != fixed { endDate = fixed }
+        if startDate > fixed { startDate = fixed }
+        error = nil
+        recountWindow()
     }
 
     /// Полка обложек — как у отметки: нажатие выбирает, подпись переезжает.
