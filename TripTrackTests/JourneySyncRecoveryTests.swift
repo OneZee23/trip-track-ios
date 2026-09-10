@@ -21,6 +21,14 @@ final class JourneySyncRecoveryTests: XCTestCase {
         pc = PersistenceController(inMemory: true)
     }
 
+    /// Отпускать обязательно: XCTest держит экземпляры до конца прогона, и
+    /// хранилище, оставленное в поле, тянет свою модель через весь набор.
+    /// См. CLAUDE.md, «Тест, не отпустивший фикстуру».
+    override func tearDown() {
+        pc = nil
+        super.tearDown()
+    }
+
     @discardableResult
     private func journey(_ status: SyncStatus, userId: UUID? = nil) -> UUID {
         let ctx = pc.container.viewContext
