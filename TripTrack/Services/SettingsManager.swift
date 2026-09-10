@@ -515,7 +515,38 @@ final class SettingsManager: ObservableObject {
         profileLevel = Int(entity.profileLevel)
         currentStreak = Int(entity.currentStreak)
         bestStreak = Int(entity.bestStreak)
-        adoptUnits(from: entity)
+        seedUnitsAtLaunch(from: entity)
+    }
+
+    /// На ЗАПУСКЕ местный выбор сильнее колонки — и это не вкусовщина.
+    ///
+    /// У `distanceUnit` в схеме стоит `defaultValueString="km"`, и стоит с
+    /// первой версии модели. Значит колонка НЕ БЫВАЕТ пустой в проде: она
+    /// заполнилась «km» в момент вставки строки, а переписать её было некому —
+    /// провод настройки был оборван до 0.6.7. У человека, выбравшего мили,
+    /// в `UserDefaults` лежит «miles», в колонке «km», и безусловный
+    /// `adoptUnits` на первом же запуске 0.6.7 стёр бы выбор молча, а
+    /// следующий `saveSettings()` зацементировал бы потерю в базе и на сервере.
+    ///
+    /// Поэтому здесь наоборот: есть местный выбор — он ЗАСЕВАЕТСЯ в колонку
+    /// (заодно впервые доезжая до сервера); нет — берём из колонки.
+    /// Входящее с сервера адоптируется в другом месте (`reloadUnitsFromStore`
+    /// по `.syncPullCompleted`), и там оно уже прошло защиту по времени правки
+    /// в `applyRemoteSettings`.
+    private func seedUnitsAtLaunch(from entity: UserSettingsEntity) {
+        if let local = unitStore.string(forKey: Self.distanceUnitKey),
+           DistanceUnit(rawValue: local) != nil {
+            if entity.distanceUnit != local { entity.distanceUnit = local }
+        } else if let raw = entity.distanceUnit, DistanceUnit(rawValue: raw) != nil {
+            unitStore.set(raw, forKey: Self.distanceUnitKey)
+        }
+
+        if let local = unitStore.string(forKey: Self.volumeUnitKey),
+           VolumeUnit(rawValue: local) != nil {
+            if entity.volumeUnit != local { entity.volumeUnit = local }
+        } else if let raw = entity.volumeUnit, VolumeUnit(rawValue: raw) != nil {
+            unitStore.set(raw, forKey: Self.volumeUnitKey)
+        }
     }
 
     func saveSettings() {

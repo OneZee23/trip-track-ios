@@ -211,4 +211,49 @@ final class SettingsUnitWireTests: XCTestCase {
 
         XCTAssertEqual(settings.distanceUnit, .miles)
     }
+    // MARK: Первый запуск 0.6.7
+
+    /// Регрессия, которую нашло ревью волны 1: у колонки `distanceUnit` в схеме
+    /// стоит `defaultValueString="km"`, и стоит с ПЕРВОЙ версии модели. Значит
+    /// в проде колонка не бывает пустой, а переписать её было некому — провод
+    /// был оборван до 0.6.7. У человека, выбравшего мили, в `UserDefaults`
+    /// лежит «miles», в колонке «km». Безусловное чтение колонки на запуске
+    /// стёрло бы выбор молча, а следующее сохранение зацементировало бы потерю
+    /// в базе и на сервере.
+    func testLaunchKeepsTheLocalChoiceWhenTheColumnStillSaysKm() throws {
+        let e = try XCTUnwrap(entity())
+        e.distanceUnit = "km"          // как её оставила прежняя сборка
+        e.volumeUnit = "liters"
+        try pc.container.viewContext.save()
+
+        store.set("miles", forKey: SettingsManager.distanceUnitKey)
+        store.set("gallons", forKey: SettingsManager.volumeUnitKey)
+
+        _ = SettingsManager(persistenceController: pc, unitStore: store)
+
+        XCTAssertEqual(store.string(forKey: SettingsManager.distanceUnitKey), "miles",
+                       "выбор человека обязан пережить первый запуск 0.6.7")
+        XCTAssertEqual(store.string(forKey: SettingsManager.volumeUnitKey), "gallons")
+        XCTAssertEqual(e.distanceUnit, "miles",
+                       "и засеяться в колонку, чтобы наконец доехать до сервера")
+        XCTAssertEqual(e.volumeUnit, "gallons")
+    }
+
+    /// Обратный случай: местного выбора нет вовсе — тогда источник правды
+    /// колонка, иначе восстановление на новом телефоне не работало бы.
+    func testLaunchTakesTheColumnWhenThereIsNoLocalChoice() throws {
+        let e = try XCTUnwrap(entity())
+        e.distanceUnit = "miles"
+        e.volumeUnit = "gallons"
+        try pc.container.viewContext.save()
+
+        store.removeObject(forKey: SettingsManager.distanceUnitKey)
+        store.removeObject(forKey: SettingsManager.volumeUnitKey)
+
+        _ = SettingsManager(persistenceController: pc, unitStore: store)
+
+        XCTAssertEqual(store.string(forKey: SettingsManager.distanceUnitKey), "miles")
+        XCTAssertEqual(store.string(forKey: SettingsManager.volumeUnitKey), "gallons")
+    }
+
 }
