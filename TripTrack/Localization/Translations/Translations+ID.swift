@@ -1212,6 +1212,8 @@ extension Translations {
         "journeyDrivingLabel": "Dalam perjalanan",
         "journeyEdit": "Edit perjalanan",
         "journeyDates": "Tanggal",
+        "journeyInDates": "di tanggal ini",
+        "journeyDatesEmpty": "Tidak ada perjalanan di tanggal ini",
         "journeyCover": "Sampul",
         "journeyRemoveLeg": "Hapus dari perjalanan",
         "journeyDelete": "Hapus perjalanan",

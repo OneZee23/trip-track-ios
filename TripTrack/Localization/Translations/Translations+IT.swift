@@ -1212,6 +1212,8 @@ extension Translations {
         "journeyDrivingLabel": "In viaggio",
         "journeyEdit": "Modifica viaggio",
         "journeyDates": "Date",
+        "journeyInDates": "in queste date",
+        "journeyDatesEmpty": "Nessun viaggio in queste date",
         "journeyCover": "Copertina",
         "journeyRemoveLeg": "Rimuovi dal viaggio",
         "journeyDelete": "Elimina viaggio",

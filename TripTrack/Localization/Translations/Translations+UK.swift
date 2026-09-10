@@ -1212,6 +1212,8 @@ extension Translations {
         "journeyDrivingLabel": "У дорозі",
         "journeyEdit": "Змінити подорож",
         "journeyDates": "Дати",
+        "journeyInDates": "у цих датах",
+        "journeyDatesEmpty": "У цих датах немає поїздок",
         "journeyCover": "Обкладинка",
         "journeyRemoveLeg": "Прибрати з подорожі",
         "journeyDelete": "Видалити подорож",

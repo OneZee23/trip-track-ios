@@ -1800,6 +1800,13 @@ enum AppStrings {
     static func journeyEdit(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyEdit", ru: "Изменить путешествие", en: "Edit journey")
     }
+    /// Под выбором дат: «3 поездки в этих датах».
+    static func journeyInDates(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyInDates", ru: "в этих датах", en: "in these dates")
+    }
+    static func journeyDatesEmpty(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyDatesEmpty", ru: "В этих датах нет поездок", en: "No trips in these dates")
+    }
     static func journeyDates(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyDates", ru: "Даты", en: "Dates")
     }

@@ -1212,6 +1212,8 @@ extension Translations {
         "journeyDrivingLabel": "Nasa biyahe",
         "journeyEdit": "I-edit ang paglalakbay",
         "journeyDates": "Mga petsa",
+        "journeyInDates": "sa mga petsang ito",
+        "journeyDatesEmpty": "Walang biyahe sa mga petsang ito",
         "journeyCover": "Pabalat",
         "journeyRemoveLeg": "Alisin sa paglalakbay",
         "journeyDelete": "Burahin ang paglalakbay",

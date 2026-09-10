@@ -1212,6 +1212,8 @@ extension Translations {
         "journeyDrivingLabel": "Yolda",
         "journeyEdit": "Yolculuğu düzenle",
         "journeyDates": "Tarihler",
+        "journeyInDates": "bu tarihlerde",
+        "journeyDatesEmpty": "Bu tarihlerde yolculuk yok",
         "journeyCover": "Kapak",
         "journeyRemoveLeg": "Yolculuktan çıkar",
         "journeyDelete": "Yolculuğu sil",

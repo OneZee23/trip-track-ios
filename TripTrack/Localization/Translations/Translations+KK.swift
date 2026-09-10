@@ -1212,6 +1212,8 @@ extension Translations {
         "journeyDrivingLabel": "Жолда",
         "journeyEdit": "Саяхатты өзгерту",
         "journeyDates": "Даталар",
+        "journeyInDates": "осы күндерде",
+        "journeyDatesEmpty": "Осы күндерде сапар жоқ",
         "journeyCover": "Мұқаба",
         "journeyRemoveLeg": "Саяхаттан алып тастау",
         "journeyDelete": "Саяхатты жою",

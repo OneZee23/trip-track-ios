@@ -23,6 +23,9 @@ struct JourneyEditSheet: View {
     @State private var coverPhotoId: UUID?
     @State private var error: String?
     @State private var confirmDelete = false
+    /// Сколько поездок попадёт в окно с выбранными датами. Считается при
+    /// каждой смене даты, а не в `body`: это выборка из базы.
+    @State private var windowTripCount: Int = 0
 
     /// Имя длиннее этого не помещается ни в шапку, ни в карточку ленты, а
     /// обрезать его при показе значило бы принять то, что нельзя прочитать.
@@ -52,6 +55,10 @@ struct JourneyEditSheet: View {
         .padding(20)
         .background(c.bg)
         .animation(.easeInOut(duration: 0.15), value: error)
+        .animation(.easeInOut(duration: 0.15), value: windowTripCount)
+        .task { recountWindow() }
+        .onChange(of: startDate) { _, _ in recountWindow() }
+        .onChange(of: endDate) { _, _ in recountWindow() }
         .appConfirm(
             isPresented: $confirmDelete,
             title: AppStrings.journeyDelete(lang.language),
@@ -108,14 +115,25 @@ struct JourneyEditSheet: View {
                 .font(.system(size: 12, weight: .heavy))
                 .foregroundStyle(c.textTertiary)
                 .textCase(.uppercase)
+            // Даты — только прошедшие и в порядке: путешествие это то, что
+            // уже проехали, а «с 15 по 30 сентября» в будущем давало пустое
+            // окно с картой-заглушкой.
             HStack(spacing: 10) {
-                datePicker($startDate, id: "journey_edit_start")
+                datePicker($startDate, in: Date.distantPast...min(endDate, Date()), id: "journey_edit_start")
                 Text("\u{2013}")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(c.textTertiary)
-                datePicker($endDate, id: "journey_edit_end")
+                datePicker($endDate, in: startDate...Date(), id: "journey_edit_end")
                 Spacer(minLength: 0)
             }
+            // Живой счёт: сколько поездок окажется внутри. Ноль — сохранять
+            // нечего, и кнопка это знает.
+            Text(windowTripCount == 0
+                 ? AppStrings.journeyDatesEmpty(lang.language)
+                 : "\(windowTripCount) \(AppStrings.nounTrips(lang.language, windowTripCount)) \(AppStrings.journeyInDates(lang.language))")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(windowTripCount == 0 ? AppTheme.red : c.textSecondary)
+                .accessibilityIdentifier("journey_edit_window_count")
             if let error {
                 Text(error)
                     .font(.system(size: 12, weight: .semibold))
@@ -125,8 +143,8 @@ struct JourneyEditSheet: View {
         }
     }
 
-    private func datePicker(_ value: Binding<Date>, id: String) -> some View {
-        DatePicker("", selection: value, displayedComponents: .date)
+    private func datePicker(_ value: Binding<Date>, in range: ClosedRange<Date>, id: String) -> some View {
+        DatePicker("", selection: value, in: range, displayedComponents: .date)
             .datePickerStyle(.compact)
             .labelsHidden()
             .tint(AppTheme.accent)
@@ -202,6 +220,8 @@ struct JourneyEditSheet: View {
                 .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(PressableCardStyle())
+        .disabled(windowTripCount == 0)
+        .opacity(windowTripCount == 0 ? 0.5 : 1)
         .accessibilityIdentifier("journey_edit_save")
     }
 
@@ -222,6 +242,16 @@ struct JourneyEditSheet: View {
     }
 
     // MARK: - Сохранение
+
+    /// Окно с выбранными датами, как его посчитает `save()`: границы дней,
+    /// те же исключённые поездки.
+    private func recountWindow() {
+        let calendar = Calendar.current
+        var probe = journey
+        probe.startDate = calendar.startOfDay(for: min(startDate, endDate))
+        probe.endDate = calendar.startOfDay(for: max(startDate, endDate)).addingTimeInterval(86_400 - 1)
+        windowTripCount = manager.trips(in: probe).count
+    }
 
     private func save() {
         var updated = journey
