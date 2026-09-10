@@ -362,9 +362,46 @@ final class SyncCoordinator {
             SyncEnqueuer.enqueue(SyncOperation(entityType: .settings, entityId: id, action: .upload))
         }
 
-        let total = trips.count + vehicles.count + photos.count
+        // Путешествия — через тот же `SyncEnqueuer`, что и соседи: привратник
+        // сам решит, уезжает ли это (личные данные, без Cloud Sync — нет).
+        let journeys = Self.pendingJourneyOperations(in: ctx, userId: userId)
+        for op in journeys { SyncEnqueuer.enqueue(op) }
+
+        let total = trips.count + vehicles.count + photos.count + journeys.count
         if total > 0 {
             coordinatorLog.debug("recovered \(total) pending entities after relaunch")
+        }
+    }
+
+    /// Путешествия, ждущие отправки, — своей функцией, чтобы правило
+    /// («pendingUpload → `.update`, pendingDelete → `.delete`, synced → никуда»)
+    /// проверялось тестом на своём in-memory сторе, а не запуском приложения:
+    /// `recoverPendingEntities` ходит в общий стор и в живую очередь.
+    ///
+    /// ПОЧЕМУ ветка вообще нужна. `SyncQueue` живёт в памяти и умирает вместе
+    /// с процессом; каскада от `TripEntity` у `JourneyEntity` нет; а в очередь
+    /// `.journey` попадает ровно из одного места — `JourneyManager`, в момент
+    /// правки руками. Значит правка, сделанная в самолёте (или упавшая в
+    /// `failedQueue`, пока бэкенд не выкачен), после перезапуска приложения
+    /// оставалась бы на телефоне НАВСЕГДА: переотправить её было бы некому.
+    ///
+    /// `.update`, а не `.upload`, потому что на проводе это одна и та же
+    /// операция (`APISyncTransport`: upsert), а «обновление» честнее описывает
+    /// строку, которая уже полежала в базе.
+    nonisolated static func pendingJourneyOperations(
+        in ctx: NSManagedObjectContext,
+        userId: UUID
+    ) -> [SyncOperation] {
+        let pendingDelete = SyncStatus.pendingDelete.rawValue
+        let req: NSFetchRequest<JourneyEntity> = JourneyEntity.fetchRequest()
+        req.predicate = NSPredicate(
+            format: "(syncStatus == %d OR syncStatus == %d) AND userId == %@",
+            SyncStatus.pendingUpload.rawValue, pendingDelete, userId as CVarArg
+        )
+        return ((try? ctx.fetch(req)) ?? []).compactMap { j in
+            guard let id = j.id else { return nil }
+            let action: SyncOperation.Action = j.syncStatus == pendingDelete ? .delete : .update
+            return SyncOperation(entityType: .journey, entityId: id, action: action)
         }
     }
 

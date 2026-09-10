@@ -2393,11 +2393,28 @@ enum AppStrings {
 
     // MARK: - Entity / action labels (used by sync status sheet)
 
+    static func entityVehicle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "entityVehicle", ru: "Машина", en: "Vehicle")
+    }
+    /// Название сущности в листе синка.
+    ///
+    /// ПОЧЕМУ каждый тип обязан иметь свою строку: пропущенный `case` здесь не
+    /// ловится ничем. `LocalizationTests` сверяют ТАБЛИЦЫ друг с другом, а тип
+    /// сущности — это switch в коде, ключа под него в таблицах нет вовсе.
+    /// Так `.journey` (0.6.6) писался «Journey» на всех тринадцати языках, а
+    /// `.vehiclePhoto` (0.6.4) превращался в «Vehiclephoto» — оба через
+    /// `default`. `default` остаётся страховкой для типа, который заведут
+    /// завтра, но существующие через него проходить не должны.
     static func entityLabel(_ type: String, _ lang: LanguageManager.Language) -> String {
         switch type {
         case "trip":     return tripTitle(lang)
-        case "vehicle":  return tr(lang, "entityVehicle", ru: "Машина", en: "Vehicle")
+        case "vehicle":  return entityVehicle(lang)
         case "photo":    return photoShort(lang)
+        // Своего ключа у фотографии машины нет и не заводится: склейка двух
+        // существующих слов через «·» читается в любом языке, а «Фото машины»
+        // пришлось бы склонять в тринадцати. Тем же «·» лист отделяет действие.
+        case "vehiclePhoto": return "\(entityVehicle(lang)) · \(photoShort(lang))"
+        case "journey":  return journeyWord(lang)
         case "settings": return settingsTitle(lang)
         default:         return type.capitalized
         }
