@@ -162,6 +162,64 @@ final class ScoringStaysMetricTests: XCTestCase {
         XCTAssertEqual(kmLevel, 4)
     }
 
+    /// Наградное начисление ЦЕЛИКОМ, а не по кускам.
+    ///
+    /// Предыдущие тесты спрашивают составные части — опыт, одометр, уровень —
+    /// у тех функций, которые их считают. Но в базу они попадают не оттуда, а
+    /// из `processCompletedTrip`: это он складывает опыт с прежним, пишет
+    /// `profileXP`, прибавляет километры к `VehicleEntity.odometerKm` и ставит
+    /// новый уровень машины. Ровно эти четыре числа лежат в базе, и ровно их
+    /// нельзя починить следующим релизом.
+    ///
+    /// Поэтому здесь дверь, а не её створки: если однажды кто-то добавит в
+    /// этот метод пятое наградное число и посчитает его показанным, ни один
+    /// тест выше не покраснеет.
+    func testTripCompletionWritesTheSameRewardsInBothUnits() {
+        let trip = longTrip()
+
+        func complete(_ unit: DistanceUnit) -> (TripCompletionData, Double, Int) {
+            select(unit)
+            let ctx = pc.container.viewContext
+            let settings = UserSettingsEntity(context: ctx)
+            settings.profileXP = 1_000
+            settings.profileLevel = 3
+            let vehicle = VehicleEntity(context: ctx)
+            vehicle.id = UUID()
+            vehicle.name = "Car"
+            vehicle.odometerKm = 500
+            vehicle.vehicleLevel = 3
+            let gm = GamificationManager(persistenceController: pc, defaults: defaults)
+            let data = gm.processCompletedTrip(
+                trip: trip, allTrips: [trip],
+                settingsEntity: settings, vehicleEntity: vehicle)
+            let odometer = vehicle.odometerKm
+            let level = Int(vehicle.vehicleLevel)
+            ctx.delete(settings)
+            ctx.delete(vehicle)
+            return (data, odometer, level)
+        }
+
+        let (km, kmOdometer, kmVehicleLevel) = complete(.km)
+        let (mi, miOdometer, miVehicleLevel) = complete(.miles)
+
+        XCTAssertEqual(km.xpEarned, mi.xpEarned, "опыт за поездку поехал вслед за настройкой")
+        XCTAssertEqual(km.newXP, mi.newXP, "записанный в базу опыт зависит от единицы")
+        XCTAssertEqual(km.newLevel, mi.newLevel, "уровень водителя зависит от единицы")
+        XCTAssertEqual(kmOdometer, miOdometer, accuracy: 0.000_1,
+                       "одометр машины в базе поехал вслед за настройкой")
+        XCTAssertEqual(kmVehicleLevel, miVehicleLevel, "уровень машины зависит от единицы")
+
+        // Абсолютные числа, чтобы тест падал ДВАЖДЫ на подмене: 200 км дают
+        // 200 базовых + 200 бонусом за длинную + 20 за первую в дне + 50 за
+        // новый регион + 100 за регион к базе. В милях это 124.3 — и база, и
+        // бонус, и уровень машины стали бы другими.
+        XCTAssertEqual(km.xpEarned, 570)
+        XCTAssertEqual(kmOdometer, 700, accuracy: 0.000_1)
+        // 700 км — пятый уровень (50·L·(L−1): 0 / 100 / 300 / 600 / 1000 —
+        // то есть 700 всё ещё четвёртый).
+        XCTAssertEqual(kmVehicleLevel, 4)
+    }
+
     /// Пересчёт одометра в репозитории — второе место, где живёт то же число.
     /// Разойтись им нельзя: оба пишут в `VehicleEntity.odometerKm`, под которым
     /// лежит уровень.
