@@ -65,6 +65,8 @@ struct VehicleEditFormView: View {
     @State private var initialCity: String
     @State private var initialHighway: String
     @State private var initialPrice: String
+    /// Пробег с приборки — тоже строкой: см. комментарий в `save()`.
+    @State private var initialManualOdometer: String
 
     @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
     @Environment(\.distanceUnit) private var distanceUnit
@@ -84,6 +86,10 @@ struct VehicleEditFormView: View {
         // is always per-100. Read the preference straight from defaults —
         // @AppStorage is not available yet at init time.
         let shownUnit = ConsumptionUnit.current
+        // То же и с расстоянием: `@Environment(\.distanceUnit)` в `init` ещё
+        // не существует, а `DistanceUnit.current` — тот же самый выбор, из
+        // того же хранилища (умолчание окружения тоже считается по нему).
+        let shownDistance = DistanceUnit.current
 
         if case .edit(let id) = mode,
            let vehicle = SettingsManager.shared.vehicles.first(where: { $0.id == id }) {
@@ -99,8 +105,13 @@ struct VehicleEditFormView: View {
             _plateVisible = State(initialValue: vehicle.plateVisible)
             // Пустая строка, если реальный пробег ещё не вводили — так поле
             // показывает «—», а не выдуманный ноль.
+            //
+            // Число — В ЕДИНИЦЕ ПОКАЗА. Это единственное место во всём
+            // приложении, где человек ВВОДИТ расстояние, и ради него половина
+            // версии: у машины с мильной приборкой до 0.6.7 не было способа
+            // ввести свой пробег — поле требовало пересчитать его в уме.
             _manualOdometer = State(initialValue: vehicle.manualOdometerKm
-                .map { String(Int($0.rounded())) } ?? "")
+                .map { String(Int(shownDistance.distance(fromMetres: $0 * 1000).rounded())) } ?? "")
             _visibleToOthers = State(initialValue: vehicle.visibleToOthers)
             _selectedAvatar = State(initialValue: vehicle.avatarEmoji)
             _selectedAvatarStyle = State(
@@ -108,9 +119,11 @@ struct VehicleEditFormView: View {
             )
             _currencySymbol = State(initialValue: vehicle.fuelCurrency)
             _city = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: vehicle.cityConsumption), lng: lng))
+                shownUnit.display(fromPer100: vehicle.cityConsumption,
+                                  distance: shownDistance), lng: lng))
             _highway = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: vehicle.highwayConsumption), lng: lng))
+                shownUnit.display(fromPer100: vehicle.highwayConsumption,
+                                  distance: shownDistance), lng: lng))
             _price = State(initialValue: GarageFormat.fuel(
                 shownUnit.displayPrice(fromPerLitre: vehicle.fuelPrice), lng: lng))
         } else {
@@ -131,14 +144,17 @@ struct VehicleEditFormView: View {
             _selectedAvatarStyle = State(initialValue: VehicleAvatar.defaultStyle)
             _currencySymbol = State(initialValue: FuelCurrency.current)
             _city = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: defaults.cityConsumption), lng: lng))
+                shownUnit.display(fromPer100: defaults.cityConsumption,
+                                  distance: shownDistance), lng: lng))
             _highway = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: defaults.highwayConsumption), lng: lng))
+                shownUnit.display(fromPer100: defaults.highwayConsumption,
+                                  distance: shownDistance), lng: lng))
             _price = State(initialValue: GarageFormat.fuel(
                 shownUnit.displayPrice(fromPerLitre: defaults.fuelPrice), lng: lng))
         }
         _initialCity = State(initialValue: _city.wrappedValue)
         _initialHighway = State(initialValue: _highway.wrappedValue)
+        _initialManualOdometer = State(initialValue: _manualOdometer.wrappedValue)
         _initialPrice = State(initialValue: _price.wrappedValue)
     }
 
@@ -754,8 +770,10 @@ struct VehicleEditFormView: View {
         let unit = consumptionUnitLabel(l)
         // 50 л/100 км is an absurd car; 50 mpg is an ordinary one. The ceiling
         // has to speak the unit on screen or the field would refuse a perfectly
-        // normal figure the moment someone switched to mpg.
-        let ceiling: Double = consumptionUnit == .mpg ? 250 : 50
+        // normal figure the moment someone switched to mpg. Единица расстояния
+        // сюда входит по той же причине: 50 л/100 миль — это 31 л/100 км, то
+        // есть тоже вполне обычная машина.
+        let ceiling: Double = consumptionUnit.inputCeiling(distance: distanceUnit)
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 GarageSectionLabel(text: AppStrings.fuelSectionLabel(l), color: c.textSecondary)
@@ -814,8 +832,9 @@ struct VehicleEditFormView: View {
         let lng = lang.language
         for field in [$city, $highway] {
             guard let shown = parsed(field.wrappedValue) else { continue }
-            let stored = consumptionUnit.toPer100(shown)
-            field.wrappedValue = GarageFormat.fuel(unit.display(fromPer100: stored), lng: lng)
+            let stored = consumptionUnit.toPer100(shown, distance: distanceUnit)
+            field.wrappedValue = GarageFormat.fuel(
+                unit.display(fromPer100: stored, distance: distanceUnit), lng: lng)
         }
         if let shownPrice = parsed(price) {
             let perLitre = consumptionUnit.priceToPerLitre(shownPrice)
@@ -1002,10 +1021,10 @@ struct VehicleEditFormView: View {
                 // поездкам», и показывать под ней введённое руками значило бы
                 // подписать чужое число чужим объяснением. Поле ручного
                 // пробега стоит отдельной строкой ниже.
-                Text(GarageFormat.odometer(vehicle.odometerKm, lng: l))
+                Text(trackedOdometer(vehicle, l).value)
                     .font(.system(size: 22, weight: .heavy).monospacedDigit())
                     .foregroundStyle(c.text)
-                Text(AppStrings.km(l))
+                Text(trackedOdometer(vehicle, l).unit)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(c.textSecondary)
             }
@@ -1040,7 +1059,7 @@ struct VehicleEditFormView: View {
                     .tint(AppTheme.accent)
                     .frame(width: 80)
                     .accessibilityIdentifier("vehicle_manual_odometer")
-                    Text(AppStrings.km(l))
+                    Text(manualOdometerUnit(l))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                 }
@@ -1140,9 +1159,16 @@ struct VehicleEditFormView: View {
             // Реальный пробег живёт отдельной записью: он не часть «личности»
             // машины и не должен тащить за собой её sync-операцию, когда
             // менялось только число на приборке.
-            let typedOdometer = Double(manualOdometer.trimmingCharacters(in: .whitespaces))
-            if typedOdometer != original.manualOdometerKm {
-                settings.setManualOdometer(vehicleId: id, km: typedOdometer)
+            // Сравниваются СТРОКИ, а не километры, и это не придирка.
+            // У человека с милями путь «в базе км → в поле мили → обратно в
+            // км» не сходится сам с собой на единицы километров: 100 000 км
+            // показываются как 62 137 миль, а 62 137 миль — это 100 000,3 км.
+            // Сравнение чисел объявляло бы пробег изменившимся при КАЖДОМ
+            // сохранении формы, переписывало бы его и ставило лишнюю операцию
+            // в очередь синка — ровно та ловушка, что уже описана выше у
+            // полей расхода (`initialCity`).
+            if manualOdometer.trimmingCharacters(in: .whitespaces) != initialManualOdometer {
+                settings.setManualOdometer(vehicleId: id, km: storedManualOdometerKm)
             }
             // One write for the whole identity half, so a type + plate + name
             // change costs one sync operation instead of three.
@@ -1197,10 +1223,36 @@ struct VehicleEditFormView: View {
         Double(text.replacingOccurrences(of: ",", with: "."))
     }
 
+    // MARK: - Пробег
+
+    /// Треканный пробег — число и подпись. Одометр хранится в километрах и в
+    /// 0.6.7 в метры не мигрирует (против него уже записаны уровни машин в
+    /// базе), поэтому вход у `Measure` километровый и назван вслух.
+    private func trackedOdometer(
+        _ vehicle: Vehicle, _ l: LanguageManager.Language
+    ) -> Measure.Parts {
+        Measure.distanceParts(km: vehicle.odometerKm, unit: distanceUnit, lang: l)
+    }
+
+    /// Подпись у поля ввода. Склоняется по тому, что в поле НАПЕЧАТАНО:
+    /// «1 миля», но «12 миль». Пустое поле подписывается как сотня — это
+    /// множественное число во всех тринадцати языках.
+    private func manualOdometerUnit(_ l: LanguageManager.Language) -> String {
+        let shown = Double(manualOdometer.trimmingCharacters(in: .whitespaces)) ?? 100
+        return AppStrings.unitDistanceShort(
+            l, unit: distanceUnit, value: shown, fractionDigits: 0)
+    }
+
+    /// То, что напечатано в поле, → километры для хранения.
+    private var storedManualOdometerKm: Double? {
+        Double(manualOdometer.trimmingCharacters(in: .whitespaces))
+            .map { distanceUnit.metres(fromDistance: $0) / 1000 }
+    }
+
     /// A consumption field as it must be STORED: litres per 100 km, whatever
     /// dialect the field was typed in.
     private func storedConsumption(_ text: String) -> Double? {
-        parsed(text).map { consumptionUnit.toPer100($0) }
+        parsed(text).map { consumptionUnit.toPer100($0, distance: distanceUnit) }
     }
 
     /// A price field as it must be STORED: per litre, whatever the field said.

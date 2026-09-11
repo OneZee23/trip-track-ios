@@ -13,30 +13,74 @@ final class ConsumptionUnitTests: XCTestCase {
 
     /// The reference figure: 9.4 L/100 km ≈ 25 mpg (US).
     func testConvertsToMpg() {
-        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 9.4), 25.02, accuracy: 0.05)
-        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 5.6), 42.0, accuracy: 0.05)
+        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 9.4, distance: .km),
+                       25.02, accuracy: 0.05)
+        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 5.6, distance: .km),
+                       42.0, accuracy: 0.05)
     }
 
     func testConvertsBackFromMpg() {
-        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(25), 9.41, accuracy: 0.01)
-        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(42), 5.6, accuracy: 0.01)
+        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(25, distance: .km), 9.41, accuracy: 0.01)
+        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(42, distance: .km), 5.6, accuracy: 0.01)
     }
 
-    /// Per-100 is the storage unit, so it passes straight through in both
-    /// directions. Fails if someone ever "helpfully" converts it too.
-    func testPer100IsIdentity() {
-        XCTAssertEqual(ConsumptionUnit.per100.display(fromPer100: 9.1), 9.1)
-        XCTAssertEqual(ConsumptionUnit.per100.toPer100(9.1), 9.1)
+    /// Per-100 is the storage unit, so with kilometres it passes straight
+    /// through in both directions. Fails if someone ever "helpfully" converts
+    /// it too.
+    func testPer100IsIdentityInKilometres() {
+        XCTAssertEqual(ConsumptionUnit.per100.display(fromPer100: 9.1, distance: .km), 9.1)
+        XCTAssertEqual(ConsumptionUnit.per100.toPer100(9.1, distance: .km), 9.1)
+    }
+
+    /// Мили меняют ЧИСЛО, а не только подпись.
+    ///
+    /// Сотня миль длиннее сотни километров в 1.609344 раза, значит и литров на
+    /// неё уходит во столько же больше. До 0.6.7 выбор миль менял здесь только
+    /// подпись — «л/100 миль» стояло над километровым числом, и машина
+    /// выглядела на 61 % экономичнее, чем есть.
+    func testPer100FollowsTheDistanceUnit() {
+        XCTAssertEqual(ConsumptionUnit.per100.display(fromPer100: 8, distance: .miles),
+                       12.87, accuracy: 0.01)
+        XCTAssertEqual(ConsumptionUnit.per100.toPer100(12.87, distance: .miles),
+                       8, accuracy: 0.01)
+        // Строго больше — то самое направление, которое подпись обещает.
+        XCTAssertGreaterThan(
+            ConsumptionUnit.per100.display(fromPer100: 8, distance: .miles),
+            ConsumptionUnit.per100.display(fromPer100: 8, distance: .km))
+    }
+
+    /// У `mpg` мили уже внутри — в самом названии единицы. Второй раз их
+    /// умножать нельзя: это ровно та поломка, от которой этот тип и написан,
+    /// только зеркальная.
+    func testMpgIgnoresTheDistanceUnit() {
+        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 9.4, distance: .miles),
+                       ConsumptionUnit.mpg.display(fromPer100: 9.4, distance: .km))
+        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(25, distance: .miles),
+                       ConsumptionUnit.mpg.toPer100(25, distance: .km))
+    }
+
+    /// Потолок поля ввода живёт в единицах ПОКАЗА: 50 л/100 миль — обычная
+    /// машина (31 л/100 км), и отвергать её поле не имеет права.
+    func testInputCeilingSpeaksTheUnitOnScreen() {
+        XCTAssertEqual(ConsumptionUnit.per100.inputCeiling(distance: .km), 50)
+        XCTAssertEqual(ConsumptionUnit.per100.inputCeiling(distance: .miles),
+                       80.47, accuracy: 0.01)
+        XCTAssertEqual(ConsumptionUnit.mpg.inputCeiling(distance: .km), 250)
+        XCTAssertEqual(ConsumptionUnit.mpg.inputCeiling(distance: .miles), 250)
     }
 
     /// Typing a figure, switching units and switching back must return the
     /// same car — this is exactly what the segment does on every tap.
     func testRoundTripSurvivesTheSwitch() {
-        for stored in [4.2, 6.0, 7.8, 9.1, 14.5, 22.0] {
-            let shown = ConsumptionUnit.mpg.display(fromPer100: stored)
-            let back = ConsumptionUnit.mpg.toPer100(shown)
-            XCTAssertEqual(back, stored, accuracy: 0.0001,
-                           "\(stored) L/100km did not survive a round trip through mpg")
+        for distance in DistanceUnit.allCases {
+            for stored in [4.2, 6.0, 7.8, 9.1, 14.5, 22.0] {
+                for unit in ConsumptionUnit.allCases {
+                    let shown = unit.display(fromPer100: stored, distance: distance)
+                    let back = unit.toPer100(shown, distance: distance)
+                    XCTAssertEqual(back, stored, accuracy: 0.0001,
+                                   "\(stored) L/100km не пережил круг через \(unit.rawValue)/\(distance.rawValue)")
+                }
+            }
         }
     }
 
@@ -45,8 +89,8 @@ final class ConsumptionUnitTests: XCTestCase {
     /// The whole reason this type exists: more litres is worse, more miles per
     /// gallon is better. A relabel would preserve the order and lie.
     func testTheScaleIsInverted() {
-        let thirsty = ConsumptionUnit.mpg.display(fromPer100: 15)
-        let frugal = ConsumptionUnit.mpg.display(fromPer100: 5)
+        let thirsty = ConsumptionUnit.mpg.display(fromPer100: 15, distance: .km)
+        let frugal = ConsumptionUnit.mpg.display(fromPer100: 5, distance: .km)
         XCTAssertLessThan(thirsty, frugal, "the thirstier car must show FEWER mpg")
     }
 
@@ -55,9 +99,12 @@ final class ConsumptionUnitTests: XCTestCase {
     /// A vehicle with no consumption set yet. Dividing by it would give
     /// infinity, which formats as "inf" in a text field.
     func testZeroStaysZero() {
-        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 0), 0)
-        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(0), 0)
-        XCTAssertFalse(ConsumptionUnit.mpg.display(fromPer100: 0).isInfinite)
+        for distance in DistanceUnit.allCases {
+            XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 0, distance: distance), 0)
+            XCTAssertEqual(ConsumptionUnit.mpg.toPer100(0, distance: distance), 0)
+            XCTAssertFalse(ConsumptionUnit.mpg.display(fromPer100: 0, distance: distance).isInfinite)
+            XCTAssertEqual(ConsumptionUnit.per100.display(fromPer100: 0, distance: distance), 0)
+        }
     }
 
     // MARK: - Labels
@@ -117,11 +164,11 @@ final class ConsumptionUnitTests: XCTestCase {
     /// conversion for both.
     func testPriceAndConsumptionAreNotTheSameConversion() {
         XCTAssertGreaterThan(ConsumptionUnit.mpg.displayPrice(fromPerLitre: 65), 65)
-        XCTAssertGreaterThan(ConsumptionUnit.mpg.display(fromPer100: 9.4), 9.4)
+        XCTAssertGreaterThan(ConsumptionUnit.mpg.display(fromPer100: 9.4, distance: .km), 9.4)
         // …but not by the same factor, and not by each other's factor.
         XCTAssertNotEqual(
             ConsumptionUnit.mpg.displayPrice(fromPerLitre: 9.4),
-            ConsumptionUnit.mpg.display(fromPer100: 9.4),
+            ConsumptionUnit.mpg.display(fromPer100: 9.4, distance: .km),
             accuracy: 0.001)
     }
 

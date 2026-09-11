@@ -27,10 +27,21 @@ enum ConsumptionUnit: String, CaseIterable, Identifiable {
     static let mpgConstant: Double = 235.214583
 
     /// Stored value → what to show.
-    func display(fromPer100 value: Double) -> Double {
+    ///
+    /// **`distance` — не украшение подписи, а множитель.** Сотня миль длиннее
+    /// сотни километров ровно в 1.609344 раза, значит и литров на неё уходит
+    /// во столько же больше: 8 л/100 км — это 12.9 л/100 миль. До 0.6.7 выбор
+    /// миль менял ЗДЕСЬ только подпись, а число оставлял километровым — ровно
+    /// та же поломка, ради которой этот тип и написан («shipped a card that
+    /// praised thirst»), только с другой стороны дроби.
+    ///
+    /// У `mpg` параметр не работает и работать не должен: мили в этой единице
+    /// уже есть, они в самом её названии. Умножить ещё раз — значит сделать
+    /// из экономичной машины прожорливую второй раз за две версии.
+    func display(fromPer100 value: Double, distance: DistanceUnit) -> Double {
         switch self {
         case .per100:
-            return value
+            return distance.consumptionPer100(fromPer100Km: value)
         case .mpg:
             // A car that burns nothing has no mpg to report — 0 in, 0 out,
             // rather than an infinity that formats as "inf".
@@ -39,14 +50,27 @@ enum ConsumptionUnit: String, CaseIterable, Identifiable {
         }
     }
 
-    /// What someone typed → what to store.
-    func toPer100(_ displayed: Double) -> Double {
+    /// What someone typed → what to store. Хранится ВСЕГДА л/100 км.
+    func toPer100(_ displayed: Double, distance: DistanceUnit) -> Double {
         switch self {
         case .per100:
-            return displayed
+            return distance.per100Km(fromConsumptionPer100: displayed)
         case .mpg:
             guard displayed > 0 else { return 0 }
             return Self.mpgConstant / displayed
+        }
+    }
+
+    /// Потолок поля ввода — В ЕДИНИЦАХ ПОКАЗА.
+    ///
+    /// 50 л/100 км — абсурдная машина, 50 mpg — обычная; но и 50 л/100 МИЛЬ —
+    /// тоже обычная (это 31 л/100 км). Потолок, заданный числом «50» в любой
+    /// единице, отверг бы у мильного человека вполне нормальный расход, и он
+    /// решил бы, что поле сломано.
+    func inputCeiling(distance: DistanceUnit) -> Double {
+        switch self {
+        case .mpg:    return 250
+        case .per100: return distance.consumptionPer100(fromPer100Km: 50)
         }
     }
 

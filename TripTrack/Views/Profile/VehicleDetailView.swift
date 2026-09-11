@@ -1210,9 +1210,11 @@ struct VehicleDetailView: View {
             volumeRaw: volumeUnit, distance: distanceUnit, lng: l)
     }
 
-    /// A stored per-100 figure, expressed in whatever unit is on screen.
+    /// A stored per-100 figure, expressed in whatever unit is on screen — и в
+    /// той единице расстояния, которую выбрал человек: подпись под числом
+    /// говорит «л/100 миль», и число обязано быть на сотню миль.
     private func shownConsumption(_ per100: Double) -> Double {
-        shownConsumptionUnit.display(fromPer100: per100)
+        shownConsumptionUnit.display(fromPer100: per100, distance: distanceUnit)
     }
 
     // MARK: - Actions
