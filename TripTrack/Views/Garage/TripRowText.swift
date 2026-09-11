@@ -41,6 +41,10 @@ enum TripRowText {
     /// Ровно это и есть `Measure.Style.adaptive`, и с 0.6.7 правило берётся
     /// оттуда: своя копия «до десяти — с десятыми» разошлась бы с отметками и
     /// с виджетом на первой же миле, где порог не десять, а шесть.
+    ///
+    /// Вторая половина прежнего правила — «ровные пять километров это «5», а
+    /// не «5,0»» — тоже живёт в `adaptive`, и тоже одна на проект: здесь её
+    /// делал `GarageFormat.fuel`, и в первой сборке 0.6.7 она отсюда выпала.
     static func distance(_ t: Trip, _ l: LanguageManager.Language, unit: DistanceUnit) -> String {
         Measure.distance(metres: t.distance, unit: unit, lang: l, style: .adaptive)
     }

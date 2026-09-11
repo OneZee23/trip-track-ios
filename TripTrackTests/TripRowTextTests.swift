@@ -66,6 +66,13 @@ final class TripRowTextTests: XCTestCase {
         XCTAssertTrue(s.hasPrefix("0.4"), "четыреста метров показаны как «\(s)»")
     }
 
+    /// Обратная сторона того же правила: ровные пять километров — «5 км», а не
+    /// «5.0 км». До 0.6.7 хвост здесь ронял `GarageFormat.fuel`, и в первой
+    /// сборке версии правило отсюда выпало вместе с ним.
+    func testWholeNumberOfKilometresHasNoZeroTail() {
+        XCTAssertEqual(TripRowText.distance(trip(km: 5), .ru, unit: .km), "5 км")
+    }
+
     func testLongTripIsWhole() {
         XCTAssertTrue(TripRowText.distance(trip(km: 137.4), .ru, unit: .km).hasPrefix("137"))
     }

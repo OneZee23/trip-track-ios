@@ -1631,6 +1631,12 @@ struct PublicProfileView: View {
             // Date AND distance: the tile used to carry a bare «142.0 km»,
             // which says nothing about WHEN — the one thing a grid of a
             // person's drives is read for.
+            //
+            // Число — `adaptive`, а не `tenths`: плитка печатает СЛОЖИВШЕЕСЯ
+            // расстояние, у которого хвоста «.0» быть не должно, и она же
+            // просит разряды («6 апр · 1 240 км» в каноне) — ровно то, что
+            // здесь делал `GarageFormat.fuel` до 0.6.7 и что потерялось вместе
+            // с ним. `tenths` — стиль живого счётчика, не плитки.
             HStack(spacing: 4) {
                 // The feed card's own phrasing («14 июн», «Вчера») rather than
                 // the full «14 июн 2026» — canon's tile prints «6 апр · 1 240 км»,
@@ -1640,7 +1646,7 @@ struct PublicProfileView: View {
                     .foregroundStyle(c.textTertiary)
                 Text("·").foregroundStyle(c.textTertiary)
                 Text(Measure.distance(
-                    metres: trip.distance, unit: distanceUnit, lang: lng, style: .tenths))
+                    metres: trip.distance, unit: distanceUnit, lang: lng, style: .adaptive))
                     .foregroundStyle(c.textSecondary)
             }
             .font(.system(size: 10.5, weight: .semibold).monospacedDigit())

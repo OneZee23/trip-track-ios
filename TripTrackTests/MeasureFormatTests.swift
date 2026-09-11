@@ -118,6 +118,61 @@ final class MeasureFormatTests: XCTestCase {
         XCTAssertEqual(Measure.distanceValue(metres: 11_000, unit: .miles, lang: .ru, style: .adaptive), "7")
     }
 
+    // MARK: - Хвоста «.0» не бывает
+
+    /// Ровные 142 километра — это «142», а не «142.0».
+    ///
+    /// Регрессия 0.6.7, найденная глазами на ревью: до версии хвост роняли
+    /// `GarageFormat.fuel` (плитка чужого профиля) и «до десяти — с десятыми»
+    /// (строка гаража), обе функции ушли, и вместе с ними ушло правило. Ноль
+    /// после точки — не десятая, а след форматтера, и появляется он у КАЖДОГО
+    /// десятого расстояния, а не в редком углу.
+    func testAdaptiveNeverPrintsAZeroTenth() {
+        for lang in langs {
+            for unit in DistanceUnit.allCases {
+                // Ровно 5 единиц показа, ровно 142, и «почти ровно» — 4.98,
+                // которое округляется до пяти и хвост вернуло бы через
+                // округление, а не через ввод.
+                for shown in [5.0, 142.0, 4.98] {
+                    let metres = unit.metres(fromDistance: shown)
+                    let text = Measure.distanceValue(
+                        metres: metres, unit: unit, lang: lang, style: .adaptive)
+                    XCTAssertFalse(
+                        text.hasSuffix(AppStrings.decimalSeparator(lang) + "0"),
+                        "\(lang.rawValue)/\(unit.rawValue) на \(shown): «\(text)»")
+                }
+            }
+        }
+    }
+
+    /// Подпись обязана уйти в целую форму ВМЕСТЕ с хвостом.
+    ///
+    /// Это и есть причина, по которой правило живёт в `Measure`, а не обрезает
+    /// строку на месте показа: «5.0» по-русски — это «5.0 мили», а «5» — уже
+    /// «5 миль». Обрезанная строка оставила бы подпись дробной.
+    func testDroppingTheTailAlsoFixesTheWordAfterIt() {
+        XCTAssertEqual(
+            Measure.distance(metres: 5 * DistanceUnit.metresPerMile,
+                             unit: .miles, lang: .ru, style: .adaptive),
+            "5 миль")
+        XCTAssertEqual(
+            Measure.distance(metres: 2 * DistanceUnit.metresPerMile,
+                             unit: .miles, lang: .ru, style: .adaptive),
+            "2 мили")
+    }
+
+    /// А `tenths` хвост держит — и это тоже правило, а не недосмотр.
+    ///
+    /// Половина его мест — живой счётчик (плашка REC, плитка записи, реплей),
+    /// где число перещёлкивает каждую сотню метров. Уронить там десятую значит
+    /// дёргать ширину строки на символ каждый километр.
+    func testTenthsKeepsTheZeroTenthOnPurpose() {
+        XCTAssertEqual(
+            Measure.distanceValue(metres: 5_000, unit: .km, lang: .ru, style: .tenths), "5.0")
+        XCTAssertEqual(
+            Measure.distanceValue(metres: 0, unit: .km, lang: .en, style: .tenths), "0.0")
+    }
+
     // MARK: - Локаль
 
     /// Разделитель дробной части — ТОЧКА во всех тринадцати языках.

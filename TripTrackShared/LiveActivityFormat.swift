@@ -23,18 +23,23 @@ enum LiveActivityFormat {
         let unit: String
     }
 
-    /// «12,4» + «км» / «7,7» + «mi».
+    /// «12.4» + «км» / «7.7» + «mi».
     ///
     /// Точность — `DistanceUnit.showsTenths`, то же правило, что у
     /// `Measure.Style.adaptive`: десятые ниже порога, дальше целое с
     /// разрядами. Порог в ЕДИНИЦАХ ПОКАЗА (10 км, 6 миль), поэтому меняется он
     /// на одном и том же физическом расстоянии, а не на числе, которое
     /// случайно читается как «десять».
+    ///
+    /// И ровно как у `adaptive`, ХВОСТА «.0» не бывает: «5.0» на локскрине —
+    /// тот же след форматтера, что и в приложении. Копия правила здесь не по
+    /// лени, а потому что `Measure` в таргет виджета не приезжает; что обе
+    /// копии отвечают побайтово одинаково, держит `LiveActivityUnitTests`.
     static func distanceParts(km: Double, unit: DistanceUnit, code: String) -> Parts {
         let raw = unit.distance(fromMetres: km * 1000)
         let value = raw.isFinite ? raw : 0
-        if unit.showsTenths(value) {
-            let rounded = (value * 10).rounded() / 10
+        let rounded = (value * 10).rounded() / 10
+        if unit.showsTenths(value), rounded != rounded.rounded() {
             return Parts(
                 value: UnitNumber.tenths(value, code: code),
                 unit: LiveActivityStrings.distanceShort(
