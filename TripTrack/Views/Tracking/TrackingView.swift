@@ -54,7 +54,8 @@ struct TrackingView: View {
                 onCameraDistanceChanged: { viewModel.currentCameraDistance = $0 },
                 onVisibleRectChanged: { viewModel.handleVisibleRectChange($0) },
                 onFogRendererCreated: { viewModel.fogRenderer = $0 },
-                onMapReady: { markMapReady() }
+                onMapReady: { markMapReady() },
+                carColorName: viewModel.activeCarColorName
             )
             .ignoresSafeArea()
             .allowsHitTesting(!viewModel.isRecording)

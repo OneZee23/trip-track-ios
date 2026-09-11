@@ -82,6 +82,9 @@ struct FullscreenMapSheet: View {
     /// одного массива. Реплей живёт у поездки, где время есть у каждой точки;
     /// путешествие ставит здесь `false` и кнопки «играть» не получает.
     var allowsPlayback: Bool = true
+    /// Цвет машины этой поездки — им красится машинка реплея. `nil` у чужой
+    /// поездки и у поездки без транспорта: маркер возьмёт умолчание гаража.
+    var carColorName: String? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -152,6 +155,7 @@ struct FullscreenMapSheet: View {
                 fogCutoffDate: fogCutoffDate,
                 showsFog: showsFog,
                 treatAsPreview: treatAsPreview,
+                carColorName: carColorName,
                 zoomTick: zoomTick,
                 // The car and its trail are RouteMapView's job already — the
                 // replay only has to say where the head is this frame.

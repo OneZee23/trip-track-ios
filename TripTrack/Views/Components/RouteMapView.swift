@@ -176,6 +176,10 @@ struct RouteMapView: UIViewRepresentable {
     /// which the 1 km gap threshold treats as discontinuities and leaves the
     /// map with zero drawable segments (so no bounding rect, so no zoom).
     var treatAsPreview: Bool = false
+    /// Цвет машины этой поездки — имя из гаража («red», «silver», …). `nil`
+    /// значит «без транспорта»: маркер всё равно рисуется, цветом гаража по
+    /// умолчанию. Красится только машинка реплея — на карте без реплея её нет.
+    var carColorName: String? = nil
     /// Bumped by the caller's «+» / «−» buttons. Only the CHANGE matters — the
     /// coordinator remembers the last value it applied, so an unrelated
     /// re-render never re-zooms the map under the user's fingers.
@@ -358,6 +362,7 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.syncFocus(focusCoordinate, on: mapView)
         context.coordinator.syncPhotoPins(photoPins, on: mapView)
         context.coordinator.applyZoom(tick: zoomTick, mapView: mapView)
+        context.coordinator.applyCarColor(carColorName, on: mapView)
         context.coordinator.applyPlayback(
             carCoord: playbackCarCoord,
             trailIndex: playbackTrailIndex,
@@ -767,45 +772,27 @@ struct RouteMapView: UIViewRepresentable {
                 withAttributes: attributes)
         }
 
-        /// Pre-rendered pixel-car bitmaps for the playback annotation, one
-        /// per facing. Drawn once at first access; reused across every
-        /// annotation view dequeue.
-        ///
-        /// TWO fixes live in this renderer. The sprite is 254×188 and was
-        /// drawn into a 36×36 square, which squashed it horizontally; and
-        /// pixel art scaled with the default interpolation comes out
-        /// blurred. Both are already handled everywhere else the asset is
-        /// used (the rings, the poster canvas) — this call site had been
-        /// missed.
-        private static let playbackCarRight: UIImage? = renderCar(mirrored: false)
-        private static let playbackCarLeft: UIImage? = renderCar(mirrored: true)
+        /// Цвет машины этой поездки — им красится маркер. `nil` — «без
+        /// транспорта», маркер берёт цвет гаража по умолчанию.
+        private var carColorName: String?
+        private var hasCarColor = false
+        /// Курс маркера по земле. Живёт в координаторе, а не в виде: вид
+        /// MapKit вправе выбросить и создать заново, и вместе с ним пропал бы
+        /// весь набранный поворот.
+        private var carCourse: Double = 0
+        /// Был ли курс хоть раз достоверным. Пока не был — держать нечего, и
+        /// первый же ответ геометрии ставится без доводки.
+        private var carHasCourse = false
+        private var lastCarTick: CFTimeInterval = 0
 
-        /// The sprite is drawn from the SIDE, so it must never be rotated to
-        /// the course — on a northbound leg the car would stand on its nose.
-        /// A side view has exactly two honest states, and mirroring is how
-        /// you get the second one.
-        private static func renderCar(mirrored: Bool) -> UIImage? {
-            guard let img = UIImage(named: "PixelCar"), img.size.width > 0, img.size.height > 0
-            else { return nil }
-            let maxSide: CGFloat = 40
-            let scale = min(maxSide / img.size.width, maxSide / img.size.height)
-            let target = CGSize(width: img.size.width * scale, height: img.size.height * scale)
-            let renderer = UIGraphicsImageRenderer(size: target)
-            return renderer.image { ctx in
-                ctx.cgContext.interpolationQuality = .none
-                if mirrored {
-                    ctx.cgContext.translateBy(x: target.width, y: 0)
-                    ctx.cgContext.scaleBy(x: -1, y: 1)
-                }
-                img.draw(in: CGRect(origin: .zero, size: target))
-            }
+        func applyCarColor(_ name: String?, on mapView: MKMapView) {
+            guard !hasCarColor || carColorName != name else { return }
+            hasCarColor = true
+            carColorName = name
+            guard let annotation = playbackCar,
+                  let view = mapView.view(for: annotation) as? MapCarAnnotationView else { return }
+            view.setCar(MapCarMarker.image(colorName: name))
         }
-
-        /// Which way the car is currently drawn. Flipped only when the
-        /// sideways component of travel is decisive — on a due-north leg a
-        /// bare `dx > 0` test would flicker the sprite left and right on GPS
-        /// noise alone.
-        var playbackFacesRight = true
 
         func applyPlayback(
             carCoord: CLLocationCoordinate2D?,
@@ -830,6 +817,8 @@ struct RouteMapView: UIViewRepresentable {
                     playbackCar = nil
                 }
                 playbackLastIndex = -1
+                carHasCourse = false
+                lastCarTick = 0
                 return
             }
             // Body trail polyline — replace only when the tail index
@@ -875,8 +864,10 @@ struct RouteMapView: UIViewRepresentable {
             // PlaybackCarAnnotation lets MapKit reposition the view
             // without any overlay churn. Frame cadence comes from the
             // controller's CADisplayLink.
+            // Курс считается ДО создания вида: иначе на первом кадре маркер
+            // успевает показаться смотрящим на север.
+            updateCarHeading(at: car, passed: trailIndex, coords: coords, mapView: mapView)
             if let annotation = playbackCar {
-                updateCarFacing(from: annotation.coordinate, to: car, mapView: mapView)
                 annotation.coordinate = car
             } else {
                 let annotation = PlaybackCarAnnotation(coordinate: car)
@@ -885,24 +876,47 @@ struct RouteMapView: UIViewRepresentable {
             }
         }
 
-        /// Turn the car to face where it is going. Sideways travel only —
-        /// the sprite is a side view, so the two states are "facing right"
-        /// and "facing left", and the threshold keeps a due-north leg from
-        /// flipping it back and forth on GPS jitter.
-        private func updateCarFacing(
-            from previous: CLLocationCoordinate2D,
-            to next: CLLocationCoordinate2D,
+        /// Повернуть машину туда, куда она едет.
+        ///
+        /// Курс берётся ПО ГЕОМЕТРИИ с упреждением, а не из разницы соседних
+        /// кадров: полилиния хранит координаты в одинарной точности, и за один
+        /// кадр машина сдвигается меньше, чем на квант хранения — знак такой
+        /// разницы чистый шум. Само правило — в `CarHeadingPolicy`, здесь
+        /// только его применение к текущему кадру.
+        private func updateCarHeading(
+            at position: CLLocationCoordinate2D,
+            passed index: Int,
+            coords: [CLLocationCoordinate2D],
             mapView: MKMapView
         ) {
-            let dx = next.longitude - previous.longitude
-            let dy = next.latitude - previous.latitude
-            guard abs(dx) > abs(dy) * 0.3, abs(dx) > 1e-7 else { return }
-            let facesRight = dx > 0
-            guard facesRight != playbackFacesRight else { return }
-            playbackFacesRight = facesRight
+            let now = CACurrentMediaTime()
+            // Первый кадр после паузы или подмотки не должен считаться за
+            // секунду простоя: доводка углов идёт от реального шага времени.
+            let dt = lastCarTick > 0 ? min(now - lastCarTick, 0.5) : 1.0 / 60
+            lastCarTick = now
+
+            let target = CarHeadingPolicy.courseAlongRoute(
+                from: position, passed: index, in: coords
+            )
+            if !carHasCourse, let target {
+                carCourse = target
+                carHasCourse = true
+            } else {
+                carCourse = CarHeadingPolicy.smoothed(current: carCourse, target: target, dt: dt)
+            }
+
             guard let annotation = playbackCar,
-                  let view = mapView.view(for: annotation) else { return }
-            view.image = facesRight ? Self.playbackCarRight : Self.playbackCarLeft
+                  let view = mapView.view(for: annotation) as? MapCarAnnotationView else { return }
+            view.apply(course: carCourse, cameraHeading: mapView.camera.heading)
+        }
+
+        /// Карту повернули пальцами (или камера пошла по курсу) — экранный
+        /// угол маркера считается от поворота камеры, и без этого маркер
+        /// отвязывается от дороги под собой.
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            guard let annotation = playbackCar,
+                  let view = mapView.view(for: annotation) as? MapCarAnnotationView else { return }
+            view.applyScreenAngle(cameraHeading: mapView.camera.heading)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -1187,17 +1201,15 @@ struct RouteMapView: UIViewRepresentable {
                 view.selectedZPriority = .max
                 return view
             }
-            // Pixel-car play head for route playback. Image is the
-            // pre-rendered `playbackCarImage` static — set once per
-            // dequeue, never re-rasterised.
+            // Машинка реплея. Картинка собрана и закэширована по цвету, а
+            // поворот — это трансформация её слоя, не новая растеризация.
             if annotation is PlaybackCarAnnotation {
-                let id = "PlaybackCar"
-                let view = mapView.dequeueReusableAnnotationView(withIdentifier: id)
-                    ?? MKAnnotationView(annotation: annotation, reuseIdentifier: id)
+                let id = MapCarAnnotationView.reuseIdentifier
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MapCarAnnotationView
+                    ?? MapCarAnnotationView(annotation: annotation, reuseIdentifier: id)
                 view.annotation = annotation
-                view.canShowCallout = false
-                view.image = playbackFacesRight ? Self.playbackCarRight : Self.playbackCarLeft
-                view.centerOffset = .zero
+                view.setCar(MapCarMarker.image(colorName: carColorName))
+                view.apply(course: carCourse, cameraHeading: mapView.camera.heading)
                 view.displayPriority = .required
                 view.collisionMode = .none
                 view.zPriority = .max

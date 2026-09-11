@@ -853,7 +853,8 @@ struct TripDetailView: View {
                 onAddCheckpoint: checkpointAdder,
                 showsFog: isOwn,
                 treatAsPreview: isPreviewRoute,
-                language: lang.language
+                language: lang.language,
+                carColorName: tripCarColorName
             )
         }
         .appConfirm(
@@ -2079,6 +2080,13 @@ isOwn
         .scrollClipDisabled()
     }
 
+
+    /// Цвет машины поездки для машинки на карте. `nil` — транспорта нет или
+    /// у него эмодзи вместо спрайта: цвета в этом случае просто нет.
+    private var tripCarColorName: String? {
+        guard let vehicle = tripVehicle else { return nil }
+        return VehicleAvatar.decompose(vehicle.avatarEmoji)?.color
+    }
 
     private var tripVehicle: Vehicle? {
         if let vid = trip?.vehicleId {

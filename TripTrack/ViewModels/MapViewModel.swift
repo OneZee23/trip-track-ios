@@ -111,6 +111,20 @@ final class MapViewModel: ObservableObject {
         gamificationManager.fetchSettingsEntity()?.selectedVehicleId
     }
 
+    /// Цвет машинки на карте записи — имя цвета из гаража.
+    ///
+    /// Пока пишем — цвет ТОЙ машины, на которую пишется поездка (сменить её на
+    /// ходу можно, и маркер обязан догнать); пока не пишем — той, на которую
+    /// уйдёт следующая. Это ровно источник чипа в верхнем ряду, чтобы экран не
+    /// расходился в показаниях сам с собой. `nil` — «Без транспорта» или
+    /// машина с эмодзи вместо спрайта: цвета там нет, маркер возьмёт
+    /// умолчание гаража.
+    var activeCarColorName: String? {
+        let id = tripManager.activeTrip?.vehicleId ?? SettingsManager.shared.activeRecordableVehicleId
+        guard let vehicle = SettingsManager.shared.vehicle(for: id) else { return nil }
+        return VehicleAvatar.decompose(vehicle.avatarEmoji)?.color
+    }
+
     // MARK: - Dependencies
     var locationManager: LocationManager
     let tripManager: TripManager

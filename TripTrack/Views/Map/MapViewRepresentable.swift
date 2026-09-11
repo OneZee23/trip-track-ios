@@ -23,6 +23,9 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// Fires once when the map first finishes rendering. Lets the host clear its
     /// loading spinner from a real signal instead of a fragile timed Task.
     var onMapReady: (() -> Void)?
+    /// Цвет машины, на которую пишется поездка — имя из гаража («red», …).
+    /// `nil` — «Без транспорта»: маркер берёт цвет гаража по умолчанию.
+    var carColorName: String? = nil
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -84,6 +87,8 @@ struct MapViewRepresentable: UIViewRepresentable {
         mapView.isZoomEnabled = !isRecording
         mapView.isRotateEnabled = !isRecording
         mapView.isPitchEnabled = !isRecording
+
+        context.coordinator.applyCarColor(carColorName, on: mapView)
 
         // Dark/light map
         let style: UIUserInterfaceStyle = isDarkMap ? .dark : .light
@@ -229,47 +234,79 @@ struct MapViewRepresentable: UIViewRepresentable {
             }
         }
 
-        /// Pre-rendered pixel-car bitmap for the "you are here" marker.
-        /// Rasterised once and reused across every dequeue, the same way
-        /// `RouteMapView` prepares the replay play head.
+        /// Цвет машины, на которую пишется поездка.
+        private var carColorName: String?
+        private var hasCarColor = false
+        /// Курс маркера по земле, [0, 360). Держим в координаторе: вид MapKit
+        /// вправе выбросить и создать заново.
+        private var carCourse: Double = 0
+        /// Пока курса не было ни разу, держать нечего — первый достоверный
+        /// ставится без доводки.
+        private var carHasCourse = false
+        private var lastCourseTick: CFTimeInterval = 0
+
+        func applyCarColor(_ name: String?, on mapView: MKMapView) {
+            guard !hasCarColor || carColorName != name else { return }
+            hasCarColor = true
+            carColorName = name
+            carView(on: mapView)?.setCar(MapCarMarker.image(colorName: name))
+        }
+
+        private func carView(on mapView: MKMapView) -> MapCarAnnotationView? {
+            mapView.view(for: mapView.userLocation) as? MapCarAnnotationView
+        }
+
+        /// Куда смотрит машинка на живой записи.
         ///
-        /// Aspect-fitted into the canon's 44pt box (146:1183) instead of drawn
-        /// into it: the sprite is 254×188, so a square draw rect squashes it.
-        /// Nearest-neighbour matches the `.interpolation(.none)` every other
-        /// surface uses for this art — smoothed, the pixels smear.
-        private static let userCarImage: UIImage? = {
-            guard let sprite = UIImage(named: "PixelCar") else { return nil }
-            let box = CGSize(width: 44, height: 44)
-            let ratio = min(box.width / sprite.size.width, box.height / sprite.size.height)
-            let fitted = CGSize(width: sprite.size.width * ratio, height: sprite.size.height * ratio)
-            let origin = CGPoint(x: (box.width - fitted.width) / 2,
-                                 y: (box.height - fitted.height) / 2)
-            return UIGraphicsImageRenderer(size: box).image { ctx in
-                ctx.cgContext.interpolationQuality = .none
-                sprite.draw(in: CGRect(origin: origin, size: fitted))
+        /// Курс берём у CoreLocation напрямую — у него он с доплера, то есть
+        /// про движение, а не про разницу двух зашумлённых точек. Ворота — в
+        /// `CarHeadingPolicy`: не прошли, значит держим последний достоверный
+        /// угол, а не подставляем север.
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            guard let location = userLocation.location else { return }
+            let now = CACurrentMediaTime()
+            let dt = lastCourseTick > 0 ? min(now - lastCourseTick, 2) : 1
+            lastCourseTick = now
+
+            let target = CarHeadingPolicy.liveCourse(
+                course: location.course,
+                courseAccuracy: location.courseAccuracy,
+                rawSpeed: location.speed
+            )
+            if !carHasCourse, let target {
+                carCourse = target
+                carHasCourse = true
+            } else {
+                carCourse = CarHeadingPolicy.smoothed(current: carCourse, target: target, dt: dt)
             }
-        }()
+            carView(on: mapView)?.apply(
+                course: carCourse, cameraHeading: mapView.camera.heading, animated: true
+            )
+        }
+
+        /// Карта повернулась — сама (режим «по курсу») или пальцами. Экранный
+        /// угол маркера считается от поворота камеры, и без этого нос
+        /// отвязывается от дороги под собой.
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            carView(on: mapView)?.applyScreenAngle(cameraHeading: mapView.camera.heading)
+        }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            // The pixel car is the app's marker for "you", and the recording
-            // map — the one screen where you are actually driving — was the
-            // last one still handing the job to MapKit's stock blue puck.
-            // No rotation: the replay's play head doesn't rotate either, and
-            // MapKit keeps annotation views upright while `.followWithHeading`
-            // turns the map under them. A missing asset falls through to the
-            // puck rather than to no marker at all.
+            // Машинка — маркер «это я», и экран записи был последним, кто
+            // отдавал эту работу синему кружку MapKit. Тот же вид, что у
+            // реплея: вид сверху, повёрнутый на курс. Ассета нет — падаем на
+            // штатный кружок, а не на пустое место.
             if annotation is MKUserLocation {
-                guard let carImage = Self.userCarImage else { return nil }
-                let carIdentifier = "UserPixelCar"
-                let carView = mapView.dequeueReusableAnnotationView(withIdentifier: carIdentifier)
-                    ?? MKAnnotationView(annotation: annotation, reuseIdentifier: carIdentifier)
+                guard let carImage = MapCarMarker.image(colorName: carColorName) else { return nil }
+                let id = MapCarAnnotationView.reuseIdentifier
+                let carView = mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MapCarAnnotationView
+                    ?? MapCarAnnotationView(annotation: annotation, reuseIdentifier: id)
                 carView.annotation = annotation
-                carView.canShowCallout = false
                 // Nothing to open on tap; selectable, it would swallow taps
                 // meant for the map under it.
                 carView.isEnabled = false
-                carView.image = carImage
-                carView.centerOffset = .zero
+                carView.setCar(carImage)
+                carView.apply(course: carCourse, cameraHeading: mapView.camera.heading)
                 carView.layer.zPosition = 1000
                 return carView
             }
