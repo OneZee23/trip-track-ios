@@ -161,4 +161,53 @@ final class UnitLabelTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Единица ВНУТРИ слова
+
+    /// Заголовок «Километры по месяцам» стоит НАД мильным графиком, если не
+    /// спросить у него единицу. Это не опечатка и не мелочь: подпись и число
+    /// здесь разнесены по разным строкам экрана, и разойтись им нечему
+    /// помешать, кроме этого теста.
+    func testMonthlyChartTitleFollowsTheUnit() {
+        for lang in langs {
+            let km = AppStrings.statsKmByMonth(lang, unit: .km)
+            let mi = AppStrings.statsKmByMonth(lang, unit: .miles)
+            XCTAssertFalse(km.trimmingCharacters(in: .whitespaces).isEmpty,
+                           "\(lang.rawValue): пустой заголовок")
+            XCTAssertFalse(mi.trimmingCharacters(in: .whitespaces).isEmpty,
+                           "\(lang.rawValue): пустой заголовок в милях")
+            XCTAssertNotEqual(km, mi,
+                              "\(lang.rawValue): в милях заголовок не изменился")
+        }
+        XCTAssertEqual(AppStrings.statsKmByMonth(.ru, unit: .km), "Километры по месяцам")
+        XCTAssertEqual(AppStrings.statsKmByMonth(.ru, unit: .miles), "Мили по месяцам")
+        XCTAssertEqual(AppStrings.statsKmByMonth(.en, unit: .miles), "Miles by month")
+    }
+
+    /// «212-й км» → «132-я миля»: меняется И число, И род порядкового.
+    ///
+    /// Вторая функция написана целиком, а не вторым аргументом к первой,
+    /// именно из-за рода: «миля» в русском и украинском женского, и подстановка
+    /// слова дала бы «212-й миля».
+    func testChartMarkConvertsTheNumberAndDeclinesTheWord() {
+        // 212 км — это 131.7 мили.
+        XCTAssertEqual(AppStrings.chartDistanceMark(.ru, unit: .km, km: 212), "212-й км")
+        XCTAssertEqual(AppStrings.chartDistanceMark(.ru, unit: .miles, km: 212), "132-я миля")
+        XCTAssertEqual(AppStrings.chartDistanceMark(.uk, unit: .miles, km: 212), "132-та миля")
+        XCTAssertEqual(AppStrings.chartDistanceMark(.kk, unit: .miles, km: 212), "132-миля")
+        XCTAssertEqual(AppStrings.chartDistanceMark(.en, unit: .miles, km: 212), "mi 132")
+        // Ни один язык не отдаёт пустое и ни один не оставляет «km» в мильной
+        // подписи — вот это и было живой поломкой до 0.6.7.
+        for lang in langs {
+            let mark = AppStrings.chartDistanceMark(lang, unit: .miles, km: 212)
+            XCTAssertFalse(mark.trimmingCharacters(in: .whitespaces).isEmpty,
+                           "\(lang.rawValue): пустая подпись графика")
+            XCTAssertFalse(mark.lowercased().contains("km"),
+                           "\(lang.rawValue): в милях осталось «km» — \(mark)")
+            XCTAssertFalse(mark.contains("км"),
+                           "\(lang.rawValue): в милях осталось «км» — \(mark)")
+            XCTAssertTrue(mark.contains("132"),
+                          "\(lang.rawValue): число не перевелось — \(mark)")
+        }
+    }
 }

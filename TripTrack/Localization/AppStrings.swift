@@ -655,9 +655,6 @@ enum AppStrings {
     static func tripVehicle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tripVehicle", ru: "Машина поездки", en: "Trip vehicle")
     }
-    static func statsMoreKm(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statsMoreKm", ru: "— больше км", en: "— more km")
-    }
     static func statsToday(_ lang: LanguageManager.Language) -> String {
         tr(lang, "statsToday", ru: "сегодня", en: "today")
     }
@@ -2183,6 +2180,51 @@ enum AppStrings {
     }
 
     /// Where along the route a chart sample sits: «212-й км» / «km 212».
+    /// «212-й км» или «212-я миля» — подпись под точкой графика.
+    ///
+    /// Дверь одна, а слов два, и слова живут в РАЗНЫХ функциях: «миля» в
+    /// русском и украинском женского рода, и порядковое при ней меняет
+    /// окончание («212-й км», но «212-я миля»). Подстановкой одного слова
+    /// вместо другого это не чинится, поэтому вторая таблица написана целиком,
+    /// а не вторым аргументом к первой.
+    ///
+    /// Вход километровый: график строится по накопленным километрам маршрута
+    /// (`DetailChartPoint.x`), как и весь трек. Перевод — здесь, у показа.
+    static func chartDistanceMark(
+        _ lang: LanguageManager.Language, unit: DistanceUnit, km: Double
+    ) -> String {
+        switch unit {
+        case .km:    return chartKmMark(lang, km: km)
+        case .miles: return chartMileMark(lang, miles: km * 1000 / DistanceUnit.metresPerMile)
+        }
+    }
+
+    /// «212-я миля».
+    ///
+    /// Символ `mi` стоит ровно там, где метрическая таблица рядом ставит
+    /// символ `km`, а склоняемое слово — там, где она ставит «км» кириллицей:
+    /// в русском, украинском и казахском. Придумывать девяти языкам
+    /// существительное «миля» там, где у них и «километр» сокращён, значило бы
+    /// выдумать девять переводов, которых никто не проверял.
+    static func chartMileMark(_ lang: LanguageManager.Language, miles: Double) -> String {
+        let n = max(0, Int(miles.rounded()))
+        switch lang {
+        case .ru: return "\(n)-я миля"
+        case .en: return "mi \(n)"
+        case .de: return "mi \(n)"
+        case .es: return "mi \(n)"
+        case .fr: return "mi \(n)"
+        case .it: return "mi \(n)"
+        case .pl: return "\(n). mi"
+        case .id: return "mi \(n)"
+        case .tr: return "\(n). mi"
+        case .fil: return "mi \(n)"
+        case .uk: return "\(n)-та миля"
+        case .kk: return "\(n)-миля"
+        case .pt: return "mi \(n)"
+        }
+    }
+
     static func chartKmMark(_ lang: LanguageManager.Language, km: Double) -> String {
         let n = max(0, Int(km.rounded()))
         switch lang {
@@ -3883,8 +3925,32 @@ enum AppStrings {
     static func statsHours(_ lang: LanguageManager.Language) -> String {
         statsHoursOnRoad(lang)
     }
-    static func statsKmByMonth(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "statsKmByMonth", ru: "Километры по месяцам", en: "Kilometres by month")
+    /// «Километры по месяцам» / «Мили по месяцам» — заголовок над графиком.
+    ///
+    /// Переехал из таблиц в switch, потому что единица тут не приписка в
+    /// конце, а СЛОВО ВНУТРИ предложения, и место у него в разных языках
+    /// разное: по-русски первое, по-турецки последнее. Склейкой из двух кусков
+    /// такое не собирается — собиралось бы «Аylara göre мили».
+    ///
+    /// Не короткая подпись («км»), а полное слово: заголовок читается как
+    /// фраза, и «км по месяцам» в ней выглядит обрывком.
+    static func statsKmByMonth(_ lang: LanguageManager.Language, unit: DistanceUnit) -> String {
+        let miles = unit == .miles
+        switch lang {
+        case .ru:  return miles ? "Мили по месяцам" : "Километры по месяцам"
+        case .en:  return miles ? "Miles by month" : "Kilometres by month"
+        case .de:  return miles ? "Meilen pro Monat" : "Kilometer pro Monat"
+        case .es:  return miles ? "Millas por mes" : "Kilómetros por mes"
+        case .fr:  return miles ? "Miles par mois" : "Kilomètres par mois"
+        case .it:  return miles ? "Miglia per mese" : "Chilometri per mese"
+        case .pl:  return miles ? "Mile według miesięcy" : "Kilometry według miesięcy"
+        case .id:  return miles ? "Mil per bulan" : "Kilometer per bulan"
+        case .tr:  return miles ? "Aylara göre mil" : "Aylara göre kilometre"
+        case .fil: return miles ? "Milya kada buwan" : "Kilometro kada buwan"
+        case .uk:  return miles ? "Милі за місяцями" : "Кілометри за місяцями"
+        case .kk:  return miles ? "Айлар бойынша мильдер" : "Айлар бойынша километрлер"
+        case .pt:  return miles ? "Milhas por mês" : "Quilômetros por mês"
+        }
     }
     static func statsRecords(_ lang: LanguageManager.Language) -> String {
         tr(lang, "statsRecords", ru: "РЕКОРДЫ", en: "RECORDS")

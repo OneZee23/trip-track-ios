@@ -549,7 +549,7 @@ struct StatsScreenView: View {
 
         return VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(AppStrings.statsKmByMonth(l))
+                Text(AppStrings.statsKmByMonth(l, unit: distanceUnit))
                     .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(c.text)
                 Spacer()

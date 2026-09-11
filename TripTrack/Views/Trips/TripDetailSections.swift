@@ -530,6 +530,10 @@ struct ElevationChartCard: View {
     /// Right footer label — total distance («316 км»).
     let rightLabel: String
     @Environment(\.colorScheme) private var scheme
+    /// Высота на этом графике метрическая (футы — отдельный шаг версии), но
+    /// ось X — расстояние, и подпись под пальцем («212-й км») обязана считать
+    /// его в том, что выбрал человек.
+    @Environment(\.distanceUnit) private var distanceUnit
     @State private var selection: ChartScrubSelection?
 
     private var yDomain: ClosedRange<Double> {
@@ -603,7 +607,8 @@ struct ElevationChartCard: View {
             .chartScrub(series: series, selection: $selection) { pt in
                 ChartScrubTooltip(
                     primary: TripDetailFormat.chartAltitudeReadout(pt, lang: language),
-                    secondary: AppStrings.chartKmMark(language, km: pt.x)
+                    secondary: AppStrings.chartDistanceMark(
+                        language, unit: distanceUnit, km: pt.x)
                 )
             }
             .accessibilityIdentifier("elevation_chart")
@@ -723,7 +728,8 @@ struct SpeedChartCard: View {
                 ChartScrubTooltip(
                     primary: TripDetailFormat.chartSpeedReadout(
                         pt, unit: distanceUnit, lang: language),
-                    secondary: AppStrings.chartKmMark(language, km: pt.x)
+                    secondary: AppStrings.chartDistanceMark(
+                        language, unit: distanceUnit, km: pt.x)
                 )
             }
             .accessibilityIdentifier("speed_chart")
