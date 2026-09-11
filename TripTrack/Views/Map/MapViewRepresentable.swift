@@ -26,6 +26,14 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// Цвет машины, на которую пишется поездка — имя из гаража («red», …).
     /// `nil` — «Без транспорта»: маркер берёт цвет гаража по умолчанию.
     var carColorName: String? = nil
+    /// Запись на паузе. Маркер гасит краску и надевает пилюлю с паузой —
+    /// «остановился нарочно», сказанное на самой карте, а не только плашкой
+    /// наверху экрана.
+    var isPaused: Bool = false
+    /// Нет принятого фикса дольше десяти секунд (`MapViewModel.gpsSignalStale`).
+    /// Маркер теряет цвет совсем и наполовину растворяется: «я не знаю, где ты
+    /// сейчас».
+    var gpsSignalStale: Bool = false
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -88,7 +96,7 @@ struct MapViewRepresentable: UIViewRepresentable {
         mapView.isRotateEnabled = !isRecording
         mapView.isPitchEnabled = !isRecording
 
-        context.coordinator.applyCarColor(carColorName, on: mapView)
+        context.coordinator.applyCarState(on: mapView)
 
         // Dark/light map
         let style: UIUserInterfaceStyle = isDarkMap ? .dark : .light
@@ -234,9 +242,6 @@ struct MapViewRepresentable: UIViewRepresentable {
             }
         }
 
-        /// Цвет машины, на которую пишется поездка.
-        private var carColorName: String?
-        private var hasCarColor = false
         /// Курс маркера по земле, [0, 360). Держим в координаторе: вид MapKit
         /// вправе выбросить и создать заново.
         private var carCourse: Double = 0
@@ -244,12 +249,42 @@ struct MapViewRepresentable: UIViewRepresentable {
         /// ставится без доводки.
         private var carHasCourse = false
         private var lastCourseTick: CFTimeInterval = 0
+        /// Радиус круга точности в МЕТРАХ, прямо от CoreLocation. `nil` — фикса
+        /// нет, и круг обещал бы точность, которой не существует.
+        private var accuracyMeters: Double?
+        /// Полуугол конуса «еду примерно туда» — или `nil`, когда курсу верим.
+        private var coneHalfAngle: Double?
 
-        func applyCarColor(_ name: String?, on mapView: MKMapView) {
-            guard !hasCarColor || carColorName != name else { return }
-            hasCarColor = true
-            carColorName = name
-            carView(on: mapView)?.setCar(MapCarMarker.image(colorName: name))
+        /// Всё, что маркер показывает кроме курса.
+        ///
+        /// Пауза старше потери сигнала: в подземном паркинге верны оба, но
+        /// человек нажал паузу сам, и сказать ему «сигнал потерян» значит
+        /// объяснить его же решение поломкой. Тем же порядком идут и баннеры
+        /// наверху экрана.
+        private var carState: MapCarMarker.State {
+            let mood: MapCarMarker.Mood
+            if parent.isRecording && parent.isPaused {
+                mood = .paused
+            } else if parent.isRecording && parent.gpsSignalStale {
+                mood = .lost
+            } else {
+                mood = .normal
+            }
+            return MapCarMarker.State(
+                colorName: parent.carColorName,
+                accuracyMeters: accuracyMeters,
+                // На паузе и без сигнала конус не рисуется: он про «еду
+                // примерно туда», а никто никуда не едет.
+                coneHalfAngle: mood == .normal ? coneHalfAngle : nil,
+                // Пульс — «сигнал живой», и только на записи. В простое карта
+                // ничего не пишет, и пульсировать ей не о чем.
+                pulses: parent.isRecording && mood == .normal,
+                mood: mood
+            )
+        }
+
+        func applyCarState(on mapView: MKMapView) {
+            carView(on: mapView)?.setState(carState)
         }
 
         private func carView(on mapView: MKMapView) -> MapCarAnnotationView? {
@@ -277,9 +312,24 @@ struct MapViewRepresentable: UIViewRepresentable {
                 carCourse = target
                 carHasCourse = true
             } else {
-                carCourse = CarHeadingPolicy.smoothed(current: carCourse, target: target, dt: dt)
+                // Reduce Motion: сам поворот остаётся — это информация, и
+                // системная стрелка курса тоже не выключается. Уходит доводка.
+                carCourse = CarHeadingPolicy.smoothed(
+                    current: carCourse, target: target, dt: dt,
+                    instant: UIAccessibility.isReduceMotionEnabled
+                )
             }
-            carView(on: mapView)?.apply(
+            // Круг точности и конус приезжают тем же фиксом, что и курс:
+            // спрашивать их у модели значило бы завести второй счёт того же
+            // самого, и однажды он разошёлся бы с первым.
+            accuracyMeters = location.horizontalAccuracy > 0 ? location.horizontalAccuracy : nil
+            coneHalfAngle = CarHeadingPolicy.coneHalfAngle(
+                courseAccuracy: location.courseAccuracy, rawSpeed: location.speed
+            )
+            let view = carView(on: mapView)
+            view?.setState(carState)
+            view?.setScale(metersPerPoint: mapView.metersPerScreenPoint)
+            view?.apply(
                 course: carCourse, cameraHeading: mapView.camera.heading, animated: true
             )
         }
@@ -288,7 +338,11 @@ struct MapViewRepresentable: UIViewRepresentable {
         /// угол маркера считается от поворота камеры, и без этого нос
         /// отвязывается от дороги под собой.
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
-            carView(on: mapView)?.applyScreenAngle(cameraHeading: mapView.camera.heading)
+            guard let view = carView(on: mapView) else { return }
+            view.applyScreenAngle(cameraHeading: mapView.camera.heading)
+            // Тем же жестом меняется масштаб — отсюда круг точности, конус и
+            // решение схлопнуться в точку узнают, сколько метров в пункте.
+            view.setScale(metersPerPoint: mapView.metersPerScreenPoint)
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
@@ -297,7 +351,7 @@ struct MapViewRepresentable: UIViewRepresentable {
             // реплея: вид сверху, повёрнутый на курс. Ассета нет — падаем на
             // штатный кружок, а не на пустое место.
             if annotation is MKUserLocation {
-                guard let carImage = MapCarMarker.image(colorName: carColorName) else { return nil }
+                guard MapCarMarker.image(colorName: parent.carColorName) != nil else { return nil }
                 let id = MapCarAnnotationView.reuseIdentifier
                 let carView = mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MapCarAnnotationView
                     ?? MapCarAnnotationView(annotation: annotation, reuseIdentifier: id)
@@ -305,7 +359,8 @@ struct MapViewRepresentable: UIViewRepresentable {
                 // Nothing to open on tap; selectable, it would swallow taps
                 // meant for the map under it.
                 carView.isEnabled = false
-                carView.setCar(carImage)
+                carView.setState(carState)
+                carView.setScale(metersPerPoint: mapView.metersPerScreenPoint)
                 carView.apply(course: carCourse, cameraHeading: mapView.camera.heading)
                 carView.layer.zPosition = 1000
                 return carView

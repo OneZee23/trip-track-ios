@@ -135,6 +135,72 @@ final class CarHeadingPolicyTests: XCTestCase {
         XCTAssertEqual(at60, at120, accuracy: 2.5)
     }
 
+    // MARK: - Конус неуверенности
+
+    /// Честный курс конуса не даёт: постоянная клякса на экране ничего не
+    /// сообщает, а мешает всему.
+    func testConfidentCourseDrawsNoCone() {
+        XCTAssertNil(CarHeadingPolicy.coneHalfAngle(courseAccuracy: 5, rawSpeed: 20))
+        XCTAssertNil(CarHeadingPolicy.coneHalfAngle(
+            courseAccuracy: CarHeadingPolicy.coneThreshold, rawSpeed: 20
+        ))
+    }
+
+    /// Раствор конуса — это и есть то, что сказал CoreLocation, а не наша
+    /// выдумка о нём.
+    func testConeRepeatsWhatTheFixSaid() throws {
+        let cone = CarHeadingPolicy.coneHalfAngle(courseAccuracy: 35, rawSpeed: 20)
+        XCTAssertEqual(try XCTUnwrap(cone), 35, accuracy: 0.0001)
+    }
+
+    /// Шире потолка конус не растёт: веер во полкарты — это уже не «примерно
+    /// туда», а «не знаю», и говорить это надо неподвижным маркером.
+    func testConeIsCapped() throws {
+        let cone = CarHeadingPolicy.coneHalfAngle(courseAccuracy: 180, rawSpeed: 20)
+        XCTAssertEqual(try XCTUnwrap(cone), CarHeadingPolicy.coneMaxHalfAngle, accuracy: 0.0001)
+    }
+
+    /// На стоянке конуса нет. Маркер там заморожен и держит последний
+    /// достоверный угол — веер вокруг него обещал бы движение, которого нет.
+    func testParkedCarHasNoCone() {
+        XCTAssertNil(CarHeadingPolicy.coneHalfAngle(
+            courseAccuracy: 45, rawSpeed: CarHeadingPolicy.minCourseSpeed - 0.01
+        ))
+    }
+
+    /// Неизвестная точность (−1) — это «поля нет», а не «плохо». Рисовать по
+    /// ней конус значило бы придумать неуверенность вместо того, чтобы её
+    /// измерить.
+    func testUnknownAccuracyGivesNoCone() {
+        XCTAssertNil(CarHeadingPolicy.coneHalfAngle(courseAccuracy: -1, rawSpeed: 20))
+    }
+
+    // MARK: - Reduce Motion
+
+    /// Поворот ОСТАЁТСЯ, уходит доводка: угол встаёт за один шаг, а не за
+    /// полсекунды пружины. Apple стрелку курса при Reduce Motion тоже не
+    /// выключает — это информация, а не украшение.
+    func testReduceMotionTurnsInstantlyButStillTurns() {
+        let angle = CarHeadingPolicy.smoothed(current: 0, target: 90, dt: frame, instant: true)
+        XCTAssertEqual(angle, 90, accuracy: 0.0001)
+    }
+
+    /// Мгновенный поворот идёт мимо потолка скорости, но не мимо мёртвой
+    /// зоны: она не про плавность, а про то, чтобы маркер не дышал на ровной
+    /// дороге.
+    func testReduceMotionKeepsTheDeadZone() {
+        let angle = CarHeadingPolicy.smoothed(current: 10, target: 11, dt: frame, instant: true)
+        XCTAssertEqual(angle, 10, accuracy: 0.0001)
+    }
+
+    /// И заморозку: курса нет — угол не меняется ни с доводкой, ни без неё.
+    func testReduceMotionStillFreezesWithoutACourse() {
+        XCTAssertEqual(
+            CarHeadingPolicy.smoothed(current: 137, target: nil, dt: frame, instant: true),
+            137, accuracy: 0.0001
+        )
+    }
+
     // MARK: - Экранный угол
 
     /// Карта, повёрнутая пальцем, уносит с собой дорогу — маркер обязан

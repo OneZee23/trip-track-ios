@@ -59,6 +59,20 @@ enum CarHeadingPolicy {
     /// Ближе этого «вперёд» считать нельзя — там квант хранения, а не дорога.
     static let minLookaheadSpan: Double = 1
 
+    /// С какой точности курса начинается конус «еду примерно туда».
+    ///
+    /// CoreLocation отдаёт `courseAccuracy` в градусах ±. Двадцать — это
+    /// примерно ширина самой машины на длине корпуса: уже неточность, но ещё
+    /// не вопрос «в какую сторону». Рисовать конус на всякой честной пятёрке
+    /// значило бы держать на экране постоянную кляксу, которая ничего не
+    /// сообщает.
+    static let coneThreshold: Double = 20
+
+    /// Шире конус не рисуется. Сто двадцать градусов раствора — это уже «не
+    /// знаю», и честнее сказать это неподвижным маркером, чем веером во
+    /// полкарты.
+    static let coneMaxHalfAngle: Double = 60
+
     // MARK: - Экран
 
     /// Угол, под которым маркер рисуется НА ЭКРАНЕ.
@@ -89,6 +103,25 @@ enum CarHeadingPolicy {
         guard let course, course >= 0, courseAccuracy >= 0 else { return nil }
         guard rawSpeed >= minCourseSpeed else { return nil }
         return normalized(course)
+    }
+
+    /// Полуугол конуса неуверенности курса, или `nil` — конуса нет.
+    ///
+    /// Конус рисуется ТОЛЬКО там, где курс есть и он свежий: на стоянке
+    /// маркер заморожен и держит последний достоверный угол, и раскрывать
+    /// вокруг него веер было бы враньём в другую сторону — «я примерно еду
+    /// туда», когда никто никуда не едет.
+    ///
+    /// Неизвестная точность (−1) конуса тоже не даёт: у CoreLocation это
+    /// значит «поля нет», а не «плохо». Такой фикс уже отсеян воротами
+    /// `liveCourse`, и рисовать по нему нечего.
+    static func coneHalfAngle(
+        courseAccuracy: CLLocationDirectionAccuracy,
+        rawSpeed: CLLocationSpeed
+    ) -> Double? {
+        guard courseAccuracy > coneThreshold else { return nil }
+        guard rawSpeed >= minCourseSpeed else { return nil }
+        return min(courseAccuracy, coneMaxHalfAngle)
     }
 
     // MARK: - Реплей
@@ -155,14 +188,20 @@ enum CarHeadingPolicy {
     /// притормаживает у цели вместо того, чтобы проскочить её и вернуться.
     /// Пересчёт под реальный `dt` держит одинаковую скорость поворота на
     /// 60 и на 120 кадрах: `framePull` задан для кадра в 1/60 секунды.
+    /// `instant` — Reduce Motion. Поворот при нём ОСТАЁТСЯ: это информация,
+    /// и системная стрелка курса тоже не выключается. Уходит только доводка —
+    /// угол встаёт сразу, без пружины. Мёртвая зона остаётся и там: она не
+    /// про плавность, а про то, чтобы маркер не дышал на ровной дороге.
     static func smoothed(
         current: Double,
         target: Double?,
-        dt: TimeInterval
+        dt: TimeInterval,
+        instant: Bool = false
     ) -> Double {
         guard let target else { return normalized(current) }
         let delta = shortestDelta(from: current, to: target)
         guard abs(delta) > deadZone else { return normalized(current) }
+        guard !instant else { return normalized(target) }
         guard dt > 0 else { return normalized(current) }
 
         let pull = 1 - pow(1 - framePull, min(dt, 1) * 60)

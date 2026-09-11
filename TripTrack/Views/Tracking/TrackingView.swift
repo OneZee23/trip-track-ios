@@ -55,7 +55,9 @@ struct TrackingView: View {
                 onVisibleRectChanged: { viewModel.handleVisibleRectChange($0) },
                 onFogRendererCreated: { viewModel.fogRenderer = $0 },
                 onMapReady: { markMapReady() },
-                carColorName: viewModel.activeCarColorName
+                carColorName: viewModel.activeCarColorName,
+                isPaused: viewModel.isPaused,
+                gpsSignalStale: viewModel.gpsSignalStale
             )
             .ignoresSafeArea()
             .allowsHitTesting(!viewModel.isRecording)

@@ -791,7 +791,18 @@ struct RouteMapView: UIViewRepresentable {
             carColorName = name
             guard let annotation = playbackCar,
                   let view = mapView.view(for: annotation) as? MapCarAnnotationView else { return }
-            view.setCar(MapCarMarker.image(colorName: name))
+            view.setState(carState)
+        }
+
+        /// Состояние маркера реплея.
+        ///
+        /// Из шести состояний живой записи здесь честны ноль: точность — это
+        /// свойство той, прошлой секунды, а не этой; пауза и «нет сигнала»
+        /// говорят про запись, которая давно закончилась; пульс сообщал бы,
+        /// что сигнал живой, там, где никакого сигнала уже нет. Остаётся цвет
+        /// машины — и тень со схлопыванием, которые состояния не спрашивают.
+        var carState: MapCarMarker.State {
+            MapCarMarker.State(colorName: carColorName)
         }
 
         func applyPlayback(
@@ -902,7 +913,12 @@ struct RouteMapView: UIViewRepresentable {
                 carCourse = target
                 carHasCourse = true
             } else {
-                carCourse = CarHeadingPolicy.smoothed(current: carCourse, target: target, dt: dt)
+                // Reduce Motion: поворот остаётся, доводка уходит — угол
+                // встаёт сразу. Правило целиком в `CarHeadingPolicy`.
+                carCourse = CarHeadingPolicy.smoothed(
+                    current: carCourse, target: target, dt: dt,
+                    instant: UIAccessibility.isReduceMotionEnabled
+                )
             }
 
             guard let annotation = playbackCar,
@@ -917,6 +933,9 @@ struct RouteMapView: UIViewRepresentable {
             guard let annotation = playbackCar,
                   let view = mapView.view(for: annotation) as? MapCarAnnotationView else { return }
             view.applyScreenAngle(cameraHeading: mapView.camera.heading)
+            // Масштаб меняется тем же жестом, что и поворот: отсюда маркер
+            // узнаёт, не пора ли схлопнуться в точку.
+            view.setScale(metersPerPoint: mapView.metersPerScreenPoint)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -1208,7 +1227,8 @@ struct RouteMapView: UIViewRepresentable {
                 let view = mapView.dequeueReusableAnnotationView(withIdentifier: id) as? MapCarAnnotationView
                     ?? MapCarAnnotationView(annotation: annotation, reuseIdentifier: id)
                 view.annotation = annotation
-                view.setCar(MapCarMarker.image(colorName: carColorName))
+                view.setState(carState)
+                view.setScale(metersPerPoint: mapView.metersPerScreenPoint)
                 view.apply(course: carCourse, cameraHeading: mapView.camera.heading)
                 view.displayPriority = .required
                 view.collisionMode = .none
