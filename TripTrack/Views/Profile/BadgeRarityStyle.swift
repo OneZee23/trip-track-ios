@@ -110,9 +110,9 @@ extension BadgeRarity {
 // MARK: - Unlock share
 
 extension Badge {
-    /// «0,4» / «3» — the global unlock share, one decimal, RU comma, and no
-    /// dangling «,0». Canon prints «0,4%» beside «3%», so the decimal exists
-    /// for the sub-1 % tiers and nowhere else.
+    /// «0.4» / «3» — the global unlock share, one decimal and no dangling
+    /// «.0». Canon prints «0.4%» beside «3%», so the decimal exists for the
+    /// sub-1 % tiers and nowhere else.
     ///
     /// Lives here because three screens print this number — the profile's
     /// featured row, the award grid and the award detail — and three private
@@ -120,10 +120,10 @@ extension Badge {
     /// next, for the same badge.
     ///
     /// Not `NumberFormatter`: the app's language is not the device's, and a
-    /// phone on en_US showing the RU screen still owes «0,4».
+    /// phone on en_US showing the RU screen still owes the app's own separator.
+    /// «Одна десятая, и никакого хвоста ноль» — это `UnitNumber.upToTenth`,
+    /// общее правило, а не третья его копия.
     static func unlockShareText(_ value: Double, _ lang: LanguageManager.Language) -> String {
-        var s = String(format: "%.1f", value)
-        if s.hasSuffix(".0") { s.removeLast(2) }
-        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lang))
+        UnitNumber.upToTenth(value, code: lang.rawValue)
     }
 }

@@ -987,13 +987,13 @@ enum AppStrings {
         "\(Measure.distance(metres: metres, unit: unit, lang: lang)) · \(percent)"
     }
 
-    /// English is the only one of the seven that puts a dot before the tenths.
+    /// Всегда точка, на любом языке — решение владельца от 11 сентября 2026.
+    ///
+    /// Само правило и причина, по которой его нельзя вернуть к правилам локали,
+    /// записаны в `UnitNumber.decimalSeparator(code:)`. Здесь — только дверь для
+    /// экранов: по ту сторону границы процесса `AppStrings` не существует, а
+    /// печатать число локскрин обязан теми же символами.
     static func decimalSeparator(_ lang: LanguageManager.Language) -> String {
-        // Asked of the locale, not written out: English, Filipino and Chinese
-        // use a dot where most of Europe uses a comma, and the list only grows.
-        // Спрашивается через `UnitNumber` — общую с виджетом таблицу: по ту
-        // сторону границы процесса `AppStrings` не существует, а печатать
-        // число локскрин обязан теми же символами.
         UnitNumber.decimalSeparator(code: lang.rawValue)
     }
     static func mapPullHint(_ lang: LanguageManager.Language) -> String {

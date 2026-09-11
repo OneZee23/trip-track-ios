@@ -161,7 +161,4 @@ enum NotificationInviteRowModel {
         )
     }
 
-    private static func oneDecimal(_ value: Double) -> String {
-        String(format: "%.1f", value)
-    }
 }

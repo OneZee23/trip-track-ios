@@ -2967,7 +2967,7 @@ isOwn
                     // Canon writes «23.4 л» and «1 310 ₽». The «~» we used to
                     // prefix said "estimated", which every number on this
                     // screen is — and it made the tile read like a warning.
-                    value: TripDetailFormat.fuelVolume(fuel.volume),
+                    value: TripDetailFormat.fuelVolume(fuel.volume, lang: l),
                     unit: fuel.volUnit,
                     label: AppStrings.statFuel(l),
                     color: AppTheme.yellow,

@@ -99,36 +99,51 @@ final class MeasureFormatTests: XCTestCase {
         }
     }
 
-    /// Порог живёт в единицах ПОКАЗА: 9 900 метров — это 9,9 км (ещё с
-    /// десятыми) и 6,2 мили (уже целое). Если порог перенести в мили числом
-    /// «10», мильная строка на этом же расстоянии покажет «6,2» — тест падает.
+    /// Порог живёт в единицах ПОКАЗА: 9 900 метров — это 9.9 км (ещё с
+    /// десятыми) и 6.2 мили (уже целое). Если порог перенести в мили числом
+    /// «10», мильная строка на этом же расстоянии покажет «6.2» — тест падает.
     func testAdaptiveThresholdIsTenKilometresAndSixMiles() {
         let metres = 9_900.0
         let inKm = Measure.distanceValue(metres: metres, unit: .km, lang: .ru, style: .adaptive)
         let inMiles = Measure.distanceValue(metres: metres, unit: .miles, lang: .ru, style: .adaptive)
-        XCTAssertEqual(inKm, "9,9")
+        XCTAssertEqual(inKm, "9.9")
         XCTAssertEqual(inMiles, "6")
 
-        // Чуть ближе — десятые у обеих; чуть дальше — целые у обеих.
-        XCTAssertEqual(Measure.distanceValue(metres: 9_000, unit: .km, lang: .ru, style: .adaptive), "9,0")
-        XCTAssertEqual(Measure.distanceValue(metres: 9_000, unit: .miles, lang: .ru, style: .adaptive), "5,6")
+        // Чуть ближе — десятые у обеих; чуть дальше — целые у обеих. Расстояние
+        // взято НЕ круглое нарочно: на ровных девяти километрах обе стороны
+        // ответили бы «9», и тест перестал бы видеть порог, о котором он.
+        XCTAssertEqual(Measure.distanceValue(metres: 9_300, unit: .km, lang: .ru, style: .adaptive), "9.3")
+        XCTAssertEqual(Measure.distanceValue(metres: 9_300, unit: .miles, lang: .ru, style: .adaptive), "5.8")
         XCTAssertEqual(Measure.distanceValue(metres: 11_000, unit: .km, lang: .ru, style: .adaptive), "11")
         XCTAssertEqual(Measure.distanceValue(metres: 11_000, unit: .miles, lang: .ru, style: .adaptive), "7")
     }
 
     // MARK: - Локаль
 
-    /// Разделитель берётся у ЯЗЫКА ПРИЛОЖЕНИЯ, а не у системы: человек,
-    /// читающий приложение по-немецки на английском телефоне, — законный
-    /// случай, и до 0.6.7 три места печатали ему точку через `String(format:)`.
-    func testDecimalSeparatorComesFromTheLanguage() {
-        XCTAssertEqual(Measure.distanceValue(metres: 8_400, unit: .km, lang: .ru, style: .tenths), "8,4")
-        XCTAssertEqual(Measure.distanceValue(metres: 8_400, unit: .km, lang: .en, style: .tenths), "8.4")
-        XCTAssertEqual(Measure.distanceValue(metres: 8_400, unit: .km, lang: .de, style: .tenths), "8,4")
-        XCTAssertEqual(Measure.distanceValue(metres: 8_400, unit: .km, lang: .fil, style: .tenths), "8.4")
+    /// Разделитель дробной части — ТОЧКА во всех тринадцати языках.
+    ///
+    /// Решение владельца от 11 сентября 2026 («всегда числа когда идут
+    /// десятичными, разделялись точкой, просто для красоты»), а не забытая
+    /// локализация: по правилам локали русский, немецкий и ещё восемь пишут
+    /// здесь запятую. Тест перебирает ВСЕ языки, а не три показательных, ровно
+    /// потому, что вернуть запятую попытаются добросовестно — как починку
+    /// локализации, языку за языком.
+    func testDecimalSeparatorIsADotInEveryLanguage() {
         for lang in langs {
-            XCTAssertFalse(AppStrings.decimalSeparator(lang).isEmpty)
+            XCTAssertEqual(AppStrings.decimalSeparator(lang), ".", lang.rawValue)
+            for unit in DistanceUnit.allCases {
+                let text = Measure.distanceValue(
+                    metres: 8_400, unit: unit, lang: lang, style: .tenths)
+                XCTAssertTrue(text.contains("."),
+                              "\(lang.rawValue)/\(unit.rawValue): «\(text)» без точки")
+                XCTAssertFalse(text.contains(","),
+                               "\(lang.rawValue)/\(unit.rawValue): «\(text)» с запятой")
+            }
         }
+        XCTAssertEqual(
+            Measure.distanceValue(metres: 8_400, unit: .km, lang: .ru, style: .tenths), "8.4")
+        XCTAssertEqual(
+            Measure.distanceValue(metres: 8_400, unit: .km, lang: .de, style: .tenths), "8.4")
     }
 
     func testGroupingComesFromTheLanguage() {
@@ -140,6 +155,27 @@ final class MeasureFormatTests: XCTestCase {
         XCTAssertEqual(
             Measure.distanceValue(metres: 12_345_000, unit: .km, lang: .en, style: .grouped),
             "12,345")
+    }
+
+    // MARK: - Одна десятая, и только если она есть
+
+    /// То же правило вне расстояния: расход, цена топлива, редкость значка,
+    /// скорость реплея.
+    ///
+    /// Живёт оно в `UnitNumber.upToTenth`, а не тремя копиями по экранам, —
+    /// копии уже разошлись: старая `GarageFormat.fuel` на 9.96 печатала
+    /// «10.0» (она смотрела на целость ДО округления), а `Badge.unlockShareText`
+    /// на том же числе — «10».
+    func testUpToTenthPrintsTheTenthOnlyWhenThereIsOne() {
+        XCTAssertEqual(UnitNumber.upToTenth(1, code: "ru"), "1")
+        XCTAssertEqual(UnitNumber.upToTenth(1.5, code: "ru"), "1.5")
+        XCTAssertEqual(UnitNumber.upToTenth(9.96, code: "ru"), "10")
+        XCTAssertEqual(UnitNumber.upToTenth(0.44, code: "de"), "0.4")
+        XCTAssertEqual(UnitNumber.upToTenth(0, code: "en"), "0")
+        // Разделитель — тот же один на приложение.
+        for lang in langs {
+            XCTAssertEqual(UnitNumber.upToTenth(8.4, code: lang.rawValue), "8.4", lang.rawValue)
+        }
     }
 
     // MARK: - Свойство перевода
@@ -171,7 +207,7 @@ final class MeasureFormatTests: XCTestCase {
     /// другом.
     func testLabelAgreesWithTheNumberItStandsNextTo() {
         XCTAssertEqual(Measure.distance(metres: 8_400, unit: .miles, lang: .ru, style: .tenths),
-                       "5,2 мили")
+                       "5.2 мили")
         XCTAssertEqual(Measure.distance(metres: 8_000, unit: .miles, lang: .ru, style: .grouped),
                        "5 миль")
         // 21 миля — та самая, на которой русский расходится с польским.

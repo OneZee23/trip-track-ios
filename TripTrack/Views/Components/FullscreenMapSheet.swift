@@ -488,7 +488,7 @@ struct FullscreenMapSheet: View {
             Haptics.selection()
             engine.cycleRate()
         } label: {
-            Text(Self.rateLabel(engine.rate))
+            Text(Self.rateLabel(engine.rate, language))
                 .font(.system(size: 12, weight: .bold).monospacedDigit())
                 .foregroundStyle(c.textSecondary)
                 .frame(width: 40, height: 40)
@@ -577,20 +577,17 @@ struct FullscreenMapSheet: View {
     }
 
     /// «1×», «1,5×», «5×». Whole rates lose the decimal, and the separator
-    /// follows the device locale — a Russian phone writes 1,5.
-    private static func rateLabel(_ rate: Double) -> String {
-        let number = rateFormatter.string(from: NSNumber(value: rate))
-            ?? String(format: "%g", rate)
-        return "\(number)×"
+    /// «1×», «1.5×», «2×» — лестница `ReplayEngine.rateLadder`, напечатанная
+    /// общим форматтером.
+    ///
+    /// Свой `NumberFormatter` здесь стоял БЕЗ локали, то есть брал локаль
+    /// УСТРОЙСТВА и писал «1,5×» на русском телефоне даже с приложением
+    /// по-английски. Разделитель в приложении один (`UnitNumber`), и половинная
+    /// ступень — единственная в лестнице, у кого дробная часть вообще есть:
+    /// остальным `upToTenth` хвост не приписывает.
+    private static func rateLabel(_ rate: Double, _ lang: LanguageManager.Language) -> String {
+        "\(UnitNumber.upToTenth(rate, code: lang.rawValue))×"
     }
-
-    private static let rateFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.minimumFractionDigits = 0
-        f.maximumFractionDigits = 1
-        return f
-    }()
 
     /// «02:14» — zero-padded H:MM of a trip-time interval.
     private static func hmm(_ seconds: TimeInterval) -> String {

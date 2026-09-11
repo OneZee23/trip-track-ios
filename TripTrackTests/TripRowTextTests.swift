@@ -63,7 +63,7 @@ final class TripRowTextTests: XCTestCase {
 
     func testShortTripDoesNotReadAsZero() {
         let s = TripRowText.distance(trip(km: 0.4), .ru, unit: .km)
-        XCTAssertTrue(s.hasPrefix("0,4"), "четыреста метров показаны как «\(s)»")
+        XCTAssertTrue(s.hasPrefix("0.4"), "четыреста метров показаны как «\(s)»")
     }
 
     func testLongTripIsWhole() {

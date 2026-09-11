@@ -387,8 +387,9 @@ struct OnboardingView: View {
         return "\(prefix) · \(df.string(from: realTrip.startDate))"
     }
 
-    /// RU writes decimals with a comma; the canned values already did, so the
-    /// real ones must too or the card changes typography mid-flow.
+    /// Разделитель — общий на приложение (`AppStrings.decimalSeparator`), а не
+    /// записанный руками в подставных значениях карточки: иначе настоящее
+    /// число и подставное разошлись бы типографикой посреди онбординга.
     private static func number(_ value: Double, decimals: Int, lng: LanguageManager.Language) -> String {
         let s = String(format: "%.\(decimals)f", value)
         return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lng))

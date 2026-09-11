@@ -116,7 +116,7 @@ final class BadgeUnitTests: XCTestCase {
         XCTAssertEqual(badge("mountain_goat").figures.first?.value, 1000)
         XCTAssertEqual(badge("above_clouds").figures.first?.value, 2000)
         XCTAssertEqual(badge("highway_wolf").figures.first?.value, 300)
-        // Марафон — 42.195, а печатается «42,2»: порог точный, запись круглая.
+        // Марафон — 42.195, а печатается «42.2»: порог точный, запись круглая.
         XCTAssertEqual(badge("marathon_42").figures.first?.value ?? 0, 42.195, accuracy: 1e-9)
     }
 
@@ -160,11 +160,12 @@ final class BadgeUnitTests: XCTestCase {
                        "Along coastline (altitude <33 ft, >12 mi)")
     }
 
-    /// Русское описание марафона до 0.6.7 писало «42.2» с ТОЧКОЙ — на русском
-    /// экране, рядом с «47,3 км» личного рекорда через запятую.
-    func testRussianFinallyWritesTheMarathonWithAComma() {
+    /// Число в описании значка печатает общий форматтер, а не рука
+    /// переводчика: одиннадцать таблиц писали марафон кто «42.2», кто «42,2».
+    /// Разделитель с 0.6.7 один на приложение — точка (решение владельца).
+    func testTheMarathonFigureComesFromTheSharedFormatter() {
         XCTAssertEqual(badge("marathon_42").description(.ru, unit: .km),
-                       "42,2 км за одну поездку")
+                       "42.2 км за одну поездку")
     }
 
     /// Метрический человек не должен заметить версию: слова те же, число то

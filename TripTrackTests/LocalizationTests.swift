@@ -182,19 +182,31 @@ final class LocalizationTests: XCTestCase {
 
     // MARK: - Formatting
 
-    /// Two of the thirteen write tenths with a dot — English and Filipino.
-    /// This used to be «English is the only one», which is exactly the kind of
-    /// rule that quietly stops being true when a language is added; the
-    /// separator is asked of the locale now, and this pins the answer.
+    /// ВСЕ ТРИНАДЦАТЬ пишут десятые через точку — решение владельца от
+    /// 11 сентября 2026, а не забытая локализация.
+    ///
+    /// Тест стоит именно здесь, среди правил локализации, потому что ловить он
+    /// обязан не поломку, а ДОБРОСОВЕСТНУЮ ПРАВКУ: следующий, кто увидит
+    /// «немецкий пишет 8.4», прочтёт это как баг и вернёт запятую. Причина
+    /// записана в `UnitNumber.decimalSeparator(code:)`; здесь — цена возврата.
     func testDecimalSeparator() {
-        let dotted: Set<LanguageManager.Language> = [.en, .fil]
         for lang in LanguageManager.Language.allCases {
             XCTAssertEqual(
-                AppStrings.decimalSeparator(lang),
-                dotted.contains(lang) ? "." : ",",
-                "wrong decimal separator for \(lang.rawValue)"
+                AppStrings.decimalSeparator(lang), ".",
+                "\(lang.rawValue): разделитель дробной части — всегда точка "
+                + "(решение владельца, см. `UnitNumber.decimalSeparator`)"
             )
         }
+    }
+
+    /// Разряды при этом остались ЯЗЫКОВЫМИ, и это не забытая половина правки:
+    /// владелец говорил про десятичный разделитель. Немецкое «12.345» — это
+    /// двенадцать тысяч, и такое число никогда не печатается вместе с
+    /// десятыми: `tenths` не группирует, `grouped` не дробит.
+    func testGroupingStayedWithTheLanguage() {
+        XCTAssertEqual(AppStrings.groupedNumber(12_345, .en), "12,345")
+        XCTAssertEqual(AppStrings.groupedNumber(12_345, .de), "12.345")
+        XCTAssertEqual(AppStrings.groupedNumber(12_345, .ru), "12\u{00A0}345")
     }
 
     func testDateFormattersExistForEveryLanguage() {

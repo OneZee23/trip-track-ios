@@ -178,19 +178,19 @@ enum GarageFormat {
     // `Measure.elevation(metres:)`, и перепутать их нельзя: у них разные
     // входные единицы в самом имени параметра.
 
-    /// Retired FuelSettingsCard's proven display format: integral values drop
-    /// the fraction, others keep one decimal; RU uses a decimal comma.
+    /// Расход и цена топлива: целое печатается без хвоста, дробное — с одной
+    /// десятой. Это правило `UnitNumber.upToTenth`, и своей копии у него больше
+    /// нет: копия здесь и копия в `Badge.unlockShareText` уже разошлись на
+    /// 9.96 — одна печатала «10», другая «10.0».
     static func fuel(_ value: Double, lng: LanguageManager.Language) -> String {
-        let s = value == Double(Int(value))
-            ? String(format: "%.0f", value)
-            : String(format: "%.1f", value)
-        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lng))
+        UnitNumber.upToTenth(value, code: lng.rawValue)
     }
 
-    /// Always-one-decimal variant (avg-consumption stat card).
+    /// Always-one-decimal variant (avg-consumption stat card): «9.0» здесь
+    /// нарочно — плитка стоит рядом с такой же, и обе обязаны быть одной
+    /// ширины.
     static func oneDecimal(_ value: Double, lng: LanguageManager.Language) -> String {
-        let s = String(format: "%.1f", value)
-        return s.replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lng))
+        UnitNumber.tenths(value, code: lng.rawValue)
     }
 
     /// Localized short volume unit ("л"/"L", "гал"/"gal") — carried over from

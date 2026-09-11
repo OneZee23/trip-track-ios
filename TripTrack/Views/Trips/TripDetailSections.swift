@@ -44,9 +44,15 @@ enum TripDetailFormat {
         return f
     }()
 
-    /// «23.4» — one decimal, and a decimal comma where the language uses one.
-    static func fuelVolume(_ litres: Double) -> String {
-        Self.oneDecimal.string(from: NSNumber(value: litres)) ?? String(format: "%.1f", litres)
+    /// «23.4» — одна десятая, разделитель из общего места.
+    ///
+    /// Свой `NumberFormatter` стоял здесь БЕЗ локали, то есть брал локаль
+    /// УСТРОЙСТВА: телефон на `ru_RU` с приложением по-английски писал в этой
+    /// плитке «23,4», а в соседней — «23.4». С 0.6.7 разделитель один на
+    /// приложение и приезжает из `UnitNumber`; язык в сигнатуре нужен именно
+    /// затем, чтобы спросить его было у кого.
+    static func fuelVolume(_ litres: Double, lang: LanguageManager.Language) -> String {
+        UnitNumber.tenths(litres, code: lang.rawValue)
     }
 
     /// «1 310» — grouped, because a four-digit price without a separator reads
@@ -63,15 +69,6 @@ enum TripDetailFormat {
     static func groupedNumber(_ value: Double) -> String {
         Self.grouped.string(from: NSNumber(value: value.rounded())) ?? String(format: "%.0f", value)
     }
-
-    private static let oneDecimal: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.minimumFractionDigits = 1
-        f.maximumFractionDigits = 1
-        f.usesGroupingSeparator = false
-        return f
-    }()
 
     private static let grouped: NumberFormatter = {
         let f = NumberFormatter()
