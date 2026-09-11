@@ -183,24 +183,6 @@ struct IdleHUDView: View {
         }
     }
 
-    // Per-language grouping, consistent with My Map (MyMapView.groupedNumber):
-    // RU «2 430» (Figma «2 430 км всего»), EN "2,430".
-    private static let ruKmFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.maximumFractionDigits = 0
-        f.groupingSeparator = " "
-        return f
-    }()
-
-    private static let enKmFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.maximumFractionDigits = 0
-        f.groupingSeparator = ","
-        return f
-    }()
-
     private func formatKmWithSeparator(_ km: Double) -> String {
         Measure.distanceValue(km: km, unit: distanceUnit, lang: lang.language)
     }
