@@ -250,14 +250,19 @@ enum Measure {
         }
     }
 
+    /// Печатает не сам, а зовёт `UnitNumber` — общую с виджетом таблицу.
+    ///
+    /// Общую нарочно: те же десятые и те же разряды обязан напечатать
+    /// локскрин, а `Measure` в его таргет не приезжает (он знает `AppStrings`,
+    /// которого в виджете нет). Своя копия правила по ту сторону границы у нас
+    /// уже была — `String(format: "%.1f")` с точкой в любом языке.
     private static func tenths(_ value: Double, _ lang: LanguageManager.Language) -> Shown {
         let rounded = (value * 10).rounded() / 10
-        // `%.1f` пишет точку в любой локали — разделитель подставляется
-        // языком, а не системой: язык приложения и язык телефона у нас
-        // расходятся законно.
-        let text = String(format: "%.1f", rounded)
-            .replacingOccurrences(of: ".", with: AppStrings.decimalSeparator(lang))
-        return Shown(text: text, value: rounded, fractionDigits: 1)
+        return Shown(
+            text: UnitNumber.tenths(value, code: lang.rawValue),
+            value: rounded,
+            fractionDigits: 1
+        )
     }
 
     private static func grouped(_ value: Double, _ lang: LanguageManager.Language) -> Shown {
@@ -266,7 +271,7 @@ enum Measure {
         // числа за пределами Int падает, а не насыщается.
         let clamped = min(max(rounded, -1e15), 1e15)
         return Shown(
-            text: AppStrings.groupedNumber(Int(clamped), lang),
+            text: UnitNumber.grouped(Int(clamped), code: lang.rawValue),
             value: clamped,
             fractionDigits: 0
         )

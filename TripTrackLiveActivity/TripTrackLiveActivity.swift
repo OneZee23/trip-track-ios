@@ -18,12 +18,24 @@ private let darkBg = Color(red: 25/255, green: 25/255, blue: 31/255)
 /// Их было три: две одинаковых приватных копии в двух экранах активности и
 /// третья, написанная прямо в строке итога. Правило «до десяти показываем
 /// десятые» они повторяли слово в слово, поэтому и не расходились — пока
-/// граница была десять километров. У миль она шесть, и живёт эта граница в
-/// `DistanceUnit.showsTenths` (папка `TripTrackShared` — единственная, которую
-/// компилируют оба таргета): `Measure` из приложения сюда не дотянуться, а
-/// считать те же мили теми же числами виджет обязан.
-private func fmtDist(_ value: Double, unit: DistanceUnit = .km) -> String {
-    unit.showsTenths(value) ? String(format: "%.1f", value) : String(format: "%.0f", value)
+/// граница была десять километров. У миль она шесть.
+///
+/// С 0.6.7 функция ничего не решает сама: и порог, и разряды, и разделитель, и
+/// подпись приезжают из `LiveActivityFormat` (`TripTrackShared` — единственная
+/// папка, которую компилируют оба таргета). Значения по умолчанию у `unit`
+/// нет НИ ЗДЕСЬ, ни в `Measure`: дефолт `= .km` — это ровно тот рычаг, которым
+/// новое место показа молча печатает километры человеку, выбравшему мили.
+/// Единицу говорит состояние активности (`ContentState.shownUnit`).
+private func fmtDist(
+    _ km: Double, unit: DistanceUnit, code: String
+) -> LiveActivityFormat.Parts {
+    LiveActivityFormat.distanceParts(km: km, unit: unit, code: code)
+}
+
+private func fmtSpeed(
+    _ kmh: Double, unit: DistanceUnit, code: String
+) -> LiveActivityFormat.Parts {
+    LiveActivityFormat.speedParts(kmh: kmh, unit: unit, code: code)
 }
 
 // MARK: - Adaptive colors
@@ -112,8 +124,12 @@ struct TripTrackLiveActivity: Widget {
                     } else {
                         statBlock(
                             caption: LiveActivityStrings.speedCaption(context.state.language),
-                            value: "\(Int(context.state.speedKmh))",
-                            unit: LiveActivityStrings.kmh(context.state.language),
+                            value: fmtSpeed(context.state.speedKmh,
+                                            unit: context.state.shownUnit,
+                                            code: context.state.language).value,
+                            unit: fmtSpeed(context.state.speedKmh,
+                                           unit: context.state.shownUnit,
+                                           code: context.state.language).unit,
                             alignment: .leading
                         )
                     }
@@ -122,8 +138,12 @@ struct TripTrackLiveActivity: Widget {
                     if !context.state.isFinished {
                         statBlock(
                             caption: LiveActivityStrings.distanceCaption(context.state.language),
-                            value: fmtDist(context.state.distanceKm),
-                            unit: LiveActivityStrings.km(context.state.language),
+                            value: fmtDist(context.state.distanceKm,
+                                           unit: context.state.shownUnit,
+                                           code: context.state.language).value,
+                            unit: fmtDist(context.state.distanceKm,
+                                          unit: context.state.shownUnit,
+                                          code: context.state.language).unit,
                             alignment: .trailing
                         )
                     }
@@ -255,7 +275,10 @@ struct TripTrackLiveActivity: Widget {
                         } else {
                             Circle().fill(accentRed).frame(width: 7, height: 7)
                         }
-                        Text("\(Int(context.state.speedKmh))").font(.caption.bold())
+                        Text(fmtSpeed(context.state.speedKmh,
+                                      unit: context.state.shownUnit,
+                                      code: context.state.language).value)
+                            .font(.caption.bold())
                     }
                     .padding(.leading, 3)
                 }
@@ -271,7 +294,9 @@ struct TripTrackLiveActivity: Widget {
                 // Ширина слота фиксирована по той же причине, по какой была
                 // фиксирована у таймера: остров подгоняет слот под контент, и
                 // на паузе он схлопывался бы, дёргая весь ряд.
-                Text(fmtDist(context.state.distanceKm))
+                Text(fmtDist(context.state.distanceKm,
+                             unit: context.state.shownUnit,
+                             code: context.state.language).value)
                     .font(.caption)
                     .monospacedDigit()
                     .frame(maxWidth: 44)
@@ -353,6 +378,12 @@ private struct LiveLockScreenView: View {
     private var lng: String { context.state.language }
     private var isPixel: Bool { VehicleAvatar.isAsset(context.attributes.vehicleAvatar) }
     private var c: WidgetColors { .from(isDark: context.state.isDarkMode) }
+    /// Число и подпись берутся ОДНИМ вызовом: подпись мили склоняется по
+    /// показанному числу («7,7 мили», но «12 миль»), и собрать их врозь — это
+    /// однажды поставить «12» рядом с «мили».
+    private var distance: LiveActivityFormat.Parts {
+        fmtDist(context.state.distanceKm, unit: context.state.shownUnit, code: lng)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -412,11 +443,11 @@ private struct LiveLockScreenView: View {
                     label: LiveActivityStrings.distanceCaptionShort(lng),
                     value: {
                         HStack(alignment: .lastTextBaseline, spacing: 2) {
-                            Text(fmtDist(context.state.distanceKm))
+                            Text(distance.value)
                                 .font(.system(size: 20, weight: .bold, design: .rounded))
                                 .monospacedDigit()
                                 .foregroundStyle(c.text)
-                            Text(LiveActivityStrings.km(context.state.language))
+                            Text(distance.unit)
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(c.textSecondary)
                         }
@@ -618,8 +649,8 @@ private struct FinishedLockScreenView: View {
     }
 
     private var summaryText: String {
-        let d = fmtDist(context.state.distanceKm)
-        let u = LiveActivityStrings.km(lng)
-        return "\(context.attributes.vehicleName) • \(d) \(u) • \(context.state.finalDuration ?? "--:--")"
+        let d = fmtDist(context.state.distanceKm,
+                        unit: context.state.shownUnit, code: lng)
+        return "\(context.attributes.vehicleName) • \(d.value) \(d.unit) • \(context.state.finalDuration ?? "--:--")"
     }
 }

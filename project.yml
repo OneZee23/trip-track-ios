@@ -182,6 +182,16 @@ targets:
     deploymentTarget: "10.0"
     sources:
       - path: TripTrackWatch
+      # Единицы — пофайлово, а не всей папкой: `TripTrackShared` целиком
+      # часам не собрать (там ActivityKit, AppIntents и WidgetKit, которых на
+      # watchOS нет). Эти четыре — чистый Foundation, и берутся они именно
+      # ради того, чтобы мили на часах считались ТЕМИ ЖЕ числами и теми же
+      # словами, что на телефоне: своя копия 1609.344 здесь разошлась бы
+      # молча — таргет в схему сборки не входит (см. ниже).
+      - path: TripTrackShared/DistanceUnit.swift
+      - path: TripTrackShared/UnitNumber.swift
+      - path: TripTrackShared/LiveActivityStrings.swift
+      - path: TripTrackShared/LiveActivityFormat.swift
     settings:
       base:
         CODE_SIGN_STYLE: Automatic

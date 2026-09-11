@@ -985,7 +985,10 @@ enum AppStrings {
     static func decimalSeparator(_ lang: LanguageManager.Language) -> String {
         // Asked of the locale, not written out: English, Filipino and Chinese
         // use a dot where most of Europe uses a comma, and the list only grows.
-        lang.locale.decimalSeparator ?? "."
+        // Спрашивается через `UnitNumber` — общую с виджетом таблицу: по ту
+        // сторону границы процесса `AppStrings` не существует, а печатать
+        // число локскрин обязан теми же символами.
+        UnitNumber.decimalSeparator(code: lang.rawValue)
     }
     static func mapPullHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "mapPullHint",
@@ -1130,42 +1133,14 @@ enum AppStrings {
         return formatter.string(from: date)
     }
     /// Locale-aware thousands grouping («12 890» in RU, «12,890» in EN).
+    ///
+    /// Таблица форматтеров уехала в `UnitNumber` (`TripTrackShared`), и это не
+    /// перестановка ради чистоты: ровно эти разряды обязан напечатать виджет
+    /// на локскрине, а `AppStrings` в его таргет не компилируется. До 0.6.7
+    /// виджет разрядов не ставил вовсе — «1240» против «1 240» в приложении.
     static func groupedNumber(_ value: Int, _ lang: LanguageManager.Language) -> String {
-        let formatter = groupingFormatters[lang] ?? enGrouping
-        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        UnitNumber.grouped(value, code: lang.rawValue)
     }
-
-    /// One formatter per language, built once. Russian keeps its explicit
-    /// space and English its comma — the two the design was drawn against;
-    /// the rest take whatever their locale groups with (a dot in German,
-    /// Italian and Spanish, a thin space in French and Polish).
-    private static let groupingFormatters: [LanguageManager.Language: NumberFormatter] = {
-        var map: [LanguageManager.Language: NumberFormatter] = [:]
-        for lang in LanguageManager.Language.allCases {
-            let f = NumberFormatter()
-            f.numberStyle = .decimal
-            f.locale = lang.locale
-            if lang == .ru { f.groupingSeparator = "\u{00A0}" }
-            if lang == .en { f.groupingSeparator = "," }
-            // Разделитель разрядов обязан быть НЕРАЗРЫВНЫМ. С обычным пробелом
-            // строка «Volkswagen Polo · 2019 · 12 000 км» переносится ВНУТРИ
-            // числа — «12» остаётся на одной строке, «000 км» уезжает на
-            // следующую. Ловится не в тестах, а глазами на узкой карточке, и то
-            // не сразу. Локали, которые сами группируют пробелом (fr, pl, kk,
-            // uk), приходят сюда с U+0020 и чинятся тем же правилом.
-            if let sep = f.groupingSeparator, sep == " " {
-                f.groupingSeparator = "\u{00A0}"
-            }
-            map[lang] = f
-        }
-        return map
-    }()
-    private static let ruGrouping: NumberFormatter = {
-        let f = NumberFormatter(); f.numberStyle = .decimal; f.groupingSeparator = " "; return f
-    }()
-    private static let enGrouping: NumberFormatter = {
-        let f = NumberFormatter(); f.numberStyle = .decimal; f.groupingSeparator = ","; return f
-    }()
     /// Bare genitive plate labels («8 регионов», «24 города» etc.).
     static func regionsGenitive(_ lang: LanguageManager.Language, count: Int) -> String {
         nounRegions(lang, count)

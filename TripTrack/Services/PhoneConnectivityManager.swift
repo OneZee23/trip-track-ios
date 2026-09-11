@@ -45,12 +45,21 @@ final class PhoneConnectivityManager: NSObject, WCSessionDelegate {
         let session = WCSession.default
         guard session.activationState == .activated else { return }
         guard session.isPaired, session.isWatchAppInstalled else { return }
+        // Провод на часы — МЕТРИЧЕСКИЙ, как и провод на локскрин: километры
+        // и километры в час, а `distanceUnit` говорит, что из них рисовать.
+        //
+        // Язык и единица дописаны сейчас, пока помним: словарь нетипизирован,
+        // часовой таргет в схему сборки не входит (`project.yml`), и забытый
+        // ключ здесь никто не поймает ни компилятором, ни тестом — только
+        // глазами на часах, которых у нас нет.
         let payload: [String: Any] = [
             "isRecording": isRecording,
             "isPaused": isPaused,
             "speedKmh": speedKmh,
             "distanceKm": distanceKm,
             "elapsedSeconds": elapsedSeconds,
+            "distanceUnit": DistanceUnit.current.rawValue,
+            "language": UserDefaults.standard.string(forKey: "appLanguage") ?? "en",
         ]
         try? session.updateApplicationContext(payload)
     }

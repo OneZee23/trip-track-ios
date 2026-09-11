@@ -20,6 +20,11 @@ final class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
     @Published private(set) var elapsedSeconds: Int = 0
     @Published private(set) var isReachable = false
     @Published private(set) var lastError: String?
+    /// В чём показывать и на каком языке — приезжает тем же снимком, что и
+    /// числа. Провод остаётся метрическим (`speedKmh`, `distanceKm`), перевод
+    /// живёт на часах, у самого показа, общим `DistanceUnit`.
+    @Published private(set) var distanceUnit: DistanceUnit = .km
+    @Published private(set) var language: String = "en"
 
     private override init() {
         super.init()
@@ -76,5 +81,12 @@ final class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         if let v = ctx["speedKmh"] as? Double { speedKmh = v }
         if let v = ctx["distanceKm"] as? Double { distanceKm = v }
         if let v = ctx["elapsedSeconds"] as? Int { elapsedSeconds = v }
+        // Снимок от старого телефона этих ключей не несёт — тогда остаётся
+        // то, что уже стоит, а не «километры по умолчанию»: сбросить выбор на
+        // километры одним пропущенным апдейтом хуже, чем показать прежний.
+        if let v = ctx["distanceUnit"] as? String, let u = DistanceUnit(rawValue: v) {
+            distanceUnit = u
+        }
+        if let v = ctx["language"] as? String { language = v }
     }
 }

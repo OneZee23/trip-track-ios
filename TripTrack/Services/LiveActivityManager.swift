@@ -17,7 +17,26 @@ final class LiveActivityManager {
     /// independent of the Live Activity and always work.
     private static let staleAfter: TimeInterval = 8 * 60
 
-    private init() {}
+    private init() {
+        // Смена единицы — то, чего активность сама не заметит.
+        //
+        // Язык и тема доезжают до карточки следующим апдейтом, и этого хватает:
+        // их меняют, глядя в приложение, где следующая точка GPS придёт через
+        // секунду. Единицу меняют там же, но смотрят потом на ЛОКСКРИН — и
+        // между «переключил» и «увидел» стоит тротлинг в две секунды и пауза,
+        // на которой апдейтов нет вовсе. Поэтому здесь принудительный кадр,
+        // мимо ограничителя частоты, — ровно как у отметки на маршруте.
+        unitObserver = NotificationCenter.default.addObserver(
+            forName: .distanceUnitChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.applyUnitChange() }
+        }
+    }
+
+    /// Отписка — формальность (синглтон живёт всё время работы приложения), но
+    /// без неё наблюдатель пережил бы владельца, если синглтон однажды
+    /// перестанет быть синглтоном.
+    private var unitObserver: NSObjectProtocol?
 
     /// Current language & dark mode — read fresh on every update
     private var currentLanguage: String {
@@ -26,6 +45,26 @@ final class LiveActivityManager {
 
     private var currentIsDarkMode: Bool {
         UserDefaults.standard.bool(forKey: "liveActivityDarkMode")
+    }
+
+    /// В чём показывать — читается СВЕЖО, как язык, и по той же причине:
+    /// активность живёт часами, а выбор могли поменять посреди поездки или
+    /// привезти пулом со второго телефона. Поле в классе запомнило бы то, что
+    /// стояло на старте записи.
+    private var currentDistanceUnit: String {
+        DistanceUnit.current.rawValue
+    }
+
+    /// Человек сменил единицу — перерисовать карточку немедленно.
+    private func applyUnitChange() {
+        guard let activity = currentActivity else { return }
+        var state = activity.content.state
+        let unit = currentDistanceUnit
+        guard state.distanceUnit != unit else { return }
+        state.distanceUnit = unit
+        state.language = currentLanguage
+        Task { await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(Self.staleAfter))) }
+        lastUpdateDate = Date()
     }
 
     // MARK: - Start
@@ -53,7 +92,8 @@ final class LiveActivityManager {
             checkpointCount = 0
             let initialState = TripActivityAttributes.ContentState(
                 speedKmh: 0, distanceKm: 0, isPaused: false, pausedDuration: 0,
-                language: currentLanguage, isDarkMode: currentIsDarkMode
+                language: currentLanguage, isDarkMode: currentIsDarkMode,
+                distanceUnit: currentDistanceUnit
             )
 
             do {
@@ -94,7 +134,8 @@ final class LiveActivityManager {
             speedKmh: speedKmh, distanceKm: distanceKm, isPaused: isPaused,
             pausedDuration: pausedDuration, elapsedAtPause: elapsedAtPause,
             language: currentLanguage, isDarkMode: currentIsDarkMode,
-            checkpointCount: checkpointCount
+            checkpointCount: checkpointCount,
+            distanceUnit: currentDistanceUnit
         )
 
         Task { await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(Self.staleAfter))) }
@@ -118,6 +159,7 @@ final class LiveActivityManager {
         guard let activity = currentActivity else { return }
         var state = activity.content.state
         state.checkpointCount = count
+        state.distanceUnit = currentDistanceUnit
         Task { await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(Self.staleAfter))) }
         lastUpdateDate = Date()
     }
@@ -147,7 +189,8 @@ final class LiveActivityManager {
         let finalState = TripActivityAttributes.ContentState(
             speedKmh: 0, distanceKm: distanceKm, isPaused: false, pausedDuration: 0,
             isFinished: true, finalDuration: duration, averageSpeedKmh: avgSpeedKmh,
-            language: currentLanguage, isDarkMode: currentIsDarkMode
+            language: currentLanguage, isDarkMode: currentIsDarkMode,
+            distanceUnit: currentDistanceUnit
         )
 
         Task {

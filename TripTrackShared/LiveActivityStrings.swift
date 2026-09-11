@@ -9,8 +9,9 @@ import Foundation
 /// `TripActivityAttributes.ContentState.language` — no new field, so an
 /// activity started before an update still decodes.
 ///
-/// Fifteen strings. If it grows much past that, move the app's translation
-/// tables into the shared target instead of adding cases here.
+/// Fifteen strings plus the two unit labels. If it grows much past that, move
+/// the app's translation tables into the shared target instead of adding cases
+/// here.
 enum LiveActivityStrings {
     /// Unknown codes fall back to English, the same rule `AppStrings.tr` uses.
     private static func pick(
@@ -66,6 +67,65 @@ enum LiveActivityStrings {
     static func km(_ c: String) -> String {
         pick(c, ru: "км", en: "km", de: "km", es: "km", fr: "km", it: "km", pl: "km",
              id: "km", tr: "km", fil: "km", uk: "км", kk: "км", pt: "km")
+    }
+
+    // MARK: - Подписи единиц (0.6.7)
+
+    /// «км» / «миля» — подпись у ПОКАЗАННОГО расстояния.
+    ///
+    /// Двойник `AppStrings.unitDistanceShort` по эту сторону границы таргета.
+    /// Двойник, а не общий код: слова живут в `AppStrings`, который тянет за
+    /// собой пол-приложения и в виджете не существует. Держит их вместе тест
+    /// (`LiveActivityUnitTests`) — он гоняет обе стороны по всем тринадцати
+    /// языкам и падает на первом же разошедшемся слове. Правишь слово здесь —
+    /// правь и там, тест напомнит.
+    ///
+    /// `value` и `fractionDigits` — про УЖЕ напечатанное число: «2,0» и «2» —
+    /// одно значение и две разные формы слова после него.
+    static func distanceShort(
+        _ c: String, unit: DistanceUnit, value: Double, fractionDigits: Int
+    ) -> String {
+        guard unit == .miles else { return km(c) }
+        switch c {
+        case "ru": return slavic(value, fractionDigits, one: "миля", few: "мили", many: "миль")
+        case "uk": return slavic(value, fractionDigits, one: "миля", few: "милі", many: "миль")
+        case "kk": return "миля"
+        default:   return "mi"
+        }
+    }
+
+    /// «км/ч» / «mph». Склонения здесь нет вовсе — mph символ; зато есть
+    /// разнобой в сокращении часа, тот же самый, что у метрической таблицы.
+    static func speedShort(_ c: String, unit: DistanceUnit) -> String {
+        guard unit == .miles else { return kmh(c) }
+        switch c {
+        case "ru": return "миль/ч"
+        case "uk": return "миль/год"
+        case "kk": return "миль/сағ"
+        case "tr": return "mil/sa"
+        default:   return "mph"
+        }
+    }
+
+    /// Восточнославянский счёт, урезанный до того, что нужно одному слову.
+    ///
+    /// Копия правила из `AppStringsCore.pluralForm`, и копия сознательная: то
+    /// правило знает про тринадцать языков и про `LanguageManager.Language`,
+    /// а здесь нужны два языка и сырой код. Расходиться им нельзя — держит
+    /// тот же тест, что и слова.
+    private static func slavic(
+        _ value: Double, _ fractionDigits: Int, one: String, few: String, many: String
+    ) -> String {
+        // Видимая дробная часть даёт CLDR-категорию `other` во всех
+        // тринадцати: «1,5 мили», «2,0 мили». Решает ЗАПИСЬ числа, а не его
+        // значение, поэтому спрашивается `fractionDigits`, а не остаток.
+        if fractionDigits > 0 { return few }
+        let n = abs(Int(value.rounded()))
+        let mod10 = n % 10
+        let mod100 = n % 100
+        if mod10 == 1 && mod100 != 11 { return one }
+        if (2...4).contains(mod10) && !(12...14).contains(mod100) { return few }
+        return many
     }
 
     static func resume(_ c: String) -> String {

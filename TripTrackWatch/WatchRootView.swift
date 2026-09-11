@@ -52,16 +52,30 @@ struct WatchIdleView: View {
 struct WatchRecordingView: View {
     @EnvironmentObject private var session: WatchSessionManager
 
+    /// Те же числа теми же символами, что на телефоне и на локскрине: считает
+    /// и подписывает общий `LiveActivityFormat` из `TripTrackShared`. До 0.6.7
+    /// здесь стояло `String(format: "%.1f km")` — точка в любом языке и
+    /// английское слово на русском циферблате.
+    private var distance: LiveActivityFormat.Parts {
+        LiveActivityFormat.distanceParts(
+            km: session.distanceKm, unit: session.distanceUnit, code: session.language)
+    }
+
+    private var speed: LiveActivityFormat.Parts {
+        LiveActivityFormat.speedParts(
+            kmh: session.speedKmh, unit: session.distanceUnit, code: session.language)
+    }
+
     var body: some View {
         VStack(spacing: 6) {
-            Text("\(Int(session.speedKmh))")
+            Text(speed.value)
                 .font(.system(size: 52, weight: .heavy, design: .rounded).monospacedDigit())
                 .foregroundStyle(.orange)
-            Text("km/h")
+            Text(speed.unit)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             HStack(spacing: 12) {
-                Text(String(format: "%.1f km", session.distanceKm))
+                Text("\(distance.value) \(distance.unit)")
                 Text(timeString(session.elapsedSeconds))
                     .monospacedDigit()
             }
