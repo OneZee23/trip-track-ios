@@ -368,7 +368,13 @@ struct GarageView: View {
         _ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language
     ) -> some View {
         HStack(spacing: 14) {
-            fact("mappin", Measure.odometer(km: vehicle.displayOdometerKm, unit: distanceUnit, lang: l), c: c)
+            // Единица ПРИБОРКИ этой машины: число на карточке — то же, что на
+            // её панели. У соседней карточки оно может быть в других единицах,
+            // и это не разнобой, а правда — у суммы миль и километров единицы
+            // не существует, поэтому складывать их гараж и не пытается.
+            fact("mappin", Measure.odometer(km: vehicle.displayOdometerKm,
+                                            unit: vehicle.dashboardUnit(app: distanceUnit),
+                                            lang: l), c: c)
             if let trips = tripCounts[vehicle.id], trips > 0 {
                 fact("flag.checkered", "\(trips) " + AppStrings.nounTrips(l, trips), c: c)
             }

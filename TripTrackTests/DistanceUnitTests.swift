@@ -130,32 +130,14 @@ final class DistanceUnitTests: XCTestCase {
         XCTAssertEqual(DistanceUnit.miles.elevation(fromMetres: 640), 2099.74, accuracy: 0.01)
     }
 
-    // MARK: - Расход
+    // MARK: - Расхода здесь нет
 
-    /// Сотня миль длиннее сотни километров, поэтому литров на неё уходит
-    /// БОЛЬШЕ. Сегодня выбор миль меняет подпись на «л/100 миль», а число
-    /// оставляет километровым — это живой баг, а не новая работа.
-    func testConsumptionGrowsWithTheLongerHundred() {
-        XCTAssertEqual(DistanceUnit.miles.consumptionPer100(fromPer100Km: 8),
-                       12.874752, accuracy: 1e-9)
-        XCTAssertGreaterThan(DistanceUnit.miles.consumptionPer100(fromPer100Km: 8), 8)
-    }
-
-    func testConsumptionInKilometresIsIdentity() {
-        for value in [0.0, 4.2, 7.8, 22.0] {
-            XCTAssertEqual(DistanceUnit.km.consumptionPer100(fromPer100Km: value), value)
-            XCTAssertEqual(DistanceUnit.km.per100Km(fromConsumptionPer100: value), value)
-        }
-    }
-
-    func testConsumptionRoundTrip() {
-        for unit in DistanceUnit.allCases {
-            for value in [4.2, 7.8, 9.4, 22.0] {
-                let back = unit.per100Km(fromConsumptionPer100: unit.consumptionPer100(fromPer100Km: value))
-                XCTAssertEqual(back, value, accuracy: 1e-12)
-            }
-        }
-    }
+    /// Пара «л/100 км → л/100 миль» стояла здесь и уехала в 0.6.7 вместе с
+    /// отдельной настройкой расхода: диалект теперь ВЫВОДИТСЯ из приборки
+    /// машины, мильная панель даёт mpg, и «литры на сотню МИЛЬ» не выражаются
+    /// вовсе. Что функция не вернулась в общую арифметику, сторожит
+    /// `VehicleConsumptionUnitTests`; что расход считается правильно —
+    /// он же.
 
     // MARK: - Порог точности
 

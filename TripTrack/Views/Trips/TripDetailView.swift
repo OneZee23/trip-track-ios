@@ -3007,14 +3007,21 @@ isOwn
         // и денег молча — расстояние входит в него дважды.
         let fuel = v.fuelCost(metres: trip.distance, avgSpeedMS: trip.averageSpeed)
 
-        let volumeUnit = UserDefaults.standard.string(forKey: "volumeUnit") ?? "liters"
+        // Литры или галлоны спрашивается у МАШИНЫ ТОЙ ПОЕЗДКИ, а не у
+        // настройки аккаунта. Настройка одна, машин в гараже несколько — и до
+        // 0.6.7 поездка на тойоте печаталась в галлонах просто потому, что в
+        // гараже стояла американка. Диалект выводится из приборки: мильная
+        // панель — галлоны, метрическая — литры.
+        let dialect = v.consumptionUnit(app: distanceUnit)
         let currency = trip.fuelCurrency ?? FuelCurrency.current
-        let volShort = volumeUnit == "gallons" ? (AppStrings.unitGallonsShort(lang.language)) : (AppStrings.unitLitresShort(lang.language))
+        let volShort = dialect.volumeUnit == .gallons
+            ? AppStrings.unitGallonsShort(lang.language)
+            : AppStrings.unitLitresShort(lang.language)
 
         // Константа галлона живёт в `ConsumptionUnit` и больше нигде: здесь
         // стояла её ЧЕТВЁРТАЯ копия, и записана она была с обрезанной пятой
         // цифрой — 3.78541 против точных 3.785411784.
-        let volume = volumeUnit == "gallons"
+        let volume = dialect.volumeUnit == .gallons
             ? fuel.liters / ConsumptionUnit.litresPerGallon
             : fuel.liters
 

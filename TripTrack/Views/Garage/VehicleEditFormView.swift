@@ -68,10 +68,15 @@ struct VehicleEditFormView: View {
     /// Пробег с приборки — тоже строкой: см. комментарий в `save()`.
     @State private var initialManualOdometer: String
 
-    @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
+    /// Единица ЧЕЛОВЕКА — ею подписаны расстояния поездок этой машины, её
+    /// рекорды и «до уровня». Числа с ПРИБОРКИ (пробег, расход, цена) идут не
+    /// ею, а `vehicleDistanceUnit` ниже.
     @Environment(\.distanceUnit) private var distanceUnit
-    @AppStorage(ConsumptionUnit.storageKey)
-    private var consumptionUnitRaw: String = ConsumptionUnit.per100.rawValue
+
+    /// В чём показывает приборка этой машины. `@State`, а не чтение снимка:
+    /// выбор меняется прямо в форме, и поля обязаны перепечататься под него в
+    /// ту же секунду.
+    @State private var dashboardUnits: DashboardUnits
 
     /// Snapshot of the edited vehicle taken at init — used for
     /// changed-only saves so SyncEnqueuer isn't churned needlessly.
@@ -82,18 +87,19 @@ struct VehicleEditFormView: View {
     init(mode: Mode) {
         self.mode = mode
         let lng = LanguageManager.currentLanguage
-        // The fields hold what a person reads, which may be mpg; storage
-        // is always per-100. Read the preference straight from defaults —
-        // @AppStorage is not available yet at init time.
-        let shownUnit = ConsumptionUnit.current
-        // То же и с расстоянием: `@Environment(\.distanceUnit)` в `init` ещё
-        // не существует, а `DistanceUnit.current` — тот же самый выбор, из
-        // того же хранилища (умолчание окружения тоже считается по нему).
-        let shownDistance = DistanceUnit.current
+        // Единица ЧЕЛОВЕКА: `@Environment(\.distanceUnit)` в `init` ещё не
+        // существует, а `DistanceUnit.current` — тот же самый выбор из того же
+        // хранилища (умолчание окружения считается по нему же).
+        let appDistance = DistanceUnit.current
 
         if case .edit(let id) = mode,
            let vehicle = SettingsManager.shared.vehicles.first(where: { $0.id == id }) {
             editedVehicle = vehicle
+            // Поля паспорта заполняются В ЕДИНИЦЕ ПРИБОРКИ, а не человека:
+            // всё, что тут вводят, списывают с панели этой машины.
+            let shownDistance = vehicle.dashboardUnit(app: appDistance)
+            let shownUnit = ConsumptionUnit.forDashboard(shownDistance)
+            _dashboardUnits = State(initialValue: vehicle.dashboardUnits)
             _name = State(initialValue: vehicle.name)
             _selectedType = State(initialValue: vehicle.type)
             _plate = State(initialValue: vehicle.plate)
@@ -106,12 +112,14 @@ struct VehicleEditFormView: View {
             // Пустая строка, если реальный пробег ещё не вводили — так поле
             // показывает «—», а не выдуманный ноль.
             //
-            // Число — В ЕДИНИЦЕ ПОКАЗА. Это единственное место во всём
+            // Число — В ЕДИНИЦЕ ПРИБОРКИ. Это единственное место во всём
             // приложении, где человек ВВОДИТ расстояние, и ради него половина
             // версии: у машины с мильной приборкой до 0.6.7 не было способа
-            // ввести свой пробег — поле требовало пересчитать его в уме.
-            _manualOdometer = State(initialValue: vehicle.manualOdometerKm
-                .map { String(Int(shownDistance.distance(fromMetres: $0 * 1000).rounded())) } ?? "")
+            // ввести свой пробег — поле требовало пересчитать его в уме, — а с
+            // единицей ЧЕЛОВЕКА километровая панель американца разбиралась бы
+            // как мили и уезжала в базу увеличенной в 1.609 раза.
+            _manualOdometer = State(initialValue:
+                OdometerField.fieldText(km: vehicle.manualOdometerKm, unit: shownDistance))
             _visibleToOthers = State(initialValue: vehicle.visibleToOthers)
             _selectedAvatar = State(initialValue: vehicle.avatarEmoji)
             _selectedAvatarStyle = State(
@@ -119,16 +127,19 @@ struct VehicleEditFormView: View {
             )
             _currencySymbol = State(initialValue: vehicle.fuelCurrency)
             _city = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: vehicle.cityConsumption,
-                                  distance: shownDistance), lng: lng))
+                shownUnit.display(fromPer100: vehicle.cityConsumption), lng: lng))
             _highway = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: vehicle.highwayConsumption,
-                                  distance: shownDistance), lng: lng))
+                shownUnit.display(fromPer100: vehicle.highwayConsumption), lng: lng))
             _price = State(initialValue: GarageFormat.fuel(
                 shownUnit.displayPrice(fromPerLitre: vehicle.fuelPrice), lng: lng))
         } else {
             editedVehicle = nil
             let defaults = Vehicle()
+            // У новой машины приборки ещё нет — «как в приложении», ровно как
+            // у всех заведённых до 0.6.7.
+            _dashboardUnits = State(initialValue: defaults.dashboardUnits)
+            let shownUnit = ConsumptionUnit.forDashboard(
+                defaults.dashboardUnit(app: appDistance))
             _name = State(initialValue: "")
             _selectedType = State(initialValue: .car)
             _plate = State(initialValue: "")
@@ -144,11 +155,9 @@ struct VehicleEditFormView: View {
             _selectedAvatarStyle = State(initialValue: VehicleAvatar.defaultStyle)
             _currencySymbol = State(initialValue: FuelCurrency.current)
             _city = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: defaults.cityConsumption,
-                                  distance: shownDistance), lng: lng))
+                shownUnit.display(fromPer100: defaults.cityConsumption), lng: lng))
             _highway = State(initialValue: GarageFormat.fuel(
-                shownUnit.display(fromPer100: defaults.highwayConsumption,
-                                  distance: shownDistance), lng: lng))
+                shownUnit.display(fromPer100: defaults.highwayConsumption), lng: lng))
             _price = State(initialValue: GarageFormat.fuel(
                 shownUnit.displayPrice(fromPerLitre: defaults.fuelPrice), lng: lng))
         }
@@ -212,6 +221,12 @@ struct VehicleEditFormView: View {
         // inset and the scroll view takes everything above it.
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        // Смена приборки ПЕРЕПЕЧАТЫВАЕТ набранное, а не переподписывает его:
+        // 142 000 на километровой панели — это 88 235 на мильной, одна и та же
+        // машина. Переподписанное поле сохранилось бы как другое число.
+        .onChange(of: dashboardUnits) { old, new in
+            convertUnitFields(from: old, to: new)
+        }
         .sheet(isPresented: $showCurrencyPicker) {
             FuelCurrencyPickerSheet(selectedSymbol: $currencySymbol)
                 .environmentObject(lang)
@@ -770,16 +785,10 @@ struct VehicleEditFormView: View {
         let unit = consumptionUnitLabel(l)
         // 50 л/100 км is an absurd car; 50 mpg is an ordinary one. The ceiling
         // has to speak the unit on screen or the field would refuse a perfectly
-        // normal figure the moment someone switched to mpg. Единица расстояния
-        // сюда входит по той же причине: 50 л/100 миль — это 31 л/100 км, то
-        // есть тоже вполне обычная машина.
-        let ceiling: Double = consumptionUnit.inputCeiling(distance: distanceUnit)
+        // normal figure the moment the dashboard says miles.
+        let ceiling: Double = consumptionUnit.inputCeiling
         return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                GarageSectionLabel(text: AppStrings.fuelSectionLabel(l), color: c.textSecondary)
-                Spacer(minLength: 8)
-                consumptionUnitSegment(c: c, l: l)
-            }
+            GarageSectionLabel(text: AppStrings.fuelSectionLabel(l), color: c.textSecondary)
             fuelInputRow(label: AppStrings.fuelCity(l), text: $city, maxValue: ceiling, c: c) {
                 unitLabel(unit, c: c)
             }
@@ -791,71 +800,57 @@ struct VehicleEditFormView: View {
         .surfaceCard(cornerRadius: 16)
     }
 
-    /// «л/100 | mpg».
+    /// Перепечатать всё, что набрано, в новой единице приборки.
     ///
-    /// Switching it CONVERTS what is in the fields — it does not relabel them.
-    /// The two units run in opposite directions (9,1 л/100 км is 25,8 mpg), so
-    /// a relabel would turn a frugal car into a thirsty one on a tap. What gets
-    /// stored is litres per 100 km either way; this only chooses the dialect.
-    private func consumptionUnitSegment(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        HStack(spacing: 2) {
-            ForEach(ConsumptionUnit.allCases) { unit in
-                let selected = unit == consumptionUnit
-                Button {
-                    guard !selected else { return }
-                    Haptics.tap()
-                    convertFuelFields(to: unit)
-                    consumptionUnitRaw = unit.rawValue
-                } label: {
-                    Text(unit.segmentLabel(l))
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(selected ? c.text : c.textTertiary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background {
-                            if selected {
-                                Capsule().fill(c.card)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(2)
-        .background(c.cardAlt, in: Capsule())
-        .accessibilityIdentifier("consumption_unit_segment")
-    }
-
-    /// Re-expresses whatever is typed right now in the new unit, going through
-    /// the stored per-100 value so the round trip cannot drift.
-    private func convertFuelFields(to unit: ConsumptionUnit) {
+    /// Именно ПЕРЕПЕЧАТАТЬ, а не переподписать: диалекты расхода идут в разные
+    /// стороны (9,1 л/100 км — это 25,8 mpg), и смена подписи превратила бы
+    /// экономичную машину в прожорливую одним нажатием. Пробег с панели тоже
+    /// перепечатывается: 142 000 на километровой панели — это те же 88 235 на
+    /// мильной, одна и та же машина.
+    ///
+    /// Круг идёт через ХРАНИМОЕ значение (литры на сотню километров, цена за
+    /// литр, километры пробега), а не из показанного в показанное: иначе
+    /// каждое переключение считало бы от уже округлённого числа и уводило его
+    /// дальше. Совсем без сдвига не обойтись — поле показывает одну десятую, а
+    /// пробег целые единицы, — но сдвиг тут ровно тот же, что при наборе того
+    /// же числа руками, и не накапливается.
+    ///
+    /// Глобальных настроек эта функция не трогает НИ ОДНОЙ — и это половина
+    /// смысла 0.6.7. До неё здесь стоял `SettingsManager.setVolumeUnit`, и
+    /// американка, заведённая в российском гараже, переводила в галлоны весь
+    /// аккаунт: настройка уезжала на сервер и возвращалась на второй телефон.
+    private func convertUnitFields(from old: DashboardUnits, to new: DashboardUnits) {
         let lng = lang.language
+        let oldDistance = old.resolved(app: distanceUnit)
+        let newDistance = new.resolved(app: distanceUnit)
+        guard oldDistance != newDistance else { return }
+
+        let oldUnit = ConsumptionUnit.forDashboard(oldDistance)
+        let newUnit = ConsumptionUnit.forDashboard(newDistance)
+
         for field in [$city, $highway] {
             guard let shown = parsed(field.wrappedValue) else { continue }
-            let stored = consumptionUnit.toPer100(shown, distance: distanceUnit)
-            field.wrappedValue = GarageFormat.fuel(
-                unit.display(fromPer100: stored, distance: distanceUnit), lng: lng)
+            let stored = oldUnit.toPer100(shown)
+            field.wrappedValue = GarageFormat.fuel(newUnit.display(fromPer100: stored), lng: lng)
         }
         if let shownPrice = parsed(price) {
-            let perLitre = consumptionUnit.priceToPerLitre(shownPrice)
-            price = GarageFormat.fuel(unit.displayPrice(fromPerLitre: perLitre), lng: lng)
+            let perLitre = oldUnit.priceToPerLitre(shownPrice)
+            price = GarageFormat.fuel(newUnit.displayPrice(fromPerLitre: perLitre), lng: lng)
         }
-        // One setting, not two. The trip screen prints fuel volume from this
-        // key, so leaving it behind would have a trip say gallons while the
-        // garage says litres.
-        //
-        // Через `SettingsManager`, а не голым присваиванием `@AppStorage`:
-        // тому же ключу место в `UserSettingsEntity`, иначе выбор галлонов не
-        // уедет ни на сервер, ни на второй телефон.
-        SettingsManager.shared.setVolumeUnit(unit.volumeUnit)
+        if let km = OdometerField.storedKm(manualOdometer, unit: oldDistance) {
+            manualOdometer = OdometerField.fieldText(km: km, unit: newDistance)
+        }
     }
 
     private func priceCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         // The row label carries the volume unit and the pill carries the
         // currency: `pricePerLiter` interpolates the app-wide symbol, which is
         // the wrong one now that each vehicle owns its currency.
-        // The segment above owns this too: mpg means gallons, so the row
-        // reads «Цена за галлон» and the number is converted, not relabelled.
+        //
+        // Обе половины подписи помашинные, и разъехаться им нельзя: валюта у
+        // машины своя с 0.6.4, объём стал своим в 0.6.7 (мильная приборка —
+        // галлоны), а «рубли за галлон» — подпись, у которой нет числа. Число
+        // при этом переводится, а не переподписывается.
         let unit = GarageFormat.volumeShort(consumptionUnit.volumeUnit.rawValue, lng: l)
         return VStack(alignment: .leading, spacing: 10) {
             GarageSectionLabel(text: AppStrings.fuelPriceSection(l), color: c.textSecondary)
@@ -1152,10 +1147,23 @@ struct VehicleEditFormView: View {
                 // card instead of keeping the currency the form showed.
                 settings.updateVehicleCurrency(id: newId, symbol: currencySymbol)
             }
+            // Приборка пишется отдельной дверью — той же, что у правки:
+            // `addVehicle` о ней не знает, а «как в приложении» и так стоит
+            // умолчанием, поэтому лишней записи на обычном пути нет.
+            if dashboardUnits != Vehicle().dashboardUnits {
+                settings.setDashboardUnits(vehicleId: newId, dashboardUnits)
+            }
             settings.selectVehicle(id: newId)
 
         case .edit(let id):
             guard let original = editedVehicle else { break }
+            // Приборка — первой: следом идут пробег и расход, и они уже
+            // разобраны в ЕЁ единице. Порядок здесь не косметика — пул,
+            // приехавший между двумя записями, увидел бы числа, разобранные
+            // одной единицей, при ещё старом значении поля.
+            if dashboardUnits != original.dashboardUnits {
+                settings.setDashboardUnits(vehicleId: id, dashboardUnits)
+            }
             // Реальный пробег живёт отдельной записью: он не часть «личности»
             // машины и не должен тащить за собой её sync-операцию, когда
             // менялось только число на приборке.
@@ -1225,13 +1233,17 @@ struct VehicleEditFormView: View {
 
     // MARK: - Пробег
 
-    /// Треканный пробег — число и подпись. Одометр хранится в километрах и в
-    /// 0.6.7 в метры не мигрирует (против него уже записаны уровни машин в
-    /// базе), поэтому вход у `Measure` километровый и назван вслух.
+    /// Треканный пробег — число и подпись. В единице ПРИБОРКИ: он стоит в
+    /// одном кадре с реальным и вычитается из него глазами, а две разные
+    /// единицы в одной арифметике — это неверный ответ на экране.
+    ///
+    /// Одометр хранится в километрах и в 0.6.7 в метры не мигрирует (против
+    /// него уже записаны уровни машин в базе), поэтому вход у `Measure`
+    /// километровый и назван вслух.
     private func trackedOdometer(
         _ vehicle: Vehicle, _ l: LanguageManager.Language
     ) -> Measure.Parts {
-        Measure.distanceParts(km: vehicle.odometerKm, unit: distanceUnit, lang: l)
+        Measure.distanceParts(km: vehicle.odometerKm, unit: vehicleDistanceUnit, lang: l)
     }
 
     /// Подпись у поля ввода. Склоняется по тому, что в поле НАПЕЧАТАНО:
@@ -1240,19 +1252,21 @@ struct VehicleEditFormView: View {
     private func manualOdometerUnit(_ l: LanguageManager.Language) -> String {
         let shown = Double(manualOdometer.trimmingCharacters(in: .whitespaces)) ?? 100
         return AppStrings.unitDistanceShort(
-            l, unit: distanceUnit, value: shown, fractionDigits: 0)
+            l, unit: vehicleDistanceUnit, value: shown, fractionDigits: 0)
     }
 
-    /// То, что напечатано в поле, → километры для хранения.
+    /// То, что напечатано в поле, → километры для хранения. Разбор живёт в
+    /// `OdometerField` чистой функцией: это единственный вход, где ошибка с
+    /// единицей попадает в БАЗУ, и держать его обязан тест, а не открытая
+    /// форма на телефоне.
     private var storedManualOdometerKm: Double? {
-        Double(manualOdometer.trimmingCharacters(in: .whitespaces))
-            .map { distanceUnit.metres(fromDistance: $0) / 1000 }
+        OdometerField.storedKm(manualOdometer, unit: vehicleDistanceUnit)
     }
 
     /// A consumption field as it must be STORED: litres per 100 km, whatever
     /// dialect the field was typed in.
     private func storedConsumption(_ text: String) -> Double? {
-        parsed(text).map { consumptionUnit.toPer100($0, distance: distanceUnit) }
+        parsed(text).map { consumptionUnit.toPer100($0) }
     }
 
     /// A price field as it must be STORED: per litre, whatever the field said.
@@ -1260,14 +1274,25 @@ struct VehicleEditFormView: View {
         parsed(text).map { consumptionUnit.priceToPerLitre($0) }
     }
 
-    // MARK: - Helpers
+    // MARK: - Единицы
 
+    /// В чём показывать и разбирать числа С ПРИБОРКИ: пробег, расход, цену.
+    ///
+    /// Не `distanceUnit`: тот — единица ЧЕЛОВЕКА, и ею подписаны расстояния
+    /// поездок, рекорды и «до уровня». Здесь же всё, что человек списывает с
+    /// панели своей машины, и ответ на вопрос «если он сейчас глянет на
+    /// панель, он увидит ровно это число?».
+    private var vehicleDistanceUnit: DistanceUnit {
+        dashboardUnits.resolved(app: distanceUnit)
+    }
+
+    /// Диалект расхода выводится из приборки, отдельной галочки у него нет —
+    /// см. `ConsumptionUnit`.
     private var consumptionUnit: ConsumptionUnit {
-        ConsumptionUnit(rawValue: consumptionUnitRaw) ?? .per100
+        ConsumptionUnit.forDashboard(vehicleDistanceUnit)
     }
 
     private func consumptionUnitLabel(_ l: LanguageManager.Language) -> String {
-        consumptionUnit.valueUnit(
-            volumeRaw: volumeUnit, distance: distanceUnit, lng: l)
+        consumptionUnit.valueUnit(l)
     }
 }

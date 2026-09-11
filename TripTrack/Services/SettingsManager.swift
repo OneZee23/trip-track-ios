@@ -465,6 +465,18 @@ final class SettingsManager: ObservableObject {
         DistanceUnit(rawValue: unitStore.string(forKey: Self.distanceUnitKey) ?? "") ?? .km
     }
 
+    /// Литры или галлоны НА ВЕСЬ АККАУНТ — и с 0.6.7 гараж этого не
+    /// спрашивает и не пишет.
+    ///
+    /// Объём топлива стал помашинным: он выводится из приборки машины
+    /// (`ConsumptionUnit.forDashboard`), потому что настройка тут одна, а
+    /// машин в гараже несколько. До 0.6.7 сегмент «л/100 | mpg» на карточке
+    /// КОНКРЕТНОЙ машины писал сюда — и американка, заведённая в российском
+    /// гараже, переводила в галлоны весь аккаунт, включая второй телефон.
+    ///
+    /// Колонка и провод остаются: это контракт с сервером
+    /// (`SettingsSyncPayload.volumeUnit`), и выкидывать из него ключ — отдельная
+    /// работа с бэкендом, а не уборка. Пишущего экрана у него сейчас нет.
     var volumeUnit: VolumeUnit {
         VolumeUnit(rawValue: unitStore.string(forKey: Self.volumeUnitKey) ?? "") ?? .liters
     }

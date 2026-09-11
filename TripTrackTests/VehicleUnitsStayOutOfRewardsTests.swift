@@ -72,7 +72,11 @@ final class VehicleUnitsStayOutOfRewardsTests: XCTestCase {
          "«Статистика» и Wrapped: сквозные по построению, машин там много, единица одна — человека.")
     ]
 
-    private static let tokens = ["dashboardUnit", "DashboardUnits"]
+    /// `consumptionUnit` здесь третьим не для симметрии: диалект расхода с
+    /// 0.6.7 ВЫВОДИТСЯ из приборки (`Vehicle.consumptionUnit(app:)`), то есть
+    /// это та же единица машины, только под другим именем — и попасть в сводку
+    /// она может, не написав ни разу слова «dashboard».
+    private static let tokens = ["dashboardUnit", "DashboardUnits", "consumptionUnit"]
 
     /// Читает те же исходники и тем же инструментом, что `UnitsDisciplineTests`:
     /// комментарии сняты, литералы на месте. Единица, ОБЪЯСНЁННАЯ словами, —
@@ -113,9 +117,12 @@ final class VehicleUnitsStayOutOfRewardsTests: XCTestCase {
     /// находит и выглядит работающим.
     func testTheGuardCatchesAPlantedLine() {
         let planted = UnitGuard.strip(
-            "let u = vehicle.dashboardUnit(app: .km)\n// dashboardUnit в комментарии\n").code
+            "let u = vehicle.dashboardUnit(app: .km)\n// dashboardUnit в комментарии\n"
+            + "let f = vehicle.consumptionUnit(app: .km)\n").code
         XCTAssertTrue(planted[0].contains("dashboardUnit"), "сторож не видит настоящую строку")
         XCTAssertFalse(planted[1].contains("dashboardUnit"), "сторож считает комментарий нарушением")
+        XCTAssertTrue(Self.tokens.contains(where: { planted[2].contains($0) }),
+                      "сторож не видит единицу машины под именем расхода")
     }
 
     // MARK: - Поведение: цифры не двигаются

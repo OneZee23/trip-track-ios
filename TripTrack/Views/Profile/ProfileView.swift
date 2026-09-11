@@ -938,7 +938,12 @@ struct ProfileView: View {
                         }
                     }
 
-                    Text(Measure.odometer(km: vehicle.displayOdometerKm, unit: distanceUnit, lang: l))
+                    // Единица приборки ЭТОЙ машины — как на карточке гаража и
+                    // в пикере: один одометр, один ответ во всех четырёх
+                    // местах, где он показан.
+                    Text(Measure.odometer(km: vehicle.displayOdometerKm,
+                                          unit: vehicle.dashboardUnit(app: distanceUnit),
+                                          lang: l))
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(1)

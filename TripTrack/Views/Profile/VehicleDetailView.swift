@@ -70,9 +70,6 @@ struct VehicleDetailView: View {
     /// refreshed whenever the route changes. Nil when nothing is connected.
     @State private var connectedStereo: String?
 
-    @AppStorage("volumeUnit") private var volumeUnit: String = "liters"
-    @AppStorage(ConsumptionUnit.storageKey)
-    private var consumptionUnitRaw: String = ConsumptionUnit.per100.rawValue
     @AppStorage(FuelCurrency.storageKey) private var currency: String = FuelCurrency.defaultSymbol
 
     private var vehicle: Vehicle? {
@@ -470,12 +467,13 @@ struct VehicleDetailView: View {
         if vehicle.manualOdometerKm != nil {
             VStack(alignment: .leading, spacing: 2) {
                 Text(AppStrings.odometerTrackedLine(
-                    l, km: Measure.odometer(km: vehicle.odometerKm, unit: distanceUnit, lang: l)))
+                    l, km: Measure.odometer(km: vehicle.odometerKm,
+                                            unit: dashUnit(vehicle), lang: l)))
                     .font(.system(size: 11.5))
                     .foregroundStyle(c.textTertiary)
                 if let gap = vehicle.untrackedKm {
                     Text(AppStrings.odometerUntrackedLine(
-                        l, km: Measure.odometer(km: gap, unit: distanceUnit, lang: l)))
+                        l, km: Measure.odometer(km: gap, unit: dashUnit(vehicle), lang: l)))
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(AppTheme.accent)
                 }
@@ -493,7 +491,7 @@ struct VehicleDetailView: View {
     /// 0.6.7 в метры не мигрирует (против него уже записаны уровни машин в
     /// базе), поэтому вход у `Measure` тут километровый и назван вслух.
     private func odometerParts(_ vehicle: Vehicle, _ l: LanguageManager.Language) -> Measure.Parts {
-        Measure.distanceParts(km: vehicle.displayOdometerKm, unit: distanceUnit, lang: l)
+        Measure.distanceParts(km: vehicle.displayOdometerKm, unit: dashUnit(vehicle), lang: l)
     }
 
     private func odometerCard(_ vehicle: Vehicle, c: AppTheme.Colors,
@@ -531,7 +529,13 @@ struct VehicleDetailView: View {
         // No measured consumption exists — mean of city/highway settings (fork F10).
         // Averaged BEFORE conversion: mpg is a reciprocal, so the mean of
         // two mpg figures is not the mpg of the mean consumption.
-        let avg = shownConsumption((vehicle.cityConsumption + vehicle.highwayConsumption) / 2)
+        //
+        // Диалект — ЭТОЙ машины: плитка стоит в одной строке с её одометром, и
+        // средний расход в чужих единицах рядом с пробегом в своих читался бы
+        // как характеристика другой машины.
+        let dialect = fuelDialect(vehicle)
+        let avg = dialect.display(
+            fromPer100: (vehicle.cityConsumption + vehicle.highwayConsumption) / 2)
 
         return HStack(spacing: 10) {
             statCard(
@@ -551,7 +555,7 @@ struct VehicleDetailView: View {
                 statCard(
                     value: GarageFormat.oneDecimal(avg, lng: l),
                     valueColor: AppTheme.green,
-                    unit: consumptionUnitLabel(l),
+                    unit: dialect.valueUnit(l),
                     label: AppStrings.avgConsumptionLabel(l),
                     c: c
                 )
@@ -1126,12 +1130,14 @@ struct VehicleDetailView: View {
 
     private func fuelSection(_ vehicle: Vehicle, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         let lng = l
-        let consumptionUnit = consumptionUnitLabel(l)
+        let dialect = fuelDialect(vehicle)
+        let consumptionUnit = dialect.valueUnit(l)
         // Per litre or per gallon by the same choice that picks л/100 vs mpg —
-        // and the number converts with it. The vehicle currency, not the
-        // app-wide one: each vehicle owns its price.
+        // and the number converts with it. Обе половины помашинные: валюта у
+        // машины своя с 0.6.4, а объём стал своим в 0.6.7. Разъехавшись, они
+        // дали бы «рубли за галлон» — подпись, у которой нет числа.
         let priceUnit = "\(vehicle.fuelCurrency)/"
-            + GarageFormat.volumeShort(shownConsumptionUnit.volumeUnit.rawValue, lng: lng)
+            + GarageFormat.volumeShort(dialect.volumeUnit.rawValue, lng: lng)
 
         return VStack(alignment: .leading, spacing: 8) {
             // Canon (499:193) keeps this one at the in-card 10/0.5, but on the
@@ -1141,19 +1147,19 @@ struct VehicleDetailView: View {
             VStack(spacing: 0) {
                 fuelRow(
                     title: AppStrings.fuelCityRow(l),
-                    value: "\(GarageFormat.fuel(shownConsumption(vehicle.cityConsumption), lng: lng)) \(consumptionUnit)",
+                    value: "\(GarageFormat.fuel(dialect.display(fromPer100: vehicle.cityConsumption), lng: lng)) \(consumptionUnit)",
                     c: c
                 )
                 fuelDivider(c: c)
                 fuelRow(
                     title: AppStrings.fuelHighwayRow(l),
-                    value: "\(GarageFormat.fuel(shownConsumption(vehicle.highwayConsumption), lng: lng)) \(consumptionUnit)",
+                    value: "\(GarageFormat.fuel(dialect.display(fromPer100: vehicle.highwayConsumption), lng: lng)) \(consumptionUnit)",
                     c: c
                 )
                 fuelDivider(c: c)
                 fuelRow(
                     title: AppStrings.fuelPriceRow(l),
-                    value: "\(GarageFormat.fuel(shownConsumptionUnit.displayPrice(fromPerLitre: vehicle.fuelPrice), lng: lng)) \(priceUnit)",
+                    value: "\(GarageFormat.fuel(dialect.displayPrice(fromPerLitre: vehicle.fuelPrice), lng: lng)) \(priceUnit)",
                     c: c
                 )
             }
@@ -1201,23 +1207,26 @@ struct VehicleDetailView: View {
         vehicle.name.isEmpty ? AppStrings.unnamedVehicle(l) : vehicle.name
     }
 
-    /// The dialect chosen in the vehicle form. Kept in step with it on
-    /// purpose: the card showing «9,1 л/100 км» while the form that set the
-    /// figure shows «25,8 mpg» would read as two different cars.
-    private var shownConsumptionUnit: ConsumptionUnit {
-        ConsumptionUnit(rawValue: consumptionUnitRaw) ?? .per100
+    // MARK: - Единицы
+
+    /// В чём показывать числа С ПРИБОРКИ этой машины: пробег крупно,
+    /// «треканный» и «недотрекано».
+    ///
+    /// Последние два стоят в одном кадре с первым и вычитаются из него
+    /// глазами — разные единицы сломали бы арифметику прямо на экране. Всё
+    /// остальное на этом экране (расстояния поездок, рекорды, «до уровня»,
+    /// высоты) остаётся в единице ЧЕЛОВЕКА: там считало приложение, а не
+    /// приборная панель.
+    private func dashUnit(_ vehicle: Vehicle) -> DistanceUnit {
+        vehicle.dashboardUnit(app: distanceUnit)
     }
 
-    private func consumptionUnitLabel(_ l: LanguageManager.Language) -> String {
-        shownConsumptionUnit.valueUnit(
-            volumeRaw: volumeUnit, distance: distanceUnit, lng: l)
-    }
-
-    /// A stored per-100 figure, expressed in whatever unit is on screen — и в
-    /// той единице расстояния, которую выбрал человек: подпись под числом
-    /// говорит «л/100 миль», и число обязано быть на сотню миль.
-    private func shownConsumption(_ per100: Double) -> Double {
-        shownConsumptionUnit.display(fromPer100: per100, distance: distanceUnit)
+    /// Диалект расхода этой машины. Выводится из приборки: метрическая панель
+    /// — литры на сотню километров, мильная — мили на галлон. Карточка,
+    /// показывающая «9,1 л/100 км» там, где форма показывает «25,8 mpg»,
+    /// читалась бы как две разные машины, поэтому обе зовут одно и то же.
+    private func fuelDialect(_ vehicle: Vehicle) -> ConsumptionUnit {
+        vehicle.consumptionUnit(app: distanceUnit)
     }
 
     // MARK: - Actions

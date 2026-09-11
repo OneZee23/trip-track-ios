@@ -308,7 +308,11 @@ struct VehiclePickerSheet: View {
                             VehiclePlateChip(plate: vehicle.plate, size: 10)
                         }
                     }
-                    Text(Measure.odometer(km: vehicle.displayOdometerKm, unit: distanceUnit, lang: lang.language))
+                    // Единица приборки ЭТОЙ машины — строка читается как её
+                    // панель, а не как настройка человека.
+                    Text(Measure.odometer(km: vehicle.displayOdometerKm,
+                                          unit: vehicle.dashboardUnit(app: distanceUnit),
+                                          lang: lang.language))
                         .font(.system(size: 12))
                         .foregroundStyle(c.textTertiary)
                 }

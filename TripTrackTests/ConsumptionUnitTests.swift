@@ -1,151 +1,126 @@
 import XCTest
 @testable import TripTrack
 
-/// Coverage for `ConsumptionUnit`, the litres-per-100 ↔ mpg switch.
+/// Арифметика `ConsumptionUnit` — переключателя «литры на сотню ↔ мили на
+/// галлон».
 ///
-/// These tests exist because this screen already shipped the bug once: an
-/// earlier pass labelled the stored per-100 numbers "mpg" without converting
-/// them, which inverts the meaning — the scale runs the other way. Anything
-/// that reintroduces a relabel-instead-of-convert should fail here.
+/// Тесты существуют, потому что этот экран уже шипал свою поломку: прошлая
+/// версия подписала хранимые километровые числа словом «mpg», ничего не
+/// переведя, — а шкала у mpg идёт в ДРУГУЮ сторону, и экономичная машина
+/// стала выглядеть грузовиком. Всё, что вернёт «переподписать вместо
+/// перевести», обязано падать здесь.
+///
+/// Про то, откуда диалект берётся у конкретной машины, и про оба сценария
+/// владельца — соседний `VehicleConsumptionUnitTests`. Здесь только сам тип.
 final class ConsumptionUnitTests: XCTestCase {
 
-    // MARK: - The two directions
+    // MARK: - Две стороны
 
-    /// The reference figure: 9.4 L/100 km ≈ 25 mpg (US).
+    /// Опорная цифра: 9.4 л/100 км ≈ 25 mpg (US).
     func testConvertsToMpg() {
-        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 9.4, distance: .km),
-                       25.02, accuracy: 0.05)
-        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 5.6, distance: .km),
-                       42.0, accuracy: 0.05)
+        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 9.4), 25.02, accuracy: 0.05)
+        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 5.6), 42.0, accuracy: 0.05)
     }
 
     func testConvertsBackFromMpg() {
-        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(25, distance: .km), 9.41, accuracy: 0.01)
-        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(42, distance: .km), 5.6, accuracy: 0.01)
+        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(25), 9.41, accuracy: 0.01)
+        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(42), 5.6, accuracy: 0.01)
     }
 
-    /// Per-100 is the storage unit, so with kilometres it passes straight
-    /// through in both directions. Fails if someone ever "helpfully" converts
-    /// it too.
-    func testPer100IsIdentityInKilometres() {
-        XCTAssertEqual(ConsumptionUnit.per100.display(fromPer100: 9.1, distance: .km), 9.1)
-        XCTAssertEqual(ConsumptionUnit.per100.toPer100(9.1, distance: .km), 9.1)
+    /// `per100` — единица ХРАНЕНИЯ, поэтому проходит насквозь в обе стороны.
+    /// Падает, если кто-нибудь «на всякий случай» переведёт и её: с 0.6.7
+    /// сотня в ней всегда километровая, и переводить нечего.
+    func testPer100IsIdentity() {
+        for value in [0.0, 4.2, 9.1, 22.0] {
+            XCTAssertEqual(ConsumptionUnit.per100.display(fromPer100: value), value)
+            XCTAssertEqual(ConsumptionUnit.per100.toPer100(value), value)
+        }
     }
 
-    /// Мили меняют ЧИСЛО, а не только подпись.
-    ///
-    /// Сотня миль длиннее сотни километров в 1.609344 раза, значит и литров на
-    /// неё уходит во столько же больше. До 0.6.7 выбор миль менял здесь только
-    /// подпись — «л/100 миль» стояло над километровым числом, и машина
-    /// выглядела на 61 % экономичнее, чем есть.
-    func testPer100FollowsTheDistanceUnit() {
-        XCTAssertEqual(ConsumptionUnit.per100.display(fromPer100: 8, distance: .miles),
-                       12.87, accuracy: 0.01)
-        XCTAssertEqual(ConsumptionUnit.per100.toPer100(12.87, distance: .miles),
-                       8, accuracy: 0.01)
-        // Строго больше — то самое направление, которое подпись обещает.
-        XCTAssertGreaterThan(
-            ConsumptionUnit.per100.display(fromPer100: 8, distance: .miles),
-            ConsumptionUnit.per100.display(fromPer100: 8, distance: .km))
-    }
-
-    /// У `mpg` мили уже внутри — в самом названии единицы. Второй раз их
-    /// умножать нельзя: это ровно та поломка, от которой этот тип и написан,
-    /// только зеркальная.
-    func testMpgIgnoresTheDistanceUnit() {
-        XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 9.4, distance: .miles),
-                       ConsumptionUnit.mpg.display(fromPer100: 9.4, distance: .km))
-        XCTAssertEqual(ConsumptionUnit.mpg.toPer100(25, distance: .miles),
-                       ConsumptionUnit.mpg.toPer100(25, distance: .km))
-    }
-
-    /// Потолок поля ввода живёт в единицах ПОКАЗА: 50 л/100 миль — обычная
-    /// машина (31 л/100 км), и отвергать её поле не имеет права.
-    func testInputCeilingSpeaksTheUnitOnScreen() {
-        XCTAssertEqual(ConsumptionUnit.per100.inputCeiling(distance: .km), 50)
-        XCTAssertEqual(ConsumptionUnit.per100.inputCeiling(distance: .miles),
-                       80.47, accuracy: 0.01)
-        XCTAssertEqual(ConsumptionUnit.mpg.inputCeiling(distance: .km), 250)
-        XCTAssertEqual(ConsumptionUnit.mpg.inputCeiling(distance: .miles), 250)
-    }
-
-    /// Typing a figure, switching units and switching back must return the
-    /// same car — this is exactly what the segment does on every tap.
+    /// Набрал, переключил, переключил обратно — та же машина. Ровно это делает
+    /// форма на каждой смене приборки.
     func testRoundTripSurvivesTheSwitch() {
-        for distance in DistanceUnit.allCases {
+        for unit in ConsumptionUnit.allCases {
             for stored in [4.2, 6.0, 7.8, 9.1, 14.5, 22.0] {
-                for unit in ConsumptionUnit.allCases {
-                    let shown = unit.display(fromPer100: stored, distance: distance)
-                    let back = unit.toPer100(shown, distance: distance)
-                    XCTAssertEqual(back, stored, accuracy: 0.0001,
-                                   "\(stored) L/100km не пережил круг через \(unit.rawValue)/\(distance.rawValue)")
-                }
+                XCTAssertEqual(unit.toPer100(unit.display(fromPer100: stored)), stored,
+                               accuracy: 0.0001,
+                               "\(stored) л/100 км не пережили круг через \(unit.rawValue)")
             }
         }
     }
 
-    // MARK: - The inversion itself
+    // MARK: - Сама инверсия
 
-    /// The whole reason this type exists: more litres is worse, more miles per
-    /// gallon is better. A relabel would preserve the order and lie.
+    /// Причина, по которой тип вообще существует: больше литров — хуже, больше
+    /// миль на галлон — лучше. Переподписывание сохранило бы порядок и соврало.
     func testTheScaleIsInverted() {
-        let thirsty = ConsumptionUnit.mpg.display(fromPer100: 15, distance: .km)
-        let frugal = ConsumptionUnit.mpg.display(fromPer100: 5, distance: .km)
-        XCTAssertLessThan(thirsty, frugal, "the thirstier car must show FEWER mpg")
+        XCTAssertLessThan(ConsumptionUnit.mpg.display(fromPer100: 15),
+                          ConsumptionUnit.mpg.display(fromPer100: 5),
+                          "прожорливая машина обязана показывать МЕНЬШЕ mpg")
     }
 
-    // MARK: - Degenerate input
+    // MARK: - Вырожденный вход
 
-    /// A vehicle with no consumption set yet. Dividing by it would give
-    /// infinity, which formats as "inf" in a text field.
+    /// Машина, у которой расход ещё не заполнен. Деление на него дало бы
+    /// бесконечность, а она печатается в поле как «inf».
     func testZeroStaysZero() {
-        for distance in DistanceUnit.allCases {
-            XCTAssertEqual(ConsumptionUnit.mpg.display(fromPer100: 0, distance: distance), 0)
-            XCTAssertEqual(ConsumptionUnit.mpg.toPer100(0, distance: distance), 0)
-            XCTAssertFalse(ConsumptionUnit.mpg.display(fromPer100: 0, distance: distance).isInfinite)
-            XCTAssertEqual(ConsumptionUnit.per100.display(fromPer100: 0, distance: distance), 0)
+        for unit in ConsumptionUnit.allCases {
+            XCTAssertEqual(unit.display(fromPer100: 0), 0)
+            XCTAssertEqual(unit.toPer100(0), 0)
+            XCTAssertFalse(unit.display(fromPer100: 0).isInfinite)
         }
     }
 
-    // MARK: - Labels
-
-    func testSegmentLabels() {
-        XCTAssertEqual(ConsumptionUnit.mpg.segmentLabel(.ru), "mpg")
-        XCTAssertEqual(ConsumptionUnit.mpg.segmentLabel(.en), "mpg")
-        XCTAssertEqual(ConsumptionUnit.per100.segmentLabel(.ru), "л/100")
+    /// Потолок поля ввода — В ЕДИНИЦАХ ПОКАЗА: 50 л/100 км — абсурдная машина,
+    /// 50 mpg — обычная, и общее число отвергло бы у мильного человека вполне
+    /// нормальный расход.
+    func testInputCeilingSpeaksTheUnitOnScreen() {
+        XCTAssertEqual(ConsumptionUnit.per100.inputCeiling, 50)
+        XCTAssertEqual(ConsumptionUnit.mpg.inputCeiling, 250)
     }
 
-    /// The per-100 label still defers to the volume/distance settings; only
-    /// mpg is a fixed word.
-    func testValueUnitFollowsTheOtherSettings() {
-        XCTAssertEqual(
-            ConsumptionUnit.per100.valueUnit(volumeRaw: "liters", distance: .km, lng: .ru),
-            "л/100км")
-        XCTAssertEqual(
-            ConsumptionUnit.mpg.valueUnit(volumeRaw: "liters", distance: .km, lng: .ru),
-            "mpg")
-        // Мили — существительное, и подпись их склоняет по сотне: «л/100 миль»
-        // читается, «л/100 миля» — машинный перевод.
-        XCTAssertEqual(
-            ConsumptionUnit.per100.valueUnit(volumeRaw: "liters", distance: .miles, lng: .ru),
-            "л/100миль")
-        XCTAssertEqual(
-            ConsumptionUnit.per100.valueUnit(volumeRaw: "liters", distance: .miles, lng: .en),
-            "L/100mi")
+    // MARK: - Подписи
+
+    /// `per100` — это сотня КИЛОМЕТРОВ на всех тринадцати языках, и никогда
+    /// сотня миль. Проверяется во всех, потому что подпись — последнее, что
+    /// видит человек: число, подписанное чужой сотней, от правильного уже не
+    /// отличить.
+    func testPer100AlwaysSaysHundredKilometres() {
+        for lang in LanguageManager.Language.allCases {
+            let label = ConsumptionUnit.per100.valueUnit(lang)
+            let km = AppStrings.unitDistanceShort(lang, unit: .km, value: 100, fractionDigits: 0)
+            let mile = AppStrings.unitDistanceShort(lang, unit: .miles, value: 100, fractionDigits: 0)
+
+            XCTAssertTrue(label.hasSuffix("100" + km),
+                          "\(lang.rawValue): «\(label)» не заканчивается сотней километров")
+            XCTAssertFalse(label.contains(mile),
+                           "\(lang.rawValue): в подписи расхода появилась миля — «\(label)»")
+        }
+        XCTAssertEqual(ConsumptionUnit.per100.valueUnit(.ru), "л/100км")
+        XCTAssertEqual(ConsumptionUnit.per100.valueUnit(.en), "L/100km")
     }
 
-    // MARK: - Fuel price
+    /// mpg — символ, а не существительное: он одинаков во всех языках и не
+    /// склоняется.
+    func testMpgIsTheSameWordEverywhere() {
+        for lang in LanguageManager.Language.allCases {
+            XCTAssertEqual(ConsumptionUnit.mpg.valueUnit(lang), "mpg")
+        }
+    }
 
-    /// Picking mpg picks gallons. Miles per gallon alongside roubles per litre
-    /// is not a set of units anyone uses.
+    // MARK: - Цена топлива
+
+    /// Мильная панель — это галлоны. «Мили на галлон» рядом с «рублями за
+    /// литр» не набор единиц, которым кто-то пользуется.
     func testMpgImpliesGallons() {
         XCTAssertEqual(ConsumptionUnit.mpg.volumeUnit, .gallons)
         XCTAssertEqual(ConsumptionUnit.per100.volumeUnit, .liters)
     }
 
-    /// The price is STORED per litre — that is what trip cost multiplies
-    /// litres by. Switching to gallons used to only change the label, so
-    /// «65 ₽/л» became «65 ₽/gal» while every trip stayed litre-priced.
+    /// Цена ХРАНИТСЯ за литр — на неё умножаются литры поездки. Настройка
+    /// галлонов когда-то меняла только подпись, и «65 ₽/л» становились
+    /// «65 ₽/gal» одним нажатием, а каждая поездка молча оставалась
+    /// посчитанной по литровой цене.
     func testPriceConvertsToGallons() {
         XCTAssertEqual(ConsumptionUnit.mpg.displayPrice(fromPerLitre: 65), 246.05, accuracy: 0.01)
         XCTAssertEqual(ConsumptionUnit.per100.displayPrice(fromPerLitre: 65), 65)
@@ -158,24 +133,27 @@ final class ConsumptionUnitTests: XCTestCase {
         }
     }
 
-    /// Price and consumption move in OPPOSITE directions across the same
-    /// switch: a gallon costs more than a litre, and a car goes further on a
-    /// gallon than 100 km costs it in litres. Fails if someone reuses one
-    /// conversion for both.
+    /// Цена и расход идут через одно переключение в РАЗНЫЕ стороны: галлон
+    /// дороже литра, а машина проезжает на галлоне больше, чем сотня
+    /// километров стоит ей литров. Падает, если кто-то переиспользует одну
+    /// конверсию на обе.
     func testPriceAndConsumptionAreNotTheSameConversion() {
         XCTAssertGreaterThan(ConsumptionUnit.mpg.displayPrice(fromPerLitre: 65), 65)
-        XCTAssertGreaterThan(ConsumptionUnit.mpg.display(fromPer100: 9.4, distance: .km), 9.4)
-        // …but not by the same factor, and not by each other's factor.
-        XCTAssertNotEqual(
-            ConsumptionUnit.mpg.displayPrice(fromPerLitre: 9.4),
-            ConsumptionUnit.mpg.display(fromPer100: 9.4, distance: .km),
-            accuracy: 0.001)
+        XCTAssertGreaterThan(ConsumptionUnit.mpg.display(fromPer100: 9.4), 9.4)
+        XCTAssertNotEqual(ConsumptionUnit.mpg.displayPrice(fromPerLitre: 9.4),
+                          ConsumptionUnit.mpg.display(fromPer100: 9.4), accuracy: 0.001)
     }
 
-    func testUnknownStoredValueFallsBackToPer100() {
-        UserDefaults.standard.set("furlongs", forKey: ConsumptionUnit.storageKey)
-        XCTAssertEqual(ConsumptionUnit.current, .per100)
-        UserDefaults.standard.removeObject(forKey: ConsumptionUnit.storageKey)
-        XCTAssertEqual(ConsumptionUnit.current, .per100)
+    /// Галлон АМЕРИКАНСКИЙ по обе стороны экрана.
+    ///
+    /// Британский микс (мили + литры + imperial mpg) — осознанный пропуск
+    /// 0.6.7: имперский галлон это 4.546 л, и стой его константа в расходе,
+    /// одно и то же слово значило бы в расходе одно, а в поле цены рядом —
+    /// другое. Разошлись бы они молча, числами.
+    func testTheGallonIsAmericanOnBothSidesOfTheScreen() {
+        XCTAssertEqual(ConsumptionUnit.litresPerGallon, 3.785411784)
+        // 235.214583 = 100 × 3.785411784 ÷ 1.609344. Имперская константа —
+        // 282.48.
+        XCTAssertEqual(ConsumptionUnit.mpgConstant, 235.214583, accuracy: 1e-6)
     }
 }
