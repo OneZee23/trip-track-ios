@@ -299,8 +299,8 @@ struct TrackingView: View {
                         .fill(.white.opacity(0.08))
                         .frame(width: 1, height: 40)
                     statItem(
-                        value: "\(Int(viewModel.altitude))",
-                        unit: AppStrings.m(lang.language),
+                        value: recordedAltitude.value,
+                        unit: recordedAltitude.unit,
                         icon: "mountain.2"
                     )
                 }
@@ -585,6 +585,16 @@ struct TrackingView: View {
 
     private var confirmDistanceText: String {
         "\(recordedDistance.value) \(recordedDistance.unit)"
+    }
+
+    /// Высота над уровнем моря в третьей плитке — «340 м» / «1 115 ft».
+    ///
+    /// Целое, без десятых: барометр телефона врёт на единицы метров, и
+    /// десятая доля тут была бы обещанием точности, которой нет. `Measure`
+    /// печатает высоту стилем `.grouped` по той же причине.
+    private var recordedAltitude: Measure.Parts {
+        Measure.elevationParts(
+            metres: viewModel.altitude, unit: distanceUnit, lang: lang.language)
     }
 
     // MARK: - Recording status pills / banners (Figma 146:1178, 477:119, 435:119, 494:119)

@@ -157,7 +157,6 @@ extension Translations {
         "tripsTab": "Mga biyahe",
         "startFirstTrip": "Simulan ang unang biyahe mo para makita ito rito",
         "regionsCount": "rehiyon",
-        "m": "m",
         "onboardingWelcomeTitle1": "Malilimutan mo ang halos lahat ng biyahe.",
         "onboardingWelcomeTitle2": "Ang TripTrack, hindi.",
         "onboardingWelcomeSub": "Talaarawan ng mga kalsada mo — ruta, estadistika, konsumo at garahe. Buksan mo makalipas ang isang taon — at maaalala mo ang lahat.",

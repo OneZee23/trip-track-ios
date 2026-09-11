@@ -14,11 +14,15 @@ import CoreLocation
 enum TripDetailFormat {
     /// «186 м · 14:05» — the touched altitude sample and when it was reached.
     /// Falls back to the bare value for a trip whose points carry no clock.
+    /// - Parameter unit: высота идёт той же настройкой, что расстояние —
+    ///   «26.2 mi · ↑ 640 m» смешивает системы ровно так же, как «79 mi» с
+    ///   «68 км/ч». `pt.y` — метры, как везде в треке.
     static func chartAltitudeReadout(
         _ pt: DetailChartPoint,
+        unit: DistanceUnit,
         lang: LanguageManager.Language
     ) -> String {
-        let value = "\(Int(pt.y.rounded())) \(AppStrings.m(lang))"
+        let value = Measure.elevation(metres: pt.y, unit: unit, lang: lang)
         guard let date = pt.date else { return value }
         return "\(value) · \(chartClock.string(from: date))"
     }
@@ -530,9 +534,10 @@ struct ElevationChartCard: View {
     /// Right footer label — total distance («316 км»).
     let rightLabel: String
     @Environment(\.colorScheme) private var scheme
-    /// Высота на этом графике метрическая (футы — отдельный шаг версии), но
-    /// ось X — расстояние, и подпись под пальцем («212-й км») обязана считать
-    /// его в том, что выбрал человек.
+    /// Одна настройка на обе оси: подпись под пальцем («212-й км») считает
+    /// расстояние, а высоту над ним («186 м» / «610 ft») — та же единица.
+    /// Сама кривая рисуется по сырым метрам: шкала графика — отношение, и
+    /// перевод её не меняет.
     @Environment(\.distanceUnit) private var distanceUnit
     @State private var selection: ChartScrubSelection?
 
@@ -606,7 +611,8 @@ struct ElevationChartCard: View {
             .frame(height: 92)
             .chartScrub(series: series, selection: $selection) { pt in
                 ChartScrubTooltip(
-                    primary: TripDetailFormat.chartAltitudeReadout(pt, lang: language),
+                    primary: TripDetailFormat.chartAltitudeReadout(
+                        pt, unit: distanceUnit, lang: language),
                     secondary: AppStrings.chartDistanceMark(
                         language, unit: distanceUnit, km: pt.x)
                 )

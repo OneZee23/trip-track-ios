@@ -696,9 +696,6 @@ enum AppStrings {
     static func regionsCount(_ lang: LanguageManager.Language) -> String {
         tr(lang, "regionsCount", ru: "регионов", en: "regions")
     }
-    static func m(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "m", ru: "м", en: "m")
-    }
 
     // MARK: - Onboarding
     // Two-tone welcome headline (0.6.0): the hook line in text color, the

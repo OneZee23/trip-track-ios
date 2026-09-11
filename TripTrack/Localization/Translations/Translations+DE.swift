@@ -157,7 +157,6 @@ extension Translations {
         "tripsTab": "Fahrten",
         "startFirstTrip": "Starte deine erste Fahrt, um sie hier zu sehen",
         "regionsCount": "Regionen",
-        "m": "m",
         "onboardingWelcomeTitle1": "Du wirst fast jede Fahrt vergessen.",
         "onboardingWelcomeTitle2": "TripTrack nicht.",
         "onboardingWelcomeSub": "Ein Tagebuch deiner Straßen — Routen, Statistik, Verbrauch und Garage. Öffne es in einem Jahr — und erinnere dich an alles.",

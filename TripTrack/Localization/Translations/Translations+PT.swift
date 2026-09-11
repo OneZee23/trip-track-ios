@@ -157,7 +157,6 @@ extension Translations {
         "tripsTab": "Viagens",
         "startFirstTrip": "Comece sua primeira viagem para vê-la aqui",
         "regionsCount": "regiões",
-        "m": "m",
         "onboardingWelcomeTitle1": "Você vai esquecer quase todas as viagens.",
         "onboardingWelcomeTitle2": "O TripTrack não.",
         "onboardingWelcomeSub": "Um diário das suas estradas — trajetos, estatísticas, consumo e garagem. Abra daqui a um ano e lembre de tudo.",

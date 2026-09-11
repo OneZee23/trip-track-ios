@@ -157,7 +157,6 @@ extension Translations {
         "tripsTab": "Поїздки",
         "startFirstTrip": "Почніть першу поїздку, щоб побачити її тут",
         "regionsCount": "регіонів",
-        "m": "м",
         "onboardingWelcomeTitle1": "Ви забудете майже кожну поїздку.",
         "onboardingWelcomeTitle2": "TripTrack — ні.",
         "onboardingWelcomeSub": "Щоденник ваших доріг — маршрути, статистика, витрата й гараж. Відкрийте через рік — і згадаєте все.",

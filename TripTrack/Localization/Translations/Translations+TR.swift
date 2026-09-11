@@ -157,7 +157,6 @@ extension Translations {
         "tripsTab": "Geziler",
         "startFirstTrip": "Burada görmek için ilk gezini başlat",
         "regionsCount": "bölge",
-        "m": "m",
         "onboardingWelcomeTitle1": "Neredeyse her geziyi unutacaksın.",
         "onboardingWelcomeTitle2": "TripTrack unutmaz.",
         "onboardingWelcomeSub": "Yollarının günlüğü — rotalar, istatistik, yakıt ve garaj. Bir yıl sonra aç, her şeyi hatırla.",

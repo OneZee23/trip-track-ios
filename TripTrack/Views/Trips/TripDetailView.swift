@@ -1927,8 +1927,12 @@ isOwn
                         language: lang.language,
                         summary: AppStrings.chartMaxElev(
                             lang.language,
-                            max: "\(Int(cachedMaxAltitude)) \(AppStrings.m(lang.language))",
-                            gain: "\(Int(cachedElevationGain)) \(AppStrings.m(lang.language))"
+                            max: Measure.elevation(
+                                metres: cachedMaxAltitude, unit: distanceUnit,
+                                lang: lang.language),
+                            gain: Measure.elevation(
+                                metres: cachedElevationGain, unit: distanceUnit,
+                                lang: lang.language)
                         ),
                         leftLabel: trip.region ?? "",
                         rightLabel: Measure.distance(
@@ -2875,6 +2879,22 @@ isOwn
         Measure.speedParts(ms: trip.maxSpeed, unit: distanceUnit, lang: l)
     }
 
+    /// Набор высоты — «+640 м» / «+2 100 ft».
+    ///
+    /// Плюс приписан снаружи `Measure` нарочно: это не форматирование числа, а
+    /// смысл соседней плитки. Набор всегда неотрицателен, и знак отличает
+    /// «поднялся на столько» от «оказался на такой высоте» — второе стоит
+    /// рядом и печатается тем же числом без знака.
+    private func tripElevationGain(_ l: LanguageManager.Language) -> Measure.Parts {
+        let p = Measure.elevationParts(
+            metres: cachedElevationGain, unit: distanceUnit, lang: l)
+        return Measure.Parts(value: "+" + p.value, unit: p.unit)
+    }
+
+    private func tripMaxAltitude(_ l: LanguageManager.Language) -> Measure.Parts {
+        Measure.elevationParts(metres: cachedMaxAltitude, unit: distanceUnit, lang: l)
+    }
+
     private func statsGrid(trip: Trip, c: AppTheme.Colors) -> some View {
         let l = lang.language
         return LazyVGrid(columns: [
@@ -2927,15 +2947,15 @@ isOwn
                 staggerIndex: 5
             )
             DetailStatCard(
-                value: String(format: "+%.0f", cachedElevationGain),
-                unit: AppStrings.m(l),
+                value: tripElevationGain(l).value,
+                unit: tripElevationGain(l).unit,
                 label: AppStrings.elevationGain(l),
                 color: AppTheme.green,
                 staggerIndex: 6
             )
             DetailStatCard(
-                value: String(format: "%.0f", cachedMaxAltitude),
-                unit: AppStrings.m(l),
+                value: tripMaxAltitude(l).value,
+                unit: tripMaxAltitude(l).unit,
                 label: AppStrings.maxAltitude(l),
                 color: AppTheme.teal,
                 staggerIndex: 7

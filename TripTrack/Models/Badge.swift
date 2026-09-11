@@ -248,18 +248,12 @@ struct Badge: Identifiable {
             return trip.formattedDurationHuman(language)
         case .tripElevationGain:
             guard trip.elevation > 0 else { return nil }
-            return Self.metres(trip.elevation, language)
+            return Measure.elevation(metres: trip.elevation, unit: unit, lang: language)
         case .tripMaxAltitude:
             let peak = trip.trackPoints.map(\.altitude).max() ?? 0
             guard peak > 0 else { return nil }
-            return Self.metres(peak, language)
+            return Measure.elevation(metres: peak, unit: unit, lang: language)
         }
-    }
-
-    /// RU writes decimals with a comma, and the app's language is not the
-    /// device's — a device on en_US showing the RU card still owes «47,3».
-    private static func metres(_ value: Double, _ lang: LanguageManager.Language) -> String {
-        "\(AppStrings.groupedNumber(Int(value.rounded()), lang)) \(AppStrings.unitMeters(lang))"
     }
 }
 

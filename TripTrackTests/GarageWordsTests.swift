@@ -50,13 +50,20 @@ final class GarageWordsTests: XCTestCase {
 
     // MARK: - Одометр: единственный формат, живший без языка
 
-    /// `GarageFormat.odometer` жёстко ставила русский разделитель разрядов и
-    /// уезжала с ним на немецкие и английские телефоны.
+    // `GarageFormat.odometer` больше нет: с 0.6.7 пробег печатает
+    // `Measure.odometer(km:)`. Свойства, которые держат эти три теста, никуда
+    // не делись, поэтому и тесты не удалены, а переставлены на нового
+    // исполнителя. Заодно они стерегут то, чего у старой функции не было
+    // вовсе: у человека с милями пробег обязан быть переведён, а не просто
+    // подписан другим словом.
+
+    /// Прежняя функция жёстко ставила русский разделитель разрядов и уезжала
+    /// с ним на немецкие и английские телефоны.
     func testOdometerGroupsByLanguage() {
-        XCTAssertEqual(GarageFormat.odometer(143_500, lng: .en), "143,500")
-        let ru = GarageFormat.odometer(143_500, lng: .ru)
+        XCTAssertEqual(Measure.distanceValue(km: 143_500, unit: .km, lang: .en), "143,500")
+        let ru = Measure.distanceValue(km: 143_500, unit: .km, lang: .ru)
         XCTAssertTrue(ru.hasPrefix("143") && ru.hasSuffix("500"))
-        XCTAssertNotEqual(ru, GarageFormat.odometer(143_500, lng: .en),
+        XCTAssertNotEqual(ru, Measure.distanceValue(km: 143_500, unit: .km, lang: .en),
                           "русский и английский не могут группировать одинаково")
     }
 
@@ -65,14 +72,20 @@ final class GarageWordsTests: XCTestCase {
     /// остаётся, «000 км» уезжает на следующую строку.
     func testThousandsSeparatorNeverBreaksTheLine() {
         for lang in all {
-            let s = GarageFormat.odometer(143_500, lng: lang)
+            let s = Measure.distanceValue(km: 143_500, unit: .km, lang: lang)
             XCTAssertFalse(s.contains(" "),
                            "\(lang): обычный пробел в числе «\(s)» — оно разорвётся при переносе")
         }
     }
 
     func testOdometerRoundsRatherThanTruncates() {
-        XCTAssertEqual(GarageFormat.odometer(12_345.6, lng: .en), "12,346")
+        XCTAssertEqual(Measure.distanceValue(km: 12_345.6, unit: .km, lang: .en), "12,346")
+    }
+
+    /// Пробег в милях — то, ради чего версия и затевалась: у машины с мильной
+    /// приборкой числа на экране и на панели обязаны совпадать.
+    func testOdometerConvertsForMiles() {
+        XCTAssertEqual(Measure.odometer(km: 143_500, unit: .miles, lang: .en), "89,167 mi")
     }
 
     // MARK: - Годы: механизма для чисел словами в проекте нет

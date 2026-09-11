@@ -157,7 +157,6 @@ extension Translations {
         "tripsTab": "Perjalanan",
         "startFirstTrip": "Mulai perjalanan pertamamu untuk melihatnya di sini",
         "regionsCount": "wilayah",
-        "m": "m",
         "onboardingWelcomeTitle1": "Kamu akan lupa hampir setiap perjalanan.",
         "onboardingWelcomeTitle2": "TripTrack tidak.",
         "onboardingWelcomeSub": "Buku harian jalan-jalanmu — rute, statistik, konsumsi, dan garasi. Buka setahun lagi, dan semuanya kembali.",

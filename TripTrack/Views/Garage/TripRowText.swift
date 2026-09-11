@@ -45,8 +45,15 @@ enum TripRowText {
         Measure.distance(metres: t.distance, unit: unit, lang: l, style: .adaptive)
     }
 
-    static func elevation(_ t: Trip, _ l: LanguageManager.Language) -> String {
-        "↑ " + GarageFormat.odometer(t.elevation, lng: l) + " " + AppStrings.unitMeters(l)
+    /// «↑ 640 м» / «↑ 2 100 ft».
+    ///
+    /// До 0.6.7 высоту печатала `GarageFormat.odometer` — функция про ПРОБЕГ.
+    /// Пока единица была одна, разницы не было; на второй встроенная в неё
+    /// конверсия увезла бы метры в мили ×0.621 молча. Поэтому у `Measure`
+    /// высота отдельной функцией, а та `GarageFormat.odometer` удалена.
+    static func elevation(_ t: Trip, _ l: LanguageManager.Language,
+                          unit: DistanceUnit) -> String {
+        "↑ " + Measure.elevation(metres: t.elevation, unit: unit, lang: l)
     }
 
     // MARK: - Форматтеры

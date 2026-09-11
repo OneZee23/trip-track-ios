@@ -185,7 +185,7 @@ struct VehicleTripsView: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(trip.isPrivate ? c.textSecondary : c.text)
                     if trip.elevation > 0 {
-                        Text(TripRowText.elevation(trip, l))
+                        Text(TripRowText.elevation(trip, l, unit: distanceUnit))
                             .font(.system(size: 11))
                             .foregroundStyle(c.textTertiary)
                     }

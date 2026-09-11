@@ -422,6 +422,8 @@ struct OnboardingView: View {
                 let avg = Measure.speedParts(
                     ms: trip.averageSpeed, unit: distanceUnit, lang: lng)
                 let max = Measure.speedParts(ms: trip.maxSpeed, unit: distanceUnit, lang: lng)
+                let elevation = Measure.elevationParts(
+                    metres: trip.elevation, unit: distanceUnit, lang: lng)
                 return [
                     ("point.topleft.down.curvedto.point.bottomright.up",
                      distance.value, distance.unit, AppTheme.green, AppStrings.distance(l)),
@@ -430,12 +432,13 @@ struct OnboardingView: View {
                     ("bolt.fill", max.value, max.unit, AppTheme.red, AppStrings.onboardingStatMax(l)),
                     ("drop", Self.number(fuel, decimals: 1, lng: lng),
                      AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
-                    ("mountain.2", Self.number(trip.elevation, decimals: 0, lng: lng),
-                     AppStrings.unitMeters(l), AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
+                    ("mountain.2", elevation.value, elevation.unit,
+                     AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
                 ]
             } ?? [
-            // Канонические числа демо-карточки — 246 км, 82 и 150 км/ч —
-            // записаны в СИ и проходят через тот же `Measure`. Первый запуск —
+            // Канонические числа демо-карточки — 246 км, 82 и 150 км/ч,
+            // 340 м — записаны в СИ и проходят через тот же `Measure`, включая
+            // высоту (с 0.6.7 она тоже следует настройке). Первый запуск —
             // единственный экран, который человек видит ДО того, как у него
             // появится хоть одна поездка, и мильная карточка с подписью «км»
             // была бы первым, что приложение о себе соврало.
@@ -453,7 +456,10 @@ struct OnboardingView: View {
              Measure.speedParts(ms: 150 / 3.6, unit: distanceUnit, lang: l).unit,
              AppTheme.red, AppStrings.onboardingStatMax(l)),
             ("drop", Self.number(7.4, decimals: 1, lng: l), AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
-            ("mountain.2", "340", AppStrings.unitMeters(l), AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
+            ("mountain.2",
+             Measure.elevationParts(metres: 340, unit: distanceUnit, lang: l).value,
+             Measure.elevationParts(metres: 340, unit: distanceUnit, lang: l).unit,
+             AppTheme.teal, AppStrings.onboardingStatAltitude(l)),
         ]
         let hairline = Color.black.opacity(0.05)
 

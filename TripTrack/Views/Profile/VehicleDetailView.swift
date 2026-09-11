@@ -827,8 +827,11 @@ struct VehicleDetailView: View {
         Measure.distance(km: km, unit: distanceUnit, lang: l)
     }
 
+    /// Высота — «248 м» / «814 ft». Отдельно от `kmValue` выше нарочно: это
+    /// разные величины, и одна функция на обе однажды перевела бы метры
+    /// коэффициентом мили.
     private func metersValue(_ m: Double, _ l: LanguageManager.Language) -> String {
-        GarageFormat.odometer(m, lng: l) + " " + AppStrings.unitMeters(l)
+        Measure.elevation(metres: m, unit: distanceUnit, lang: l)
     }
 
     /// `opens` — поездка, о которой рекорд. Строка «самая длинная» без

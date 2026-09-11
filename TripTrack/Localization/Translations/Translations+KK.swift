@@ -157,7 +157,6 @@ extension Translations {
         "tripsTab": "Сапарлар",
         "startFirstTrip": "Мұнда көру үшін алғашқы сапарыңызды бастаңыз",
         "regionsCount": "аймақ",
-        "m": "м",
         "onboardingWelcomeTitle1": "Сіз әрбір сапарды дерлік ұмытасыз.",
         "onboardingWelcomeTitle2": "TripTrack — ұмытпайды.",
         "onboardingWelcomeSub": "Жолдарыңыздың күнделігі — бағыттар, статистика, отын шығыны және гараж. Бір жылдан кейін ашыңыз — бәрін еске түсіресіз.",

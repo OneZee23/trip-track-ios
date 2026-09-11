@@ -441,7 +441,8 @@ struct PublicVehicleView: View {
             if let peak = trips.max(by: { $0.elevation < $1.elevation }), peak.elevation > 0 {
                 record(AppStrings.recordHighest(l),
                        peak.title ?? peak.region ?? "—",
-                       GarageFormat.odometer(peak.elevation, lng: l) + " " + AppStrings.unitMeters(l),
+                       Measure.elevation(
+                           metres: peak.elevation, unit: distanceUnit, lang: l),
                        dot: AppTheme.accent, c: c)
             }
         }
