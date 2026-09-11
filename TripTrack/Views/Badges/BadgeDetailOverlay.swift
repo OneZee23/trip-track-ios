@@ -15,6 +15,7 @@ struct BadgeDetailOverlay: View {
     /// Trip this badge was earned on, for the «Получен … · Дача и обратно» line.
     var earnedOnTripTitle: String? = nil
     let onDismiss: () -> Void
+    @Environment(\.distanceUnit) private var distanceUnit
     @State private var appear = false
 
     var body: some View {
@@ -71,7 +72,7 @@ struct BadgeDetailOverlay: View {
                     .padding(.horizontal, 4)
 
                 Text(isUnlocked || !badge.isHidden
-                    ? badge.description(language)
+                    ? badge.description(language, unit: distanceUnit)
                     : (AppStrings.badgeDetailHiddenAchievement(lng)))
                     .font(.system(size: 14))
                     .foregroundStyle(c.textSecondary)

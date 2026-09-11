@@ -6,6 +6,7 @@ struct BadgeCelebrationView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.distanceUnit) private var distanceUnit
     @State private var currentIndex = 0
     @State private var appear = false
     @State private var glowPulse = false
@@ -70,7 +71,7 @@ struct BadgeCelebrationView: View {
                     .opacity(appear ? 1 : 0)
 
                 // Description
-                Text(badge.description(lang.language))
+                Text(badge.description(lang.language, unit: distanceUnit))
                     .font(.system(size: 16))
                     .foregroundStyle(Color.white.opacity(0.7))
                     .multilineTextAlignment(.center)

@@ -21,6 +21,9 @@ struct AchievementDetailView: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+    /// Правило значка читается в том, в чём человек меряет дорогу: «26.2 mi за
+    /// одну поездку». Порог при этом метрический — см. `BadgeFigure`.
+    @Environment(\.distanceUnit) private var distanceUnit
     /// Observed, not read once: pinning from the nav bar has to repaint the
     /// pin glyph and the «Закреплено» chip in the same frame.
     @ObservedObject private var settings = SettingsManager.shared
@@ -45,7 +48,7 @@ struct AchievementDetailView: View {
                 // The rule. A secret badge has none to print — telling you what
                 // to do is exactly what it withholds.
                 if !isSecret {
-                    Text(badge.description(l))
+                    Text(badge.description(l, unit: distanceUnit))
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(c.textSecondary)
                         .multilineTextAlignment(.center)

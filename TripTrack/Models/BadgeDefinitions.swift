@@ -43,81 +43,100 @@ extension Badge {
               checkUnlocked: { $0.totalTrips >= 1000 }),
 
         Badge(id: "first_km", titleRu: "Первый километр", titleEn: "First Kilometer",
-              descriptionRu: "1 км суммарно", descriptionEn: "1 km total distance",
+              descriptionRu: "%@ суммарно", descriptionEn: "%@ total distance",
               icon: "location.fill", color: AppTheme.green, category: .distance,
               rarity: .common,
+              figures: [.distance(1)],
               checkUnlocked: { $0.totalDistanceKm >= 1 }),
 
         Badge(id: "century", titleRu: "Сотня", titleEn: "Century",
-              descriptionRu: "100 км суммарно", descriptionEn: "100 km total distance",
+              descriptionRu: "%@ суммарно", descriptionEn: "%@ total distance",
               icon: "speedometer", color: AppTheme.green, category: .distance,
               rarity: .common,
+              figures: [.distance(100)],
               checkUnlocked: { $0.totalDistanceKm >= 100 }),
 
         Badge(id: "thousand", titleRu: "Тысячник", titleEn: "Thousand",
-              descriptionRu: "1 000 км суммарно", descriptionEn: "1,000 km total distance",
+              descriptionRu: "%@ суммарно", descriptionEn: "%@ total distance",
               icon: "bolt.fill", color: AppTheme.yellow, category: .distance,
               rarity: .uncommon,
+              figures: [.distance(1000)],
               checkUnlocked: { $0.totalDistanceKm >= 1000 }),
 
         Badge(id: "ten_thousand", titleRu: "Десять тысяч", titleEn: "Ten Thousand",
-              descriptionRu: "10 000 км суммарно", descriptionEn: "10,000 km total distance",
+              descriptionRu: "%@ суммарно", descriptionEn: "%@ total distance",
               icon: "bolt.circle.fill", color: AppTheme.accent, category: .distance,
               rarity: .rare,
+              figures: [.distance(10_000)],
               checkUnlocked: { $0.totalDistanceKm >= 10_000 }),
 
         Badge(id: "equator", titleRu: "Кругосветка", titleEn: "Around the World",
-              descriptionRu: "40 075 км — длина экватора", descriptionEn: "40,075 km — the equator",
+              // Экватор остаётся экватором: «24 901 mi — длина экватора» так
+              // же верно, как «40 075 км», — это одна и та же планета.
+              descriptionRu: "%@ — длина экватора", descriptionEn: "%@ — the equator",
               icon: "globe.americas.fill", color: Color(red: 0.20, green: 0.55, blue: 0.90),
               category: .distance, rarity: .epic,
+              figures: [.distance(40_075)],
               checkUnlocked: { $0.totalDistanceKm >= 40_075 }),
 
         Badge(id: "km_100k", titleRu: "Сто тысяч", titleEn: "Hundred Thousand",
-              descriptionRu: "100 000 км суммарно", descriptionEn: "100,000 km cumulative",
+              descriptionRu: "%@ суммарно", descriptionEn: "%@ cumulative",
               icon: "gauge.high", color: AppTheme.accent, category: .distance,
               rarity: .epic,
+              figures: [.distance(100_000)],
               checkUnlocked: { $0.totalDistanceKm >= 100_000 }),
 
         Badge(id: "km_250k", titleRu: "Четверть миллиона", titleEn: "Quarter Million",
-              descriptionRu: "250 000 км суммарно", descriptionEn: "250,000 km cumulative",
+              descriptionRu: "%@ суммарно", descriptionEn: "%@ cumulative",
               icon: "speedometer", color: AppTheme.red, category: .distance,
               rarity: .legendary,
+              figures: [.distance(250_000)],
               checkUnlocked: { $0.totalDistanceKm >= 250_000 }),
 
         Badge(id: "half_million", titleRu: "Полмиллиона", titleEn: "Half a Million",
-              descriptionRu: "500 000 км в сумме", descriptionEn: "500,000 km cumulative",
+              descriptionRu: "%@ в сумме", descriptionEn: "%@ cumulative",
               icon: "infinity.circle.fill", color: Color(red: 0.60, green: 0.35, blue: 0.80),
               category: .distance, rarity: .legendary,
+              figures: [.distance(500_000)],
               checkUnlocked: { $0.totalDistanceKm >= 500_000 }),
 
         Badge(id: "million", titleRu: "Миллионник", titleEn: "Millionaire",
-              descriptionRu: "1 000 000 км за всю жизнь", descriptionEn: "1,000,000 km in a lifetime",
+              descriptionRu: "%@ за всю жизнь", descriptionEn: "%@ in a lifetime",
               icon: "infinity", color: Color(red: 0.90, green: 0.65, blue: 0.10),
               category: .distance, rarity: .legendary,
+              figures: [.distance(1_000_000)],
               checkUnlocked: { $0.totalDistanceKm >= 1_000_000 }),
 
         Badge(id: "marathon_42", titleRu: "Марафонец", titleEn: "Marathon",
-              descriptionRu: "42.2 км за одну поездку", descriptionEn: "42.2 km in a single trip",
+              // «Марафон» остаётся марафоном ПО ИМЕНИ, а не по числу:
+              // американец читает тот же порог как «26.2 mi» — число, которое
+              // он знает лучше, чем сорок два. Десятая доля здесь и есть весь
+              // смысл, поэтому стиль `.tenths`, а не разряды.
+              descriptionRu: "%@ за одну поездку", descriptionEn: "%@ in a single trip",
               icon: "figure.run", color: AppTheme.teal, category: .distance,
               isRepeatable: true, rarity: .uncommon,
+              figures: [.distance(42.195, style: .tenths)],
               checkUnlocked: { $0.hasSingleTripMarathon }),
 
         Badge(id: "marathon_100", titleRu: "Стоик", titleEn: "Stoic",
-              descriptionRu: "Поездка длиннее 100 км", descriptionEn: "Single trip over 100 km",
+              descriptionRu: "Поездка длиннее %@", descriptionEn: "Single trip over %@",
               icon: "road.lanes", color: AppTheme.teal, category: .distance,
               isRepeatable: true, rarity: .uncommon,
+              figures: [.distance(100)],
               checkUnlocked: { $0.longestTripKm >= 100 }),
 
         Badge(id: "iron_butt", titleRu: "Железная задница", titleEn: "Iron Butt",
-              descriptionRu: "500+ км за одну поездку", descriptionEn: "500+ km in a single trip",
+              descriptionRu: "%@ за одну поездку", descriptionEn: "%@ in a single trip",
               icon: "flame.fill", color: AppTheme.red, category: .distance,
               isHidden: true, isRepeatable: true, rarity: .epic,
+              figures: [.distance(500, atLeast: true)],
               checkUnlocked: { $0.hasSingleTripIronButt }),
 
         Badge(id: "speed_demon", titleRu: "Спид-демон", titleEn: "Speed Demon",
-              descriptionRu: "Макс. скорость > 120 км/ч", descriptionEn: "Max speed over 120 km/h",
+              descriptionRu: "Макс. скорость > %@", descriptionEn: "Max speed over %@",
               icon: "hare.fill", color: AppTheme.red, category: .distance,
               isRepeatable: true, rarity: .rare,
+              figures: [.speed(120)],
               checkUnlocked: { $0.maxSpeedKmh >= 120 }),
 
         Badge(id: "endurance", titleRu: "Выносливый", titleEn: "Endurance",
@@ -207,15 +226,17 @@ extension Badge {
               checkUnlocked: { $0.hasEarlyMorningTrip }),
 
         Badge(id: "mountain_goat", titleRu: "Горный козёл", titleEn: "Mountain Goat",
-              descriptionRu: "Набор высоты 1000м за поездку", descriptionEn: "1000m elevation gain in one trip",
+              descriptionRu: "Набор высоты %@ за поездку", descriptionEn: "%@ elevation gain in one trip",
               icon: "mountain.2.fill", color: AppTheme.teal, category: .special,
               isHidden: true, isRepeatable: true, rarity: .rare,
+              figures: [.elevation(1000)],
               checkUnlocked: { $0.maxElevationGainSingleTrip >= 1000 }),
 
         Badge(id: "above_clouds", titleRu: "Выше облаков", titleEn: "Above Clouds",
-              descriptionRu: "Высота 2000+м", descriptionEn: "Altitude 2000+m reached",
+              descriptionRu: "Высота %@", descriptionEn: "Altitude %@ reached",
               icon: "cloud.fill", color: AppTheme.blue, category: .special,
               isHidden: true, isRepeatable: true, rarity: .epic,
+              figures: [.elevation(2000, atLeast: true)],
               checkUnlocked: { $0.maxAltitude >= 2000 }),
 
         Badge(id: "polar", titleRu: "Полярник", titleEn: "Polar",
@@ -225,10 +246,14 @@ extension Badge {
               checkUnlocked: { $0.maxLatitude >= 66.0 }),
 
         Badge(id: "sea_level", titleRu: "На уровне моря", titleEn: "Sea Level",
-              descriptionRu: "Вдоль побережья (высота <10м, >20км)",
-              descriptionEn: "Along coastline (altitude <10m, >20km)",
+              // Два числа и позиционные `%1$@`/`%2$@`: порядок слов в языках
+              // разный, и голые `%@` однажды поменялись бы местами — высота
+              // встала бы в скобку расстояния.
+              descriptionRu: "Вдоль побережья (высота <%1$@, >%2$@)",
+              descriptionEn: "Along coastline (altitude <%1$@, >%2$@)",
               icon: "water.waves", color: AppTheme.blue, category: .special,
               isHidden: true, isRepeatable: true, rarity: .rare,
+              figures: [.elevation(10), .distance(20)],
               checkUnlocked: { $0.hasSeaLevelTrip }),
 
         Badge(id: "long_shift", titleRu: "Длинная смена", titleEn: "Long Shift",
@@ -266,10 +291,11 @@ extension Badge {
               checkUnlocked: { $0.hasAfterMidnightTrip }),
 
         Badge(id: "highway_wolf", titleRu: "Хайвейный волк", titleEn: "Highway Wolf",
-              descriptionRu: "Одна поездка длиной 300+ км",
-              descriptionEn: "Single trip ≥300 km",
+              descriptionRu: "Одна поездка длиной %@",
+              descriptionEn: "Single trip %@",
               icon: "road.lanes", color: AppTheme.accent,
               category: .special, isHidden: true, rarity: .rare,
+              figures: [.distance(300, atLeast: true)],
               checkUnlocked: { $0.longestTripKm >= 300 }),
 
         Badge(id: "wrapped_year", titleRu: "Завёрнутый год", titleEn: "Wrapped",
@@ -301,10 +327,11 @@ extension Badge {
               checkUnlocked: { $0.privateTripCount >= 50 }),
 
         Badge(id: "expedition", titleRu: "Экспедиция", titleEn: "Expedition",
-              descriptionRu: "50 000 км в сумме",
-              descriptionEn: "50,000 km cumulative",
+              descriptionRu: "%@ в сумме",
+              descriptionEn: "%@ cumulative",
               icon: "mountain.2.fill", color: Color(red: 0.65, green: 0.50, blue: 0.35),
               category: .special, isHidden: true, rarity: .legendary,
+              figures: [.distance(50_000)],
               checkUnlocked: { $0.totalDistanceKm >= 50000 }),
     ]
 

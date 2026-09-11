@@ -145,6 +145,13 @@ struct Badge: Identifiable {
     /// Live global unlock share (0–100), set from the backend when available.
     /// When present it overrides `rarity` and feeds the "Получили X%" line.
     var globalUnlockPercent: Double?
+    /// Числа, которые подставляются в `descriptionRu`/`descriptionEn` и в
+    /// одиннадцать таблиц вместо `%@`. Пусто у значков без величин («100
+    /// поездок записано» считает поездки, а не километры).
+    ///
+    /// Порядок значим: у берегового значка их два, и шаблон обращается к ним
+    /// позиционно (`%1$@`, `%2$@`), потому что порядок слов в языках разный.
+    let figures: [BadgeFigure]
     let checkUnlocked: (BadgeStats) -> Bool
 
     /// The rarity to actually show — dynamic global share if we have it, else authored.
@@ -162,6 +169,7 @@ struct Badge: Identifiable {
          isRepeatable: Bool = false,
          rarity: BadgeRarity = .common,
          globalUnlockPercent: Double? = nil,
+         figures: [BadgeFigure] = [],
          checkUnlocked: @escaping (BadgeStats) -> Bool) {
         self.id = id
         self.titleRu = titleRu
@@ -175,6 +183,7 @@ struct Badge: Identifiable {
         self.isRepeatable = isRepeatable
         self.rarity = rarity
         self.globalUnlockPercent = globalUnlockPercent
+        self.figures = figures
         self.checkUnlocked = checkUnlocked
     }
 
@@ -186,8 +195,24 @@ struct Badge: Identifiable {
         AppStrings.tr(lang, "badge.\(id).title", ru: titleRu, en: titleEn)
     }
 
-    func description(_ lang: LanguageManager.Language) -> String {
-        AppStrings.tr(lang, "badge.\(id).desc", ru: descriptionRu, en: descriptionEn)
+    /// Описание значка — с подставленным числом, если оно у значка есть.
+    ///
+    /// Описания с зашитым расстоянием — это ШАБЛОНЫ (`%@`), а не готовые
+    /// строки: «42.2 км за одну поездку» на мильном телефоне обязано читаться
+    /// «26.2 mi за одну поездку», иначе значки остаются единственным
+    /// метрическим местом приложения — и это пришлось бы говорить текстом под
+    /// списком достижений, потому что молча оставить нельзя.
+    ///
+    /// Сам порог при этом НЕ ДВИГАЕТСЯ: `figures` хранит те же километры, что
+    /// и `checkUnlocked` строкой ниже, а переводит их `Measure` на показе.
+    ///
+    /// - Parameter unit: берётся из `@Environment(\.distanceUnit)` у экрана.
+    func description(_ lang: LanguageManager.Language, unit: DistanceUnit) -> String {
+        let template = AppStrings.tr(lang, "badge.\(id).desc",
+                                     ru: descriptionRu, en: descriptionEn)
+        guard !figures.isEmpty else { return template }
+        return String(format: template,
+                      arguments: figures.map { $0.shown(unit: unit, lang: lang) })
     }
 
     // MARK: - Personal record
