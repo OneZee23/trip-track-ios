@@ -169,4 +169,41 @@ final class DistanceUnitTests: XCTestCase {
         XCTAssertEqual(tenKilometresInMiles, DistanceUnit.miles.tenthsBelow, accuracy: 0.3,
                        "порог у миль обязан стоять там же, где километровый — около 6.2 мили")
     }
+
+    // MARK: - Догадка по региону
+
+    private func guess(_ region: String) -> DistanceUnit {
+        DistanceUnit.guessFromRegion(Locale(identifier: "en_\(region)"))
+    }
+
+    /// Мильных стран три с половиной, и список закрыт.
+    func testMilesAreGuessedForTheFourMileCountries() {
+        XCTAssertEqual(guess("US"), .miles)
+        XCTAssertEqual(guess("GB"), .miles)
+        XCTAssertEqual(guess("LR"), .miles)  // Либерия
+        XCTAssertEqual(guess("MM"), .miles)  // Мьянма
+    }
+
+    /// Здесь и живёт вся цена вопроса «регион, а не язык»: во всех четырёх
+    /// странах ниже говорят по-английски, и все четыре метрические. Догадка по
+    /// языку (`Language.locale` у нас прибит к `en_US`) объявила бы их
+    /// мильными.
+    func testEnglishSpeakingMetricCountriesStayMetric() {
+        for region in ["AU", "CA", "IN", "IE", "NZ", "ZA"] {
+            XCTAssertEqual(guess(region), .km, "\(region) метрическая")
+        }
+    }
+
+    func testEveryoneElseIsMetric() {
+        for region in ["RU", "DE", "FR", "KZ", "UA", "BR", "TR", "ID"] {
+            XCTAssertEqual(guess(region), .km, "\(region)")
+        }
+    }
+
+    /// Локаль без региона («en», «ru») — не повод угадывать: неизвестность
+    /// читается как километры, ровно как неизвестное значение в хранилище.
+    func testALocaleWithoutARegionIsMetric() {
+        XCTAssertEqual(DistanceUnit.guessFromRegion(Locale(identifier: "en")), .km)
+        XCTAssertEqual(DistanceUnit.guessFromRegion(Locale(identifier: "")), .km)
+    }
 }

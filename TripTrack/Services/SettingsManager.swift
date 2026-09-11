@@ -223,16 +223,27 @@ final class SettingsManager: ObservableObject {
     ///   `@AppStorage` на экранах. Отдельным параметром он сделан ради тестов:
     ///   свой сьют не переписывает настоящий выбор человека и не дерётся с
     ///   синглтоном за один и тот же ключ (оба подписаны на один пул).
+    /// - Parameter regionUnit: догадка по региону телефона. Параметром, а не
+    ///   прямым вызовом `DistanceUnit.guessFromRegion()` внутри, чтобы тест
+    ///   мог поставить «этот телефон американский», не переучивая симулятор, —
+    ///   иначе первый запуск проверялся бы только руками на устройстве, то
+    ///   есть не проверялся бы.
     init(persistenceController: PersistenceController = .shared,
-         unitStore: UserDefaults = .standard) {
+         unitStore: UserDefaults = .standard,
+         regionUnit: DistanceUnit = .guessFromRegion()) {
         self.persistenceController = persistenceController
         self.unitStore = unitStore
+        // Считано ДО `loadSettings()` нарочно: там `seedUnitsAtLaunch` сам
+        // положит в `UserDefaults` значение колонки, и после него «ключа не
+        // было» уже не отличить от «ключ был».
+        let hadChoice = unitStore.string(forKey: Self.distanceUnitKey) != nil
         migrateCloudSyncToOptIn()
         migrateTripsToPrivateByDefault()
         migrateVehicleMapToOptIn()
         migrateArchiveAway()
         loadAutoRecordSettings()
         loadSettings()
+        if !hadChoice { seedDistanceUnitFromRegion(regionUnit) }
         // Выбор единиц со второго телефона приезжает пулом прямо в CoreData —
         // мимо всех, кто зовёт `loadSettings()` руками, и мимо `@AppStorage`,
         // из которого экраны его читают. Без этой подписки приехавший выбор
@@ -547,6 +558,33 @@ final class SettingsManager: ObservableObject {
         } else if let raw = entity.volumeUnit, VolumeUnit(rawValue: raw) != nil {
             unitStore.set(raw, forKey: Self.volumeUnitKey)
         }
+    }
+
+    /// Первая догадка о единице — по региону телефона, и ровно один раз.
+    ///
+    /// **Как отличить «не выбирал» от «выбрал километры».** Пикер записывает
+    /// ЛЮБОЙ ответ, включая километры (`setDistanceUnit`), поэтому отсутствие
+    /// ключа в `UserDefaults` — это и есть «человек не выбирал». Ключ есть —
+    /// выбор человека, догадка молчит, даже если в ключе те же километры.
+    /// Отличать по значению нельзя: «km» — самый частый осознанный ответ.
+    ///
+    /// **Почему этого мало и нужна вторая проверка.** У колонки
+    /// `UserSettingsEntity.distanceUnit` стоит `defaultValueString="km"` с
+    /// первой версии модели, то есть пустой она не бывает и «km» в ней ничего
+    /// не значит. А вот «miles» в ней значит много: положить их туда мог
+    /// только пул со второго телефона (до 0.6.7 колонку не писал никто), и это
+    /// уже НАСТОЯЩИЙ выбор, приехавший чужим путём. К моменту этого вызова
+    /// `seedUnitsAtLaunch` уже перенёс колонку в `UserDefaults`, поэтому
+    /// достаточно спросить итог: не километры — значит выбор есть, догадка
+    /// молчит. Иначе восстановление аккаунта на новом телефоне теряло бы
+    /// единицу на каждом запуске.
+    ///
+    /// Отметку времени догадка НЕ трогает — как и `seedUnitsAtLaunch`: она не
+    /// правка человека, и приехавший следом пул обязан её перебить.
+    private func seedDistanceUnitFromRegion(_ guess: DistanceUnit) {
+        guard distanceUnit == .km, guess != .km else { return }
+        unitStore.set(guess.rawValue, forKey: Self.distanceUnitKey)
+        settingsEntity?.distanceUnit = guess.rawValue
     }
 
     func saveSettings() {

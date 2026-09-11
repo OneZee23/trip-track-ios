@@ -38,7 +38,9 @@ final class SettingsUnitWireTests: XCTestCase {
         store = UserDefaults(suiteName: suiteName)
         pc = PersistenceController(inMemory: true)
         repo = CoreDataTripRepository(persistenceController: pc)
-        settings = SettingsManager(persistenceController: pc, unitStore: store)
+        // Регион — параметром и всегда явно: иначе результат прогона зависел
+        // бы от того, на какую страну настроен симулятор.
+        settings = SettingsManager(persistenceController: pc, unitStore: store, regionUnit: .km)
     }
 
     override func tearDown() {
@@ -256,4 +258,96 @@ final class SettingsUnitWireTests: XCTestCase {
         XCTAssertEqual(store.string(forKey: SettingsManager.volumeUnitKey), "gallons")
     }
 
+    // MARK: Догадка по региону (0.6.7)
+
+    /// Первый запуск в США: выбора нет ни здесь, ни в колонке — значит мили.
+    ///
+    /// Без этого американец на первом же экране читает «246 км», а половину
+    /// значения приложения («сколько мы проехали») получает в единице, в
+    /// которой не думает.
+    func testFirstLaunchInAMileCountryGuessesMiles() throws {
+        let fresh = UserDefaults(suiteName: "\(suiteName!).guess")!
+        defer { fresh.removePersistentDomain(forName: "\(suiteName!).guess") }
+
+        _ = SettingsManager(persistenceController: pc, unitStore: fresh, regionUnit: .miles)
+
+        XCTAssertEqual(fresh.string(forKey: SettingsManager.distanceUnitKey), "miles")
+        XCTAssertEqual(entity()?.distanceUnit, "miles",
+                       "догадка обязана доехать и до колонки, иначе уедет «km»")
+    }
+
+    func testFirstLaunchInAMetricCountryStaysMetric() {
+        let fresh = UserDefaults(suiteName: "\(suiteName!).metric")!
+        defer { fresh.removePersistentDomain(forName: "\(suiteName!).metric") }
+
+        let m = SettingsManager(persistenceController: pc, unitStore: fresh, regionUnit: .km)
+
+        XCTAssertEqual(m.distanceUnit, .km)
+        XCTAssertEqual(entity()?.distanceUnit, "km")
+    }
+
+    /// **Главное различие всей догадки: «выбрал километры» ≠ «не выбирал».**
+    ///
+    /// Пикер записывает ЛЮБОЙ ответ, включая километры, поэтому наличие ключа
+    /// — и есть ответ человека. Догадка, которая перебивает выбранные
+    /// километры у американца, меняет настройку молча и без спроса, а он её
+    /// уже один раз поставил руками.
+    func testAChosenKilometreSurvivesTheGuess() {
+        let chosen = UserDefaults(suiteName: "\(suiteName!).chosen")!
+        defer { chosen.removePersistentDomain(forName: "\(suiteName!).chosen") }
+        chosen.set("km", forKey: SettingsManager.distanceUnitKey)
+
+        _ = SettingsManager(persistenceController: pc, unitStore: chosen, regionUnit: .miles)
+
+        XCTAssertEqual(chosen.string(forKey: SettingsManager.distanceUnitKey), "km")
+    }
+
+    /// Выбор со второго телефона приезжает В КОЛОНКЕ, а не в `UserDefaults`, и
+    /// он сильнее догадки: иначе восстановление аккаунта теряло бы единицу на
+    /// каждом запуске в стране, которая думает иначе.
+    func testAPulledChoiceBeatsTheGuess() throws {
+        let e = try XCTUnwrap(entity())
+        e.distanceUnit = "miles"
+        try pc.container.viewContext.save()
+
+        let fresh = UserDefaults(suiteName: "\(suiteName!).pulled")!
+        defer { fresh.removePersistentDomain(forName: "\(suiteName!).pulled") }
+
+        _ = SettingsManager(persistenceController: pc, unitStore: fresh, regionUnit: .km)
+
+        XCTAssertEqual(fresh.string(forKey: SettingsManager.distanceUnitKey), "miles")
+        XCTAssertEqual(entity()?.distanceUnit, "miles",
+                       "догадка, записанная ДО чтения колонки, затёрла бы её метрическим «km»")
+    }
+
+    /// Ровно один раз. Человек переключился на километры, уехал в США —
+    /// догадка молчит: она уже отработала, а с тех пор появился ответ.
+    func testTheGuessDoesNotComeBackOnTheSecondLaunch() {
+        let fresh = UserDefaults(suiteName: "\(suiteName!).twice")!
+        defer { fresh.removePersistentDomain(forName: "\(suiteName!).twice") }
+
+        let first = SettingsManager(persistenceController: pc, unitStore: fresh, regionUnit: .miles)
+        XCTAssertEqual(first.distanceUnit, .miles)
+        first.setDistanceUnit(.km)
+
+        let second = SettingsManager(persistenceController: pc, unitStore: fresh, regionUnit: .miles)
+
+        XCTAssertEqual(second.distanceUnit, .km, "догадка перебила ответ человека")
+    }
+
+    /// Догадка — не правка человека, и датировать её нельзя: приехавший следом
+    /// пул обязан её перебить, а не считать себя устаревшим.
+    func testTheGuessDoesNotStampTheRow() throws {
+        let e = try XCTUnwrap(entity())
+        let stamp = Date(timeIntervalSince1970: 1_700_000_000)
+        e.lastModifiedAt = stamp
+        try pc.container.viewContext.save()
+
+        let fresh = UserDefaults(suiteName: "\(suiteName!).stamp")!
+        defer { fresh.removePersistentDomain(forName: "\(suiteName!).stamp") }
+
+        _ = SettingsManager(persistenceController: pc, unitStore: fresh, regionUnit: .miles)
+
+        XCTAssertEqual(entity()?.lastModifiedAt, stamp)
+    }
 }
