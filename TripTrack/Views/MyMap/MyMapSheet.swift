@@ -393,7 +393,8 @@ struct MyMapSheet: View {
         regionHeader(region, c)
 
         HStack(spacing: 0) {
-            statColumn(AppStrings.groupedNumber(Int(region.km.rounded()), lang.language),
+            statColumn(Measure.distanceValue(km: region.km, unit: distanceUnit,
+                                             lang: lang.language, style: .grouped),
                        AppStrings.mapKmDriven(lang.language, unit: distanceUnit), c)
             statColumn("\(region.tripCount)",
                        AppStrings.tripsGenitive(lang.language, count: region.tripCount), c)

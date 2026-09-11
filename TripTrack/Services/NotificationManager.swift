@@ -193,7 +193,7 @@ final class NotificationManager: NSObject, ObservableObject {
         content.title = AppStrings.notifAutoStopTitle(lang)
         content.body = AppStrings.notifAutoStopSummary(
             lang,
-            km: Measure.distanceValue(metres: metres, unit: unit, lang: lang, style: .tenths),
+            distance: Measure.distance(metres: metres, unit: unit, lang: lang, style: .tenths),
             time: duration)
         content.sound = .default
 

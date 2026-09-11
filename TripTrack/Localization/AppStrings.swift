@@ -2291,8 +2291,19 @@ enum AppStrings {
     static func notifAutoStopTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifAutoStopTitle", ru: "Поездка завершена", en: "Trip completed")
     }
-    static func notifAutoStopSummary(_ lang: LanguageManager.Language, km: String, time: String) -> String {
-        "\(km) \(AppStrings.km(lang)) · \(time)"
+    /// «12,4 км · 23 мин» — тело уведомления об автозавершении.
+    ///
+    /// Расстояние приезжает сюда УЖЕ С ПОДПИСЬЮ, готовой строкой от `Measure`,
+    /// и дописывать единицу здесь нечем и незачем. Так было не всегда: пока
+    /// параметр назывался `km:`, а подпись дописывалась вот этой самой
+    /// строкой, уведомление печатало мили и подписывало их словом «км» —
+    /// поездка в 200 км читалась с локскрина как «124,3 км». Разлучать число
+    /// и его подпись нельзя нигде, но на экране блокировки особенно: эту
+    /// строку уже не исправить, её можно только удалить.
+    static func notifAutoStopSummary(
+        _ lang: LanguageManager.Language, distance: String, time: String
+    ) -> String {
+        "\(distance) · \(time)"
     }
     static func notifAutoStopBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifAutoStopBody", ru: "Автозавершение поездки", en: "Auto-stopping trip")
