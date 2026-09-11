@@ -6356,6 +6356,90 @@ enum AppStrings {
            ru: "Спишите число с панели. Уровень машины считается по записанным поездкам и от этого не изменится.",
            en: "Copy the number from your dashboard. The vehicle level is earned from recorded trips and will not change.")
     }
+
+    // MARK: - Приборка машины (0.6.7)
+
+    /// Строка настройки в паспорте машины — та, что командует ЧИСЛАМИ С ПАНЕЛИ:
+    /// пробегом, расходом, ценой топлива.
+    ///
+    /// Не «Единицы»: так называется настройка ПРИЛОЖЕНИЯ, и два одинаковых
+    /// имени на соседних экранах слились бы в одно. «Приборка» отвечает на
+    /// вопрос «что написано вот на этой панели», а не «в чём я мыслю» — ровно
+    /// то различие, ради которого версия и делалась: американец с тойотой на
+    /// километрах и русский с американкой на милях.
+    static func vehicleDashboardTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleDashboardTitle", ru: "Приборка", en: "Dashboard units")
+    }
+
+    /// Подзаголовок строки. Он и есть ответ на «это что, ещё одни единицы?» —
+    /// без него строка «Приборка» читается как дубль настройки приложения.
+    static func vehicleDashboardSubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleDashboardSubtitle",
+           ru: "в чём показывает эта машина",
+           en: "what this car shows")
+    }
+
+    /// Умолчание — и у новой машины, и у всех заведённых до 0.6.7. Не «не
+    /// задано»: это честный ответ «показывать как везде», см. `DashboardUnits`.
+    static func dashboardUnitsApp(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "dashboardUnitsApp", ru: "Как в приложении", en: "Same as app")
+    }
+
+    /// Вариант «метрическая панель» — у машины С БАКОМ.
+    ///
+    /// Расстояние и объём названы вместе, потому что выбор один и командует
+    /// обоими: диалект расхода ВЫВОДИТСЯ из приборки и отдельной галочки не
+    /// имеет (см. `ConsumptionUnit`). У велосипеда бака нет, и там вместо этой
+    /// строки стоит одно слово — `DistanceUnit.labelFull`.
+    static func dashboardUnitsMetricFuel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "dashboardUnitsMetricFuel",
+           ru: "Километры и литры",
+           en: "Kilometres and litres")
+    }
+
+    /// Вариант «мильная панель» — у машины с баком. Галлон американский: см.
+    /// `ConsumptionUnit`, где записано, почему имперского у нас нет.
+    static func dashboardUnitsImperialFuel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "dashboardUnitsImperialFuel",
+           ru: "Мили и галлоны",
+           en: "Miles and gallons")
+    }
+
+    /// Подвал пикера: что произойдёт с уже сохранёнными числами.
+    ///
+    /// Это надо СКАЗАТЬ, а не подразумевать. В этом жанре Fleetio
+    /// ПЕРЕИМЕНОВЫВАЕТ число (142 000 км становятся 142 000 миль), Fuelly
+    /// ПЕРЕСЧИТЫВАЕТ заправки, и обоим пришлось потом писать предупреждение.
+    /// Мы делаем третье — переводим показ, храня прежнее, — и человек не
+    /// обязан угадывать, какое из трёх.
+    static func dashboardUnitsPickerFootnote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "dashboardUnitsPickerFootnote",
+           ru: "Ничего не пересчитывается: пробег, расход и цена остаются теми же величинами. Меняется единица, в которой их показывают и вводят, — число на экране станет другим, машина прежней.",
+           en: "Nothing is recalculated: the odometer, consumption and price stay the same quantities. Only the unit they are shown and typed in changes — the figure on screen moves, the car does not.")
+    }
+
+    /// Живая строка под полем ручного пробега: в чём его сейчас ждут.
+    ///
+    /// `{units}` — имя ВЫВЕДЕННОЙ единицы («Мили и галлоны»), и «Как в
+    /// приложении» в неё не подставляется никогда: человек, сверяющий поле с
+    /// панелью, спрашивает «мили или километры», а не «чей это выбор».
+    /// Подстановка стоит в начале фразы, чтобы имя единицы не попадало в
+    /// середину предложения с заглавной буквы.
+    static func dashboardUnitsFieldHint(
+        _ lang: LanguageManager.Language, units: String
+    ) -> String {
+        tr(lang, "dashboardUnitsFieldHint",
+           ru: "{units} — так показывает приборка этой машины.",
+           en: "{units} — that is what this car's dashboard reads.")
+            .replacingOccurrences(of: "{units}", with: units)
+    }
+
+    /// Хвост той же строки — и единственное в ней, что нажимается. Слово, а не
+    /// шеврон: строка идёт текстом в две-три полосы, и шеврон у переноса
+    /// оказался бы где угодно.
+    static func dashboardUnitsChange(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "dashboardUnitsChange", ru: "Поменять", en: "Change")
+    }
     /// Поездка пассажиром.
     static func tripTransferTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tripTransferTitle", ru: "Ехал пассажиром", en: "I was a passenger")

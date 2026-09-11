@@ -79,3 +79,69 @@ enum DashboardUnits: String, CaseIterable, Codable {
         }
     }
 }
+
+// MARK: - Слова
+
+/// Как выбор называется НА ЭКРАНЕ.
+///
+/// Здесь, а не в форме паспорта: имя варианта нужно в двух местах сразу —
+/// в списке выбора и в живой подсказке под полем ручного пробега, — и
+/// разъехаться этим двум написаниям нельзя. Разъехавшись, они задали бы
+/// человеку вопрос «это одна настройка или две?» ровно там, где вся версия
+/// отвечает «единица — это ответ на вопрос, откуда взято число».
+extension DashboardUnits {
+
+    /// Имя варианта в списке.
+    ///
+    /// **У велосипеда бака нет**, и «Километры и литры» на его экране — слово
+    /// про то, чего у этой машины не бывает: топливных карточек в форме у него
+    /// тоже нет, они спрятаны по `VehicleType.burnsFuel`. Поэтому там остаётся
+    /// одно расстояние — то же самое слово, которым подписан выбор единиц
+    /// приложения (`DistanceUnit.labelFull`), и новых строк на это не заведено.
+    ///
+    /// Объём назван вместе с расстоянием, а не отдельной строкой, потому что
+    /// выбор ОДИН и командует обоими: диалект расхода выводится из приборки и
+    /// собственной галочки не имеет (см. `ConsumptionUnit.forDashboard`).
+    /// Назвать в списке только километры, а поменять заодно и литры — это и
+    /// есть «экран обещает одно, а делает другое».
+    func label(_ lang: LanguageManager.Language, burnsFuel: Bool) -> String {
+        switch self {
+        case .app:
+            return AppStrings.dashboardUnitsApp(lang)
+        case .metric:
+            return burnsFuel
+                ? AppStrings.dashboardUnitsMetricFuel(lang)
+                : DistanceUnit.km.labelFull(lang)
+        case .imperial:
+            return burnsFuel
+                ? AppStrings.dashboardUnitsImperialFuel(lang)
+                : DistanceUnit.miles.labelFull(lang)
+        }
+    }
+
+    /// Имя того, что человек УВИДИТ, — «Как в приложении» из него не выходит
+    /// никогда.
+    ///
+    /// Подсказка под полем ввода отвечает на вопрос «мили или километры я
+    /// сейчас набираю», и «как в приложении» на него не отвечает: это ответ на
+    /// другой вопрос — чей это выбор. Поэтому `app` здесь разворачивается в ту
+    /// единицу, в которую он разрешился.
+    func resolvedLabel(
+        _ lang: LanguageManager.Language,
+        app appUnit: DistanceUnit,
+        burnsFuel: Bool
+    ) -> String {
+        let concrete: DashboardUnits = resolved(app: appUnit) == .miles ? .imperial : .metric
+        return concrete.label(lang, burnsFuel: burnsFuel)
+    }
+
+    /// Значок в кружке 32pt слева от имени.
+    ///
+    /// Показывает РАЗРЕШЁННУЮ единицу, поэтому у «Как в приложении» значок тот
+    /// же, что у одного из двух других вариантов, — и это не ошибка, а ответ
+    /// на «а что у меня сейчас в приложении?», заданный молча и прочитанный
+    /// глазами. Выбирают всё равно по имени: три имени различны всегда.
+    func badge(_ lang: LanguageManager.Language, app appUnit: DistanceUnit) -> String {
+        AppStrings.unitDistanceBadge(lang, unit: resolved(app: appUnit))
+    }
+}

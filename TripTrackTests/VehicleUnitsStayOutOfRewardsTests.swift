@@ -168,6 +168,46 @@ final class VehicleUnitsStayOutOfRewardsTests: XCTestCase {
                        VehicleLevelSystem.level(for: v.odometerKm))
     }
 
+    /// Пороги ЗНАЧКОВ — при любой приборке те же, и марафон берётся на 42.2
+    /// КИЛОМЕТРА даже у машины с мильной панелью.
+    ///
+    /// Половина утверждения проверяется тем, что его негде нарушить:
+    /// `BadgeManager.computeStats` принимает поездки и НИ ОДНОЙ машины — то
+    /// есть приборка в правила игры физически не приходит. Тест написан ровно
+    /// затем, чтобы это перестало быть случайностью: следующему, кто захочет
+    /// «показать марафон в милях», придётся сначала протащить машину в
+    /// сигнатуру и уронить эту строку.
+    ///
+    /// Второй половиной стоит само число: 42.2 км — это 26.2 мили, и если бы
+    /// порог однажды начали сравнивать с показанным числом, у владельца
+    /// мустанга значок перестал бы выдаваться. `ScoringStaysMetricTests`
+    /// держит тот же порог против единицы ЧЕЛОВЕКА; здесь — против единицы
+    /// МАШИНЫ.
+    func testBadgeThresholdsCannotSeeADashboardAtAll() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let marathon = Trip(startDate: start, endDate: start.addingTimeInterval(2600),
+                            distance: 42_200, maxSpeed: 30, averageSpeed: 16)
+
+        let ids = Set(BadgeManager.unlockedBadges(
+            for: BadgeManager.computeStats(from: [marathon])).map(\.id))
+
+        XCTAssertTrue(ids.contains("marathon_42"),
+                      "марафон не выдан на 42.2 километрах")
+
+        // Машина с мильной панелью существует, и ни один из трёх её вариантов
+        // ничего в этом наборе не меняет — менять ему нечем.
+        for units in DashboardUnits.allCases {
+            let owned = Trip(startDate: start, endDate: start.addingTimeInterval(2600),
+                             distance: 42_200, maxSpeed: 30, averageSpeed: 16,
+                             vehicleId: car(units).id)
+            XCTAssertEqual(
+                Set(BadgeManager.unlockedBadges(
+                    for: BadgeManager.computeStats(from: [owned])).map(\.id)),
+                ids,
+                "набор значков поехал за приборкой (\(units.rawValue))")
+        }
+    }
+
     /// Треканный пробег машины складывается из метров поездок и про приборку
     /// не спрашивает — спросить ему нечего, машина туда не приходит вовсе.
     func testTrackedOdometerIsBuiltFromMetresAndKnowsNothingAboutDashboards() {

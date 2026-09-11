@@ -78,6 +78,11 @@ struct VehicleEditFormView: View {
     /// ту же секунду.
     @State private var dashboardUnits: DashboardUnits
 
+    /// Лист выбора приборки. Свой (`SettingsOptionPicker`), а не `Menu` и не
+    /// `.confirmationDialog`: системные модалки в этом приложении не ставятся
+    /// вовсе — см. раздел «Dialogs» в CLAUDE.md.
+    @State private var showDashboardPicker = false
+
     /// Snapshot of the edited vehicle taken at init — used for
     /// changed-only saves so SyncEnqueuer isn't churned needlessly.
     private let editedVehicle: Vehicle?
@@ -232,6 +237,11 @@ struct VehicleEditFormView: View {
                 .environmentObject(lang)
                 // A sheet over a sheet does not inherit the theme override, and
                 // `scheme` is already the resolved one.
+                .preferredColorScheme(scheme)
+        }
+        .sheet(isPresented: $showDashboardPicker) {
+            dashboardUnitsPicker(lang.language)
+                .environmentObject(lang)
                 .preferredColorScheme(scheme)
         }
     }
@@ -1029,6 +1039,8 @@ struct VehicleEditFormView: View {
 
             Divider().padding(.vertical, 4)
 
+            dashboardUnitsRow(c: c, l: l)
+
             // Реальный пробег с панели. Отдельно от треканного и НЕ влияет на
             // уровень: уровень — награда за записанные поездки, а не за цифру
             // с клавиатуры.
@@ -1067,10 +1079,127 @@ struct VehicleEditFormView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(c.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            dashboardUnitsFieldHint(c: c, l: l)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .surfaceCard(cornerRadius: 16)
+    }
+
+    // MARK: - Приборка
+
+    /// Строка «Приборка» — непосредственно НАД полем ручного пробега, рядом с
+    /// тем, чем она командует.
+    ///
+    /// Не в настройках приложения: та отвечает на «в чём я мыслю», эта — на
+    /// «что написано вот на ЭТОЙ панели». У человека с тойотой и мустангом
+    /// ответы разные, и одной настройкой на аккаунт их не покрыть — ровно эту
+    /// дыру закрывает версия.
+    ///
+    /// Живёт внутри карточки пробега, то есть только у СУЩЕСТВУЮЩЕЙ машины:
+    /// при заведении вопрос не задаётся. В девяти случаях из десяти приборка
+    /// совпадает с приложением, и лишний вопрос на первом экране стоит дороже,
+    /// чем две секунды правки потом.
+    private func dashboardUnitsRow(
+        c: AppTheme.Colors, l: LanguageManager.Language
+    ) -> some View {
+        Button {
+            Haptics.tap()
+            showDashboardPicker = true
+        } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(AppStrings.vehicleDashboardTitle(l))
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(c.text)
+                    // Подзаголовок — он и есть ответ на «это что, ещё одни
+                    // единицы?». Без него строка читается как дубль настройки
+                    // приложения.
+                    Text(AppStrings.vehicleDashboardSubtitle(l))
+                        .font(.system(size: 12))
+                        .foregroundStyle(c.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(dashboardUnits.label(l, burnsFuel: selectedType.burnsFuel))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(c.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                // Шеврон, потому что строка ОТКРЫВАЕТ лист: «если нажатие
+                // что-то открывает — это видно» (CLAUDE.md).
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        // Не голый `.plain`: отклик обязан быть в момент КАСАНИЯ, а не в
+        // момент, когда откроется лист.
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("vehicle_dashboard_units")
+    }
+
+    /// Живая строка под полем: в чём число сейчас ждут — и как это поменять.
+    ///
+    /// Нажимается вся строка, подсвечено одно слово: объяснение и действие тут
+    /// одно и то же — «единица не та». Ведёт в тот же лист, что строка выше:
+    /// два входа, одна дверь. Второй вход нужен потому, что смотрят сюда в
+    /// другой момент — не выбирая настройку, а сверяя поле с панелью, — и
+    /// искать наверху объяснение того, что видишь внизу, человек не станет.
+    ///
+    /// Имя единицы берётся `resolvedLabel`: «Как в приложении» здесь не
+    /// печатается никогда — на вопрос «мили или километры я набираю» это не
+    /// ответ.
+    private func dashboardUnitsFieldHint(
+        c: AppTheme.Colors, l: LanguageManager.Language
+    ) -> some View {
+        let units = dashboardUnits.resolvedLabel(
+            l, app: distanceUnit, burnsFuel: selectedType.burnsFuel)
+        return Button {
+            Haptics.tap()
+            showDashboardPicker = true
+        } label: {
+            (Text(AppStrings.dashboardUnitsFieldHint(l, units: units))
+                .foregroundStyle(c.textTertiary)
+             + Text(" ")
+             + Text(AppStrings.dashboardUnitsChange(l))
+                .foregroundStyle(AppTheme.accent))
+                .font(.system(size: 12))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("vehicle_dashboard_units_hint")
+    }
+
+    /// Лист выбора — домашний `SettingsOptionPicker` в `contentSizedSheet`,
+    /// тот же, что носят «Единицы», «Язык» и «Тема».
+    ///
+    /// Выбор ложится в `@State`, а не сразу в базу: сохраняет его `save()`
+    /// вместе с остальной формой, а `.onChange(of: dashboardUnits)` тут же
+    /// перепечатывает набранные числа. Писать отсюда прямо в
+    /// `setDashboardUnits` значило бы сохранить единицу у человека, который
+    /// потом закрыл форму крестиком, — приборка уехала бы на сервер, а числа,
+    /// разобранные ею, нет.
+    private func dashboardUnitsPicker(_ l: LanguageManager.Language) -> some View {
+        SettingsOptionPicker(
+            title: AppStrings.vehicleDashboardTitle(l),
+            // `allCases`, а не три перечисленных значения: четвёртая единица
+            // (британский микс) появится в списке сама, а не окажется
+            // выбором, до которого в интерфейсе не дойти.
+            options: DashboardUnits.allCases,
+            selection: dashboardUnits,
+            footnote: AppStrings.dashboardUnitsPickerFootnote(l),
+            badge: { $0.badge(l, app: distanceUnit) },
+            label: { $0.label(l, burnsFuel: selectedType.burnsFuel) },
+            onSelect: { dashboardUnits = $0 },
+            accessibilityPrefix: "vehicle_dashboard_units"
+        )
     }
 
     // MARK: - Save
