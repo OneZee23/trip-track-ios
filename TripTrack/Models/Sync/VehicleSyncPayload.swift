@@ -21,6 +21,13 @@ struct VehicleSyncPayload: Codable {
     var soldAtKnown: Bool = false
     let level: Int
     let stickersJson: String?
+    /// Расход — литры на сотню КИЛОМЕТРОВ, цена — за ЛИТР. Всегда, при любой
+    /// приборке и при любой настройке приложения.
+    ///
+    /// Названо вслух, потому что число без единицы в проводе — это способ
+    /// потерять историю целиком: у Gas Cubby «Online Sync only stores the
+    /// numbers, not the units», и восстановить её не смог никто. Галлоны и mpg
+    /// появляются только на экране, вместе с подписью.
     let cityConsumption: Double
     let highwayConsumption: Double
     let fuelPrice: Double
@@ -44,6 +51,19 @@ struct VehicleSyncPayload: Codable {
     let plateVisible: Bool?
     let visibleToOthers: Bool?
     let fuelCurrency: String?
+    /// В чём показывает приборка этой машины (`DashboardUnits`).
+    ///
+    /// Опционально, и `nil` означает ровно одно: «про это поле не сказано» —
+    /// старый сервер без колонки либо значение, которого мы не знаем (его
+    /// отбросил разбор). Читается вызывающим как «локальное не трогаю», и это
+    /// та же дверь, через которую однажды проедет четвёртая единица.
+    ///
+    /// `...Known`-флага у него НЕТ, и он не нужен: у `manualOdometerKm` и
+    /// `soldAt` пустота — это ОТВЕТ человека («стёр пробег», «отменил
+    /// продажу»), который обязан доехать явным `null`. Здесь пустого ответа не
+    /// существует: «как в приложении» — это значение `app`, а не отсутствие
+    /// значения. Ровно ради этого поле и сделано неопциональным в модели.
+    let dashboardUnits: DashboardUnits?
 
     // Паспорт (0.6.4). Опциональные, как и всё, что появилось после первого
     // релиза: сервер до 0.6.4 этих ключей не знает, и их отсутствие обязано
@@ -77,6 +97,7 @@ struct VehicleSyncPayload: Codable {
         plateVisible: Bool? = nil,
         visibleToOthers: Bool? = nil,
         fuelCurrency: String? = nil,
+        dashboardUnits: DashboardUnits? = nil,
         about: String? = nil,
         make: String? = nil,
         model: String? = nil,
@@ -114,6 +135,7 @@ struct VehicleSyncPayload: Codable {
         self.plateVisible = plateVisible
         self.visibleToOthers = visibleToOthers
         self.fuelCurrency = fuelCurrency
+        self.dashboardUnits = dashboardUnits
     }
 
     // MARK: - Codable вручную
@@ -140,7 +162,7 @@ struct VehicleSyncPayload: Codable {
         case id, name, avatarEmoji, odometerKm, manualOdometerKm, level
         case stickersJson, cityConsumption, highwayConsumption, fuelPrice
         case conflictVersion, lastModifiedAt, vehicleType, avatarStyle
-        case plate, plateVisible, visibleToOthers, fuelCurrency
+        case plate, plateVisible, visibleToOthers, fuelCurrency, dashboardUnits
         case about, make, model, year, bodyType
         case mapVisible, photosVisible, isArchived, soldAt
     }
@@ -176,6 +198,17 @@ struct VehicleSyncPayload: Codable {
         plateVisible = try c.decodeIfPresent(Bool.self, forKey: .plateVisible)
         visibleToOthers = try c.decodeIfPresent(Bool.self, forKey: .visibleToOthers)
         fuelCurrency = try c.decodeIfPresent(String.self, forKey: .fuelCurrency)
+        // Строкой, а не типом, и через `try?` — обе оговорки про одно и то же.
+        // `decodeIfPresent(DashboardUnits.self)` на незнакомом значении
+        // БРОСАЕТ, а брошенное здесь роняет не поле, а весь ответ пула:
+        // человек остаётся без поездок, снимков и машин из-за подсказки для
+        // показа. Асимметрия та же, на которой сервер отказался от белого
+        // списка в валидаторе: отказ стоит машины целиком, отброшенный ключ —
+        // одной настройки, которую телефон дошлёт следующим апсертом.
+        // Незнакомое значение, чужой тип и отсутствие ключа здесь одинаково
+        // дают `nil`, а `nil` значит «не трогать локальное».
+        dashboardUnits = DashboardUnits.parse(
+            (try? c.decodeIfPresent(String.self, forKey: .dashboardUnits)) ?? nil)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -199,6 +232,7 @@ struct VehicleSyncPayload: Codable {
         try c.encodeIfPresent(plateVisible, forKey: .plateVisible)
         try c.encodeIfPresent(visibleToOthers, forKey: .visibleToOthers)
         try c.encodeIfPresent(fuelCurrency, forKey: .fuelCurrency)
+        try c.encodeIfPresent(dashboardUnits?.rawValue, forKey: .dashboardUnits)
         try c.encodeIfPresent(about, forKey: .about)
         try c.encodeIfPresent(make, forKey: .make)
         try c.encodeIfPresent(model, forKey: .model)

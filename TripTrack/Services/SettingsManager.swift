@@ -849,6 +849,12 @@ final class SettingsManager: ObservableObject {
         // с ними одно выражение перестало проверяться по типам за разумное
         // время («unable to type-check this expression in reasonable time»).
         // Разбиение — не стилевая прихоть, а условие сборки.
+        // Приборка — сюда же и по той же причине. Нераспознанное значение
+        // (машина приехала с клиента, который знает четвёртую единицу)
+        // показывается как «как в приложении»: печатать в единице, которой
+        // этот бинарник не знает, всё равно нечем. Сама строка в базе при этом
+        // остаётся нетронутой — её не перезапишет никто, кроме человека.
+        v.dashboardUnits = DashboardUnits.parse(entity.dashboardUnits) ?? .app
         v.about = entity.about ?? ""
         v.make = entity.make ?? ""
         v.model = entity.model ?? ""
@@ -1004,6 +1010,35 @@ final class SettingsManager: ObservableObject {
         loadVehicles()
         Task { @MainActor in
             SyncEnqueuer.enqueue(SyncOperation(entityType: .vehicle, entityId: id, action: .update))
+        }
+    }
+
+    /// Записать, в чём показывает приборка этой машины.
+    ///
+    /// Ничего не пересчитывает и ничего не переписывает: хранение метрическое,
+    /// 142 000 километров остаются теми же километрами — меняется только
+    /// единица, в которой их печатают и вводят. (Мы здесь третьи: Fleetio
+    /// ПЕРЕИМЕНОВЫВАЕТ число, Fuelly ПЕРЕСЧИТЫВАЕТ заправки, и обоим пришлось
+    /// написать про это предупреждение. Своё поведение надо называть вслух —
+    /// подпись в подвале пикера.)
+    ///
+    /// `pendingUpload` + операция в очереди — как у ручного пробега. Без
+    /// первого приехавший пул считает машину «синхронизированной» и молча
+    /// кладёт поверх серверное значение; без второй выбор уедет в лучшем
+    /// случае на следующем запуске, через восстановление зависших сущностей.
+    func setDashboardUnits(vehicleId: UUID, _ units: DashboardUnits) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", vehicleId as CVarArg)
+        request.fetchLimit = 1
+        guard let entity = try? context.fetch(request).first else { return }
+        entity.dashboardUnits = units.rawValue
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        loadVehicles()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(
+                SyncOperation(entityType: .vehicle, entityId: vehicleId, action: .update))
         }
     }
 

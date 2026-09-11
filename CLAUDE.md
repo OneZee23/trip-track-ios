@@ -314,9 +314,9 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   телефоне (`JourneyEditSheet.startBounds`/`endBounds`,
   `JourneyEditWindowTests`).
 
-## CoreData Schema (versioned, v12 — 0.6.6)
+## CoreData Schema (versioned, v13 — 0.6.7)
 
-`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v12 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`).
+`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v13 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`).
 
 **Внимание:** `VehiclePhotoEntity` связи с машиной НЕ имеет — `vehicleId` это
 обычный атрибут. Значит каскад её не заберёт: удаление машины и стирание
@@ -468,6 +468,45 @@ git log --format='%s|%(trailers:key=Co-Authored-By)' origin/master..HEAD
   добавлено рядом, существующие поля не переименованы: активность, начатая
   старым бинарником и пережившая обновление, иначе перестанет декодироваться и
   умрёт посреди поездки.
+
+### Единица МАШИНЫ отдельно от единицы человека (0.6.7)
+
+«У меня целиком по приложению мили, а тойота с километровой панелью» — и
+наоборот, американка в РФ-гараже. Вопрос, который решает спор на любом экране,
+один: **если человек сейчас глянет на панель, он увидит ровно это число?** Да —
+единица машины (`Vehicle.dashboardUnits`), нет — единица человека
+(`DistanceUnit`).
+
+- **`DashboardUnits` — три значения, неопциональное, умолчание `.app`.**
+  `app | metric | imperial`, `rawValue` менять нельзя: это колонка
+  `VehicleEntity.dashboardUnits` (v13), поле `VehicleSyncPayload.dashboardUnits`
+  и колонка `vehicle.dashboard_units` на сервере. Двузначный выбор потребовал
+  бы выбрать умолчание для УЖЕ заведённых машин, а у машины, заведённой до
+  0.6.7, ответа на вопрос «что у неё на панели» не существует — любой выбор
+  молча переставил бы цифры половине людей. `app` — единственное умолчание,
+  при котором миграция физически не может никому сменить показания.
+- **Хранение метрическое ВСЕГДА.** `odometerKm` — километры, расход — литры на
+  сотню километров, цена — за литр. Единица машины живёт строго на границе
+  показа и разбора; смена настройки не пересчитывает в базе НИЧЕГО (и это
+  сказано человеку в подвале пикера: мы здесь третьи — Fleetio переименовывает
+  число, Fuelly пересчитывает заправки).
+- **До наград не доходит НИКОГДА** — ни до `scoringKm`, ни до опыта, уровня
+  машины, порогов значков, `VehicleOdometer`. Держит
+  `VehicleUnitsStayOutOfRewardsTests`: он читает сами исходники наградных и
+  сводных файлов, потому что про награду, которую напишут в 0.6.8,
+  поведенческий тест не скажет ничего.
+- **Сумма по нескольким машинам — всегда единица приложения.** Ни одна функция,
+  куда приходит больше одной машины, не имеет права спрашивать машину: у суммы
+  миль и километров единицы не существует. Поэтому `Vehicle.dashboardUnit(app:)`
+  — функция ОТ единицы человека, а не чтение глобального выбора.
+- **`nil` на проводе = «не сказано», а не `app`.** Старый сервер, незнакомое
+  значение и чужой тип дают одно и то же — локальное не трогаем (`try?` +
+  `DashboardUnits.parse`). Через эту же дверь однажды проедет четвёртая
+  единица (британский микс), не роняя разбор гаража. И `applyRemoteVehicle`
+  держит поле пятым к четырём осям видимости: пока правка не уехала, побеждает
+  она — вернувшееся имя машины досада, а вернувшаяся единица приборки это
+  НЕВЕРНОЕ ЧИСЛО В БАЗЕ (введённые с километровой панели 142 000 уедут как
+  228 527).
 
 ## Localization & Theming
 

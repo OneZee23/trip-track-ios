@@ -36,12 +36,39 @@ struct Vehicle: Identifiable, Codable {
     var level: Int
     var stickers: [VehicleSticker]
     var createdAt: Date
-    var cityConsumption: Double   // L/100km (or equivalent)
+    /// Расход в городе — литры на сотню КИЛОМЕТРОВ. Всегда, при любой
+    /// приборке и при любой настройке приложения.
+    ///
+    /// Здесь стояло «или эквивалент», и это была записанная мина: число без
+    /// единицы в проводе. Ровно так Gas Cubby уничтожил людям историю
+    /// заправок — «Online Sync only stores the numbers, not the units», —
+    /// и восстановить её не смог никто. Эквивалента больше нет: в mpg и в
+    /// литры на сотню миль число превращает `ConsumptionUnit` на границе
+    /// показа, а обратно — разбор поля ввода. В модель, в базу и на сервер
+    /// уезжает одна и та же нормализованная величина.
+    var cityConsumption: Double
+    /// Расход на трассе — те же литры на сотню километров.
     var highwayConsumption: Double
-    var fuelPrice: Double          // per liter/gallon
+    /// Цена топлива — за ЛИТР. Не за галлон и не «за то, что выбрано»: см.
+    /// `cityConsumption` выше. Галлон появляется только на экране, вместе с
+    /// подписью, и только у машины, у которой на панели мили.
+    var fuelPrice: Double
     /// Currency symbol for this vehicle's fuel price. Per-vehicle because a
     /// second car can live in a second country; a trip may still override it.
     var fuelCurrency: String
+    /// В чём показывает приборка ЭТОЙ машины. См. `DashboardUnits`.
+    ///
+    /// Неопциональное с умолчанием `.app`: «не задано» и «как в приложении» —
+    /// один и тот же ответ, и разводить их значило бы завести третью копию
+    /// механики `...Known`-флагов, на которой в этом файле уже умирала кнопка
+    /// «Вернуть из проданных».
+    ///
+    /// Командует ровно тремя вещами и только у своей машины: полем ввода
+    /// ручного пробега, одометрным блоком паспорта и топливным блоком. Всё
+    /// остальное — расстояния поездок, итоги, рекорды, «до уровня»,
+    /// статистика, путешествия — единица ЧЕЛОВЕКА, а награды метрические
+    /// всегда.
+    var dashboardUnits: DashboardUnits
 
     // MARK: - Паспорт машины (0.6.4)
 
@@ -101,6 +128,7 @@ struct Vehicle: Identifiable, Codable {
          createdAt: Date = Date(),
          cityConsumption: Double = 10.0, highwayConsumption: Double = 6.0,
          fuelPrice: Double = 56.0, fuelCurrency: String = FuelCurrency.current,
+         dashboardUnits: DashboardUnits = .app,
          about: String = "", make: String = "", model: String = "",
          year: Int = 0, bodyType: String = "",
          photosVisible: Bool = false, mapVisible: Bool = true,
@@ -131,6 +159,7 @@ struct Vehicle: Identifiable, Codable {
         self.highwayConsumption = highwayConsumption
         self.fuelPrice = fuelPrice
         self.fuelCurrency = fuelCurrency
+        self.dashboardUnits = dashboardUnits
     }
 
     /// Decoding tolerates payloads written before these fields existed —
@@ -161,6 +190,15 @@ struct Vehicle: Identifiable, Codable {
         fuelPrice = try c.decode(Double.self, forKey: .fuelPrice)
         fuelCurrency = try c.decodeIfPresent(String.self, forKey: .fuelCurrency)
             ?? FuelCurrency.current
+        // Строкой, а не типом: `decodeIfPresent(DashboardUnits.self)` на
+        // незнакомом значении БРОСАЕТ, то есть роняет всю машину целиком из-за
+        // одного поля — а незнакомое значение приедет с первого же клиента,
+        // который узнает про четвёртую единицу. Отсутствие ключа и
+        // нераспознанное значение здесь одинаково означают «как в приложении»:
+        // для только что раскодированной машины локального значения, которое
+        // можно было бы сохранить, ещё не существует.
+        dashboardUnits = DashboardUnits.parse(
+            (try? c.decodeIfPresent(String.self, forKey: .dashboardUnits)) ?? nil) ?? .app
 
         // Поля паспорта (0.6.4). Все через `decodeIfPresent` с умолчанием: их
         // не шлёт ни один сохранённый payload и ни один сервер до 0.6.4, и
@@ -266,6 +304,22 @@ struct Vehicle: Identifiable, Codable {
     var untrackedKm: Double? {
         guard let manual = manualOdometerKm, manual > odometerKm else { return nil }
         return manual - odometerKm
+    }
+
+    /// В чём печатать и разбирать числа ЭТОЙ машины, зная единицу человека.
+    ///
+    /// Ровно три места имеют право её звать: поле ввода ручного пробега,
+    /// одометрный блок паспорта и топливный блок (плюс расход поездки — по
+    /// машине ТОЙ поездки). Четвёртое место — это уже расползание, на котором
+    /// aCar получил жалобы «смесь KM и Miles»: единица машины, попавшая в
+    /// общий экран, превращает список в набор несравнимых чисел.
+    ///
+    /// Функция от единицы человека, а не чтение глобального выбора: так
+    /// вызывающий обязан сказать вслух, чью единицу он подставляет, а сумма по
+    /// нескольким машинам физически не может сюда попасть — ей нечего
+    /// спрашивать.
+    func dashboardUnit(app appUnit: DistanceUnit) -> DistanceUnit {
+        dashboardUnits.resolved(app: appUnit)
     }
 
     /// От какого числа считается уровень. ВСЕГДА треканный: уровень — награда
