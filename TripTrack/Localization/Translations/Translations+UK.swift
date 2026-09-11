@@ -138,7 +138,6 @@ extension Translations {
         "onlyCurrentWeek": "лише поточний тиждень",
         "thisWeek": "Цей тиждень",
         "quickStats": "Статистика",
-        "consumption": "Витрата л/100км",
         "distance": "Відстань",
         "duration": "Час",
         "avgSpeed": "Сер. швидкість",

@@ -138,7 +138,6 @@ extension Translations {
         "onlyCurrentWeek": "sadece bu hafta",
         "thisWeek": "Bu hafta",
         "quickStats": "İstatistik",
-        "consumption": "L/100 km",
         "distance": "Mesafe",
         "duration": "Süre",
         "avgSpeed": "Ortalama hız",

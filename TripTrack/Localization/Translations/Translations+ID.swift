@@ -138,7 +138,6 @@ extension Translations {
         "onlyCurrentWeek": "hanya minggu ini",
         "thisWeek": "Minggu ini",
         "quickStats": "Statistik",
-        "consumption": "L/100 km",
         "distance": "Jarak",
         "duration": "Waktu",
         "avgSpeed": "Kecepatan rata-rata",

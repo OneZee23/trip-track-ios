@@ -1552,8 +1552,6 @@ struct PublicProfileView: View {
         }
     }
 
-    /// «142», «21,5» — a trailing «.0» on a whole number is the thing that
-    /// makes a card look machine-printed.
     /// Wraps a trip tile in a button where a trip can actually be opened, and
     /// leaves it exactly as it is where it can't — see `canOpenTrips`.
     @ViewBuilder

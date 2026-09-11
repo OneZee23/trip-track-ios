@@ -193,7 +193,9 @@ final class UnitLabelTests: XCTestCase {
         // 212 км — это 131.7 мили.
         XCTAssertEqual(AppStrings.chartDistanceMark(.ru, unit: .km, km: 212), "212-й км")
         XCTAssertEqual(AppStrings.chartDistanceMark(.ru, unit: .miles, km: 212), "132-я миля")
-        XCTAssertEqual(AppStrings.chartDistanceMark(.uk, unit: .miles, km: 212), "132-та миля")
+        // «сто тридцять друга» — «-га», а не «-та»: наращение выбирает
+        // последнее слово числительного (см. тест ниже).
+        XCTAssertEqual(AppStrings.chartDistanceMark(.uk, unit: .miles, km: 212), "132-га миля")
         XCTAssertEqual(AppStrings.chartDistanceMark(.kk, unit: .miles, km: 212), "132-миля")
         XCTAssertEqual(AppStrings.chartDistanceMark(.en, unit: .miles, km: 212), "mi 132")
         // Ни один язык не отдаёт пустое и ни один не оставляет «km» в мильной
@@ -208,6 +210,57 @@ final class UnitLabelTests: XCTestCase {
                            "\(lang.rawValue): в милях осталось «км» — \(mark)")
             XCTAssertTrue(mark.contains("132"),
                           "\(lang.rawValue): число не перевелось — \(mark)")
+        }
+    }
+
+    /// Украинское порядковое женского рода меняет наращение по ПОСЛЕДНЕМУ
+    /// слову числительного, а не одно на всех.
+    ///
+    /// Мильная таблица родилась с фиксированным «-та», и это верно меньше чем
+    /// для половины чисел: «221-та миля» вместо «221-ша», «222-та» вместо
+    /// «222-га». Русскую соседку это не касается — там все женские порядковые
+    /// на «-ая/-яя», и «-я» подходит любому числу.
+    func testUkrainianOrdinalFollowsTheLastWord() {
+        func mile(_ n: Int) -> String {
+            AppStrings.chartMileMark(.uk, miles: Double(n))
+        }
+        XCTAssertEqual(mile(1), "1-ша миля")     // перша
+        XCTAssertEqual(mile(2), "2-га миля")     // друга
+        XCTAssertEqual(mile(3), "3-тя миля")     // третя
+        XCTAssertEqual(mile(4), "4-та миля")     // четверта
+        XCTAssertEqual(mile(7), "7-ма миля")     // сьома
+        XCTAssertEqual(mile(8), "8-ма миля")     // восьма
+        XCTAssertEqual(mile(11), "11-та миля")   // одинадцята — не «-ша»
+        XCTAssertEqual(mile(12), "12-та миля")   // дванадцята — не «-га»
+        XCTAssertEqual(mile(21), "21-ша миля")
+        XCTAssertEqual(mile(22), "22-га миля")
+        XCTAssertEqual(mile(40), "40-ва миля")   // сорокова
+        XCTAssertEqual(mile(50), "50-та миля")   // п'ятдесята
+        XCTAssertEqual(mile(100), "100-та миля") // сота
+        XCTAssertEqual(mile(211), "211-та миля") // двісті одинадцята
+        XCTAssertEqual(mile(221), "221-ша миля")
+        XCTAssertEqual(mile(1000), "1000-на миля") // тисячна
+    }
+
+    /// Карточка неоткрытого региона на «Моей карте»: «0 км · 0 поездок · 0 из
+    /// 26 городов».
+    ///
+    /// Ноль есть ноль в любой единице — соврать тут может только ПОДПИСЬ, и
+    /// она врала: до 0.6.7 функция звала `AppStrings.km` напрямую и печатала
+    /// километры человеку, выбравшему мили. Последнее такое место в проекте.
+    func testLockedRegionCardFollowsTheUnit() {
+        XCTAssertTrue(AppStrings.mapLockedStats(.ru, unit: .km, totalCities: 26)
+            .hasPrefix("0 км"))
+        XCTAssertTrue(AppStrings.mapLockedStats(.ru, unit: .miles, totalCities: 26)
+            .hasPrefix("0 миль"))
+        XCTAssertTrue(AppStrings.mapLockedStats(.en, unit: .miles, totalCities: 26)
+            .hasPrefix("0 mi"))
+        for lang in langs {
+            let line = AppStrings.mapLockedStats(lang, unit: .miles, totalCities: 26)
+            XCTAssertFalse(line.contains("км"),
+                           "\(lang.rawValue): в милях осталось «км» — \(line)")
+            XCTAssertFalse(line.hasPrefix("0 km"),
+                           "\(lang.rawValue): в милях осталось «km» — \(line)")
         }
     }
 }

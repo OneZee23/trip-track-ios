@@ -2,7 +2,17 @@ import ActivityKit
 import Foundation
 
 struct TripActivityAttributes: ActivityAttributes {
-    /// Static data — set once when the activity starts
+    /// Static data — set once when the activity starts.
+    ///
+    /// Та же мина, что этажом ниже у `ContentState`, только заряженная на
+    /// будущее: эти четыре поля тоже декодируются у активности, пережившей
+    /// обновление, и тоже синтезированным `Decodable`, который на пропущенном
+    /// ключе бросает `keyNotFound`, а не берёт значение по умолчанию. Сегодня
+    /// это безопасно ровно потому, что все четыре поля существуют с первой
+    /// версии. **Пятое поле обязано приехать сюда с `decodeIfPresent` и
+    /// ручным `init(from:)` в расширении** — иначе карточка умрёт посреди
+    /// поездки у всех, кто обновился на ходу, и увидит это только владелец
+    /// телефона, а не сборка.
     var tripId: UUID
     var startDate: Date
     var vehicleName: String

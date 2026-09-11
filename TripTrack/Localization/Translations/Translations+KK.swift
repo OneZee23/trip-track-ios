@@ -138,7 +138,6 @@ extension Translations {
         "onlyCurrentWeek": "тек ағымдағы апта",
         "thisWeek": "Осы апта",
         "quickStats": "Статистика",
-        "consumption": "Л/100 км",
         "distance": "Қашықтық",
         "duration": "Уақыт",
         "avgSpeed": "Орташа жылдамдық",

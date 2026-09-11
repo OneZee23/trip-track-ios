@@ -138,7 +138,6 @@ extension Translations {
         "onlyCurrentWeek": "solo la settimana corrente",
         "thisWeek": "Questa settimana",
         "quickStats": "Statistiche",
-        "consumption": "L/100 km",
         "distance": "Distanza",
         "duration": "Tempo",
         "avgSpeed": "Velocità media",

@@ -138,7 +138,6 @@ extension Translations {
         "onlyCurrentWeek": "kasalukuyang linggo lang",
         "thisWeek": "Ngayong linggo",
         "quickStats": "Estadistika",
-        "consumption": "L/100 km",
         "distance": "Distansya",
         "duration": "Oras",
         "avgSpeed": "Aberids na bilis",

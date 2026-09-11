@@ -756,7 +756,8 @@ struct MyMapSheet: View {
         .padding(.top, 16)
 
         Text(AppStrings.mapLockedStats(
-            lang.language, totalCities: RegionAtlas.shared.cities(in: region.id).count))
+            lang.language, unit: distanceUnit,
+            totalCities: RegionAtlas.shared.cities(in: region.id).count))
             .font(.inter(14))
             .foregroundStyle(c.textSecondary)
             .padding(.horizontal, 16)

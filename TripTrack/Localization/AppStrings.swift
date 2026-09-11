@@ -586,9 +586,6 @@ enum AppStrings {
     static func quickStats(_ lang: LanguageManager.Language) -> String {
         tr(lang, "quickStats", ru: "Статистика", en: "Quick stats")
     }
-    static func consumption(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "consumption", ru: "Расход л/100км", en: "L/100km")
-    }
     static func pricePerLiter(_ lang: LanguageManager.Language) -> String {
         let c = FuelCurrency.current
         switch lang {
@@ -1076,10 +1073,18 @@ enum AppStrings {
         tr(lang, "mapRegionLocked", ru: "ещё не открыт", en: "not opened yet")
     }
     /// «0 км · 0 поездок · 0 из 26 городов» — the zeroes are the point.
-    static func mapLockedStats(_ lang: LanguageManager.Language, totalCities: Int) -> String {
+    ///
+    /// Ноль есть ноль в любой единице, и величина здесь соврать не может —
+    /// а подпись может: до 0.6.7 она была прибита к «км» и печатала их
+    /// человеку, выбравшему мили. Поэтому единица тут параметр, как у соседней
+    /// `mapLockedTeaser`, хотя число всегда одно и то же.
+    static func mapLockedStats(
+        _ lang: LanguageManager.Language, unit: DistanceUnit, totalCities: Int
+    ) -> String {
+        let zeroDistance = "0 \(unitDistanceShort(lang, unit: unit, value: 0, fractionDigits: 0))"
         let zeroTrips = "0 \(nounTrips(lang, 0))"
         let cities = "0 \(ofWord(lang)) \(totalCities) \(nounCities(lang, totalCities))"
-        return "0 \(AppStrings.km(lang)) · \(zeroTrips) · \(cities)"
+        return "\(zeroDistance) · \(zeroTrips) · \(cities)"
     }
     /// «Ближайший твой след — 40 км западнее: Кропоткин, май 2026.
     /// Заедешь — регион загорится на карте.»
@@ -2219,9 +2224,41 @@ enum AppStrings {
         case .id: return "mi \(n)"
         case .tr: return "\(n). mi"
         case .fil: return "mi \(n)"
-        case .uk: return "\(n)-та миля"
+        case .uk: return "\(n)-\(ukrainianOrdinalFeminine(n)) миля"
         case .kk: return "\(n)-миля"
         case .pt: return "mi \(n)"
+        }
+    }
+
+    /// Наращение украинского порядкового ЖЕНСКОГО рода: «1-ша», «2-га»,
+    /// «3-тя», «7-ма», «40-ва», «1000-на», у остальных «-та».
+    ///
+    /// В русском такой функции нет и не нужно: все женские порядковые
+    /// оканчиваются на «-ая/-яя», поэтому «212-я» верно для любого числа. В
+    /// украинском форм пять, и выбирает их ПОСЛЕДНЕЕ слово числительного:
+    /// «двісті двадцять перша» — «221-ша», «двісті двадцять друга» —
+    /// «222-га». Фиксированное «-та», стоявшее здесь при рождении мильной
+    /// таблицы, верно только для окончаний 4, 5, 6, 9 и для 11–19.
+    ///
+    /// Единственный вызывающий — `chartMileMark`. Километровая отметка рядом
+    /// наращения не требует: «км» мужского рода, и «-й» подходит всем.
+    private static func ukrainianOrdinalFeminine(_ n: Int) -> String {
+        let value = abs(n)
+        // Одинадцята … дев'ятнадцята — все на «-та», и последняя цифра тут
+        // ничего не решает: «111-та», а не «111-ша».
+        if (11...19).contains(value % 100) { return "та" }
+        switch value % 10 {
+        case 1: return "ша"   // перша
+        case 2: return "га"   // друга
+        case 3: return "тя"   // третя
+        case 7, 8: return "ма" // сьома, восьма
+        case 0:
+            // Круглые числа идут не по цифре, а по слову: сорокова и тисячна
+            // выпадают из общего «-та».
+            if value % 100 == 40 { return "ва" }
+            if value != 0, value % 1000 == 0 { return "на" }
+            return value == 0 ? "ва" : "та" // нульова / десята, сота
+        default: return "та"  // четверта, п'ята, шоста, дев'ята
         }
     }
 
