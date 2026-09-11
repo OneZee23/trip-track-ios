@@ -417,13 +417,17 @@ final class KalmanLocationFilter {
 
         // Compute speed and course from velocity state
         let speed = sqrt(x[2] * x[2] + x[3] * x[3])
-        let course: Double
+        // Курс, которого не было, остаётся −1: это язык CoreLocation для «не
+        // знаю», и его понимают все, кто читает эти точки. Прежняя строка
+        // нормализации прибавляла к нему 360 и выдавала 359° — то есть
+        // «почти строго на север», неотличимое от измерения.
+        let normalizedCourse: Double
         if speed > 0.5 {
-            course = atan2(x[2], x[3]) * 180.0 / .pi
+            let bearing = atan2(x[2], x[3]) * 180.0 / .pi
+            normalizedCourse = bearing < 0 ? bearing + 360.0 : bearing
         } else {
-            course = lastCourse
+            normalizedCourse = lastCourse
         }
-        let normalizedCourse = course < 0 ? course + 360.0 : course
 
         return CLLocation(
             coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),

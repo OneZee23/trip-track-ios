@@ -6,7 +6,17 @@ import Combine
 struct LocationUpdate {
     let coordinate: CLLocationCoordinate2D
     let speed: CLLocationSpeed // м/с
-    let course: CLLocationDirection // градусы, 0 = север
+    /// Градусы, 0 = север. `nil` — курс неизвестен, и это НЕ ноль.
+    ///
+    /// До 0.6.7 здесь стояло `location.course >= 0 ? location.course : 0`, то
+    /// есть «не знаю» превращалось в «строго на север». Разницу было не видно,
+    /// пока курс никто не показывал: маркер был видом сбоку и умел только
+    /// зеркалиться. Маркер сверху показал бы её сразу — машина на парковке
+    /// демонстративно смотрит на север. И тихо портилось не только это:
+    /// `toCLLocation()` отдаёт эти данные фильтру Калмана, а тот отличает
+    /// известный курс от неизвестного ровно по знаку и с нулём считал выдумку
+    /// за настоящее измерение.
+    let course: CLLocationDirection?
     let altitude: CLLocationDistance // метры
     let timestamp: Date
     let horizontalAccuracy: CLLocationAccuracy
@@ -16,7 +26,7 @@ struct LocationUpdate {
         LocationUpdate(
             coordinate: location.coordinate,
             speed: max(0, location.speed),
-            course: location.course >= 0 ? location.course : 0,
+            course: location.course >= 0 ? location.course : nil,
             altitude: location.altitude,
             timestamp: location.timestamp,
             horizontalAccuracy: location.horizontalAccuracy
@@ -30,7 +40,9 @@ struct LocationUpdate {
             altitude: altitude,
             horizontalAccuracy: horizontalAccuracy,
             verticalAccuracy: 0,
-            course: course,
+            // −1 — это язык CoreLocation для «курс неизвестен»; его и понимают
+            // все, кто читает эти точки дальше.
+            course: course ?? -1,
             speed: speed,
             timestamp: timestamp
         )
