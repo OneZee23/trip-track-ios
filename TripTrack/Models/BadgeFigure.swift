@@ -59,7 +59,8 @@ struct BadgeFigure {
         case .distance:
             parts = Measure.distanceParts(km: value, unit: unit, lang: lang, style: style)
         case .speed:
-            parts = Measure.speedParts(ms: value / 3.6, unit: unit, lang: lang)
+            parts = Measure.speedParts(
+                ms: DistanceUnit.km.metresPerSecond(fromSpeed: value), unit: unit, lang: lang)
         case .elevation:
             parts = Measure.elevationParts(metres: value, unit: unit, lang: lang)
         }

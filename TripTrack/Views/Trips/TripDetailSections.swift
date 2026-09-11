@@ -566,11 +566,16 @@ struct ElevationChartCard: View {
                     .foregroundStyle(c.textSecondary)
             }
 
+            // Имена колонок для Charts — «distance»/«altitude», а не «km»/«m».
+            // Обе оси скрыты, так что на экран эти строки не попадают вовсе —
+            // они уезжают в дерево доступности, и единица в них была бы
+            // враньём при выборе миль. У соседнего графика она враньём уже и
+            // была: там стояло «kmh», а серия с 0.6.5 везёт метры в секунду.
             Chart(series) { pt in
                 AreaMark(
-                    x: .value("km", pt.x),
+                    x: .value("distance", pt.x),
                     yStart: .value("base", yDomain.lowerBound),
-                    yEnd: .value("m", pt.y)
+                    yEnd: .value("altitude", pt.y)
                 )
                 .foregroundStyle(AppTheme.green.opacity(0.18))
                 .interpolationMethod(.monotone)
@@ -580,7 +585,7 @@ struct ElevationChartCard: View {
                 // mountain pass it is the shape of the pass.
                 if pt.hasBand {
                     AreaMark(
-                        x: .value("km", pt.x),
+                        x: .value("distance", pt.x),
                         yStart: .value("min", pt.yMin),
                         yEnd: .value("max", pt.yMax)
                     )
@@ -588,18 +593,18 @@ struct ElevationChartCard: View {
                     .interpolationMethod(.monotone)
                 }
 
-                LineMark(x: .value("km", pt.x), y: .value("m", pt.y))
+                LineMark(x: .value("distance", pt.x), y: .value("altitude", pt.y))
                     .foregroundStyle(AppTheme.green)
                     .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                     .interpolationMethod(.monotone)
 
                 if let sel = selection {
-                    RuleMark(x: .value("km", sel.point.x))
+                    RuleMark(x: .value("distance", sel.point.x))
                         .foregroundStyle(AppTheme.accent.opacity(0.55))
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
                     PointMark(
-                        x: .value("km", sel.point.x),
-                        y: .value("m", sel.point.y)
+                        x: .value("distance", sel.point.x),
+                        y: .value("altitude", sel.point.y)
                     )
                     .foregroundStyle(AppTheme.accent)
                     .symbolSize(60)
@@ -659,7 +664,8 @@ struct SpeedChartCard: View {
     private var yDomain: ClosedRange<Double> {
         // Пол шкалы — те же 10 км/ч, что и были, записанные в СИ: серия
         // теперь метры в секунду, а не километры в час.
-        let hi = max(series.map { $0.hasBand ? $0.yMax : $0.y }.max() ?? 1, 10 / 3.6)
+        let hi = max(series.map { $0.hasBand ? $0.yMax : $0.y }.max() ?? 1,
+                     DistanceUnit.km.metresPerSecond(fromSpeed: 10))
         return 0...(hi * 1.1)
     }
 
@@ -699,7 +705,7 @@ struct SpeedChartCard: View {
                 // 60. The band says both happened.
                 if pt.hasBand {
                     AreaMark(
-                        x: .value("km", pt.x),
+                        x: .value("distance", pt.x),
                         yStart: .value("min", pt.yMin),
                         yEnd: .value("max", pt.yMax)
                     )
@@ -707,7 +713,7 @@ struct SpeedChartCard: View {
                     .interpolationMethod(.monotone)
                 }
 
-                LineMark(x: .value("km", pt.x), y: .value("kmh", pt.y))
+                LineMark(x: .value("distance", pt.x), y: .value("speed", pt.y))
                     .foregroundStyle(.linearGradient(
                         speedGradient, startPoint: .leading, endPoint: .trailing
                     ))
@@ -715,12 +721,12 @@ struct SpeedChartCard: View {
                     .interpolationMethod(.monotone)
 
                 if let sel = selection {
-                    RuleMark(x: .value("km", sel.point.x))
+                    RuleMark(x: .value("distance", sel.point.x))
                         .foregroundStyle(AppTheme.accent.opacity(0.55))
                         .lineStyle(StrokeStyle(lineWidth: 1.5))
                     PointMark(
-                        x: .value("km", sel.point.x),
-                        y: .value("kmh", sel.point.y)
+                        x: .value("distance", sel.point.x),
+                        y: .value("speed", sel.point.y)
                     )
                     .foregroundStyle(AppTheme.accent)
                     .symbolSize(60)

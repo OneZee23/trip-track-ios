@@ -158,7 +158,7 @@ struct AppPreferencesView: View {
             // The SYMBOL, not the word: the row's value answers «миль» in RU,
             // and four glyphs do not fit a 32pt badge. The row's own value
             // below still uses the localized word, as canon draws it.
-            badge: { $0 == .miles ? "mi" : "km" },
+            badge: { AppStrings.unitDistanceBadge(l, unit: $0) },
             label: { $0.labelFull(l) },
             // Через `SettingsManager`, а не голым присваиванием `@AppStorage`:
             // выбор обязан доехать до `UserSettingsEntity`, иначе он не уедет с

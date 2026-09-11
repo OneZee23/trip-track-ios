@@ -405,6 +405,11 @@ struct OnboardingView: View {
     /// dividers. Values are static mock data (RU uses decimal comma).
     private func mockStatsArea(lng: LanguageManager.Language) -> some View {
         let l = lang.language
+        // Канонические 82 и 150 км/ч демо-карточки — в СИ. Делит на 3.6 ровно
+        // одно место в проекте (`DistanceUnit`), и это оно; своя копия здесь
+        // была бы второй арифметикой на экране, который видят первым.
+        let demoAvgMS = DistanceUnit.km.metresPerSecond(fromSpeed: 82)
+        let demoMaxMS = DistanceUnit.km.metresPerSecond(fromSpeed: 150)
         // Real numbers whenever there's a real trip behind the card; the
         // canned set only fills in for a first-ever launch, where there is
         // genuinely nothing to show.
@@ -448,12 +453,12 @@ struct OnboardingView: View {
              AppTheme.green, AppStrings.distance(l)),
             ("clock", "2:59", "", AppTheme.accent, AppStrings.duration(l)),
             ("gauge",
-             Measure.speedParts(ms: 82 / 3.6, unit: distanceUnit, lang: l).value,
-             Measure.speedParts(ms: 82 / 3.6, unit: distanceUnit, lang: l).unit,
+             Measure.speedParts(ms: demoAvgMS, unit: distanceUnit, lang: l).value,
+             Measure.speedParts(ms: demoAvgMS, unit: distanceUnit, lang: l).unit,
              AppTheme.blue, AppStrings.onboardingStatAvg(l)),
             ("bolt.fill",
-             Measure.speedParts(ms: 150 / 3.6, unit: distanceUnit, lang: l).value,
-             Measure.speedParts(ms: 150 / 3.6, unit: distanceUnit, lang: l).unit,
+             Measure.speedParts(ms: demoMaxMS, unit: distanceUnit, lang: l).value,
+             Measure.speedParts(ms: demoMaxMS, unit: distanceUnit, lang: l).unit,
              AppTheme.red, AppStrings.onboardingStatMax(l)),
             ("drop", Self.number(7.4, decimals: 1, lng: l), AppStrings.unitLPer100(l), AppTheme.yellow, AppStrings.onboardingStatFuel(l)),
             ("mountain.2",

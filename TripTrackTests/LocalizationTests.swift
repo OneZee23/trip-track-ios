@@ -292,4 +292,181 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(AppStrings.pluralForm(11, .uk), .many)
         XCTAssertEqual(AppStrings.pluralForm(21, .uk), .one)
     }
+
+    // MARK: - Единица внутри строки (0.6.7)
+
+    // Вторая половина работы `UnitsDisciplineTests`. Тот сторож читает КОД и
+    // ловит место показа, забывшее спросить единицу; здесь читается ТЕКСТ и
+    // ловится единица, вписанная прямо в перевод — «за поездки от 200 км»,
+    // «всего 1 240 км». Токен её не находит (в строке она стоит без кавычек,
+    // вплотную к числу), а на мильном телефоне она врёт ровно так же.
+    //
+    // Правило: в строке перевода единица приходит ТОЛЬКО подстановкой, то есть
+    // из `Measure`, который уже знает и выбор человека, и форму слова для
+    // этого числа.
+
+    /// Ключи, у которых единица в тексте стоит ПО ДЕЛУ, и почему.
+    ///
+    /// Пара «ключ + причина» по той же причине, что и allowlist сторожа: строка
+    /// здесь — решение, а не строчка.
+    private static let unitBelongsInTheText: [(key: String, reason: String)] = [
+        ("levelsRuleLong",
+         "Правило игры: двойной опыт даётся за поездки от 200 КМ всем и при любой "
+         + "настройке. Число в тексте обязано совпадать с числом в `GamificationManager` — "
+         + "перевести его в мили значило бы пообещать бонус на 124-й миле, которого нет.")
+    ]
+
+    /// Единица, стоящая сразу за числом или за подстановкой, — или `nil`.
+    ///
+    /// «Сразу за числом» и есть определение единицы в тексте, и без него
+    /// проверка тонет в ложных срабатываниях: «mi» — это турецкий вопрос
+    /// («Gezi bitti mi?»), испанское «mi casa» и французское «m'indique».
+    /// Проверять «есть ли где-то в строке слово mi» в тринадцати языках нельзя.
+    static func unitAfterNumber(in text: String) -> String? {
+        let chars = Array(maskPlaceholders(text))
+        for token in ["km", "км", "mph", "mi"] {
+            let t = Array(token)
+            for i in chars.indices where i + t.count <= chars.count {
+                guard Array(chars[i..<(i + t.count)]) == t else { continue }
+                // Буква следом — это другое слово: «kmh», «мили», «mint».
+                let after = i + t.count < chars.count ? chars[i + t.count] : " "
+                if after.isLetter { continue }
+                var j = i - 1
+                while j >= 0, chars[j] == " " || chars[j] == "\u{00A0}" || chars[j] == "\u{202F}" {
+                    j -= 1
+                }
+                guard j >= 0 else { continue }
+                if chars[j].isNumber || chars[j] == "№" { return token }
+            }
+        }
+        return nil
+    }
+
+    /// Подстановки — `{km}`, `%@`, `%1$@`, `%.1f`, `\(value)` — становятся «№».
+    ///
+    /// Иначе имя подстановки читается как единица: `odometerTrackedLine` — это
+    /// «davon {km} aufgezeichnet», и внутри фигурных скобок приедет уже готовое
+    /// «312 mi».
+    static func maskPlaceholders(_ text: String) -> String {
+        let chars = Array(text)
+        var out = ""
+        var i = 0
+        while i < chars.count {
+            if chars[i] == "{", let close = chars[i...].firstIndex(of: "}") {
+                out += "№"; i = close + 1; continue
+            }
+            if chars[i] == "\\", i + 1 < chars.count, chars[i + 1] == "(" {
+                var depth = 0
+                var j = i + 1
+                while j < chars.count {
+                    if chars[j] == "(" { depth += 1 }
+                    if chars[j] == ")" { depth -= 1; if depth == 0 { break } }
+                    j += 1
+                }
+                out += "№"; i = min(j + 1, chars.count); continue
+            }
+            if chars[i] == "%" {
+                var j = i + 1
+                while j < chars.count,
+                      chars[j].isNumber || chars[j] == "." || chars[j] == "$" || chars[j] == "-" {
+                    j += 1
+                }
+                if j < chars.count, chars[j] == "@" || chars[j].isLetter {
+                    out += "№"; i = j + 1; continue
+                }
+            }
+            out.append(chars[i]); i += 1
+        }
+        return out
+    }
+
+    private func reasonToKeepUnit(_ key: String) -> String? {
+        Self.unitBelongsInTheText.first { $0.key == key }?.reason
+    }
+
+    /// Ни один ряд ни в одной из одиннадцати таблиц.
+    func testNoTranslationRowCarriesAUnitNextToANumber() {
+        for (lang, table) in completeLanguages + inProgressLanguages {
+            for (key, value) in table {
+                guard let unit = Self.unitAfterNumber(in: value) else { continue }
+                if reasonToKeepUnit(key) != nil { continue }
+                XCTFail("""
+
+                    \(lang.rawValue).\(key) пишет единицу словом: «\(unit)» в «\(value)».
+                      Единица обязана приезжать подстановкой — её собирает `Measure` по \
+                    выбору человека и по форме числа («1 миля», «2 мили», «5 миль»).
+                      Если число и единица тут — ПРАВИЛО ИГРЫ (одинаковое для всех), \
+                    впиши ключ в `unitBelongsInTheText` вместе с причиной.
+                    """)
+            }
+        }
+    }
+
+    /// И ни один inline-вариант `ru:` / `en:` в `AppStrings`.
+    ///
+    /// Их в таблицах нет по определению — они написаны прямо в вызове `tr`, —
+    /// поэтому проверить их можно только по исходнику. Нет исходника — пропуск,
+    /// а не падение (см. `UnitsDisciplineTests`).
+    func testNoInlineRussianOrEnglishCarriesAUnitNextToANumber() throws {
+        let url = UnitGuard.repoRoot().appendingPathComponent("TripTrack/Localization/AppStrings.swift")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+            throw XCTSkip("`AppStrings.swift` рядом с тестом нет — читать нечего")
+        }
+        let (code, _) = UnitGuard.strip(text)
+        var key = "?"
+        var failures = 0
+        for (index, line) in code.enumerated() {
+            if let k = Self.keyOfTrCall(in: line) { key = k }
+            for literal in Self.inlineLiterals(in: line) {
+                guard let unit = Self.unitAfterNumber(in: literal) else { continue }
+                if reasonToKeepUnit(key) != nil { continue }
+                failures += 1
+                XCTFail("""
+
+                    AppStrings.swift:\(index + 1) («\(key)») пишет единицу словом: \
+                    «\(unit)» в «\(literal)».
+                      Единица обязана приезжать подстановкой из `Measure` — \
+                    `\\(Measure.distance(metres:unit:lang:))` и её родня.
+                      Если это ПРАВИЛО ИГРЫ — впиши ключ в `unitBelongsInTheText` с причиной.
+                    """)
+            }
+        }
+        XCTAssertEqual(failures, 0)
+    }
+
+    /// `tr(lang, "ключ", …)` — первый литерал в вызове и есть ключ.
+    static func keyOfTrCall(in line: String) -> String? {
+        guard let call = line.range(of: "tr(") else { return nil }
+        let rest = line[call.upperBound...]
+        guard let open = rest.firstIndex(of: "\"") else { return nil }
+        let after = rest[rest.index(after: open)...]
+        guard let close = after.firstIndex(of: "\"") else { return nil }
+        let key = String(after[..<close])
+        return key.isEmpty ? nil : key
+    }
+
+    /// Строки, написанные в вызове как `ru: "…"` / `en: "…"`.
+    static func inlineLiterals(in line: String) -> [String] {
+        var out: [String] = []
+        for marker in ["ru: \"", "en: \""] {
+            var search = line.startIndex
+            while let r = line.range(of: marker, range: search..<line.endIndex) {
+                var value = ""
+                var i = r.upperBound
+                while i < line.endIndex {
+                    let c = line[i]
+                    if c == "\\" {
+                        let next = line.index(after: i)
+                        if next < line.endIndex { value.append(c); value.append(line[next]); i = line.index(after: next); continue }
+                    }
+                    if c == "\"" { break }
+                    value.append(c)
+                    i = line.index(after: i)
+                }
+                out.append(value)
+                search = i < line.endIndex ? line.index(after: i) : line.endIndex
+            }
+        }
+        return out
+    }
 }

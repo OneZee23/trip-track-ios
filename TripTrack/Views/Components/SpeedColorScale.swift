@@ -34,7 +34,7 @@ enum SpeedColorScale {
     /// Zone index for grouping consecutive same-colour segments (matches the
     /// `< upper` cutoffs of `bands`). Falls through to the last band.
     static func zone(forSpeedMS speedMS: Double) -> Int {
-        let kmh = max(0, speedMS) * 3.6
+        let kmh = DistanceUnit.km.speed(fromMetresPerSecond: max(0, speedMS))
         for (i, band) in bands.enumerated() {
             if let upper = band.upperKmh, kmh < upper { return i }
         }

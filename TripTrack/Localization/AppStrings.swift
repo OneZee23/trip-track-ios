@@ -501,6 +501,21 @@ enum AppStrings {
         }
     }
 
+    /// «км» / «mi» — двухбуквенный значок единицы в пикере настроек.
+    ///
+    /// Четвёртая подпись, и она существует не от хорошей жизни: в кружок 32pt
+    /// не влезает слово, а по-русски у мили слово — «миль». Поэтому здесь
+    /// символ, а не форма от числа. Но символ ЛОКАЛИЗОВАННЫЙ: у километра он
+    /// свой в кириллице, и до 0.6.7 в этом кружке стояло латинское «km» даже
+    /// на русском — единственное место в приложении, где километр писался не
+    /// по-русски. Слово под значком (`labelFull`) остаётся словом.
+    static func unitDistanceBadge(
+        _ lang: LanguageManager.Language,
+        unit: DistanceUnit
+    ) -> String {
+        unit == .miles ? "mi" : km(lang)
+    }
+
     // MARK: - Regions
     static func regionsExplored(_ lang: LanguageManager.Language) -> String {
         tr(lang, "regionsExplored", ru: "регионов", en: "regions")

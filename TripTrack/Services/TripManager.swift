@@ -750,7 +750,7 @@ final class TripManager: ObservableObject {
             // Recording progress (throttled to the batch cadence): ties accepted
             // fixes to actually-recorded output, so a "GPS dropped" export shows
             // whether distance kept growing or flatlined.
-            gpsLog.notice("recording: dist=\(String(format: "%.2f", entity.distance / 1000))km maxSpeed=\(String(format: "%.0f", entity.maxSpeed * 3.6))km/h")
+            gpsLog.notice("recording: dist=\(String(format: "%.2f", entity.distance / 1000))km maxSpeed=\(String(format: "%.0f", DistanceUnit.km.speed(fromMetresPerSecond: entity.maxSpeed)))km/h")
         }
     }
 
