@@ -24,6 +24,26 @@ enum AppStrings {
         tr(lang, "tabMe", ru: "Я", en: "Me")
     }
 
+    /// 0.6.8: «Места» в слоте «Групп». Ключ `regions` («Места») остался от
+    /// вкладки регионов 0.5 и нигде не читается — не переиспользован нарочно:
+    /// старую строку однажды удалят, новая не должна уехать вместе с ней.
+    static func tabPlaces(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tabPlaces", ru: "Места", en: "Places")
+    }
+
+    // MARK: - Places (0.6.8, Figma 2895:160)
+    static func placesEmptyTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesEmptyTitle", ru: "Мест пока нет", en: "No places yet")
+    }
+    /// Одна фраза о том, откуда берутся места: из отметки в поездке. Без
+    /// кнопки — в этой версии «сделать местом» руками нельзя, место
+    /// рождается само (решение владельца, спека §7).
+    static func placesEmptyBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesEmptyBody",
+           ru: "Поставьте отметку в поездке — приложение узнает это место в следующий раз и покажет, сколько до него обычно.",
+           en: "Mark a spot during a trip — the app will recognise it next time and tell you how long it usually takes to get there.")
+    }
+
     // MARK: - Groups (coming soon, Figma 117:2265)
     static func groupsComingTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "groupsComingTitle", ru: "Клубы — скоро", en: "Clubs — coming soon")

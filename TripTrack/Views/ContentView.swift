@@ -111,8 +111,8 @@ struct ContentView: View {
                 TrackingView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.colorScheme, mapVM.isDarkMap ? .dark : systemScheme)
-            case .groups:
-                GroupsComingSoonView()
+            case .places:
+                PlacesView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .profile:
                 ProfileView(hostedInTab: true)

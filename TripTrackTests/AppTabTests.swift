@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import TripTrack
 
 final class AppTabTests: XCTestCase {
@@ -21,8 +22,24 @@ final class AppTabTests: XCTestCase {
         XCTAssertEqual(AppTab.home.rawValue, "home")
         XCTAssertEqual(AppTab.maps.rawValue, "maps")
         XCTAssertEqual(AppTab.record.rawValue, "record")
-        XCTAssertEqual(AppTab.groups.rawValue, "groups")
+        XCTAssertEqual(AppTab.places.rawValue, "places")
         XCTAssertEqual(AppTab.profile.rawValue, "profile")
+    }
+
+    /// 0.6.8 убрала вкладку «Группы». Телефон, у которого в `selectedTabV2`
+    /// осталось «groups», обязан открыться на «Ленте» — не упасть и не
+    /// показать пустой слот. `@AppStorage` с `RawRepresentable` делает это
+    /// сам: `init?(rawValue:)` вернул nil → значение по умолчанию. Тест
+    /// держит обе половины: что «groups» больше не парсится и что обёртка
+    /// действительно отдаёт дефолт, а не nil и не старое значение.
+    func testStoredGroupsFallsBackToHome() {
+        XCTAssertNil(AppTab(rawValue: "groups"))
+        XCTAssertEqual(AppTab(rawValue: "places"), .places)
+
+        let d = makeDefaults("AppTabTests.groupsFallback")
+        d.set("groups", forKey: AppTab.storageKey)
+        let stored = AppStorage(wrappedValue: AppTab.home, AppTab.storageKey, store: d)
+        XCTAssertEqual(stored.wrappedValue, .home)
     }
 
     // MARK: migration

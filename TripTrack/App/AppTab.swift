@@ -3,8 +3,15 @@ import Foundation
 /// Single source of truth for the five top-level tabs (0.6.0 redesign
 /// navigation). Replaces the previous hardcoded `Int` indices. Backed by a
 /// stable `String` rawValue so it persists cleanly via `@AppStorage`.
+///
+/// 0.6.8: `groups` стал `places` — «Группы» уехали строкой в профиль, слот
+/// заняли «Места». Телефон с сохранённым «groups» в `selectedTabV2` получает
+/// `.home`: `init?(rawValue:)` возвращает nil, и `@AppStorage` подставляет
+/// значение по умолчанию (`AppTabTests.testStoredGroupsFallsBackToHome`).
+/// Отдельной миграции не нужно — и не надо: человек, сидевший на «Группах»,
+/// не просил «Мест».
 enum AppTab: String, CaseIterable, Hashable {
-    case home, maps, record, groups, profile
+    case home, maps, record, places, profile
 
     /// Storage key for the new enum-backed selection. A NEW key (not the
     /// legacy "selectedTab") so an old `Int` value can never be misread as

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Floating glass tab bar — 0.6.0 redesign, 5 tabs: Лента / Карта / Запись /
-/// Группы / Я. Spec is the Figma TabBar masters (page 88:2, section 90:2):
+/// Места / Я. Spec is the Figma TabBar masters (page 88:2, section 90:2):
 /// 74pt-tall pill, radius 30, glass background; regular tabs are a 20pt icon
 /// over a 9pt label, active = filled glyph + accent, inactive = tertiary
 /// grey; the center Record item is a 46pt accent disc with a white steering
@@ -27,8 +27,12 @@ struct CustomTabBar: View {
 
             recordItem(c: c)
 
-            tabItem(tab: .groups, label: AppStrings.tabGroups(lang.language), c: c) { active in
-                sfIcon(active ? "person.2.fill" : "person.2", active: active, size: 14)
+            // «Места» (0.6.8) в слоте «Групп». У `mappin.and.ellipse` в SF
+            // Symbols нет залитого варианта, поэтому активное состояние здесь
+            // несёт только цвет и bounce — как и задумано у бара: индикатора
+            // нет, активность = цвет (+ заливка там, где она у глифа есть).
+            tabItem(tab: .places, label: AppStrings.tabPlaces(lang.language), c: c) { active in
+                sfIcon("mappin.and.ellipse", active: active, size: 16)
             }
             tabItem(tab: .profile, label: AppStrings.tabMe(lang.language), c: c) { active in
                 sfIcon(active ? "person.fill" : "person", active: active, size: 17)
@@ -56,7 +60,7 @@ struct CustomTabBar: View {
 
     // MARK: - Tab cells
 
-    /// Standard peer tab — Лента, Карта, Группы, Я. The icon closure gets
+    /// Standard peer tab — Лента, Карта, Места, Я. The icon closure gets
     /// the active flag so callers can swap outline/filled variants.
     private func tabItem(
         tab: AppTab,

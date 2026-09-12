@@ -45,7 +45,7 @@ final class TripTrackUITests: XCTestCase {
         let bar = { (id: String) in self.app.buttons.matching(identifier: id).firstMatch }
         XCTAssertTrue(bar("tab_maps").waitForExistence(timeout: 4), "tab bar should be visible after normalization")
 
-        for id in ["tab_maps", "tab_groups", "tab_profile", "tab_home"] {
+        for id in ["tab_maps", "tab_places", "tab_profile", "tab_home"] {
             bar(id).tap()
             usleep(600_000)
             XCTAssertTrue(bar("tab_record").exists, "tab bar should stay visible after switching to \(id)")
