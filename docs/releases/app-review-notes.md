@@ -4,7 +4,71 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.6.6 — journeys (current submission)
+## v0.6.7 — units and the map car (current submission)
+
+### Короткая версия — вставить в App Store Connect
+
+```
+TripTrack 0.6.7 is a units release plus a redrawn map marker.
+
+UNITS. The app already had a miles/kilometres setting, but it only changed the
+labels — the numbers stayed metric. This build makes the choice real across
+distance, speed, elevation (feet) and fuel economy. Storage stays metric
+everywhere; the unit lives only at the display boundary.
+
+PER-VEHICLE DASHBOARD UNITS. A car's dashboard has its own units, independent
+of the person's preference: an imported car with a miles odometer in a metric
+country, or the reverse. The vehicle passport now has a "Dashboard units" row
+governing exactly three things — the odometer field the user types into, the
+odometer display, and fuel figures. Everything else, and every figure that sums
+more than one vehicle, stays in the user's chosen unit.
+
+MAP MARKER. Trip replay now draws a top-down car that rotates to the recorded
+course, tinted with that vehicle's colour. The previous sprite was a side view
+that could only mirror left/right.
+
+CRASH REPORTING. This is the first build that actually sends crash reports.
+Earlier releases shipped with an empty Sentry key and sent nothing. The App
+Privacy answers have been updated accordingly in this submission — the previous
+"Data Not Collected" entry predated the app's account, sync and social
+features and was out of date.
+
+No new permissions are requested. Location usage is unchanged from 0.6.6.
+```
+
+### Если спросят про приватность и данные
+
+```
+The App Privacy answers were rewritten for this submission to match what the
+app actually does: account email and name (Sign in with Apple), user and device
+identifiers, precise and coarse location for recorded trips, photos, user-written
+content, product interaction and diagnostics. All of it is linked to the user's
+account; none of it is used for tracking, and the app contains no advertising or
+analytics SDK — the only third-party SDK is Sentry, for crash and performance
+diagnostics, hosted in the European Union.
+
+Cloud sync is off by default. Trips, photos and settings stay on device until
+the user signs in and enables it; a trip the user publishes is the one exception,
+and that is an explicit action.
+
+The home location used to suggest grouping trips into a journey is inferred on
+device from the user's own trip history and never leaves the phone. Verified by
+inspection: the string "home" does not appear in the app's sync models or
+networking layer.
+```
+
+### Если спросят про единицы и точность
+
+```
+Distances are stored in metres and never converted for storage. The unit choice
+affects display and input parsing only. Achievement thresholds, experience
+points and vehicle levels are computed from metric values regardless of the
+chosen unit, so changing units can neither unlock nor lock an achievement.
+```
+
+---
+
+## v0.6.6 — journeys
 
 ### Короткая версия — вставить в App Store Connect
 
