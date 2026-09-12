@@ -37,7 +37,7 @@ struct PlacesView: View {
             Spacer(minLength: 0)
         }
         // Плавающий таб-бар: содержимое обязано уходить из-под него.
-        .padding(.bottom, 96)
+        .padding(.bottom, CustomTabBar.clearance)
         .frame(maxWidth: .infinity)
         .background(c.bg.ignoresSafeArea())
     }

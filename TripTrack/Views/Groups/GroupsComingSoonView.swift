@@ -85,7 +85,7 @@ struct GroupsComingSoonView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.bottom, 96)
+        .padding(.bottom, CustomTabBar.clearance)
         .frame(maxWidth: .infinity)
         .background(c.bg.ignoresSafeArea())
         .animation(.easeInOut(duration: 0.2), value: waitlist.state.joined)

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Floating glass tab bar — 0.6.0 redesign, 5 tabs: Лента / Карта / Запись /
 /// Места / Я. Spec is the Figma TabBar masters (page 88:2, section 90:2):
@@ -13,6 +14,35 @@ struct CustomTabBar: View {
     @Binding var selectedTab: AppTab
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
+
+    // MARK: - Геометрия
+
+    /// Одно место, откуда пилюлю читают и сам бар, и экраны, которым надо
+    /// увести последнюю строку из-под неё (`clearance`). 74 — из канона;
+    /// фактическая высота складывается из содержимого (иконка 20 + подпись
+    /// + отступы), меняешь содержимое — сверь.
+    static let pillHeight: CGFloat = 74
+    static let sideMargin: CGFloat = 11
+    /// Верх индикатора «домой» от физического низа экрана: 5 pt высоты
+    /// + 8 pt отступа (Apple Design Resources; одинаково на всех iPhone
+    /// без кнопки).
+    static let homeIndicatorTop: CGFloat = 13
+    /// Подъём пилюли над физическим низом. С индикатором зазор до него
+    /// равен боковому полю — одинаковый воздух с трёх сторон, как у
+    /// плавающего бара iOS 26; без индикатора (телефоны с кнопкой,
+    /// `bottomInset == 0`) остаются канонные 14 pt. Канон ставил 14 везде,
+    /// и на телефонах с индикатором пилюля садилась на него с зазором в
+    /// один пункт. Чистая функция — держится `CustomTabBarLiftTests`.
+    static func bottomLift(bottomInset: CGFloat) -> CGFloat {
+        bottomInset > 0 ? homeIndicatorTop + sideMargin : 14
+    }
+    /// Сколько места снизу оставить контенту экрана, над которым висит бар:
+    /// пилюля + подъём + 8 pt воздуха. Было литералом 96 (74 + 14 + 8) в
+    /// каждом экране-вкладке, поэтому подъём нельзя было поменять, не
+    /// спрятав под бар последнюю строку ленты.
+    static var clearance: CGFloat {
+        pillHeight + bottomLift(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0) + 8
+    }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -50,12 +80,12 @@ struct CustomTabBar: View {
             }
         }
         .shadow(color: .black.opacity(scheme == .dark ? 0.25 : 0.06), radius: 3, y: 3)
-        .padding(.horizontal, 11)
-        // ContentView ignores the bottom safe area, so the pill is lifted
-        // manually. Figma places the pill's bottom edge 14pt above the
-        // physical screen bottom — the home indicator renders in that gap
-        // over the app background.
-        .padding(.bottom, 14)
+        .padding(.horizontal, Self.sideMargin)
+        // ContentView игнорирует безопасную зону снизу, поэтому пилюля
+        // поднимается сама — над индикатором «домой», а не на нём: см.
+        // `bottomLift`. `tt_safeAreaInsets` — nil только до первого окна;
+        // тогда берём 0 → 14 pt, и следующий же кадр ставит верное.
+        .padding(.bottom, Self.bottomLift(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0))
     }
 
     // MARK: - Tab cells

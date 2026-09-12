@@ -147,7 +147,7 @@ struct GarageView: View {
             // The first card sat flush against the nav row, so the
             // highlighted one read as growing out of it.
             .padding(.top, 8)
-            .padding(.bottom, 96)
+            .padding(.bottom, CustomTabBar.clearance)
         }
     }
 

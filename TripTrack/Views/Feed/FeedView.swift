@@ -508,7 +508,7 @@ struct FeedView: View {
                 pending: pending,
                 undoLabel: AppStrings.undoAction(lang.language)
             )
-            .padding(.bottom, 96)
+            .padding(.bottom, CustomTabBar.clearance)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .zIndex(200)
         }
@@ -520,7 +520,10 @@ struct FeedView: View {
                 duration: mapVM.duration,
                 onTap: { selectedTab = .record }
             )
-            .padding(.bottom, 100)
+            // Тот же клиренс, что у тост-уведомления выше, плюс 4pt: банер
+            // висит чуть выше, чтобы не слипаться с ним, если оба на экране
+            // разом. Было литералом 100 = 96 (старый клиренс) + 4.
+            .padding(.bottom, CustomTabBar.clearance + 4)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .animation(.easeInOut(duration: 0.3), value: mapVM.isRecording)
         }
@@ -690,7 +693,7 @@ struct FeedView: View {
                 // Clears the floating tab bar and no more. It was 120, which
                 // left a field of empty background under the last card that a
                 // scroll had to cross before it stopped.
-                .padding(.bottom, 96)
+                .padding(.bottom, CustomTabBar.clearance)
             }
             .scrollIndicators(.hidden)
             .background(c.bg)
@@ -728,7 +731,7 @@ struct FeedView: View {
                 // Clears the floating tab bar and no more. It was 120, which
                 // left a field of empty background under the last card that a
                 // scroll had to cross before it stopped.
-                .padding(.bottom, 96)
+                .padding(.bottom, CustomTabBar.clearance)
             }
             .scrollIndicators(.hidden)
             .background(c.bg)
@@ -919,7 +922,7 @@ struct FeedView: View {
         }
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
-        .padding(.bottom, 96)
+        .padding(.bottom, CustomTabBar.clearance)
         .containerRelativeFrame(.vertical, alignment: .center)
     }
 
@@ -959,7 +962,7 @@ struct FeedView: View {
         }
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
-        .padding(.bottom, 96)
+        .padding(.bottom, CustomTabBar.clearance)
         .containerRelativeFrame(.vertical, alignment: .center)
     }
 
@@ -1184,7 +1187,7 @@ struct FeedView: View {
         }
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
-        .padding(.bottom, 96)
+        .padding(.bottom, CustomTabBar.clearance)
         // Sized to the scroll view so the hero sits in the middle of the page.
         // Top-anchored, the whole state measured ~76pt on a 360×780 frame and
         // hung right under the segment with the rest of the screen empty.
