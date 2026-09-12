@@ -6,19 +6,18 @@ import MapKit
 /// Custom MKPolyline subclass that carries the speed value for color mapping.
 final class SpeedPolyline: MKPolyline {
     var speed: Double = 0 // m/s
+
+    /// Доля маршрута, на которой этот отрезок КОНЧАЕТСЯ, от 0 до 1.
+    ///
+    /// Нужна воспроизведению: пройденное показывается полной яркостью, а
+    /// непройденное приглушается — и решается это сравнением двух долей.
+    /// Именно доля, а не метры и не индекс: отрезки строятся по упрощённому
+    /// маршруту, а машина едет по плотному, длины у них отличаются на доли
+    /// процента, а номера точек не совпадают вовсе. Доля — единственная
+    /// величина, одинаковая у обоих.
+    var endFraction: Double = 1
 }
 
-/// Marker subclass so the renderer can pick a brighter style for the
-/// "now playing" trail without confusing it with the static SpeedPolyline
-/// fragments drawn underneath.
-final class PlaybackPolyline: MKPolyline {}
-
-/// Tip extension that closes the visual gap between the last passed
-/// waypoint (where `PlaybackPolyline` ends) and the interpolated car
-/// position (where `PlaybackCarAnnotation` sits). Without this overlay
-/// the white trail visibly lags the car between GPS samples. Always
-/// exactly two points; rendered with the same brush as the main trail.
-final class PlaybackTipPolyline: MKPolyline {}
 
 /// Annotation that the renderer recognises as the moving "play head" —
 /// shown as the pixel-car asset travelling along the route.
@@ -275,6 +274,11 @@ struct RouteMapView: UIViewRepresentable {
 
             var unionRect: MKMapRect = .null
             let epsilon = Self.drawEpsilon
+            // Отрезки скорости в порядке маршрута — воспроизведение гасит
+            // ими непройденное, вместо того чтобы подкладывать белую линию.
+            var speedRun: [SpeedPolyline] = []
+            var runMetres: [Double] = []
+            var runTotal: Double = 0
 
             for (segCoords, segSpeeds) in segments {
                 guard segCoords.count >= 2 else { continue }
@@ -289,6 +293,9 @@ struct RouteMapView: UIViewRepresentable {
                         poly.speed = group.speed
                         mapView.addOverlay(poly, level: .aboveRoads)
                         unionRect = unionRect.union(poly.boundingMapRect)
+                        runTotal += GeometryUtils.polylineLength(group.coords)
+                        speedRun.append(poly)
+                        runMetres.append(runTotal)
                     }
                 } else {
                     let simplified = GeometryUtils.simplifyRDP(segCoords, epsilon: epsilon)
@@ -298,6 +305,16 @@ struct RouteMapView: UIViewRepresentable {
                     unionRect = unionRect.union(polyline.boundingMapRect)
                 }
             }
+
+            // Доли считаются ПОСЛЕ прохода: полная длина известна только в
+            // конце. Разрывы записи в сумму входят — машина их «проезжает»
+            // тоже, и без этого прогресс убегал бы вперёд после каждой дыры.
+            if runTotal > 0 {
+                for (i, poly) in speedRun.enumerated() {
+                    poly.endFraction = runMetres[i] / runTotal
+                }
+            }
+            context.coordinator.speedRun = speedRun
 
             if !unionRect.isNull {
                 let insets = fitInsets ?? UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
@@ -567,16 +584,19 @@ struct RouteMapView: UIViewRepresentable {
 
         private var followAnimationUntil: CFTimeInterval = 0
 
-        weak var playbackPolyline: PlaybackPolyline?
-        /// Two-point overlay that bridges the gap between the body
-        /// trail's end and the interpolated car position. Replaced
-        /// every frame so the trail tip tracks the car exactly.
-        weak var playbackTip: PlaybackTipPolyline?
+        /// Отрезки маршрута в порядке следования. Воспроизведение гасит
+        /// ими непройденное; добавляются один раз и живут до перестройки
+        /// карты — оверлеи при этом НЕ пересоздаются ни разу.
+        var speedRun: [SpeedPolyline] = []
+        /// Накопленная длина по точкам маршрута воспроизведения, в метрах.
+        /// Считается один раз на поездку: пересчитывать её на каждом кадре —
+        /// это тысячи гаверсинусов шестьдесят раз в секунду.
+        var playbackCum: [Double] = []
+        /// Доля, до которой сейчас подсвечено. Меняется редко, поэтому
+        /// прозрачность отрезков трогается только когда она реально уехала.
+        var litFraction: Double = -1
+
         weak var playbackCar: PlaybackCarAnnotation?
-        /// Last coord index used to draw the trail. Stored so we don't
-        /// remove + re-add the overlay every frame — only when the
-        /// trail's tail actually advanced.
-        var playbackLastIndex: Int = -1
 
         /// Снимок на карте: квадратик со скруглением и белой рамкой.
         ///
@@ -805,6 +825,74 @@ struct RouteMapView: UIViewRepresentable {
             MapCarMarker.State(colorName: carColorName)
         }
 
+        /// Доля маршрута, пройденная машиной, от 0 до 1.
+        ///
+        /// Считается по НАКОПЛЕННОЙ длине, а не по номеру точки: точки лежат
+        /// неравномерно, и «сотая из двухсот» на треке с плотным городом и
+        /// пустой трассой означает совсем не половину пути.
+        func progressFraction(
+            car: CLLocationCoordinate2D,
+            trailIndex: Int,
+            coords: [CLLocationCoordinate2D]
+        ) -> Double {
+            if playbackCum.count != coords.count {
+                var cum: [Double] = [0]
+                cum.reserveCapacity(coords.count)
+                var total: Double = 0
+                for i in 1..<coords.count {
+                    total += GeometryUtils.haversineDistance(coords[i - 1], coords[i])
+                    cum.append(total)
+                }
+                playbackCum = cum
+            }
+            return Self.fraction(cum: playbackCum, coords: coords, car: car, trailIndex: trailIndex)
+        }
+
+        /// Само правило — чистой функцией, потому что это правило, а не
+        /// отрисовка: ступенька по точке за раз, уход за единицу на последнем
+        /// кадре и отрицательный индекс на первом ловятся тестом, а не глазами
+        /// на телефоне.
+        static func fraction(
+            cum: [Double],
+            coords: [CLLocationCoordinate2D],
+            car: CLLocationCoordinate2D,
+            trailIndex: Int
+        ) -> Double {
+            guard let total = cum.last, total > 0, cum.count == coords.count else { return 0 }
+            let i = min(max(trailIndex, 0), coords.count - 1)
+            // Плюс кусок до машины: она стоит МЕЖДУ точками, и без этого
+            // подсветка дёргалась бы ступеньками по точке за раз.
+            let partial = GeometryUtils.haversineDistance(coords[i], car)
+            return min(1, max(0, (cum[i] + partial) / total))
+        }
+
+        /// Подсветить маршрут до доли `fraction`, приглушив остальное.
+        ///
+        /// Трогает только те отрезки, у которых прозрачность реально меняется:
+        /// за поездку это столько раз, сколько в маршруте отрезков скорости, а
+        /// не шестьдесят раз в секунду.
+        func relight(to fraction: Double, mapView: MKMapView) {
+            guard !speedRun.isEmpty else { return }
+            guard abs(fraction - litFraction) > 0.0005 || fraction >= 1 || fraction <= 0 else { return }
+            let wasLit = litFraction
+            litFraction = fraction
+            for poly in speedRun {
+                let passedNow = poly.endFraction <= fraction
+                let passedBefore = wasLit >= 0 && poly.endFraction <= wasLit
+                guard passedNow != passedBefore || wasLit < 0 else { continue }
+                guard let r = mapView.renderer(for: poly) else { continue }
+                r.alpha = passedNow ? 1 : Self.dimmedAhead
+            }
+        }
+
+        /// Насколько гаснет непройденное.
+        ///
+        /// Не в ноль и не в серое: маршрут впереди обязан остаться читаемым —
+        /// человек смотрит на форму дороги целиком, а не только на то, где
+        /// сейчас машина. И цвет скорости там тот же, просто тише: это
+        /// содержание экрана, и подменять его нейтральным нельзя.
+        static let dimmedAhead: CGFloat = 0.3
+
         func applyPlayback(
             carCoord: CLLocationCoordinate2D?,
             trailIndex: Int,
@@ -815,62 +903,27 @@ struct RouteMapView: UIViewRepresentable {
             // Cleanup branch — controller cleared its state (playback ended
             // or stopped). Drop annotation + both overlays.
             guard let car = carCoord else {
-                if let p = playbackPolyline {
-                    mapView.removeOverlay(p)
-                    playbackPolyline = nil
-                }
-                if let t = playbackTip {
-                    mapView.removeOverlay(t)
-                    playbackTip = nil
-                }
+                // Воспроизведение кончилось — маршрут снова весь яркий.
+                relight(to: 1, mapView: mapView)
                 if let c = playbackCar {
                     mapView.removeAnnotation(c)
                     playbackCar = nil
                 }
-                playbackLastIndex = -1
                 carHasCourse = false
                 lastCarTick = 0
                 return
             }
-            // Body trail polyline — replace only when the tail index
-            // actually moves to a new original waypoint. This keeps
-            // overlay churn bounded by GPS sample count (≤ N swaps per
-            // trip), not display refresh rate (≤ 60×duration swaps).
-            if trailIndex != playbackLastIndex && trailIndex >= 1 {
-                if let p = playbackPolyline {
-                    mapView.removeOverlay(p)
-                    playbackPolyline = nil
-                }
-                let safe = min(trailIndex, coords.count - 1)
-                var body = Array(coords[0...safe])
-                let poly = PlaybackPolyline(coordinates: &body, count: body.count)
-                // UNDER the route, not over it. Drawn on top, a solid trail
-                // painted out the speed colours behind the car, and by the end
-                // of the replay the whole trip was one white line. As a casing
-                // beneath it the covered stretch is haloed and still coloured.
-                mapView.insertOverlay(
-                    poly, at: min(1, mapView.overlays.count), level: .aboveRoads
-                )
-                playbackPolyline = poly
-                playbackLastIndex = trailIndex
-            }
-            // Tip segment — closes the visual gap between the body
-            // trail (ends at last passed waypoint) and the car (sits
-            // at the interpolated position between two waypoints). Two
-            // points only, so a per-frame swap is cheap — 60×duration
-            // overlay swaps of tiny polylines vs whole-trail swaps.
-            if trailIndex >= 0 && trailIndex < coords.count {
-                if let t = playbackTip {
-                    mapView.removeOverlay(t)
-                    playbackTip = nil
-                }
-                var tip = [coords[trailIndex], car]
-                let poly = PlaybackTipPolyline(coordinates: &tip, count: 2)
-                mapView.insertOverlay(
-                    poly, at: min(1, mapView.overlays.count), level: .aboveRoads
-                )
-                playbackTip = poly
-            }
+            // Прогресс показывается ЯРКОСТЬЮ самого маршрута, а не белой
+            // линией под ним. Так исчезают обе жалобы разом: белой каймы с
+            // жёстким краем больше нет, и — главное — ни один оверлей не
+            // добавляется и не удаляется во время воспроизведения. Прежний
+            // след пересоздавался на каждой пройденной точке, а хвостик до
+            // машины — на КАЖДОМ кадре, шестьдесят раз в секунду; во время
+            // щипка карта растрирует оверлеи и тянет растр, и подмена в этот
+            // момент рвала картинку.
+            let fraction = progressFraction(car: car, trailIndex: trailIndex, coords: coords)
+            relight(to: fraction, mapView: mapView)
+
             // Car position — KVO-observed `@objc dynamic coordinate` on
             // PlaybackCarAnnotation lets MapKit reposition the view
             // without any overlay churn. Frame cadence comes from the
@@ -941,28 +994,6 @@ struct RouteMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if overlay is FogOverlay {
                 return FogOverlayRenderer(overlay: overlay)
-            }
-            if let playback = overlay as? PlaybackPolyline {
-                let renderer = MKPolylineRenderer(polyline: playback)
-                // A white casing, wider than the route, sitting under it: the
-                // covered stretch reads as lit up without losing the speed
-                // colour that is the whole point of the line.
-                renderer.strokeColor = UIColor(red: 0xFF/255, green: 0xFF/255, blue: 0xFF/255, alpha: 1.0)
-                renderer.lineWidth = 12
-                renderer.lineCap = .round
-                renderer.lineJoin = .round
-                return renderer
-            }
-            if let tip = overlay as? PlaybackTipPolyline {
-                // Same brush as the main trail — visually a single
-                // continuous polyline from start to car, but cheaper to
-                // update because the tip is just 2 points.
-                let renderer = MKPolylineRenderer(polyline: tip)
-                renderer.strokeColor = UIColor(red: 0xFF/255, green: 0xFF/255, blue: 0xFF/255, alpha: 1.0)
-                renderer.lineWidth = 12
-                renderer.lineCap = .round
-                renderer.lineJoin = .round
-                return renderer
             }
             if let speedLine = overlay as? SpeedPolyline {
                 let renderer = MKPolylineRenderer(polyline: speedLine)

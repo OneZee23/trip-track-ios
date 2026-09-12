@@ -188,6 +188,22 @@ enum GeometryUtils {
     }
 
     /// Haversine distance in meters between two coordinates.
+    /// Длина ломаной в метрах.
+    ///
+    /// Заведена ради воспроизведения: прогресс машины по маршруту меряется
+    /// ДОЛЕЙ пути, а доля — это длина куска, делённая на длину целого. Класть
+    /// этот цикл по месту нельзя: считать длину пришлось бы в двух местах, по
+    /// двум разным массивам точек, и однажды они разошлись бы — ровно так уже
+    /// расходился одометр, пока его не свели в `TripDistanceGate`.
+    static func polylineLength(_ coords: [CLLocationCoordinate2D]) -> Double {
+        guard coords.count >= 2 else { return 0 }
+        var total: Double = 0
+        for i in 1..<coords.count {
+            total += haversineDistance(coords[i - 1], coords[i])
+        }
+        return total
+    }
+
     static func haversineDistance(
         _ a: CLLocationCoordinate2D,
         _ b: CLLocationCoordinate2D
