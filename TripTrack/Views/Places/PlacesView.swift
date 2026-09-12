@@ -5,10 +5,9 @@ import SwiftUI
 /// матчинг, список мест и экран места).
 ///
 /// Форма пустого экрана — та же, что у пустых экранов 0.6.2:
-/// `EmptyStateIllustration`, заголовок, одна фраза. Картинка пока `empty_map`
-/// — карта с булавкой, что стоит и у «Моей карты»: у неё уже есть булавка, а
-/// у остальных сцен нет. Своя `empty_places` придёт от владельца; заменить
-/// строку здесь и больше нигде.
+/// `EmptyStateIllustration`, заголовок, одна фраза. Сцена — своя,
+/// `empty_places`: дорога, булавка на обочине и пустой указатель; нарисована
+/// владельцем 12 сентября в ряд с остальными пустыми сценами 0.6.2.
 struct PlacesView: View {
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var lang: LanguageManager
@@ -45,7 +44,7 @@ struct PlacesView: View {
 
     private func emptyState(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(spacing: 0) {
-            EmptyStateIllustration(name: "empty_map", size: 148)
+            EmptyStateIllustration(name: "empty_places", size: 148)
 
             Text(AppStrings.placesEmptyTitle(l))
                 .font(.inter(21, weight: .heavy))
