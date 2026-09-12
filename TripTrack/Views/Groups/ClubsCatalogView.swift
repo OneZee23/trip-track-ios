@@ -61,7 +61,7 @@ struct ClubsCatalogView: View {
                         // лист ожидания. Внутри строки на её месте стоит
                         // `.hidden()`-двойник — он сохраняет размер, поэтому
                         // накладка встаёт ровно в те же координаты.
-                        .overlay { joinOverlay(club) }
+                        .overlay { joinOverlay(club, c: c) }
                     }
                 }
                 .padding(.top, 2)
@@ -106,15 +106,7 @@ struct ClubsCatalogView: View {
                     .lineLimit(1)
             }
 
-            Spacer(minLength: 8)
-
-            // Двойник-распорка: рисует и нажимает `joinOverlay` выше.
-            ClubJoinButton(club: club, compact: true)
-                .hidden()
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
+            trailingTail(club, joinVisible: false, c: c)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -123,21 +115,41 @@ struct ClubsCatalogView: View {
     }
 
     /// Только «Вступить», в тех же координатах, что и в строке: тот же хвост
-    /// `HStack` с теми же отступами. Шеврон здесь невидим и стоит распоркой —
-    /// без него кнопка уехала бы к самому краю карточки. Пустоты накладки
-    /// нажатий не ловят, поэтому вся остальная площадь по-прежнему открывает
-    /// клуб.
-    private func joinOverlay(_ club: Club) -> some View {
+    /// (`trailingTail`) с теми же отступами. Пустоты накладки нажатий не
+    /// ловят, поэтому вся остальная площадь по-прежнему открывает клуб.
+    private func joinOverlay(_ club: Club, c: AppTheme.Colors) -> some View {
+        trailingTail(club, joinVisible: true, c: c)
+            .padding(12)
+    }
+
+    /// Хвост строки — `Spacer` → «Вступить» → шеврон — общий для видимой
+    /// строки и надстроенной накладки поверх неё; раньше дублировался с
+    /// разным `minLength` у спейсера (8 и 0). Ровно один из кнопки/шеврона
+    /// настоящий, второй — невидимый двойник той же ширины, иначе второй
+    /// уехал бы к самому краю карточки: `row()` нажимает шевроном (кнопка —
+    /// распорка под `joinOverlay`), накладка — кнопкой (шеврон — распорка
+    /// под видимый в `row()`).
+    private func trailingTail(_ club: Club, joinVisible: Bool, c: AppTheme.Colors) -> some View {
         HStack(spacing: 12) {
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
 
-            ClubJoinButton(club: club, compact: true)
+            if joinVisible {
+                ClubJoinButton(club: club, compact: true)
+            } else {
+                ClubJoinButton(club: club, compact: true)
+                    .hidden()
+            }
 
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .hidden()
+            if joinVisible {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .hidden()
+            } else {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
         }
-        .padding(12)
     }
 }
 
