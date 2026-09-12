@@ -898,7 +898,7 @@ struct ProfileView: View {
     private func clubsSection() -> some View {
         let l = lang.language
         return VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 ProfileSectionLabel(text: AppStrings.clubsTitle(l))
                 Spacer(minLength: 8)
             }
