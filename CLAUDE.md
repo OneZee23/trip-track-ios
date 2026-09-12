@@ -565,6 +565,28 @@ git log --format='%s|%(trailers:key=Co-Authored-By)' origin/master..HEAD
   ответ на другой. Держит `VehicleDashboardPickerTests` — там же сторож
   «экран машины не пишет единицу аккаунта», близнец того, что стоит у объёма.
 
+### Вкладки: «Места» вместо «Групп» (0.6.8)
+
+- `AppTab` = `home, maps, record, places, profile`. Сохранённое «groups» в
+  `selectedTabV2` не парсится → `@AppStorage` отдаёт `.home`; держит
+  `AppTabTests.testStoredGroupsFallsBackToHome`. Миграции нет нарочно.
+- Тизер клубов, каталог и страница клуба пушатся из «Я» (`MeDest.clubs`,
+  `.clubsCatalog`, `.club`) со строки `ProfileClubsRow` под гаражом. Своего
+  `NavigationStack` у них больше нет (вложенный запрещён), а
+  `NavigationLink(value:)` в типизированном `[MeDest]` ОТКЛЮЧЁН — не падает,
+  просто мёртвый. Поэтому экраны отдают нажатие замыканием (`onOpenCatalog`,
+  `onOpenClub`), как `StatsScreenView.onOpenTrip`. Новый экран в стек «Я» —
+  новый `MeDest` и замыкание, не ссылка.
+- Таб-бар на экранах клубов остаётся, как у гаража и как рисует канон.
+- «Места» в волне 1 — только `PlacesView` с пустым экраном; модель, матчинг и
+  экраны — спека `docs/superpowers/specs/2026-09-12-068-places-public-journeys.md`.
+- **Геометрия таб-бара — в `CustomTabBar` и только там.** `bottomLift(bottomInset:)`:
+  с индикатором «домой» зазор до него равен боковому полю (`sideMargin`, 11 pt)
+  → 24 pt, без индикатора — канонные 14; `clearance` = пилюля + подъём + 8 — им
+  уводят последнюю строку экраны, над которыми бар ВИДЕН (лента, «Места»,
+  гараж, паспорт машины, экраны клубов). Литерал `96` остался только там, где
+  бар спрятан или экран открыт в шите. Держит `CustomTabBarLiftTests`.
+
 ## Localization & Theming
 
 - **Languages**: thirteen — `en, ru, de, es, fr, it, pl, id, tr, fil, uk, kk, pt` — via `LanguageManager.Language` + the `AppStrings` enum (all UI strings)
