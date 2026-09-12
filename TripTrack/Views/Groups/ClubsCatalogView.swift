@@ -54,6 +54,14 @@ struct ClubsCatalogView: View {
                         // отвечать под пальцем (CLAUDE.md «Нажатие обязано
                         // отвечать»); прежняя ссылка стояла на `.plain`.
                         .buttonStyle(PressableCardStyle())
+                        // «Вступить» — СОСЕД кнопки-строки, а не её потомок.
+                        // У `ButtonStyle` жест висит на всей площади ярлыка, и
+                        // вложенная кнопка нажатий не получает вовсе: тап по
+                        // «Вступить» открывал страницу клуба вместо записи в
+                        // лист ожидания. Внутри строки на её месте стоит
+                        // `.hidden()`-двойник — он сохраняет размер, поэтому
+                        // накладка встаёт ровно в те же координаты.
+                        .overlay { joinOverlay(club) }
                     }
                 }
                 .padding(.top, 2)
@@ -100,7 +108,9 @@ struct ClubsCatalogView: View {
 
             Spacer(minLength: 8)
 
+            // Двойник-распорка: рисует и нажимает `joinOverlay` выше.
             ClubJoinButton(club: club, compact: true)
+                .hidden()
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 13, weight: .semibold))
@@ -110,6 +120,24 @@ struct ClubsCatalogView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .surfaceCard(cornerRadius: 16)
         .contentShape(Rectangle())
+    }
+
+    /// Только «Вступить», в тех же координатах, что и в строке: тот же хвост
+    /// `HStack` с теми же отступами. Шеврон здесь невидим и стоит распоркой —
+    /// без него кнопка уехала бы к самому краю карточки. Пустоты накладки
+    /// нажатий не ловят, поэтому вся остальная площадь по-прежнему открывает
+    /// клуб.
+    private func joinOverlay(_ club: Club) -> some View {
+        HStack(spacing: 12) {
+            Spacer(minLength: 0)
+
+            ClubJoinButton(club: club, compact: true)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .hidden()
+        }
+        .padding(12)
     }
 }
 
