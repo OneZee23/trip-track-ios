@@ -43,8 +43,9 @@ struct MyMapSheet: View {
                     } else {
                         summaryCard
                             .padding(.horizontal, 16)
-                            // Clear the floating tab bar (74 pt pill + 14 pt gap).
-                            .padding(.bottom, 102)
+                            // Уйти из-под плавающего бара: клиренс + 6 = прежние 14 pt зазора над
+                            // пилюлей (тот же приём, что у `RecordingBanner` в ленте).
+                            .padding(.bottom, CustomTabBar.clearance + 6)
                             .transition(.opacity)
                     }
                 } else {

@@ -39,9 +39,15 @@ struct CustomTabBar: View {
     /// Сколько места снизу оставить контенту экрана, над которым висит бар:
     /// пилюля + подъём + 8 pt воздуха. Было литералом 96 (74 + 14 + 8) в
     /// каждом экране-вкладке, поэтому подъём нельзя было поменять, не
-    /// спрятав под бар последнюю строку ленты.
+    /// спрятав под бар последнюю строку ленты. Чистая версия — под тестом.
+    static func clearance(bottomInset: CGFloat) -> CGFloat {
+        pillHeight + bottomLift(bottomInset: bottomInset) + 8
+    }
+    /// То же от живого окна. `tt_safeAreaInsets` — nil, пока окна нет (первый
+    /// кадр; при подъёме в фоне — дольше): тогда 14 pt, верное значение
+    /// придёт с первой перерисовкой после появления окна.
     static var clearance: CGFloat {
-        pillHeight + bottomLift(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0) + 8
+        clearance(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0)
     }
 
     var body: some View {
@@ -84,7 +90,8 @@ struct CustomTabBar: View {
         // ContentView игнорирует безопасную зону снизу, поэтому пилюля
         // поднимается сама — над индикатором «домой», а не на нём: см.
         // `bottomLift`. `tt_safeAreaInsets` — nil только до первого окна;
-        // тогда берём 0 → 14 pt, и следующий же кадр ставит верное.
+        // тогда берём 0 → 14 pt, верное придёт с первой перерисовкой после
+        // появления окна.
         .padding(.bottom, Self.bottomLift(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0))
     }
 

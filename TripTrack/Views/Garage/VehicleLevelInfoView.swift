@@ -47,6 +47,10 @@ struct VehicleLevelInfoView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 4)
+                // Клиренс под бар: из гаража бар виден. Из экрана поездки
+                // (`TripDetailView`) он спрятан, и здесь остаётся 10 pt
+                // лишнего воздуха — сознательно: пушится только из паспорта
+                // машины, наследует оба его входа.
                 .padding(.bottom, CustomTabBar.clearance)
             }
             .scrollIndicators(.hidden)

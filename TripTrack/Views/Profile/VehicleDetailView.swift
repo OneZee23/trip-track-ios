@@ -166,6 +166,10 @@ struct VehicleDetailView: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.top, 4)
+                    // Клиренс под бар: из гаража бар виден. Из экрана поездки
+                    // (`TripDetailView`) он спрятан, и здесь остаётся 10 pt
+                    // лишнего воздуха — сознательно: второй вход реже первого,
+                    // а один экран не может знать, откуда его открыли.
                     .padding(.bottom, CustomTabBar.clearance)
                 }
                 .scrollIndicators(.hidden)

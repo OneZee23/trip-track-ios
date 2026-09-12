@@ -117,6 +117,7 @@ struct FeedView: View {
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
+        let clearance = CustomTabBar.clearance
 
         ZStack(alignment: .bottom) {
         NavigationStack(path: $authorPath) {
@@ -508,7 +509,7 @@ struct FeedView: View {
                 pending: pending,
                 undoLabel: AppStrings.undoAction(lang.language)
             )
-            .padding(.bottom, CustomTabBar.clearance)
+            .padding(.bottom, clearance)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .zIndex(200)
         }
@@ -523,7 +524,7 @@ struct FeedView: View {
             // Тот же клиренс, что у тост-уведомления выше, плюс 4pt: банер
             // висит чуть выше, чтобы не слипаться с ним, если оба на экране
             // разом. Было литералом 100 = 96 (старый клиренс) + 4.
-            .padding(.bottom, CustomTabBar.clearance + 4)
+            .padding(.bottom, clearance + 4)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .animation(.easeInOut(duration: 0.3), value: mapVM.isRecording)
         }

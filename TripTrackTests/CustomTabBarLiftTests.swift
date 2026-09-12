@@ -15,9 +15,10 @@ final class CustomTabBarLiftTests: XCTestCase {
         XCTAssertEqual(CustomTabBar.bottomLift(bottomInset: 0), 14)
     }
 
-    /// Клиренс обязан покрывать пилюлю с подъёмом при любом окне — иначе
-    /// последняя строка экрана прячется под бар.
-    func testClearanceCoversPillAndLift() {
-        XCTAssertGreaterThanOrEqual(CustomTabBar.clearance, CustomTabBar.pillHeight + 14 + 8)
+    /// Клиренс считается от ФАКТИЧЕСКОГО инсета, а не от пола: с индикатором
+    /// 74 + 24 + 8, без него 74 + 14 + 8.
+    func testClearanceFollowsInset() {
+        XCTAssertEqual(CustomTabBar.clearance(bottomInset: 34), 106)
+        XCTAssertEqual(CustomTabBar.clearance(bottomInset: 0), 96)
     }
 }

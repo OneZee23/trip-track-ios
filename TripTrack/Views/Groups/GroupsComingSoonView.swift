@@ -36,6 +36,10 @@ struct GroupsComingSoonView: View {
 
             content(c: c, l: l)
         }
+        // Как у каталога и страницы клуба: контент до физического низа, иначе
+        // к клиренсу прибавляется домашний индикатор, и `CustomTabBar.clearance`
+        // перестаёт значить то, что написано.
+        .ignoresSafeArea(edges: .bottom)
         .background(c.bg.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task { await waitlist.refresh() }
