@@ -90,7 +90,11 @@ struct CustomTabBar: View {
         .background {
             ZStack {
                 RoundedRectangle(cornerRadius: 30)
-                    .fill(.ultraThinMaterial)
+                    // Над картой материал плотнее: в светлой теме серые
+                    // подписи сквозь тонкое стекло на почти чёрной карте
+                    // не читались (QA 0.6.8). На остальных вкладках под
+                    // пилюлей свой фон, и тонкое стекло там на месте.
+                    .fill(selectedTab == .maps ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(.ultraThinMaterial))
                 RoundedRectangle(cornerRadius: 30)
                     .stroke(c.glassBorder, lineWidth: 1)
             }
