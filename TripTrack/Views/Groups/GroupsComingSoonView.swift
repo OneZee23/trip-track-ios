@@ -165,7 +165,9 @@ struct GroupsComingSoonView: View {
             )
         }
         .buttonStyle(.plain)
-        .disabled(waitlist.isBusy)
+        // Только своя запись, не фоновое чтение: иначе экран открывается с
+        // погашенной главной кнопкой (см. `GroupsWaitlistStore.isJoining`).
+        .disabled(waitlist.isJoining)
         .accessibilityIdentifier("groups_notify_cta")
     }
 

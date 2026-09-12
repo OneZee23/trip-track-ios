@@ -39,7 +39,11 @@ final class GroupsWaitlistStore: ObservableObject {
     static let shared = GroupsWaitlistStore()
 
     @Published private(set) var state: GroupsWaitlistState
-    @Published private(set) var isBusy = false
+    /// Своя ЗАПИСЬ в полёте — и только она. Флаг поднимал и `refresh()`, а на
+    /// нём стоит `.disabled` у «Уведомить меня»: экран клубов открывался с
+    /// погашенной главной кнопкой на всё время фонового опроса, хотя нажать её
+    /// было можно. Читатель гасить кнопку права не имеет.
+    @Published private(set) var isJoining = false
     /// Last error, for the one line the tab shows under the CTA.
     @Published private(set) var failed = false
 
@@ -53,6 +57,8 @@ final class GroupsWaitlistStore: ObservableObject {
     /// ограничения каждый заход в профиль был бы сетевым запросом.
     static let refreshInterval: TimeInterval = 300
     private var lastRefresh: Date?
+    /// Счётчик запущенных запросов — см. `run`.
+    private var latestRequest = 0
 
     private init() {
         if let data = UserDefaults.standard.data(forKey: Self.cacheKey),
@@ -81,6 +87,11 @@ final class GroupsWaitlistStore: ObservableObject {
         let isJoined = clubKey.map { state.joinedClubs.contains($0) } ?? state.joined
         let endpoint = isJoined ? APIEndpoint.groupsWaitlistLeave : APIEndpoint.groupsWaitlistJoin
 
+        // Поднимается ДО запроса разрешения: пока висит системный запрос,
+        // второе нажатие завело бы вторую запись.
+        isJoining = true
+        defer { isJoining = false }
+
         // Ask for notification permission on the way IN, never on the way out:
         // the whole point of joining is being told when it opens.
         if !isJoined {
@@ -108,10 +119,16 @@ final class GroupsWaitlistStore: ObservableObject {
     // MARK: - Plumbing
 
     private func run(_ request: @escaping () async throws -> GroupsWaitlistState) async {
-        isBusy = true
-        defer { isBusy = false }
+        // Номер последнего ЗАПУЩЕННОГО запроса: ответ, пришедший не последним,
+        // состояние не трогает. Раньше очередь держал `.disabled` на кнопке —
+        // и вместе с ней гасил её на время фонового чтения; без него чтение,
+        // начатое до записи и ответившее после неё, вернуло бы «вы не
+        // записаны» поверх свежей записи.
+        latestRequest += 1
+        let ticket = latestRequest
         do {
             let fresh = try await request()
+            guard ticket == latestRequest else { return }
             state = fresh
             lastRefresh = Date()
             failed = false
@@ -119,6 +136,7 @@ final class GroupsWaitlistStore: ObservableObject {
                 UserDefaults.standard.set(data, forKey: Self.cacheKey)
             }
         } catch {
+            guard ticket == latestRequest else { return }
             failed = true
             waitlistLog.error("waitlist call failed: \(error.localizedDescription, privacy: .public)")
         }
