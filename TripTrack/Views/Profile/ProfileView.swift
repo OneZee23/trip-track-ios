@@ -893,10 +893,23 @@ struct ProfileView: View {
 
     /// «Клубы — скоро» (0.6.8): под гаражом, над историей — там же, где и
     /// гараж, и по той же причине: под бесконечным списком никто не скроллит.
+    /// Свой заголовок — решение владельца после QA: без него строка читалась
+    /// второй карточкой раздела «Гараж».
     private func clubsSection() -> some View {
-        ProfileClubsRow { push(.clubs) }
+        let l = lang.language
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                ProfileSectionLabel(text: AppStrings.clubsTitle(l))
+                Spacer(minLength: 8)
+            }
             .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
+
+            ProfileClubsRow { push(.clubs) }
+                .padding(.horizontal, 16)
+        }
+        .padding(.bottom, 12)
     }
 
     /// ONE row: the vehicle currently selected as the main one.
