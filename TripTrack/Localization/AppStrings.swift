@@ -17,9 +17,6 @@ enum AppStrings {
     static func tabMap(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tabMap", ru: "Карта", en: "Map")
     }
-    static func tabGroups(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "tabGroups", ru: "Группы", en: "Groups")
-    }
     static func tabMe(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tabMe", ru: "Я", en: "Me")
     }
@@ -105,6 +102,11 @@ enum AppStrings {
     }
     static func clubsTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "clubsTitle", ru: "Клубы", en: "Clubs")
+    }
+    /// Хвост подписи строки «Клубы» в профиле: «Уже ждут 6 человек · вы
+    /// записаны». Строчная — это фрагмент после точки, не предложение.
+    static func clubsRowJoined(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "clubsRowJoined", ru: "вы записаны", en: "you're on the list")
     }
     static func clubsSubtitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "clubsSubtitle",

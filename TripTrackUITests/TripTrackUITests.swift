@@ -272,15 +272,25 @@ final class TripTrackUITests: XCTestCase {
         win.swipeUp(); usleep(700_000); snap("121_logs_lower")
     }
 
-    /// Groups teaser (0.6.0 Группы): tab → shot → notify CTA → done-state.
-    func test_zz_groups_shots() {
+    /// Places tab shot, then the clubs teaser reached via profile (0.6.8):
+    /// «Места» tab → shot; «Я» → clubs row → teaser → notify CTA.
+    func test_zz_places_shots() {
         normalizeToHome()
-        let groups = app.buttons.matching(identifier: "tab_groups").firstMatch
-        if groups.waitForExistence(timeout: 3) { groups.tap(); sleep(2) }
-        snap("130_groups_teaser")
-        let cta = app.buttons.matching(identifier: "groups_notify_cta").firstMatch
-        if cta.waitForExistence(timeout: 2), cta.isHittable {
-            cta.tap(); sleep(1); snap("131_groups_notified")
+        let places = app.buttons.matching(identifier: "tab_places").firstMatch
+        if places.waitForExistence(timeout: 3) { places.tap(); sleep(2) }
+        snap("130_places_empty")
+
+        // Клубы переехали из вкладки в профиль (0.6.8): строка под гаражом.
+        let me = app.buttons.matching(identifier: "tab_profile").firstMatch
+        if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
+        let row = app.buttons.matching(identifier: "profile_clubs_row").firstMatch
+        if !row.waitForExistence(timeout: 2) { win.swipeUp(); usleep(700_000) }
+        if row.waitForExistence(timeout: 2), row.isHittable {
+            row.tap(); sleep(2); snap("131_clubs_teaser")
+            let cta = app.buttons.matching(identifier: "groups_notify_cta").firstMatch
+            if cta.waitForExistence(timeout: 2), cta.isHittable {
+                cta.tap(); sleep(1); snap("132_clubs_notified")
+            }
         }
     }
 

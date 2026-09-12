@@ -106,6 +106,15 @@ struct ProfileView: View {
         /// enum for `mePath`) because `mePath`'s type predates it and this
         /// is the only spot in the Я stack that needs a non-owned trip.
         case companionTrip(SocialFeedTrip)
+        /// Клубы (0.6.8): вкладки «Группы» больше нет — тизер, каталог и
+        /// страница клуба пушатся отсюда, из строки под гаражом. Три случая,
+        /// а не один экран со своим стеком: вложенный `NavigationStack`
+        /// запрещён, а `mePath` типизирован, и `NavigationLink(value: Club)`
+        /// в нём отключён — поэтому экраны клубов отдают нажатие замыканием,
+        /// а пушит профиль.
+        case clubs
+        case clubsCatalog
+        case club(Club)
     }
 
     /// How История draws its trips — canon 580:122 (list) / 755:119 (grid).
@@ -243,6 +252,13 @@ struct ProfileView: View {
                         // it is the one section here that has something to
                         // do before the first kilometre.
                         garageSection(c)
+
+                        // «Клубы — скоро» (0.6.8): под гаражом, над историей
+                        // — там же, где и гараж, и по той же причине: под
+                        // бесконечным списком никто не скроллит.
+                        ProfileClubsRow { push(.clubs) }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
                     } else {
                         if !auth.isSignedIn {
                             guestSignInCard(c)
@@ -287,6 +303,13 @@ struct ProfileView: View {
                         // its place whether the library is empty, loading, or
                         // full.
                         garageSection(c)
+
+                        // «Клубы — скоро» (0.6.8): под гаражом, над историей
+                        // — там же, где и гараж, и по той же причине: под
+                        // бесконечным списком никто не скроллит.
+                        ProfileClubsRow { push(.clubs) }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
 
                         // Над «Историей», а не под ней: подсказка про только
                         // что законченное путешествие теряет смысл, если её
@@ -414,6 +437,14 @@ struct ProfileView: View {
                 case .journey(let id):
                     // Экран путешествия сам рисует свою шапку и прячет таб-бар.
                     JourneyDetailView(journeyId: id)
+                case .clubs:
+                    GroupsComingSoonView(onOpenCatalog: { push(.clubsCatalog) })
+                case .clubsCatalog:
+                    ClubsCatalogView(onOpenClub: { push(.club($0)) })
+                case .club(let club):
+                    // Таб-бар остаётся, как у гаража и как рисует канон
+                    // (`ClubDetailView`): пушнутый экран со своей шапкой.
+                    ClubDetailView(club: club)
                 case .companionTrip(let trip):
                     // Same construction FeedView's `.socialTrip` destination
                     // uses: `social:` feeds the screen someone else's trip,
@@ -654,7 +685,8 @@ struct ProfileView: View {
         case .publicGarage(let id, let name): return .publicGarage(id, name)
         case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
         case .garage, .stats, .myProfile, .levels, .country, .achievements,
-             .achievement, .trip, .journey, .companionTrip:
+             .achievement, .trip, .journey, .companionTrip,
+             .clubs, .clubsCatalog, .club:
             return nil
         }
     }
