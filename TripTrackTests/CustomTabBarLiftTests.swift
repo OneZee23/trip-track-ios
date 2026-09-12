@@ -21,4 +21,11 @@ final class CustomTabBarLiftTests: XCTestCase {
         XCTAssertEqual(CustomTabBar.clearance(bottomInset: 34), 106)
         XCTAssertEqual(CustomTabBar.clearance(bottomInset: 0), 96)
     }
+
+    /// Внутри стека отсчёт от границы безопасной зоны: 106 − 34 = 72 с
+    /// индикатором, 96 − 0 = 96 без него.
+    func testClearanceAboveSafeAreaSubtractsTheInset() {
+        XCTAssertEqual(CustomTabBar.clearanceAboveSafeArea(bottomInset: 34), 72)
+        XCTAssertEqual(CustomTabBar.clearanceAboveSafeArea(bottomInset: 0), 96)
+    }
 }

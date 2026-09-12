@@ -51,7 +51,7 @@ struct VehicleLevelInfoView: View {
                 // (`TripDetailView`) он спрятан, и здесь остаётся 10 pt
                 // лишнего воздуха — сознательно: пушится только из паспорта
                 // машины, наследует оба его входа.
-                .padding(.bottom, CustomTabBar.clearance)
+                .padding(.bottom, CustomTabBar.clearanceAboveSafeArea)
             }
             .scrollIndicators(.hidden)
         }

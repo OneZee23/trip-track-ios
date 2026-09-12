@@ -49,6 +49,16 @@ struct CustomTabBar: View {
     static var clearance: CGFloat {
         clearance(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0)
     }
+    /// Тот же клиренс для скролла, который УВАЖАЕТ безопасную зону снизу —
+    /// экраны внутри `NavigationStack` (профиль, гараж, паспорт, лента):
+    /// их содержимое кончается на границе зоны, а пилюля стоит от физического
+    /// низа, и без вычета под последней строкой было 42 pt вместо 8.
+    static func clearanceAboveSafeArea(bottomInset: CGFloat) -> CGFloat {
+        max(0, clearance(bottomInset: bottomInset) - bottomInset)
+    }
+    static var clearanceAboveSafeArea: CGFloat {
+        clearanceAboveSafeArea(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0)
+    }
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)

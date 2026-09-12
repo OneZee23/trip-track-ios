@@ -170,7 +170,7 @@ struct VehicleDetailView: View {
                     // (`TripDetailView`) он спрятан, и здесь остаётся 10 pt
                     // лишнего воздуха — сознательно: второй вход реже первого,
                     // а один экран не может знать, откуда его открыли.
-                    .padding(.bottom, CustomTabBar.clearance)
+                    .padding(.bottom, CustomTabBar.clearanceAboveSafeArea)
                 }
                 .scrollIndicators(.hidden)
             }

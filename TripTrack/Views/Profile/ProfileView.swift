@@ -335,7 +335,8 @@ struct ProfileView: View {
                 }
                 // As a tab (0.6.0), leave room for the floating tab bar so the
                 // last row can scroll clear of it; as a sheet there is no bar.
-                .padding(.bottom, hostedInTab ? 120 : 40)
+                // Клиренс — как у гаража и паспорта, от границы безопасной зоны.
+                .padding(.bottom, hostedInTab ? CustomTabBar.clearanceAboveSafeArea : 40)
             }
             .scrollIndicators(.hidden)
             .background(c.bg)
