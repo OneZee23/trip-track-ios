@@ -1,7 +1,15 @@
 import SwiftUI
 
-/// Groups-tab teaser (Figma 117:2265 «09 · Группы · Скоро»): an IdleRing hero,
-/// example club chips, «Уведомить меня» and «Посмотреть что будет».
+/// Тизер клубов (Figma 117:2265 «09 · Группы · Скоро»): кластер марок,
+/// примеры клубов, «Уведомить меня» и «Посмотреть что будет».
+///
+/// С 0.6.8 это НЕ вкладка: «Группы» ушли строкой в профиль (спека 0.6.8 §3),
+/// и экран пушится из «Я». Отсюда две вещи:
+///  • шапка — `CustomNavBar` с «назад», а не заголовок вкладки;
+///  • своего `NavigationStack` нет (вложенный запрещён), а в типизированном
+///    `[MeDest]` профиля `NavigationLink(value:)` с чужим типом отключён —
+///    поэтому «Посмотреть что будет» сообщает о нажатии замыканием, а пушит
+///    профиль (`MeDest.clubsCatalog`).
 ///
 /// Two things here used to be theatre and are not any more:
 ///  • «Уведомить меня» set a local `@AppStorage` bool. Nothing on the server
@@ -12,52 +20,30 @@ import SwiftUI
 ///  • «Уже ждут 1 240 человек» was a string in the layout. It is the count of
 ///    that waitlist now, and it does not appear at all until somebody is on it.
 struct GroupsComingSoonView: View {
+    let onOpenCatalog: () -> Void
+
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var waitlist = GroupsWaitlistStore.shared
     @ObservedObject private var auth = AuthService.shared
 
-    /// Type-erased because the stack carries two kinds of destination: the
-    /// catalogue (one of a kind) and a club (many).
-    @State private var path = NavigationPath()
-
-    /// The non-club destinations of this tab.
-    private enum GroupsRoute: Hashable { case catalog }
-
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
 
-        NavigationStack(path: $path) {
+        VStack(spacing: 0) {
+            CustomNavBar(title: AppStrings.clubsTitle(l)) { EmptyView() }
+
             content(c: c, l: l)
-                .navigationDestination(for: GroupsRoute.self) { _ in
-                    ClubsCatalogView()
-                }
-                .navigationDestination(for: Club.self) { club in
-                    // A pushed screen with its own bar; the tab bar stays,
-                    // exactly as canon draws it.
-                    ClubDetailView(club: club)
-                }
-                .toolbar(.hidden, for: .navigationBar)
         }
+        .background(c.bg.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
         .task { await waitlist.refresh() }
     }
 
     @ViewBuilder
     private func content(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         VStack(spacing: 0) {
-            // Page header (feed-header convention: 28 heavy, tracking −0.56).
-            HStack {
-                Text(AppStrings.tabGroups(l))
-                    .font(.inter(28, weight: .heavy))
-                    .tracking(-0.56)
-                    .foregroundStyle(c.text)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 2)
-            .padding(.bottom, 10)
-
             Spacer(minLength: 0)
 
             VStack(spacing: 0) {
@@ -179,11 +165,13 @@ struct GroupsComingSoonView: View {
         .accessibilityIdentifier("groups_notify_cta")
     }
 
-    /// «Посмотреть что будет» (canon 117:2265) — the second CTA, and the one
-    /// that was drawn in Figma but never built: the tab had no way into the
-    /// catalogue at all.
+    /// «Посмотреть что будет» (canon 117:2265) — second CTA. Кнопка, не
+    /// ссылка: см. комментарий к типу.
     private func previewButton(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        NavigationLink(value: GroupsRoute.catalog) {
+        Button {
+            Haptics.tap()
+            onOpenCatalog()
+        } label: {
             Text(AppStrings.groupsPreviewCTA(l))
                 .font(.inter(14, weight: .bold))
                 .foregroundStyle(AppTheme.accent)
@@ -195,7 +183,6 @@ struct GroupsComingSoonView: View {
                 )
         }
         .buttonStyle(.plain)
-        .simultaneousGesture(TapGesture().onEnded { Haptics.tap() })
         .accessibilityIdentifier("groups_preview_cta")
     }
 

@@ -8,6 +8,10 @@ import SwiftUI
 /// rather than of members. The counts come from the waitlist, so the page is a
 /// preview whose numbers are nonetheless true.
 struct ClubsCatalogView: View {
+    /// Пушит профиль: стек «Я» типизирован, `NavigationLink(value: club)`
+    /// в нём отключён (см. `GroupsComingSoonView`).
+    let onOpenClub: (Club) -> Void
+
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var waitlist = GroupsWaitlistStore.shared
@@ -40,10 +44,16 @@ struct ClubsCatalogView: View {
 
                 LazyVStack(spacing: 10) {
                     ForEach(Club.all) { club in
-                        NavigationLink(value: club) {
+                        Button {
+                            Haptics.tap()
+                            onOpenClub(club)
+                        } label: {
                             row(club, c: c, l: l)
                         }
-                        .buttonStyle(.plain)
+                        // Карточка, которая открывает страницу, обязана
+                        // отвечать под пальцем (CLAUDE.md «Нажатие обязано
+                        // отвечать»); прежняя ссылка стояла на `.plain`.
+                        .buttonStyle(PressableCardStyle())
                     }
                 }
                 .padding(.top, 2)
