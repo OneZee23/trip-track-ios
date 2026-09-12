@@ -33,7 +33,10 @@ enum LocalDataWipe {
             "VehiclePhotoEntity", "VehicleEntity",
             // Путешествие тоже без связи — `JourneyEntity` ссылается на поездки
             // только косвенно (окном дат), каскад от `TripEntity` её не заберёт.
-            "JourneyEntity", "VisitedGeohashEntity", "RoadEntity",
+            "JourneyEntity",
+            // Места и проезды — без связей — каскад не заберёт.
+            "PlacePassEntity", "PlaceEntity",
+            "VisitedGeohashEntity", "RoadEntity",
             "GeocodeCacheEntity",
         ]
         for name in entities {

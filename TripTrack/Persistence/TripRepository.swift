@@ -6,6 +6,16 @@ import OSLog
 
 // MARK: - Protocol
 
+/// Поездка для предфильтра мест: без точек, снимков и отметок.
+struct TripPreviewRef: Identifiable, Equatable {
+    let id: UUID
+    let startDate: Date
+    let previewPolyline: Data?
+    var previewCoordinates: [CLLocationCoordinate2D] {
+        previewPolyline.map(Trip.decodePolyline) ?? []
+    }
+}
+
 protocol TripRepository {
     func fetchTrips(limit: Int, offset: Int) -> [Trip]
     func fetchAllTrips() -> [Trip]
@@ -111,6 +121,19 @@ protocol TripRepository {
     func journeySyncStatus(id: UUID) -> Int16?
     func applyRemoteJourney(_ payload: JourneySyncPayload)
     func markJourneySynced(id: UUID, conflictVersion: Int)
+
+    // MARK: Места (0.6.8)
+    /// Выведенное значение: `pendingUpload` НЕ взводится, уедет с первой
+    /// настоящей правкой поездки.
+    func setPlaceId(forCheckpoint id: UUID, placeId: UUID)
+    /// Отметки завершённых поездок, у которых места ещё нет.
+    func checkpointsWithoutPlace() -> [(checkpoint: TripCheckpoint, tripId: UUID)]
+    /// Координаты отметок места — для центроида.
+    func checkpointCoordinates(placeId: UUID) -> [CLLocationCoordinate2D]
+    /// Лёгкая выборка для предфильтра: id, старт и превью, без снимков,
+    /// отметок и точек. `needingPlaceMatch: true` — только ещё не сверенные.
+    func tripPreviews(needingPlaceMatch: Bool) -> [TripPreviewRef]
+    func markPlacesMatched(tripId: UUID)
 }
 
 // MARK: - CoreData Implementation
@@ -321,6 +344,11 @@ final class CoreDataTripRepository: TripRepository {
 
     func deleteTrip(id: UUID) {
         guard let entity = fetchEntity(id: id) else { return }
+        // Проезды через места — без связи с поездкой (как `JourneyEntity`),
+        // каскад их не заберёт: история места не должна помнить поездку,
+        // которой у человека больше нет — ни после мягкого удаления, ни после
+        // твёрдого.
+        CoreDataPlaceStore(context: context).deletePasses(tripId: id)
         // If the trip never reached the server (no serverCreatedAt) we can
         // skip the soft-delete + enqueue dance entirely — there's nothing for
         // the server to delete. Without this short-circuit, a private trip
@@ -828,6 +856,61 @@ final class CoreDataTripRepository: TripRepository {
             ce.photoIdsJSON = Self.encodePhotoIds(rest)
             ce.lastModifiedAt = Date()
         }
+    }
+
+    // MARK: - Места (0.6.8)
+
+    func setPlaceId(forCheckpoint id: UUID, placeId: UUID) {
+        let request: NSFetchRequest<TripCheckpointEntity> = TripCheckpointEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        guard let ce = try? context.fetch(request).first, ce.placeId != placeId else { return }
+        // Нарочно без `markCheckpointsChanged`: место выводится из отметки и
+        // трека, оба уже синхронизируются; взводить очередь ради выведенного
+        // значения — слать каждую поездку библиотеки после первого бэкфилла.
+        ce.placeId = placeId
+        persistenceController.save()
+    }
+
+    func checkpointsWithoutPlace() -> [(checkpoint: TripCheckpoint, tripId: UUID)] {
+        let request: NSFetchRequest<TripCheckpointEntity> = TripCheckpointEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "placeId == nil AND trip != nil AND trip.endDate != nil AND trip.syncStatus != %d",
+                                        SyncStatus.pendingDelete.rawValue)
+        request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
+        return ((try? context.fetch(request)) ?? []).compactMap { ce in
+            guard let id = ce.id, let ts = ce.timestamp, let tripId = ce.trip?.id else { return nil }
+            return (TripCheckpoint(id: id, timestamp: ts, latitude: ce.latitude, longitude: ce.longitude,
+                                   distanceFromStart: ce.distanceFromStart, elapsedFromStart: ce.elapsedFromStart,
+                                   name: ce.name, photoId: ce.photoId,
+                                   photoIds: Self.decodePhotoIds(ce.photoIdsJSON), placeId: nil), tripId)
+        }
+    }
+
+    func checkpointCoordinates(placeId: UUID) -> [CLLocationCoordinate2D] {
+        let request: NSFetchRequest<TripCheckpointEntity> = TripCheckpointEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "placeId == %@", placeId as CVarArg)
+        return ((try? context.fetch(request)) ?? []).map {
+            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+        }
+    }
+
+    func tripPreviews(needingPlaceMatch: Bool) -> [TripPreviewRef] {
+        let request = NSFetchRequest<NSDictionary>(entityName: "TripEntity")
+        request.resultType = .dictionaryResultType
+        request.propertiesToFetch = ["id", "startDate", "previewPolyline"]
+        var predicates = [completedTripPredicate]
+        if needingPlaceMatch { predicates.append(NSPredicate(format: "placesMatchedAt == nil")) }
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        request.sortDescriptors = [NSSortDescriptor(key: "startDate", ascending: false)]
+        return ((try? context.fetch(request)) ?? []).compactMap { row in
+            guard let id = row["id"] as? UUID, let start = row["startDate"] as? Date else { return nil }
+            return TripPreviewRef(id: id, startDate: start, previewPolyline: row["previewPolyline"] as? Data)
+        }
+    }
+
+    func markPlacesMatched(tripId: UUID) {
+        guard let e = fetchEntity(id: tripId) else { return }
+        e.placesMatchedAt = Date()
+        persistenceController.save()
     }
 
     func deletePhoto(id: UUID, from tripId: UUID) {
@@ -1360,6 +1443,7 @@ final class CoreDataTripRepository: TripRepository {
         }
         // Та же уборка, что и в `deleteTripHard`: надгробие с другого телефона
         // тоже означает «поездки больше нет», а кадры каскад не заберёт.
+        CoreDataPlaceStore(context: context).deletePasses(tripId: id)
         PhotoStorageService.deletePhotos(for: id)
         context.delete(entity)
         saveIfNeeded()
