@@ -284,7 +284,11 @@ final class TripTrackUITests: XCTestCase {
         let me = app.buttons.matching(identifier: "tab_profile").firstMatch
         if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
         let row = app.buttons.matching(identifier: "profile_clubs_row").firstMatch
-        if !row.waitForExistence(timeout: 2) { win.swipeUp(); usleep(700_000) }
+        for _ in 0..<5 {
+            if row.exists { break }
+            win.swipeUp(); usleep(700_000)
+        }
+        XCTAssertTrue(row.waitForExistence(timeout: 2), "profile_clubs_row не найдена — потерян вход в клубы из профиля")
         if row.waitForExistence(timeout: 2), row.isHittable {
             row.tap(); sleep(2); snap("131_clubs_teaser")
             let cta = app.buttons.matching(identifier: "groups_notify_cta").firstMatch

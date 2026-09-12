@@ -253,12 +253,7 @@ struct ProfileView: View {
                         // do before the first kilometre.
                         garageSection(c)
 
-                        // «Клубы — скоро» (0.6.8): под гаражом, над историей
-                        // — там же, где и гараж, и по той же причине: под
-                        // бесконечным списком никто не скроллит.
-                        ProfileClubsRow { push(.clubs) }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 12)
+                        clubsSection()
                     } else {
                         if !auth.isSignedIn {
                             guestSignInCard(c)
@@ -304,12 +299,7 @@ struct ProfileView: View {
                         // full.
                         garageSection(c)
 
-                        // «Клубы — скоро» (0.6.8): под гаражом, над историей
-                        // — там же, где и гараж, и по той же причине: под
-                        // бесконечным списком никто не скроллит.
-                        ProfileClubsRow { push(.clubs) }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 12)
+                        clubsSection()
 
                         // Над «Историей», а не под ней: подсказка про только
                         // что законченное путешествие теряет смысл, если её
@@ -898,6 +888,14 @@ struct ProfileView: View {
             .padding(.horizontal, 16)
         }
         .padding(.bottom, 12)
+    }
+
+    /// «Клубы — скоро» (0.6.8): под гаражом, над историей — там же, где и
+    /// гараж, и по той же причине: под бесконечным списком никто не скроллит.
+    private func clubsSection() -> some View {
+        ProfileClubsRow { push(.clubs) }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
     }
 
     /// ONE row: the vehicle currently selected as the main one.
