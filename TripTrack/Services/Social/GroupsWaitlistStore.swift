@@ -48,6 +48,12 @@ final class GroupsWaitlistStore: ObservableObject {
     /// truth rather than zero).
     private static let cacheKey = "groups.waitlist.cache"
 
+    /// Не чаще раза в пять минут: число приходит из кэша мгновенно, а строка
+    /// в профиле (0.6.8) зовёт обновление при каждом открытии «Я» — без
+    /// ограничения каждый заход в профиль был бы сетевым запросом.
+    static let refreshInterval: TimeInterval = 300
+    private var lastRefresh: Date?
+
     private init() {
         if let data = UserDefaults.standard.data(forKey: Self.cacheKey),
            let cached = try? JSONDecoder().decode(GroupsWaitlistState.self, from: data) {
@@ -59,7 +65,8 @@ final class GroupsWaitlistStore: ObservableObject {
 
     private var deviceId: UUID { SettingsManager.shared.localUserId }
 
-    func refresh() async {
+    func refresh(force: Bool = false) async {
+        if !force, let last = lastRefresh, Date().timeIntervalSince(last) < Self.refreshInterval { return }
         await run {
             try await APIClient.shared.post(
                 APIEndpoint.groupsWaitlist,
@@ -106,6 +113,7 @@ final class GroupsWaitlistStore: ObservableObject {
         do {
             let fresh = try await request()
             state = fresh
+            lastRefresh = Date()
             failed = false
             if let data = try? JSONEncoder().encode(fresh) {
                 UserDefaults.standard.set(data, forKey: Self.cacheKey)
