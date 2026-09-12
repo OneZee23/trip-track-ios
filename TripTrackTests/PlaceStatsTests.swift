@@ -45,6 +45,16 @@ final class PlaceStatsTests: XCTestCase {
         XCTAssertEqual(stats.directions[0].count, 1)
     }
 
+    /// Оба проезда без курса — сгруппировать нечего, но проезды всё равно
+    /// посчитаны: `passCount` не зависит от наличия курса.
+    func testAllUnknownCoursesGiveNoDirections() {
+        let passes = [pass(daysAgo: 1, course: PlacePass.unknownCourse, elapsed: hms(2, 0)),
+                      pass(daysAgo: 2, course: PlacePass.unknownCourse, elapsed: hms(2, 5))]
+        let stats = PlaceStats.build(from: passes, now: now)
+        XCTAssertEqual(stats.passCount, 2)
+        XCTAssertTrue(stats.directions.isEmpty)
+    }
+
     func testFirstAndLastAndFirstTime() {
         let one = PlaceStats.build(from: [pass(daysAgo: 3, course: 0, elapsed: 100)], now: now)
         XCTAssertTrue(one.isFirstTime)
@@ -54,7 +64,14 @@ final class PlaceStatsTests: XCTestCase {
         XCTAssertFalse(two.isFirstTime)
         XCTAssertEqual(two.firstAt, now.addingTimeInterval(-30 * 86_400))
         XCTAssertEqual(two.lastAt, now.addingTimeInterval(-3 * 86_400))
-        XCTAssertNil(PlaceStats.build(from: [], now: now).firstAt)
+        // Пустой список — не просто "нет первой": ни одного поля со значением.
+        let empty = PlaceStats.build(from: [], now: now)
+        XCTAssertEqual(empty.passCount, 0)
+        XCTAssertNil(empty.firstAt)
+        XCTAssertNil(empty.lastAt)
+        XCTAssertTrue(empty.directions.isEmpty)
+        XCTAssertFalse(empty.isFrequentGuest)
+        XCTAssertFalse(empty.isFirstTime)
     }
 
     /// «Частый гость» — ≥ 5 проездов за 90 дней. Старые проезды не в счёт.

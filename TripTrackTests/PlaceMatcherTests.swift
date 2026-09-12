@@ -85,7 +85,8 @@ final class PlaceMatcherTests: XCTestCase {
         let jubga = place(lat: 44.3196, lon: 38.7089)
         let moscow = PlaceMatcher.cells(of: [CLLocationCoordinate2D(latitude: 55.75, longitude: 37.61)])
         XCTAssertFalse(PlaceMatcher.isCandidate(place: jubga, tripCells: moscow))
-        let sameCell = PlaceMatcher.cells(of: [CLLocationCoordinate2D(latitude: 44.3300, longitude: 38.7200)])
+        // Та же ячейка — координаты самого места.
+        let sameCell = PlaceMatcher.cells(of: [jubga.coordinate])
         XCTAssertTrue(PlaceMatcher.isCandidate(place: jubga, tripCells: sameCell))
         // Соседняя ячейка geohash-5 (~2 км восточнее) — тоже кандидат: место у
         // границы ячейки видно из соседней.
