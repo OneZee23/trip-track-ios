@@ -330,6 +330,9 @@ final class TripManager: ObservableObject {
                 SyncQueue.shared.cancelOperations(for: pid, entityType: .photo)
             }
         }
+        Task { @MainActor in
+            PlaceManager.shared.forget(tripId: id)
+        }
         repository.deleteTrip(id: id)
     }
 
@@ -467,6 +470,9 @@ final class TripManager: ObservableObject {
         if saved != nil {
             checkpointCount += 1
             nameCheckpointFromPlace(id: checkpoint.id, tripId: tripId, coordinate: here.coordinate)
+            Task { @MainActor in
+                PlaceManager.shared.registerCheckpoint(checkpoint, tripId: tripId)
+            }
         }
         return saved
     }
@@ -516,6 +522,9 @@ final class TripManager: ObservableObject {
         if saved != nil {
             enqueueTripUpdate(tripId)
             nameCheckpointFromPlace(id: checkpoint.id, tripId: tripId, coordinate: fix.coordinate)
+            Task { @MainActor in
+                PlaceManager.shared.registerCheckpoint(checkpoint, tripId: tripId)
+            }
         }
         return saved
     }
@@ -559,6 +568,9 @@ final class TripManager: ObservableObject {
         guard looksDefault else { return }
         repository.updateCheckpoint(
             id: id, name: name, photoId: checkpoint.photoId, photoIds: checkpoint.photoIds)
+        Task { @MainActor in
+            PlaceManager.shared.adoptName(name, forCheckpoint: id, tripId: tripId)
+        }
         enqueueTripUpdate(tripId)
         NotificationCenter.default.post(name: .tripCheckpointsChanged, object: tripId)
     }

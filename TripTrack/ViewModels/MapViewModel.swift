@@ -310,6 +310,9 @@ final class MapViewModel: ObservableObject {
             gamificationManager.backfillIfNeeded(trips: allTrips, settingsEntity: settingsEntity)
 
             territoryManager.backfillIfNeeded()
+            // Места (0.6.8): отметки без места и поездки без сверки. После
+            // первого раза — пустые выборки, ноль работы.
+            await PlaceManager.shared.reconcile()
             gamificationManager.backfillBadgesIfNeeded(trips: allTrips)
             StartupTrace.mark("migrations+backfill done")
         }
@@ -841,6 +844,10 @@ final class MapViewModel: ObservableObject {
             let processor = PostTripTrackProcessor()
             Task {
                 await processor.processTrip(trip.id)
+                // На ОКОНЧАТЕЛЬНОМ треке — с заполненными разрывами и без
+                // выбросов; мусорная поездка к этому моменту уже удалена, и
+                // `process` для неё ничего не найдёт.
+                await PlaceManager.shared.process(tripId: trip.id)
             }
         }
 

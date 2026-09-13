@@ -26,6 +26,9 @@ extension Notification.Name {
     static let tripRecordingEnded = Notification.Name("tripRecordingEnded")
     static let territoryRebuilt = Notification.Name("territoryRebuilt")
     static let syncPullCompleted = Notification.Name("syncPullCompleted")
+    /// Места или проезды изменились (0.6.8): вкладка «Места» и чип у отметки
+    /// перечитывают историю.
+    static let placesChanged = Notification.Name("placesChanged")
     static let tripPrivacyChanged = Notification.Name("tripPrivacyChanged")
     /// Photo added or removed from a trip. Feed listens so the card's photo
     /// indicator refreshes without forcing a pull-to-refresh.
