@@ -9,4 +9,10 @@ import Foundation
 struct GeocodeCacheResult {
     let locality: String?
     let region: String?
+
+    /// TTL записи кэша — 90 дней, один источник на оба пути чтения:
+    /// синхронный `CoreDataTripRepository.cachedGeocode` и пакетный фоновый
+    /// `TripManager.cachedLocalities`. Раньше то же число стояло в обоих
+    /// файлах по отдельности и могло разъехаться при правке одного из них.
+    static let ttl: TimeInterval = 90 * 24 * 3600
 }

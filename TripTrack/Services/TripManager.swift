@@ -798,9 +798,6 @@ final class TripManager: ObservableObject {
 
     // MARK: - Geocoding (with persistent cache)
 
-    /// TTL for geocoding cache entries (90 days)
-    private static let geocodeCacheTTL: TimeInterval = 90 * 24 * 3600
-
     private func geocodeAndNameTrip(entity: TripEntity) {
         guard let points = entity.trackPoints?.array as? [TrackPointEntity],
               let first = points.first, let last = points.last else { return }
@@ -1001,7 +998,7 @@ final class TripManager: ObservableObject {
         })
         guard !geohashes.isEmpty else { return [:] }
         let context = persistenceController.container.newBackgroundContext()
-        let ttl = Self.geocodeCacheTTL
+        let ttl = GeocodeCacheResult.ttl
         return await withCheckedContinuation { (cont: CheckedContinuation<[String: String], Never>) in
             context.perform {
                 let request: NSFetchRequest<GeocodeCacheEntity> = GeocodeCacheEntity.fetchRequest()

@@ -18,7 +18,8 @@ struct PlaceDetailView: View {
     @State private var renaming = false
 
     private static let dayMonthWeekday = LocalizedDateFormatter.templates("dMMMEEE")
-    private static let dayMonthYear = LocalizedDateFormatter.templates("dMMMyyyy")
+    private static let dayMonth = LocalizedDateFormatter.templates("dMMM")
+    private static let monthYear = LocalizedDateFormatter.templates("MMMyyyy")
 
     init(placeId: UUID, onOpenTrip: @escaping (UUID, TripFocus) -> Void) {
         self.placeId = placeId
@@ -148,47 +149,35 @@ struct PlaceDetailView: View {
 
     // MARK: - Плитки
 
-    /// Своя плитка, не `DetailStatCard`: та рисует значение ОДНИМ 23pt-словом
-    /// под цифру («4 ч 58 мин») и в трети ширины экрана обрезает «18 сент.
-    /// 2026» в «18 сент…» даже с `minimumScaleFactor`. Карточка та же (радиус,
-    /// тень, подпись капсом) — отличается только размер числа.
+    /// Тот же `DetailStatCard`, что у путешествия (`JourneyDetailView.totals`)
+    /// и поездки — общий компонент плитки, а не его копия. Держится это тем,
+    /// что дата у него короткая (`tileDate`): полная дата с годом
+    /// («Jun 18, 2026») в трети ширины плитки обрезалась в «Jun 18, 2…» даже
+    /// с `minimumScaleFactor` — короткая («18 июн») в тот же 23pt влезает.
     private func tilesRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         HStack(spacing: 10) {
-            tile(value: "\(model.stats.passCount)", label: AppStrings.nounPasses(l, model.stats.passCount), c: c)
-            tile(value: tileDate(model.stats.firstAt, l), label: AppStrings.placeTileFirst(l), c: c)
-            tile(value: tileDate(model.stats.lastAt, l), label: AppStrings.placeTileLast(l), c: c)
+            DetailStatCard(value: "\(model.stats.passCount)",
+                           label: AppStrings.nounPasses(l, model.stats.passCount),
+                           color: AppTheme.accent)
+            DetailStatCard(value: model.stats.firstAt.map { Self.tileDate($0, lang: l) } ?? "—",
+                           label: AppStrings.placeTileFirst(l),
+                           color: AppTheme.accent)
+            DetailStatCard(value: model.stats.lastAt.map { Self.tileDate($0, lang: l) } ?? "—",
+                           label: AppStrings.placeTileLast(l),
+                           color: AppTheme.accent)
         }
     }
 
-    private func tile(value: String, label: String, c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(value)
-                .font(.system(size: 16, weight: .heavy))
-                .foregroundStyle(AppTheme.accent)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(label)
-                .font(.system(size: 10, weight: .bold))
-                .tracking(0.2)
-                .textCase(.uppercase)
-                .foregroundStyle(c.textTertiary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, 14)
-        .padding(.trailing, 10)
-        .padding(.vertical, 13)
-        .background {
-            RoundedRectangle(cornerRadius: 14)
-                .fill(c.card)
-                .shadow(color: scheme == .dark ? .clear : .black.opacity(0.03), radius: 2, y: 1)
-        }
-    }
-
-    private func tileDate(_ date: Date?, _ l: LanguageManager.Language) -> String {
-        guard let date, let f = Self.dayMonthYear[l] else { return "—" }
-        return f.string(from: date)
+    /// «18 июн» внутри текущего календарного года просмотра, иначе
+    /// «июн 2024» — без года место, которое не видели три года, читалось бы
+    /// как «в этом году». Чистая функция (`now`/`calendar` параметрами, не
+    /// `Date()`/`.current` внутри тела) — год решает тест, а не то, в каком
+    /// году открыли экран.
+    static func tileDate(_ date: Date, now: Date = Date(), calendar: Calendar = .current,
+                          lang: LanguageManager.Language) -> String {
+        let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
+        let templates = sameYear ? dayMonth : monthYear
+        return templates[lang]?.string(from: date) ?? ""
     }
 
     // MARK: - «Обычно занимает»

@@ -940,9 +940,6 @@ final class CoreDataTripRepository: TripRepository {
 
     // MARK: - Геокодер-кэш
 
-    /// TTL записи — 90 дней; то же значение, что жило в `TripManager`.
-    private static let geocodeCacheTTL: TimeInterval = 90 * 24 * 3600
-
     func cachedGeocode(for coordinate: CLLocationCoordinate2D) -> GeocodeCacheResult? {
         let geohash = GeohashEncoder.encode(latitude: coordinate.latitude, longitude: coordinate.longitude, precision: 5)
         let request: NSFetchRequest<GeocodeCacheEntity> = GeocodeCacheEntity.fetchRequest()
@@ -954,7 +951,7 @@ final class CoreDataTripRepository: TripRepository {
         // Протухшую запись удаляем, но сохранение асинхронное — сам lookup
         // синхронный и не должен ждать записи на диск.
         if let cachedAt = entity.cachedAt,
-           Date().timeIntervalSince(cachedAt) > Self.geocodeCacheTTL {
+           Date().timeIntervalSince(cachedAt) > GeocodeCacheResult.ttl {
             context.delete(entity)
             persistenceController.saveAsync()
             return nil
