@@ -50,8 +50,13 @@ struct PlacesMapView: UIViewRepresentable {
         private var shownPins: [PlacePin] = []
         private var shownRoutes: [[CLLocationCoordinate2D]] = []
         private var fitted = false
+        /// Запомненный выбор: `mapView(_:viewFor:)` красит свежесозданную
+        /// булавку сразу, не дожидаясь следующего `sync()` — на момент
+        /// дозапроса вида `map.view(for:)` эту аннотацию ещё не видит.
+        private var selectedId: UUID?
 
         func sync(pins: [PlacePin], routes: [[CLLocationCoordinate2D]], selectedId: UUID?, on map: MKMapView) {
+            self.selectedId = selectedId
             if pins != shownPins {
                 map.removeAnnotations(map.annotations)
                 map.addAnnotations(pins.map { PlaceAnnotation(pin: $0) })
@@ -96,8 +101,13 @@ struct PlacesMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            guard annotation is PlaceAnnotation else { return nil }
-            return mapView.dequeueReusableAnnotationView(withIdentifier: PlacePinView.reuseID, for: annotation)
+            guard let place = annotation as? PlaceAnnotation else { return nil }
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: PlacePinView.reuseID, for: annotation)
+            // Свежедобавленная булавка ещё не видна `map.view(for:)` в цикле
+            // ниже по `sync()`, а переиспользованный вид мог прийти с чужим
+            // масштабом — красим по актуальному выбору здесь же.
+            (view as? PlacePinView)?.setSelectedAppearance(place.pin.id == selectedId)
+            return view
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
@@ -150,6 +160,13 @@ final class PlacePinView: MKAnnotationView {
         accessibilityIdentifier = "place_pin"
     }
     required init?(coder: NSCoder) { nil }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        // Иначе переиспользованный вид мог на кадр мелькнуть с прежним
+        // масштабом 1.35 до того, как `mapView(_:viewFor:)` перекрасит его.
+        setSelectedAppearance(false)
+    }
 
     func setSelectedAppearance(_ selected: Bool) {
         transform = selected ? CGAffineTransform(scaleX: 1.35, y: 1.35) : .identity
