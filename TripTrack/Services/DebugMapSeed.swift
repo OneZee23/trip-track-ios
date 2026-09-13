@@ -12,9 +12,17 @@ import CoreLocation
 /// compiled out of release builds entirely.
 enum DebugMapSeed {
     static let launchArgument = "-seed-map-demo"
+    /// Вторым аргументом поверх обычного сида поездок добавляет одну отметку
+    /// на демо-поездке — иначе «Места» на скриншотах и QA стоят пустой полкой,
+    /// а сеять настоящее место настоящим проездом здесь нечем.
+    static let placesArgument = "-seed-places-demo"
 
     static var isRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
+    }
+
+    static var isPlacesRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(placesArgument)
     }
 
     private struct Route {
@@ -78,7 +86,12 @@ enum DebugMapSeed {
         let context = persistence.container.viewContext
         let existing: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         existing.fetchLimit = 1
-        if let found = try? context.count(for: existing), found > 0 { return }
+        if let found = try? context.count(for: existing), found > 0 {
+            // Повторный запуск с тем же аргументом: поездки на месте, сеять
+            // маршруты заново незачем, а отметке сеяться, кроме них, негде.
+            if isPlacesRequested { seedPlaceDemo(persistence: persistence) }
+            return
+        }
 
         for route in routes {
         for pass in 0..<route.repeats {
@@ -128,6 +141,49 @@ enum DebugMapSeed {
         }
         }
         persistence.save()
+        if isPlacesRequested { seedPlaceDemo(persistence: persistence) }
+    }
+
+    // MARK: - Отметка (0.6.8)
+
+    /// Для скриншотов и QA: место с историей без реальной поездки — сама
+    /// поездка уже засеяна выше, здесь только одна отметка посередине трека.
+    /// Идемпотентно: если у выбранной поездки уже есть отметка, повторный
+    /// запуск ничего не делает.
+    private static func seedPlaceDemo(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: true)]
+        guard let trips = try? context.fetch(request),
+              let target = trips.first(where: { ($0.trackPoints?.count ?? 0) >= 40 }),
+              let tripId = target.id,
+              (target.checkpoints?.count ?? 0) == 0 else { return }
+
+        // Через репозиторий, а не через `TripManager`: тот заодно ставит
+        // отметку в очередь синка и зовёт геокодер, чей ответ переписал бы
+        // «Демо-место» настоящим названием — обоим побочным эффектам здесь не
+        // место.
+        let repository = CoreDataTripRepository(persistenceController: persistence)
+        guard let trip = repository.fetchTripDetail(id: tripId), !trip.trackPoints.isEmpty else { return }
+
+        let points = trip.trackPoints
+        let index = points.count / 2
+        let prefix = TripRouteLocator.distancePrefix(points)
+        let fix = TripRouteLocator.fix(at: index, in: points, prefix: prefix, origin: trip.startDate)
+        let checkpoint = TripCheckpoint(
+            timestamp: fix.timestamp,
+            latitude: fix.coordinate.latitude,
+            longitude: fix.coordinate.longitude,
+            distanceFromStart: fix.distanceFromStart,
+            elapsedFromStart: fix.elapsedFromStart,
+            name: "Демо-место")
+        guard let saved = repository.addCheckpoint(checkpoint, to: tripId) else { return }
+        // Историю места (проезды по всей библиотеке) досчитает фоновая
+        // задача внутри `PlaceManager` — для скриншота и QA достаточно, что
+        // место появилось, а не что оно сразу знает «обычно».
+        Task { @MainActor in
+            PlaceManager.shared.registerCheckpoint(saved, tripId: tripId)
+        }
     }
 
     // MARK: - Geometry
