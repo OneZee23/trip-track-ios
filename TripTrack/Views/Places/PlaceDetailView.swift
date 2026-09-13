@@ -70,7 +70,13 @@ struct PlaceDetailView: View {
         // резком pop посреди анимации.
         .background(NavBarKiller())
         .ignoresSafeArea(edges: .bottom)
-        .task { model.load() }
+        .task {
+            model.load()
+            // Пришли по устаревшему id (`.navigateToPlace` на уже удалённое
+            // место): `place` был `nil` и остался `nil`, перехода нет, и
+            // `onChange` в `body` не сработает никогда — закрываемся здесь.
+            if model.place == nil { dismiss() }
+        }
         .sheet(isPresented: $renaming) {
             PlaceRenameSheet(name: model.place?.name) { model.rename($0) }
         }
