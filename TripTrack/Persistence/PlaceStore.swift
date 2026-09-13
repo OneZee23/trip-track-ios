@@ -18,6 +18,9 @@ protocol PlaceStore {
     func upsertPlace(cell: String, coordinate: CLLocationCoordinate2D, name: String?) -> (place: Place, isNew: Bool)
     func recomputeCentroid(placeId: UUID, from coordinates: [CLLocationCoordinate2D])
     func adoptName(_ name: String, forPlace id: UUID)
+    /// Имя рукой: перезаписывает любое; пустое — снова безымянное. Геокодер
+    /// (`adoptName`) пишет только в пустое, поэтому данное рукой не откатит.
+    func rename(placeId: UUID, to name: String?)
     /// Место и его проезды. Отметки остаются при своих `placeId` (надгробие):
     /// иначе сверка при запуске воскресила бы место тем же вечером.
     func deletePlace(id: UUID)
@@ -89,6 +92,13 @@ final class CoreDataPlaceStore: PlaceStore {
     func adoptName(_ name: String, forPlace id: UUID) {
         guard !name.isEmpty, let e = entity(id: id), e.name == nil else { return }
         e.name = name
+        save()
+    }
+
+    func rename(placeId: UUID, to name: String?) {
+        guard let e = entity(id: placeId) else { return }
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        e.name = (trimmed?.isEmpty ?? true) ? nil : trimmed
         save()
     }
 

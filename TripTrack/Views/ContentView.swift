@@ -29,6 +29,10 @@ extension Notification.Name {
     /// Места или проезды изменились (0.6.8): вкладка «Места» и чип у отметки
     /// перечитывают историю.
     static let placesChanged = Notification.Name("placesChanged")
+    /// Открыть место из чужого стека (чип у отметки живёт в экране поездки,
+    /// а тот — в ленте или профиле): двухфазно, как `.openTripDetail`.
+    static let openPlace = Notification.Name("openPlace")
+    static let navigateToPlace = Notification.Name("navigateToPlace")
     static let tripPrivacyChanged = Notification.Name("tripPrivacyChanged")
     /// Photo added or removed from a trip. Feed listens so the card's photo
     /// indicator refreshes without forcing a pull-to-refresh.

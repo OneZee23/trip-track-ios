@@ -88,4 +88,20 @@ final class PlaceStatsTests: XCTestCase {
         XCTAssertEqual(PlaceStats.angularDistance(10, 350), 20)
         XCTAssertEqual(PlaceStats.angularDistance(0, 180), 180)
     }
+
+    /// Медиана по ВСЕМ проездам — для карточки списка, когда у места нет
+    /// ни одного проезда с курсом (все −1) или направления не нужны.
+    func testOverallMedianAndLatestTripPerDirection() {
+        let a = UUID(), b = UUID(), c = UUID()
+        let passes = [
+            PlacePass(placeId: placeId, tripId: a, timestamp: now.addingTimeInterval(-3 * 86_400), elapsedFromStart: hms(2, 14), distanceFromStart: 1, course: 0),
+            PlacePass(placeId: placeId, tripId: b, timestamp: now.addingTimeInterval(-1 * 86_400), elapsedFromStart: hms(2, 8), distanceFromStart: 1, course: 5),
+            PlacePass(placeId: placeId, tripId: c, timestamp: now.addingTimeInterval(-2 * 86_400), elapsedFromStart: hms(1, 58), distanceFromStart: 1, course: 180),
+        ]
+        let stats = PlaceStats.build(from: passes, now: now)
+        XCTAssertEqual(stats.medianElapsed, hms(2, 8))                 // 1:58, 2:08, 2:14 → 2:08
+        XCTAssertEqual(stats.directions[0].latestTripId, b)            // север: самый свежий — b
+        XCTAssertEqual(stats.directions[1].latestTripId, c)
+        XCTAssertNil(PlaceStats.build(from: [], now: now).medianElapsed)
+    }
 }

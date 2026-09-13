@@ -218,6 +218,13 @@ final class PlaceManager: ObservableObject {
         reload()
     }
 
+    /// Имя рукой — из экрана места или чипа у отметки.
+    func rename(placeId: UUID, to name: String?) {
+        store.rename(placeId: placeId, to: name)
+        reload()
+        NotificationCenter.default.post(name: .placesChanged, object: nil)
+    }
+
     // MARK: - Удаление
 
     func forget(tripId: UUID) {

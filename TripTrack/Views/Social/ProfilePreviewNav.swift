@@ -21,6 +21,10 @@ enum TripFocus: Hashable {
     /// One specific comment, which also gets highlighted on arrival — the
     /// inbox uses this so "X commented …" lands you on the actual sentence.
     case comment(UUID)
+    /// Отметка на маршруте (0.6.8): экран места открывает поездку и
+    /// прокручивает «Моменты» к этой отметке с подсветкой — тем же путём, что
+    /// тап по маркеру на карте (`momentScrollTarget`).
+    case checkpoint(UUID)
 }
 
 /// Payload for the `.openTripDetail` → `.navigateToTrip` handoff when the

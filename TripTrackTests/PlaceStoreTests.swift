@@ -43,6 +43,18 @@ final class PlaceStoreTests: XCTestCase {
         XCTAssertEqual(store.fetchPlaces().count, 1)
     }
 
+    /// Имя рукой перезаписывает всё; геокодер (`adoptName`) — только пустое.
+    func testRenameOverwritesButAdoptNameDoesNot() {
+        let cell = Place.cell(latitude: jubga.latitude, longitude: jubga.longitude)
+        let p = store.upsertPlace(cell: cell, coordinate: jubga, name: "Джубга").place
+        store.rename(placeId: p.id, to: "Поворот к морю")
+        XCTAssertEqual(store.fetchPlace(id: p.id)?.name, "Поворот к морю")
+        store.adoptName("Джубга", forPlace: p.id)
+        XCTAssertEqual(store.fetchPlace(id: p.id)?.name, "Поворот к морю")
+        store.rename(placeId: p.id, to: "   ")
+        XCTAssertNil(store.fetchPlace(id: p.id)?.name, "пустое имя — снова безымянное")
+    }
+
     func testCentroidIsMeanOfCheckpoints() {
         let cell = Place.cell(latitude: 44.3196, longitude: 38.7089)
         let p = store.upsertPlace(cell: cell, coordinate: jubga, name: nil).place

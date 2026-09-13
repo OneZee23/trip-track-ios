@@ -41,6 +41,69 @@ enum AppStrings {
            en: "Mark a spot during a trip — the app will recognise it next time and tell you how long it usually takes to get there.")
     }
 
+    // MARK: - Places · экраны (0.6.8)
+    static func placeUnnamed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeUnnamed", ru: "Место без имени", en: "Unnamed place")
+    }
+    /// «11 проездов · последний 6 сен» — вторая половина.
+    static func placeLastPass(_ lang: LanguageManager.Language, date: String) -> String {
+        String(format: tr(lang, "placeLastPass", ru: "последний %@", en: "last %@"), date)
+    }
+    /// «обычно 2:14 от старта» — акцентная строка карточки.
+    static func placeUsually(_ lang: LanguageManager.Language, time: String) -> String {
+        String(format: tr(lang, "placeUsually", ru: "обычно %@ от старта", en: "usually %@ from the start"), time)
+    }
+    static func placeUsuallyTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeUsuallyTitle", ru: "Обычно занимает · от старта поездки", en: "Usually takes · from the trip start")
+    }
+    /// Подписи, не награды: опыта и значков места не дают.
+    static func placeChipFrequent(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeChipFrequent", ru: "Частый гость", en: "Frequent guest")
+    }
+    static func placeChipFirst(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeChipFirst", ru: "Первый раз здесь", en: "First time here")
+    }
+    static func placeTileFirst(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeTileFirst", ru: "первый раз", en: "first time")
+    }
+    static func placeTileLast(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeTileLast", ru: "последний", en: "last")
+    }
+    static func placePassesSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placePassesSection", ru: "Проезды", en: "Passes")
+    }
+    static func placeRename(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeRename", ru: "Переименовать", en: "Rename")
+    }
+    static func placeDelete(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeDelete", ru: "Удалить место", en: "Delete place")
+    }
+    static func placeDeleteTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeDeleteTitle", ru: "Удалить место?", en: "Delete this place?")
+    }
+    /// Честно про надгробие: отметки живут, история забывается, новая
+    /// отметка здесь заведёт место заново (тот же id).
+    static func placeDeleteMessage(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeDeleteMessage",
+           ru: "Отметки останутся в своих поездках, история проездов забудется. Новая отметка здесь заведёт место заново.",
+           en: "Checkpoints stay in their trips; the pass history is forgotten. A new checkpoint here will create the place again.")
+    }
+    static func placeNamePlaceholder(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeNamePlaceholder", ru: "Название места", en: "Place name")
+    }
+    /// «Здесь 11 раз» — без порядкового «11-й»: порядковые на тринадцати
+    /// языках (род, падеж, суффиксы) — источник ошибок, а «раз» уже переведён.
+    static func placeHereTimes(_ lang: LanguageManager.Language, count: Int) -> String {
+        let times = "\(formattedCount(count, lang: lang)) \(nounTimes(lang, count))"
+        return String(format: tr(lang, "placeHereTimes", ru: "Здесь %@", en: "Here %@"), times)
+    }
+    static func placeChipUsually(_ lang: LanguageManager.Language, time: String) -> String {
+        String(format: tr(lang, "placeChipUsually", ru: "обычно %@", en: "usually %@"), time)
+    }
+    static func placeNoDirection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeNoDirection", ru: "Без направления", en: "No direction")
+    }
+
     // MARK: - Groups (coming soon, Figma 117:2265)
     static func groupsComingTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "groupsComingTitle", ru: "Клубы — скоро", en: "Clubs — coming soon")

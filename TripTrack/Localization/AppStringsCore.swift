@@ -379,6 +379,25 @@ extension AppStrings {
         case .pt: return plural(lang, n, one: "vez", many: "vezes")
         }
     }
+
+    /// «проезд» — how many times a trip has gone past a place (0.6.8).
+    static func nounPasses(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "проезд", few: "проезда", many: "проездов")
+        case .en: return plural(lang, n, one: "pass", many: "passes")
+        case .de: return plural(lang, n, one: "Durchfahrt", many: "Durchfahrten")
+        case .es: return plural(lang, n, one: "paso", many: "pasos")
+        case .fr: return plural(lang, n, one: "passage", many: "passages")
+        case .it: return plural(lang, n, one: "passaggio", many: "passaggi")
+        case .pl: return plural(lang, n, one: "przejazd", few: "przejazdy", many: "przejazdów")
+        case .id: return "lintasan"
+        case .tr: return "geçiş"
+        case .fil: return "pagdaan"
+        case .uk: return plural(lang, n, one: "проїзд", few: "проїзди", many: "проїздів")
+        case .kk: return "өту"
+        case .pt: return plural(lang, n, one: "passagem", many: "passagens")
+        }
+    }
 }
 
 /// Date formatters that exist once per language.

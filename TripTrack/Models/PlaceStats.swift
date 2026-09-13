@@ -14,11 +14,17 @@ struct PlaceStats: Equatable {
         let best: TimeInterval
         let worst: TimeInterval
         let lastAt: Date
+        /// Самая свежая поездка направления — по её концу подписывается
+        /// направление («к морю»).
+        let latestTripId: UUID
     }
 
     let passCount: Int
     let firstAt: Date?
     let lastAt: Date?
+    /// Медиана по всем — для карточки списка, когда направления не нужны
+    /// или курсов нет.
+    let medianElapsed: TimeInterval?
     /// Ровно один проезд — «первый раз здесь».
     var isFirstTime: Bool { passCount == 1 }
     /// ≥ `frequentGuestPasses` проездов за `frequentGuestWindow` — «частый
@@ -39,6 +45,7 @@ struct PlaceStats: Equatable {
             passCount: passes.count,
             firstAt: sorted.first?.timestamp,
             lastAt: sorted.last?.timestamp,
+            medianElapsed: passes.isEmpty ? nil : median(passes.map(\.elapsedFromStart).sorted()),
             isFrequentGuest: recent >= frequentGuestPasses,
             directions: cluster(passes))
     }
@@ -56,7 +63,7 @@ struct PlaceStats: Equatable {
             result.append(Direction(
                 course: anchor.course, count: group.count,
                 median: median(times), best: times[0], worst: times[times.count - 1],
-                lastAt: anchor.timestamp))
+                lastAt: anchor.timestamp, latestTripId: anchor.tripId))
         }
         return result.sorted {
             $0.count != $1.count ? $0.count > $1.count : $0.lastAt > $1.lastAt

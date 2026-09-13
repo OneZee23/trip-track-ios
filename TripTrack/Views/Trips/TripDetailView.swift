@@ -227,6 +227,8 @@ struct TripDetailView: View {
 
     /// See `SocialTripDetailView.scrollToCommentsIfRequested`.
     private func scrollToCommentsIfRequested(_ proxy: ScrollViewProxy) async {
+        // Отметка — не комментарии: к ней прокручивает свой путь, дальше.
+        if case .checkpoint = focus { return }
         // `.comment` lands on the section too — the comments block then
         // homes in on the exact row once it has found it in a page.
         guard focus != .top else { return }
@@ -1630,6 +1632,11 @@ isOwn
             return TripMoments.PlacedPhoto(photo: photo, fix: fix)
         }
         tripMoments = TripMoments.build(checkpoints: trip.checkpoints, links: links, loose: loose)
+        // Открыты на конкретную отметку (из экрана места) — та же прокрутка,
+        // что у тапа по маркеру на карте, лишь бы отметка правда нашлась.
+        if case .checkpoint(let id) = focus, tripMoments.contains(where: { $0.id == id }) {
+            momentScrollTarget = id
+        }
     }
 
     /// Открыть снимок, нажатый на карте.
