@@ -47,4 +47,16 @@ final class PlaceListItemTests: XCTestCase {
         XCTAssertTrue(ia.isFirstTime); XCTAssertTrue(ib.isFrequentGuest); XCTAssertNil(ic.lastAt)
         XCTAssertEqual(PlaceListItem.sorted([ia, ic, ib]).map(\.place.name), ["Б", "А", "В"])
     }
+
+    /// Оба места без имени и без проездов — ветка `(nil, nil)` у обоих ключей
+    /// сравнения сразу: `"" < ""` не крашит, порядок стабилен (Swift `sorted`
+    /// гарантированно стабилен), элементы не теряются.
+    func testSortedStableForTwoNamelessEmptyPlaces() {
+        let cell = Place.cell(latitude: 44.3196, longitude: 38.7089)
+        let a = Place(id: UUID(), cell: cell, latitude: 44.3196, longitude: 38.7089, name: nil, createdAt: now)
+        let b = Place(id: UUID(), cell: cell, latitude: 44.3196, longitude: 38.7089, name: nil, createdAt: now)
+        let ia = PlaceListItem.build(place: a, passes: [], now: now)
+        let ib = PlaceListItem.build(place: b, passes: [], now: now)
+        XCTAssertEqual(PlaceListItem.sorted([ia, ib]).map(\.place.id), [a.id, b.id])
+    }
 }

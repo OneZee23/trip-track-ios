@@ -216,7 +216,7 @@ struct TripMomentsTimeline: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "mappin.and.ellipse").font(.system(size: 11, weight: .semibold))
-                Text(placeChipText(chip)).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                Text(chip.text(language)).font(.system(size: 12, weight: .semibold)).lineLimit(1)
                 Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
             }
             .foregroundStyle(AppTheme.accent)
@@ -230,13 +230,6 @@ struct TripMomentsTimeline: View {
         .padding(.trailing, Self.horizontalPadding)
         .padding(.top, -4)
         .accessibilityIdentifier("checkpoint_place_chip")
-    }
-
-    private func placeChipText(_ chip: PlaceChip) -> String {
-        guard chip.count > 1 else { return AppStrings.placeChipFirst(language) }
-        let here = AppStrings.placeHereTimes(language, count: chip.count)
-        guard let usual = chip.usual else { return here }
-        return "\(here) · \(AppStrings.placeChipUsually(language, time: CheckpointReading.clock(usual, lang: language)))"
     }
 
     /// Время слева, узел на рельсе, содержимое справа — как в расписании:

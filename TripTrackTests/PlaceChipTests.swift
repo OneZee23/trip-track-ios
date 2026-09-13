@@ -18,4 +18,23 @@ final class PlaceChipTests: XCTestCase {
         XCTAssertEqual(chip.count, 1)
         XCTAssertNil(chip.usual, "один проезд — не «обычно», а «первый раз здесь»")
     }
+
+    func testTextForFirstVisit() {
+        let chip = PlaceChip(placeId: UUID(), count: 1, usual: nil)
+        XCTAssertEqual(chip.text(.ru), AppStrings.placeChipFirst(.ru))
+    }
+
+    func testTextWithoutUsual() {
+        let chip = PlaceChip(placeId: UUID(), count: 5, usual: nil)
+        let text = chip.text(.ru)
+        XCTAssertEqual(text, AppStrings.placeHereTimes(.ru, count: 5))
+        XCTAssertFalse(text.contains("·"))
+    }
+
+    func testTextWithUsual() {
+        let chip = PlaceChip(placeId: UUID(), count: 5, usual: 8040)
+        let text = chip.text(.ru)
+        XCTAssertTrue(text.contains("·"))
+        XCTAssertTrue(text.contains(CheckpointReading.clock(8040, lang: .ru)))
+    }
 }
