@@ -3113,7 +3113,7 @@ isOwn
                 onNamePlace: isOwn ? { markPlace(fromPhoto: $0.id) } : nil,
                 onOpenPhoto: { openPhoto(id: $0) },
                 placeChips: placeChips,
-                onOpenPlace: { openPlace($0) }
+                onOpenPlace: isOwn ? { openPlace($0) } : nil
             )
         }
     }

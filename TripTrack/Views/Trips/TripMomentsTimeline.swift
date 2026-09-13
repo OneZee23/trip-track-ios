@@ -225,6 +225,9 @@ struct TripMomentsTimeline: View {
         }
         .buttonStyle(.plain)
         .padding(.leading, Self.horizontalPadding + Self.timeWidth + Self.nodeSize + 2 * Self.timeSpacing)
+        // Правое поле — как у `nodeRow`: без него длинный перевод («Здесь N
+        // раз · обычно 1 ч 20 мин» на de/pl) дотягивал бы капсулу до края карточки.
+        .padding(.trailing, Self.horizontalPadding)
         .padding(.top, -4)
         .accessibilityIdentifier("checkpoint_place_chip")
     }
