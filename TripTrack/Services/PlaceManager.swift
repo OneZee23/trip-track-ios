@@ -73,7 +73,11 @@ final class PlaceManager: ObservableObject {
         repository.setPlaceId(forCheckpoint: checkpoint.id, placeId: place.id)
         store.recomputeCentroid(placeId: place.id, from: repository.checkpointCoordinates(placeId: place.id))
         reload()
-        if isNew {
+        // «Новое» — это место БЕЗ истории, а не только что вставленная строка:
+        // геокодер на тёплом кэше заводит место именем раньше регистрации
+        // (см. `adoptName`), и по `isNew` такое место осталось бы без
+        // бэкфилла навсегда.
+        if isNew || store.passCount(placeId: place.id) == 0 {
             backfillTask = Task { [weak self] in
                 await self?.matchAllTrips(against: place)
             }
@@ -85,10 +89,27 @@ final class PlaceManager: ObservableObject {
     }
 
     /// Геокодер назвал отметку — безымянное место берёт то же имя.
+    ///
+    /// Имя приходит из кэша геокодера СИНХРОННО, то есть раньше, чем
+    /// регистрация проставит отметке `placeId` (порядок вызовов в
+    /// `TripManager.addCheckpoint`). Пока имя искали по `placeId`, у дома и
+    /// знакомых регионов — где кэш как раз тёплый — место оставалось
+    /// безымянным навсегда. Поэтому место берём по ЯЧЕЙКЕ отметки: она даёт
+    /// тот же id (`Place.id(forCell:)`), и гонки больше нет.
     func adoptName(_ name: String, forCheckpoint id: UUID, tripId: UUID) {
-        guard let placeId = repository.fetchTripDetail(id: tripId)?
-                .checkpoints.first(where: { $0.id == id })?.placeId else { return }
-        store.adoptName(name, forPlace: placeId)
+        guard let checkpoint = repository.fetchTripDetail(id: tripId)?
+                .checkpoints.first(where: { $0.id == id }) else { return }
+        if let placeId = checkpoint.placeId {
+            // Место уже зарегистрировано — или это надгробие удалённого, и
+            // тогда заводить его заново нельзя.
+            store.adoptName(name, forPlace: placeId)
+        } else {
+            // Регистрация ещё не дошла: заводим место сразу с именем, она
+            // найдёт его уже названным (и досчитает историю — проездов у него
+            // ещё нет).
+            let cell = Place.cell(latitude: checkpoint.latitude, longitude: checkpoint.longitude)
+            store.upsertPlace(cell: cell, coordinate: checkpoint.coordinate, name: name)
+        }
         reload()
     }
 

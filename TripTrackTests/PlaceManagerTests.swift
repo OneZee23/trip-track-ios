@@ -153,6 +153,25 @@ final class PlaceManagerTests: XCTestCase {
         XCTAssertEqual(manager.places[0].name, "Джубга")
     }
 
+    /// Тёплый кэш геокодера отвечает синхронно, и имя приходит РАНЬШЕ, чем
+    /// отметка получит `placeId`: у дома и знакомых регионов место оставалось
+    /// безымянным навсегда. Имя должно найти место по ячейке, а регистрация —
+    /// досчитать историю такому месту, хотя вставила его не она.
+    func testGeocoderNameArrivesBeforeRegistration() async {
+        let earlier = trip(start: t0.addingTimeInterval(-86_400))
+        let today = trip(start: t0)
+        let cp = checkpoint(on: today, atIndex: 30)
+        manager.adoptName("Джубга", forCheckpoint: cp.id, tripId: today)
+        manager.registerCheckpoint(cp, tripId: today)
+        await manager.settle()
+        XCTAssertEqual(manager.places.count, 1)
+        let place = manager.places[0]
+        XCTAssertEqual(place.id, Place.id(forCell: Place.cell(latitude: cp.latitude, longitude: cp.longitude)))
+        XCTAssertEqual(place.name, "Джубга")
+        XCTAssertEqual(Set(store.passes(placeId: place.id).map(\.tripId)), [earlier, today],
+                       "место, заведённое геокодером, историю всё равно получает")
+    }
+
     func testDeletingAPlaceKeepsCheckpointTombstoneSoItIsNotReborn() async {
         let today = trip(start: t0)
         let cp = checkpoint(on: today, atIndex: 30)
