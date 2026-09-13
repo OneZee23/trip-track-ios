@@ -272,28 +272,79 @@ final class TripTrackUITests: XCTestCase {
         win.swipeUp(); usleep(700_000); snap("121_logs_lower")
     }
 
-    /// Places tab shot, then the clubs teaser reached via profile (0.6.8):
-    /// «Места» tab → shot; «Я» → clubs row → teaser → notify CTA.
+    /// Places tab shots — list with a demo place, its detail screen, the
+    /// «…» menu — then the clubs teaser reached via profile (0.6.8). The
+    /// demo place only appears after `DebugMapSeed` runs, and that only
+    /// happens at process launch, so the app is relaunched here instead of
+    /// reused from `setUpWithError` — same trick as
+    /// `MyMapTourTests.mapLuminanceAtStreetZoom`.
     func test_zz_places_shots() {
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments += ["-hasCompletedOnboarding", "<true/>", "-seed-map-demo", "-seed-places-demo"]
+        app.launch()
         normalizeToHome()
+
         let places = app.buttons.matching(identifier: "tab_places").firstMatch
         if places.waitForExistence(timeout: 3) { places.tap(); sleep(2) }
-        snap("130_places_empty")
+        // `places_map` sits on the bare `MKMapView` inside `PlacesMapView` (a
+        // `UIViewRepresentable`) — XCUITest can report that as
+        // `XCUIElementTypeMap` rather than `.other`, or hoist the identifier
+        // onto a SwiftUI wrapper. `.any` finds it either way — same fallback
+        // already used below for `social_trip_card`/`profile_stats_strip`.
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(identifier: "places_map").firstMatch.waitForExistence(timeout: 5),
+            "places_map не найдена — демо-место не отрисовалось"
+        )
+        snap("130_places_list")
+
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'place_card_'")).firstMatch
+        if card.waitForExistence(timeout: 3), card.isHittable {
+            card.tap(); sleep(2); snap("131_place_detail")
+            let menu = app.buttons.matching(identifier: "place_menu").firstMatch
+            if menu.waitForExistence(timeout: 2), menu.isHittable {
+                menu.tap(); sleep(1); snap("132_place_menu")
+                pt(0.5, 0.85).tap(); sleep(1) // закрыть поповер тапом мимо
+            }
+            // Экран места прячет таб-бар (`hideAppTabBar`) — назад раньше,
+            // чем идти в профиль за клубами. `NavBackButton` несёт только
+            // `accessibilityLabel` (локализован под язык устройства — на
+            // BA1BECF1 это оказался pt-BR, «Voltar»), но без явного
+            // `accessibilityIdentifier` XCUITest сам подставляет в него имя
+            // SF Symbol — «chevron.backward», не зависящее от языка.
+            // Координата верхнего левого угла тут не подошла: `CustomNavBar`
+            // кладёт кружок в {{20, 69}, {40, 40}}, а не в те ~5% высоты, что
+            // работают у `TripDetailView`.
+            let back = app.buttons.matching(identifier: "chevron.backward").firstMatch
+            if back.waitForExistence(timeout: 2), back.isHittable { back.tap() }
+            sleep(1)
+        }
 
         // Клубы переехали из вкладки в профиль (0.6.8): строка под гаражом.
         let me = app.buttons.matching(identifier: "tab_profile").firstMatch
         if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
         let row = app.buttons.matching(identifier: "profile_clubs_row").firstMatch
+        // `.exists`, and even `.isHittable`, are not enough: with the demo
+        // seed (46 trips — a fixed height for «Достижения»/«Гараж» above
+        // «Клубы») the row's accessibility frame lands almost entirely
+        // BEHIND the floating tab bar right after the tab switch. It still
+        // reports `exists`/`isHittable == true` (SwiftUI's accessibility
+        // tree doesn't model the overlay's occlusion), but the synthesized
+        // tap at its centre lands on the tab bar instead of the row —
+        // measured: row centre (196, 794) sits inside the pill's own y-range
+        // (767–815). Scroll until the row's frame genuinely clears the tab
+        // bar's top edge before trusting either flag.
+        let tabBarTop = app.buttons.matching(identifier: "tab_profile").firstMatch.frame.minY
         for _ in 0..<5 {
-            if row.exists { break }
+            if row.exists, row.frame.maxY < tabBarTop, row.isHittable { break }
             win.swipeUp(); usleep(700_000)
         }
         XCTAssertTrue(row.waitForExistence(timeout: 2), "profile_clubs_row не найдена — потерян вход в клубы из профиля")
         if row.waitForExistence(timeout: 2), row.isHittable {
-            row.tap(); sleep(2); snap("131_clubs_teaser")
+            row.tap(); sleep(2); snap("133_clubs_teaser")
             let cta = app.buttons.matching(identifier: "groups_notify_cta").firstMatch
             if cta.waitForExistence(timeout: 2), cta.isHittable {
-                cta.tap(); sleep(1); snap("132_clubs_notified")
+                cta.tap(); sleep(1); snap("134_clubs_notified")
             }
         }
     }
