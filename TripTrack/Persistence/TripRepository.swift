@@ -1196,8 +1196,18 @@ final class CoreDataTripRepository: TripRepository {
         // Отметки: сервер прислал список — он и есть правда. Ключ отсутствует —
         // старый сервер, локальные не трогаем (иначе каждый pull стирал бы их).
         if let serverCheckpoints = p.checkpoints {
+            // Место выводится локально и на сервер не уезжает, поэтому в
+            // пришедшем списке `placeId` пуст почти всегда. Правило 0.6.5 про
+            // `capturedAt`/`exifLatitude` ровно про этот случай: локальное
+            // значение точнее серверного и не перезаписывается. Иначе каждый
+            // пул осиротил бы отметки, сверка зарегистрировала бы их заново — и
+            // УДАЛЁННОЕ место воскресало бы с полной историей.
+            var previous: [UUID: UUID] = [:]
             if let existing = entity.checkpoints?.array as? [TripCheckpointEntity] {
-                for ce in existing { context.delete(ce) }
+                for ce in existing {
+                    if let cid = ce.id, let pid = ce.placeId { previous[cid] = pid }
+                    context.delete(ce)
+                }
             }
             for c in serverCheckpoints.sorted(by: { $0.sortOrder < $1.sortOrder }) {
                 let ce = TripCheckpointEntity(context: context)
@@ -1210,7 +1220,7 @@ final class CoreDataTripRepository: TripRepository {
                 ce.name = c.name
                 ce.photoId = c.photoId
                 ce.photoIdsJSON = Self.encodePhotoIds(c.photoIds ?? [])
-                ce.placeId = c.placeId
+                ce.placeId = c.placeId ?? previous[c.id]
                 ce.createdAt = Date()
                 ce.lastModifiedAt = p.lastModifiedAt
                 ce.userId = SettingsManager.shared.localUserId

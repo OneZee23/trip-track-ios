@@ -139,6 +139,51 @@ final class PlaceStoreTests: XCTestCase {
         XCTAssertEqual(repo.tripPreviews(needingPlaceMatch: true).map(\.id), [c], "пустая пачка ничего не трогает")
     }
 
+    // MARK: Пул
+
+    /// Поездка с сервера, где отметка с тем же id несёт (или не несёт) место.
+    private func payload(tripId: UUID, checkpointId: UUID, placeId: UUID?) -> TripSyncPayload {
+        TripSyncPayload(
+            id: tripId, title: "t", description: nil,
+            startDate: t0, endDate: t0.addingTimeInterval(3600),
+            distance: 100_000, maxSpeed: 20, averageSpeed: 15, fuelUsed: 0, elevation: 0,
+            maxAltitude: nil, drivingTime: nil, stoppedTime: nil, region: nil,
+            isPrivate: true, vehicleId: nil, fuelCurrency: nil, previewPolyline: nil,
+            badgesJson: nil, xpEarned: 0,
+            conflictVersion: 1, lastModifiedAt: t0,
+            serverCreatedAt: t0, trackPoints: nil, photos: nil,
+            checkpoints: [TripCheckpointPayload(
+                id: checkpointId, timestamp: t0.addingTimeInterval(600),
+                latitude: jubga.latitude, longitude: jubga.longitude,
+                distanceFromStart: 1_000, elapsedFromStart: 600,
+                name: nil, photoId: nil, photoIds: nil, placeId: placeId, sortOrder: 0)])
+    }
+
+    /// Место выводится локально и на сервер не уезжает — в пришедшем списке
+    /// `placeId` пуст почти всегда. Стирать им локальный значит осиротить
+    /// отметку на каждом пуле: сверка зарегистрирует её заново и воскресит
+    /// удалённое место со всей историей.
+    func testPullKeepsTheLocalPlaceIdWhenTheServerHasNone() {
+        let tripId = trip(withCheckpointAt: jubga)
+        let cpId = repo.fetchTripDetail(id: tripId)!.checkpoints[0].id
+        let placeId = Place.id(forCell: Place.cell(latitude: jubga.latitude, longitude: jubga.longitude))
+        repo.setPlaceId(forCheckpoint: cpId, placeId: placeId)
+        repo.applyRemoteTrip(payload(tripId: tripId, checkpointId: cpId, placeId: nil))
+        repo.flushPendingApplies()
+        XCTAssertEqual(repo.fetchTripDetail(id: tripId)?.checkpoints.first?.placeId, placeId)
+    }
+
+    /// Но если сервер место ПРИСЛАЛ, побеждает он: это не «нет ответа».
+    func testPullTakesTheServerPlaceIdWhenItHasOne() {
+        let tripId = trip(withCheckpointAt: jubga)
+        let cpId = repo.fetchTripDetail(id: tripId)!.checkpoints[0].id
+        repo.setPlaceId(forCheckpoint: cpId, placeId: Place.id(forCell: "szgs0u4"))
+        let fromServer = Place.id(forCell: "szgs0u5")
+        repo.applyRemoteTrip(payload(tripId: tripId, checkpointId: cpId, placeId: fromServer))
+        repo.flushPendingApplies()
+        XCTAssertEqual(repo.fetchTripDetail(id: tripId)?.checkpoints.first?.placeId, fromServer)
+    }
+
     func testDeletingATripForgetsItsPasses() {
         let tripId = trip(withCheckpointAt: nil)
         let place = UUID()
