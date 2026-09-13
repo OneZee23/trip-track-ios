@@ -23,6 +23,10 @@ struct TripMomentsTimeline: View {
     /// обложкой новой отметки. Пусто — кнопки нет.
     var onNamePlace: ((TripPhoto) -> Void)?
     var onOpenPhoto: ((UUID) -> Void)?
+    /// Чип «Здесь 11 раз · обычно 2:14» у отметки, ставшей местом (0.6.8).
+    /// Ключ — id отметки; считает экран поездки на загрузке, не лента.
+    var placeChips: [UUID: PlaceChip] = [:]
+    var onOpenPlace: ((UUID) -> Void)?
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
@@ -127,7 +131,15 @@ struct TripMomentsTimeline: View {
     private func momentRow(_ moment: TripMoment, c: AppTheme.Colors) -> some View {
         switch moment {
         case .checkpoint(let checkpoint, let number, let photos):
-            checkpointRow(checkpoint, number: number, photos: photos, c: c)
+            // Чип — отдельным элементом ПОД строкой, не кнопкой внутри кнопки:
+            // строка сама целиком `Button`, вложенная повторила бы баг
+            // «Вступить» из каталога клубов (внешняя кнопка перехватывает тап).
+            VStack(alignment: .leading, spacing: 0) {
+                checkpointRow(checkpoint, number: number, photos: photos, c: c)
+                if let chip = placeChips[checkpoint.id] {
+                    placeChipView(chip, c: c)
+                }
+            }
         case .photos(let fix, let photos):
             nodeRow(time: fix.timestamp, c: c, node: { cameraNode(c) }) {
                 titleLine("\(photos.count) \(AppStrings.nounPhotos(language, photos.count))", c: c)
@@ -191,6 +203,37 @@ struct TripMomentsTimeline: View {
         }
         .buttonStyle(PressableCardStyle())
         .disabled(onSelectCheckpoint == nil)
+    }
+
+    /// Лучший вход в «Места» — не вкладка, а знакомая отметка (0.6.8).
+    /// Левый отступ равен колонке содержимого строки (`timeWidth` + `nodeSize`
+    /// + два интервала `nodeRow` = 106 пт), отрицательный верхний — чтобы чип
+    /// читался как часть строки отметки, а не отдельной строкой ленты.
+    private func placeChipView(_ chip: PlaceChip, c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            onOpenPlace?(chip.placeId)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "mappin.and.ellipse").font(.system(size: 11, weight: .semibold))
+                Text(placeChipText(chip)).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(AppTheme.accent)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(AppTheme.accentBg, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, Self.horizontalPadding + Self.timeWidth + Self.nodeSize + 2 * Self.timeSpacing)
+        .padding(.top, -4)
+        .accessibilityIdentifier("checkpoint_place_chip")
+    }
+
+    private func placeChipText(_ chip: PlaceChip) -> String {
+        guard chip.count > 1 else { return AppStrings.placeChipFirst(language) }
+        let here = AppStrings.placeHereTimes(language, count: chip.count)
+        guard let usual = chip.usual else { return here }
+        return "\(here) · \(AppStrings.placeChipUsually(language, time: CheckpointReading.clock(usual, lang: language)))"
     }
 
     /// Время слева, узел на рельсе, содержимое справа — как в расписании:

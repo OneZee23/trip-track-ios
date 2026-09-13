@@ -125,6 +125,9 @@ struct TripDetailView: View {
     @State private var pinsTask: Task<Void, Never>?
     /// Лента «Моменты» — отметки и стопки снимков по порядку дороги.
     @State private var tripMoments: [TripMoment] = []
+    /// Чипы мест у отметок (0.6.8) — ключ id отметки; только у своих поездок:
+    /// у чужой `placeId` тоже приходит, но места локальные (см. `reloadPlaceChips`).
+    @State private var placeChips: [UUID: PlaceChip] = [:]
     /// Нажатый на герое маркер: лента прокручивается к его строке.
     @State private var momentScrollTarget: UUID?
     /// Строка, к которой только что приехали, — подсвечена на секунду, чтобы
@@ -965,6 +968,11 @@ struct TripDetailView: View {
             guard let changed = note.object as? UUID, changed == tripId else { return }
             reloadCheckpoints()
         }
+        // Место переименовали или удалили во вкладке «Места», либо досчитался
+        // новый проезд — чип у отметки обновляется без перезахода на экран.
+        .onReceive(NotificationCenter.default.publisher(for: .placesChanged)) { _ in
+            reloadPlaceChips()
+        }
         .fullScreenCover(isPresented: Binding(
             get: { selectedPhotoIndex != nil },
             set: { if !$0 { selectedPhotoIndex = nil } }
@@ -1577,6 +1585,7 @@ isOwn
             photoPins = []
             checkpointMarkers = []
             tripMoments = []
+            placeChips = [:]
             return
         }
 
@@ -1632,11 +1641,27 @@ isOwn
             return TripMoments.PlacedPhoto(photo: photo, fix: fix)
         }
         tripMoments = TripMoments.build(checkpoints: trip.checkpoints, links: links, loose: loose)
+        reloadPlaceChips()
         // Открыты на конкретную отметку (из экрана места) — та же прокрутка,
         // что у тапа по маркеру на карте, лишь бы отметка правда нашлась.
         if case .checkpoint(let id) = focus, tripMoments.contains(where: { $0.id == id }) {
             momentScrollTarget = id
         }
+    }
+
+    /// Чипы мест — по отметкам с `placeId`; считается здесь на загрузке и по
+    /// `.placesChanged` (см. `tripDetailBody`), не в `body`: `stats(for:)`
+    /// ходит в базу. Отметка, чьё место успели удалить, чипа не получает —
+    /// `placeId` у неё остаётся (надгробие, см. CLAUDE.md «Места»), и без
+    /// проверки по живым местам чип показывал бы «Первый раз здесь» на месте,
+    /// которого больше нет.
+    private func reloadPlaceChips() {
+        guard let trip, isOwn else { placeChips = [:]; return }
+        let alive = Set(PlaceManager.shared.places.map(\.id))
+        placeChips = Dictionary(uniqueKeysWithValues: trip.checkpoints.compactMap { cp -> (UUID, PlaceChip)? in
+            guard let placeId = cp.placeId, alive.contains(placeId) else { return nil }
+            return (cp.id, PlaceChip.build(placeId: placeId, stats: PlaceManager.shared.stats(for: placeId)))
+        })
     }
 
     /// Открыть снимок, нажатый на карте.
@@ -1750,6 +1775,11 @@ isOwn
         }
         reloadCheckpoints()
         toastItem = ToastItem(type: .success, message: AppStrings.checkpointMarkPlace(lang.language))
+    }
+
+    /// Место живёт во вкладке «Места»; экран поездки — в ленте или профиле.
+    private func openPlace(_ id: UUID) {
+        NotificationCenter.default.post(name: .openPlace, object: id)
     }
 
     /// Перечитать отметки после правки.
@@ -3081,7 +3111,9 @@ isOwn
                 highlightedId: highlightedMomentId,
                 onSelectCheckpoint: isOwn ? { selectedCheckpoint = $0 } : nil,
                 onNamePlace: isOwn ? { markPlace(fromPhoto: $0.id) } : nil,
-                onOpenPhoto: { openPhoto(id: $0) }
+                onOpenPhoto: { openPhoto(id: $0) },
+                placeChips: placeChips,
+                onOpenPlace: { openPlace($0) }
             )
         }
     }
