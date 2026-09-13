@@ -28,9 +28,23 @@ struct PlaceDetailView: View {
     }
 
     var body: some View {
+        // Вынесенной цепочкой, как у `TripDetailView.body`: закрытие экрана —
+        // условие для экрана целиком, а не часть его содержимого.
+        placeDetailBody
+            .onChange(of: model.place == nil) { wasNil, isNil in
+                // Место исчезло, пока экран был открыт (удалили на другом
+                // пути; устаревший id в `.navigateToPlace`) — закрываемся
+                // сами, а не показываем скелет «Без названия» без карты и с
+                // плитками «0/—/—». Первичный `nil` — до `load()` — не в
+                // счёт: экран ещё ни разу не показал место.
+                if isNil && !wasNil { dismiss() }
+            }
+    }
+
+    private var placeDetailBody: some View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             CustomNavBar(title: model.place?.name ?? AppStrings.placeUnnamed(l)) {
                 menuButton(c: c, l: l)
             }
@@ -68,8 +82,10 @@ struct PlaceDetailView: View {
             message: AppStrings.placeDeleteMessage(l),
             actions: [
                 AppDialogAction(AppStrings.placeDelete(l), kind: .destructive) {
+                    // Закрывает экран `onChange` выше (place станет nil) —
+                    // путь один; звать `dismiss()` здесь же означало бы
+                    // закрывать дважды.
                     model.delete()
-                    dismiss()
                 }
             ]
         )
