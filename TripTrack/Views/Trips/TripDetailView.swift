@@ -130,6 +130,11 @@ struct TripDetailView: View {
     @State private var placeChips: [UUID: PlaceChip] = [:]
     /// Нажатый на герое маркер: лента прокручивается к его строке.
     @State private var momentScrollTarget: UUID?
+    /// `focus` фокусирует ленту на отметке только ОДИН раз за жизнь экрана:
+    /// `rebuildPhotoPins()` перезапускается на каждое фото и правку отметки,
+    /// а `jumpToMoment` обнуляет цель после прокрутки — без флага экран
+    /// прыгал бы обратно к отметке, с которой человек уже ушёл.
+    @State private var focusConsumed = false
     /// Строка, к которой только что приехали, — подсвечена на секунду, чтобы
     /// глаз нашёл её после прокрутки.
     @State private var highlightedMomentId: UUID?
@@ -1644,8 +1649,11 @@ isOwn
         reloadPlaceChips()
         // Открыты на конкретную отметку (из экрана места) — та же прокрутка,
         // что у тапа по маркеру на карте, лишь бы отметка правда нашлась.
-        if case .checkpoint(let id) = focus, tripMoments.contains(where: { $0.id == id }) {
+        // Один раз: иначе каждый повторный rebuildPhotoPins() отправлял бы
+        // обратно к отметке, с которой уже ушли.
+        if case .checkpoint(let id) = focus, !focusConsumed, tripMoments.contains(where: { $0.id == id }) {
             momentScrollTarget = id
+            focusConsumed = true
         }
     }
 
