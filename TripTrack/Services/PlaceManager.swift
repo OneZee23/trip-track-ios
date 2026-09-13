@@ -105,18 +105,25 @@ final class PlaceManager: ObservableObject {
     func adoptName(_ name: String, forCheckpoint id: UUID, tripId: UUID) {
         guard let checkpoint = repository.fetchTripDetail(id: tripId)?
                 .checkpoints.first(where: { $0.id == id }) else { return }
+        let changed: Bool
         if let placeId = checkpoint.placeId {
             // Место уже зарегистрировано — или это надгробие удалённого, и
             // тогда заводить его заново нельзя.
-            store.adoptName(name, forPlace: placeId)
+            changed = store.adoptName(name, forPlace: placeId)
         } else {
             // Регистрация ещё не дошла: заводим место сразу с именем, она
             // найдёт его уже названным (и досчитает историю — проездов у него
-            // ещё нет).
+            // ещё нет). Место новое — уже само по себе изменение списка.
             let cell = Place.cell(latitude: checkpoint.latitude, longitude: checkpoint.longitude)
+            let hadName = store.fetchPlace(id: Place.id(forCell: cell))?.name != nil
             store.upsertPlace(cell: cell, coordinate: checkpoint.coordinate, name: name)
+            changed = !hadName
         }
         reload()
+        // Пост — только если имя РЕАЛЬНО принято: геокодер зовёт это на
+        // каждый проезд знакомого места, и лишний пост заставлял бы вкладку
+        // «Места» перечитывать список без единой правки на экране.
+        if changed { NotificationCenter.default.post(name: .placesChanged, object: nil) }
     }
 
     // MARK: - Поездка → проезды
@@ -185,7 +192,12 @@ final class PlaceManager: ObservableObject {
         isReconciling = true
         defer { isReconciling = false }
 
-        for (checkpoint, tripId) in repository.checkpointsWithoutPlace() {
+        // Непустой список — сигнал самому reconcile(): отметка без места
+        // получила его (новое или существующее), а `registerCheckpoint`
+        // постит `.placesChanged` сам только когда бэкфилл что-то находит —
+        // совсем новое место без единого совпадения в библиотеке молчит.
+        let orphans = repository.checkpointsWithoutPlace()
+        for (checkpoint, tripId) in orphans {
             registerCheckpoint(checkpoint, tripId: tripId)
             await settle()
         }
@@ -216,6 +228,10 @@ final class PlaceManager: ObservableObject {
         }
         repository.markPlacesMatched(tripIds: done)
         reload()
+        // Новые места из отметок без своего проезда: если бэкфилл не нашёл
+        // им истории нигде, он сам не постит — без этого вкладка «Места» не
+        // узнала бы о них до следующего изменения.
+        if !orphans.isEmpty { NotificationCenter.default.post(name: .placesChanged, object: nil) }
     }
 
     /// Имя рукой — из экрана места или чипа у отметки.

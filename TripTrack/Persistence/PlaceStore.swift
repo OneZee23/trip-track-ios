@@ -17,7 +17,10 @@ protocol PlaceStore {
     @discardableResult
     func upsertPlace(cell: String, coordinate: CLLocationCoordinate2D, name: String?) -> (place: Place, isNew: Bool)
     func recomputeCentroid(placeId: UUID, from coordinates: [CLLocationCoordinate2D])
-    func adoptName(_ name: String, forPlace id: UUID)
+    /// true — место было безымянным и имя реально принято; false — уже было
+    /// названо, или это надгробие удалённого (не заводит место заново).
+    @discardableResult
+    func adoptName(_ name: String, forPlace id: UUID) -> Bool
     /// Имя рукой: перезаписывает любое; пустое — снова безымянное. Геокодер
     /// (`adoptName`) пишет только в пустое, поэтому данное рукой не откатит.
     func rename(placeId: UUID, to name: String?)
@@ -89,10 +92,12 @@ final class CoreDataPlaceStore: PlaceStore {
         save()
     }
 
-    func adoptName(_ name: String, forPlace id: UUID) {
-        guard !name.isEmpty, let e = entity(id: id), e.name == nil else { return }
+    @discardableResult
+    func adoptName(_ name: String, forPlace id: UUID) -> Bool {
+        guard !name.isEmpty, let e = entity(id: id), e.name == nil else { return false }
         e.name = name
         save()
+        return true
     }
 
     func rename(placeId: UUID, to name: String?) {
