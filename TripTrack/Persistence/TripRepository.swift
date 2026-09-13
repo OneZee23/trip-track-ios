@@ -863,6 +863,7 @@ final class CoreDataTripRepository: TripRepository {
     func setPlaceId(forCheckpoint id: UUID, placeId: UUID) {
         let request: NSFetchRequest<TripCheckpointEntity> = TripCheckpointEntity.fetchRequest()
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.fetchLimit = 1
         guard let ce = try? context.fetch(request).first, ce.placeId != placeId else { return }
         // Нарочно без `markCheckpointsChanged`: место выводится из отметки и
         // трека, оба уже синхронизируются; взводить очередь ради выведенного
@@ -1408,6 +1409,11 @@ final class CoreDataTripRepository: TripRepository {
 
     func deleteTripHard(id: UUID) {
         if let e = fetchEntity(id: id) {
+            // Три вызывающих — `deleteTrip` (короткое замыкание), транспорт
+            // при `tripNotFound` на загрузке и транспорт после подтверждения
+            // удаления — все проходят здесь; проезды без связи с поездкой
+            // каскад не заберёт.
+            CoreDataPlaceStore(context: context).deletePasses(tripId: id)
             let vehicleId = e.vehicleId
             // Каскад забирает строки снимков, но не сами кадры: они лежат
             // файлами в `Documents/TripPhotos/<id>/`, и каталог исключён из

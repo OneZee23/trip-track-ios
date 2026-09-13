@@ -83,12 +83,16 @@ final class PlaceStoreTests: XCTestCase {
     // MARK: Репозиторий
 
     @discardableResult
-    private func trip(withCheckpointAt coordinate: CLLocationCoordinate2D?, ended: Bool = true) -> UUID {
+    private func trip(withCheckpointAt coordinate: CLLocationCoordinate2D?, ended: Bool = true, mirrored: Bool = false) -> UUID {
         let ctx = pc.container.viewContext
         let e = TripEntity(context: ctx)
         let id = UUID()
         e.id = id; e.startDate = t0; e.endDate = ended ? t0.addingTimeInterval(3600) : nil
         e.distance = 100_000; e.isPrivate = true
+        // `mirrored` — поездка, у которой есть копия на сервере: `deleteTrip`
+        // без него ушёл бы коротким замыканием в `deleteTripHard` сам, а тест
+        // должен звать `deleteTripHard` напрямую — как это делает транспорт.
+        if mirrored { e.serverCreatedAt = t0 }
         if let coordinate {
             let c = TripCheckpointEntity(context: ctx)
             c.id = UUID(); c.timestamp = t0.addingTimeInterval(600)
@@ -128,6 +132,17 @@ final class PlaceStoreTests: XCTestCase {
         let place = UUID()
         store.replacePasses(placeId: place, tripId: tripId, with: [pass(place: place, trip: tripId, t: 100)])
         repo.deleteTrip(id: tripId)   // serverCreatedAt == nil → твёрдое удаление сразу
+        XCTAssertTrue(store.passes(tripId: tripId).isEmpty)
+    }
+
+    /// Транспорт зовёт `deleteTripHard` НАПРЯМУЮ, мимо `deleteTrip` — при
+    /// `tripNotFound` во время загрузки и после подтверждения удаления
+    /// сервером. Оба пути должны забирать проезды тоже.
+    func testHardDeleteFromTransportForgetsPasses() {
+        let tripId = trip(withCheckpointAt: nil, mirrored: true)
+        let place = UUID()
+        store.replacePasses(placeId: place, tripId: tripId, with: [pass(place: place, trip: tripId, t: 100)])
+        repo.deleteTripHard(id: tripId)
         XCTAssertTrue(store.passes(tripId: tripId).isEmpty)
     }
 }
