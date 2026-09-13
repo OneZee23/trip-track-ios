@@ -249,6 +249,42 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   `mapLockedStats`. Единицу, вписанную в САМ ТЕКСТ перевода («от 200 км»),
   токеном не поймать — её держит вторая половина, в `LocalizationTests`.
 
+### Места (0.6.8)
+
+«Вы здесь в 11-й раз, обычно доезжаете за 2:14». Место — точка, которую
+приложение узнаёт на каждом проезде; не «сегмент» с воротами (это модель
+соревнований по времени, которых у нас не будет никогда).
+
+- **Место рождается из отметки** и живёт только на телефоне: ни синка, ни
+  колонок на сервере. Ячейка — geohash-7 (`Place.cell`, ~150 м), две отметки
+  в одной ячейке — одно место. `id` — UUID v5 от ячейки (`Place.id(forCell:)`,
+  пространство имён `Place.namespace` — НАВСЕГДА): два телефона сходятся без
+  синка. Держат `PlaceIdentityTests` с замороженными векторами.
+- **`TripCheckpoint.placeId` заполняется локально** и НЕ взводит `pendingUpload`
+  (`setPlaceId(forCheckpoint:)`): выведенное значение уедет с первой настоящей
+  правкой. Сервер хранит его как непрозрачное; после пула отметки с `nil`
+  получают место на сверке.
+- **Проезд = трек в 100 м от места** (`PlaceMatcher.passRadius`), считает
+  `TripRouteLocator.passes(near:)` — «туда и обратно» даёт два проезда с
+  противоположным курсом. Курс хранится (`PlacePass.course`, `-1` неизвестен),
+  при отсутствии — из соседних точек. Предфильтр по geohash-5 превью
+  (`PlaceMatcher.isCandidate`): точки поднимаются только у кандидатов; пустое
+  превью — кандидат.
+- **«Обычно занимает» — медиана по направлению ±45°** (`PlaceStats`), опорный
+  курс группы — самый свежий проезд. «Частый гость» = ≥ 5 за 90 дней —
+  подпись, не награда: опыта и значков места не дают.
+- **`PlaceEntity`/`PlacePassEntity` без связей** — как `JourneyEntity`:
+  удаление поездки зовёт `deletePasses(tripId:)` явно (`deleteTrip`,
+  `deleteTripHardIfMirrored`), `LocalDataWipe` называет обе.
+- **Пять входов в `PlaceManager`:** отметка (`registerCheckpoint`), финиш
+  (`process(tripId:)` ПОСЛЕ `PostTripTrackProcessor` — на окончательном
+  треке), пул (`reconcile()` по `.syncPullCompleted`), удаление (`forget`),
+  запуск (`reconcile()` в миграциях `MapViewModel`). Что сверено, помнит
+  `TripEntity.placesMatchedAt`; сверка идемпотентна.
+- **Удалённое место — надгробие:** отметки остаются при своих `placeId`, и
+  сверка его не воскрешает; новая отметка в той же ячейке заведёт его заново
+  с тем же id.
+
 ### Ловушки, на которые уходит по часу
 
 - **После добавления версии модели `xcodegen generate` надо запустить ДВАЖДЫ.**
@@ -314,9 +350,9 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   телефоне (`JourneyEditSheet.startBounds`/`endBounds`,
   `JourneyEditWindowTests`).
 
-## CoreData Schema (versioned, v13 — 0.6.7)
+## CoreData Schema (versioned, v14 — 0.6.8)
 
-`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v13 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`).
+`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `PlaceEntity`, `PlacePassEntity` (0.6.8, no relationships), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v14 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`, v14 — `PlaceEntity`/`PlacePassEntity` + `TripEntity.placesMatchedAt`).
 
 **Внимание:** `VehiclePhotoEntity` связи с машиной НЕ имеет — `vehicleId` это
 обычный атрибут. Значит каскад её не заберёт: удаление машины и стирание
