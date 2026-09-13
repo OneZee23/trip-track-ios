@@ -258,6 +258,17 @@ struct ContentView: View {
                 NotificationCenter.default.post(name: .navigateToProfile, object: id)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openPlace)) { notification in
+            // Чип у отметки живёт в экране поездки — в ленте или профиле; место
+            // же живёт во вкладке «Места». Тот же двухфазный переход, что у
+            // `.openTripDetail`: сначала вкладка, потом повтор для её стека.
+            guard let id = notification.object as? UUID else { return }
+            selectedTab = .places
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                NotificationCenter.default.post(name: .navigateToPlace, object: id)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .dismissTripSummary)) { _ in
             // Dismiss any showing summary/celebration when deep-linking to trip detail
             mapVM.lastCompletedTrip = nil
