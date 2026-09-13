@@ -33,7 +33,7 @@ struct PlacesView: View {
             .navigationDestination(for: PlacesDest.self) { dest in
                 switch dest {
                 case .place(let id):
-                    PlaceDetailView(placeId: id, onOpenTrip: { path.append(.trip($0, focus: $1)) })
+                    PlaceDetailView(placeId: id, onOpenTrip: { push(.trip($0, focus: $1)) })
                         .hideAppTabBar()
                 case .trip(let id, let focus):
                     TripDetailView(tripId: id, viewModel: TripsViewModel(tripManager: mapVM.tripManager), focus: focus)
@@ -45,6 +45,14 @@ struct PlacesView: View {
             guard let id = note.object as? UUID else { return }
             path = [.place(id)]
         }
+    }
+
+    /// Идемпотентный push — быстрый двойной тап по одной и той же булавке
+    /// или карточке не должен класть в стек два экземпляра одного экрана:
+    /// тогда «назад» пришлось бы жать дважды. Как `ProfileView.push`.
+    private func push(_ dest: PlacesDest) {
+        guard path.last != dest else { return }
+        path.append(dest)
     }
 
     private func header(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
@@ -63,13 +71,19 @@ struct PlacesView: View {
             VStack(spacing: 10) {
                 header(c, l)
                 PlacesMapView(pins: model.items.map { PlacePin(id: $0.id, coordinate: $0.place.coordinate) },
-                              onPinTap: { path.append(.place($0)) })
+                              // Карта на 220pt живёт внутри списочного ScrollView: с
+                              // включённым pan/zoom жест, начатый на карте, панорамирует
+                              // её вместо того чтобы скроллить список. isInteractive
+                              // гасит только scroll/zoom у MKMapView — тап по булавке
+                              // (didSelect) не завязан на эти жесты и продолжает работать.
+                              isInteractive: false,
+                              onPinTap: { push(.place($0)) })
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .padding(.horizontal, 16)
                 LazyVStack(spacing: 10) {
                     ForEach(model.items) { item in
-                        PlaceCardView(item: item) { path.append(.place(item.id)) }
+                        PlaceCardView(item: item) { push(.place(item.id)) }
                     }
                 }
                 .padding(.horizontal, 16)

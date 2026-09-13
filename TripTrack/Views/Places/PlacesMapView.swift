@@ -48,7 +48,7 @@ struct PlacesMapView: UIViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate {
         var onPinTap: ((UUID) -> Void)?
         private var shownPins: [PlacePin] = []
-        private var shownRouteCount = -1
+        private var shownRoutes: [[CLLocationCoordinate2D]] = []
         private var fitted = false
 
         func sync(pins: [PlacePin], routes: [[CLLocationCoordinate2D]], selectedId: UUID?, on map: MKMapView) {
@@ -58,10 +58,10 @@ struct PlacesMapView: UIViewRepresentable {
                 shownPins = pins
                 fitted = false
             }
-            if routes.count != shownRouteCount {
+            if !Self.routesMatch(routes, shownRoutes) {
                 map.removeOverlays(map.overlays)
                 map.addOverlays(routes.filter { $0.count > 1 }.map { MKPolyline(coordinates: $0, count: $0.count) })
-                shownRouteCount = routes.count
+                shownRoutes = routes
                 fitted = false
             }
             for case let view as PlacePinView in map.annotations.compactMap({ map.view(for: $0) }) {
@@ -78,6 +78,21 @@ struct PlacesMapView: UIViewRepresentable {
             } else {
                 map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 40, left: 40, bottom: 40, right: 40), animated: false)
             }
+        }
+
+        /// Сравнение ПО СОДЕРЖИМОМУ, а не по числу маршрутов: на экране места
+        /// (Task 4) один набор ниток сменяется другим той же длины (сверка
+        /// задним числом поменяла проезд, не поменяв их количество) — счётчик
+        /// такую подмену не заметил бы, и карта осталась бы со старыми
+        /// нитками. `CLLocationCoordinate2D` не `Equatable`, поэтому руками.
+        private static func routesMatch(_ a: [[CLLocationCoordinate2D]], _ b: [[CLLocationCoordinate2D]]) -> Bool {
+            guard a.count == b.count else { return false }
+            for (ra, rb) in zip(a, b) {
+                guard ra.count == rb.count,
+                      ra.elementsEqual(rb, by: { $0.latitude == $1.latitude && $0.longitude == $1.longitude })
+                else { return false }
+            }
+            return true
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
