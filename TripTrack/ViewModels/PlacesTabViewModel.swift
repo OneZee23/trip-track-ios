@@ -18,6 +18,10 @@ final class PlacesTabViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.reload() }
             .store(in: &cancellables)
+        // Без этого первый кадр вкладки рисует пустую сцену «Мест пока нет»,
+        // которую тут же сменяет список: `items` иначе заполняется только
+        // асинхронно, по подписке.
+        reload()
     }
 
     func reload() {
