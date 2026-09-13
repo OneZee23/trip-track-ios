@@ -115,6 +115,9 @@ struct PlacesView: View {
         }
         .padding(.bottom, CustomTabBar.clearance)
         .frame(maxWidth: .infinity)
+        // Тот же приём, что у `list`: без него центр сцены считается от края
+        // safe area, а не от физического низа, и стоит выше пилюли.
+        .ignoresSafeArea(edges: .bottom)
     }
 }
 
