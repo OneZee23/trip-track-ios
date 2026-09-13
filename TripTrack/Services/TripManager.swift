@@ -970,20 +970,18 @@ final class TripManager: ObservableObject {
 
     // MARK: - Geocode Cache (CoreData)
 
-    private struct GeocodeCacheResult {
-        let locality: String?
-        let region: String?
-    }
-
     /// Имя места из СВОЕГО кэша — без сети и без ожидания.
     ///
     /// Экрану путешествия нужны «Краснодар» и «Тбилиси»: для имени по
     /// умолчанию и для подписи свёрнутой стоянки. Кэш уже наполнен именами
     /// поездок, а чего в нём нет — того экран просто не покажет: имя места это
     /// украшение, ради которого не стоит ни ходить в сеть, ни держать экран.
+    ///
+    /// С 0.6.8 сам запрос живёт в `repository.cachedLocality` (экрану места он
+    /// нужен без `TripManager`) — этот метод остался тонкой обёрткой, чтобы не
+    /// трогать вызывающих (`JourneyCardView`, `ProfileView`, …).
     func cachedLocality(for coordinate: CLLocationCoordinate2D) -> String? {
-        guard let name = lookupGeocodeCache(for: coordinate)?.locality, !name.isEmpty else { return nil }
-        return name
+        repository.cachedLocality(for: coordinate)
     }
 
     /// Имена мест сразу для пачки координат — ОДНИМ запросом и не на главном
@@ -1027,24 +1025,11 @@ final class TripManager: ObservableObject {
                               longitude: coordinate.longitude, precision: 5)
     }
 
+    /// Тонкая обёртка над `repository.cachedGeocode` — четыре вызывающих
+    /// внутри этого файла (именование мест, регион, заголовок поездки) ничего
+    /// не заметили при переносе самого запроса в `CoreDataTripRepository`.
     private func lookupGeocodeCache(for coord: CLLocationCoordinate2D) -> GeocodeCacheResult? {
-        let geohash = GeohashEncoder.encode(latitude: coord.latitude, longitude: coord.longitude, precision: 5)
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<GeocodeCacheEntity> = GeocodeCacheEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "geohash5 == %@", geohash)
-        request.fetchLimit = 1
-
-        guard let entity = try? context.fetch(request).first else { return nil }
-
-        // Check TTL — defer delete to avoid synchronous save during lookup
-        if let cachedAt = entity.cachedAt,
-           Date().timeIntervalSince(cachedAt) > Self.geocodeCacheTTL {
-            context.delete(entity)
-            persistenceController.saveAsync()
-            return nil
-        }
-
-        return GeocodeCacheResult(locality: entity.locality, region: entity.region)
+        repository.cachedGeocode(for: coord)
     }
 
     private func saveGeocodeCache(for coord: CLLocationCoordinate2D, locality: String?, region: String?) {

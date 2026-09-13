@@ -136,6 +136,21 @@ protocol TripRepository {
     func markPlacesMatched(tripId: UUID)
     /// Пачкой: сверка библиотеки помечает сотни поездок одним сохранением.
     func markPlacesMatched(tripIds: [UUID])
+
+    // MARK: Геокодер-кэш
+    /// Полный ответ кэша геокодера (имя и регион) по координате — geohash-5,
+    /// с TTL. Раньше жил приватно в `TripManager` (`lookupGeocodeCache`);
+    /// перенесён сюда, чтобы экран места мог спросить его без `TripManager`.
+    func cachedGeocode(for coordinate: CLLocationCoordinate2D) -> GeocodeCacheResult?
+}
+
+extension TripRepository {
+    /// Только имя населённого пункта — то, что нужно подписям путешествия и
+    /// направлений места; региона они не спрашивают.
+    func cachedLocality(for coordinate: CLLocationCoordinate2D) -> String? {
+        guard let name = cachedGeocode(for: coordinate)?.locality, !name.isEmpty else { return nil }
+        return name
+    }
 }
 
 // MARK: - CoreData Implementation
@@ -921,6 +936,31 @@ final class CoreDataTripRepository: TripRepository {
         // каждую поездку — это тысяча записей на диск на первой сверке.
         for e in (try? context.fetch(request)) ?? [] { e.placesMatchedAt = now }
         persistenceController.save()
+    }
+
+    // MARK: - Геокодер-кэш
+
+    /// TTL записи — 90 дней; то же значение, что жило в `TripManager`.
+    private static let geocodeCacheTTL: TimeInterval = 90 * 24 * 3600
+
+    func cachedGeocode(for coordinate: CLLocationCoordinate2D) -> GeocodeCacheResult? {
+        let geohash = GeohashEncoder.encode(latitude: coordinate.latitude, longitude: coordinate.longitude, precision: 5)
+        let request: NSFetchRequest<GeocodeCacheEntity> = GeocodeCacheEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "geohash5 == %@", geohash)
+        request.fetchLimit = 1
+
+        guard let entity = try? context.fetch(request).first else { return nil }
+
+        // Протухшую запись удаляем, но сохранение асинхронное — сам lookup
+        // синхронный и не должен ждать записи на диск.
+        if let cachedAt = entity.cachedAt,
+           Date().timeIntervalSince(cachedAt) > Self.geocodeCacheTTL {
+            context.delete(entity)
+            persistenceController.saveAsync()
+            return nil
+        }
+
+        return GeocodeCacheResult(locality: entity.locality, region: entity.region)
     }
 
     func deletePhoto(id: UUID, from tripId: UUID) {
