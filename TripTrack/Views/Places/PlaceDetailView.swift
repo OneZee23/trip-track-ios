@@ -134,6 +134,8 @@ struct PlaceDetailView: View {
                     .font(.system(size: 11, weight: .heavy))
                     .textCase(.uppercase)
                     .foregroundStyle(c.textTertiary)
+                    // Длинное имя иначе даёт три строки и сдвигает плитки ниже.
+                    .lineLimit(2)
             }
         }
     }
