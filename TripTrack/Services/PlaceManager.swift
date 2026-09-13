@@ -30,6 +30,11 @@ final class PlaceManager: ObservableObject {
     /// Досчёт истории после новой отметки идёт отдельной задачей; тесты и
     /// вызывающие, которым нужен результат, ждут её через `settle()`.
     private var backfillTask: Task<Void, Never>?
+    /// Сверка в одном экземпляре: пул приходит поверх стартовой сверки.
+    private var isReconciling = false
+
+    /// Сколько поездок сверки помечается одной пачкой.
+    private static let matchBatch = 200
 
     init(repository: TripRepository = CoreDataTripRepository(),
          store: PlaceStore = CoreDataPlaceStore(context: PersistenceController.shared.container.viewContext)) {
@@ -90,18 +95,32 @@ final class PlaceManager: ObservableObject {
     // MARK: - Поездка → проезды
 
     /// Проезды одной поездки мимо всех мест. Зовётся после финиша (на
-    /// окончательном треке) и из сверки. Поездка без мест рядом всё равно
-    /// помечается сверенной — иначе запуск перебирал бы её вечно.
+    /// окончательном треке). Поездка без мест рядом всё равно помечается
+    /// сверенной — иначе запуск перебирал бы её вечно.
     func process(tripId: UUID) async {
-        defer { repository.markPlacesMatched(tripId: tripId) }
-        let candidates = candidatePlaces(for: repository.tripPreviews(needingPlaceMatch: false)
-            .first { $0.id == tripId })
+        // Нет среди завершённых — поездка ещё пишется или уже удалена: сверять
+        // нечего, и метку ставить НЕЛЬЗЯ (её финиш тогда сверки не получит).
+        // С финиша ссылка находится всегда — трек только что закрыт.
+        guard let ref = repository.tripPreviews(needingPlaceMatch: false)
+            .first(where: { $0.id == tripId }) else { return }
+        await process(ref, places: store.fetchPlaces())
+        repository.markPlacesMatched(tripId: tripId)
+    }
+
+    /// То же, но ссылку и список мест держит вызывающий: сверка библиотеки
+    /// берёт их ОДИН раз на весь проход, а не на каждую поездку — при тысяче
+    /// поездок это был миллион строк превью с блобами на главном потоке.
+    /// Метку «сверено» ставит вызывающий, пачкой.
+    func process(_ ref: TripPreviewRef, places: [Place]) async {
+        let candidates = candidatePlaces(for: ref, places: places)
         guard !candidates.isEmpty,
-              let trip = repository.fetchTripDetail(id: tripId), trip.trackPoints.count > 1 else { return }
+              let trip = repository.fetchTripDetail(id: ref.id), trip.trackPoints.count > 1 else { return }
+        // Одна выборка проездов на поездку, а не по одной на каждое место.
+        let existing = store.passes(tripId: ref.id)
         var changed = false
         for place in candidates {
             let passes = PlaceMatcher.passes(through: place, tripId: trip.id, points: trip.trackPoints, startDate: trip.startDate)
-            if !passes.isEmpty || !store.passes(tripId: tripId).filter({ $0.placeId == place.id }).isEmpty {
+            if !passes.isEmpty || existing.contains(where: { $0.placeId == place.id }) {
                 store.replacePasses(placeId: place.id, tripId: trip.id, with: passes)
                 changed = true
             }
@@ -129,20 +148,52 @@ final class PlaceManager: ObservableObject {
     /// Сверка — после пула и при запуске. Идемпотентна: трогает только
     /// отметки без места и поездки без `placesMatchedAt`.
     func reconcile() async {
+        // Пул во время стартовой сверки — обычное дело: сверка идёт с первого
+        // экрана, пул приходит через секунду. Второй проход идемпотентен, но
+        // бесполезен: то, что первый уже пометил, он пропустит, а остальное
+        // первый и досверит.
+        guard !isReconciling else { return }
+        isReconciling = true
+        defer { isReconciling = false }
+
         for (checkpoint, tripId) in repository.checkpointsWithoutPlace() {
             registerCheckpoint(checkpoint, tripId: tripId)
             await settle()
         }
-        for ref in repository.tripPreviews(needingPlaceMatch: true) {
-            await process(tripId: ref.id)
+        // Обе выборки — по одной на весь проход. Места читаются ПОСЛЕ отметок:
+        // строкой выше могли родиться новые.
+        let places = store.fetchPlaces()
+        let pending = repository.tripPreviews(needingPlaceMatch: true)
+        guard !places.isEmpty else {
+            // Главный случай первого запуска после обновления: мест нет вовсе,
+            // сверять не с чем. Поднимать точки всей библиотеки ради этого
+            // незачем — метку ставим одной пачкой.
+            repository.markPlacesMatched(tripIds: pending.map(\.id))
+            reload()
+            return
+        }
+        var done: [UUID] = []
+        for ref in pending {
+            await process(ref, places: places)
+            done.append(ref.id)
+            // Пачками: прерванный проход (человек закрыл приложение на
+            // середине первой сверки) не теряет всё сделанное.
+            if done.count >= Self.matchBatch {
+                repository.markPlacesMatched(tripIds: done)
+                done.removeAll()
+            }
             await Task.yield()
         }
+        repository.markPlacesMatched(tripIds: done)
         reload()
     }
 
     // MARK: - Удаление
 
     func forget(tripId: UUID) {
+        // Поездка без проездов — обычное дело (мест рядом не было), и будить
+        // ею экраны незачем: удаление любой поездки перерисовывало бы места.
+        guard !store.passes(tripId: tripId).isEmpty else { return }
         store.deletePasses(tripId: tripId)
         NotificationCenter.default.post(name: .placesChanged, object: nil)
     }
@@ -158,10 +209,11 @@ final class PlaceManager: ObservableObject {
 
     // MARK: - Предфильтр
 
-    private func candidatePlaces(for ref: TripPreviewRef?) -> [Place] {
-        let all = store.fetchPlaces()
-        guard !all.isEmpty, let ref else { return all.isEmpty ? [] : all }
+    /// Места, мимо которых поездка могла пройти. Список приходит параметром —
+    /// хранилище здесь не читается: иначе выборка шла бы на каждую поездку.
+    private func candidatePlaces(for ref: TripPreviewRef, places: [Place]) -> [Place] {
+        guard !places.isEmpty else { return [] }
         let cells = PlaceMatcher.cells(of: ref.previewCoordinates)
-        return all.filter { PlaceMatcher.isCandidate(place: $0, tripCells: cells) }
+        return places.filter { PlaceMatcher.isCandidate(place: $0, tripCells: cells) }
     }
 }

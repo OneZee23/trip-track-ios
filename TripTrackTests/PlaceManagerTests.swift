@@ -127,6 +127,21 @@ final class PlaceManagerTests: XCTestCase {
         _ = b
     }
 
+    /// Первый запуск после обновления у человека без отметок: мест нет вовсе,
+    /// сверять не с чем. Поездки обязаны пометиться одной пачкой — иначе
+    /// сверка поднимала бы точки всей библиотеки, чтобы каждый раз выяснить,
+    /// что мест ноль.
+    func testReconcileWithoutPlacesMarksEverythingWithoutLoadingPoints() async {
+        trip(start: t0)
+        trip(start: t0.addingTimeInterval(7_200))
+        trip(start: t0.addingTimeInterval(14_400))
+        XCTAssertEqual(repo.tripPreviews(needingPlaceMatch: true).count, 3)
+        await manager.reconcile()
+        XCTAssertTrue(repo.tripPreviews(needingPlaceMatch: true).isEmpty)
+        XCTAssertTrue(store.fetchPlaces().isEmpty)
+        XCTAssertTrue(manager.places.isEmpty)
+    }
+
     func testAdoptNameNamesAnUnnamedPlaceOnce() async {
         let today = trip(start: t0)
         let cp = checkpoint(on: today, atIndex: 30)

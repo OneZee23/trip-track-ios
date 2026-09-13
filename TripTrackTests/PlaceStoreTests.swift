@@ -127,6 +127,18 @@ final class PlaceStoreTests: XCTestCase {
         _ = open
     }
 
+    /// Сверка библиотеки помечает поездки пачкой — одной выборкой и одним
+    /// сохранением; помечаются ровно названные.
+    func testMarkPlacesMatchedBatch() {
+        let a = trip(withCheckpointAt: nil)
+        let b = trip(withCheckpointAt: nil)
+        let c = trip(withCheckpointAt: nil)
+        repo.markPlacesMatched(tripIds: [a, b])
+        XCTAssertEqual(repo.tripPreviews(needingPlaceMatch: true).map(\.id), [c])
+        repo.markPlacesMatched(tripIds: [])
+        XCTAssertEqual(repo.tripPreviews(needingPlaceMatch: true).map(\.id), [c], "пустая пачка ничего не трогает")
+    }
+
     func testDeletingATripForgetsItsPasses() {
         let tripId = trip(withCheckpointAt: nil)
         let place = UUID()

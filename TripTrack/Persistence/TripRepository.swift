@@ -134,6 +134,8 @@ protocol TripRepository {
     /// отметок и точек. `needingPlaceMatch: true` — только ещё не сверенные.
     func tripPreviews(needingPlaceMatch: Bool) -> [TripPreviewRef]
     func markPlacesMatched(tripId: UUID)
+    /// Пачкой: сверка библиотеки помечает сотни поездок одним сохранением.
+    func markPlacesMatched(tripIds: [UUID])
 }
 
 // MARK: - CoreData Implementation
@@ -908,9 +910,16 @@ final class CoreDataTripRepository: TripRepository {
         }
     }
 
-    func markPlacesMatched(tripId: UUID) {
-        guard let e = fetchEntity(id: tripId) else { return }
-        e.placesMatchedAt = Date()
+    func markPlacesMatched(tripId: UUID) { markPlacesMatched(tripIds: [tripId]) }
+
+    func markPlacesMatched(tripIds: [UUID]) {
+        guard !tripIds.isEmpty else { return }
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id IN %@", tripIds)
+        let now = Date()
+        // Одна выборка и ОДНО сохранение на всю пачку: сохранение контекста на
+        // каждую поездку — это тысяча записей на диск на первой сверке.
+        for e in (try? context.fetch(request)) ?? [] { e.placesMatchedAt = now }
         persistenceController.save()
     }
 
