@@ -45,7 +45,10 @@ final class PlaceDetailViewModel: ObservableObject {
         passes = all.sorted { $0.timestamp > $1.timestamp }
         stats = PlaceStats.build(from: all)
         let recentTripIds = Array(passes.map(\.tripId).uniqued().prefix(Self.maxRoutes))
-        let previews = Dictionary(uniqueKeysWithValues: repository.tripPreviews(needingPlaceMatch: false).map { ($0.id, $0) })
+        // `uniqueKeysWithValues` падает на дубле `TripEntity.id` — модель не
+        // объявляет его уникальность, а дубли это известный класс синк-багов.
+        let previews = Dictionary(repository.tripPreviews(needingPlaceMatch: false).map { ($0.id, $0) },
+                                   uniquingKeysWith: { a, _ in a })
         routes = recentTripIds.compactMap { previews[$0]?.previewCoordinates }.filter { $0.count > 1 }
         var labels: [UUID: String] = [:]
         for direction in stats.directions {
