@@ -21,9 +21,13 @@ final class PlaceManagerTests: XCTestCase {
         repo = CoreDataTripRepository(persistenceController: pc)
         store = CoreDataPlaceStore(context: pc.container.viewContext)
         manager = PlaceManager(repository: repo, store: store)
+        // Отложенная история живёт в `UserDefaults` (переживает убийство
+        // приложения) — значит переживает и чужой тест.
+        manager.pendingHistoryIds = []
     }
 
     override func tearDown() {
+        manager.pendingHistoryIds = []
         manager = nil; store = nil; repo = nil; pc = nil
         super.tearDown()
     }
@@ -170,6 +174,25 @@ final class PlaceManagerTests: XCTestCase {
         XCTAssertEqual(place.name, "Джубга")
         XCTAssertEqual(Set(store.passes(placeId: place.id).map(\.tripId)), [earlier, today],
                        "место, заведённое геокодером, историю всё равно получает")
+    }
+
+    /// Кнопку отметки жмут на ходу: перебор всей библиотеки на главном актёре
+    /// там — заминка в машине. История нового места ждёт финиша, но НЕ
+    /// теряется: очередь лежит в `UserDefaults` и переживает убийство
+    /// приложения на парковке.
+    func testHistoryBackfillIsDeferredWhileRecording() async {
+        let earlier = trip(start: t0.addingTimeInterval(-86_400))
+        let today = trip(start: t0)
+        let cp = checkpoint(on: today, atIndex: 30)
+        manager.registerCheckpoint(cp, tripId: today, recording: true)
+        await manager.settle()
+        let place = manager.places[0]
+        XCTAssertTrue(store.passes(placeId: place.id).isEmpty, "за рулём библиотеку не перебираем")
+        XCTAssertEqual(manager.pendingHistoryIds, [place.id])
+        await manager.process(tripId: today)
+        XCTAssertEqual(Set(store.passes(placeId: place.id).map(\.tripId)), [earlier, today],
+                       "на финише история досчитана")
+        XCTAssertTrue(manager.pendingHistoryIds.isEmpty)
     }
 
     func testDeletingAPlaceKeepsCheckpointTombstoneSoItIsNotReborn() async {

@@ -470,8 +470,11 @@ final class TripManager: ObservableObject {
         if saved != nil {
             checkpointCount += 1
             nameCheckpointFromPlace(id: checkpoint.id, tripId: tripId, coordinate: here.coordinate)
+            // За рулём история нового места не считается — см.
+            // `PlaceManager.deferHistory`.
+            let recording = isRecording
             Task { @MainActor in
-                PlaceManager.shared.registerCheckpoint(checkpoint, tripId: tripId)
+                PlaceManager.shared.registerCheckpoint(checkpoint, tripId: tripId, recording: recording)
             }
         }
         return saved
@@ -522,8 +525,11 @@ final class TripManager: ObservableObject {
         if saved != nil {
             enqueueTripUpdate(tripId)
             nameCheckpointFromPlace(id: checkpoint.id, tripId: tripId, coordinate: fix.coordinate)
+            // Отметку пальцем по карте ставят и во время чужой записи — тогда
+            // история тоже ждёт финиша.
+            let recording = isRecording
             Task { @MainActor in
-                PlaceManager.shared.registerCheckpoint(checkpoint, tripId: tripId)
+                PlaceManager.shared.registerCheckpoint(checkpoint, tripId: tripId, recording: recording)
             }
         }
         return saved

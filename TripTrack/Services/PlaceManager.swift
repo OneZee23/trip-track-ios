@@ -67,7 +67,9 @@ final class PlaceManager: ObservableObject {
     /// Новое место сразу получает историю по всей библиотеке; у известного
     /// история уже есть, а проезд ЭТОЙ поездки допишет финиш (или сверка,
     /// если поездка уже завершена).
-    func registerCheckpoint(_ checkpoint: TripCheckpoint, tripId: UUID) {
+    /// `recording` — отметка поставлена на ходу, кнопкой: тогда история нового
+    /// места откладывается (см. `deferHistory`).
+    func registerCheckpoint(_ checkpoint: TripCheckpoint, tripId: UUID, recording: Bool = false) {
         let cell = Place.cell(latitude: checkpoint.latitude, longitude: checkpoint.longitude)
         let (place, isNew) = store.upsertPlace(cell: cell, coordinate: checkpoint.coordinate, name: checkpoint.name)
         repository.setPlaceId(forCheckpoint: checkpoint.id, placeId: place.id)
@@ -78,8 +80,12 @@ final class PlaceManager: ObservableObject {
         // (см. `adoptName`), и по `isNew` такое место осталось бы без
         // бэкфилла навсегда.
         if isNew || store.passCount(placeId: place.id) == 0 {
-            backfillTask = Task { [weak self] in
-                await self?.matchAllTrips(against: place)
+            if recording {
+                deferHistory(place.id)
+            } else {
+                backfillTask = Task { [weak self] in
+                    await self?.matchAllTrips(against: place)
+                }
             }
         } else if repository.tripPreviews(needingPlaceMatch: false).contains(where: { $0.id == tripId }) {
             backfillTask = Task { [weak self] in
@@ -122,10 +128,12 @@ final class PlaceManager: ObservableObject {
         // Нет среди завершённых — поездка ещё пишется или уже удалена: сверять
         // нечего, и метку ставить НЕЛЬЗЯ (её финиш тогда сверки не получит).
         // С финиша ссылка находится всегда — трек только что закрыт.
-        guard let ref = repository.tripPreviews(needingPlaceMatch: false)
-            .first(where: { $0.id == tripId }) else { return }
-        await process(ref, places: store.fetchPlaces())
-        repository.markPlacesMatched(tripId: tripId)
+        if let ref = repository.tripPreviews(needingPlaceMatch: false)
+            .first(where: { $0.id == tripId }) {
+            await process(ref, places: store.fetchPlaces())
+            repository.markPlacesMatched(tripId: tripId)
+        }
+        await drainPendingHistory()
     }
 
     /// То же, но ссылку и список мест держит вызывающий: сверка библиотеки
@@ -181,6 +189,7 @@ final class PlaceManager: ObservableObject {
             registerCheckpoint(checkpoint, tripId: tripId)
             await settle()
         }
+        await drainPendingHistory()
         // Обе выборки — по одной на весь проход. Места читаются ПОСЛЕ отметок:
         // строкой выше могли родиться новые.
         let places = store.fetchPlaces()
@@ -226,6 +235,46 @@ final class PlaceManager: ObservableObject {
         store.deletePlace(id: placeId)
         reload()
         NotificationCenter.default.post(name: .placesChanged, object: nil)
+    }
+
+    // MARK: - Отложенная история
+
+    /// Места, которым история ещё не досчитана. Ключ `UserDefaults`, а не поле
+    /// в памяти: на парковке система убивает приложение свободно, и потерянный
+    /// здесь id — это место без истории навсегда.
+    private static let pendingHistoryKey = "places.pendingHistory"
+
+    /// Не `private`: очередь читает и чистит тест — без неё «отложили» и
+    /// «потеряли» выглядят с экрана одинаково.
+    var pendingHistoryIds: [UUID] {
+        get {
+            (UserDefaults.standard.array(forKey: Self.pendingHistoryKey) as? [String] ?? [])
+                .compactMap(UUID.init(uuidString:))
+        }
+        set { UserDefaults.standard.set(newValue.map(\.uuidString), forKey: Self.pendingHistoryKey) }
+    }
+
+    /// Отложить историю нового места до финиша.
+    ///
+    /// Досчёт — это `fetchTripDetail` и `distancePrefix` по плотному треку на
+    /// каждой поездке библиотеки: сотни миллисекунд на главном актёре без
+    /// разрыва. Кнопку отметки жмут на ходу, в машине, и заминка там дороже
+    /// любой истории, которая подождёт полчаса до финиша.
+    private func deferHistory(_ placeId: UUID) {
+        guard !pendingHistoryIds.contains(placeId) else { return }
+        pendingHistoryIds.append(placeId)
+    }
+
+    /// Досчитать отложенное. Зовётся с финиша и со сверки — то есть тогда,
+    /// когда человек уже не за рулём.
+    private func drainPendingHistory() async {
+        for id in pendingHistoryIds {
+            // Место могли удалить, пока оно ждало, — тогда просто забываем.
+            if let place = store.fetchPlace(id: id) {
+                await matchAllTrips(against: place)
+            }
+            pendingHistoryIds.removeAll { $0 == id }
+        }
     }
 
     // MARK: - Предфильтр
