@@ -14,8 +14,10 @@ struct PlaceListItem: Identifiable, Equatable {
 
     static func build(place: Place, passes: [PlacePass], now: Date = Date()) -> PlaceListItem {
         let stats = PlaceStats.build(from: passes, now: now)
+        // Одно число — не «обычно» (см. PlaceChip.build): при одном проезде
+        // карточка иначе печатает «обычно …» прямо над «Первый раз здесь».
         return PlaceListItem(place: place, stats: stats,
-                             usual: stats.directions.first?.median ?? stats.medianElapsed)
+                             usual: stats.passCount > 1 ? (stats.directions.first?.median ?? stats.medianElapsed) : nil)
     }
 
     /// Свежие сверху; без проездов — в конец, по имени: место без истории —

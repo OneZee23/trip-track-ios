@@ -31,6 +31,14 @@ final class PlaceListItemTests: XCTestCase {
         XCTAssertNil(PlaceListItem.build(place: p, passes: [], now: now).usual)
     }
 
+    /// Один проезд — не «обычно» (см. PlaceChip.build): карточка иначе
+    /// печатает «обычно …» прямо над чипом «Первый раз здесь».
+    func testSinglePassHasNoUsual() {
+        let p = place("Гараж")
+        let item = PlaceListItem.build(place: p, passes: [pass(p, daysAgo: 1, course: 0, elapsed: 500)], now: now)
+        XCTAssertNil(item.usual)
+    }
+
     func testChipsAndSorting() {
         let a = place("А"), b = place("Б"), c = place("В")
         let ia = PlaceListItem.build(place: a, passes: [pass(a, daysAgo: 10, course: 0, elapsed: 1)], now: now)
