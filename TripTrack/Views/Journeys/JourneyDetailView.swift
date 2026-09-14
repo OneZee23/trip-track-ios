@@ -214,6 +214,9 @@ struct JourneyDetailView: View {
     private var scroll: some View {
         ScrollView {
             VStack(spacing: 0) {
+                // Чужой режим: строка автора — первая в скролле, НАД героем.
+                // Своего режима эта ветка не касается вовсе.
+                authorRow
                 hero
                     .background(alignment: .top) { scrollProbe }
                 pageBody(colors)
@@ -301,14 +304,25 @@ struct JourneyDetailView: View {
         .frame(height: Self.heroHeight)
         .clipped()
         .overlay(alignment: .bottomTrailing) { expandButton }
-        .overlay(alignment: .topLeading) { authorRow }
     }
 
-    /// Строка автора чужого путешествия (S6) — над героем, под неподвижной
-    /// шапкой. Без кнопки «Подписаться» в 0.6.8: решение контроллера, кнопка
-    /// живёт в `PublicProfileView.followButton` и требует состояния полного
-    /// профиля, которого у этого экрана нет и заводить его ради одной кнопки
-    /// здесь не стали — тап по строке уже ведёт туда, где она есть.
+    /// Строка автора чужого путешествия (S6) — ОТДЕЛЬНАЯ секция НАД героем в
+    /// скролле, не оверлей на нём.
+    ///
+    /// Раньше строка висела оверлеем в углу героя (`topLeading`) — герой
+    /// уезжает вместе со скроллом, а неподвижная кнопка «назад» стоит на
+    /// месте (`TripDetailTopBar`, `topInset + 8`, 44pt). В покое между ними
+    /// оставалось ~4pt, а на первых кадрах прокрутки герой утаскивал строку
+    /// ПОД кнопку — накладка, которую поймал ревью, не симулятор. Плоская
+    /// секция с фоном `c.bg` решает оба: у неё свой верх с отдельным отступом
+    /// от шапки (не завязанным на геометрию героя), и скроллится она как
+    /// обычная строка контента — под неподвижной шапкой, как строки итога
+    /// ниже, а не как подпись, приклеенная к картинке.
+    ///
+    /// Без кнопки «Подписаться» в 0.6.8: решение контроллера, кнопка живёт в
+    /// `PublicProfileView.followButton` и требует состояния полного профиля,
+    /// которого у этого экрана нет и заводить его ради одной кнопки здесь не
+    /// стали — тап по строке уже ведёт туда, где она есть.
     @ViewBuilder
     private var authorRow: some View {
         if let social {
@@ -321,27 +335,33 @@ struct JourneyDetailView: View {
                     Text(author.avatarEmoji ?? "🚗")
                         .font(.system(size: 18))
                         .frame(width: 34, height: 34)
-                        .background(.white.opacity(0.16), in: Circle())
+                        .background(colors.cardAlt, in: Circle())
                     VStack(alignment: .leading, spacing: 1) {
                         Text(author.displayName ?? AppStrings.blockedListUser(lang.language))
                             .font(.system(size: 14, weight: .heavy))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colors.text)
                             .lineLimit(1)
                         Text("\(dateRangeText) · \(AppStrings.nounDays(lang.language, aggregate.calendarDays))")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.75))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(colors.textSecondary)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(.black.opacity(0.28), in: Capsule())
+                .contentShape(Rectangle())
             }
             .buttonStyle(PressableCardStyle())
             .accessibilityIdentifier("journey_author")
-            .padding(.leading, 16)
-            .padding(.top, safeAreaTop + 56)
+            .padding(.horizontal, 16)
+            // Отступ от статус-бара до низа шапки: `topInset + 8` (верхний
+            // паддинг `TripDetailTopBar`) + 44 (кнопка) + 8 (нижний паддинг
+            // бара) = `topInset + 60`, плюс восемь для зазора под пальцем —
+            // считается от `topInset`, а не подгоняется на глаз под один
+            // кадр симулятора.
+            .padding(.top, safeAreaTop + 68)
+            .padding(.bottom, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(colors.bg)
         }
     }
 
