@@ -2628,8 +2628,7 @@ isOwn
         if let trip,
            let journey = JourneyManager.shared.journey(containing: trip.id),
            !journey.isPrivate {
-            let title = journey.title ?? AppStrings.journeyWord(lang.language)
-            message += "\n\n" + AppStrings.tripPrivateLegOfPublicJourney(lang.language, title: title)
+            message += "\n\n" + JourneyFormat.journeyLegMessage(for: journey, lang: lang.language)
         }
         return message
     }

@@ -1294,15 +1294,15 @@ struct FeedView: View {
     /// the rest of the app listens to (feed removal, store invalidation).
     /// Card leaves the feed immediately; the actual privacy flip waits for
     /// the undo window to close (canon toast rules).
-    /// Same copy as `TripDetailView.unpublishMessage`, built from the
-    /// server-supplied `trip.journey` (0.6.8) instead of a local
-    /// `JourneyManager` lookup — the feed card already carries exactly the
-    /// fact this needs: a leg of a journey the AUTHOR made public.
+    /// Same copy as `TripDetailView.unpublishMessage`, through the same
+    /// shared `JourneyFormat.journeyLegMessage` — `onMakePrivate` only ever
+    /// reaches this for `isOwn` cards, so the trip's local `Journey` (with
+    /// its full title ladder) is always the right one to look up, the same
+    /// way the detail screen does it.
     private func journeyLegHideMessage(for trip: SocialFeedTrip) -> String {
         var message = AppStrings.tripDetailThisTripWill(lang.language)
-        if let journey = trip.journey {
-            let title = journey.title ?? AppStrings.journeyWord(lang.language)
-            message += "\n\n" + AppStrings.tripPrivateLegOfPublicJourney(lang.language, title: title)
+        if let journey = JourneyManager.shared.journey(containing: trip.id), !journey.isPrivate {
+            message += "\n\n" + JourneyFormat.journeyLegMessage(for: journey, lang: lang.language)
         }
         return message
     }

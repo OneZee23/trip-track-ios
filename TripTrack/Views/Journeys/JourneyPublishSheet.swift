@@ -4,10 +4,11 @@ import SwiftUI
 ///
 /// Кнопка считает ТОЛЬКО поездки, которые публикация ОТКРОЕТ — плечи, уже
 /// публичные сами по себе, не в счёте (`journeyPublishButton(count:)`
-/// получает `privateLegs.count`, а не общее число плеч). Список — в
-/// `ScrollView` с потолком высоты: лист сборки путешествия (0.6.6) один раз
-/// уже перерастал экран и прятал кнопку под нижним краем, когда никто не
-/// поставил границу.
+/// получает `privateLegs.count`, а не общее число плеч). Короткий список
+/// (≤4 плеч, типичный случай) рисуется без прокрутки и сжимается по
+/// содержимому; длинный уходит в `ScrollView` с потолком высоты — лист
+/// сборки путешествия (0.6.6) один раз уже перерастал экран и прятал кнопку
+/// под нижним краем, когда никто не поставил границу (см. `legsList`).
 struct JourneyPublishSheet: View {
     let title: String
     /// Плечи, которые публикация переведёт из приватных в публичные.
@@ -84,24 +85,44 @@ struct JourneyPublishSheet: View {
         }
     }
 
-    /// Всегда в прокрутке, с потолком в 320 — та же защита, что у
-    /// `JourneyComposerSheet.candidateList`: жадный по вертикали `ScrollView`
-    /// без верхней границы растянул бы лист на весь список плеч.
+    /// Короткий список (типичный случай — одно-два плеча) рисуется голым
+    /// `VStack`, БЕЗ `ScrollView`.
+    ///
+    /// У `ScrollView` нет натуральной высоты по содержимому: `.frame(maxHeight:
+    /// 320)` не СЖИМАЕТ его к меньшему, а растягивает ДО 320 всегда, и
+    /// `contentSizedSheet` снаружи меряет уже раздутый лист — на пять плеч
+    /// потолок пуст ровно так же, как на одно. Замерено снимком: лист
+    /// вытягивался почти во весь экран с пустотой перед кнопкой, совсем не
+    /// компактный S5. Прокрутка нужна только когда список ДЕЙСТВИТЕЛЬНО
+    /// длинный — тот же потолок, что у `JourneyComposerSheet.candidateList`,
+    /// но включается только за порогом.
+    @ViewBuilder
     private func legsList(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
-                ForEach(privateLegs) { trip in
-                    JourneyLegRow(trip: trip, subtitle: subtitle(trip, l), language: l) {
-                        EmptyView()
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+        if privateLegs.count <= 4 {
+            VStack(alignment: .leading, spacing: 10) {
+                legRows(c, l)
+            }
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    legRows(c, l)
                 }
             }
+            .frame(maxHeight: 320)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .frame(maxHeight: 320)
-        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    @ViewBuilder
+    private func legRows(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
+        ForEach(privateLegs) { trip in
+            JourneyLegRow(trip: trip, subtitle: subtitle(trip, l), language: l) {
+                EmptyView()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+        }
     }
 
     private func confirmButton(_ l: LanguageManager.Language) -> some View {

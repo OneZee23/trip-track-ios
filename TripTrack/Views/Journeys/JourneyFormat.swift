@@ -68,6 +68,32 @@ enum JourneyFormat {
         }
         return ProfileDateFormat.dayMonth(trip.startDate, lang: language)
     }
+
+    /// «Эта поездка — плечо публичного путешествия «Грузия»…» — общая
+    /// вторая строка `TripDetailView.unpublishMessage` и
+    /// `FeedView.journeyLegHideMessage`: один и тот же вопрос («сделать
+    /// поездку приватной?»), заданный с двух экранов, не может по-разному
+    /// называть путешествие.
+    ///
+    /// Имя — та же лестница `JourneyTitle`, что у карточки и у самого
+    /// экрана путешествия (`JourneyCardView.titleText`), а не одинокое
+    /// `AppStrings.journeyWord`: у безымянного путешествия экран показывает
+    /// его окно дат («Aug 31»), и предупреждение обязано называть его так
+    /// же — иначе один человек видит «Aug 31» на одном экране и «Journey»
+    /// на другом и решает, что это две разные записи.
+    @MainActor
+    static func journeyLegMessage(for journey: Journey, lang: LanguageManager.Language) -> String {
+        let trips = JourneyManager.shared.trips(in: journey)
+        let aggregate = JourneyAggregate.build(trips: trips)
+        let windowEnd = journey.endDate
+            ?? trips.map { $0.endDate ?? $0.startDate }.max()
+            ?? journey.startDate
+        let window = dateRange(from: journey.startDate, to: windowEnd, language: lang)
+        let title = JourneyTitle.text(journey, aggregate: aggregate,
+                                      startName: nil, farthestName: nil,
+                                      dateRange: window)
+        return AppStrings.tripPrivateLegOfPublicJourney(lang, title: title)
+    }
 }
 
 /// Заголовок путешествия — ОДНА лестница из трёх ступеней на всё приложение.
