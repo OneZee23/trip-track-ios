@@ -580,7 +580,17 @@ struct JourneyDetailView: View {
             privateLegs: publishPrivateLegs,
             alreadyPublic: publishAlreadyPublic,
             onConfirm: {
-                try? manager.publish(id: journeyId, tripManager: mapVM.tripManager)
+                // Тост успеха — только после успеха. Единственная ошибка
+                // (`JourneyError.notFound`) значит, что путешествие исчезло,
+                // пока лист был открыт: синком со второго телефона или
+                // удалением здесь же.
+                do {
+                    try manager.publish(id: journeyId, tripManager: mapVM.tripManager)
+                } catch {
+                    toastItem = ToastItem(
+                        type: .error, message: AppStrings.journeyUnavailable(lang.language))
+                    return
+                }
                 toastItem = ToastItem(
                     type: .success, message: AppStrings.journeyPublished(lang.language))
             }
