@@ -75,6 +75,9 @@ No new permissions are requested. Location usage is unchanged from 0.6.7.
 
 ### Если спросят про приватность и данные
 
+Это ответ на ОТДЕЛЬНЫЙ вопрос ревьюера, не продолжение вставки выше — вместе
+два блока уходят за 4000 знаков лимита Notes.
+
 ```
 Nothing new is collected in this version, and one thing is deliberately not
 collected at all.
