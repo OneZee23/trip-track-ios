@@ -41,15 +41,20 @@
       же самое из `@Index`/`@Column` — миграции здесь дублирующая страховка, и
       налететь друг на друга они не должны. После выкатки посмотреть лог старта:
       ни одного `QueryFailedError`.
-- [ ] **Смоук по живому проду:**
+- [ ] **Смоук по живому проду.** Маршрут объявлен через `GetApiEntry`, и
+      `JsonRpcInterceptor` заворачивает ответ в конверт — тело всегда
+      `{"status":"ok","payload":{…}}`, а не голый объект:
       ```
       curl -s -o /dev/null -w '%{http_code}\n' https://trip-track.app/j/nope
-      curl -s https://api.trip-track.app/users/<свой-uuid>/journeys | jq
+      curl -s https://api.trip-track.app/users/<свой-uuid>/journeys | jq .payload.journeys
       curl -s https://api.trip-track.app/users/nonsense/journeys | jq .code
       ```
-      Ждём `404`; `{"journeys":[],"nextCursor":null}` (или свои публичные);
-      `USER_NOT_FOUND`. Приватное путешествие в списке не появляется **никогда,
-      включая владельца** — свои он читает с телефона.
+      Ждём `404`; `.payload.journeys` — `[]` (или свои публичные) с
+      `.payload.nextCursor` — `null`; `USER_NOT_FOUND`. **Ошибка приезжает
+      HTTP-кодом 200 с телом `{"status":"error","code":"…"}`, не 404** — не
+      принимать 200 за поломку маршрута. `GET /j/nope` → 404 остаётся: это
+      HTML-контроллер вне JSON-RPC. Приватное путешествие в списке не
+      появляется **никогда, включая владельца** — свои он читает с телефона.
 - [ ] **Ключ `segments` отсутствует — колонка не стирается.** Апсерт поездки
       старым клиентом (без `segments` в теле) не должен обнулить `trip.segments`:
       это ровно та поломка, которой `language` однажды снёс profile-update.
