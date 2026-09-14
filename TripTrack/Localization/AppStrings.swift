@@ -1924,6 +1924,48 @@ enum AppStrings {
            en: "You drove past here more than once")
     }
 
+    // MARK: - Сегменты (0.6.8)
+
+    /// Кнопка в листе отметки — второй вход в создание сегмента, переключает
+    /// лист во вторую стадию (список остальных отметок).
+    static func segmentTo(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "segmentTo", ru: "Отрезок до…", en: "Leg to…")
+    }
+    /// Заголовок второй стадии того же листа.
+    static func segmentPickTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "segmentPickTitle", ru: "До какой отметки?", en: "Which checkpoint?")
+    }
+    static func segmentNameField(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "segmentNameField", ru: "Название отрезка", en: "Leg name")
+    }
+    static func segmentDelete(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "segmentDelete", ru: "Удалить отрезок", en: "Delete leg")
+    }
+    static func segmentCreated(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "segmentCreated", ru: "Отрезок добавлен", en: "Leg added")
+    }
+    /// «Вы ехали этот отрезок 3 раза: 4:58, 5:12, 5:40» — история по проездам
+    /// обеих отметок, когда они стали местами (`SegmentHistory`).
+    ///
+    /// Отклонение от брифа только в форме: `{count}` и `{times}` — плейсхолдеры
+    /// `{placeholder}`, подставляются ПОСЛЕ `tr()`, как у `journeyPublishIntro`.
+    /// `{count}` собирается здесь же из `n` и `nounTimes(lang, n)`, `times` —
+    /// готовая строка часов (`SegmentHistory.clock`, через запятую собирает
+    /// экран). Живая интерполяция внутри `ru:`/`en:` потеряла бы оба значения
+    /// на остальных одиннадцати языках — `tr()` для них читает готовую строку
+    /// из таблицы.
+    static func segmentHistory(_ lang: LanguageManager.Language, count: Int, times: String) -> String {
+        tr(lang, "segmentHistory",
+           ru: "Вы ехали этот отрезок {count}: {times}",
+           en: "You drove this leg {count}: {times}")
+            .replacingOccurrences(of: "{count}", with: "\(count) \(nounTimes(lang, count))")
+            .replacingOccurrences(of: "{times}", with: times)
+    }
+    /// Заголовок подтверждения удаления — как `deleteVehicleConfirm`.
+    static func segmentDeleteConfirm(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "segmentDeleteConfirm", ru: "Удалить отрезок?", en: "Delete this leg?")
+    }
+
     // MARK: - Путешествие (0.6.6)
 
     static func journeyWord(_ lang: LanguageManager.Language) -> String {
