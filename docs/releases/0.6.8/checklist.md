@@ -11,7 +11,7 @@
 
 | Что | Где | Состояние |
 |---|---|---|
-| iOS `release/0.6.8` | github.com/OneZee23/trip-track-ios | `bae546b..06f430e` — 87 коммитов, волны 1–6. **Не запушено** |
+| iOS `release/0.6.8` | github.com/OneZee23/trip-track-ios | `bae546b..e7b652a` — 89 коммитов, волны 1–7 (волна 7 трогает продовый код одной строкой — accessibility id). **Не запушено** |
 | Бэкенд `master` | gitlab.com/triptrack1/triptrack-backend | `bcbed67..983c0b3` — 15 коммитов, волны 4 и 6. **Не запушено** |
 | Версия | `project.yml` | **уже 0.6.8 / билд 60** в обоих таргетах — поднимать не нужно, проверить нужно |
 | Схема CoreData | `TripTrack.xcdatamodeld` | **v15** — `PlaceEntity`, `PlacePassEntity`, `TripEntity.placesMatchedAt`, `TripEntity.segmentsJSON` |
