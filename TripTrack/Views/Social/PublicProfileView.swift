@@ -85,8 +85,10 @@ struct PublicProfileView: View {
     /// rebuilding the whole profile to bump a tally would redraw the hero,
     /// the stats and the achievements with it.
     @State private var tripCards: [SocialFeedTrip] = []
-    /// Превью хаба «Путешествия» (S7, 0.6.8) — до трёх, тот же приём, что у
-    /// `garagePreviewVehicles`: полный список живёт на `PublicJourneysView`.
+    /// Путешествия аккаунта (S7, 0.6.8) — одна страница лимитом 50
+    /// (`loadJourneysPreview`), не только три: хаб-карточка показывает
+    /// первые три, а `recomputeProfileRows` схлопывает «Историю» по ВСЕМ.
+    /// Полный постраничный список — на `PublicJourneysView`.
     @State private var publicJourneys: [PublicJourneyDto] = []
     /// Строки «Истории» в режиме списка — свои поездки и путешествия со
     /// своими плечами, посчитанные `HistoryFolding.fold` (см. `ProfileView`
@@ -1276,8 +1278,9 @@ struct PublicProfileView: View {
     /// НЕ через `hubCard`: та оборачивает всё тело в один `Button`, а тело
     /// здесь — настоящие `JourneyCardView`, сами являющиеся `Button`.
     /// Кнопка внутри кнопки не получает тап надёжно — внешняя перехватывает
-    /// его (см. `CompanionsRosterSheet.companionRow`, тот же вывод и у чипа
-    /// места в `TripMomentsTimeline`) — поэтому здесь заголовок-кнопка и
+    /// его (см. `Views/Trips/CompanionsRosterSheet.swift`, `companionRow`,
+    /// тот же вывод и у чипа места в `Views/Trips/TripMomentsTimeline.swift`)
+    /// — поэтому здесь заголовок-кнопка и
     /// карточки-кнопки стоят РЯДОМ, в общем контейнере, а не одна в другой.
     /// Строка показывается только когда есть что показать: в отличие от
     /// гаража, у которого закрытый и пустой выглядят одинаково намеренно,
@@ -1294,9 +1297,13 @@ struct PublicProfileView: View {
                             Text(AppStrings.journeysTitle(lng))
                                 .font(.system(size: 15, weight: .heavy))
                                 .foregroundStyle(c.text)
-                            // Счётного «N путешествий» в словаре нет — вместо
-                            // числа тот же заголовок, без него.
-                            Text(AppStrings.journeysTitle(lng))
+                            // «3 путешествия» — число ВСЕХ загруженных
+                            // (`loadJourneysPreview` берёт страницу лимитом
+                            // 50, не только три показанные карточки), а не
+                            // видимых в превью: иначе «3 путешествия» над
+                            // тремя карточками звучало бы как «это все», хотя
+                            // их может быть больше.
+                            Text("\(publicJourneys.count) \(AppStrings.nounJourneys(lng, publicJourneys.count))")
                                 .font(.system(size: 11.5))
                                 .foregroundStyle(c.textTertiary)
                         }
@@ -1332,10 +1339,20 @@ struct PublicProfileView: View {
     /// строка ЗАВИСИТ от результата (в отличие от гаража), поэтому вызывается
     /// не из `.task` самой карточки (она тогда не рисовалась бы, чтобы его
     /// поставить), а из `.task` на уровне всего профиля.
+    ///
+    /// Одна страница лимитом 50, а не три: `publicJourneys` служит СРАЗУ
+    /// трём целям — превью хаба (первые три карточки), число в подписи
+    /// хаба (`nounJourneys`) и схлопывание «Истории» в `recomputeProfileRows`
+    /// (там нужны ВСЕ путешествия, а не три последних, иначе четвёртое по
+    /// свежести путешествие не схлопнуло бы свои плечи в списке). 50 —
+    /// разумный потолок одной страницы для профиля (не для полного списка:
+    /// он листается на `PublicJourneysView`, здесь `nextCursor`
+    /// сознательно игнорируется — у превью на чужом профиле нет
+    /// пагинации, читать «ещё» идут через хаб).
     private func loadJourneysPreview() async {
         guard publicJourneys.isEmpty else { return }
         let res: PublicJourneysResponse? = try? await APIClient.shared.get(
-            APIEndpoint.userJourneys(accountId.uuidString, limit: 3),
+            APIEndpoint.userJourneys(accountId.uuidString, limit: 50),
             requiresAuth: AuthService.shared.isSignedIn)
         publicJourneys = res?.journeys ?? []
     }
@@ -1652,7 +1669,21 @@ struct PublicProfileView: View {
     private func recomputeProfileRows() {
         let trips = tripCards.map(Trip.init(social:))
         let journeys = publicJourneys.map { Journey(publicJourney: $0, ownerId: accountId) }
-        profileRows = HistoryFolding.fold(trips: trips, journeys: journeys)
+        // `range` не передаём — на этом экране нет отрезка календаря, каким
+        // «Мои» отличает «плечи отрезал фильтр» от «плеч не осталось», и без
+        // него `HistoryFolding.fold` держит пустое путешествие строкой ВСЕГДА
+        // (`intersects` возвращает true при `range == nil`). Здесь это не
+        // тот случай: `tripCards` — короткое превью «Последних поездок», а не
+        // вся история, и путешествие без единого совпавшего плеча в нём —
+        // не «плеч не осталось», а «плечи вне превью». Пустая карточка (карта-
+        // заглушка, нули) тут не даёт войти и удалить путешествие, как на
+        // «Моих» — это чужой профиль, — так что фильтруем её здесь, а не
+        // правим общую `HistoryFolding`. Список поездок при этом не худеет:
+        // этих карточек в нём и так не было.
+        profileRows = HistoryFolding.fold(trips: trips, journeys: journeys).filter { row in
+            if case .journey(_, let legs) = row { return !legs.isEmpty }
+            return true
+        }
         tripCardsById = Dictionary(uniqueKeysWithValues: tripCards.map { ($0.id, $0) })
     }
 

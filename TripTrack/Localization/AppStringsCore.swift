@@ -243,6 +243,28 @@ extension AppStrings {
         }
     }
 
+    /// «3 путешествия» — счётчик под хаб-карточкой «Путешествия» в чужом
+    /// профиле (S7, 0.6.8). Тот же корень, что у `journeyWord` (путешествие /
+    /// journey / Reise / …), но здесь — родовое склоняемое слово после числа,
+    /// как у `nounTrips`/`nounDays`, а не заголовок с большой буквы.
+    static func nounJourneys(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "путешествие", few: "путешествия", many: "путешествий")
+        case .en: return plural(lang, n, one: "journey", many: "journeys")
+        case .de: return plural(lang, n, one: "Reise", many: "Reisen")
+        case .es: return plural(lang, n, one: "viaje", many: "viajes")
+        case .fr: return plural(lang, n, one: "voyage", many: "voyages")
+        case .it: return plural(lang, n, one: "viaggio", many: "viaggi")
+        case .pl: return plural(lang, n, one: "podróż", few: "podróże", many: "podróży")
+        case .id: return "perjalanan"
+        case .tr: return "yolculuk"
+        case .fil: return plural(lang, n, one: "paglalakbay", many: "paglalakbay")
+        case .uk: return plural(lang, n, one: "подорож", few: "подорожі", many: "подорожей")
+        case .kk: return "саяхат"
+        case .pt: return plural(lang, n, one: "viagem", many: "viagens")
+        }
+    }
+
     /// «год / года / лет» — для стажа машины в гараже и для срока владения
     /// в архиве («2012–2023 · 11 лет»).
     ///
