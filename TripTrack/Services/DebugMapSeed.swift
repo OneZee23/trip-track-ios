@@ -223,6 +223,8 @@ enum DebugMapSeed {
             clone.previewPolyline = original.previewPolyline
             clone.startDate = newStart
             clone.endDate = original.endDate.map { $0.addingTimeInterval(offset) }
+            // `syncStatus` нарочно не копируется — как у базового сида: файл
+            // `#if DEBUG`-only, синка нет, оба остаются на дефолте CoreData.
 
             for point in originalPoints {
                 let copy = TrackPointEntity(context: context)
