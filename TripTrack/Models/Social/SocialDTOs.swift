@@ -114,7 +114,10 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     /// Публичное путешествие автора, в окно которого попала поездка (0.6.8).
     /// `nil` — поездка не плечо или путешествие приватное. Опционально по той
     /// же причине, что и `commentCountRaw`: старый сервер ключ не шлёт.
-    var journey: SocialFeedTripJourney? = nil
+    /// Значения по умолчанию у поля НЕТ нарочно: мемберуайз-инициализатор
+    /// зовут перестройки карточки (`SocialReactions`), и дефолт молча
+    /// стирал бы «Часть путешествия» на каждой реакции.
+    var journey: SocialFeedTripJourney?
 
     /// Decode-safe comment total: absent key (pre-comments backend) → 0.
     var commentCount: Int { commentCountRaw ?? 0 }
@@ -392,7 +395,10 @@ struct SocialProfileRecentTrip: Codable, Identifiable, Hashable {
             reactionBreakdown: reactionBreakdown ?? [],
             myReaction: myReaction,
             badgeIds: badgeIds ?? [],
-            commentCountRaw: commentCount
+            commentCountRaw: commentCount,
+            // Профиль путешествия не возит: `/social/profile` собирает
+            // элемент своим билдером и ключа `journey` в нём нет.
+            journey: nil
         )
     }
 

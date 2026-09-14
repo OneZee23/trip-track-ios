@@ -20,7 +20,8 @@ extension SocialFeedTrip {
             vehicle: vehicle,
             reactionCount: reactionCount, reactionBreakdown: reactionBreakdown,
             myReaction: myReaction, badgeIds: badgeIds,
-            commentCountRaw: commentCount
+            commentCountRaw: commentCount,
+            journey: journey
         )
     }
 
@@ -51,7 +52,8 @@ extension SocialFeedTrip {
             vehicle: vehicle,
             reactionCount: reactionCount, reactionBreakdown: updated,
             myReaction: myReaction, badgeIds: badgeIds,
-            commentCountRaw: commentCountRaw
+            commentCountRaw: commentCountRaw,
+            journey: journey
         )
     }
 

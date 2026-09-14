@@ -39,7 +39,8 @@ final class WithMeSectionTests: XCTestCase {
             reactionBreakdown: [],
             myReaction: nil,
             badgeIds: [],
-            commentCountRaw: nil
+            commentCountRaw: nil,
+            journey: nil
         )
     }
 

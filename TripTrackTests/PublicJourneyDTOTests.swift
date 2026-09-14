@@ -38,4 +38,44 @@ final class PublicJourneyDTOTests: XCTestCase {
         XCTAssertEqual(r.journeys.first?.legs.first?.distance, 480_000)
         XCTAssertNil(r.nextCursor)
     }
+
+    // MARK: - Перестройка карточки не теряет путешествие
+
+    /// Строка «Часть путешествия» живёт в `SocialFeedTrip.journey`, а карточку
+    /// пересобирают оптимистичные билдеры `SocialReactions` через
+    /// мемберуайз-инициализатор. Пока у поля стоял дефолт `= nil`, реакция и
+    /// возврат с обсуждения стирали строку до полного рефреша ленты.
+    private func feedTrip(journey: SocialFeedTripJourney?) -> SocialFeedTrip {
+        SocialFeedTrip(
+            id: UUID(),
+            author: SocialAuthor(id: UUID(), displayName: "A", avatarEmoji: nil, profileLevel: 1),
+            title: nil, description: nil,
+            startDate: Date(), endDate: nil,
+            distance: 1000, duration: 60,
+            maxSpeed: nil, elevation: nil,
+            maxAltitude: nil, drivingTime: nil, stoppedTime: nil,
+            region: nil, isPrivate: false,
+            previewPolyline: nil,
+            photoCount: 0, firstPhotoThumbnail: nil,
+            vehicle: nil,
+            reactionCount: 0, reactionBreakdown: [],
+            myReaction: nil, badgeIds: [],
+            commentCountRaw: 0,
+            journey: journey
+        )
+    }
+
+    func testReactionRebuildKeepsJourney() {
+        let j = SocialFeedTripJourney(id: UUID(), title: "Грузия", startDate: Date(), endDate: nil)
+        let bumped = feedTrip(journey: j).with(reactionCount: 1, myReaction: "👍")
+        XCTAssertEqual(bumped.journey, j)
+        XCTAssertEqual(bumped.reactionCount, 1)
+    }
+
+    func testCommentCountRebuildKeepsJourney() {
+        let j = SocialFeedTripJourney(id: UUID(), title: "Грузия", startDate: Date(), endDate: nil)
+        let bumped = feedTrip(journey: j).with(commentCount: 3)
+        XCTAssertEqual(bumped.journey, j)
+        XCTAssertEqual(bumped.commentCount, 3)
+    }
 }
