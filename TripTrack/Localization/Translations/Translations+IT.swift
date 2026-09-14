@@ -1253,6 +1253,7 @@ extension Translations {
         "journeyPublishButtonNoLegs": "Pubblica",
         "journeyHideTitle": "Nascondere il viaggio?",
         "journeyHideMessage": "Gli altri non vedranno più il viaggio. I suoi viaggi restano come sono ora.",
+        "journeyPublished": "Viaggio pubblicato",
         "tripPrivateLegOfPublicJourney": "Questo viaggio fa parte del viaggio pubblico «{title}». Verrà mostrato senza di esso.",
         "journeyPartOf": "Parte di «{title}»",
         "journeyPublicLegsLabel": "tappe · pubbliche",

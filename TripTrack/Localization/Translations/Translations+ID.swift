@@ -1253,6 +1253,7 @@ extension Translations {
         "journeyPublishButtonNoLegs": "Terbitkan",
         "journeyHideTitle": "Sembunyikan perjalanan?",
         "journeyHideMessage": "Orang lain tidak akan melihat perjalanan ini lagi. Perjalanan di dalamnya tetap seperti sekarang.",
+        "journeyPublished": "Perjalanan diterbitkan",
         "tripPrivateLegOfPublicJourney": "Perjalanan ini adalah bagian dari perjalanan publik “{title}”. Perjalanan itu akan ditampilkan tanpanya.",
         "journeyPartOf": "Bagian dari “{title}”",
         "journeyPublicLegsLabel": "etape · publik",

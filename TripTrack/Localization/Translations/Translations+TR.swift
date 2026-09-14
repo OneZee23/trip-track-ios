@@ -1253,6 +1253,7 @@ extension Translations {
         "journeyPublishButtonNoLegs": "Yayınla",
         "journeyHideTitle": "Yolculuk gizlensin mi?",
         "journeyHideMessage": "Diğerleri yolculuğu artık göremeyecek. İçindeki geziler şu anki haliyle kalır.",
+        "journeyPublished": "Yolculuk yayınlandı",
         "tripPrivateLegOfPublicJourney": "Bu gezi, herkese açık “{title}” yolculuğunun bir parçası. Yolculuk bundan sonra onsuz gösterilecek.",
         "journeyPartOf": "“{title}” yolculuğunun parçası",
         "journeyPublicLegsLabel": "kol · herkese açık",

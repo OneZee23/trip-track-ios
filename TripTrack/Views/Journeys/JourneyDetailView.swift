@@ -19,6 +19,7 @@ struct JourneyDetailView: View {
     @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var manager = JourneyManager.shared
+    @ObservedObject private var auth = AuthService.shared
 
     @State private var trips: [Trip] = []
     @State private var aggregate = JourneyAggregate.build(trips: [])
@@ -44,6 +45,14 @@ struct JourneyDetailView: View {
     @State private var showEdit = false
     @State private var showActions = false
     @State private var confirmDelete = false
+    /// Лист публикации (S5) и подтверждение скрытия — «…» экрана,
+    /// зеркало `showPublishSheet`/`unpublishConfirm` у поездки.
+    @State private var showPublishSheet = false
+    @State private var confirmHide = false
+    /// Гость на «Опубликовать»/«Скрыть» — тот же гейт, что у поездки
+    /// (`TripDetailView.signInPrompt`).
+    @State private var signInPrompt: SignInPromptSheet.Action?
+    @State private var toastItem: ToastItem?
     /// Плечо, которое просят убрать. Спрашиваем ДО правки: из ленты пропадает
     /// целый день дороги, и молча такое не делается. Вернуть плечо есть чем —
     /// полка «Убранные поездки» в листе правки, — но вопрос всё равно задаём:
@@ -67,9 +76,27 @@ struct JourneyDetailView: View {
         stage
             .fullScreenCover(isPresented: $isMapFullscreen) { fullscreenMap }
             .sheet(isPresented: $showEdit) { editSheet }
+            .sheet(isPresented: $showPublishSheet) { publishSheet }
+            .sheet(item: $signInPrompt) { action in
+                SignInPromptSheet(action: action)
+                    .environmentObject(lang)
+                    .environmentObject(auth)
+            }
+            .toast(item: $toastItem)
             .navigationDestination(item: $openTripId) { id in
                 TripDetailView(tripId: id, viewModel: TripsViewModel(tripManager: mapVM.tripManager))
             }
+            .appConfirm(
+                isPresented: $confirmHide,
+                title: AppStrings.journeyHideTitle(lang.language),
+                message: AppStrings.journeyHideMessage(lang.language),
+                actions: [
+                    AppDialogAction(AppStrings.journeyHide(lang.language), kind: .destructive,
+                                    identifier: "journey_hide_confirm") {
+                        manager.hide(id: journeyId)
+                    }
+                ]
+            )
             .appConfirm(
                 isPresented: $confirmDelete,
                 title: AppStrings.journeyDelete(lang.language),
@@ -308,14 +335,76 @@ struct JourneyDetailView: View {
                 work()
             }
         }
-        return [
+        // Первым пунктом — публикация или скрытие, зеркало `publishAction`/
+        // `unpublishAction` у поездки. Без `journey` (окно исчезло синком в
+        // момент, когда поповер уже открыт) — молчим: экран за кадром вот-вот
+        // закроется сам (`onChange(of: manager.journeys)`).
+        var items: [ActionPopoverList.Item] = []
+        if let journey {
+            if journey.isPrivate {
+                items.append(.init(title: AppStrings.journeyPublish(lang.language), systemImage: "globe",
+                                    accessibilityId: "journey_action_publish") {
+                    present { requestPublish() }
+                })
+            } else {
+                items.append(.init(title: AppStrings.journeyHide(lang.language), systemImage: "lock",
+                                    accessibilityId: "journey_action_hide") {
+                    present { requestHide() }
+                })
+            }
+        }
+        items.append(contentsOf: [
             .init(title: AppStrings.journeyEdit(lang.language), systemImage: "pencil",
                   accessibilityId: "journey_action_edit") { present { showEdit = true } },
             .init(title: AppStrings.journeyDelete(lang.language), systemImage: "trash",
                   isDestructive: true, accessibilityId: "journey_action_delete") {
                 present { confirmDelete = true }
             },
-        ]
+        ])
+        return items
+    }
+
+    /// Гость публиковать не может — путешествие уедет синком, и без сессии
+    /// ему некуда. Тот же гейт, что у поездки (`TripDetailView.requestPublish`).
+    private func requestPublish() {
+        guard auth.isSignedIn else {
+            signInPrompt = .publish
+            return
+        }
+        showPublishSheet = true
+    }
+
+    /// Вход обязателен, только если путешествие уже на сервере — снять то,
+    /// что туда никогда не уезжало, можно и гостем. Тот же гейт, что у
+    /// поездки (`TripDetailView.requestUnpublish`).
+    private func requestHide() {
+        guard let journey else { return }
+        guard auth.isSignedIn || journey.serverCreatedAt == nil else {
+            signInPrompt = .publish
+            return
+        }
+        confirmHide = true
+    }
+
+    /// `JourneyPublishSheet` держит свой `.contentSizedSheet` сама (как
+    /// `PlaceRenameSheet`) — снаружи оборачивать её ещё раз не нужно, в
+    /// отличие от `editSheet`, чьё содержимое его не несёт.
+    @ViewBuilder
+    private var publishSheet: some View {
+        if let journey {
+            let legs = manager.privateLegs(in: journey)
+            JourneyPublishSheet(
+                title: titleText,
+                privateLegs: legs,
+                alreadyPublic: trips.count - legs.count,
+                onConfirm: {
+                    try? manager.publish(id: journeyId, tripManager: mapVM.tripManager)
+                    toastItem = ToastItem(
+                        type: .success, message: AppStrings.journeyPublished(lang.language))
+                }
+            )
+            .environmentObject(lang)
+        }
     }
 
     // MARK: - Итог

@@ -2155,6 +2155,11 @@ enum AppStrings {
            ru: "Другие перестанут видеть путешествие. Его поездки останутся такими, какие они сейчас.",
            en: "Others will stop seeing the journey. Its trips stay as they are now.")
     }
+    /// Тост после подтверждения в листе S5 — тот же приём, что `tripHiddenToast`
+    /// у поездки.
+    static func journeyPublished(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyPublished", ru: "Путешествие опубликовано", en: "Journey published")
+    }
     /// Строка в подтверждении «сделать поездку приватной», когда поездка —
     /// плечо публичного путешествия. Тот же `{title}`-приём, что у
     /// `journeyPublishIntro`.

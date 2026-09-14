@@ -1253,6 +1253,7 @@ extension Translations {
         "journeyPublishButtonNoLegs": "Жариялау",
         "journeyHideTitle": "Саяхат жасырылсын ба?",
         "journeyHideMessage": "Басқалар саяхатты енді көрмейді. Оның сапарлары қазіргідей қалады.",
+        "journeyPublished": "Саяхат жарияланды",
         "tripPrivateLegOfPublicJourney": "Бұл сапар — ашық «{title}» саяхатының бір бөлігі. Саяхат бұдан былай онсыз көрсетіледі.",
         "journeyPartOf": "«{title}» саяхатының бөлігі",
         "journeyPublicLegsLabel": "бөлік · ашық",

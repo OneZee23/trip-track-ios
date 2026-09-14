@@ -60,6 +60,12 @@ struct FeedView: View {
     /// destructive to everything attached to the trip socially, so it asks
     /// first like the delete does.
     @State private var tripPendingPrivate: SocialFeedTrip?
+    /// Own trip awaiting «сделать приватной», when it is a leg of a PUBLIC
+    /// journey (0.6.8) — a richer confirm that names the journey, instead of
+    /// the generic «hide from feed» question `tripPendingPrivate` asks.
+    /// `trip.journey` is server-supplied and only non-nil for exactly this
+    /// case, so no local `JourneyManager` lookup is needed here.
+    @State private var hideConfirmTrip: SocialFeedTrip?
     /// Someone else's trip being reported from its card «…».
     @State private var tripPendingReport: SocialFeedTrip?
     /// Compact link-share sheet for someone else's trip.
@@ -442,6 +448,24 @@ struct FeedView: View {
                 ]
             },
             cancelTitle: AppStrings.no(lang.language)
+        )
+        // Leg of a public journey (0.6.8): same copy `TripDetailView`'s own
+        // «Сделать приватной» confirm shows, instead of the generic
+        // «hide from feed» question above — hiding it also drops the leg
+        // from the journey people see, and that deserves saying so before
+        // the fact, not after.
+        .appConfirm(
+            item: $hideConfirmTrip,
+            title: { _ in AppStrings.tripDetailMakeTripPrivate(lang.language) },
+            message: { journeyLegHideMessage(for: $0) },
+            actions: { trip in
+                [
+                    AppDialogAction(
+                        AppStrings.makePrivateAction(lang.language),
+                        kind: .destructive
+                    ) { makeTripPrivate(trip) }
+                ]
+            }
         )
         .appConfirm(
             item: $tripPendingDelete,
@@ -836,7 +860,14 @@ struct FeedView: View {
                                 signInPrompt = .publish
                                 return
                             }
-                            tripPendingPrivate = trip
+                            // Leg of a public journey → the richer confirm
+                            // that names it, instead of the generic
+                            // «hide from feed» question.
+                            if trip.journey != nil {
+                                hideConfirmTrip = trip
+                            } else {
+                                tripPendingPrivate = trip
+                            }
                         }
                         : nil,
                     onDelete: isOwn ? { tripPendingDelete = trip } : nil,
@@ -1263,6 +1294,19 @@ struct FeedView: View {
     /// the rest of the app listens to (feed removal, store invalidation).
     /// Card leaves the feed immediately; the actual privacy flip waits for
     /// the undo window to close (canon toast rules).
+    /// Same copy as `TripDetailView.unpublishMessage`, built from the
+    /// server-supplied `trip.journey` (0.6.8) instead of a local
+    /// `JourneyManager` lookup — the feed card already carries exactly the
+    /// fact this needs: a leg of a journey the AUTHOR made public.
+    private func journeyLegHideMessage(for trip: SocialFeedTrip) -> String {
+        var message = AppStrings.tripDetailThisTripWill(lang.language)
+        if let journey = trip.journey {
+            let title = journey.title ?? AppStrings.journeyWord(lang.language)
+            message += "\n\n" + AppStrings.tripPrivateLegOfPublicJourney(lang.language, title: title)
+        }
+        return message
+    }
+
     private func makeTripPrivate(_ trip: SocialFeedTrip) {
         Haptics.action()
         withAnimation(.easeInOut(duration: 0.3)) {

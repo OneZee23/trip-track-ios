@@ -1253,6 +1253,7 @@ extension Translations {
         "journeyPublishButtonNoLegs": "I-publish",
         "journeyHideTitle": "Itago ang paglalakbay?",
         "journeyHideMessage": "Hindi na makikita ng iba ang paglalakbay. Mananatili ang mga biyahe nito gaya ng kasalukuyan.",
+        "journeyPublished": "Na-publish ang paglalakbay",
         "tripPrivateLegOfPublicJourney": "Bahagi ang biyaheng ito ng pampublikong paglalakbay na “{title}”. Ipapakita ang paglalakbay nang wala ito.",
         "journeyPartOf": "Bahagi ng “{title}”",
         "journeyPublicLegsLabel": "bahagi · pampubliko",

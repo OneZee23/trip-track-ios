@@ -1253,6 +1253,7 @@ extension Translations {
         "journeyPublishButtonNoLegs": "Опублікувати",
         "journeyHideTitle": "Приховати подорож?",
         "journeyHideMessage": "Інші більше не бачитимуть подорож. Її поїздки залишаться такими, які вони зараз.",
+        "journeyPublished": "Подорож опубліковано",
         "tripPrivateLegOfPublicJourney": "Ця поїздка — частина публічної подорожі «{title}». Подорож буде показана без неї.",
         "journeyPartOf": "Частина подорожі «{title}»",
         "journeyPublicLegsLabel": "плечей · публічних",

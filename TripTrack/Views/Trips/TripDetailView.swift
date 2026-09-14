@@ -1162,7 +1162,7 @@ struct TripDetailView: View {
         .appConfirm(
             isPresented: $unpublishConfirm,
             title: AppStrings.tripDetailMakeTripPrivate(lang.language),
-            message: AppStrings.tripDetailThisTripWill(lang.language),
+            message: unpublishMessage(for: trip),
             actions: [
                 AppDialogAction(
                     AppStrings.makePrivateAction(lang.language),
@@ -2616,6 +2616,22 @@ isOwn
             return
         }
         unpublishConfirm = true
+    }
+
+    /// Базовое предупреждение плюс, если поездка — плечо ПУБЛИЧНОГО
+    /// путешествия, вторым абзацем строка про него: скрыть поездку и не
+    /// сказать, что путешествие после этого покажется без неё, значило бы
+    /// удивить человека на другом экране. Приватное путешествие молчит —
+    /// его и так никто, кроме владельца, не видит.
+    private func unpublishMessage(for trip: Trip?) -> String {
+        var message = AppStrings.tripDetailThisTripWill(lang.language)
+        if let trip,
+           let journey = JourneyManager.shared.journey(containing: trip.id),
+           !journey.isPrivate {
+            let title = journey.title ?? AppStrings.journeyWord(lang.language)
+            message += "\n\n" + AppStrings.tripPrivateLegOfPublicJourney(lang.language, title: title)
+        }
+        return message
     }
 
     /// The canon's locked-section card: a trip nobody else can see cannot
