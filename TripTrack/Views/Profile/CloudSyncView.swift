@@ -590,7 +590,12 @@ struct CloudSyncView: View {
 
     private func performSignOut(hidePublic: Bool) {
         Task {
-            if hidePublic { await auth.unpublishAllPublicTrips() }
+            if hidePublic {
+                // Путешествие ДО поездок: иначе на секунду публичное
+                // путешествие без плеч.
+                await auth.unpublishAllPublicJourneys()
+                await auth.unpublishAllPublicTrips()
+            }
             await auth.signOut()
             dismiss()
         }

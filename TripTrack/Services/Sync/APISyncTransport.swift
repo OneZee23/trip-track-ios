@@ -89,7 +89,10 @@ final class APISyncTransport: SyncTransport {
         case (.journey, .delete):
             try await deleteJourney(id: operation.entityId)
         case (.journey, .unpublish):
-            break  // публичность путешествия — следующая версия
+            // Скрытие путешествия — апсерт с `isPrivate = true` (решение плана
+            // 1): сервер хранит строку и просто перестаёт её отдавать, в
+            // отличие от поездки, где `.unpublish` это server-delete.
+            try await uploadJourney(id: operation.entityId)
         case (.photo, .upload), (.photo, .update):
             try await uploadPhoto(id: operation.entityId)
         case (.photo, .delete):

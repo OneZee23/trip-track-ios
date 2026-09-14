@@ -18,6 +18,18 @@ final class JourneyManagerTests: XCTestCase {
         repo = CoreDataTripRepository(persistenceController: pc)
     }
 
+    override func tearDown() {
+        // Ненулевое поле держит `PersistenceController(inMemory:)` и его
+        // `NSManagedObjectModel` живым до конца прогона (XCTest не отпускает
+        // экземпляры тест-кейсов сам) — а второй живой `NSManagedObjectModel`
+        // рядом с `PersistenceController.shared` роняет `+[TripEntity entity]`
+        // неоднозначным совпадением у ЧУЖИХ тестов. Тот же приём, что в
+        // `PrivacyFlowE2ETests`/`RemoteSettingsMergeTests` (см. CLAUDE.md).
+        repo = nil
+        pc = nil
+        super.tearDown()
+    }
+
     @discardableResult
     private func trip(daysFromT0 d: Double, km: Double = 100) -> UUID {
         let ctx = pc.container.viewContext

@@ -2,6 +2,14 @@ import Foundation
 import CoreData
 
 enum SyncEnqueuer {
+    /// Auth gate for enqueue, injected as a closure so unit tests can bypass
+    /// it — mirrors `SyncQueue.isAuthorizedToSync`. Production reads the real
+    /// signed-in state; tests that need to exercise the PRIVACY gate below
+    /// (0.6.8 journey publish/hide) have no way to actually sign in without a
+    /// live network round-trip, so they swap this in `setUp`/`tearDown`.
+    @MainActor
+    static var isAuthorizedToEnqueue: () -> Bool = { AuthService.shared.isSignedIn }
+
     /// `hasServerCopy` answers, for a `.photo/.delete`, the one question the
     /// gate below cannot ask any more: did this photo exist on the server?
     /// The row is gone from CoreData by the time the delete is enqueued, so
@@ -9,7 +17,7 @@ enum SyncEnqueuer {
     /// Callers that have just deleted a row pass what they read off it first.
     @MainActor
     static func enqueue(_ op: SyncOperation, hasServerCopy: Bool? = nil) {
-        guard AuthService.shared.isSignedIn else { return }
+        guard isAuthorizedToEnqueue() else { return }
         guard shouldEnqueue(op, hasServerCopy: hasServerCopy) else { return }
         SyncQueue.shared.enqueue(op)
         // Kick the queue immediately so the operation is pushed to the server as
@@ -80,11 +88,27 @@ enum SyncEnqueuer {
             guard let entity = fetchPhotoEntity(id: op.entityId),
                   let trip = entity.trip else { return false }
             return trip.isPrivate == false
-        case .vehicle, .vehiclePhoto, .settings, .journey:
-            // Personal metadata — never leaves device without full sync ON.
-            // Публичный шеринг путешествия — следующая версия.
+        case .journey:
+            // Публичное путешествие уезжает и без облака — как поездка (0.6.8).
+            if op.action == .unpublish { return true }
+            if op.action == .delete {
+                guard let entity = fetchJourneyEntity(id: op.entityId) else { return false }
+                return entity.serverCreatedAt != nil
+            }
+            guard let entity = fetchJourneyEntity(id: op.entityId) else { return false }
+            return entity.isPrivate == false
+        case .vehicle, .vehiclePhoto, .settings:
             return false
         }
+    }
+
+    @MainActor
+    private static func fetchJourneyEntity(id: UUID) -> JourneyEntity? {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req: NSFetchRequest<JourneyEntity> = JourneyEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        req.fetchLimit = 1
+        return try? ctx.fetch(req).first
     }
 
     @MainActor

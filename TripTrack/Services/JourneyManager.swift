@@ -14,6 +14,7 @@ final class JourneyManager: ObservableObject {
     enum JourneyError: Error, Equatable {
         case empty
         case overlaps(UUID)
+        case notFound
     }
 
     init(repository: TripRepository = CoreDataTripRepository()) {
@@ -97,6 +98,42 @@ final class JourneyManager: ObservableObject {
         if !SettingsManager.shared.cloudSyncEnabled {
             repository.deleteJourneyHard(id: id)
         }
+        reload()
+    }
+
+    /// Плечи, которые публикация ОТКРОЕТ: приватные поездки окна. Лист S5
+    /// показывает ровно их, кнопка считает ровно их.
+    func privateLegs(in journey: Journey) -> [Trip] {
+        trips(in: journey).filter(\.isPrivate)
+    }
+
+    /// Публикация открывает плечи (правило владельца): каждое приватное плечо
+    /// проходит через СВОЙ `updatePrivacy` — он же ставит поездку и снимки в
+    /// очередь синка, — и только потом путешествие становится публичным. Не
+    /// наоборот: публичное путешествие без плеч на сервере — пустая карточка.
+    func publish(id: UUID, tripManager: TripManager) throws {
+        guard var journey = journeys.first(where: { $0.id == id }) else { throw JourneyError.notFound }
+        for leg in privateLegs(in: journey) {
+            tripManager.updatePrivacy(for: leg.id, isPrivate: false)
+        }
+        journey.isPrivate = false
+        journey.lastModifiedAt = Date()
+        try repository.saveJourney(journey)
+        enqueue(id, repository.journeySyncStatus(id: id) == SyncStatus.synced.rawValue ? .update : .upload)
+        reload()
+    }
+
+    /// Скрытие — только само путешествие: сервер хранит строку и перестаёт
+    /// отдавать её. Плечи не трогаем — обратное правило несимметрично.
+    /// `.unpublish`, а не `.update`: гейт синка пропускает его и без облака,
+    /// а транспорт для путешествия делает по нему апсерт с `isPrivate = true`.
+    func hide(id: UUID) {
+        guard var journey = journeys.first(where: { $0.id == id }) else { return }
+        journey.isPrivate = true
+        journey.lastModifiedAt = Date()
+        try? repository.saveJourney(journey)
+        SyncQueue.shared.cancelOperations(for: id, entityType: .journey)
+        enqueue(id, .unpublish)
         reload()
     }
 

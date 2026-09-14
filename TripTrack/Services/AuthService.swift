@@ -330,6 +330,28 @@ final class AuthService: ObservableObject {
         }
     }
 
+    /// Путешествия, которые человек опубликовал, но которые ещё не доехали до
+    /// сервера, — при выходе становятся приватными: зеркало
+    /// `demotePendingPublicTripsToPrivate`.
+    @MainActor
+    private static func demotePendingPublicJourneysToPrivate() {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req: NSFetchRequest<JourneyEntity> = JourneyEntity.fetchRequest()
+        req.predicate = NSPredicate(
+            format: "isPrivate == NO AND serverCreatedAt == nil AND syncStatus == %d",
+            SyncStatus.pendingUpload.rawValue
+        )
+        guard let entities = try? ctx.fetch(req) else { return }
+        for entity in entities {
+            entity.isPrivate = true
+            entity.syncStatus = SyncStatus.synced.rawValue
+        }
+        if !entities.isEmpty {
+            try? ctx.save()
+            authLog.notice("demoted \(entities.count) pending-public-unsynced journey(s) to private on signOut")
+        }
+    }
+
     /// Drains the queue of `.unpublish` ops left over from the
     /// privacy-by-default migration. SettingsManager runs the migration at
     /// app launch (before SIWA can complete), so it can't enqueue from
@@ -391,6 +413,33 @@ final class AuthService: ObservableObject {
         }
     }
 
+    /// Спрятать все публичные путешествия на сервере (апсерт с
+    /// `isPrivate = true`). Зовётся ДО `unpublishAllPublicTrips`: иначе на
+    /// секунду публичное путешествие без плеч.
+    func unpublishAllPublicJourneys() async {
+        let ctx = PersistenceController.shared.container.viewContext
+        let req: NSFetchRequest<JourneyEntity> = JourneyEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "isPrivate == NO AND serverCreatedAt != nil")
+        guard let entities = try? ctx.fetch(req) else { return }
+        let repo: TripRepository = CoreDataTripRepository()
+        for entity in entities {
+            guard let id = entity.id, var journey = repo.fetchJourney(id: id) else { continue }
+            journey.isPrivate = true
+            let payload = JourneySyncPayload(journey: journey)
+            do {
+                let res: JourneyUpsertResponse = try await APIClient.shared.post(
+                    APIEndpoint.journeyUpsert, body: payload)
+                entity.isPrivate = true
+                entity.lastModifiedAt = payload.lastModifiedAt
+                repo.markJourneySynced(id: id, conflictVersion: res.conflictVersion)
+            } catch {
+                authLog.error("soft unpublish failed for journey \(id, privacy: .public): \(String(describing: error), privacy: .public)")
+                continue
+            }
+        }
+        JourneyManager.shared.reload()
+    }
+
     /// Hard-wipes every server-synced trip (and via cascade, its photos in
     /// R2) belonging to the signed-in user. Caller stays signed in and
     /// keeps the local copy — every trip is flipped to private locally
@@ -421,6 +470,30 @@ final class AuthService: ObservableObject {
             }
             entity.isPrivate = true
             repo.markUnpublished(tripId: id)
+        }
+
+        // Путешествия — тем же приёмом: удалить на сервере, оставить
+        // локально с сброшенным серверным состоянием (`pendingUpload`, чтобы
+        // включённая заново синхронизация отправила их снова).
+        let journeyReq: NSFetchRequest<JourneyEntity> = JourneyEntity.fetchRequest()
+        journeyReq.predicate = NSPredicate(format: "serverCreatedAt != nil")
+        if let journeyEntities = try? ctx.fetch(journeyReq) {
+            for entity in journeyEntities {
+                guard let id = entity.id else { continue }
+                do {
+                    let _: EmptyResponse = try await APIClient.shared.post(
+                        APIEndpoint.journeyDelete, body: JourneyDeleteRequest(id: id))
+                } catch APIError.journeyNotFound {
+                    // Уже нет на сервере — цель достигнута.
+                } catch {
+                    authLog.error("wipeServerData failed for journey \(id, privacy: .public): \(String(describing: error), privacy: .public)")
+                    continue
+                }
+                entity.isPrivate = true
+                entity.serverCreatedAt = nil
+                entity.syncStatus = SyncStatus.pendingUpload.rawValue
+            }
+            try? ctx.save()
         }
 
         // Гараж тоже. Раньше «стереть мои данные с сервера» удаляло только
@@ -582,8 +655,10 @@ final class AuthService: ObservableObject {
         // next account's `syncTokenToServer`.
         PushNotificationManager.shared.clearCachedToken()
 
-        // Cross-account leak prevention for trips toggled public locally
-        // but never uploaded — see `demotePendingPublicTripsToPrivate`.
+        // Cross-account leak prevention for trips (and journeys) toggled
+        // public locally but never uploaded — see
+        // `demotePendingPublicTripsToPrivate`.
+        Self.demotePendingPublicJourneysToPrivate()
         Self.demotePendingPublicTripsToPrivate()
 
         // Reset Cloud Sync to OFF so the next account makes its own consent
