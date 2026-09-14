@@ -349,6 +349,55 @@ final class TripTrackUITests: XCTestCase {
         }
     }
 
+    /// Публичное путешествие (0.6.8), гостем: своя карточка в «Мои», экран
+    /// путешествия, поповер «…», лист публикации/вход. Ничего не публикует —
+    /// гость на «Опубликовать путешествие» получает `SignInPromptSheet`, а не
+    /// сеть (`JourneyDetailView.requestPublish`), и тест закрывает его без
+    /// входа.
+    func test_zz_journey_shots() {
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments += ["-hasCompletedOnboarding", "<true/>", "-seed-map-demo", "-seed-journey-demo"]
+        app.launch()
+        normalizeToHome()
+
+        let me = app.buttons.matching(identifier: "tab_profile").firstMatch
+        if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
+
+        // Демо-путешествие сеется из двух самых СВЕЖИХ поездок
+        // (`DebugMapSeed.seedJourneyDemo`) и должно лечь у самого верха
+        // «Истории» — но свайпы остаются на случай, если сортировка когда-то
+        // изменится: без них поиск карточки стал бы хрупким к порядку.
+        let card = app.buttons.matching(identifier: "profile_journey_card").firstMatch
+        var found = false
+        for _ in 0..<15 {
+            if card.exists, card.isHittable { found = true; break }
+            win.swipeUp(); usleep(400_000)
+        }
+        XCTAssertTrue(found, "profile_journey_card не найдена — демо-путешествие не отрисовалось в «Мои»")
+        guard found else { return }
+
+        card.tap(); sleep(2); snap("140_journey_own")
+
+        let actions = app.buttons.matching(identifier: "detail_actions").firstMatch
+        guard actions.waitForExistence(timeout: 4), actions.isHittable else { return }
+        actions.tap(); sleep(1); snap("141_journey_actions")
+
+        // Жёсткая проверка ДО тапа: пункт публикации обязан стоять в
+        // поповере, иначе следующий тап промахивается мимо уже закрытого
+        // экрана и тест молча снимает не тот кадр.
+        XCTAssertTrue(app.buttons["journey_action_publish"].waitForExistence(timeout: 5),
+                      "journey_action_publish не найдена в поповере «…»")
+        app.buttons["journey_action_publish"].tap()
+
+        // Поповер гасит себя первым и только спустя ~260мс зовёт действие
+        // (см. `present(_:)` в `JourneyDetailView.actions`) — ждём с запасом,
+        // прежде чем снимать лист входа.
+        sleep(1)
+        snap("142_journey_sign_in")
+        win.swipeDown(); sleep(1)
+    }
+
     /// Walks the redesigned Me tab (0.6.0 Профиль·Я): hero, settings
     /// sheet, stats push, wrapped story. Guest-tolerant, guarded.
     func test_zz_me_shots() {

@@ -16,6 +16,11 @@ enum DebugMapSeed {
     /// на демо-поездке — иначе «Места» на скриншотах и QA стоят пустой полкой,
     /// а сеять настоящее место настоящим проездом здесь нечем.
     static let placesArgument = "-seed-places-demo"
+    /// Третьим аргументом поверх обычного сида собирает две самые старые
+    /// демо-поездки в путешествие — иначе карточку и экран путешествия для
+    /// скриншотов и QA нечем наполнить, а заводить настоящее объединение
+    /// руками на каждом прогоне UI-теста не из чего.
+    static let journeyArgument = "-seed-journey-demo"
 
     static var isRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
@@ -23,6 +28,10 @@ enum DebugMapSeed {
 
     static var isPlacesRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(placesArgument)
+    }
+
+    static var isJourneyRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(journeyArgument)
     }
 
     private struct Route {
@@ -90,6 +99,7 @@ enum DebugMapSeed {
             // Повторный запуск с тем же аргументом: поездки на месте, сеять
             // маршруты заново незачем, а отметке сеяться, кроме них, негде.
             if isPlacesRequested { seedPlaceDemo(persistence: persistence) }
+            if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
             return
         }
 
@@ -142,6 +152,55 @@ enum DebugMapSeed {
         }
         persistence.save()
         if isPlacesRequested { seedPlaceDemo(persistence: persistence) }
+        if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
+    }
+
+    // MARK: - Путешествие (0.6.8)
+
+    /// Для скриншотов и QA: путешествие из двух самых СВЕЖИХ демо-поездок, а
+    /// не самых старых. Тот же приём, что уже держит «Утренний круг по
+    /// бетонке» наверху карточки региона в фог-сиде («самые новые… карточка
+    /// сверху, где до неё дотянется тест»): 47 демо-поездок сортируются в
+    /// «Мои» по дате последнего плеча, и карточка путешествия из самых старых
+    /// легла бы в самый низ ленты — до неё UI-тест не докрутит за разумное
+    /// число свайпов.
+    ///
+    /// Первая (более ранняя) остаётся приватной (сама поездка уже сеется
+    /// так), вторая становится публичной прямо в сущности —
+    /// `TripManager.updatePrivacy` заодно ставит поездку в очередь синка, а
+    /// гостевому сиду синк не нужен и без входа в аккаунт всё равно не уйдёт
+    /// (`SyncEnqueuer.enqueue`). Идемпотентно: если хоть одно `JourneyEntity`
+    /// уже есть, повторный запуск ничего не делает.
+    private static func seedJourneyDemo(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let existing: NSFetchRequest<JourneyEntity> = JourneyEntity.fetchRequest()
+        existing.fetchLimit = 1
+        if let found = try? context.count(for: existing), found > 0 { return }
+
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
+        request.fetchLimit = 2
+        guard let newest = try? context.fetch(request), newest.count == 2,
+              let laterId = newest[0].id, let earlierId = newest[1].id else { return }
+
+        newest[1].isPrivate = true
+        newest[0].isPrivate = false
+        try? context.save()
+
+        let repository = CoreDataTripRepository(persistenceController: persistence)
+        guard let first = repository.fetchTripDetail(id: earlierId),
+              let second = repository.fetchTripDetail(id: laterId) else { return }
+
+        // `run()` executes synchronously on the main thread (called from
+        // `TripTrackApp.init()`, before the first render) — the same
+        // guarantee `PersistenceController.viewContext` above already relies
+        // on — so it is safe to enter `JourneyManager`'s actor here directly
+        // instead of dropping this onto a detached `Task` the way
+        // `seedPlaceDemo` does for `PlaceManager`. A detached task would race
+        // the UI test, which taps into «Мои» within the same run loop turn.
+        MainActor.assumeIsolated {
+            _ = try? JourneyManager.shared.create(from: [first, second], title: "Демо-путешествие")
+        }
     }
 
     // MARK: - Отметка (0.6.8)

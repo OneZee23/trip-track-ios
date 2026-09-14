@@ -350,6 +350,91 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   `cachedLocality`, TTL один — `GeocodeCacheResult.ttl`): раньше жил приватно
   в `TripManager`, а экрану места нужно спросить его без `TripManager`.
 
+### Публичное путешествие (0.6.8)
+
+Путешествие публикуется и прячется отдельно от вкладки «Места» — модель та же
+0.6.6 (`Journey` — окно дат, не контейнер), а протокол публикации переиспользует
+решения 0.6.5 для поездки (лист S5, гейт синка, соло-`.unpublish`), с одной
+разницей: у путешествия есть плечи, у поездки — нет.
+
+- **Публикация открывает плечи, а не переключает окно.** `JourneyManager.publish`
+  проходит `privateLegs(in:)` и зовёт `tripManager.updatePrivacy` на КАЖДОЕ —
+  свой апсерт, своя строка в очереди синка, — и только потом сама запись
+  путешествия становится публичной. Держит `JourneyPublishTests
+  .testPublishFlipsEachPrivateLegThroughItsOwnUpsert`: по операции `.trip` на
+  каждое открытое плечо, ни одной лишней и ни одной пропущенной.
+- **Публикация НЕ атомарна по плечам.** Цикл — обычный `for`, не транзакция:
+  смерть процесса между двумя плечами оставит одно плечо публичным локально без
+  своей операции в очереди. Осознанно — чинит сверка при следующем пуле или
+  ручная правка приватности, а обвязывать это транзакцией ради секунд между
+  двумя `updatePrivacy` не стали.
+- **Скрытие несимметрично публикации.** `JourneyManager.hide` трогает только
+  само путешествие (`isPrivate = true`), плечи остаются публичными —
+  `JourneyPublishTests.testHideLeavesLegsAlone` держит это буквально
+  (`// обратное несимметрично`). Симметричное скрытие означало бы молча
+  спрятать шесть чужих поездок ради того, чтобы спрятать одну обёртку.
+- **`.unpublish` у путешествия — апсерт с `isPrivate = true`, не удаление.**
+  У поездки `.unpublish` — server-delete (`APISyncTransport.unpublishTrip`,
+  с рескью фото перед потерей последней копии). У путешествия сервер и так
+  хранит только окно и заголовок — `(.journey, .unpublish)` в
+  `APISyncTransport.execute` зовёт тот же `uploadJourney`, что и обычный
+  апдейт: сервер прячет строку из выдачи, но не теряет её. Удаление
+  путешествия — отдельное действие (`JourneyManager.delete`), с обычным
+  `.delete`.
+- **`SyncEnqueuer` для `.journey` зеркалит `.trip`.** Тот же приватность-гейт:
+  без облака `.unpublish` уходит всегда (иначе скрытие никогда бы не
+  подтвердилось сервером), `.upload`/`.update` — только если запись публична,
+  `.delete` — только если она уже была на сервере (`serverCreatedAt != nil`).
+  Одна и та же форма гейта для двух типов сущностей — увидев новый тип,
+  зеркалить эту же форму, а не изобретать свою.
+- **Выход из аккаунта прячет путешествия ДО поездок.**
+  `AuthService.unpublishAllPublicJourneys()` зовётся первой строкой,
+  `unpublishAllPublicTrips()` — второй (`CloudSyncView`, «Спрятать публичное и
+  выйти»). Наоборот — и на секунду между двумя запросами путешествие на
+  сервере осталось бы публичным, а плеч у него уже нет: пустая карточка в
+  чужой ленте.
+- **`JourneyDetailView` живёт в двух режимах.** Своё — по `id`
+  (`init(journeyId:)`), читает `JourneyManager.shared` и базу. Чужое (S6) —
+  по целиком присланному `SocialJourneyResponse` (`init(social:pushPath:)`);
+  `JourneyManager`/`APIClient` в этом режиме не зовутся вовсе, кроме загрузки
+  самого ответа и действия «Поделиться» — `grep` по экрану находит их только
+  там, не в `body`. Герой чужого — всегда карта ниток, никогда обложка:
+  `coverPhotoId` с сервера указывает на снимок, которого у нас нет и грузить
+  неоткуда.
+- **Плечи чужого путешествия — `Trip(social:)`, лёгкие плечи профиля —
+  `Trip(publicLeg:)`.** Экран путешествия (полный DTO с треком) адаптирует
+  плечи через `SocialTripAdapter`; превью в чужом профиле и в
+  `PublicJourneysView` (список карточек, только для карты и итога) — через
+  облегчённый `PublicJourneyAdapter`. Разные адаптеры для разных по весу
+  ответов сервера, а не один на всё.
+- **Строка в ленте — окно, а не `JourneyAggregate`.** `SocialFeedCardView
+  .journeyRowText` считает дни через `JourneyWindow.days(startDate:endDate:)`
+  по датам самого путешествия в DTO (`trip.journey`), не пересчитывая агрегат
+  по плечам: у карточки в ленте одно чужое плечо, а не все — считать по нему
+  агрегат путешествия физически нечем.
+- **Поле `journey` в ленте — приватное путешествие автора не приходит
+  никогда.** Контракт сервера: `SocialFeedTripJourney` на карточке чужой
+  поездки существует ровно тогда, когда путешествие публично. Клиент эту
+  проверку не делает и не обязан — ветки «путешествие есть, но приватное»
+  в `journeyRow` просто нет.
+- **Deep link `triptrack://journey/<uuid>`** — `TripTrackApp.handleDeepLink`,
+  постит `.openJourneyDetail`, тем же приёмом, что `triptrack://trip/<uuid>`.
+  Ссылка `trip-track.app/j/<код>` резолвится на сервере (редирект в
+  `triptrack://journey/<uuid>` при установленном приложении, веб-страница —
+  без); клиент про `/j/` ничего не знает, как и про `/s/` у поездки.
+- **Тесты публикации — на общем `PersistenceController.shared`, не на
+  изолированном in-memory.** Вынужденно: `SyncEnqueuer.fetchJourneyEntity`/
+  `fetchTripEntity` читают `PersistenceController.shared.container.viewContext`
+  напрямую (сам гейт, а не что-то вокруг него, — и есть предмет проверки), и
+  подменить это инъекцией нечем. `JourneyPublishTests` заводит и убирает свои
+  строки руками в `tearDown` — тот же приём, что у
+  `VehicleDashboardUnitsWireTests`.
+- **Чужой экран путешествия, профиль и лента проверяются только с живым
+  бэкендом.** `SocialJourneyResponse`, `journeyRow` в ленте и схлопывание в
+  чужом профиле берут данные, которых на этом телефоне никогда не было и
+  сгенерировать локально нечем, — сеид (`DebugMapSeed`) сеет только своё,
+  приватное путешествие; для S6/S7 нужны два аккаунта и задеплоенный бэкенд.
+
 ### Ловушки, на которые уходит по часу
 
 - **После добавления версии модели `xcodegen generate` надо запустить ДВАЖДЫ.**
@@ -746,6 +831,14 @@ Rules that are easy to get wrong:
 - The Live Activity and the widget cannot see `AppStrings` (it reaches into
   half the app). Their words are in `TripTrackShared/LiveActivityStrings.swift`,
   keyed by the raw language code.
+- **Never** interpolate a runtime value straight into a `tr()` literal
+  (`ru: "Путешествие «\(title)» ..."`). `tr()` for the other eleven languages
+  reads a FINISHED string out of the translation tables — it has no way to
+  receive `title` at call time, so the interpolation would silently vanish on
+  every language but Russian and English. The pattern is a `{placeholder}`
+  token in both `ru:`/`en:` literals, filled in afterward with
+  `.replacingOccurrences(of: "{placeholder}", with: value)` — see
+  `publicRoutesExplainer` (`{name}`) and `journeyPublishIntro` (`{title}`).
 
 ## Tech Constraints
 
