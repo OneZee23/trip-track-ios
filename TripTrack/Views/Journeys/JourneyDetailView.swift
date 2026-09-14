@@ -495,6 +495,13 @@ struct JourneyDetailView: View {
                     present { requestPublish() }
                 })
             } else {
+                // Опубликованное СВОЁ путешествие делится так же, как чужое, и
+                // первым пунктом: ссылка — то, ради чего публикацию и нажали.
+                items.append(.init(title: AppStrings.share(lang.language),
+                                    systemImage: "square.and.arrow.up",
+                                    accessibilityId: "journey_action_share") {
+                    present { shareJourney() }
+                })
                 items.append(.init(title: AppStrings.journeyHide(lang.language), systemImage: "lock",
                                     accessibilityId: "journey_action_hide") {
                     present { requestHide() }
@@ -539,13 +546,15 @@ struct JourneyDetailView: View {
         confirmHide = true
     }
 
-    /// «Поделиться» чужим путешествием (S6): минтит ссылку на СЕРВЕРЕ
-    /// (`POST /social/share-journey`) и отдаёт её системному листу — тот же
-    /// `ShareLinkPresenter`, которым делится поездка и профиль. Гость на
-    /// «Поделиться» получает вход, а не тихий отказ: `.share` — тот же гейт,
-    /// на который заведена эта самая кнопка у `SignInPromptSheet.Action`.
+    /// «Поделиться» путешествием — чужим (S6) и СВОИМ опубликованным: минтит
+    /// ссылку на СЕРВЕРЕ (`POST /social/share-journey`) и отдаёт её системному
+    /// листу — тот же `ShareLinkPresenter`, которым делится поездка и профиль.
+    /// Один путь на оба экрана: человек, только что нажавший «Опубликовать»,
+    /// иначе не имел бы в приложении ни одного способа получить свою ссылку
+    /// `/j/<код>`. Гость на «Поделиться» получает вход, а не тихий отказ:
+    /// `.share` — тот же гейт, на который заведена эта самая кнопка у
+    /// `SignInPromptSheet.Action`.
     private func shareJourney() {
-        guard let social else { return }
         guard auth.isSignedIn else {
             signInPrompt = .share
             return
@@ -555,7 +564,7 @@ struct JourneyDetailView: View {
         Task {
             defer { isSharingJourney = false }
             do {
-                let req = SocialShareJourneyRequest(journeyId: social.journey.id, expiresInDays: nil)
+                let req = SocialShareJourneyRequest(journeyId: journeyId, expiresInDays: nil)
                 let res: SocialShareResponse = try await APIClient.shared.post(
                     APIEndpoint.socialShareJourney, body: req)
                 if let url = URL(string: res.shareUrl) {
