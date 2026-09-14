@@ -1,5 +1,8 @@
 import SwiftUI
 import MapKit
+import OSLog
+
+private let journeyDetailLog = Logger(subsystem: "com.triptrack", category: "journey")
 
 /// Экран путешествия: карта всех плеч, итог четырьмя числами, лента по дням.
 ///
@@ -11,7 +14,34 @@ import MapKit
 /// Тело разрезано на методы с первой строки, а не когда компилятор начнёт
 /// падать по таймауту: `TripDetailView` этот предел уже нашёл.
 struct JourneyDetailView: View {
-    let journeyId: UUID
+    /// Своё путешествие живёт по `id` (см. заголовок файла). Чужое (S6)
+    /// приезжает ЦЕЛИКОМ в `social` — второго запроса «дай мне путешествие
+    /// такого-то по id» на клиенте нет, DTO с шапкой и плечами уже несёт всё,
+    /// что нужно экрану.
+    private let ownJourneyId: UUID?
+    private let social: SocialJourneyResponse?
+    /// Путь навигации чужого профиля — только для режима `social`: тап по
+    /// автору и по плечу толкает в него, как у `TripDetailView`. У своего
+    /// путешествия своя навигация (`openTripId`), и `pushPath` остаётся `nil`.
+    var pushPath: Binding<[ProfilePreviewDest]>?
+
+    init(journeyId: UUID) {
+        self.ownJourneyId = journeyId
+        self.social = nil
+        self.pushPath = nil
+    }
+
+    /// Чужое путешествие (0.6.8, S6): значения с сервера, в базу не пишутся и
+    /// из неё не читаются — `manager`/`JourneyManager` в этом режиме не
+    /// зовётся вовсе.
+    init(social: SocialJourneyResponse, pushPath: Binding<[ProfilePreviewDest]>?) {
+        self.ownJourneyId = nil
+        self.social = social
+        self.pushPath = pushPath
+    }
+
+    private var journeyId: UUID { ownJourneyId ?? social!.journey.id }
+    private var isSocial: Bool { social != nil }
 
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
@@ -67,8 +97,14 @@ struct JourneyDetailView: View {
     /// читается как поломка.
     @State private var loaded = false
 
+    /// Guard на «Поделиться» — сеть одна, тапов в неё быть не должно два.
+    @State private var isSharingJourney = false
+
     private var colors: AppTheme.Colors { AppTheme.colors(for: scheme) }
-    private var journey: Journey? { manager.journeys.first { $0.id == journeyId } }
+    private var journey: Journey? {
+        if let social { return Journey(socialHead: social.journey) }
+        return manager.journeys.first { $0.id == journeyId }
+    }
 
     private static let heroHeight: CGFloat = 300
 
@@ -143,11 +179,20 @@ struct JourneyDetailView: View {
             // нажатие на него уводит в `TripDetailView` без поездки — а там
             // без поездки нет ни шапки, ни кружка «Назад»: экран без выхода.
             // Тот же случай и то же лечение, что в `ProfileView`.
-            .onReceive(NotificationCenter.default.publisher(for: .tripDeleted)) { _ in reload() }
+            //
+            // Все три обработчика ниже читают `manager`/`openTripId`, а у
+            // чужого путешествия ни того, ни другого нет: `manager.journeys`
+            // никогда не содержит запись с этим `id` (её и не должно — она с
+            // чужого сервера, а не из своей базы), и без проверки на
+            // `isSocial` `.onChange(of: manager.journeys)` закрывал бы экран
+            // сам собой на первом же кадре.
+            .onReceive(NotificationCenter.default.publisher(for: .tripDeleted)) { _ in
+                if !isSocial { reload() }
+            }
             // Возврат с экрана плеча. Там же его переименовывают, добавляют
             // снимки и ставят отметки — всё это лента дня показывает своими
             // строками, миниатюрами и кружками на карте.
-            .onChange(of: openTripId) { _, new in if new == nil { reload() } }
+            .onChange(of: openTripId) { _, new in if !isSocial, new == nil { reload() } }
             // Удаление (своё или прилетевшее синком) не оставляет экрана,
             // которому нечего показать.
             //
@@ -157,6 +202,7 @@ struct JourneyDetailView: View {
             // итог. Без этой проверки экран одного путешествия перебирал бы
             // базу всякий раз, когда меняется соседнее.
             .onChange(of: manager.journeys) { old, new in
+                guard !isSocial else { return }
                 let before = old.first { $0.id == journeyId }
                 let after = new.first { $0.id == journeyId }
                 if after == nil { dismiss() } else if before != after { reload() }
@@ -197,7 +243,12 @@ struct JourneyDetailView: View {
     @ViewBuilder
     private func pageBody(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 22) {
-            if trips.isEmpty {
+            // Пустое чужое путешествие — законный ответ сервера (все плечи
+            // приватны для этого зрителя), а не повод показать карточку
+            // «Добавить поездку»: править чужое окно нечем и незачем. Итог и
+            // (пустая) лента дней остаются — «0 дней» честнее исчезнувшего
+            // экрана.
+            if trips.isEmpty, !isSocial {
                 if loaded { emptyCard(c) }
             } else {
                 totals(c)
@@ -205,16 +256,32 @@ struct JourneyDetailView: View {
                     aggregate: aggregate,
                     language: lang.language,
                     localNames: localNames,
-                    onOpenTrip: { openTripId = $0.id },
+                    onOpenTrip: openTrip,
                     // Лента только сообщает, о чём попросили: вопрос задаёт
-                    // экран, на его корне.
-                    onRemoveLeg: { legToRemove = $0 }
+                    // экран, на его корне. У чужого путешествия убирать
+                    // плечо нечем — `nil` гасит и поповер, и действие
+                    // VoiceOver внутри списка.
+                    onRemoveLeg: isSocial ? nil : { legToRemove = $0 }
                 )
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, 18)
         .padding(.bottom, 40)
+    }
+
+    /// Тап по плечу: своя поездка открывается на месте (`openTripId`), чужая
+    /// толкает в `pushPath` тем же `SocialFeedTrip`, которым путешествие
+    /// приехало, — `TripDetailView` для нашего аккаунта строит его через
+    /// `Trip(social:)`, минуя поиск в локальной базе, которого для чужой
+    /// поездки нет и не будет.
+    private func openTrip(_ trip: Trip) {
+        guard let social else {
+            openTripId = trip.id
+            return
+        }
+        guard let feedTrip = social.legs.first(where: { $0.id == trip.id }) else { return }
+        pushPath?.wrappedValue.cappedAppend(.socialTrip(feedTrip, focus: .top))
     }
 
     // MARK: - Герой
@@ -234,6 +301,48 @@ struct JourneyDetailView: View {
         .frame(height: Self.heroHeight)
         .clipped()
         .overlay(alignment: .bottomTrailing) { expandButton }
+        .overlay(alignment: .topLeading) { authorRow }
+    }
+
+    /// Строка автора чужого путешествия (S6) — над героем, под неподвижной
+    /// шапкой. Без кнопки «Подписаться» в 0.6.8: решение контроллера, кнопка
+    /// живёт в `PublicProfileView.followButton` и требует состояния полного
+    /// профиля, которого у этого экрана нет и заводить его ради одной кнопки
+    /// здесь не стали — тап по строке уже ведёт туда, где она есть.
+    @ViewBuilder
+    private var authorRow: some View {
+        if let social {
+            let author = social.journey.author
+            Button {
+                Haptics.tap()
+                pushPath?.wrappedValue.cappedAppend(.profile(author.id, author))
+            } label: {
+                HStack(spacing: 10) {
+                    Text(author.avatarEmoji ?? "🚗")
+                        .font(.system(size: 18))
+                        .frame(width: 34, height: 34)
+                        .background(.white.opacity(0.16), in: Circle())
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(author.displayName ?? AppStrings.blockedListUser(lang.language))
+                            .font(.system(size: 14, weight: .heavy))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text("\(dateRangeText) · \(AppStrings.nounDays(lang.language, aggregate.calendarDays))")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.75))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(.black.opacity(0.28), in: Capsule())
+            }
+            .buttonStyle(PressableCardStyle())
+            .accessibilityIdentifier("journey_author")
+            .padding(.leading, 16)
+            .padding(.top, safeAreaTop + 56)
+        }
     }
 
     @ViewBuilder
@@ -335,6 +444,18 @@ struct JourneyDetailView: View {
                 work()
             }
         }
+        // Чужое путешествие: «…» это ровно один пункт, и «Изменить»/
+        // «Удалить»/«Опубликовать» на нём НЕТ — их только у себя. Убрать
+        // плечо тут нечем — та же кнопка, что и в `journeyRemoveLeg`, здесь
+        // просто не существует.
+        if isSocial {
+            return [
+                .init(title: AppStrings.share(lang.language), systemImage: "square.and.arrow.up",
+                      accessibilityId: "journey_action_share") {
+                    present { shareJourney() }
+                },
+            ]
+        }
         // Первым пунктом — публикация или скрытие, зеркало `publishAction`/
         // `unpublishAction` у поездки. Без `journey` (окно исчезло синком в
         // момент, когда поповер уже открыт) — молчим: экран за кадром вот-вот
@@ -386,6 +507,37 @@ struct JourneyDetailView: View {
         confirmHide = true
     }
 
+    /// «Поделиться» чужим путешествием (S6): минтит ссылку на СЕРВЕРЕ
+    /// (`POST /social/share-journey`) и отдаёт её системному листу — тот же
+    /// `ShareLinkPresenter`, которым делится поездка и профиль. Гость на
+    /// «Поделиться» получает вход, а не тихий отказ: `.share` — тот же гейт,
+    /// на который заведена эта самая кнопка у `SignInPromptSheet.Action`.
+    private func shareJourney() {
+        guard let social else { return }
+        guard auth.isSignedIn else {
+            signInPrompt = .share
+            return
+        }
+        guard !isSharingJourney else { return }
+        isSharingJourney = true
+        Task {
+            defer { isSharingJourney = false }
+            do {
+                let req = SocialShareJourneyRequest(journeyId: social.journey.id, expiresInDays: nil)
+                let res: SocialShareResponse = try await APIClient.shared.post(
+                    APIEndpoint.socialShareJourney, body: req)
+                if let url = URL(string: res.shareUrl) {
+                    await ShareLinkPresenter.present(url: url, title: titleText)
+                }
+            } catch {
+                // Сеть подвела — молчим, как у `PublicProfileView.shareTrip`
+                // при отказе `/social/share`: тост на «не вышло поделиться»
+                // здесь не заведён нарочно, отдельной строки под него нет.
+                journeyDetailLog.error("journey share link failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// `JourneyPublishSheet` держит свой `.contentSizedSheet` сама (как
     /// `PlaceRenameSheet`) — снаружи оборачивать её ещё раз не нужно, в
     /// отличие от `editSheet`, чьё содержимое его не несёт.
@@ -427,17 +579,30 @@ struct JourneyDetailView: View {
                 label: AppStrings.journeyDistanceLabel(l),
                 color: AppTheme.green, staggerIndex: 1
             )
-            DetailStatCard(
-                value: "\(aggregate.legCount)",
-                unit: AppStrings.nounTrips(l, aggregate.legCount),
-                label: AppStrings.journeyLegsLabel(l),
-                color: AppTheme.blue, staggerIndex: 2
-            )
-            DetailStatCard(
-                segments: TripDetailFormat.durationSegments(aggregate.drivingSeconds, lang: l),
-                label: AppStrings.journeyDrivingLabel(l),
-                color: AppTheme.accent, staggerIndex: 3
-            )
+            if isSocial {
+                // S6: три плитки, не четыре. «В пути» — из точного трека
+                // всех плеч, а чужой ответ его не везёт; и подпись третьей
+                // плитки другая — «плеч · публичных» напоминает, что
+                // приватные плечи автора в это число не входят.
+                DetailStatCard(
+                    value: "\(aggregate.legCount)",
+                    unit: AppStrings.nounTrips(l, aggregate.legCount),
+                    label: AppStrings.journeyPublicLegsLabel(l),
+                    color: AppTheme.blue, staggerIndex: 2
+                )
+            } else {
+                DetailStatCard(
+                    value: "\(aggregate.legCount)",
+                    unit: AppStrings.nounTrips(l, aggregate.legCount),
+                    label: AppStrings.journeyLegsLabel(l),
+                    color: AppTheme.blue, staggerIndex: 2
+                )
+                DetailStatCard(
+                    segments: TripDetailFormat.durationSegments(aggregate.drivingSeconds, lang: l),
+                    label: AppStrings.journeyDrivingLabel(l),
+                    color: AppTheme.accent, staggerIndex: 3
+                )
+            }
         }
     }
 
@@ -517,6 +682,23 @@ struct JourneyDetailView: View {
     // MARK: - Загрузка
 
     private func reload() {
+        if let social {
+            // Чужое путешествие: плечи и итог считаются из ОТВЕТА, репозиторий
+            // и `JourneyManager` в этом режиме не читаются вовсе. Обложки нет
+            // никогда — героем всегда идёт карта ниток (решение контроллера):
+            // `coverPhotoId` с сервера указывает на чужой снимок, которого у
+            // нас нет и грузить неоткуда.
+            let legs = social.legs.map(Trip.init(social:))
+            let agg = JourneyAggregate.build(trips: legs)
+            trips = legs
+            aggregate = agg
+            coordinates = legs.flatMap(\.previewCoordinates)
+            checkpointMarkers = legs.flatMap(markers(of:))
+            coverPhoto = nil
+            loaded = true
+            loadLocalityNames(agg: agg)
+            return
+        }
         guard let journey else { return }
         let legs = manager.trips(in: journey)
         let agg = JourneyAggregate.build(trips: legs)

@@ -474,6 +474,7 @@ extension Translations {
         "publicGarageEntrySubtitle": "Paylaştığı araçlar ve nerelere gittikleri",
         "publicGarageEmpty": "Burada henüz bir şey yok. Yolculukları ve haritası yerinde.",
         "publicVehicleUnavailable": "Bu araç kullanılamıyor.",
+        "journeyUnavailable": "Bu yolculuk kullanılamıyor.",
         "publicVehicleSold": "Satıldı · biyografi kapandı",
         "publicRecordsNote": "Yalnızca herkese açık yolculuklardan. Özel olanlar rekorlara girmez — tarihi ve yeri ele verirdi.",
         "garageLoadFailed": "Garaj yüklenemedi",

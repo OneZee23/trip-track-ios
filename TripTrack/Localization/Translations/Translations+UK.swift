@@ -474,6 +474,7 @@ extension Translations {
         "publicGarageEntrySubtitle": "Машини, які він відкрив, і де вони побували",
         "publicGarageEmpty": "Тут поки порожньо. Поїздки й карта — на місці.",
         "publicVehicleUnavailable": "Ця машина недоступна.",
+        "journeyUnavailable": "Ця подорож недоступна.",
         "publicVehicleSold": "Продана · біографія закрита",
         "publicRecordsNote": "За публічними поїздками. Приватні в рекорди не потрапляють — інакше вони видали б дату й місце.",
         "garageLoadFailed": "Не вдалося завантажити гараж",

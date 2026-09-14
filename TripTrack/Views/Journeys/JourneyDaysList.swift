@@ -27,7 +27,11 @@ struct JourneyDaysList: View {
     /// Лента только СООБЩАЕТ, о чём попросили, — и из поповера, и из действия
     /// для VoiceOver. Вопрос («вернуть будет нечем») задаёт экран на своём
     /// корне: накладка размером с эту ленту уехала бы вместе с прокруткой.
-    var onRemoveLeg: (Trip) -> Void
+    ///
+    /// `nil` — чужое путешествие (0.6.8): убрать плечо может только владелец,
+    /// и строка тогда открывает поездку простым тапом, без удержания, без
+    /// поповера и без действия VoiceOver — их не притворяемся давать.
+    var onRemoveLeg: ((Trip) -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
@@ -160,54 +164,70 @@ struct JourneyDaysList: View {
     /// поэтому вся оснастка (удержание, поповер, действие для VoiceOver) живёт
     /// в одном месте: разъедься эти две копии — и половина строк молча
     /// перестала бы убираться.
+    @ViewBuilder
     private func tripButton<Label: View>(
         _ trip: Trip, accessibilityId: String, @ViewBuilder label: () -> Label
     ) -> some View {
-        Button {
-            // Меню уже открыто долгим тапом — но кнопка всё равно получит своё
-            // нажатие на отпускании, и без этой проверки поездка открывалась бы
-            // «сама», поверх только что показанного поповера.
-            guard menuTripId == nil else { return }
-            Haptics.tap()
-            onOpenTrip(trip)
-        } label: {
-            label().contentShape(Rectangle())
-        }
-        .buttonStyle(HoldableCardStyle())
-        .accessibilityIdentifier(accessibilityId)
-        .simultaneousGesture(
-            LongPressGesture(minimumDuration: Self.holdDuration).onEnded { _ in
-                Haptics.action()
-                menuTripId = trip.id
+        if let onRemoveLeg {
+            Button {
+                // Меню уже открыто долгим тапом — но кнопка всё равно получит
+                // своё нажатие на отпускании, и без этой проверки поездка
+                // открывалась бы «сама», поверх только что показанного
+                // поповера.
+                guard menuTripId == nil else { return }
+                Haptics.tap()
+                onOpenTrip(trip)
+            } label: {
+                label().contentShape(Rectangle())
             }
-        )
-        // Поповер, а не системное меню: `Menu` роняет чужую плашку поверх
-        // нашей карточки (см. `ActionPopoverList`).
-        .popover(isPresented: Binding(
-            get: { menuTripId == trip.id },
-            set: { if !$0 { menuTripId = nil } }
-        )) {
-            ActionPopoverList(items: [
-                .init(title: AppStrings.journeyRemoveLeg(language),
-                      systemImage: "minus.circle",
-                      isDestructive: true,
-                      accessibilityId: "journey_remove_leg") {
-                    // Поповер закрывается ДО правки: убранное плечо исчезает из
-                    // ленты, и UIKit роняет поповер вместе со строкой, к которой
-                    // тот был привязан, — тем же приёмом, что `present {}` на
-                    // экране путешествия.
-                    menuTripId = nil
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 260_000_000)
-                        onRemoveLeg(trip)
-                    }
+            .buttonStyle(HoldableCardStyle())
+            .accessibilityIdentifier(accessibilityId)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: Self.holdDuration).onEnded { _ in
+                    Haptics.action()
+                    menuTripId = trip.id
                 }
-            ])
-        }
-        // Удержание — жест, которого VoiceOver не знает: без этого действия
-        // убрать плечо с озвучкой было бы нечем вовсе.
-        .accessibilityAction(named: Text(AppStrings.journeyRemoveLeg(language))) {
-            onRemoveLeg(trip)
+            )
+            // Поповер, а не системное меню: `Menu` роняет чужую плашку поверх
+            // нашей карточки (см. `ActionPopoverList`).
+            .popover(isPresented: Binding(
+                get: { menuTripId == trip.id },
+                set: { if !$0 { menuTripId = nil } }
+            )) {
+                ActionPopoverList(items: [
+                    .init(title: AppStrings.journeyRemoveLeg(language),
+                          systemImage: "minus.circle",
+                          isDestructive: true,
+                          accessibilityId: "journey_remove_leg") {
+                        // Поповер закрывается ДО правки: убранное плечо
+                        // исчезает из ленты, и UIKit роняет поповер вместе со
+                        // строкой, к которой тот был привязан, — тем же
+                        // приёмом, что `present {}` на экране путешествия.
+                        menuTripId = nil
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 260_000_000)
+                            onRemoveLeg(trip)
+                        }
+                    }
+                ])
+            }
+            // Удержание — жест, которого VoiceOver не знает: без этого
+            // действия убрать плечо с озвучкой было бы нечем вовсе.
+            .accessibilityAction(named: Text(AppStrings.journeyRemoveLeg(language))) {
+                onRemoveLeg(trip)
+            }
+        } else {
+            // Чужое путешествие: убрать плечо нечем, поэтому обычный тап без
+            // удержания — `HoldableCardStyle` на строке без спрятанного
+            // действия обещал бы меню, которого не будет.
+            Button {
+                Haptics.tap()
+                onOpenTrip(trip)
+            } label: {
+                label().contentShape(Rectangle())
+            }
+            .buttonStyle(PressableCardStyle())
+            .accessibilityIdentifier(accessibilityId)
         }
     }
 

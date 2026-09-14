@@ -474,6 +474,7 @@ extension Translations {
         "publicGarageEntrySubtitle": "Ang mga sasakyang binuksan niya at kung saan na ang mga ito",
         "publicGarageEmpty": "Wala pa rito. Nasa dati pa rin ang mga biyahe at mapa niya.",
         "publicVehicleUnavailable": "Hindi available ang sasakyang ito.",
+        "journeyUnavailable": "Hindi available ang paglalakbay na ito.",
         "publicVehicleSold": "Naibenta · sarado ang biograpiya",
         "publicRecordsNote": "Mula sa mga pampublikong biyahe lang. Hindi kasama ang pribado sa mga rekord — malalantad ang petsa at lugar.",
         "garageLoadFailed": "Hindi ma-load ang garahe",

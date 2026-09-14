@@ -474,6 +474,7 @@ extension Translations {
         "publicGarageEntrySubtitle": "Kendaraan yang dia buka dan pernah ke mana",
         "publicGarageEmpty": "Belum ada apa-apa di sini. Perjalanan dan petanya tetap di tempatnya.",
         "publicVehicleUnavailable": "Kendaraan ini tidak tersedia.",
+        "journeyUnavailable": "Perjalanan ini tidak tersedia.",
         "publicVehicleSold": "Terjual · biografi ditutup",
         "publicRecordsNote": "Hanya dari perjalanan publik. Yang pribadi tidak masuk rekor — akan membocorkan tanggal dan tempat.",
         "garageLoadFailed": "Gagal memuat garasi",

@@ -2179,6 +2179,15 @@ enum AppStrings {
     static func journeyPublicLegsLabel(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyPublicLegsLabel", ru: "плеч · публичных", en: "legs · public")
     }
+    /// Заглушка `PublicJourneyView` (S6) — путешествие скрыли, удалили, или
+    /// запрос не дошёл. Один ответ на все три причины, как у
+    /// `publicVehicleUnavailable`: сообщение не обязано отличать «спрятано» от
+    /// «не смогли спросить».
+    static func journeyUnavailable(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyUnavailable",
+           ru: "Путешествие недоступно.",
+           en: "This journey isn't available.")
+    }
 
     /// Вопрос про дом задаётся ОДИН раз: без дома подсказок нет вовсе.
     static func homeQuestionTitle(_ lang: LanguageManager.Language) -> String {

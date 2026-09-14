@@ -474,6 +474,7 @@ extension Translations {
         "publicGarageEntrySubtitle": "Ол ашқан көліктер және олар қайда болды",
         "publicGarageEmpty": "Мұнда әзірге бос. Сапарлары мен картасы орнында.",
         "publicVehicleUnavailable": "Бұл көлік қолжетімсіз.",
+        "journeyUnavailable": "Бұл саяхат қолжетімсіз.",
         "publicVehicleSold": "Сатылды · өмірбаяны жабық",
         "publicRecordsNote": "Тек ашық сапарлар бойынша. Жеке сапарлар рекордқа кірмейді — олар күні мен орнын ашып қояр еді.",
         "garageLoadFailed": "Гаражды жүктеу мүмкін болмады",

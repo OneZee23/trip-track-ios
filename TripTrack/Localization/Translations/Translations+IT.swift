@@ -474,6 +474,7 @@ extension Translations {
         "publicGarageEntrySubtitle": "I veicoli che ha aperto e dove sono stati",
         "publicGarageEmpty": "Qui non c'è ancora nulla. I viaggi e la mappa sono dove erano.",
         "publicVehicleUnavailable": "Questo veicolo non è disponibile.",
+        "journeyUnavailable": "Questo viaggio non è disponibile.",
         "publicVehicleSold": "Venduto · biografia chiusa",
         "publicRecordsNote": "Solo dai viaggi pubblici. Quelli privati restano fuori dai record: rivelerebbero data e luogo.",
         "garageLoadFailed": "Impossibile caricare il garage",
