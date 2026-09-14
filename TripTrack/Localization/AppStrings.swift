@@ -2097,8 +2097,13 @@ enum AppStrings {
     static func journeyPublishTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyPublishTitle", ru: "Опубликовать путешествие", en: "Publish journey")
     }
-    /// «Путешествие «Грузия» станет видно другим. Вместе с ним откроются эти
-    /// поездки — сейчас они приватные.» Имя — без кавычек, кавычки в строке.
+    /// «Путешествие «Грузия» станет видно другим. Вместе с ним откроется всё,
+    /// что сейчас приватно.» Имя — без кавычек, кавычки в строке.
+    ///
+    /// Абзац НЕ согласован с числом плеч нарочно: приватное плечо бывает одно
+    /// («откроются эти поездки» на одной поездке — ошибка на всех тринадцати
+    /// языках), а бывает и ни одного — лист показывает этот абзац и тогда,
+    /// когда все плечи уже публичны.
     ///
     /// Отклонение от брифа: имя вставляется плейсхолдером `{title}` ПОСЛЕ
     /// `tr()` (как `publicRoutesExplainer`), а не живой интерполяцией
@@ -2108,8 +2113,8 @@ enum AppStrings {
     /// имя путешествия на любом языке, кроме русского и английского.
     static func journeyPublishIntro(_ lang: LanguageManager.Language, title: String) -> String {
         tr(lang, "journeyPublishIntro",
-           ru: "Путешествие «{title}» станет видно другим. Вместе с ним откроются эти поездки — сейчас они приватные.",
-           en: "“{title}” will be visible to others. These trips open with it — they are private now.")
+           ru: "Путешествие «{title}» станет видно другим. Вместе с ним откроется всё, что сейчас приватно.",
+           en: "“{title}” will be visible to others. Everything in it that is private now opens with it.")
             .replacingOccurrences(of: "{title}", with: title)
     }
     /// Подпись у плеча в листе: «12 сен · 480 км · сейчас приватная» — дата и
@@ -2117,7 +2122,7 @@ enum AppStrings {
     static func journeyLegPrivateNow(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyLegPrivateNow", ru: "сейчас приватная", en: "private now")
     }
-    /// «Ещё 2 поездки путешествия уже публичные — они не меняются.»
+    /// «Уже публично: 2 поездки — без изменений.»
     ///
     /// Отклонение от брифа: плейсхолдер `{trips}` несёт уже готовую пару
     /// «число + склонённое слово» (`nounTrips`), а не голое `count` — в
@@ -2126,11 +2131,17 @@ enum AppStrings {
     /// языке. Число нужно посчитать ДО `tr()` по той же причине, что и
     /// `title` выше: перевод не может сам решить между «2 поездки» и «5
     /// поездок».
+    ///
+    /// Форма — подпись с двоеточием, БЕЗ согласования с числом. Прежняя фраза
+    /// («Ещё {trips} путешествия уже публичные — они не меняются») ломалась на
+    /// одном плече на всех проверенных языках: глагол и местоимение стояли во
+    /// множественном, а число подставлялось. Плечо бывает одно, и подставить
+    /// в готовую фразу правильную форму глагола перевод не может.
     static func journeyPublishAlreadyPublic(_ lang: LanguageManager.Language, count: Int) -> String {
         let trips = "\(count) \(nounTrips(lang, count))"
         return tr(lang, "journeyPublishAlreadyPublic",
-           ru: "Ещё {trips} путешествия уже публичные — они не меняются.",
-           en: "{trips} of this journey are already public — they stay as they are.")
+           ru: "Уже публично: {trips} — без изменений.",
+           en: "Already public: {trips} — unchanged.")
             .replacingOccurrences(of: "{trips}", with: trips)
     }
     /// Кнопка: считает ТОЛЬКО открываемые поездки (макет S5). Тот же
