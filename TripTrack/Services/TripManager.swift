@@ -499,6 +499,30 @@ final class TripManager: ObservableObject {
         enqueueTripUpdate(tripId)
     }
 
+    // MARK: - Отрезки между отметками (0.6.8)
+
+    /// Отрезки едут внутри поездки, как отметки, — значит любая правка отрезка
+    /// это правка поездки, и её надо поставить в очередь синка. Без этого
+    /// отрезок жил бы до первого pull: сервер вернул бы список без него и
+    /// «заменил целиком».
+    @discardableResult
+    func addSegment(tripId: UUID, from: UUID, to: UUID) -> TripSegment? {
+        guard let segment = repository.addSegment(
+            tripId: tripId, fromCheckpointId: from, toCheckpointId: to) else { return nil }
+        enqueueTripUpdate(tripId)
+        return segment
+    }
+
+    func updateSegment(id: UUID, name: String?) {
+        guard let tripId = repository.updateSegment(id: id, name: name) else { return }
+        enqueueTripUpdate(tripId)
+    }
+
+    func deleteSegment(id: UUID) {
+        guard let tripId = repository.deleteSegment(id: id) else { return }
+        enqueueTripUpdate(tripId)
+    }
+
     /// Как у названия и заметок: правка поездки → операция в очередь синка.
     private func enqueueTripUpdate(_ tripId: UUID) {
         Task { @MainActor in

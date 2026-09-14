@@ -14,6 +14,11 @@ struct Trip: Identifiable, Codable {
     /// это ещё не касалось, поэтому значение по умолчанию обязательно: инициализатор
     /// зовут из полутора десятков мест, включая ленту и синк.
     var checkpoints: [TripCheckpoint] = []
+    /// Отрезки между парами отметок — «от заправки до перевала». Живут
+    /// JSON-колонкой у поездки, а не сущностью: своих колонок для выборок у
+    /// сегмента нет, а связь на две отметки одной поездки — это две строки
+    /// JSON. Сегменты с отметкой, которой больше нет, чтение молча отбрасывает.
+    var segments: [TripSegment] = []
 
     var title: String?
     /// Whether a PERSON put that title there, as opposed to the app stamping
@@ -303,6 +308,7 @@ struct Trip: Identifiable, Codable {
          distance: Double = 0, maxSpeed: Double = 0, averageSpeed: Double = 0,
          trackPoints: [TrackPoint] = [], photos: [TripPhoto] = [],
          checkpoints: [TripCheckpoint] = [],
+         segments: [TripSegment] = [],
          title: String? = nil, titleIsCustom: Bool = false,
          tripDescription: String? = nil,
          fuelUsed: Double = 0, elevation: Double = 0,
@@ -321,6 +327,7 @@ struct Trip: Identifiable, Codable {
         self.trackPoints = trackPoints
         self.photos = photos
         self.checkpoints = checkpoints
+        self.segments = segments
         self.title = title
         self.titleIsCustom = titleIsCustom
         self.tripDescription = tripDescription

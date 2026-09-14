@@ -32,6 +32,18 @@ struct TripCheckpointPayload: Codable {
     let sortOrder: Int
 }
 
+/// Отрезок между двумя отметками в проводе (0.6.8). Зеркало `TripSegment`.
+///
+/// Времени и километров здесь нет НАРОЧНО: их считают из двух отметок, а
+/// посланное число стало бы вторым счётом, который однажды разойдётся с
+/// одометром поездки.
+struct TripSegmentPayload: Codable {
+    let id: UUID
+    let fromCheckpointId: UUID
+    let toCheckpointId: UUID
+    let name: String?
+}
+
 struct TripSyncPayload: Codable {
     let id: UUID
     let title: String?
@@ -80,6 +92,10 @@ struct TripSyncPayload: Codable {
     /// бессмысленны без неё, и отдельный тип синк-операции ради них — это
     /// второй диалект того же разговора.
     var checkpoints: [TripCheckpointPayload]?
+    /// Отрезки — той же дисциплиной, что отметки: едут внутри поездки, список
+    /// целиком заменяет прежний, ключ отсутствует — старый сервер, локальное
+    /// не трогать.
+    var segments: [TripSegmentPayload]?
 }
 
 extension TripSyncPayload {
@@ -135,6 +151,11 @@ extension TripSyncPayload {
                 latitude: c.latitude, longitude: c.longitude,
                 distanceFromStart: c.distanceFromStart, elapsedFromStart: c.elapsedFromStart,
                 name: c.name, photoId: c.photoId, photoIds: c.photoIds, placeId: c.placeId, sortOrder: index)
+        }
+        self.segments = trip.segments.map {
+            TripSegmentPayload(
+                id: $0.id, fromCheckpointId: $0.fromCheckpointId,
+                toCheckpointId: $0.toCheckpointId, name: $0.name)
         }
     }
 

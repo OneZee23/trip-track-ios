@@ -503,9 +503,9 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   телефоне (`JourneyEditSheet.startBounds`/`endBounds`,
   `JourneyEditWindowTests`).
 
-## CoreData Schema (versioned, v14 — 0.6.8)
+## CoreData Schema (versioned, v15 — 0.6.8)
 
-`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `PlaceEntity`, `PlacePassEntity` (0.6.8, no relationships), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v14 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`, v14 — `PlaceEntity`/`PlacePassEntity` + `TripEntity.placesMatchedAt`).
+`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `PlaceEntity`, `PlacePassEntity` (0.6.8, no relationships), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v15 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`, v14 — `PlaceEntity`/`PlacePassEntity` + `TripEntity.placesMatchedAt`, v15 — `TripEntity.segmentsJSON`).
 
 **Внимание:** `VehiclePhotoEntity` связи с машиной НЕ имеет — `vehicleId` это
 обычный атрибут. Значит каскад её не заберёт: удаление машины и стирание

@@ -69,6 +69,16 @@ protocol TripRepository {
     /// Возвращают id поездки — чтобы вызывающий мог поставить её в очередь синка.
     @discardableResult func updateCheckpoint(id: UUID, name: String?, photoId: UUID?, photoIds: [UUID]) -> UUID?
     @discardableResult func deleteCheckpoint(id: UUID) -> UUID?
+
+    // MARK: Отрезки между отметками
+    /// Нормализует порядок (`from` — раньше по `elapsedFromStart`); `nil` —
+    /// поездка или отметки не найдены, либо `from == to`.
+    @discardableResult
+    func addSegment(tripId: UUID, fromCheckpointId: UUID, toCheckpointId: UUID) -> TripSegment?
+    /// Возвращают id поездки — чтобы вызывающий поставил её в очередь синка.
+    @discardableResult func updateSegment(id: UUID, name: String?) -> UUID?
+    @discardableResult func deleteSegment(id: UUID) -> UUID?
+
     func markSynced(tripId: UUID, conflictVersion: Int)
 
     // MARK: Sync
@@ -853,10 +863,103 @@ final class CoreDataTripRepository: TripRepository {
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
         guard let ce = try? context.fetch(request).first else { return nil }
         let tripId = ce.trip?.id
-        if let trip = ce.trip { markCheckpointsChanged(on: trip) }
+        if let trip = ce.trip {
+            // Каскада у отрезков нет — они лежат JSON-колонкой поездки,
+            // и связь с отметкой держит только их id. Чистим руками, ДО
+            // удаления: иначе отрезок остался бы висеть на половине пары.
+            // Чтение такой мусор и так отбрасывает, но хранить его незачем —
+            // он уехал бы на сервер и вернулся бы на второй телефон.
+            let rest = Self.decodeSegments(trip.segmentsJSON).filter {
+                $0.fromCheckpointId != id && $0.toCheckpointId != id
+            }
+            trip.segmentsJSON = Self.encodeSegments(rest)
+            markCheckpointsChanged(on: trip)
+        }
         context.delete(ce)
         persistenceController.save()
         return tripId
+    }
+
+    // MARK: - Отрезки между отметками (0.6.8)
+
+    /// Отрезки — JSON-колонкой у поездки, как `companionsJSON`: своих колонок
+    /// для выборок у отрезка нет, а связь на две отметки одной поездки — это
+    /// две строки JSON, а не таблица.
+    static func encodeSegments(_ segments: [TripSegment]) -> String? {
+        guard !segments.isEmpty,
+              let data = try? JSONEncoder().encode(segments) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func decodeSegments(_ json: String?) -> [TripSegment] {
+        guard let json, let data = json.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([TripSegment].self, from: data) else { return [] }
+        return decoded
+    }
+
+    @discardableResult
+    func addSegment(tripId: UUID, fromCheckpointId: UUID, toCheckpointId: UUID) -> TripSegment? {
+        guard fromCheckpointId != toCheckpointId,
+              let entity = fetchEntity(id: tripId),
+              let all = entity.checkpoints?.array as? [TripCheckpointEntity],
+              let a = all.first(where: { $0.id == fromCheckpointId }),
+              let b = all.first(where: { $0.id == toCheckpointId }) else { return nil }
+
+        var segments = Self.decodeSegments(entity.segmentsJSON)
+        // Та же пара в любом направлении — тот же отрезок: направление задаёт
+        // дорога, а не порядок нажатий, и второй такой же был бы дублем в ленте.
+        let pair = Set([fromCheckpointId, toCheckpointId])
+        if let existing = segments.first(where: { Set([$0.fromCheckpointId, $0.toCheckpointId]) == pair }) {
+            return existing
+        }
+
+        // Порядок по дороге: «Отрезок до…» человек выбирает и назад по треку.
+        let reversed = b.elapsedFromStart < a.elapsedFromStart
+        let segment = TripSegment(
+            fromCheckpointId: reversed ? toCheckpointId : fromCheckpointId,
+            toCheckpointId: reversed ? fromCheckpointId : toCheckpointId)
+        segments.append(segment)
+        entity.segmentsJSON = Self.encodeSegments(segments)
+        markCheckpointsChanged(on: entity)
+        persistenceController.save()
+        return segment
+    }
+
+    @discardableResult
+    func updateSegment(id: UUID, name: String?) -> UUID? {
+        guard let entity = tripEntity(carryingSegment: id) else { return nil }
+        var segments = Self.decodeSegments(entity.segmentsJSON)
+        guard let index = segments.firstIndex(where: { $0.id == id }) else { return nil }
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Пустое имя — это `nil`, а не пустая строка: «A → B» при показе
+        // собирается именно по `nil`, и пробел в базе сломал бы его молча.
+        segments[index].name = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        entity.segmentsJSON = Self.encodeSegments(segments)
+        markCheckpointsChanged(on: entity)
+        persistenceController.save()
+        return entity.id
+    }
+
+    @discardableResult
+    func deleteSegment(id: UUID) -> UUID? {
+        guard let entity = tripEntity(carryingSegment: id) else { return nil }
+        let segments = Self.decodeSegments(entity.segmentsJSON)
+        guard segments.contains(where: { $0.id == id }) else { return nil }
+        entity.segmentsJSON = Self.encodeSegments(segments.filter { $0.id != id })
+        markCheckpointsChanged(on: entity)
+        persistenceController.save()
+        return entity.id
+    }
+
+    /// Поездку по id отрезка ищем строкой в колонке — у отрезка нет своей
+    /// строки в базе, и это дешевле, чем разбирать JSON у всех поездок.
+    /// `CONTAINS` может дать лишнего только при совпадении UUID, поэтому
+    /// вызывающие всё равно проверяют список после разбора.
+    private func tripEntity(carryingSegment id: UUID) -> TripEntity? {
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "segmentsJSON CONTAINS[c] %@", id.uuidString)
+        request.fetchLimit = 1
+        return (try? context.fetch(request))?.first
     }
 
     /// Снимок был обложкой или прикреплён к отметке — отметка остаётся,
@@ -1059,6 +1162,15 @@ final class CoreDataTripRepository: TripRepository {
             }
             .sorted { $0.elapsedFromStart < $1.elapsedFromStart } ?? []
 
+        // Отрезок без одной из своих отметок молча отбрасывается: каскада у
+        // JSON-колонки нет, а список отметок целиком заменяет пул — и тогда
+        // отрезок указал бы в пустоту. Чтение — единственное место, где это
+        // ловится для ВСЕХ путей (своё удаление, пул, база с другого телефона).
+        let checkpointIds = Set(checkpoints.map(\.id))
+        let segments = Self.decodeSegments(entity.segmentsJSON).filter {
+            checkpointIds.contains($0.fromCheckpointId) && checkpointIds.contains($0.toCheckpointId)
+        }
+
         let badgeIds: [String]
         if let json = entity.badgesJSON,
            let data = json.data(using: .utf8),
@@ -1082,6 +1194,7 @@ final class CoreDataTripRepository: TripRepository {
             distance: entity.distance, maxSpeed: entity.maxSpeed,
             averageSpeed: entity.averageSpeed, trackPoints: points, photos: photos,
             checkpoints: checkpoints,
+            segments: segments,
             title: entity.title, titleIsCustom: entity.titleIsCustom,
             tripDescription: entity.tripDescription,
             fuelUsed: entity.fuelUsed, elevation: entity.elevation,
@@ -1263,6 +1376,17 @@ final class CoreDataTripRepository: TripRepository {
                 ce.userId = SettingsManager.shared.localUserId
                 ce.trip = entity
             }
+        }
+
+        // Отрезки — то же правило, что у отметок: список целиком заменяет
+        // прежний, ключ отсутствует (старый сервер) — локальные не трогаем.
+        // Висячие отбрасывать здесь не нужно: их отбрасывает чтение, и оно
+        // ловит ещё и случай «отметки заменил ЭТОТ же пул».
+        if let serverSegments = p.segments {
+            entity.segmentsJSON = Self.encodeSegments(serverSegments.map {
+                TripSegment(id: $0.id, fromCheckpointId: $0.fromCheckpointId,
+                            toCheckpointId: $0.toCheckpointId, name: $0.name)
+            })
         }
 
         // Save deferred to PullApplier.flushPendingApplies() — batches a
