@@ -503,6 +503,13 @@ final class TripTrackUITests: XCTestCase {
     ///   ещё раз с нуля.
     private func openRostovLegThroughJourney(searchingUp: Bool = false) -> Bool {
         let journey = app.buttons.matching(identifier: "profile_journey_card").firstMatch
+        // Испытан короткий `waitForExistence` перед циклом (0.6.8, волна 7,
+        // F8): и 2, и 6 секунд без единого свайпа давали ложное «нет» на
+        // свежем релонче — карточка ЕСТЬ, но лениво отрисовывается только по
+        // свайпу, а не по ожиданию. Ранний выход при этом ещё и уводил поиск
+        // по названию (`searchingUp`) с текущей позиции, попадая в клон
+        // `-seed-places-rich` вместо оригинала. Полных тридцать свайпов —
+        // единственный вариант, который проходит и один, и в тройке.
         var reached = false
         for _ in 0..<30 {
             if journey.exists, journey.isHittable { reached = true; break }
