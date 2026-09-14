@@ -189,7 +189,9 @@
    поэтому `xcodegen generate` — **ДВАЖДЫ**: первый прогон переписывает файл на
    прежнюю версию, второй уважает его. Без проверки соберётся v14, а ошибка
    будет выглядеть как «сущность не найдена».
-3. **Sentry**: `SENTRY_DSN[config=Release]` в `Local.xcconfig` на месте. После
+3. **Sentry**: `SENTRY_DSN[config=Release]` в `Local.xcconfig` на месте — ключ
+   берётся в кабинете sentry.io → Settings → Projects → Client Keys (DSN); на
+   другой машине файл пуст (`Local.xcconfig` вне гита), вставить заново. После
    архива:
    `/usr/libexec/PlistBuddy -c "Print :SENTRY_DSN" <архив>/…/TripTrack.app/Info.plist`
    — должен вернуть DSN, а не пустую строку. С 0.6.6 пустой ключ пишет `notice`
