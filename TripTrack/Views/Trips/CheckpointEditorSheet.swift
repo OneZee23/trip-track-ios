@@ -19,9 +19,21 @@ struct CheckpointEditorSheet: View {
     /// должен откатить «Джубгу» обратно в «Отметка 1».
     let onSave: (String?, Bool, UUID?, [UUID]) -> Void
     let onDelete: () -> Void
+    /// Остальные отметки поездки с их номерами во времени — вторая стадия
+    /// листа («До какой отметки?»). Пусто — отметка в поездке одна, и
+    /// отрезку не с чем быть.
+    let otherCheckpoints: [(checkpoint: TripCheckpoint, number: Int)]
+    /// Создать отрезок до выбранной отметки. Пусто — чужая поездка либо
+    /// экран, который отрезков не заводит; кнопки тогда нет.
+    let onCreateSegment: ((UUID) -> Void)?
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.distanceUnit) private var distanceUnit
+    /// Вторая стадия ТОГО ЖЕ листа, а не второй лист поверх первого: вопрос
+    /// «до какой отметки» — продолжение разговора про эту отметку, и лист
+    /// поверх листа на iOS уводит первый вниз вместе с несохранённым именем.
+    @State private var picking = false
     @State private var name: String
     /// Обложка и прикреплённые рукой снимки — то, что уедет в базу.
     @State private var photoId: UUID?
@@ -37,7 +49,9 @@ struct CheckpointEditorSheet: View {
         otherPhotos: [TripPhoto],
         language: LanguageManager.Language,
         onSave: @escaping (String?, Bool, UUID?, [UUID]) -> Void,
-        onDelete: @escaping () -> Void
+        onDelete: @escaping () -> Void,
+        otherCheckpoints: [(checkpoint: TripCheckpoint, number: Int)] = [],
+        onCreateSegment: ((UUID) -> Void)? = nil
     ) {
         self.checkpoint = checkpoint
         self.number = number
@@ -46,6 +60,8 @@ struct CheckpointEditorSheet: View {
         self.language = language
         self.onSave = onSave
         self.onDelete = onDelete
+        self.otherCheckpoints = otherCheckpoints
+        self.onCreateSegment = onCreateSegment
         _name = State(initialValue: checkpoint.name ?? "")
         initialName = checkpoint.name ?? ""
         _photoId = State(initialValue: checkpoint.photoId)
@@ -55,6 +71,108 @@ struct CheckpointEditorSheet: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
 
+        Group {
+            if picking {
+                pickStage(c)
+            } else {
+                editStage(c)
+            }
+        }
+        .padding(20)
+        .background(c.bg)
+        // Свайп вниз закрывает лист мимо кнопки — правки не должны пропасть.
+        // Сохранение идемпотентно, так что второй вызов после «×» безвреден.
+        // Стадия выбора этого не меняет: имя уже набрано, и уход из листа с
+        // неё обязан сохранить его так же, как уход с первой стадии.
+        .onDisappear { if !deleted { commit() } }
+        .appConfirm(
+            isPresented: $confirmingDelete,
+            title: AppStrings.checkpointDelete(language),
+            actions: [
+                AppDialogAction(AppStrings.delete(language), kind: .destructive) {
+                    deleted = true
+                    onDelete()
+                    dismiss()
+                }
+            ]
+        )
+    }
+
+    /// Вторая стадия: до какой отметки вести отрезок.
+    private func pickStage(_ c: AppTheme.Colors) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Button {
+                    Haptics.tap()
+                    picking = false
+                } label: {
+                    NavCircleIcon(systemImage: "chevron.left")
+                }
+                .buttonStyle(.plain)
+                Text(AppStrings.segmentPickTitle(language))
+                    .font(.system(size: 19, weight: .heavy))
+                    .foregroundStyle(c.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer()
+            }
+            // Список в прокрутке с потолком: у поездки бывает десяток отметок,
+            // а лист меряет себя по содержимому — без потолка он вырос бы за
+            // экран, и нижние строки оказались бы недостижимы.
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 8) {
+                    ForEach(otherCheckpoints, id: \.checkpoint.id) { item in
+                        pickRow(item.checkpoint, number: item.number, c: c)
+                    }
+                }
+            }
+            .frame(maxHeight: min(CGFloat(otherCheckpoints.count) * 64, 380))
+        }
+    }
+
+    private func pickRow(_ item: TripCheckpoint, number: Int, c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.selection()
+            onCreateSegment?(item.id)
+            dismiss()
+        } label: {
+            HStack(spacing: 10) {
+                Text("\(number)")
+                    .font(.system(size: 13, weight: .heavy))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(AppTheme.accent, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name?.isEmpty == false
+                         ? item.name!
+                         : AppStrings.checkpointDefaultName(language, number: number))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    Text(CheckpointReading.text(
+                        elapsed: item.elapsedFromStart, metres: item.distanceFromStart,
+                        unit: distanceUnit, lang: language))
+                        .font(.system(size: 12, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(c.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 6)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(c.cardAlt, in: RoundedRectangle(cornerRadius: 12))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("segment_pick_row")
+    }
+
+    private func editStage(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
                 Text("\(number)")
@@ -111,6 +229,28 @@ struct CheckpointEditorSheet: View {
                 photoRow(title: AppStrings.checkpointPhotosOther(language), photos: addablePhotos, linked: false, c: c)
             }
 
+            // Вход в создание отрезка — здесь, а не за «…»: у отметки нет
+            // своего меню, всё про неё живёт на этом листе (см. доккомент).
+            if onCreateSegment != nil, !otherCheckpoints.isEmpty {
+                Button {
+                    Haptics.tap()
+                    picking = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.swap")
+                            .font(.system(size: 13, weight: .bold))
+                        Text(AppStrings.segmentTo(language))
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(AppTheme.accentBg, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("checkpoint_segment_to")
+            }
+
             Button {
                 Haptics.tap()
                 confirmingDelete = true
@@ -124,22 +264,6 @@ struct CheckpointEditorSheet: View {
             }
             .buttonStyle(PressableCardStyle())
         }
-        .padding(20)
-        .background(c.bg)
-        // Свайп вниз закрывает лист мимо кнопки — правки не должны пропасть.
-        // Сохранение идемпотентно, так что второй вызов после «×» безвреден.
-        .onDisappear { if !deleted { commit() } }
-        .appConfirm(
-            isPresented: $confirmingDelete,
-            title: AppStrings.checkpointDelete(language),
-            actions: [
-                AppDialogAction(AppStrings.delete(language), kind: .destructive) {
-                    deleted = true
-                    onDelete()
-                    dismiss()
-                }
-            ]
-        )
     }
 
     /// Полка отметки с учётом текущего выбора: обложка первой, за ней

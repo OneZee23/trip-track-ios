@@ -400,6 +400,99 @@ final class TripTrackUITests: XCTestCase {
         win.swipeDown(); sleep(1)
     }
 
+    /// Отрезок между отметками (0.6.8): скобка в «Моментах» и лист правки.
+    ///
+    /// Сеется отдельным аргументом — отрезок иначе пришлось бы заводить
+    /// руками через два листа, и первый же кадр зависел бы от четырёх тапов.
+    func test_zz_segment_shots() {
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments += ["-hasCompletedOnboarding", "<true/>", "-seed-map-demo", "-seed-segment-demo"]
+        app.launch()
+        normalizeToHome()
+
+        let me = app.buttons.matching(identifier: "tab_profile").firstMatch
+        if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
+
+        // Демо-отрезок лежит на «Краснодар → Ростов-на-Дону» (daysAgo 14) —
+        // позади десятка более свежих городских поездок в «Истории», отсюда
+        // бюджет свайпов, как у путешествия.
+        let card = app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@",
+            "profile_trip_card", "Ростов-на-Дону")).firstMatch
+        var opened = false
+        for _ in 0..<30 {
+            // Тап по карточке, до которой список ещё доезжает, уходит в
+            // пустоту: свайп даёт инерцию, `isHittable` становится истинным
+            // раньше, чем строка встаёт на место. Поэтому пауза перед тапом
+            // и проверка, что экран поездки правда открылся, — иначе тест
+            // молча продолжает свайпать ленту «Мои» и падает на «Моментах».
+            if card.exists, card.isHittable {
+                usleep(600_000)
+                card.tap()
+                if app.buttons["detail_map_expand"].waitForExistence(timeout: 6) {
+                    opened = true; break
+                }
+            }
+            win.swipeUp(); usleep(400_000)
+        }
+        if !opened { opened = openRostovLegThroughJourney() }
+        XCTAssertTrue(opened, "поездка «Краснодар → Ростов-на-Дону» не открылась из «Мои»")
+        guard opened else { return }
+        sleep(2)
+
+        // Лента «Моменты» — в самом низу экрана поездки.
+        let block = app.buttons.matching(identifier: "moment_segment").firstMatch
+        var reached = false
+        for _ in 0..<20 {
+            if block.exists, block.isHittable { reached = true; break }
+            win.swipeUp(); usleep(500_000)
+        }
+        XCTAssertTrue(reached, "скобка отрезка не найдена в «Моментах»")
+        guard reached else { return }
+        snap("150_segment_row")
+
+        block.tap()
+        XCTAssertTrue(app.otherElements["segment_editor"].waitForExistence(timeout: 5)
+                      || app.descendants(matching: .any)["segment_editor"].waitForExistence(timeout: 1),
+                      "лист отрезка не открылся")
+        sleep(1); snap("151_segment_editor")
+        win.swipeDown(); sleep(1)
+    }
+
+    /// Запасной путь к той же поездке: через карточку демо-путешествия.
+    ///
+    /// Когда в том же прогоне отработал `test_zz_journey_shots` (он идёт
+    /// раньше по алфавиту), «Краснодар → Ростов-на-Дону» — уже плечо
+    /// демо-путешествия, а плечо в «Мои» показывается только внутри карточки
+    /// путешествия (`HistoryFolding`), своей карточки у него нет. Стор между
+    /// тестами один, и перезапуск с аргументами его не чистит.
+    private func openRostovLegThroughJourney() -> Bool {
+        // Ищем НА ОБРАТНОМ ходу: первый цикл уже увёл список в самый низ, и
+        // слепая прокрутка наверх стоила бы столько же свайпов ещё раз.
+        let journey = app.buttons.matching(identifier: "profile_journey_card").firstMatch
+        var reached = false
+        for _ in 0..<30 {
+            if journey.exists, journey.isHittable { reached = true; break }
+            win.swipeDown(); usleep(400_000)
+        }
+        guard reached else { return false }
+        journey.tap(); sleep(2)
+
+        let leg = app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label CONTAINS %@",
+            "journey_leg_row", "Ростов-на-Дону")).firstMatch
+        for _ in 0..<15 {
+            if leg.exists, leg.isHittable {
+                usleep(600_000)
+                leg.tap()
+                if app.buttons["detail_map_expand"].waitForExistence(timeout: 6) { return true }
+            }
+            win.swipeUp(); usleep(400_000)
+        }
+        return false
+    }
+
     /// Walks the redesigned Me tab (0.6.0 Профиль·Я): hero, settings
     /// sheet, stats push, wrapped story. Guest-tolerant, guarded.
     func test_zz_me_shots() {

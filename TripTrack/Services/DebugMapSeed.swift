@@ -23,6 +23,11 @@ enum DebugMapSeed {
     /// две городские поездки подряд (как в первой версии сида) дают
     /// «0 плеч, 1 городская поездка» и пустой лист.
     static let journeyArgument = "-seed-journey-demo"
+    /// Четвёртым аргументом кладёт на ту же дорогу («Краснодар →
+    /// Ростов-на-Дону») две отметки и отрезок между ними: скобка в «Моментах»
+    /// иначе не показывается нигде, а завести отрезок руками в UI-тесте —
+    /// это два листа и четыре тапа до первого же кадра.
+    static let segmentArgument = "-seed-segment-demo"
 
     static var isRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
@@ -34,6 +39,10 @@ enum DebugMapSeed {
 
     static var isJourneyRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(journeyArgument)
+    }
+
+    static var isSegmentRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(segmentArgument)
     }
 
     private struct Route {
@@ -101,6 +110,7 @@ enum DebugMapSeed {
             // Повторный запуск с тем же аргументом: поездки на месте, сеять
             // маршруты заново незачем, а отметке сеяться, кроме них, негде.
             if isPlacesRequested { seedPlaceDemo(persistence: persistence) }
+            if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
             if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
             return
         }
@@ -154,6 +164,7 @@ enum DebugMapSeed {
         }
         persistence.save()
         if isPlacesRequested { seedPlaceDemo(persistence: persistence) }
+        if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
         if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
     }
 
@@ -212,6 +223,56 @@ enum DebugMapSeed {
         MainActor.assumeIsolated {
             _ = try? JourneyManager.shared.create(from: legs, title: "Демо-путешествие")
         }
+    }
+
+    // MARK: - Отрезок (0.6.8)
+
+    /// Для скриншотов и QA: две отметки на настоящей дороге и отрезок между
+    /// ними. Поездка берётся по НАЗВАНИЮ («Краснодар → Ростов-на-Дону»), как
+    /// у путешествия: скобка отрезка показывает «сколько между», и это число
+    /// обязано быть похоже на дорогу, а не на круг по кварталу.
+    ///
+    /// Отметки ставятся на 30 % и 70 % пути по `TripRouteLocator.distancePrefix`
+    /// — тем же пятиметровым шагом, каким набирается одометр, иначе «421 км»
+    /// в скобке разошлось бы с итогом поездки.
+    ///
+    /// Через репозиторий, а не через `TripManager`: тот заодно ставит поездку
+    /// в очередь синка и зовёт геокодер, чей ответ переписал бы «Кореновск»
+    /// настоящим названием посреди кадра. Идемпотентно: у поездки уже есть
+    /// отрезок — выход.
+    private static func seedSegmentDemo(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "title == %@", "Краснодар → Ростов-на-Дону")
+        request.fetchLimit = 1
+        let repository = CoreDataTripRepository(persistenceController: persistence)
+        guard let entity = try? context.fetch(request).first, let tripId = entity.id,
+              let trip = repository.fetchTripDetail(id: tripId),
+              trip.segments.isEmpty, trip.trackPoints.count > 10 else { return }
+
+        let points = trip.trackPoints
+        let prefix = TripRouteLocator.distancePrefix(points)
+        let total = prefix.last ?? 0
+        guard total > 0 else { return }
+
+        func checkpoint(atFraction fraction: Double, name: String) -> TripCheckpoint? {
+            guard let index = prefix.firstIndex(where: { $0 >= total * fraction }) else { return nil }
+            let fix = TripRouteLocator.fix(
+                at: index, in: points, prefix: prefix, origin: trip.startDate)
+            return repository.addCheckpoint(
+                TripCheckpoint(
+                    timestamp: fix.timestamp,
+                    latitude: fix.coordinate.latitude,
+                    longitude: fix.coordinate.longitude,
+                    distanceFromStart: fix.distanceFromStart,
+                    elapsedFromStart: fix.elapsedFromStart,
+                    name: name),
+                to: tripId)
+        }
+
+        guard let from = checkpoint(atFraction: 0.3, name: "Кореновск"),
+              let to = checkpoint(atFraction: 0.7, name: "Батайск") else { return }
+        _ = repository.addSegment(tripId: tripId, fromCheckpointId: from.id, toCheckpointId: to.id)
     }
 
     // MARK: - Отметка (0.6.8)

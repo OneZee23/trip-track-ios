@@ -27,6 +27,15 @@ struct TripMomentsTimeline: View {
     /// Ключ — id отметки; считает экран поездки на загрузке, не лента.
     var placeChips: [UUID: PlaceChip] = [:]
     var onOpenPlace: ((UUID) -> Void)?
+    /// Отрезки поездки (0.6.8): скобка под строкой отметки-начала. Время и
+    /// километры лента считает сама (`TripSegmentMetrics`) — они нигде не
+    /// хранятся.
+    var segments: [TripSegment] = []
+    /// «Вы ехали этот отрезок 3 раза: 4:58 · 5:12» — ключ id отрезка, считает
+    /// экран поездки на загрузке по проездам обоих мест, как `placeChips`.
+    var segmentHistory: [UUID: [TimeInterval]] = [:]
+    /// Нажатие на скобку — лист правки отрезка. Пусто — чужая поездка.
+    var onSelectSegment: ((TripSegment) -> Void)?
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
@@ -43,6 +52,7 @@ struct TripMomentsTimeline: View {
             nodeRow(time: startDate, c: c, node: { startNode(c) }) {
                 titleLine(AppStrings.momentStart(language), c: c)
             }
+            let checkpoints = allCheckpoints
             ForEach(Array(moments.enumerated()), id: \.element.id) { pair in
                 connector(before: pair.offset, c: c)
                 momentRow(pair.element, c: c)
@@ -50,6 +60,11 @@ struct TripMomentsTimeline: View {
                     .animation(.easeInOut(duration: 0.25), value: highlightedId)
                     // Якорь для прокрутки с карты — по id отметки.
                     .id(pair.element.id)
+                // Скобка отрезка — под строкой той отметки, с которой он
+                // начинается: несколько отрезков от одной отметки стопкой.
+                ForEach(segments(startingAt: pair.element.id, in: checkpoints)) { segment in
+                    segmentBlock(segment, checkpoints: checkpoints, c: c)
+                }
             }
             connector(before: moments.count, c: c)
             nodeRow(time: endDate, c: c, node: { finishNode(c) }) {
@@ -87,6 +102,11 @@ struct TripMomentsTimeline: View {
     /// Равен шагу стека в строке — так рельс и коннектор считают одно и то же.
     private static let timeSpacing: CGFloat = 12
     private static let rowPadding: CGFloat = 8
+    /// Левый край колонки содержимого строки: поле карточки + колонка времени
+    /// + узел + два интервала `nodeRow`. По нему выравнивается всё, что стоит
+    /// ПОД строкой, — чип места и скобка отрезка.
+    private static let contentInset: CGFloat =
+        horizontalPadding + timeWidth + nodeSize + 2 * timeSpacing
 
     // MARK: - Узлы
 
@@ -224,12 +244,88 @@ struct TripMomentsTimeline: View {
             .background(AppTheme.accentBg, in: Capsule())
         }
         .buttonStyle(.plain)
-        .padding(.leading, Self.horizontalPadding + Self.timeWidth + Self.nodeSize + 2 * Self.timeSpacing)
+        .padding(.leading, Self.contentInset)
         // Правое поле — как у `nodeRow`: без него длинный перевод («Здесь N
         // раз · обычно 1 ч 20 мин» на de/pl) дотягивал бы капсулу до края карточки.
         .padding(.trailing, Self.horizontalPadding)
         .padding(.top, -4)
         .accessibilityIdentifier("checkpoint_place_chip")
+    }
+
+    // MARK: - Отрезки (0.6.8)
+
+    /// Отметки поездки — из самой ленты: `TripMoments.build` кладёт в неё
+    /// каждую отметку, так что отдельным входом их передавать незачем, а
+    /// второй список разошёлся бы с первым.
+    private var allCheckpoints: [TripCheckpoint] {
+        moments.compactMap {
+            if case .checkpoint(let checkpoint, _, _) = $0 { return checkpoint }
+            return nil
+        }
+    }
+
+    /// Отрезки, начинающиеся с этой отметки. Начало берётся у резолва, а не у
+    /// поля `fromCheckpointId`: порядок нормализуется при создании, но скобка
+    /// обязана стоять под ранней отметкой и тогда, когда в базу приехал
+    /// перевёрнутый отрезок с другого телефона. Нерезолвящийся — не рисуется.
+    private func segments(startingAt momentId: UUID, in checkpoints: [TripCheckpoint]) -> [TripSegment] {
+        segments.filter {
+            TripSegmentMetrics.resolve($0, in: checkpoints)?.from.id == momentId
+        }
+    }
+
+    /// Скобка отрезка (S9): надпись «ОТРЕЗОК · A → B», крупное «5 ч 12 мин ·
+    /// 421 км», строка истории. Акцентная черта слева — чтобы блок читался
+    /// как ответ про промежуток между двумя узлами, а не как третий узел.
+    @ViewBuilder
+    private func segmentBlock(_ segment: TripSegment, checkpoints: [TripCheckpoint],
+                              c: AppTheme.Colors) -> some View {
+        if let resolved = TripSegmentMetrics.resolve(segment, in: checkpoints) {
+            Button {
+                Haptics.tap()
+                onSelectSegment?(segment)
+            } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(AppTheme.accent)
+                        .frame(width: 3)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(AppStrings.checkpointLeg(language).uppercased(language)) · "
+                             + TripSegmentName.text(segment, in: checkpoints, lang: language))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppTheme.accent)
+                            .lineLimit(1)
+                        Text(reading(time: resolved.elapsed, metres: resolved.metres))
+                            .font(.system(size: 17, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(c.text)
+                        // Одна поездка — это сама текущая, и «1 раз» ничего
+                        // не отвечает: история показывается от двух.
+                        if let times = segmentHistory[segment.id], times.count >= 2 {
+                            Text(AppStrings.segmentHistory(
+                                language, count: times.count,
+                                times: times.map(SegmentHistory.clock).joined(separator: " · ")))
+                                .font(.system(size: 13))
+                                .foregroundStyle(c.textSecondary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                    Spacer(minLength: 0)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableCardStyle())
+            .disabled(onSelectSegment == nil)
+            // Левый отступ — колонка содержимого строки, как у чипа места.
+            .padding(.leading, Self.contentInset)
+            .padding(.trailing, Self.horizontalPadding)
+            .padding(.top, 2)
+            .padding(.bottom, 4)
+            .accessibilityIdentifier("moment_segment")
+        }
     }
 
     /// Время слева, узел на рельсе, содержимое справа — как в расписании:
@@ -295,7 +391,7 @@ struct TripMomentsTimeline: View {
             : (totalElapsed, totalMetres)
         let dt = next.0 - prev.0
         let dm = next.1 - prev.1
-        if index > 0, dt > 0 || dm > 0 {
+        if index > 0, dt > 0 || dm > 0, !isSpannedBySegment(before: index) {
             HStack(spacing: 12) {
                 Color.clear.frame(width: Self.timeWidth + Self.timeSpacing + Self.nodeSize, height: 1)
                 Text("+" + reading(time: max(0, dt), metres: max(0, dm)))
@@ -306,6 +402,20 @@ struct TripMomentsTimeline: View {
             }
             .padding(.horizontal, Self.horizontalPadding)
             .padding(.vertical, 2)
+        }
+    }
+
+    /// Отрезок ровно между этими двумя соседними узлами уже сказал то же
+    /// самое, и крупно. Правило то же, по которому не пишется коннектор от
+    /// старта до первой отметки: два одинаковых числа рядом просят их
+    /// сравнивать, а сравнивать нечего.
+    private func isSpannedBySegment(before index: Int) -> Bool {
+        guard index > 0, index < moments.count, !segments.isEmpty else { return false }
+        let checkpoints = allCheckpoints
+        let pair = Set([moments[index - 1].id, moments[index].id])
+        return segments.contains { segment in
+            guard let resolved = TripSegmentMetrics.resolve(segment, in: checkpoints) else { return false }
+            return Set([resolved.from.id, resolved.to.id]) == pair
         }
     }
 

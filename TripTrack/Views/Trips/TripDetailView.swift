@@ -112,6 +112,11 @@ struct TripDetailView: View {
     @State private var showTripActions = false
     /// Открытая отметка — лист с именем, снимком и удалением.
     @State private var selectedCheckpoint: TripCheckpoint?
+    /// Открытый отрезок — лист с именем и удалением (0.6.8).
+    @State private var selectedSegment: TripSegment?
+    /// «Вы ехали этот отрезок 3 раза» — по проездам обоих мест отрезка.
+    /// Ключ — id отрезка; считается на загрузке, как `placeChips`, не в `body`.
+    @State private var segmentHistory: [UUID: [TimeInterval]] = [:]
     /// Лист «Объединить в путешествие» — соседи за ±7 дней и имя.
     @State private var showJourneyComposer = false
     /// Открытое путешествие этой поездки — пушится в тот же стек.
@@ -709,34 +714,82 @@ struct TripDetailView: View {
         // таймауту, причём в случайном месте, а не там, где добавили строку.
         // Разбиение на два выражения возвращает компилятору дыхание.
         tripDetailBody
-        .sheet(item: $selectedCheckpoint) { checkpoint in
-            CheckpointEditorSheet(
-                checkpoint: checkpoint,
-                number: (trip?.checkpoints.firstIndex { $0.id == checkpoint.id } ?? 0) + 1,
-                nearbyPhotos: checkpointPhotoLinks[checkpoint.id] ?? [],
-                otherPhotos: (trip?.photos ?? []).filter { photo in
-                    !(checkpointPhotoLinks[checkpoint.id] ?? []).contains { $0.id == photo.id }
-                },
-                language: lang.language,
-                onSave: { name, nameEdited, photoId, photoIds in
-                    // Нетронутое поле — берём имя, каким оно СЕЙЧАС лежит в базе:
-                    // геокодер мог дописать его, пока лист был открыт.
-                    let currentName = trip?.checkpoints.first { $0.id == checkpoint.id }?.name
-                    mapVM.tripManager.updateCheckpoint(
-                        id: checkpoint.id, name: nameEdited ? name : currentName,
-                        photoId: photoId, photoIds: photoIds)
-                    reloadCheckpoints()
-                },
-                onDelete: {
-                    mapVM.tripManager.deleteCheckpoint(id: checkpoint.id)
-                    reloadCheckpoints()
-                }
-            )
-            .environmentObject(lang)
-            .environmentObject(themeManager)
-            .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
-        }
+        .sheet(item: $selectedCheckpoint) { checkpointPresentation($0) }
+        .sheet(item: $selectedSegment) { segmentPresentation($0) }
         .sheet(isPresented: $showJourneyComposer) { journeyPresentation() }
+    }
+
+    /// Лист отметки — отдельным методом по той же причине, что и остальные:
+    /// каждое выражение с замыканиями в `body` этого экрана приближает
+    /// таймаут вывода типов.
+    private func checkpointPresentation(_ checkpoint: TripCheckpoint) -> some View {
+        CheckpointEditorSheet(
+            checkpoint: checkpoint,
+            number: (trip?.checkpoints.firstIndex { $0.id == checkpoint.id } ?? 0) + 1,
+            nearbyPhotos: checkpointPhotoLinks[checkpoint.id] ?? [],
+            otherPhotos: (trip?.photos ?? []).filter { photo in
+                !(checkpointPhotoLinks[checkpoint.id] ?? []).contains { $0.id == photo.id }
+            },
+            language: lang.language,
+            onSave: { name, nameEdited, photoId, photoIds in
+                // Нетронутое поле — берём имя, каким оно СЕЙЧАС лежит в базе:
+                // геокодер мог дописать его, пока лист был открыт.
+                let currentName = trip?.checkpoints.first { $0.id == checkpoint.id }?.name
+                mapVM.tripManager.updateCheckpoint(
+                    id: checkpoint.id, name: nameEdited ? name : currentName,
+                    photoId: photoId, photoIds: photoIds)
+                reloadCheckpoints()
+            },
+            onDelete: {
+                mapVM.tripManager.deleteCheckpoint(id: checkpoint.id)
+                reloadCheckpoints()
+            },
+            otherCheckpoints: isOwn ? otherCheckpoints(besides: checkpoint.id) : [],
+            onCreateSegment: isOwn ? { createSegment(from: checkpoint.id, to: $0) } : nil
+        )
+        .environmentObject(lang)
+        .environmentObject(themeManager)
+        .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
+    }
+
+    /// Лист отрезка (0.6.8).
+    private func segmentPresentation(_ segment: TripSegment) -> some View {
+        SegmentEditorSheet(
+            segment: segment,
+            title: TripSegmentName.text(
+                segment, in: trip?.checkpoints ?? [], lang: lang.language),
+            language: lang.language,
+            onSave: { name in
+                mapVM.tripManager.updateSegment(id: segment.id, name: name)
+                reloadCheckpoints()
+            },
+            onDelete: {
+                mapVM.tripManager.deleteSegment(id: segment.id)
+                reloadCheckpoints()
+            }
+        )
+        .environmentObject(lang)
+        .environmentObject(themeManager)
+        .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
+    }
+
+    /// Остальные отметки поездки с номерами во времени — вторая стадия листа
+    /// отметки. Номер тот же, что рисует лента: отметки уже приходят из базы
+    /// отсортированными по времени.
+    private func otherCheckpoints(besides id: UUID) -> [(checkpoint: TripCheckpoint, number: Int)] {
+        (trip?.checkpoints ?? []).enumerated()
+            .filter { $0.element.id != id }
+            .map { (checkpoint: $0.element, number: $0.offset + 1) }
+    }
+
+    /// Создать отрезок между двумя отметками. Повтор той же пары возвращает
+    /// уже существующий отрезок (см. `addSegment`) — это «уже есть», а не
+    /// ошибка, и человеку показывается то же подтверждение.
+    private func createSegment(from: UUID, to: UUID) {
+        guard let tripId = trip?.id,
+              mapVM.tripManager.addSegment(tripId: tripId, from: from, to: to) != nil else { return }
+        reloadCheckpoints()
+        toastItem = ToastItem(type: .success, message: AppStrings.segmentCreated(lang.language))
     }
 
     /// Лист «Объединить в путешествие» — отдельным методом по той же причине,
@@ -983,6 +1036,7 @@ struct TripDetailView: View {
         // новый проезд — чип у отметки обновляется без перезахода на экран.
         .onReceive(NotificationCenter.default.publisher(for: .placesChanged)) { _ in
             reloadPlaceChips()
+            reloadSegmentHistory()
         }
         .fullScreenCover(isPresented: Binding(
             get: { selectedPhotoIndex != nil },
@@ -1597,6 +1651,7 @@ isOwn
             checkpointMarkers = []
             tripMoments = []
             placeChips = [:]
+            segmentHistory = [:]
             return
         }
 
@@ -1653,6 +1708,7 @@ isOwn
         }
         tripMoments = TripMoments.build(checkpoints: trip.checkpoints, links: links, loose: loose)
         reloadPlaceChips()
+        reloadSegmentHistory()
         // Открыты на конкретную отметку (из экрана места) — та же прокрутка,
         // что у тапа по маркеру на карте, лишь бы отметка правда нашлась.
         // Один раз: иначе каждый повторный rebuildPhotoPins() отправлял бы
@@ -1805,7 +1861,42 @@ isOwn
         guard let id = trip?.id,
               let fresh = mapVM.tripManager.tripDetail(id: id) else { return }
         trip?.checkpoints = fresh.checkpoints
+        // Отрезки живут при отметках: удаление отметки уносит их с собой, и
+        // без этой строки скобка в ленте пережила бы свою отметку до выхода
+        // с экрана.
+        trip?.segments = fresh.segments
+        reloadSegmentHistory()
         restartPinsRebuild()
+    }
+
+    /// История отрезков — по проездам обоих их мест (0.6.8).
+    ///
+    /// Считается здесь, рядом с `reloadPlaceChips` и по тем же поводам:
+    /// `passes(for:)` ходит в базу на каждый вызов, и в `body` ему не место.
+    /// Отрезок, у которого хоть одна отметка не стала местом (или чьё место
+    /// успели удалить — надгробие в `placeId`, см. CLAUDE.md «Места»),
+    /// истории не получает: ответить ему нечем.
+    private func reloadSegmentHistory() {
+        guard let trip, isOwn, !trip.segments.isEmpty else { segmentHistory = [:]; return }
+        let alive = Set(PlaceManager.shared.places.map(\.id))
+        func placeId(_ checkpointId: UUID) -> UUID? {
+            guard let id = trip.checkpoints.first(where: { $0.id == checkpointId })?.placeId,
+                  alive.contains(id) else { return nil }
+            return id
+        }
+        var passesByPlace: [UUID: [PlacePass]] = [:]
+        func passes(_ placeId: UUID) -> [PlacePass] {
+            if let cached = passesByPlace[placeId] { return cached }
+            let fetched = PlaceManager.shared.passes(for: placeId)
+            passesByPlace[placeId] = fetched
+            return fetched
+        }
+        segmentHistory = trip.segments.reduce(into: [:]) { result, segment in
+            guard let resolved = TripSegmentMetrics.resolve(segment, in: trip.checkpoints),
+                  let from = placeId(resolved.from.id), let to = placeId(resolved.to.id) else { return }
+            result[segment.id] = SegmentHistory.times(
+                fromPasses: passes(from), toPasses: passes(to))
+        }
     }
 
     /// Перестроение булавок и маркеров — всегда одно, последнее. Две задачи
@@ -3143,7 +3234,10 @@ isOwn
                 onNamePlace: isOwn ? { markPlace(fromPhoto: $0.id) } : nil,
                 onOpenPhoto: { openPhoto(id: $0) },
                 placeChips: placeChips,
-                onOpenPlace: isOwn ? { openPlace($0) } : nil
+                onOpenPlace: isOwn ? { openPlace($0) } : nil,
+                segments: trip.segments,
+                segmentHistory: segmentHistory,
+                onSelectSegment: isOwn ? { selectedSegment = $0 } : nil
             )
         }
     }
