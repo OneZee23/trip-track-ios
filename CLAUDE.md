@@ -418,8 +418,11 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   проверку не делает и не обязан — ветки «путешествие есть, но приватное»
   в `journeyRow` просто нет.
 - **Deep link `triptrack://journey/<uuid>`** — `TripTrackApp.handleDeepLink`,
-  постит `.openJourneyDetail`, тем же приёмом, что `triptrack://trip/<uuid>`.
-  Ссылка `trip-track.app/j/<код>` резолвится на сервере (редирект в
+  постит `.openJourneyDetail` тем же механизмом (парсинг UUID из пути,
+  `NotificationCenter.post`), что `triptrack://trip/<uuid>`, но БЕЗ его
+  побочных дел: `.trip` заодно гасит Live Activity и шлёт
+  `.dismissTripSummary`, у `.journey` этого нет. Ссылка
+  `trip-track.app/j/<код>` резолвится на сервере (редирект в
   `triptrack://journey/<uuid>` при установленном приложении, веб-страница —
   без); клиент про `/j/` ничего не знает, как и про `/s/` у поездки.
 - **Тесты публикации — на общем `PersistenceController.shared`, не на

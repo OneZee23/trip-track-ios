@@ -364,13 +364,15 @@ final class TripTrackUITests: XCTestCase {
         let me = app.buttons.matching(identifier: "tab_profile").firstMatch
         if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
 
-        // Демо-путешествие сеется из двух самых СВЕЖИХ поездок
-        // (`DebugMapSeed.seedJourneyDemo`) и должно лечь у самого верха
-        // «Истории» — но свайпы остаются на случай, если сортировка когда-то
-        // изменится: без них поиск карточки стал бы хрупким к порядку.
+        // Демо-путешествие сеется из НАЗВАННЫХ поездок («Краснодар →
+        // Ростов-на-Дону» + «По Ростову», `DebugMapSeed.seedJourneyDemo») —
+        // его дата в «Истории» это дата самого свежего плеча («По Ростову»,
+        // ~12 дней назад), а не «только что», так что карточка стоит позади
+        // примерно десятка более новых городских поездок. Бюджет свайпов —
+        // с запасом под это расстояние по прокрутке.
         let card = app.buttons.matching(identifier: "profile_journey_card").firstMatch
         var found = false
-        for _ in 0..<15 {
+        for _ in 0..<30 {
             if card.exists, card.isHittable { found = true; break }
             win.swipeUp(); usleep(400_000)
         }
