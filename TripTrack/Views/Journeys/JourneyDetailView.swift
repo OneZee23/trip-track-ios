@@ -341,7 +341,7 @@ struct JourneyDetailView: View {
                             .font(.system(size: 14, weight: .heavy))
                             .foregroundStyle(colors.text)
                             .lineLimit(1)
-                        Text("\(dateRangeText) · \(AppStrings.nounDays(lang.language, aggregate.calendarDays))")
+                        Text("\(dateRangeText) · \(aggregate.calendarDays) \(AppStrings.nounDays(lang.language, aggregate.calendarDays))")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(colors.textSecondary)
                             .lineLimit(1)
