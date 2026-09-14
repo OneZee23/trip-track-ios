@@ -472,9 +472,11 @@ final class AuthService: ObservableObject {
             repo.markUnpublished(tripId: id)
         }
 
-        // Путешествия — тем же приёмом: удалить на сервере, оставить
-        // локально с сброшенным серверным состоянием (`pendingUpload`, чтобы
-        // включённая заново синхронизация отправила их снова).
+        // Путешествия — тем же приёмом: удалить на сервере, оставить локально
+        // со сброшенным серверным состоянием (`serverCreatedAt = nil`,
+        // `pendingUpload`). Наружу они от этого НЕ уедут: `isPrivate = true`,
+        // а `SyncEnqueuer` приватное путешествие не выпускает — обратно на
+        // сервер оно попадёт только новой публикацией рукой человека.
         let journeyReq: NSFetchRequest<JourneyEntity> = JourneyEntity.fetchRequest()
         journeyReq.predicate = NSPredicate(format: "serverCreatedAt != nil")
         if let journeyEntities = try? ctx.fetch(journeyReq) {
