@@ -1203,7 +1203,7 @@ extension Translations {
         "checkpointEmptyHint": "Орынды белгілеп, оған қанша уақыт кеткенін білу үшін бағдарды түртіңіз",
         "checkpointChoosePass": "Қай өтуі?",
         "checkpointChoosePassHint": "Мұнда бірнеше рет өттіңіз",
-        "segmentTo": "Белгіге дейінгі аралық",
+        "segmentTo": "Белгіге дейінгі аралық…",
         "segmentPickTitle": "Қай белгіге дейін?",
         "segmentNameField": "Аралық атауы",
         "segmentDelete": "Аралықты жою",
