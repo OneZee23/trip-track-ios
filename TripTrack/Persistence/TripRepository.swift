@@ -75,6 +75,11 @@ protocol TripRepository {
     /// поездка или отметки не найдены, либо `from == to`.
     @discardableResult
     func addSegment(tripId: UUID, fromCheckpointId: UUID, toCheckpointId: UUID) -> TripSegment?
+    /// Отрезки поездки, как они лежат в базе, — без самой поездки и её точек.
+    /// Нужны обёртке `TripManager.addSegment`, чтобы отличить заведённый
+    /// отрезок от возвращённого дубля и не ставить поездку в очередь синка,
+    /// когда в базе ничего не изменилось.
+    func segments(forTrip tripId: UUID) -> [TripSegment]
     /// Возвращают id поездки — чтобы вызывающий поставил её в очередь синка.
     @discardableResult func updateSegment(id: UUID, name: String?) -> UUID?
     @discardableResult func deleteSegment(id: UUID) -> UUID?
@@ -898,6 +903,10 @@ final class CoreDataTripRepository: TripRepository {
     }
 
     @discardableResult
+    func segments(forTrip tripId: UUID) -> [TripSegment] {
+        Self.decodeSegments(fetchEntity(id: tripId)?.segmentsJSON)
+    }
+
     func addSegment(tripId: UUID, fromCheckpointId: UUID, toCheckpointId: UUID) -> TripSegment? {
         guard fromCheckpointId != toCheckpointId,
               let entity = fetchEntity(id: tripId),

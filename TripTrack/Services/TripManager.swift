@@ -507,8 +507,13 @@ final class TripManager: ObservableObject {
     /// «заменил целиком».
     @discardableResult
     func addSegment(tripId: UUID, from: UUID, to: UUID) -> TripSegment? {
+        // Та же пара в любом направлении — тот же отрезок: репозиторий вернёт
+        // прежний и ничего не запишет. Ставить поездку в очередь синка тогда
+        // не за чем: апсерт уехал бы с теми же сегментами, что и в прошлый раз.
+        let before = repository.segments(forTrip: tripId)
         guard let segment = repository.addSegment(
             tripId: tripId, fromCheckpointId: from, toCheckpointId: to) else { return nil }
+        guard !before.contains(where: { $0.id == segment.id }) else { return segment }
         enqueueTripUpdate(tripId)
         return segment
     }
