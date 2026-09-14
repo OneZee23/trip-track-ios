@@ -309,6 +309,7 @@ struct TripMomentsTimeline: View {
                                 .foregroundStyle(c.textSecondary)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
+                                .accessibilityIdentifier("moment_segment_history")
                         }
                     }
                     .padding(.vertical, 2)

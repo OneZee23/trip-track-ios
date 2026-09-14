@@ -28,6 +28,13 @@ enum DebugMapSeed {
     /// иначе не показывается нигде, а завести отрезок руками в UI-тесте —
     /// это два листа и четыре тапа до первого же кадра.
     static let segmentArgument = "-seed-segment-demo"
+    /// Пятым аргументом клонирует «Краснодар → Ростов-на-Дону» ещё дважды на
+    /// других датах — иначе у мест демо-отрезка (0.6.5+0.6.8) ровно один
+    /// проезд, «Здесь 1 раз» ничего не отвечает, и строка истории отрезка
+    /// вовсе не рисуется (показывается от двух проездов). Три поездки по
+    /// одной дороге дают трём проездам появиться там, где их посчитает
+    /// штатная сверка `PlaceManager.reconcile()` на запуске.
+    static let placesRichArgument = "-seed-places-rich"
 
     static var isRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
@@ -35,6 +42,10 @@ enum DebugMapSeed {
 
     static var isPlacesRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(placesArgument)
+    }
+
+    static var isPlacesRichRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(placesRichArgument)
     }
 
     static var isJourneyRequested: Bool {
@@ -109,9 +120,10 @@ enum DebugMapSeed {
         if let found = try? context.count(for: existing), found > 0 {
             // Повторный запуск с тем же аргументом: поездки на месте, сеять
             // маршруты заново незачем, а отметке сеяться, кроме них, негде.
+            if isPlacesRichRequested { seedPlacesRich(persistence: persistence) }
             if isPlacesRequested { seedPlaceDemo(persistence: persistence) }
-            if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
             if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
+            if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
             return
         }
 
@@ -163,9 +175,69 @@ enum DebugMapSeed {
         }
         }
         persistence.save()
+        if isPlacesRichRequested { seedPlacesRich(persistence: persistence) }
         if isPlacesRequested { seedPlaceDemo(persistence: persistence) }
-        if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
         if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
+        if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
+    }
+
+    // MARK: - Богатый сид мест (0.6.8)
+
+    /// Клонирует «Краснодар → Ростов-на-Дону» ещё дважды, на 40 и 66 дней
+    /// назад, с теми же точками трека (сдвинутыми во времени) — сама
+    /// сверка (`PlaceManager.reconcile()` на запуске) тогда находит у
+    /// обоих мест демо-отрезка (`seedSegmentDemo`) три проезда вместо
+    /// одного: «Здесь 3 раза» и строка истории отрезка (видна от двух
+    /// проездов) становятся видны на симуляторе без трёх дней реальной
+    /// записи. Ничего в `PlaceEntity`/`PlacePassEntity` не пишет — это
+    /// работа сверки, как у `seedPlaceDemo`.
+    ///
+    /// Идемпотентно: если поездок с этим названием уже ≥ 3 — выход.
+    /// `seedSegmentDemo` и `seedJourneyDemo` сами выбирают среди
+    /// одноимённых поездок ту, что нужна им (самую свежую) — см. их
+    /// комментарии; здесь достаточно того, что клоны СУЩЕСТВУЮТ, а не
+    /// того, где они стоят в списке.
+    private static func seedPlacesRich(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "title == %@", "Краснодар → Ростов-на-Дону")
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
+        guard let matches = try? context.fetch(request), matches.count < 3,
+              let original = matches.first, let originalStart = original.startDate else { return }
+        let originalPoints = (original.trackPoints?.array as? [TrackPointEntity]) ?? []
+        guard !originalPoints.isEmpty else { return }
+
+        for daysAgo in [40, 66] {
+            guard let newStart = Calendar.current.date(
+                byAdding: .day, value: -daysAgo, to: Date()) else { continue }
+            let offset = newStart.timeIntervalSince(originalStart)
+
+            let clone = TripEntity(context: context)
+            clone.id = UUID()
+            clone.title = original.title
+            clone.region = original.region
+            clone.isPrivate = true
+            clone.distance = original.distance
+            clone.maxSpeed = original.maxSpeed
+            clone.averageSpeed = original.averageSpeed
+            clone.previewPolyline = original.previewPolyline
+            clone.startDate = newStart
+            clone.endDate = original.endDate.map { $0.addingTimeInterval(offset) }
+
+            for point in originalPoints {
+                let copy = TrackPointEntity(context: context)
+                copy.id = UUID()
+                copy.latitude = point.latitude
+                copy.longitude = point.longitude
+                copy.altitude = point.altitude
+                copy.speed = point.speed
+                copy.course = point.course
+                copy.horizontalAccuracy = point.horizontalAccuracy
+                copy.timestamp = (point.timestamp ?? originalStart).addingTimeInterval(offset)
+                copy.trip = clone
+            }
+        }
+        persistence.save()
     }
 
     // MARK: - Путешествие (0.6.8)
@@ -202,16 +274,24 @@ enum DebugMapSeed {
         request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: true)]
         guard let matches = try? context.fetch(request), !matches.isEmpty else { return }
 
-        let roadLeg = matches.filter { $0.title == "Краснодар → Ростов-на-Дону" }
         let cityLegs = matches.filter { $0.title == "По Ростову" }
-        guard !roadLeg.isEmpty, !cityLegs.isEmpty else { return }
+        // `-seed-places-rich` клонирует то же название дороги на 40 и 66
+        // дней назад — плечом путешествия остаётся только САМЫЙ СВЕЖИЙ из
+        // них (daysAgo 14). Окно путешествия ниже берётся по `legs`, и
+        // клоны внутри него раздули бы его до 66 дней и утащили в
+        // `excludedTripIds` всё, что случилось между («Геленджик → Джубга»,
+        // «Сочи → Красная Поляна» и другие демо-маршруты).
+        guard let roadLeg = matches
+            .filter({ $0.title == "Краснодар → Ростов-на-Дону" })
+            .max(by: { ($0.startDate ?? .distantPast) < ($1.startDate ?? .distantPast) }),
+              !cityLegs.isEmpty else { return }
 
         cityLegs.forEach { $0.isPrivate = false }
         try? context.save()
 
         let repository = CoreDataTripRepository(persistenceController: persistence)
-        let legs = (roadLeg + cityLegs).compactMap(\.id).compactMap(repository.fetchTripDetail(id:))
-        guard legs.count == roadLeg.count + cityLegs.count else { return }
+        let legs = ([roadLeg] + cityLegs).compactMap(\.id).compactMap(repository.fetchTripDetail(id:))
+        guard legs.count == 1 + cityLegs.count else { return }
 
         // `run()` executes synchronously on the main thread (called from
         // `TripTrackApp.init()`, before the first render) — the same
@@ -240,10 +320,18 @@ enum DebugMapSeed {
     /// в очередь синка и зовёт геокодер, чей ответ переписал бы «Кореновск»
     /// настоящим названием посреди кадра. Идемпотентно: у поездки уже есть
     /// отрезок — выход.
+    ///
+    /// `-seed-places-rich` клонирует то же название на других датах (40 и
+    /// 66 дней назад) — сортировка по убыванию `startDate` с `fetchLimit`
+    /// держит выбор на САМОЙ СВЕЖЕЙ из них (daysAgo 14, оригинал), а не на
+    /// первой попавшейся: без сортировки `fetchLimit = 1` был бы
+    /// недетерминирован ровно с того момента, как у названия появился
+    /// второй кандидат.
     private static func seedSegmentDemo(persistence: PersistenceController) {
         let context = persistence.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = NSPredicate(format: "title == %@", "Краснодар → Ростов-на-Дону")
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
         request.fetchLimit = 1
         let repository = CoreDataTripRepository(persistenceController: persistence)
         guard let entity = try? context.fetch(request).first, let tripId = entity.id,

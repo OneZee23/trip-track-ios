@@ -407,36 +407,49 @@ final class TripTrackUITests: XCTestCase {
     func test_zz_segment_shots() {
         app.terminate()
         app = XCUIApplication()
-        app.launchArguments += ["-hasCompletedOnboarding", "<true/>", "-seed-map-demo", "-seed-segment-demo"]
+        app.launchArguments += [
+            "-hasCompletedOnboarding", "<true/>", "-seed-map-demo",
+            "-seed-segment-demo", "-seed-places-rich"]
         app.launch()
         normalizeToHome()
 
         let me = app.buttons.matching(identifier: "tab_profile").firstMatch
         if me.waitForExistence(timeout: 3) { me.tap(); sleep(2) }
 
-        // Демо-отрезок лежит на «Краснодар → Ростов-на-Дону» (daysAgo 14) —
-        // позади десятка более свежих городских поездок в «Истории», отсюда
-        // бюджет свайпов, как у путешествия.
-        let card = app.buttons.matching(NSPredicate(
-            format: "identifier == %@ AND label CONTAINS %@",
-            "profile_trip_card", "Ростов-на-Дону")).firstMatch
-        var opened = false
-        for _ in 0..<30 {
-            // Тап по карточке, до которой список ещё доезжает, уходит в
-            // пустоту: свайп даёт инерцию, `isHittable` становится истинным
-            // раньше, чем строка встаёт на место. Поэтому пауза перед тапом
-            // и проверка, что экран поездки правда открылся, — иначе тест
-            // молча продолжает свайпать ленту «Мои» и падает на «Моментах».
-            if card.exists, card.isHittable {
-                usleep(600_000)
-                card.tap()
-                if app.buttons["detail_map_expand"].waitForExistence(timeout: 6) {
-                    opened = true; break
+        // Если демо-путешествие уже есть (`test_zz_journey_shots` отработал
+        // раньше по алфавиту), «Краснодар → Ростов-на-Дону» — уже его плечо,
+        // своей карточки у оригинала в «Мои» больше нет (`HistoryFolding`).
+        // Клоны `-seed-places-rich` при этом остаются ОБЫЧНЫМИ карточками с
+        // тем же названием, но БЕЗ единой отметки — поиск ниже по названию
+        // открыл бы клон вместо оригинала. Проверяем плечо сначала и
+        // однозначно, по `journey_leg_row`, а не вслепую по заголовку.
+        var opened = openRostovLegThroughJourney(searchingUp: true)
+        if !opened {
+            // Демо-путешествия нет (одиночный прогон этого теста) — «Мои»
+            // ещё стоит на самом верху, ищем «Краснодар → Ростов-на-Дону» по
+            // названию; среди клонов первым становится хитовым ОРИГИНАЛ —
+            // он ближе к сегодня и оттого выше в списке.
+            let card = app.buttons.matching(NSPredicate(
+                format: "identifier == %@ AND label CONTAINS %@",
+                "profile_trip_card", "Ростов-на-Дону")).firstMatch
+            for _ in 0..<30 {
+                // Тап по карточке, до которой список ещё доезжает, уходит в
+                // пустоту: свайп даёт инерцию, `isHittable` становится
+                // истинным раньше, чем строка встаёт на место. Поэтому пауза
+                // перед тапом и проверка, что экран поездки правда открылся,
+                // — иначе тест молча продолжает свайпать ленту «Мои» и
+                // падает на «Моментах».
+                if card.exists, card.isHittable {
+                    usleep(600_000)
+                    card.tap()
+                    if app.buttons["detail_map_expand"].waitForExistence(timeout: 8) {
+                        opened = true; break
+                    }
                 }
+                win.swipeUp(); usleep(400_000)
             }
-            win.swipeUp(); usleep(400_000)
+            if !opened { opened = openRostovLegThroughJourney() }
         }
-        if !opened { opened = openRostovLegThroughJourney() }
         XCTAssertTrue(opened, "поездка «Краснодар → Ростов-на-Дону» не открылась из «Мои»")
         guard opened else { return }
         sleep(2)
@@ -452,6 +465,21 @@ final class TripTrackUITests: XCTestCase {
         guard reached else { return }
         snap("150_segment_row")
 
+        // Строка истории появляется только когда сверка на запуске
+        // (`PlaceManager.reconcile()`) успела посчитать три проезда у обоих
+        // мест демо-отрезка (`-seed-places-rich`) — она асинхронна, и до
+        // 8 секунд ожидания это нормально. Если экран уже отрисован без
+        // строки (сверка ещё не закончилась к первому рендеру «Моментов»),
+        // свайп вниз-вверх форсирует перерисовку под уже готовые данные.
+        let history = app.staticTexts["moment_segment_history"]
+        if !history.waitForExistence(timeout: 8) {
+            win.swipeDown(); usleep(300_000)
+            win.swipeUp(); usleep(300_000)
+            _ = history.waitForExistence(timeout: 8)
+        }
+        XCTAssertTrue(history.exists, "история отрезка не появилась — сверка мест не досчиталась")
+        snap("152_segment_history")
+
         block.tap()
         XCTAssertTrue(app.otherElements["segment_editor"].waitForExistence(timeout: 5)
                       || app.descendants(matching: .any)["segment_editor"].waitForExistence(timeout: 1),
@@ -460,21 +488,26 @@ final class TripTrackUITests: XCTestCase {
         win.swipeDown(); sleep(1)
     }
 
-    /// Запасной путь к той же поездке: через карточку демо-путешествия.
+    /// Путь к плечу через карточку демо-путешествия — единственный
+    /// однозначный, когда путешествие существует: «Краснодар →
+    /// Ростов-на-Дону» после `test_zz_journey_shots` (он идёт раньше по
+    /// алфавиту) — уже плечо, своей карточки в «Мои» у него нет
+    /// (`HistoryFolding`), а клоны `-seed-places-rich` с тем же названием
+    /// остаются обычными карточками БЕЗ единой отметки. Стор между тестами
+    /// один, и перезапуск с аргументами его не чистит.
     ///
-    /// Когда в том же прогоне отработал `test_zz_journey_shots` (он идёт
-    /// раньше по алфавиту), «Краснодар → Ростов-на-Дону» — уже плечо
-    /// демо-путешествия, а плечо в «Мои» показывается только внутри карточки
-    /// путешествия (`HistoryFolding`), своей карточки у него нет. Стор между
-    /// тестами один, и перезапуск с аргументами его не чистит.
-    private func openRostovLegThroughJourney() -> Bool {
-        // Ищем НА ОБРАТНОМ ходу: первый цикл уже увёл список в самый низ, и
-        // слепая прокрутка наверх стоила бы столько же свайпов ещё раз.
+    /// - Parameter searchingUp: `true` — список ещё у самого верха (первая
+    ///   попытка, до слепого поиска по названию), свайпаем ВНИЗ по контенту
+    ///   (`swipeUp`); `false` (по умолчанию) — список уже уведён в самый низ
+    ///   прошлым циклом, возвращаемся `swipeDown`, чтобы не свайпать вниз
+    ///   ещё раз с нуля.
+    private func openRostovLegThroughJourney(searchingUp: Bool = false) -> Bool {
         let journey = app.buttons.matching(identifier: "profile_journey_card").firstMatch
         var reached = false
         for _ in 0..<30 {
             if journey.exists, journey.isHittable { reached = true; break }
-            win.swipeDown(); usleep(400_000)
+            if searchingUp { win.swipeUp() } else { win.swipeDown() }
+            usleep(400_000)
         }
         guard reached else { return false }
         journey.tap(); sleep(2)
