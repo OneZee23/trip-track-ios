@@ -33,6 +33,11 @@ extension Notification.Name {
     /// а тот — в ленте или профиле): двухфазно, как `.openTripDetail`.
     static let openPlace = Notification.Name("openPlace")
     static let navigateToPlace = Notification.Name("navigateToPlace")
+    /// Открыть чужое путешествие из чужого стека (тот же двухфазный переход,
+    /// что у `.openTripDetail`/`.openPlace`) — deep link `triptrack://journey/<uuid>`
+    /// и push-уведомления шлют сюда. Object — `UUID` путешествия.
+    static let openJourneyDetail = Notification.Name("openJourneyDetail")
+    static let navigateToJourney = Notification.Name("navigateToJourney")
     static let tripPrivacyChanged = Notification.Name("tripPrivacyChanged")
     /// Photo added or removed from a trip. Feed listens so the card's photo
     /// indicator refreshes without forcing a pull-to-refresh.
@@ -256,6 +261,16 @@ struct ContentView: View {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(300))
                 NotificationCenter.default.post(name: .navigateToProfile, object: id)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openJourneyDetail)) { notification in
+            // Тот же двухфазный переход, что у `.openUserProfile`: сначала
+            // вкладка, потом повтор — уже для смонтированного стека Ленты.
+            guard let id = notification.object as? UUID else { return }
+            selectedTab = .home
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                NotificationCenter.default.post(name: .navigateToJourney, object: id)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openPlace)) { notification in

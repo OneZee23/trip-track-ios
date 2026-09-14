@@ -168,6 +168,12 @@ struct TripTrackApp: App {
             }
         case "recording":
             NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
+        case "journey":
+            // triptrack://journey/{uuid} — чужое публичное путешествие.
+            let journeyIdString = url.pathComponents.dropFirst().first ?? ""
+            if let journeyId = UUID(uuidString: journeyIdString) {
+                NotificationCenter.default.post(name: .openJourneyDetail, object: journeyId)
+            }
         case "trip":
             // Dismiss the finished Live Activity since user tapped through
             LiveActivityManager.shared.endActivity()

@@ -258,6 +258,12 @@ struct FeedView: View {
                         focus: focus,
                         social: t
                     )
+                case .publicJourney(let id):
+                    // Task 4 replaces `PublicJourneyView` wholesale — this
+                    // task only wires the stack so the destination compiles
+                    // and pushes somewhere.
+                    PublicJourneyView(journeyId: id, pushPath: $authorPath)
+                        .hideAppTabBar()
                 }
             }
             // Custom header above owns the top chrome — hide the system bar.
@@ -343,6 +349,13 @@ struct FeedView: View {
         .onReceive(NotificationCenter.default.publisher(for: .navigateToProfile)) { notif in
             guard let id = notif.object as? UUID else { return }
             authorPath = [.profile(id, nil)]
+        }
+        // Чужое путешествие (0.6.8) — деталь уведомлений/deep link. `cappedAppend`,
+        // а не замена пути: в отличие от профиля это не всегда входная точка
+        // (может прийти с карточки внутри уже открытого чужого профиля).
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToJourney)) { notif in
+            guard let id = notif.object as? UUID else { return }
+            authorPath.cappedAppend(.publicJourney(id))
         }
         // Privacy flipped on a trip the user owns. If it just went private, drop the
         // card from the feed immediately with a fade — waiting 2–3s for the sync push

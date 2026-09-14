@@ -66,6 +66,11 @@ enum APIEndpoint {
     static let socialComment       = "/social/comment"
     static let socialComments      = "/social/comments"
     static let socialCommentDelete = "/social/comment/delete"
+    /// Чужое путешествие — шапка и плечи, одним ответом (0.6.8).
+    static let socialJourney       = "/social/journey"
+    /// Шаринг чужого путешествия — тот же ответ, что у `socialShare`
+    /// (`SocialShareResponse`).
+    static let socialShareJourney  = "/social/share-journey"
 
     /// Clubs waitlist — guest-callable, keyed by the device's local user id.
     static let groupsWaitlist      = "/groups/waitlist"
@@ -109,6 +114,20 @@ enum APIEndpoint {
             query.append("cursor=\(escaped)")
         }
         let base = "/users/\(id)/trips"
+        return query.isEmpty ? base : "\(base)?\(query.joined(separator: "&"))"
+    }
+
+    /// Список путешествий чужого профиля (0.6.8) — та же курсорная форма,
+    /// что у `userTrips`.
+    static func userJourneys(_ id: String, cursor: String? = nil, limit: Int? = nil) -> String {
+        var query: [String] = []
+        if let limit { query.append("limit=\(limit)") }
+        if let cursor, !cursor.isEmpty {
+            let escaped = cursor.addingPercentEncoding(
+                withAllowedCharacters: .alphanumerics) ?? cursor
+            query.append("cursor=\(escaped)")
+        }
+        let base = "/users/\(id)/journeys"
         return query.isEmpty ? base : "\(base)?\(query.joined(separator: "&"))"
     }
 }

@@ -58,6 +58,11 @@ enum ProfilePreviewDest: Hashable {
     /// без подписи в шапке две страницы неразличимы.
     case publicGarage(UUID, String?)
     case publicVehicle(UUID, UUID, String?)
+    /// Чужое публичное путешествие (0.6.8) — по id, автор приходит в ответе
+    /// `/social/journey` вместе с шапкой, так что имени владельца здесь
+    /// возить незачем (в отличие от статистики/карты/гаража/машины, которые
+    /// открываются БЕЗ отдельного запроса за владельцем).
+    case publicJourney(UUID)
 
     /// Plain-open shorthands — every existing `.trip(id)` / `.socialTrip(t)`
     /// call site keeps working and means "open at the top".

@@ -287,24 +287,10 @@ struct JourneyComposerSheet: View {
             error = nil
             if isOn { selected.remove(trip.id) } else { selected.insert(trip.id) }
         } label: {
-            HStack(spacing: 12) {
-                thumbnail(trip, c: c)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(JourneyFormat.tripTitle(trip, language: lang.language))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(c.text)
-                        .lineLimit(1)
-                    Text(metaText(trip))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(c.textTertiary)
-                        .lineLimit(1)
-                    if isAnchor {
-                        Text(AppStrings.journeyComposeAnchor(lang.language))
-                            .font(.system(size: 10.5, weight: .heavy))
-                            .foregroundStyle(AppTheme.accent)
-                    }
-                }
-                Spacer(minLength: 0)
+            JourneyLegRow(
+                trip: trip, subtitle: metaText(trip), language: lang.language,
+                caption: isAnchor ? AppStrings.journeyComposeAnchor(lang.language) : nil
+            ) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(isOn ? AppTheme.accent : c.textTertiary)
@@ -322,34 +308,6 @@ struct JourneyComposerSheet: View {
         }
         .buttonStyle(PressableCardStyle())
         .accessibilityAddTraits(isOn ? .isSelected : [])
-    }
-
-    /// Меньше двух точек — `MapSnapshotPreview` возвращается ДО того, как
-    /// успевает признать себя неудачей, и мерцает вечно: целая колонка такого
-    /// читается как экран, который всё ещё грузится. Та же заглушка, что на
-    /// плитках «Моих», уменьшенная до миниатюры.
-    @ViewBuilder
-    private func thumbnail(_ trip: Trip, c: AppTheme.Colors) -> some View {
-        let coords = trip.previewCoordinates
-        Group {
-            if coords.count > 1 {
-                MapSnapshotPreview(
-                    coordinates: coords,
-                    tripId: trip.id,
-                    height: Self.thumbHeight,
-                    width: Self.thumbWidth
-                )
-            } else {
-                ZStack {
-                    Rectangle().fill(c.card)
-                    Image(systemName: "map.slash")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(c.textTertiary)
-                }
-            }
-        }
-        .frame(width: Self.thumbWidth, height: Self.thumbHeight)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private func createButton(_ c: AppTheme.Colors) -> some View {

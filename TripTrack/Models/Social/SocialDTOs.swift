@@ -111,6 +111,10 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     /// synthesized `decodeIfPresent` maps an absent key to nil instead of
     /// failing the whole feed decode. Read via `commentCount`.
     let commentCountRaw: Int?
+    /// Публичное путешествие автора, в окно которого попала поездка (0.6.8).
+    /// `nil` — поездка не плечо или путешествие приватное. Опционально по той
+    /// же причине, что и `commentCountRaw`: старый сервер ключ не шлёт.
+    var journey: SocialFeedTripJourney? = nil
 
     /// Decode-safe comment total: absent key (pre-comments backend) → 0.
     var commentCount: Int { commentCountRaw ?? 0 }
@@ -124,6 +128,7 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
         case photoCount, firstPhotoThumbnail, vehicle
         case reactionCount, reactionBreakdown, myReaction, badgeIds
         case commentCountRaw = "commentCount"
+        case journey
     }
 
     /// Средняя за поездку, в метрах в секунду — как у своей поездки
@@ -166,6 +171,66 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
         guard let s = previewPolyline, let data = Data(base64Encoded: s) else { return [] }
         return Trip.decodePolyline(data)
     }
+}
+
+// MARK: - Public journeys (0.6.8)
+
+/// Публичное путешествие автора, в окно которого попала поездка (0.6.8).
+/// Приходит с элементом ленты; `nil` — поездка не плечо или путешествие приватное.
+struct SocialFeedTripJourney: Codable, Hashable {
+    let id: UUID
+    let title: String?
+    let startDate: Date
+    let endDate: Date?
+}
+
+/// Шапка чужого путешествия — `POST /social/journey` (0.6.8).
+struct SocialJourneyHead: Codable, Hashable {
+    let id: UUID
+    let title: String?
+    let startDate: Date
+    let endDate: Date?
+    let coverPhotoId: UUID?
+    let isPrivate: Bool
+    let legCount: Int
+    let author: SocialAuthor
+}
+
+struct SocialJourneyResponse: Codable {
+    let journey: SocialJourneyHead
+    let legs: [SocialFeedTrip]
+}
+
+struct SocialJourneyRequest: Codable { let journeyId: UUID }
+struct SocialShareJourneyRequest: Codable { let journeyId: UUID; let expiresInDays: Int? }
+
+/// Лёгкое плечо в списке путешествий чужого профиля — та же форма, что у
+/// `/users/:id/trips` (`PublicTripDto` сервера).
+struct PublicJourneyLeg: Codable, Identifiable, Hashable {
+    let id: UUID
+    let startDate: Date
+    let endDate: Date?
+    /// метры
+    let distance: Double
+    /// секунды в движении, `nil` у старых поездок
+    let duration: Int?
+    let region: String?
+    let previewPolyline: String?
+}
+
+struct PublicJourneyDto: Codable, Identifiable, Hashable {
+    let id: UUID
+    let title: String?
+    let startDate: Date
+    let endDate: Date?
+    let coverPhotoId: UUID?
+    let legCount: Int
+    let legs: [PublicJourneyLeg]
+}
+
+struct PublicJourneysResponse: Codable {
+    let journeys: [PublicJourneyDto]
+    let nextCursor: String?
 }
 
 extension SocialProfileRecentTrip {

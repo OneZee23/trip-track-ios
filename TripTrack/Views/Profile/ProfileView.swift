@@ -56,6 +56,10 @@ struct ProfileView: View {
         /// именем владельца для шапки.
         case publicGarage(UUID, String?)
         case publicVehicle(UUID, UUID, String?)
+        /// Чужое публичное путешествие (0.6.8) — открывается из карточки
+        /// плеча на чужом профиле/в ленте внутри «Как видят другие», того же
+        /// моста `socialDest`/`meDest`, что и статистика/карта/гараж.
+        case publicJourney(UUID)
         /// «Мой профиль» — the hub behind the header (avatar + name/handle/bio
         /// /level/stats rows). Its five row editors are NOT cases here: four
         /// of them are sheets this view presents, and the fifth is Статистика,
@@ -412,6 +416,11 @@ struct ProfileView: View {
                     garageDest(id: id, name: name)
                 case .publicVehicle(let id, let vid, let name):
                     vehicleDest(id: id, vehicleId: vid, name: name)
+                case .publicJourney(let id):
+                    // Task 4 replaces `PublicJourneyView` wholesale — this
+                    // task only wires the stack so the destination compiles.
+                    PublicJourneyView(journeyId: id, pushPath: socialPath)
+                        .hideAppTabBar()
                 case .trip(let id):
                     // Same construction FeedView uses; TripDetailView manages
                     // its own chrome and hides the tab bar itself.
@@ -673,8 +682,7 @@ struct ProfileView: View {
         case .publicMap(let id, let name): return .publicMap(id, name)
         case .publicGarage(let id, let name): return .publicGarage(id, name)
         case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
-        case .publicGarage(let id, let name): return .publicGarage(id, name)
-        case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
+        case .publicJourney(let id): return .publicJourney(id)
         case .garage, .stats, .myProfile, .levels, .country, .achievements,
              .achievement, .trip, .journey, .companionTrip,
              .clubs, .clubsCatalog, .club:
@@ -696,6 +704,7 @@ struct ProfileView: View {
         case .publicMap(let id, let name): return .publicMap(id, name)
         case .publicGarage(let id, let name): return .publicGarage(id, name)
         case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
+        case .publicJourney(let id): return .publicJourney(id)
         }
     }
 

@@ -2083,6 +2083,98 @@ enum AppStrings {
     static func journeyNotNow(_ lang: LanguageManager.Language) -> String {
         tr(lang, "journeyNotNow", ru: "Не сейчас", en: "Not now")
     }
+
+    // MARK: - Публикация путешествия (0.6.8)
+
+    /// «…» на экране путешествия — зеркало `publishAction` у поездки.
+    static func journeyPublish(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyPublish", ru: "Опубликовать путешествие", en: "Publish journey")
+    }
+    static func journeyHide(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyHide", ru: "Скрыть путешествие", en: "Hide journey")
+    }
+    /// Заголовок листа публикации (S5).
+    static func journeyPublishTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyPublishTitle", ru: "Опубликовать путешествие", en: "Publish journey")
+    }
+    /// «Путешествие «Грузия» станет видно другим. Вместе с ним откроются эти
+    /// поездки — сейчас они приватные.» Имя — без кавычек, кавычки в строке.
+    ///
+    /// Отклонение от брифа: имя вставляется плейсхолдером `{title}` ПОСЛЕ
+    /// `tr()` (как `publicRoutesExplainer`), а не живой интерполяцией
+    /// `\(title)` внутри `ru:`/`en:` — `tr()` для остальных одиннадцати
+    /// языков читает ГОТОВУЮ строку из таблицы и не умеет получать `title` в
+    /// момент вызова; интерполяция внутри аргументов `tr()` молча теряла бы
+    /// имя путешествия на любом языке, кроме русского и английского.
+    static func journeyPublishIntro(_ lang: LanguageManager.Language, title: String) -> String {
+        tr(lang, "journeyPublishIntro",
+           ru: "Путешествие «{title}» станет видно другим. Вместе с ним откроются эти поездки — сейчас они приватные.",
+           en: "“{title}” will be visible to others. These trips open with it — they are private now.")
+            .replacingOccurrences(of: "{title}", with: title)
+    }
+    /// Подпись у плеча в листе: «12 сен · 480 км · сейчас приватная» — дата и
+    /// расстояние экран собирает сам, здесь только хвост.
+    static func journeyLegPrivateNow(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyLegPrivateNow", ru: "сейчас приватная", en: "private now")
+    }
+    /// «Ещё 2 поездки путешествия уже публичные — они не меняются.»
+    ///
+    /// Отклонение от брифа: плейсхолдер `{trips}` несёт уже готовую пару
+    /// «число + склонённое слово» (`nounTrips`), а не голое `count` — в
+    /// брифе `nounTrips(lang, count)` стоял БЕЗ числа перед собой, и строка
+    /// печатала бы «Ещё поездки путешествия…» без количества ни на одном
+    /// языке. Число нужно посчитать ДО `tr()` по той же причине, что и
+    /// `title` выше: перевод не может сам решить между «2 поездки» и «5
+    /// поездок».
+    static func journeyPublishAlreadyPublic(_ lang: LanguageManager.Language, count: Int) -> String {
+        let trips = "\(count) \(nounTrips(lang, count))"
+        return tr(lang, "journeyPublishAlreadyPublic",
+           ru: "Ещё {trips} путешествия уже публичные — они не меняются.",
+           en: "{trips} of this journey are already public — they stay as they are.")
+            .replacingOccurrences(of: "{trips}", with: trips)
+    }
+    /// Кнопка: считает ТОЛЬКО открываемые поездки (макет S5). Тот же
+    /// `{trips}`-плейсхолдер, что у `journeyPublishAlreadyPublic`, и по той
+    /// же причине.
+    static func journeyPublishButton(_ lang: LanguageManager.Language, count: Int) -> String {
+        let trips = "\(count) \(nounTrips(lang, count))"
+        return tr(lang, "journeyPublishButton",
+           ru: "Опубликовать {trips}", en: "Publish {trips}")
+            .replacingOccurrences(of: "{trips}", with: trips)
+    }
+    /// Все плечи уже публичные — открывать нечего, кнопка без числа.
+    static func journeyPublishButtonNoLegs(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyPublishButtonNoLegs", ru: "Опубликовать", en: "Publish")
+    }
+    static func journeyHideTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyHideTitle", ru: "Скрыть путешествие?", en: "Hide journey?")
+    }
+    /// Обратное несимметрично — и человеку это говорится прямо.
+    static func journeyHideMessage(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyHideMessage",
+           ru: "Другие перестанут видеть путешествие. Его поездки останутся такими, какие они сейчас.",
+           en: "Others will stop seeing the journey. Its trips stay as they are now.")
+    }
+    /// Строка в подтверждении «сделать поездку приватной», когда поездка —
+    /// плечо публичного путешествия. Тот же `{title}`-приём, что у
+    /// `journeyPublishIntro`.
+    static func tripPrivateLegOfPublicJourney(_ lang: LanguageManager.Language, title: String) -> String {
+        tr(lang, "tripPrivateLegOfPublicJourney",
+           ru: "Эта поездка — плечо публичного путешествия «{title}». Оно будет показано без неё.",
+           en: "This trip is a leg of the public journey “{title}”. The journey will be shown without it.")
+            .replacingOccurrences(of: "{title}", with: title)
+    }
+    /// Строка на карточке плеча в ленте (S7): «Часть путешествия «Грузия»».
+    static func journeyPartOf(_ lang: LanguageManager.Language, title: String) -> String {
+        tr(lang, "journeyPartOf", ru: "Часть путешествия «{title}»", en: "Part of “{title}”")
+            .replacingOccurrences(of: "{title}", with: title)
+    }
+    /// Подпись плитки у чужого путешествия (S6): приватные плечи автора не
+    /// считаются и не упоминаются.
+    static func journeyPublicLegsLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journeyPublicLegsLabel", ru: "плеч · публичных", en: "legs · public")
+    }
+
     /// Вопрос про дом задаётся ОДИН раз: без дома подсказок нет вовсе.
     static func homeQuestionTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "homeQuestionTitle", ru: "Это твой дом?", en: "Is this your home?")
