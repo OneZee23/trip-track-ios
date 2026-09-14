@@ -60,6 +60,9 @@ struct ProfileView: View {
         /// плеча на чужом профиле/в ленте внутри «Как видят другие», того же
         /// моста `socialDest`/`meDest`, что и статистика/карта/гараж.
         case publicJourney(UUID)
+        /// Хаб «Путешествия» чужого профиля (S7, 0.6.8) — тот же мост, что и
+        /// у гаража.
+        case publicJourneys(UUID, String?)
         /// «Мой профиль» — the hub behind the header (avatar + name/handle/bio
         /// /level/stats rows). Its five row editors are NOT cases here: four
         /// of them are sheets this view presents, and the fifth is Статистика,
@@ -421,6 +424,9 @@ struct ProfileView: View {
                     // task only wires the stack so the destination compiles.
                     PublicJourneyView(journeyId: id, pushPath: socialPath)
                         .hideAppTabBar()
+                case .publicJourneys(let id, let name):
+                    PublicJourneysView(accountId: id, ownerName: name, pushPath: socialPath)
+                        .hideAppTabBar()
                 case .trip(let id):
                     // Same construction FeedView uses; TripDetailView manages
                     // its own chrome and hides the tab bar itself.
@@ -683,6 +689,7 @@ struct ProfileView: View {
         case .publicGarage(let id, let name): return .publicGarage(id, name)
         case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
         case .publicJourney(let id): return .publicJourney(id)
+        case .publicJourneys(let id, let name): return .publicJourneys(id, name)
         case .garage, .stats, .myProfile, .levels, .country, .achievements,
              .achievement, .trip, .journey, .companionTrip,
              .clubs, .clubsCatalog, .club:
@@ -705,6 +712,7 @@ struct ProfileView: View {
         case .publicGarage(let id, let name): return .publicGarage(id, name)
         case .publicVehicle(let id, let vid, let name): return .publicVehicle(id, vid, name)
         case .publicJourney(let id): return .publicJourney(id)
+        case .publicJourneys(let id, let name): return .publicJourneys(id, name)
         }
     }
 

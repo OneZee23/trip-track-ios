@@ -85,6 +85,19 @@ struct PublicProfileView: View {
     /// rebuilding the whole profile to bump a tally would redraw the hero,
     /// the stats and the achievements with it.
     @State private var tripCards: [SocialFeedTrip] = []
+    /// Превью хаба «Путешествия» (S7, 0.6.8) — до трёх, тот же приём, что у
+    /// `garagePreviewVehicles`: полный список живёт на `PublicJourneysView`.
+    @State private var publicJourneys: [PublicJourneyDto] = []
+    /// Строки «Истории» в режиме списка — свои поездки и путешествия со
+    /// своими плечами, посчитанные `HistoryFolding.fold` (см. `ProfileView`
+    /// «Мои»). Считается в `recomputeProfileRows()`, а не в `body`: тело
+    /// перерисовывается на каждый `toggleReaction`, а перебор путешествий —
+    /// не работа для этого такта.
+    @State private var profileRows: [HistoryRow] = []
+    /// Исходная карточка по id — `.trip` строка держит `Trip` (для
+    /// `HistoryFolding`), а рисовать нужно ПРЕЖНЮЮ `SocialFeedCardView` по
+    /// полной `SocialFeedTrip`.
+    @State private var tripCardsById: [UUID: SocialFeedTrip] = [:]
     /// Long-pressed a card (or its «Реакция» pill) — the emoji palette.
     @State private var reactionPickerTrip: SocialFeedTrip?
     /// A trip being shared from its card's «…».
@@ -147,6 +160,20 @@ struct PublicProfileView: View {
     private func openGarage() {
         guard let pushPath else { return }
         pushPath.wrappedValue.cappedAppend(.publicGarage(accountId, resolvedDisplayName))
+    }
+
+    /// Хаб «Путешествия» чужого человека (S7, 0.6.8) — список всех, не
+    /// только превью карточки.
+    private func openJourneys() {
+        guard let pushPath else { return }
+        pushPath.wrappedValue.cappedAppend(.publicJourneys(accountId, resolvedDisplayName))
+    }
+
+    /// Одно чужое путешествие — с карточки-превью хаба и со строки в
+    /// схлопнутой «Истории».
+    private func openJourney(_ id: UUID) {
+        guard let pushPath else { return }
+        pushPath.wrappedValue.cappedAppend(.publicJourney(id))
     }
 
     private func openFollowList(_ mode: FollowListMode) {
@@ -356,6 +383,16 @@ struct PublicProfileView: View {
                                     .padding(.horizontal, 16)
                             }
 
+                            // Путешествия (S7, 0.6.8). В отличие от гаража,
+                            // строка НЕ рисуется пустой: «нет путешествий»
+                            // не выдаёт ничего скрытого, а пустая карточка-
+                            // хаб — то же ложное обещание содержимого, от
+                            // которого предостерегает превью гаража выше.
+                            if canOpenHub {
+                                journeysEntryCard(c, lng: lng)
+                                    .padding(.horizontal, 16)
+                            }
+
                             if visibility.achievements {
                                 achievementsSection(c)
                                     .padding(.horizontal, 16)
@@ -365,6 +402,12 @@ struct PublicProfileView: View {
                                 .padding(.horizontal, 16)
                         }
                         .transition(.opacity)
+                        .task(id: accountId) {
+                            // Не в `.task` самой карточки — та не рисуется,
+                            // пока список пуст, и не смогла бы его загрузить.
+                            guard canOpenHub else { return }
+                            await loadJourneysPreview()
+                        }
                     } else if let failure = loadFailure {
                         // Включая `.transient`: без этой ветки сетевой отказ
                         // рисовал бы скелетон вечно — без слова и без повтора.
@@ -449,6 +492,11 @@ struct PublicProfileView: View {
             tripCards = []
             Task { await refresh() }
         }
+        // Схлопывание «Истории» (S7, 0.6.8) — строки и словарь id → карточка
+        // считаются здесь, а не в `body`: тело перерисовывается на каждый
+        // `toggleReaction`, а `HistoryFolding.fold` перебирает путешествия.
+        .onChange(of: tripCards) { _, _ in recomputeProfileRows() }
+        .onChange(of: publicJourneys) { _, _ in recomputeProfileRows() }
         .refreshable { await refresh() }
         // Commented on a trip from the detail screen pushed off THIS page —
         // the card behind it has to come back with the new count, exactly as
@@ -1221,6 +1269,77 @@ struct PublicProfileView: View {
         garagePreviewVehicles = res?.vehicles ?? []
     }
 
+    // MARK: - Хаб: путешествия (S7, 0.6.8)
+
+    /// Вход в хаб «Путешествия» — с превью до трёх карточек.
+    ///
+    /// НЕ через `hubCard`: та оборачивает всё тело в один `Button`, а тело
+    /// здесь — настоящие `JourneyCardView`, сами являющиеся `Button`.
+    /// Кнопка внутри кнопки не получает тап надёжно — внешняя перехватывает
+    /// его (см. `CompanionsRosterSheet.companionRow`, тот же вывод и у чипа
+    /// места в `TripMomentsTimeline`) — поэтому здесь заголовок-кнопка и
+    /// карточки-кнопки стоят РЯДОМ, в общем контейнере, а не одна в другой.
+    /// Строка показывается только когда есть что показать: в отличие от
+    /// гаража, у которого закрытый и пустой выглядят одинаково намеренно,
+    /// «нет путешествий» — не то, что стоит скрывать за молчаливой строкой.
+    @ViewBuilder
+    private func journeysEntryCard(
+        _ c: AppTheme.Colors, lng: LanguageManager.Language
+    ) -> some View {
+        if !publicJourneys.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Button(action: openJourneys) {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(AppStrings.journeysTitle(lng))
+                                .font(.system(size: 15, weight: .heavy))
+                                .foregroundStyle(c.text)
+                            // Счётного «N путешествий» в словаре нет — вместо
+                            // числа тот же заголовок, без него.
+                            Text(AppStrings.journeysTitle(lng))
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(c.textTertiary)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(c.textTertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                VStack(spacing: 10) {
+                    ForEach(publicJourneys.prefix(3)) { dto in
+                        JourneyCardView(
+                            journey: Journey(publicJourney: dto, ownerId: accountId),
+                            legs: dto.legs.map(Trip.init(publicLeg:)),
+                            onTap: { openJourney(dto.id) }
+                        )
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(c.card, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(c.border, lineWidth: 1)
+            )
+        }
+    }
+
+    /// Гейт по пустому массиву — та же причина, что у `loadGaragePreview`, но
+    /// строка ЗАВИСИТ от результата (в отличие от гаража), поэтому вызывается
+    /// не из `.task` самой карточки (она тогда не рисовалась бы, чтобы его
+    /// поставить), а из `.task` на уровне всего профиля.
+    private func loadJourneysPreview() async {
+        guard publicJourneys.isEmpty else { return }
+        let res: PublicJourneysResponse? = try? await APIClient.shared.get(
+            APIEndpoint.userJourneys(accountId.uuidString, limit: 3),
+            requiresAuth: AuthService.shared.isSignedIn)
+        publicJourneys = res?.journeys ?? []
+    }
+
     // MARK: - Achievements
 
     /// «Достижения» card (canon 1667:206): the rarest award on a wash of its
@@ -1438,9 +1557,15 @@ struct PublicProfileView: View {
                         }
                     }
                 } else {
+                    // Схлопывание (S7, 0.6.8) — только здесь, как в «Моих»
+                    // (`HistoryFolding`). Сетка выше НЕ схлопывается: решётка
+                    // на две колонки не растягивается под карточку во всю
+                    // ширину, и это уже правило `HistoryFolding.runs` для
+                    // «Моих», сюда не перенесённое сознательно — своей сетки
+                    // путешествий на профиле нет.
                     LazyVStack(spacing: 12) {
-                        ForEach(tripCards) { t in
-                            tripCard(t)
+                        ForEach(profileRows) { row in
+                            historyRowView(row, c: c)
                         }
                     }
                 }
@@ -1502,8 +1627,33 @@ struct PublicProfileView: View {
                 guard auth.isSignedIn else { signInPrompt = .react; return }
                 Task { await toggleReaction(trip.id, emoji: emoji) }
             },
-            onShare: { shareTrip(trip) }
+            onShare: { shareTrip(trip) },
+            onOpenJourney: { openJourney($0) }
         )
+    }
+
+    /// Строка «Истории» (S7, 0.6.8): своя карточка поездки по исходной
+    /// `SocialFeedTrip` (словарь по id — `HistoryRow.trip` несёт лёгкий
+    /// `Trip`, которого `SocialFeedCardView` не рисует) или карточка
+    /// путешествия со своими плечами.
+    @ViewBuilder
+    private func historyRowView(_ row: HistoryRow, c: AppTheme.Colors) -> some View {
+        switch row {
+        case .trip(let t):
+            if let original = tripCardsById[t.id] {
+                tripCard(original)
+            }
+        case .journey(let j, let legs):
+            JourneyCardView(journey: j, legs: legs, onTap: { openJourney(j.id) })
+        }
+    }
+
+    /// Считается вне `body` — см. `@State private var profileRows`.
+    private func recomputeProfileRows() {
+        let trips = tripCards.map(Trip.init(social:))
+        let journeys = publicJourneys.map { Journey(publicJourney: $0, ownerId: accountId) }
+        profileRows = HistoryFolding.fold(trips: trips, journeys: journeys)
+        tripCardsById = Dictionary(uniqueKeysWithValues: tripCards.map { ($0.id, $0) })
     }
 
     private func isOwnTrip(_ trip: SocialFeedTrip) -> Bool {

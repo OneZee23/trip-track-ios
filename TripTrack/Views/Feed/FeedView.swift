@@ -270,6 +270,9 @@ struct FeedView: View {
                     // and pushes somewhere.
                     PublicJourneyView(journeyId: id, pushPath: $authorPath)
                         .hideAppTabBar()
+                case .publicJourneys(let id, let name):
+                    PublicJourneysView(accountId: id, ownerName: name, pushPath: $authorPath)
+                        .hideAppTabBar()
                 }
             }
             // Custom header above owns the top chrome — hide the system bar.
@@ -898,7 +901,8 @@ struct FeedView: View {
                     onShare: {
                         if auth.isSignedIn { shareSocialTrip(trip) }
                         else { pendingSocialAction = .share(trip); signInPrompt = .share }
-                    }
+                    },
+                    onOpenJourney: { authorPath.cappedAppend(.publicJourney($0)) }
                 )
                 .onAppear {
                     Task { await store.loadMoreIfNeeded(currentItem: trip) }

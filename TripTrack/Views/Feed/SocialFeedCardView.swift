@@ -31,6 +31,10 @@ struct SocialFeedCardView: View {
     var onLongPress: (() -> Void)?
     var onReact: ((String) -> Void)?
     var onShare: (() -> Void)?
+    /// «Часть путешествия «Грузия» · 6 дней» (S7, 0.6.8) — открывает чужое
+    /// путешествие. `nil` on hosts that don't push it — the row stays
+    /// unwired rather than dead-tapping (see `onOpenJourney` call sites).
+    var onOpenJourney: ((UUID) -> Void)? = nil
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -79,6 +83,13 @@ struct SocialFeedCardView: View {
                 Haptics.action()
                 onLongPress?()
             }
+
+            // Отдельный элемент ПОД телом карточки, не кнопка внутри кнопки:
+            // тело выше целиком ловит тап через `.onTapGesture`, а вложенная
+            // кнопка повторила бы баг «Вступить» из каталога клубов, где
+            // внешний обработчик перехватывает тап (см. `TripMomentsTimeline`
+            // чип у отметки — тот же приём).
+            journeyRow(c, lng: lng)
 
             Rectangle()
                 .fill(c.border)
@@ -397,6 +408,51 @@ struct SocialFeedCardView: View {
             + Text(" \(AppStrings.hoursUnitShort(lang.language)) ")
                 .font(small).foregroundColor(c.textSecondary)
             + minutes
+    }
+
+    // MARK: - Journey row (S7, 0.6.8)
+
+    /// «Часть путешествия «Грузия» · 6 дней» — показывается ТОЛЬКО когда эта
+    /// поездка плечо публичного путешествия автора (`trip.journey != nil`).
+    /// Название: у клиента нет плеч, чтобы собрать имя по умолчанию, как это
+    /// делает `JourneyTitle` на самом экране путешествия, поэтому пустое имя
+    /// падает на `AppStrings.journeyWord`.
+    @ViewBuilder
+    private func journeyRow(_ c: AppTheme.Colors, lng: LanguageManager.Language) -> some View {
+        if let journey = trip.journey {
+            Button {
+                Haptics.tap()
+                onOpenJourney?(journey.id)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "suitcase.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text(journeyRowText(journey, lng: lng))
+                        .font(.inter(12, weight: .semibold))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(AppTheme.accent)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppTheme.accentBg, in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 13)
+            .padding(.bottom, 10)
+            .accessibilityIdentifier("feed_card_journey")
+        }
+    }
+
+    private func journeyRowText(_ journey: SocialFeedTripJourney, lng: LanguageManager.Language) -> String {
+        let title = journey.title ?? AppStrings.journeyWord(lng)
+        let days = JourneyWindow.days(startDate: journey.startDate, endDate: journey.endDate)
+        return AppStrings.journeyPartOf(lng, title: title)
+            + " · \(days) \(AppStrings.nounDays(lng, days))"
     }
 
     // MARK: - Action Bar (Telegram-style: one pill per used emoji)

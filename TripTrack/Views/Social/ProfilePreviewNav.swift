@@ -63,6 +63,10 @@ enum ProfilePreviewDest: Hashable {
     /// возить незачем (в отличие от статистики/карты/гаража/машины, которые
     /// открываются БЕЗ отдельного запроса за владельцем).
     case publicJourney(UUID)
+    /// Хаб «Путешествия» чужого профиля (S7, 0.6.8) — список ВСЕХ путешествий
+    /// аккаунта. Имя владельца едет с ним по той же причине, что у гаража:
+    /// экран открывается без отдельного запроса за владельцем.
+    case publicJourneys(UUID, String?)
 
     /// Plain-open shorthands — every existing `.trip(id)` / `.socialTrip(t)`
     /// call site keeps working and means "open at the top".

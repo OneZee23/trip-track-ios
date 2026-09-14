@@ -86,7 +86,7 @@ struct DiscoverView: View {
                     PublicGarageView(accountId: id, ownerName: name)
                 case .publicVehicle(let id, let vid, let name):
                     PublicVehicleView(accountId: id, vehicleId: vid, ownerName: name)
-                case .publicJourney, .trip, .socialTrip:
+                case .publicJourney, .publicJourneys, .trip, .socialTrip:
                     // Discover never pushes trip or journey destinations;
                     // render empty if the path somehow gets one, to stay
                     // type-exhaustive.
