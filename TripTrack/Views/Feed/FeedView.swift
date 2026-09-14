@@ -215,6 +215,16 @@ struct FeedView: View {
             // region the layout leaves uncovered — this is the second layer
             // of the home-indicator black-band fix.
             .background(c.bg.ignoresSafeArea())
+            // Экран — корень вкладки, и плавающий таб-бар рисуется ПОВЕРХ
+            // скрима подтверждения: без этого вкладку можно переключить, пока
+            // висит вопрос «удалить поездку?» (канон «Dialogs» в CLAUDE.md,
+            // сам `AppConfirmDialog` про бар не знает). Стоит ВНУТРИ стека и
+            // ДО `navigationDestination`, чтобы не перебивать `.hideAppTabBar()`
+            // втолкнутых экранов: у `HideTabBarPreferenceKey` побеждает любой
+            // «спрятать», но только если наш узел ему не родитель.
+            .hideAppTabBar(
+                tripPendingPrivate != nil || hideConfirmTrip != nil || tripPendingDelete != nil
+            )
             // Single typed destination for every push out of Feed. Mixing a
             // `NavigationStack(path:)` with `.navigationDestination(isPresented:)`
             // made the isPresented-pushed Trip view disappear whenever the typed
