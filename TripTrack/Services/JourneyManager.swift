@@ -118,8 +118,12 @@ final class JourneyManager: ObservableObject {
         }
         journey.isPrivate = false
         journey.lastModifiedAt = Date()
-        try repository.saveJourney(journey)
-        enqueue(id, repository.journeySyncStatus(id: id) == SyncStatus.synced.rawValue ? .update : .upload)
+        repository.saveJourney(journey)
+        // Всегда `.upload`: `saveJourney` только что безусловно поставила
+        // `syncStatus = .pendingUpload`, так что спрашивать статус после неё
+        // нечего, а `(.journey, .upload)` и `(.journey, .update)` — одна
+        // ветка транспорта.
+        enqueue(id, .upload)
         reload()
     }
 
@@ -131,7 +135,7 @@ final class JourneyManager: ObservableObject {
         guard var journey = journeys.first(where: { $0.id == id }) else { return }
         journey.isPrivate = true
         journey.lastModifiedAt = Date()
-        try? repository.saveJourney(journey)
+        repository.saveJourney(journey)
         SyncQueue.shared.cancelOperations(for: id, entityType: .journey)
         enqueue(id, .unpublish)
         reload()
