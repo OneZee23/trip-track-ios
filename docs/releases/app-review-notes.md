@@ -4,7 +4,124 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.6.7 — units and the map car (current submission)
+## v0.6.8 — places, public journeys, segments (current submission)
+
+### Короткая версия — вставить в App Store Connect
+
+```
+TripTrack 0.6.8 adds three things: places the app recognises, journeys that can
+be published, and legs between two checkpoints of one trip.
+
+PLACES. When the user marks a spot during a trip, that spot becomes a "place".
+Any later trip whose recorded track passes within about 100 m of it counts as a
+pass, so the place can say "Here 4 times" and "usually 2:14 from the start".
+Places are computed ENTIRELY ON DEVICE: there is no place table on our server,
+no place field in any sync payload, and places do not travel to the user's other
+phone. Deleting a place forgets its history; the checkpoints it was built from
+stay in their trips.
+
+PUBLIC JOURNEYS. 0.6.6 added journeys — a window of dates over the user's own
+recorded trips. They were private, with no public page at all. In 0.6.8 the
+owner can publish one, and publishing names what it opens: the sheet lists, one
+by one, every private trip inside the journey, so the user sees exactly what
+becomes visible. A published journey gets its own screen for other people, a
+card in the owner's public profile, and a link trip-track.app/j/<code>; a trip
+that belongs to it shows "Part of ..." on its feed card. "Hide journey" reverses
+it — the journey disappears from other people's feeds and profiles, while the
+trips inside keep whatever privacy they have (hiding one wrapper must not
+silently hide six trips). Signing out with "hide public content", and deleting
+the account, remove journeys the same way they already removed trips.
+
+Related fix in this build: a /s/ link to a trip the user has since made private,
+or hidden when signing out, now returns 404. Previously such a link kept
+working; the check is now server-side.
+
+LEGS. Two checkpoints of one recorded trip make a named leg with its own time
+and distance. Nothing extra is recorded for it — the numbers are the difference
+between two checkpoints the app already had. Legs belong to the trip, sync with
+it, and are shown only on the user's own trip.
+
+HOW TO TEST
+1. Places: open any recorded trip, tap the map to open it full screen, tap a
+   point on the route and choose "Add checkpoint". The Places tab (fourth in the
+   bottom bar) now holds that place. Record or simulate a second drive past the
+   same spot (Simulator: Features > Location > Freeway Drive — use Freeway
+   Drive, not City Run: anything that never exceeds 15 km/h is discarded as a
+   walking misfire), and the place shows "Here 2 times" with the usual time.
+2. Legs: on a trip with two or more checkpoints, tap a checkpoint in the
+   "Moments" list, choose "Leg to..." and pick the second checkpoint. The leg
+   appears as a bracket under the earlier of the two, with its name, time and
+   distance; tap it to rename or delete it.
+3. Public journeys: sign in with Apple, turn Cloud Sync on, combine two trips
+   into a journey ("..." on a trip > "Combine into a journey"), then "..." on
+   the journey > "Publish journey". The sheet lists the private trips that will
+   open with it. After publishing, "..." > "Share" gives the
+   trip-track.app/j/<code> link, which opens the journey in the app if it is
+   installed and as a web page otherwise.
+
+SIGN-IN. Authentication is Sign in with Apple only, and no special account is
+needed: the reviewer's own Apple ID works. Everything except publishing can be
+tested without signing in at all; Cloud Sync is off by default.
+
+MODERATION. A published journey is user content with the same controls as a
+published trip (0.6.3-0.6.5): the owner can hide it at any moment, signing out
+can hide everything public, deleting the account erases it from the server, and
+the existing report and block flow covers the author. A hidden, deleted or
+blocked journey is indistinguishable from one that never existed — the link
+returns 404.
+
+No new permissions are requested. Location usage is unchanged from 0.6.7.
+```
+
+### Если спросят про приватность и данные
+
+```
+Nothing new is collected in this version, and one thing is deliberately not
+collected at all.
+
+Places never leave the device. A place is derived on the phone from the user's
+own checkpoints and their own recorded tracks: it has no table on our server, no
+field in any sync payload, and it does not reach the user's second phone. Two
+phones that hold the same checkpoint arrive at the same place identity by
+computing it from the coordinates, not by exchanging it.
+
+Legs travel inside the trip they belong to, exactly like the checkpoints added
+in 0.6.5, and only when the user has turned Cloud Sync on (off by default). The
+server stores a pair of checkpoint ids and a name; the time and distance of a
+leg are not stored anywhere — the app computes them from two checkpoints.
+
+A journey becomes visible to other people only through an explicit "Publish"
+action that lists, by name, every private trip inside it that will open with it.
+Until then a journey is as private as the trips it groups. Hiding it, signing
+out with "hide public content", and deleting the account all remove it from the
+server's answers.
+
+The home location used to suggest grouping trips into a journey is still
+inferred on device from the user's own trip history and never leaves the phone —
+unchanged from 0.6.6.
+
+The App Privacy answers are unchanged from 0.6.7; this release adds no new data
+type, no new SDK and no new permission.
+```
+
+### Длинная версия — для нас
+
+Схема CoreData v15: `PlaceEntity`, `PlacePassEntity`, `TripEntity.placesMatchedAt`
+(что уже сверено) и `TripEntity.segmentsJSON`. Ни одна из этих колонок не
+попадает в синк-пейлоад, кроме `segments`, который едет внутри поездки рядом с
+`checkpoints` и по той же дисциплине ключа: ключа нет — старый клиент, локальное
+не трогаем; список пришёл — заменяет прежний целиком.
+
+На бэкенде — публичная страница `/j/<код>` (с проверкой `is_private`, как и у
+`/s/` с этой версии), список `GET /users/:id/journeys`, поле `journey` на
+карточке ленты и колонка `trip.segments jsonb`. Мест на сервере нет вовсе.
+
+Демо-аккаунт по-прежнему не нужен и не заводится: вход только через Sign in with
+Apple собственным Apple ID ревьюера — та же формулировка, что в 0.6.4 и 0.6.5.
+
+---
+
+## v0.6.7 — units and the map car (previous submission)
 
 ### Короткая версия — вставить в App Store Connect
 
