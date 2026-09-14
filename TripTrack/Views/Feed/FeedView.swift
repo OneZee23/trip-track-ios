@@ -66,6 +66,12 @@ struct FeedView: View {
     /// `trip.journey` is server-supplied and only non-nil for exactly this
     /// case, so no local `JourneyManager` lookup is needed here.
     @State private var hideConfirmTrip: SocialFeedTrip?
+    /// Текст того диалога, посчитанный ОДИН раз в момент запроса, а не в
+    /// `body`: `journeyLegHideMessage` ходит в `JourneyManager.trips(in:)` +
+    /// `JourneyAggregate.build`, а замыкание `message:` у `.appConfirm`
+    /// зовётся на каждую перерисовку, пока диалог поднят. Тот же приём и по
+    /// той же причине, что `TripDetailView.unpublishMessageText`.
+    @State private var hideConfirmMessageText = ""
     /// Someone else's trip being reported from its card «…».
     @State private var tripPendingReport: SocialFeedTrip?
     /// Compact link-share sheet for someone else's trip.
@@ -460,7 +466,7 @@ struct FeedView: View {
         .appConfirm(
             item: $hideConfirmTrip,
             title: { _ in AppStrings.tripDetailMakeTripPrivate(lang.language) },
-            message: { journeyLegHideMessage(for: $0) },
+            message: { _ in hideConfirmMessageText },
             actions: { trip in
                 [
                     AppDialogAction(
@@ -867,6 +873,7 @@ struct FeedView: View {
                             // that names it, instead of the generic
                             // «hide from feed» question.
                             if trip.journey != nil {
+                                hideConfirmMessageText = journeyLegHideMessage(for: trip)
                                 hideConfirmTrip = trip
                             } else {
                                 tripPendingPrivate = trip
