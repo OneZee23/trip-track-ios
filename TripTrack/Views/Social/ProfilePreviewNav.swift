@@ -83,7 +83,16 @@ extension Array where Element == ProfilePreviewDest {
 
     /// Push with replacement: once we're at the cap, drop the deepest
     /// entry before appending so total depth stays bounded.
+    ///
+    /// Идемпотентен: тот же экран наверху пути — уже открытый экран, а второй
+    /// тап по карточке (палец дрогнул) клал бы его вторым. У путешествия это
+    /// не только лишний экран, но и второй `POST /social/journey`. То же
+    /// правило, что у `ProfileView.push` и `PlacesDest.push`.
     mutating func cappedAppend(_ dest: ProfilePreviewDest) {
+        guard last != dest else {
+            navLog.debug("cappedAppend skipped duplicate top")
+            return
+        }
         let before = count
         if count >= Self.previewDepthCap {
             removeLast()
