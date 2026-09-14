@@ -78,6 +78,13 @@ struct JourneyDetailView: View {
     /// Лист публикации (S5) и подтверждение скрытия — «…» экрана,
     /// зеркало `showPublishSheet`/`unpublishConfirm` у поездки.
     @State private var showPublishSheet = false
+    /// Приватные плечи и число уже публичных, посчитанные ОДИН раз в момент
+    /// запроса (`requestPublish`), а не в билдере листа: `privateLegs(in:)` —
+    /// полная выборка окна в CoreData, а `publishSheet` пересчитывается на
+    /// каждое обновление состояния, пока лист поднят. Тот же приём и по той же
+    /// причине, что `TripDetailView.unpublishMessageText`.
+    @State private var publishPrivateLegs: [Trip] = []
+    @State private var publishAlreadyPublic = 0
     @State private var confirmHide = false
     /// Гость на «Опубликовать»/«Скрыть» — тот же гейт, что у поездки
     /// (`TripDetailView.signInPrompt`).
@@ -512,6 +519,11 @@ struct JourneyDetailView: View {
             signInPrompt = .publish
             return
         }
+        // Окно исчезло синком, пока поповер был открыт — листу нечего
+        // показывать, а экран за кадром вот-вот закроется сам.
+        guard let journey else { return }
+        publishPrivateLegs = manager.privateLegs(in: journey)
+        publishAlreadyPublic = trips.count - publishPrivateLegs.count
         showPublishSheet = true
     }
 
@@ -563,20 +575,17 @@ struct JourneyDetailView: View {
     /// отличие от `editSheet`, чьё содержимое его не несёт.
     @ViewBuilder
     private var publishSheet: some View {
-        if let journey {
-            let legs = manager.privateLegs(in: journey)
-            JourneyPublishSheet(
-                title: titleText,
-                privateLegs: legs,
-                alreadyPublic: trips.count - legs.count,
-                onConfirm: {
-                    try? manager.publish(id: journeyId, tripManager: mapVM.tripManager)
-                    toastItem = ToastItem(
-                        type: .success, message: AppStrings.journeyPublished(lang.language))
-                }
-            )
-            .environmentObject(lang)
-        }
+        JourneyPublishSheet(
+            title: titleText,
+            privateLegs: publishPrivateLegs,
+            alreadyPublic: publishAlreadyPublic,
+            onConfirm: {
+                try? manager.publish(id: journeyId, tripManager: mapVM.tripManager)
+                toastItem = ToastItem(
+                    type: .success, message: AppStrings.journeyPublished(lang.language))
+            }
+        )
+        .environmentObject(lang)
     }
 
     // MARK: - Итог
