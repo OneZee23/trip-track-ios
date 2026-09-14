@@ -54,7 +54,7 @@ struct TripMomentsTimeline: View {
             }
             let checkpoints = allCheckpoints
             ForEach(Array(moments.enumerated()), id: \.element.id) { pair in
-                connector(before: pair.offset, c: c)
+                connector(before: pair.offset, checkpoints: checkpoints, c: c)
                 momentRow(pair.element, c: c)
                     .background(highlightedId == pair.element.id ? AppTheme.accent.opacity(0.12) : .clear)
                     .animation(.easeInOut(duration: 0.25), value: highlightedId)
@@ -66,7 +66,7 @@ struct TripMomentsTimeline: View {
                     segmentBlock(segment, checkpoints: checkpoints, c: c)
                 }
             }
-            connector(before: moments.count, c: c)
+            connector(before: moments.count, checkpoints: checkpoints, c: c)
             nodeRow(time: endDate, c: c, node: { finishNode(c) }) {
                 titleLine(AppStrings.momentFinish(language), c: c)
                 measure(label: AppStrings.checkpointFromStart(language),
@@ -382,7 +382,7 @@ struct TripMomentsTimeline: View {
     /// От старта до первой отметки не пишем: это же число стоит у неё
     /// в «От старта», а два одинаковых числа рядом просят их сравнивать.
     @ViewBuilder
-    private func connector(before index: Int, c: AppTheme.Colors) -> some View {
+    private func connector(before index: Int, checkpoints: [TripCheckpoint], c: AppTheme.Colors) -> some View {
         let prev: (TimeInterval, Double) = index == 0
             ? (0, 0)
             : (moments[index - 1].elapsedFromStart, moments[index - 1].distanceFromStart)
@@ -391,7 +391,7 @@ struct TripMomentsTimeline: View {
             : (totalElapsed, totalMetres)
         let dt = next.0 - prev.0
         let dm = next.1 - prev.1
-        if index > 0, dt > 0 || dm > 0, !isSpannedBySegment(before: index) {
+        if index > 0, dt > 0 || dm > 0, !isSpannedBySegment(before: index, in: checkpoints) {
             HStack(spacing: 12) {
                 Color.clear.frame(width: Self.timeWidth + Self.timeSpacing + Self.nodeSize, height: 1)
                 Text("+" + reading(time: max(0, dt), metres: max(0, dm)))
@@ -409,9 +409,12 @@ struct TripMomentsTimeline: View {
     /// самое, и крупно. Правило то же, по которому не пишется коннектор от
     /// старта до первой отметки: два одинаковых числа рядом просят их
     /// сравнивать, а сравнивать нечего.
-    private func isSpannedBySegment(before index: Int) -> Bool {
+    ///
+    /// Отметки приходят параметром, уже посчитанные один раз на всю ленту:
+    /// собирать `allCheckpoints` заново на каждый коннектор — это `compactMap`
+    /// по всем моментам на каждую строку, то есть квадрат в `body`.
+    private func isSpannedBySegment(before index: Int, in checkpoints: [TripCheckpoint]) -> Bool {
         guard index > 0, index < moments.count, !segments.isEmpty else { return false }
-        let checkpoints = allCheckpoints
         let pair = Set([moments[index - 1].id, moments[index].id])
         return segments.contains { segment in
             guard let resolved = TripSegmentMetrics.resolve(segment, in: checkpoints) else { return false }
