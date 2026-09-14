@@ -69,9 +69,11 @@ struct JourneyComposerSheet: View {
     /// потолка. Шесть кандидатов в разные дни давали лист в 849 пунктов при
     /// потолке телефона в 783, и кнопка «Создать» уезжала за нижний край —
     /// обычная неделя разъездов делала лист неработающим.
-    private static let thumbWidth: CGFloat = 56
-    private static let thumbHeight: CGFloat = 44
-    private static let rowHeight: CGFloat = thumbHeight + 16
+    /// Высота миниатюры — у `JourneyLegRow`, который её и рисует: своя копия
+    /// 44 здесь молча разъехалась бы с реальной строкой. Параметр типа
+    /// обязателен, потому что строка generic по trailing — на константу он
+    /// не влияет.
+    private static let rowHeight: CGFloat = JourneyLegRow<EmptyView>.thumbHeight + 16
     /// Строка опорной поездки выше на подпись «Эта поездка».
     private static let anchorRowHeight: CGFloat = rowHeight + 6
     private static let rowSpacing: CGFloat = 8
