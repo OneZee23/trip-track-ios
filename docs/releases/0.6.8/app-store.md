@@ -42,8 +42,8 @@
 PLACES
 
 Mark a spot during a trip and the app remembers it. Every later drive that
-passes within about 100 m counts as a pass, so the place knows «Here 4 times»
-and «usually 2:14 from the start». The new Places tab holds them all: a map of
+passes within about 100 m counts as a pass, so the place knows "Here 4 times"
+and "usually 2:14 from the start". The new Places tab holds them all: a map of
 pins and a card per place; inside, the threads of your passes, the best and the
 worst one, and every pass as a row that opens the trip right at that
 checkpoint. On the trip screen each checkpoint now carries a chip with the same
@@ -54,16 +54,16 @@ A JOURNEY CAN BE PUBLISHED
 The publish sheet lists the private trips inside by name, so you see exactly
 what opens together with it. After that the journey has its own screen for
 other people, a card in your public profile and a link trip-track.app/j/…, and
-a trip that belongs to it shows «Part of …» in the feed, with a way inside.
+a trip that belongs to it shows "Part of …" in the feed, with a way inside.
 Hiding works the same way: the journey disappears from other people's feeds and
 profiles, and the trips inside stay exactly as they are.
 
 LEGS
 
 Two checkpoints of one trip make a leg with its own name, time and distance —
-«from the petrol station to the pass». Once both ends have become places, the
-leg also shows your own history: «You drove this leg 3 times: 4:58 · 5:12 ·
-5:31».
+"from the gas station to the pass". Once both ends have become places, the
+leg also shows your own history: "You drove this leg 3 times: 4:58 · 5:12 ·
+5:31".
 
 CHANGED
 
@@ -114,8 +114,8 @@ ORTE
 
 Setzen Sie unterwegs eine Markierung, und die App merkt sich diesen Ort. Jede
 spätere Fahrt, die in etwa 100 m daran vorbeikommt, zählt als Vorbeifahrt — der
-Ort weiß dann „4-mal hier" und „üblicherweise 2:14 ab Start". Der neue Tab
-„Orte" sammelt sie alle: eine Karte mit Nadeln und eine Kachel je Ort, darin
+Ort weiß dann „4-mal hier“ und „üblicherweise 2:14 ab Start“. Der neue Tab
+„Orte“ sammelt sie alle: eine Karte mit Nadeln und eine Kachel je Ort, darin
 die Spuren Ihrer Vorbeifahrten, die beste und die schlechteste, und jede
 Vorbeifahrt öffnet die Fahrt direkt an der Markierung. Orte entstehen auf dem
 Telefon und verlassen es nie.
@@ -125,20 +125,20 @@ EINE REISE LÄSST SICH VERÖFFENTLICHEN
 Der Veröffentlichungsdialog nennt die privaten Fahrten darin beim Namen — Sie
 sehen genau, was mit geöffnet wird. Danach hat die Reise einen eigenen
 Bildschirm für andere, eine Kachel im öffentlichen Profil und einen Link
-trip-track.app/j/…; bei einer Fahrt daraus steht im Feed „Teil von …" mit dem
+trip-track.app/j/…; bei einer Fahrt daraus steht im Feed „Teil von …“ mit dem
 Weg hinein. Verbergen geht genauso: Die Reise verschwindet aus fremden Feeds
 und Profilen, die Fahrten darin bleiben, wie sie sind.
 
 ETAPPEN
 
 Zwei Markierungen einer Fahrt ergeben eine Etappe mit eigenem Namen, eigener
-Zeit und Strecke — „von der Tankstelle bis zum Pass". Sind beide Enden zu Orten
+Zeit und Strecke — „von der Tankstelle bis zum Pass“. Sind beide Enden zu Orten
 geworden, zeigt die Etappe auch Ihre eigene Historie: „Sie sind diese Etappe
-3-mal gefahren: 4:58 · 5:12 · 5:31".
+3-mal gefahren: 4:58 · 5:12 · 5:31“.
 
 GEÄNDERT
 
-Aus dem Tab „Gruppen" wurde „Orte"; die Clubs sind ins Profil unter die Garage
+Aus dem Tab „Gruppen“ wurde „Orte“; die Clubs sind ins Profil unter die Garage
 gezogen. Die schwebende Tab-Leiste sitzt nicht mehr auf dem Home-Indikator.
 ```
 
@@ -257,7 +257,7 @@ MIEJSCA
 
 Postaw znacznik podczas przejazdu, a aplikacja zapamięta to miejsce. Każdy
 późniejszy przejazd w promieniu około 100 m liczy się jako przejazd obok, więc
-miejsce wie: „Tu 4 razy" i „zwykle 2:14 od startu". Nowa zakładka „Miejsca"
+miejsce wie: „Tu 4 razy” i „zwykle 2:14 od startu”. Nowa zakładka „Miejsca”
 zbiera je wszystkie: mapa z pinezkami i kafelek na każde miejsce, a w środku
 nitki twoich przejazdów, najlepszy i najgorszy, oraz lista przejazdów z
 przejściem do trasy dokładnie przy znaczniku. Na ekranie trasy każdy znacznik
@@ -269,19 +269,19 @@ PODRÓŻ MOŻNA OPUBLIKOWAĆ
 Arkusz publikacji wymienia prywatne trasy w środku z nazwy — widzisz dokładnie,
 co otworzy się razem z nią. Potem podróż ma własny ekran dla innych, kafelek w
 publicznym profilu i link trip-track.app/j/…, a trasa należąca do niej pokazuje
-w strumieniu wiersz „Część podróży …" z przejściem do środka. Ukrycie działa
+w strumieniu wiersz „Część podróży …” z przejściem do środka. Ukrycie działa
 tak samo: podróż znika z cudzych strumieni i profili, a trasy w środku zostają
 takie, jakie są.
 
 ODCINKI
 
 Dwa znaczniki jednej trasy tworzą odcinek z własną nazwą, czasem i dystansem —
-„od stacji do przełęczy". Gdy oba końce stały się miejscami, odcinek pokazuje
-też twoją historię: „Przejechałeś ten odcinek 3 razy: 4:58 · 5:12 · 5:31".
+„od stacji do przełęczy”. Gdy oba końce stały się miejscami, odcinek pokazuje
+też twoją historię: „Przejechałeś ten odcinek 3 razy: 4:58 · 5:12 · 5:31”.
 
 ZMIENIŁO SIĘ
 
-Zakładka „Grupy" stała się zakładką „Miejsca"; kluby przeniosły się do profilu,
+Zakładka „Grupy” stała się zakładką „Miejsca”; kluby przeniosły się do profilu,
 pod garaż. Pływający pasek zakładek nie siada już na wskaźniku ekranu głównego.
 ```
 
@@ -292,8 +292,8 @@ TEMPAT
 
 Tandai satu titik saat perjalanan dan aplikasi akan mengingat tempat itu.
 Setiap perjalanan berikutnya yang lewat dalam radius 100 m dihitung
-sebagai lintasan, jadi tempat itu tahu «Di sini 4 kali» dan «biasanya 2:14 dari
-start». Tab baru «Tempat» mengumpulkan semuanya: peta berisi pin dan satu kartu
+sebagai lintasan, jadi tempat itu tahu "Di sini 4 kali" dan "biasanya 2:14 dari
+start". Tab baru "Tempat" mengumpulkan semuanya: peta berisi pin dan satu kartu
 per tempat; di dalamnya ada jalur lintasan Anda, yang tercepat dan
 terlama, serta daftar lintasan yang membuka perjalanan tepat pada penanda itu.
 Di layar perjalanan setiap penanda kini punya chip dengan angka yang sama.
@@ -305,19 +305,19 @@ Lembar publikasi menyebutkan satu per satu perjalanan privat di dalamnya —
 Anda melihat persis apa yang ikut terbuka. Setelah itu perjalanan punya layar
 sendiri untuk orang lain, kartu di profil publik Anda dan tautan
 trip-track.app/j/…; di feed, perjalanan yang menjadi bagiannya menampilkan
-«Bagian dari …» dengan jalan masuk. Menyembunyikan bekerja sama: perjalanan
+"Bagian dari …" dengan jalan masuk. Menyembunyikan bekerja sama: perjalanan
 hilang dari feed dan profil orang lain, sedangkan isinya tetap apa adanya.
 
 ETAPE
 
 Dua penanda dalam satu perjalanan membentuk etape dengan nama, waktu dan
-jaraknya sendiri — «dari pom bensin sampai puncak». Ketika kedua ujungnya sudah
-menjadi tempat, etape juga menampilkan riwayat Anda sendiri: «Anda menempuh
-etape ini 3 kali: 4:58 · 5:12 · 5:31».
+jaraknya sendiri — "dari pom bensin sampai puncak". Ketika kedua ujungnya sudah
+menjadi tempat, etape juga menampilkan riwayat Anda sendiri: "Anda menempuh
+etape ini 3 kali: 4:58 · 5:12 · 5:31".
 
 BERUBAH
 
-Tab «Grup» kini menjadi «Tempat»; klub pindah ke profil, di bawah garasi. Bilah
+Tab "Grup" kini menjadi "Tempat"; klub pindah ke profil, di bawah garasi. Bilah
 tab mengambang tidak lagi duduk di atas indikator beranda.
 ```
 
@@ -328,8 +328,8 @@ YERLER
 
 Yolculuk sırasında bir noktayı işaretleyin, uygulama o yeri hatırlasın. Sonraki
 her yolculuk yaklaşık 100 m yakınından geçtiğinde bir geçiş sayılır; böylece
-yer «Burada 4 kez» ve «genelde başlangıçtan 2:14» bilgisini edinir. Yeni
-«Yerler» sekmesi hepsini toplar: iğnelerle bir harita ve her yer için bir kart;
+yer "Burada 4 kez" ve "genelde başlangıçtan 2:14" bilgisini edinir. Yeni
+"Yerler" sekmesi hepsini toplar: iğnelerle bir harita ve her yer için bir kart;
 içinde geçişlerinizin izleri, en iyisi ve en kötüsü, ve her geçiş yolculuğu tam
 o işaretin üzerinde açar. Yolculuk ekranında her işaretin altında artık aynı
 sayıları taşıyan bir rozet var. Yerler telefonda hesaplanır ve oradan hiç
@@ -340,19 +340,19 @@ BİR GEZİ YAYINLANABİLİR
 Yayınlama sayfası içindeki özel yolculukları adıyla sayar — onunla birlikte
 tam olarak neyin açılacağını görürsünüz. Ardından gezinin başkaları için kendi
 ekranı, herkese açık profilinizde bir kartı ve trip-track.app/j/… bağlantısı
-olur; akışta ona ait bir yolculukta «… gezisinin parçası» satırı görünür ve
+olur; akışta ona ait bir yolculukta "… gezisinin parçası" satırı görünür ve
 içeri götürür. Gizlemek de aynı şekilde çalışır: gezi başkalarının akışından ve
 profilinden kaybolur, içindeki yolculuklar olduğu gibi kalır.
 
 ETAPLAR
 
 Aynı yolculuktaki iki işaret, kendi adı, süresi ve mesafesiyle bir etap olur:
-«benzinlikten geçide kadar». İki ucu da yere dönüştüğünde etap kendi geçmişinizi
-de gösterir: «Bu etabı 3 kez sürdünüz: 4:58 · 5:12 · 5:31».
+"benzinlikten geçide kadar". İki ucu da yere dönüştüğünde etap kendi geçmişinizi
+de gösterir: "Bu etabı 3 kez sürdünüz: 4:58 · 5:12 · 5:31".
 
 DEĞİŞENLER
 
-«Gruplar» sekmesi «Yerler» oldu; kulüpler profile, garajın altına taşındı.
+"Gruplar" sekmesi "Yerler" oldu; kulüpler profile, garajın altına taşındı.
 Yüzen sekme çubuğu artık ana ekran göstergesinin üzerine oturmuyor.
 ```
 
@@ -363,8 +363,8 @@ MGA LUGAR
 
 Maglagay ng marka habang naglalakbay at tatandaan ito ng app. Bawat susunod na
 biyaheng dumaan sa loob ng mga 100 m ay isang pagdaan, kaya alam ng lugar ang
-«Dito 4 na beses» at «karaniwang 2:14 mula sa simula». Tinitipon silang lahat ng
-bagong tab na «Mga lugar»: mapa ng mga pin at isang card bawat lugar; sa loob,
+"Dito 4 na beses" at "karaniwang 2:14 mula sa simula". Tinitipon silang lahat ng
+bagong tab na "Mga lugar": mapa ng mga pin at isang card bawat lugar; sa loob,
 ang mga guhit ng iyong mga pagdaan, ang pinakamabilis at pinakamabagal, at
 bubuksan ng bawat pagdaan ang biyahe mismo sa markang iyon. May chip na ang
 bawat marka sa screen ng biyahe. Sa telepono kinukuwenta ang mga lugar at hindi
@@ -375,20 +375,20 @@ PUWEDENG I-PUBLISH ANG PAGLALAKBAY
 Pinapangalanan ng publish sheet ang mga pribadong biyahe sa loob: makikita mo
 kung ano ang bubukas kasama nito. Pagkatapos, may sariling screen ang
 paglalakbay para sa iba, card sa iyong pampublikong profile at link na
-trip-track.app/j/…; sa feed, ang biyaheng kabilang dito ay may linyang «Bahagi
-ng …». Ganoon din ang pagtatago: nawawala ang paglalakbay sa feed at profile ng
+trip-track.app/j/…; sa feed, ang biyaheng kabilang dito ay may linyang "Bahagi
+ng …". Ganoon din ang pagtatago: nawawala ang paglalakbay sa feed at profile ng
 iba, nananatili ang mga biyahe sa loob.
 
 MGA LEG
 
 Dalawang marka sa iisang biyahe ang bumubuo ng leg na may sariling pangalan,
-oras at distansya: «mula gasolinahan hanggang tuktok». Kapag naging lugar na
+oras at distansya: "mula gasolinahan hanggang tuktok". Kapag naging lugar na
 ang magkabilang dulo, ipinapakita rin ng leg ang sarili mong kasaysayan:
-«Tatlong beses mo nang dinaanan ang leg na ito: 4:58 · 5:12 · 5:31».
+"Tatlong beses mo nang dinaanan ang leg na ito: 4:58 · 5:12 · 5:31".
 
 NAGBAGO
 
-Ang tab na «Mga grupo» ay «Mga lugar» na; lumipat ang mga club sa profile, sa
+Ang tab na "Mga grupo" ay "Mga lugar" na; lumipat ang mga club sa profile, sa
 ilalim ng garahe. Hindi na nakadapo ang tab bar sa home indicator.
 ```
 
@@ -436,7 +436,7 @@ LUGARES
 
 Marque um ponto durante um trajeto e o app guarda esse lugar. Cada viagem
 seguinte que passe a uns 100 m conta como uma passagem, então o lugar sabe
-«Aqui 4 vezes» e «normalmente 2:14 desde a largada». A nova aba «Lugares» reúne
+“Aqui 4 vezes” e “normalmente 2:14 desde a largada”. A nova aba “Lugares” reúne
 todos: um mapa de alfinetes e um cartão por lugar; dentro, os traços das suas
 passagens, a melhor e a pior, e cada passagem abre o trajeto exatamente naquela
 marca. Na tela do trajeto, cada marca agora tem uma pílula com os mesmos
@@ -447,20 +447,20 @@ DÁ PARA PUBLICAR UMA VIAGEM
 A folha de publicação nomeia um a um os trajetos privados que estão dentro —
 você vê exatamente o que abre junto. Depois a viagem ganha a própria tela para
 os outros, um cartão no seu perfil público e um link trip-track.app/j/…; no
-feed, um trajeto que faz parte dela mostra «Parte de …» com caminho para
+feed, um trajeto que faz parte dela mostra “Parte de …” com caminho para
 dentro. Esconder funciona igual: a viagem some do feed e do perfil dos outros,
 e os trajetos de dentro ficam como estão.
 
 TRECHOS
 
 Duas marcas de um mesmo trajeto formam um trecho com nome, tempo e distância
-próprios: «do posto até o passo». Quando as duas pontas viraram lugares, o
-trecho mostra também o seu histórico: «Você fez este trecho 3 vezes: 4:58 ·
-5:12 · 5:31».
+próprios: “do posto até o passo”. Quando as duas pontas viraram lugares, o
+trecho mostra também o seu histórico: “Você fez este trecho 3 vezes: 4:58 ·
+5:12 · 5:31”.
 
 MUDOU
 
-A aba «Grupos» agora é «Lugares»; os clubes se mudaram para o perfil, embaixo
+A aba “Grupos” agora é “Lugares”; os clubes se mudaram para o perfil, embaixo
 da garagem. A barra flutuante não senta mais no indicador de início.
 ```
 
