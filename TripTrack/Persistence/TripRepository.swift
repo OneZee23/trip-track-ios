@@ -72,7 +72,8 @@ protocol TripRepository {
 
     // MARK: Отрезки между отметками
     /// Нормализует порядок (`from` — раньше по `elapsedFromStart`); `nil` —
-    /// поездка или отметки не найдены, либо `from == to`.
+    /// поездка или отметки не найдены, `from == to`, либо отрезков у поездки
+    /// уже `TripSegment.maxPerTrip`.
     @discardableResult
     func addSegment(tripId: UUID, fromCheckpointId: UUID, toCheckpointId: UUID) -> TripSegment?
     /// Отрезки поездки, как они лежат в базе, — без самой поездки и её точек.
@@ -921,6 +922,10 @@ final class CoreDataTripRepository: TripRepository {
         if let existing = segments.first(where: { Set([$0.fromCheckpointId, $0.toCheckpointId]) == pair }) {
             return existing
         }
+        // Потолок — тот же, что у сервера (`MAX_SEGMENTS`): там лишнее молча
+        // отбрасывается, и заведённый сверх него отрезок исчез бы на первом
+        // пуле. Дубль выше проверяется РАНЬШЕ: он ничего не заводит.
+        guard segments.count < TripSegment.maxPerTrip else { return nil }
 
         // Порядок по дороге: «Отрезок до…» человек выбирает и назад по треку.
         let reversed = b.elapsedFromStart < a.elapsedFromStart

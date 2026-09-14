@@ -190,4 +190,35 @@ final class TripSegmentStoreTests: XCTestCase {
         let trip = repo.fetchTripDetail(id: tripId)
         XCTAssertEqual(trip?.segments.map(\.id), [alive?.id].compactMap { $0 })
     }
+
+    // MARK: - (g) потолок
+
+    /// Одиннадцать отметок дают 55 возможных пар — потолок достижим руками.
+    /// 51-й отрезок не заводится: сервер лишнее молча отбрасывает
+    /// (`MAX_SEGMENTS`), и заведённый сверх потолка исчез бы на первом пуле.
+    func testSegmentBeyondTheCapIsNotCreated() {
+        let checkpoints = (1...11).map { addCheckpoint(elapsed: TimeInterval($0 * 60)) }
+        var pairs: [(TripCheckpoint, TripCheckpoint)] = []
+        for i in 0..<checkpoints.count {
+            for j in (i + 1)..<checkpoints.count { pairs.append((checkpoints[i], checkpoints[j])) }
+        }
+        XCTAssertGreaterThan(pairs.count, TripSegment.maxPerTrip)
+
+        for pair in pairs.prefix(TripSegment.maxPerTrip) {
+            XCTAssertNotNil(repo.addSegment(
+                tripId: tripId, fromCheckpointId: pair.0.id, toCheckpointId: pair.1.id))
+        }
+        XCTAssertEqual(storedSegments.count, TripSegment.maxPerTrip)
+
+        let extra = pairs[TripSegment.maxPerTrip]
+        XCTAssertNil(repo.addSegment(
+            tripId: tripId, fromCheckpointId: extra.0.id, toCheckpointId: extra.1.id))
+        XCTAssertEqual(storedSegments.count, TripSegment.maxPerTrip)
+
+        // Дубль на потолке — по-прежнему «уже есть», а не отказ: он ничего
+        // не заводит, и запрещать его нечего.
+        let known = pairs[0]
+        XCTAssertNotNil(repo.addSegment(
+            tripId: tripId, fromCheckpointId: known.1.id, toCheckpointId: known.0.id))
+    }
 }

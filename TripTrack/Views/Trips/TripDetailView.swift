@@ -745,7 +745,10 @@ struct TripDetailView: View {
                 reloadCheckpoints()
             },
             otherCheckpoints: isOwn ? otherCheckpoints(besides: checkpoint.id) : [],
-            onCreateSegment: isOwn ? { createSegment(from: checkpoint.id, to: $0) } : nil
+            // Потолок отрезков (`TripSegment.maxPerTrip`) убирает кнопку
+            // «Отрезок до…» совсем: нажатие, которое ничего не делает, хуже
+            // отсутствующего — правило «не притворяемся» из CLAUDE.md.
+            onCreateSegment: isOwn && canAddSegment ? { createSegment(from: checkpoint.id, to: $0) } : nil
         )
         .environmentObject(lang)
         .environmentObject(themeManager)
@@ -780,6 +783,11 @@ struct TripDetailView: View {
         (trip?.checkpoints ?? []).enumerated()
             .filter { $0.element.id != id }
             .map { (checkpoint: $0.element, number: $0.offset + 1) }
+    }
+
+    /// Отрезков у поездки меньше потолка — значит, есть что заводить.
+    private var canAddSegment: Bool {
+        (trip?.segments.count ?? 0) < TripSegment.maxPerTrip
     }
 
     /// Создать отрезок между двумя отметками. Повтор той же пары возвращает

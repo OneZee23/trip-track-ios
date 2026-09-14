@@ -32,6 +32,15 @@ struct TripSegment: Identifiable, Codable, Equatable {
     /// обычно: при показе собирается «A → B» из имён отметок.
     var name: String?
 
+    /// Потолок числа отрезков у одной поездки.
+    ///
+    /// Число ТО ЖЕ, что серверный `MAX_SEGMENTS` в `trips.service.ts`, и
+    /// расходиться им нельзя: сервер лишнее молча отбрасывает, поэтому
+    /// заведённый сверх потолка отрезок жил бы до первого пула, а потом
+    /// исчезал без объяснения. Одиннадцать отметок дают 55 возможных пар —
+    /// человек физически может дойти сюда, не имея такого намерения.
+    static let maxPerTrip = 50
+
     init(id: UUID = UUID(), fromCheckpointId: UUID, toCheckpointId: UUID, name: String? = nil) {
         self.id = id
         self.fromCheckpointId = fromCheckpointId
