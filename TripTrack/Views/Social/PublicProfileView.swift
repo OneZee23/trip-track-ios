@@ -1684,7 +1684,10 @@ struct PublicProfileView: View {
             if case .journey(_, let legs) = row { return !legs.isEmpty }
             return true
         }
-        tripCardsById = Dictionary(uniqueKeysWithValues: tripCards.map { ($0.id, $0) })
+        // `uniquingKeysWith`, а не `uniqueKeysWithValues`: дубликат id в ответе
+        // сервера — его баг, но платить за него падением процесса нельзя.
+        // Побеждает первая карточка — порядок ленты профиля.
+        tripCardsById = Dictionary(tripCards.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     }
 
     private func isOwnTrip(_ trip: SocialFeedTrip) -> Bool {
