@@ -173,6 +173,12 @@ struct TripDetailView: View {
     /// others, demoting it isn't undoable in the social-record sense
     /// (reactions/comments don't survive a republish). One-shot confirm.
     @State private var unpublishConfirm = false
+    /// Считается ОДИН раз, в момент запроса (`requestUnpublish`), не в
+    /// `body`: `unpublishMessage(for:)` со Step 3 (0.6.8) ходит в
+    /// `JourneyManager.shared.trips(in:)` + `JourneyAggregate.build`, когда
+    /// поездка — плечо публичного путешествия, а `body` перерисовывается на
+    /// каждый кадр записи/скролла — поход в базу и агрегат там не место.
+    @State private var unpublishMessageText = ""
     @State private var reactionEntries: [SocialReactionEntry] = []
     @State private var selectedReactorAuthor: SocialAuthor?
     @State private var isMapFullscreen = false
@@ -1162,7 +1168,7 @@ struct TripDetailView: View {
         .appConfirm(
             isPresented: $unpublishConfirm,
             title: AppStrings.tripDetailMakeTripPrivate(lang.language),
-            message: unpublishMessage(for: trip),
+            message: unpublishMessageText,
             actions: [
                 AppDialogAction(
                     AppStrings.makePrivateAction(lang.language),
@@ -2615,6 +2621,7 @@ isOwn
             signInPrompt = .publish
             return
         }
+        unpublishMessageText = unpublishMessage(for: trip)
         unpublishConfirm = true
     }
 
