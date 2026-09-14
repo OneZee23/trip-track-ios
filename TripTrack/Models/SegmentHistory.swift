@@ -43,8 +43,14 @@ enum SegmentHistory {
     /// «4:58», «0:42», «12:05» — часы:минуты, минуты всегда двумя цифрами.
     /// Секунд здесь нет нарочно: история отвечает на «сколько это обычно
     /// занимает», и точность до секунды на дороге такого вопроса не бывает.
+    ///
+    /// Неполная минута ОТБРАСЫВАЕТСЯ, а не округляется: тем же счётом живут
+    /// `Trip.formattedTimeHuman` и `CheckpointReading.clock`, и одно и то же
+    /// число секунд обязано читаться одинаково во всех трёх местах — иначе
+    /// история отрезка оказалась бы на минуту длиннее, чем «От старта» у его
+    /// собственных отметок.
     static func clock(_ seconds: TimeInterval) -> String {
-        let totalMinutes = Int((seconds / 60).rounded())
+        let totalMinutes = max(0, Int(seconds)) / 60
         let hours = totalMinutes / 60
         let minutes = totalMinutes % 60
         return String(format: "%d:%02d", hours, minutes)

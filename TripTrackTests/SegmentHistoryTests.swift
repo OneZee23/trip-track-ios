@@ -63,4 +63,12 @@ final class SegmentHistoryTests: XCTestCase {
         XCTAssertEqual(SegmentHistory.clock(42 * 60), "0:42")
         XCTAssertEqual(SegmentHistory.clock(hms(12, 5)), "12:05")
     }
+
+    /// Неполная минута отбрасывается, а не округляется вверх, — так же, как
+    /// её отбрасывают `Trip.formattedTimeHuman` и `CheckpointReading.clock`.
+    func testClockDropsIncompleteMinute() {
+        XCTAssertEqual(SegmentHistory.clock(90), "0:01")
+        XCTAssertEqual(SegmentHistory.clock(59), "0:00")
+        XCTAssertEqual(SegmentHistory.clock(hms(1, 0) - 1), "0:59")
+    }
 }
