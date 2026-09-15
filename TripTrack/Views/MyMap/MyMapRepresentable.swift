@@ -29,6 +29,11 @@ enum MapZoomLevel: Int, Comparable {
 final class MapHostController: UIViewController {
     let map = MKMapView()
 
+    /// Штора на время зума — НАД картой и под SwiftUI-хромом (хром лежит в
+    /// `ZStack` выше представимого). Почему она вообще нужна и чем платим —
+    /// см. `MapZoomCurtain`.
+    let curtain = MapCurtain()
+
     /// Сколько нижней части экрана занимает постоянный лист. Логотип и
     /// «Legal» встают над ним.
     var bottomOverlayHeight: CGFloat = 0 {
@@ -40,6 +45,7 @@ final class MapHostController: UIViewController {
         map.frame = view.bounds
         map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(map)
+        curtain.install(over: map, in: view)
         applyBottomInset()
     }
 
@@ -146,6 +152,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         let fingers = FingerWatch()
         map.addGestureRecognizer(fingers)
         context.coordinator.fingers = fingers
+        context.coordinator.host = controller
 
         return controller
     }
@@ -183,6 +190,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         var onTapMap: ((CLLocationCoordinate2D) -> Void)?
 
         private weak var mapView: MKMapView?
+        /// Хозяин карты — через него координатор достаёт штору.
+        weak var host: MapHostController?
         var fingers: FingerWatch?
         private var level: MapZoomLevel = .far
         private var didSetInitialCamera = false
@@ -497,7 +506,18 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             mapView.deselectAnnotation(annotation, animated: false)
         }
 
+        // MARK: Штора на время зума
+
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            host?.curtain.willChange(mapView)
+        }
+
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            host?.curtain.changing(mapView)
+        }
+
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            host?.curtain.didChange(mapView)
             let newLevel = MapZoomLevel.of(mapView.region.span.latitudeDelta)
             guard newLevel != level else { return }
             level = newLevel

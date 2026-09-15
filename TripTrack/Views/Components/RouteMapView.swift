@@ -303,6 +303,11 @@ struct RouteMapView: UIViewRepresentable {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
         context.coordinator.showsFog = showsFog
+        // Штора на время зума — та же, что у «Атласа» и у экрана записи:
+        // дефект («на щипке наружу видна живая карта Apple, пока не приедут
+        // наши тайлы») у всех трёх карт с туманом один. Ставится верхней
+        // сабвью самой карты — своего контейнера у этой нет.
+        if showsFog, isInteractive { context.coordinator.curtain.install(over: mapView) }
         mapView.showsUserLocation = false
         mapView.isScrollEnabled = isInteractive
         mapView.isZoomEnabled = isInteractive
@@ -653,6 +658,9 @@ struct RouteMapView: UIViewRepresentable {
         /// Своя ли это поездка — от этого зависит толщина линии и обводка.
         /// Ставится в `makeUIView`, до первой отрисовки.
         var showsFog = false
+        /// Штора на время зума. Живёт у координатора, а не у вью: только он
+        /// видит все три колбэка камеры.
+        let curtain = MapCurtain()
 
         /// Маршрут рисуется по-разному на двух картах, и разница не
         /// косметическая: на светлой карте чужой поездки линия в 4 pt — это
@@ -1143,7 +1151,16 @@ struct RouteMapView: UIViewRepresentable {
         /// Карту повернули пальцами (или камера пошла по курсу) — экранный
         /// угол маркера считается от поворота камеры, и без этого маркер
         /// отвязывается от дороги под собой.
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            curtain.willChange(mapView)
+        }
+
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            curtain.didChange(mapView)
+        }
+
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            curtain.changing(mapView)
             guard let annotation = playbackCar,
                   let view = mapView.view(for: annotation) as? MapCarAnnotationView else { return }
             view.applyScreenAngle(cameraHeading: mapView.camera.heading)
