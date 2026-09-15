@@ -257,7 +257,12 @@ enum FogVeilPainter {
 final class FogVeilOverlay: NSObject, MKOverlay {
     let layer: RevealedLayer
     /// Растущая прорезь у машины на экране записи. `nil` у Атласа.
-    let revealAround: RevealPoint?
+    ///
+    /// `var`: прорезь растёт ШЕСТЬДЕСЯТ раз в секунду, и подменять ради этого
+    /// сам оверлей значило бы шестьдесят раз в секунду пересобирать индекс
+    /// путей всего открытого мира. Меняется только эта величина, а рендерер
+    /// перерисовывает коробку вокруг точки (`FogRevealAnimation.rect`).
+    var revealAround: RevealPoint?
     let coordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0)
     var boundingMapRect: MKMapRect { .world }
 
@@ -283,6 +288,12 @@ final class FogVeilRenderer: MKOverlayRenderer {
     /// `point(for:)` нет трансформа), а трогать `self` до инициализации всех
     /// полей нельзя.
     private var chunks: [RevealedLayer.LOD: MapPathChunks] = [:]
+
+    /// Сколько раз собирался индекс путей. Ровно `LOD.allCases.count`, и
+    /// вырасти он не имеет права: прорезь на экране записи растёт шестьдесят
+    /// раз в секунду, и если ради неё подменять оверлей, каждый кадр будет
+    /// пересобирать пути всего открытого мира. Держит `FogVeilTemporalTests`.
+    private(set) var chunkBuilds = 0
 
     /// Полуширина коридора на улице, в метрах.
     ///
@@ -321,6 +332,7 @@ final class FogVeilRenderer: MKOverlayRenderer {
         // раз, а не внутри каждого тайлового колбэка.
         for lod in RevealedLayer.LOD.allCases {
             chunks[lod] = MapPathChunks(veil.layer.polylines(for: lod)) { self.point(for: $0) }
+            chunkBuilds += 1
         }
     }
 

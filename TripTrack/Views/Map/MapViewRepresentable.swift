@@ -19,7 +19,7 @@ struct MapViewRepresentable: UIViewRepresentable {
     var onAnnotationSelected: ((MKPointAnnotation) -> Void)?
     var onCameraDistanceChanged: ((Double) -> Void)?
     var onVisibleRectChanged: ((MKMapRect) -> Void)?
-    var onFogRendererCreated: ((FogOverlayRenderer) -> Void)?
+    var onFogRendererCreated: ((FogVeilRenderer) -> Void)?
     /// Fires once when the map first finishes rendering. Lets the host clear its
     /// loading spinner from a real signal instead of a fragile timed Task.
     var onMapReady: (() -> Void)?
@@ -183,19 +183,23 @@ struct MapViewRepresentable: UIViewRepresentable {
         let toRemoveOverlays = existingOverlays.filter { e in !overlays.contains(where: { $0 === e }) }
         if !toRemoveOverlays.isEmpty { mapView.removeOverlays(toRemoveOverlays) }
         for overlay in overlays where !existingOverlays.contains(where: { $0 === overlay }) {
-            // Deterministic z-order via overlay LEVELS so it can't depend on
-            // which layer was re-added last. Fog is pinned to the bottom of
-            // .aboveRoads; the route line sits above it on the same level; the
-            // glowing head goes on the higher .aboveLabels level so it's ALWAYS
-            // on top — even right after the route polyline is rebuilt (every
-            // 0.5s) or while parked (when both publishers go quiet). Without the
-            // level split, a re-added route would cover the head.
-            if overlay is FogOverlay {
-                mapView.insertOverlay(overlay, at: 0, level: .aboveRoads)
+            // Deterministic z-order so it can't depend on which layer was
+            // re-added last. The route line is rebuilt every 0.5s and would
+            // otherwise come back ON TOP of the glowing head; the head is
+            // appended (= topmost), the route inserted right above the veil.
+            if overlay is FogVeilOverlay {
+                // Непрозрачная вуаль обязана лежать ВЫШЕ подписей Apple
+                // (иначе названия городов висят поверх темноты) и НИЖЕ всего
+                // своего. Поэтому уровень у всех трёх один, а порядок внутри
+                // него задан явно: вуаль в самый низ, трек сразу над ней,
+                // светящаяся голова — сверху.
+                mapView.insertOverlay(overlay, at: 0, level: .aboveLabels)
             } else if overlay is GlowingHeadOverlay {
                 mapView.addOverlay(overlay, level: .aboveLabels)
             } else {
-                mapView.addOverlay(overlay, level: .aboveRoads)
+                let veils = mapView.overlays(in: .aboveLabels)
+                    .filter { $0 is FogVeilOverlay }.count
+                mapView.insertOverlay(overlay, at: veils, level: .aboveLabels)
             }
         }
         // Regression alarm: a FULL teardown of a multi-overlay set DURING
@@ -397,8 +401,8 @@ struct MapViewRepresentable: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if overlay is FogOverlay {
-                let renderer = FogOverlayRenderer(overlay: overlay)
+            if let veil = overlay as? FogVeilOverlay {
+                let renderer = FogVeilRenderer(veil: veil)
                 DispatchQueue.main.async { [weak self] in
                     self?.parent.onFogRendererCreated?(renderer)
                 }

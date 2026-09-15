@@ -18,6 +18,43 @@ final class SpeedPolyline: MKPolyline {
     var endFraction: Double = 1
 }
 
+/// Линия маршрута с тёмной обводкой — для карты под туманом.
+///
+/// Обводка не украшение: внутри прочищенного коридора лежит живая карта Apple,
+/// и градиент скорости, положенный прямо на неё, сливается с жёлтым шоссе под
+/// собой. Тем же приёмом и тем же цветом обведена выбранная жилка Атласа
+/// (`RouteVeinRenderer.casingColor`) — две карты в одном приложении обязаны
+/// рисовать маршрут одинаково.
+///
+/// Путь собирается САМ, а не берётся из `path` родителя: `MKOverlayPathRenderer`
+/// создаёт его лениво, и полагаться на момент, когда он появится, значит
+/// однажды нарисовать обводку в пустоту.
+final class CasedPolylineRenderer: MKPolylineRenderer {
+    /// Насколько обводка шире линии, в экранных точках (по 1 pt на сторону).
+    static let casingExtra: CGFloat = 2.0
+
+    private lazy var casingPath: CGPath = {
+        let path = CGMutablePath()
+        let line = polyline
+        guard line.pointCount > 1 else { return path }
+        let points = line.points()
+        path.move(to: point(for: points[0]))
+        for i in 1..<line.pointCount { path.addLine(to: point(for: points[i])) }
+        return path
+    }()
+
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        context.beginPath()
+        context.addPath(casingPath)
+        context.setLineWidth((lineWidth + Self.casingExtra) / zoomScale)
+        context.setStrokeColor(RouteVeinRenderer.casingColor.cgColor)
+        context.strokePath()
+        super.draw(mapRect, zoomScale: zoomScale, in: context)
+    }
+}
+
 
 /// Annotation that the renderer recognises as the moving "play head" —
 /// shown as the pixel-car asset travelling along the route.
@@ -213,6 +250,16 @@ struct RouteMapView: UIViewRepresentable {
     /// bottom margin than the previews do — its transport controls sit there.
     var fitInsets: UIEdgeInsets?
 
+    /// На каком уровне лежит сама линия маршрута.
+    ///
+    /// Под непрозрачной вуалью выбора нет: вуаль обязана быть выше подписей
+    /// (иначе названия городов висят поверх темноты), а маршрут — выше вуали,
+    /// иначе поездки на экране поездки просто нет. Поэтому со своим туманом
+    /// оба уезжают на `.aboveLabels`, и порядок внутри уровня держит вставка
+    /// вуали в самый низ (`installFog`). Без тумана (чужая поездка,
+    /// путешествие) всё остаётся ровно как было.
+    private var routeLevel: MKOverlayLevel { showsFog ? .aboveLabels : .aboveRoads }
+
     private static let gapThreshold = GeometryUtils.defaultGapThreshold
 
     /// Smallest rect the preview will zoom to, ~400 m across.
@@ -238,6 +285,7 @@ struct RouteMapView: UIViewRepresentable {
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
+        context.coordinator.showsFog = showsFog
         mapView.showsUserLocation = false
         mapView.isScrollEnabled = isInteractive
         mapView.isZoomEnabled = isInteractive
@@ -245,9 +293,22 @@ struct RouteMapView: UIViewRepresentable {
         mapView.isPitchEnabled = isInteractive
         mapView.showsCompass = false
         mapView.showsScale = false
-        mapView.preferredConfiguration = MKStandardMapConfiguration(
-            elevationStyle: isInteractive ? .realistic : .flat
-        )
+        // Карта СВОЕЙ поездки (та, над которой лежит туман) — всегда ночная и
+        // приглушённая, ровно та же конфигурация, что у Атласа. До 0.7.0 здесь
+        // была светлая кремовая карта с толстым градиентом скорости, и рядом с
+        // ночной вкладкой «Карта» это читалось как два разных приложения.
+        // Конфигурация ставится ОДИН раз, здесь: MapKit падает, если менять её
+        // у живой карты.
+        if showsFog {
+            mapView.preferredConfiguration = MKStandardMapConfiguration(
+                elevationStyle: .flat, emphasisStyle: .muted
+            )
+            mapView.overrideUserInterfaceStyle = .dark
+        } else {
+            mapView.preferredConfiguration = MKStandardMapConfiguration(
+                elevationStyle: isInteractive ? .realistic : .flat
+            )
+        }
         // Apple requires the Maps attribution to stay visible, and it is laid
         // out against these margins. Without this the replay's transport row
         // sits right on top of it.
@@ -291,7 +352,7 @@ struct RouteMapView: UIViewRepresentable {
                         var coords = group.coords
                         let poly = SpeedPolyline(coordinates: &coords, count: coords.count)
                         poly.speed = group.speed
-                        mapView.addOverlay(poly, level: .aboveRoads)
+                        mapView.addOverlay(poly, level: routeLevel)
                         unionRect = unionRect.union(poly.boundingMapRect)
                         runTotal += GeometryUtils.polylineLength(group.coords)
                         speedRun.append(poly)
@@ -301,7 +362,7 @@ struct RouteMapView: UIViewRepresentable {
                     let simplified = GeometryUtils.simplifyRDP(segCoords, epsilon: epsilon)
                     var mutable = simplified
                     let polyline = MKPolyline(coordinates: &mutable, count: mutable.count)
-                    mapView.addOverlay(polyline, level: .aboveRoads)
+                    mapView.addOverlay(polyline, level: routeLevel)
                     unionRect = unionRect.union(polyline.boundingMapRect)
                 }
             }
@@ -324,18 +385,7 @@ struct RouteMapView: UIViewRepresentable {
                 context.coordinator.overviewInsets = insets
                 mapView.setVisibleMapRect(Self.floored(unionRect), edgePadding: insets, animated: false)
 
-                // Add fog of war overlay (below route polylines)
-                if showsFog {
-                    let visitedHashes: Set<String>
-                    if let cutoff = fogCutoffDate {
-                        visitedHashes = TerritoryManager().visitedHashes(before: cutoff)
-                    } else {
-                        visitedHashes = TerritoryManager().visitedGeohashes
-                    }
-                    if let fog = FogPolygonBuilder.build(visitedHashes: visitedHashes, visibleRect: mapView.visibleMapRect) {
-                        mapView.insertOverlay(fog, at: 0, level: .aboveRoads)
-                    }
-                }
+                installFog(on: mapView, coordinator: context.coordinator)
             }
         }
 
@@ -392,6 +442,27 @@ struct RouteMapView: UIViewRepresentable {
             spanMetres: playbackFollowSpan,
             mapView: mapView
         )
+    }
+
+    /// Туман «как было на финише этой поездки».
+    ///
+    /// Слой считается ВНЕ главного актёра и кэшируется на дату
+    /// (`TemporalFogCache`), поэтому карта-герой и полноэкранная карта той же
+    /// поездки платят за него один раз на двоих. До готовности карта просто
+    /// без вуали: показать маршрут на секунду раньше тумана честнее, чем
+    /// держать экран пустым.
+    ///
+    /// Вставляется в САМЫЙ НИЗ `.aboveLabels` — над дорогами и подписями
+    /// Apple, но под маршрутом, который уже лежит на этом уровне.
+    private func installFog(on mapView: MKMapView, coordinator: Coordinator) {
+        guard showsFog, !coordinator.fogRequested else { return }
+        coordinator.fogRequested = true
+        let cutoff = fogCutoffDate
+        Task { @MainActor [weak mapView] in
+            let layer = await TemporalFogCache.shared.layer(before: cutoff)
+            guard let mapView, !layer.isEmpty else { return }
+            mapView.insertOverlay(FogVeilOverlay(layer: layer), at: 0, level: .aboveLabels)
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -514,6 +585,29 @@ struct RouteMapView: UIViewRepresentable {
         /// Last zoom tick applied, so a re-render for any other reason does not
         /// re-run the zoom.
         private var lastZoomTick: Int = 0
+
+        /// Слой тумана уже заказан. Заказ один на жизнь карты: он перебирает
+        /// библиотеку, и повторять его на каждый `updateUIView` (а тот приходит
+        /// на каждый кадр реплея) нельзя.
+        var fogRequested = false
+        /// Своя ли это поездка — от этого зависит толщина линии и обводка.
+        /// Ставится в `makeUIView`, до первой отрисовки.
+        var showsFog = false
+
+        /// Маршрут рисуется по-разному на двух картах, и разница не
+        /// косметическая: на светлой карте чужой поездки линия в 4 pt — это
+        /// сама поездка, а в прочищенном коридоре своей она перекрывает ту
+        /// самую живую карту, ради которой коридор и прожигали. Внутри тумана
+        /// — 3.2 pt с тёмной обводкой, как у выбранной жилки Атласа.
+        func routeRenderer(for polyline: MKPolyline) -> MKPolylineRenderer {
+            let renderer = showsFog
+                ? CasedPolylineRenderer(polyline: polyline)
+                : MKPolylineRenderer(polyline: polyline)
+            renderer.lineWidth = showsFog ? RouteVeinRenderer.selectedWidth : 4
+            renderer.lineCap = .round
+            renderer.lineJoin = .round
+            return renderer
+        }
 
         /// One step of the «+» / «−» buttons: halve or double the visible span.
         func applyZoom(tick: Int, mapView: MKMapView) {
@@ -992,23 +1086,17 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if overlay is FogOverlay {
-                return FogOverlayRenderer(overlay: overlay)
+            if let veil = overlay as? FogVeilOverlay {
+                return FogVeilRenderer(veil: veil)
             }
             if let speedLine = overlay as? SpeedPolyline {
-                let renderer = MKPolylineRenderer(polyline: speedLine)
+                let renderer = routeRenderer(for: speedLine)
                 renderer.strokeColor = Self.color(forSpeedMS: speedLine.speed)
-                renderer.lineWidth = 4
-                renderer.lineCap = .round
-                renderer.lineJoin = .round
                 return renderer
             }
             if let polyline = overlay as? MKPolyline {
-                let renderer = MKPolylineRenderer(polyline: polyline)
+                let renderer = routeRenderer(for: polyline)
                 renderer.strokeColor = UIColor(red: 252/255, green: 76/255, blue: 2/255, alpha: 0.9) // accent
-                renderer.lineWidth = 4
-                renderer.lineCap = .round
-                renderer.lineJoin = .round
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)

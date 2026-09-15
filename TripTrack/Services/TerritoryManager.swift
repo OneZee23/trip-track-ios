@@ -251,7 +251,6 @@ final class TerritoryManager: ObservableObject {
             Task { @MainActor [weak self] in
                 self?.visitedCache = newHashes
                 self?.visitedTileCount = newHashes.count
-                FogPolygonBuilder.clearCache()
                 NotificationCenter.default.post(name: .territoryRebuilt, object: nil)
             }
         }
@@ -385,15 +384,6 @@ final class TerritoryManager: ObservableObject {
         return result
     }
 
-    /// Fetch geohash6 strings visited before or on the given date.
-    /// Used for temporal fog in trip detail (shows fog state at trip.endDate).
-    func visitedHashes(before date: Date) -> Set<String> {
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<VisitedGeohashEntity> = VisitedGeohashEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "firstVisited <= %@", date as NSDate)
-        guard let entities = try? context.fetch(request) else { return [] }
-        return Set(entities.compactMap(\.hash6))
-    }
 }
 
 // MARK: - Exploration Place Model

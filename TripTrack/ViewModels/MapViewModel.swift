@@ -150,7 +150,7 @@ final class MapViewModel: ObservableObject {
     private var consecutiveZeroSpeed = 0
     private var mainTrackOverlay: MKPolyline?
     private var headOverlay: GlowingHeadOverlay?
-    private var fogOverlay: FogOverlay?
+    private var fogOverlay: FogVeilOverlay?
     private var lastOverlayUpdate: Date = .distantPast
     /// Separate throttle for the glowing head segment, which republishes at up to
     /// 60fps (CADisplayLink). 10Hz is plenty smooth and keeps the overlay churn
@@ -159,10 +159,13 @@ final class MapViewModel: ObservableObject {
     private var fogBuilt = false
 
     // Fog reveal animation
-    weak var fogRenderer: FogOverlayRenderer? // set by MapViewRepresentable callback
+    weak var fogRenderer: FogVeilRenderer? // set by MapViewRepresentable callback
     private var fogAnimationLink: CADisplayLink?
     private var fogAnimationStart: Date?
-    private static let fogAnimationDuration: Double = 0.7
+    /// Где сейчас растёт прорезь. Одна на всю запись: она едет с машиной, а не
+    /// копится за ней — то, что уже проехано, откроет финиш, целиком и по
+    /// настоящему треку.
+    private var fogRevealCoordinate: CLLocationCoordinate2D?
 
     init() {
         let manager = LocationManager()
@@ -259,8 +262,19 @@ final class MapViewModel: ObservableObject {
         NotificationCenter.default.publisher(for: .territoryRebuilt)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                FogPolygonBuilder.clearCache()
                 self?.rebuildFog()
+            }
+            .store(in: &cancellables)
+
+        // Открытое пополнилось: финиш поездки (`ingest` идёт уже ПОСЛЕ того,
+        // как карта записи попросила перечитать туман), фоновая сборка после
+        // обновления, поездка со второго телефона. Без этой подписки карта
+        // записи показывала бы вчерашний мир до следующего запуска.
+        NotificationCenter.default.publisher(for: .revealedLayerChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, self.fogBuilt else { return }
+                self.rebuildFog()
             }
             .store(in: &cancellables)
 
@@ -836,8 +850,9 @@ final class MapViewModel: ObservableObject {
         speed = 0
         altitude = 0
 
-        // Rebuild fog with new tiles from completed trip
-        FogPolygonBuilder.clearCache()
+        // Rebuild fog with new tiles from completed trip. Сам новый кусок
+        // мира появится позже — `RevealedLayerStore.ingest` ниже идёт по
+        // ОКОНЧАТЕЛЬНОМУ треку, и туман перечитается по `.revealedLayerChanged`.
         rebuildFog()
         distance = 0
         duration = "00:00"
@@ -1045,7 +1060,7 @@ final class MapViewModel: ObservableObject {
 
                     // Animate fog reveal when a new tile is discovered
                     if isNewTile {
-                        self.rebuildFogAnimated()
+                        self.revealFog(at: update.coordinate)
                     }
 
                     // Update Live Activity with current tracking data
@@ -1124,33 +1139,58 @@ final class MapViewModel: ObservableObject {
 
     // MARK: - Fog of War
 
+    /// Перечитать открытое из хранилища.
+    ///
+    /// Слой берётся готовым (`layer(before: nil)`), а не пересчитывается по
+    /// поездкам: он копится инкрементально на финишах. Считается вне главного
+    /// актёра — сборка трёх уровней детали на зрелой библиотеке это сотни
+    /// миллисекунд, а карта записи в этот момент уже рисует трек.
+    ///
+    /// Мимо `TemporalFogCache` нарочно: тот кэширует СНИМОК НА ДАТУ (там цена
+    /// — перебор всей библиотеки), а здесь спрашивается открытое, как оно есть,
+    /// и спрашивается ровно затем, что оно только что изменилось.
     func rebuildFog() {
-        fogOverlay = FogPolygonBuilder.build(
-            visitedHashes: territoryManager.visitedGeohashes,
-            visibleRect: .world
-        )
         fogBuilt = true
-        updateTrackOverlays()
+        Task { [weak self] in
+            let layer = await Task.detached(priority: .utility) {
+                await RevealedLayerStore.shared.layer()
+            }.value
+            guard let self else { return }
+            self.fogOverlay = FogVeilOverlay(layer: layer)
+            self.fogRevealCoordinate = nil
+            self.updateTrackOverlays()
+        }
     }
 
-    /// Rebuild fog with animated reveal for newly discovered tiles.
-    private func rebuildFogAnimated() {
-        // Stop current animation — new overlay will include all pending + new tiles
+    /// Машина въехала туда, где её ещё не было: туман выгорает вокруг неё.
+    ///
+    /// Прорезь одна и едет вместе с машиной. Коридор по пройденному она за
+    /// собой НЕ оставляет — его прожжёт финиш, на окончательном треке и
+    /// навсегда; рисовать его на ходу значило бы пересобирать индекс путей
+    /// всего мира на каждой новой ячейке, посреди записи.
+    private func revealFog(at coordinate: CLLocationCoordinate2D) {
+        guard fogOverlay != nil else { return }
         stopFogAnimation()
+        fogRevealCoordinate = coordinate
 
-        guard let result = FogPolygonBuilder.buildAnimated(
-            visitedHashes: territoryManager.visitedGeohashes,
-            visibleRect: .world
-        ) else { return }
-
-        fogOverlay = result.overlay
-        fogBuilt = true
-        updateTrackOverlays()
-
-        // Start animation if there are new tiles to reveal
-        guard !result.newHashes.isEmpty else { return }
+        guard !UIAccessibility.isReduceMotionEnabled else {
+            applyReveal(progress: 1)
+            return
+        }
         fogAnimationStart = Date()
+        applyReveal(progress: 0)
         startFogAnimation()
+    }
+
+    private func applyReveal(progress: Double) {
+        guard let overlay = fogOverlay, let coordinate = fogRevealCoordinate else { return }
+        overlay.revealAround = FogVeilOverlay.RevealPoint(
+            coordinate: coordinate, progress: progress
+        )
+        // По коробке вокруг точки, а не по всему миру: вуаль накрывает мир по
+        // определению, и голый `setNeedsDisplay()` пересобирал бы каждый
+        // видимый тайл шестьдесят раз в секунду.
+        fogRenderer?.setNeedsDisplay(FogRevealAnimation.rect(around: coordinate))
     }
 
     private func startFogAnimation() {
@@ -1172,20 +1212,17 @@ final class MapViewModel: ObservableObject {
     }
 
     private func fogAnimationTick() {
-        guard let start = fogAnimationStart, let overlay = fogOverlay else {
+        guard let start = fogAnimationStart, fogOverlay != nil else {
             stopFogAnimation()
             return
         }
 
         let elapsed = Date().timeIntervalSince(start)
-        let t = min(1.0, elapsed / Self.fogAnimationDuration)
-        // EaseOut cubic
-        let progress = 1.0 - pow(1.0 - t, 3)
-
-        let stillAnimating = overlay.updateAnimationProgress(progress)
-        fogRenderer?.setNeedsDisplay()
-
-        if !stillAnimating {
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        applyReveal(progress: FogRevealAnimation.progress(
+            elapsed: elapsed, reduceMotion: reduceMotion
+        ))
+        if FogRevealAnimation.isDone(elapsed: elapsed, reduceMotion: reduceMotion) {
             stopFogAnimation()
         }
     }
