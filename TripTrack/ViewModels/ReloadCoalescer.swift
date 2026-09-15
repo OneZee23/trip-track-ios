@@ -24,7 +24,7 @@ final class ReloadCoalescer {
     /// Сколько ждать следующего уведомления. Четверть секунды: три события
     /// финиша приходят в пределах десятков миллисекунд, а человек, открывший
     /// «Атлас» сразу после, ждёт первый кадр не дольше, чем раньше.
-    static let defaultWindow: Duration = .milliseconds(250)
+    nonisolated static let defaultWindow: Duration = .milliseconds(250)
 
     init(window: Duration = ReloadCoalescer.defaultWindow, run: @escaping () async -> Void) {
         self.window = window
