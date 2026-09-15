@@ -16,22 +16,64 @@ enum MapZoomLevel: Int, Comparable {
     static func < (lhs: MapZoomLevel, rhs: MapZoomLevel) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
+/// Хозяин карты.
+///
+/// `UIViewControllerRepresentable`, а не `UIViewRepresentable`, ради ОДНОГО
+/// свойства: `additionalSafeAreaInsets`. Логотип Apple и ссылка «Legal» — это
+/// сабвью `MKMapView`, и позицию им с iOS 11 задают только инсеты
+/// контроллера (`layoutMargins` перестал работать тогда же). Прятать «Legal»
+/// нельзя — API для этого нет, а попытка рискует ревью; до 0.7.0 это сходило
+/// с рук, потому что карта под листом была полупрозрачной и ссылка терялась
+/// сама. На непрозрачном тумане перекрытие стало бы очевидным — и ревьюеру
+/// тоже.
+final class MapHostController: UIViewController {
+    let map = MKMapView()
+
+    /// Сколько нижней части экрана занимает постоянный лист. Логотип и
+    /// «Legal» встают над ним.
+    var bottomOverlayHeight: CGFloat = 0 {
+        didSet { applyBottomInset() }
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        map.frame = view.bounds
+        map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(map)
+        applyBottomInset()
+    }
+
+    /// Считается от инсетов ОКНА, а не от своих: `additionalSafeAreaInsets`
+    /// меняет собственный `safeAreaInsets`, и считать от него значит гонять
+    /// вью-контроллер по кругу.
+    private func applyBottomInset() {
+        let base = UIApplication.tt_safeAreaInsets?.bottom ?? 0
+        let extra = max(0, bottomOverlayHeight - base)
+        guard abs(additionalSafeAreaInsets.bottom - extra) > 0.5 else { return }
+        additionalSafeAreaInsets.bottom = extra
+    }
+}
+
 /// The night memory-map. One layer, no switches (canon: «слоёв-переключателей
 /// нет») — the territory you opened and the trips you drove share it, and
 /// what you can see is decided by how close you are, not by a segment.
-struct MyMapRepresentable: UIViewRepresentable {
+struct MyMapRepresentable: UIViewControllerRepresentable {
     var exploration: MapExploration
-    /// The driven network, one overlay for every zoom.
-    var fog: RoadFogOverlay?
-    /// The dark over everywhere the network has not reached.
-    var veil: FogOfWarOverlay?
-    /// Only the selected trip is drawn as its own gradient line.
-    var selectedRoute: SpeedGradientPolyline?
+    /// Открытый мир — из него же собраны оверлеи. Нужен ещё и здесь: подпись
+    /// региона встаёт в середину его ОТКРЫТОЙ части.
+    var revealed: RevealedLayer
+    /// Непрозрачный туман поверх всего мира.
+    var veil: FogVeilOverlay?
+    /// Тонкая тёплая линия по оси коридоров.
+    var vein: RouteVeinOverlay?
+    /// Выбранная поездка — та же жилка, шире.
+    var selectedRoute: RouteVeinOverlay?
     var selection: MyMapViewModel.Selection?
-    var highlightedRegionId: String?
-    /// Chip labels follow the app language, which lives in an
-    /// EnvironmentObject the coordinator cannot reach.
+    /// Подписи регионов следуют языку приложения, который живёт в
+    /// EnvironmentObject — координатору до него не дотянуться.
     var language: LanguageManager.Language
+    /// Высота свёрнутого листа: на столько поднимаются логотип и «Legal».
+    var bottomOverlayHeight: CGFloat = 0
 
     var onZoomLevelChange: (MapZoomLevel) -> Void
     var onSelectTrip: (UUID) -> Void
@@ -41,8 +83,9 @@ struct MyMapRepresentable: UIViewRepresentable {
     /// One-shot camera command; the binding is cleared once applied.
     @Binding var cameraCommand: MapCameraCommand?
 
-    func makeUIView(context: Context) -> MKMapView {
-        let map = MKMapView()
+    func makeUIViewController(context: Context) -> MapHostController {
+        let controller = MapHostController()
+        let map = controller.map
         let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
         map.preferredConfiguration = config
         // The memory map is ALWAYS night — Figma draws it dark regardless of
@@ -59,7 +102,7 @@ struct MyMapRepresentable: UIViewRepresentable {
         map.register(TripPinView.self, forAnnotationViewWithReuseIdentifier: TripPinView.reuseID)
         map.register(TripClusterView.self, forAnnotationViewWithReuseIdentifier: TripClusterView.reuseID)
         map.register(CityDotView.self, forAnnotationViewWithReuseIdentifier: CityDotView.reuseID)
-        map.register(CountryChipView.self, forAnnotationViewWithReuseIdentifier: CountryChipView.reuseID)
+        map.register(RegionLabelView.self, forAnnotationViewWithReuseIdentifier: RegionLabelView.reuseID)
         map.register(RouteEndpointView.self, forAnnotationViewWithReuseIdentifier: RouteEndpointView.reuseID)
 
         let tap = UITapGestureRecognizer(
@@ -75,20 +118,22 @@ struct MyMapRepresentable: UIViewRepresentable {
         map.addGestureRecognizer(fingers)
         context.coordinator.fingers = fingers
 
-        return map
+        return controller
     }
 
-    func updateUIView(_ map: MKMapView, context: Context) {
+    func updateUIViewController(_ controller: MapHostController, context: Context) {
+        let map = controller.map
+        controller.bottomOverlayHeight = bottomOverlayHeight
         let coordinator = context.coordinator
         coordinator.onZoomLevelChange = onZoomLevelChange
         coordinator.onSelectTrip = onSelectTrip
         coordinator.onSelectRoad = onSelectRoad
         coordinator.onTapMap = onTapMap
 
-        coordinator.syncData(map, exploration: exploration, language: language,
-                             fog: fog, veil: veil)
+        coordinator.syncData(map, exploration: exploration, revealed: revealed,
+                             language: language, veil: veil, vein: vein)
         coordinator.syncSelectedRoute(map, route: selectedRoute, language: language)
-        coordinator.syncHighlight(map, regionId: highlightedRegionId, selection: selection)
+        coordinator.syncSelection(map, selection: selection)
         coordinator.applyInitialCameraIfNeeded(map, exploration: exploration)
 
         if let command = cameraCommand {
@@ -116,16 +161,15 @@ struct MyMapRepresentable: UIViewRepresentable {
 
         private var installedTripIds: Set<UUID> = []
         private var installedRegionIds: Set<String> = []
-        private var installedFog: RoadFogOverlay?
-        private var installedVeil: FogOfWarOverlay?
-        private var installedRoute: SpeedGradientPolyline?
+        private var installedVeil: FogVeilOverlay?
+        private var installedVein: RouteVeinOverlay?
+        private var installedRoute: RouteVeinOverlay?
         private var pinsBuilt = false
         /// Which trip the current pin set was built for.
         private var pinsSelection: UUID?
-        private var highlightRegionId: String?
         private var selectedTripId: UUID?
         private var cityAnnotations: [CityDotAnnotation] = []
-        private var chipAnnotations: [CountryChipAnnotation] = []
+        private var regionLabels: [RegionLabelAnnotation] = []
         private var exploration = MapExploration()
         private var installedLanguage: LanguageManager.Language?
         /// Routes projected into map points once, for hit-testing. Converting
@@ -136,54 +180,40 @@ struct MyMapRepresentable: UIViewRepresentable {
 
         // MARK: Data
 
-        /// Z-order, bottom to top: opened-region fills on `.aboveRoads`, then
-        /// the veil, the heat network, the selected route and the region
-        /// highlight on `.aboveLabels`, in that insertion order (the callers
-        /// run in that sequence every update).
+        /// Порядок, снизу вверх: вуаль на `.aboveLabels`, жилка сразу за ней
+        /// на том же уровне, аннотации поверх всего.
         ///
-        /// The fills go UNDER the veil on purpose. Over it they painted a
-        /// brown sheet across the corridors the veil had just cleared, and the
-        /// two territory cues cancelled each other out. Under it, the veil's
-        /// dark is what you have not opened and the fill only shows through
-        /// where you have — which is the whole idea.
+        /// Заливок регионов под вуалью больше нет. Они рисовали коричневое
+        /// полотно поперёк коридоров, которые вуаль только что прочистила, и
+        /// две подсказки про территорию гасили друг друга; вуаль и так
+        /// говорит, что открыто, а что нет.
         func syncData(
             _ map: MKMapView,
             exploration: MapExploration,
+            revealed: RevealedLayer,
             language: LanguageManager.Language,
-            fog: RoadFogOverlay?,
-            veil: FogOfWarOverlay?
+            veil: FogVeilOverlay?,
+            vein: RouteVeinOverlay?
         ) {
             mapView = map
             self.exploration = exploration
 
-            // Region fills — one polygon per opened region, added once.
             let regionIds = Set(exploration.regions.map(\.id))
             let regionsChanged = regionIds != installedRegionIds
-            if regionsChanged {
-                // Only the fills — the highlight tracing the selected region
-                // is owned by `syncHighlight` and must survive a data refresh.
-                let stale = map.overlays.compactMap { $0 as? RegionPolygon }
-                    .filter { $0.style == .opened }
-                map.removeOverlays(stale)
-                for id in regionIds {
-                    guard let region = RegionAtlas.shared.region(id: id) else { continue }
-                    for polygon in Self.polygons(for: region, style: .opened) {
-                        map.addOverlay(polygon, level: .aboveRoads)
-                    }
-                }
-                installedRegionIds = regionIds
-            }
+            if regionsChanged { installedRegionIds = regionIds }
 
             if installedVeil !== veil {
-                map.removeOverlays(map.overlays.compactMap { $0 as? FogOfWarOverlay })
+                map.removeOverlays(map.overlays.compactMap { $0 as? FogVeilOverlay })
                 if let veil { map.addOverlay(veil, level: .aboveLabels) }
                 installedVeil = veil
             }
 
-            if installedFog !== fog {
-                map.removeOverlays(map.overlays.compactMap { $0 as? RoadFogOverlay })
-                if let fog { map.addOverlay(fog, level: .aboveLabels) }
-                installedFog = fog
+            if installedVein !== vein {
+                map.removeOverlays(map.overlays.compactMap {
+                    ($0 as? RouteVeinOverlay)?.style == .network ? $0 : nil
+                })
+                if let vein { map.addOverlay(vein, level: .aboveLabels) }
+                installedVein = vein
             }
 
             // Trip pins — which of them are shown depends on the zoom, so the
@@ -204,13 +234,17 @@ struct MyMapRepresentable: UIViewRepresentable {
                 }
             }
 
-            // City dots and country chips are derived data, and `updateUIView`
+            // City dots and region labels are derived data, and `updateUIView`
             // runs on every published change — a selection, a camera command.
             // Rebuilding these arrays each time was pure allocation.
             if tripsChanged || regionsChanged || language != installedLanguage {
                 installedLanguage = language
+                // Только внутри коридоров: город, до которого ты не доезжал,
+                // на карте тумана не существует. `MapExploration` уже отдаёт
+                // лишь города с покрытием, но правило записано и здесь —
+                // источник у него может смениться, а правило нет.
                 cityAnnotations = exploration.regions.flatMap { region in
-                    region.cities.map {
+                    region.cities.filter { $0.coverage > 0 }.map {
                         CityDotAnnotation(
                             coordinate: $0.coordinate,
                             cityName: $0.localizedName(language),
@@ -218,53 +252,68 @@ struct MyMapRepresentable: UIViewRepresentable {
                         )
                     }
                 }
-                chipAnnotations = Self.countryChips(for: exploration, language: language)
+                regionLabels = Self.labels(for: exploration, revealed: revealed, language: language)
                 // The annotations on screen are stale copies of what just
                 // changed underneath them.
                 map.removeAnnotations(map.annotations.filter {
-                    $0 is CityDotAnnotation || $0 is CountryChipAnnotation
+                    $0 is CityDotAnnotation || $0 is RegionLabelAnnotation
                 })
             }
             applyLevel(map, animated: false)
         }
 
+        /// Подписи — только у регионов, где есть ОТКРЫТАЯ дорога, и только в
+        /// середине открытого куска.
+        ///
+        /// Регион без центроида пропускается молча: центр края из атласа стоял
+        /// бы посреди темноты, в которой человек не был, — а подпись там
+        /// обещает открытое там, где его нет.
+        static func labels(
+            for exploration: MapExploration,
+            revealed: RevealedLayer,
+            language: LanguageManager.Language
+        ) -> [RegionLabelAnnotation] {
+            exploration.regions.compactMap { region in
+                guard region.openedRoadKm > 0,
+                      let centre = revealed.regionCentroids[region.id] else { return nil }
+                return RegionLabelAnnotation(
+                    regionId: region.id,
+                    coordinate: centre,
+                    title: region.localizedName(language).uppercased(language)
+                )
+            }
+        }
+
         /// The selected trip's own line, laid over the fog, with a dot at each
         /// end — the line says which roads, never which way round.
-        func syncSelectedRoute(_ map: MKMapView, route: SpeedGradientPolyline?, language: LanguageManager.Language) {
+        func syncSelectedRoute(_ map: MKMapView, route: RouteVeinOverlay?, language: LanguageManager.Language) {
             guard installedRoute !== route else { return }
-            map.removeOverlays(map.overlays.compactMap { $0 as? SpeedGradientPolyline })
+            map.removeOverlays(map.overlays.compactMap {
+                ($0 as? RouteVeinOverlay)?.style == .selected ? $0 : nil
+            })
             map.removeAnnotations(map.annotations.filter { $0 is RouteEndpointAnnotation })
             installedRoute = route
-            guard let route, route.pointCount > 1 else { return }
+            guard let route, let line = route.polylines(for: .fine).first,
+                  line.pointCount > 1 else { return }
 
             map.addOverlay(route, level: .aboveLabels)
-            let points = route.points()
+            let points = line.points()
             map.addAnnotations([
                 RouteEndpointAnnotation(
                     coordinate: points[0].coordinate, isStart: true,
                     title: AppStrings.mapRouteStart(language)
                 ),
                 RouteEndpointAnnotation(
-                    coordinate: points[route.pointCount - 1].coordinate, isStart: false,
+                    coordinate: points[line.pointCount - 1].coordinate, isStart: false,
                     title: AppStrings.mapRouteFinish(language)
                 ),
             ])
         }
 
-        func syncHighlight(_ map: MKMapView, regionId: String?, selection: MyMapViewModel.Selection?) {
-            if regionId != highlightRegionId {
-                highlightRegionId = regionId
-                map.removeOverlays(map.overlays.compactMap { $0 as? RegionPolygon }
-                    .filter { $0.style != .opened })
-                if let regionId, let region = RegionAtlas.shared.region(id: regionId) {
-                    // An opened region gets the bright traced border; one you
-                    // have never driven in gets the dashed outline instead.
-                    let isOpen = installedRegionIds.contains(regionId)
-                    let polygons = Self.polygons(for: region, style: isOpen ? .selected : .locked)
-                    map.addOverlays(polygons, level: .aboveLabels)
-                }
-            }
-
+        /// Выбранный регион на карте больше НЕ обводится: контур — это
+        /// игровая карта территорий, а туман границ не рисует. Остаётся пин
+        /// выбранной поездки.
+        func syncSelection(_ map: MKMapView, selection: MyMapViewModel.Selection?) {
             let newTrip: UUID?
             if case .trip(let id) = selection { newTrip = id } else { newTrip = nil }
             if newTrip != selectedTripId {
@@ -274,7 +323,6 @@ struct MyMapRepresentable: UIViewRepresentable {
                 // painting the selected look onto one was a no-op and the trip
                 // you opened stayed buried in a «9» badge.
                 applyLevel(map, animated: true)
-                refreshFocus(map)
             }
         }
 
@@ -290,13 +338,15 @@ struct MyMapRepresentable: UIViewRepresentable {
                 map.removeAnnotations(map.annotations.filter { $0 is CityDotAnnotation })
             }
 
-            // Country chips: far zoom only.
-            let wantChips = level == .far
-            let hasChips = map.annotations.contains { $0 is CountryChipAnnotation }
-            if wantChips && !hasChips {
-                map.addAnnotations(chipAnnotations)
-            } else if !wantChips && hasChips {
-                map.removeAnnotations(map.annotations.filter { $0 is CountryChipAnnotation })
+            // Имена регионов: страна и регион. На улице ближайшая граница за
+            // экраном, и подпись края там — шум поверх дорог, за которыми
+            // человек и пришёл.
+            let wantLabels = level <= .region
+            let hasLabels = map.annotations.contains { $0 is RegionLabelAnnotation }
+            if wantLabels && !hasLabels {
+                map.addAnnotations(regionLabels)
+            } else if !wantLabels && hasLabels {
+                map.removeAnnotations(map.annotations.filter { $0 is RegionLabelAnnotation })
             }
 
             syncTripPins(map)
@@ -321,53 +371,6 @@ struct MyMapRepresentable: UIViewRepresentable {
             map.addAnnotations(shown.map {
                 TripPinAnnotation(coordinate: $0.coordinate, tripId: $0.id, photoFilename: $0.photoFilename)
             })
-        }
-
-        /// Fades the heat network while a single trip is open, so its line is
-        /// the thing you are looking at rather than one thread in the weave.
-        /// The network stays faintly visible on purpose — it is the context
-        /// that says which of your roads this drive used.
-        private func refreshFocus(_ map: MKMapView) {
-            for overlay in map.overlays {
-                guard overlay is RoadFogOverlay,
-                      let renderer = map.renderer(for: overlay) else { continue }
-                let target = Self.fogAlpha(focused: selectedTripId != nil)
-                guard renderer.alpha != target else { continue }
-                renderer.alpha = target
-                renderer.setNeedsDisplay()
-            }
-        }
-
-        static func fogAlpha(focused: Bool) -> CGFloat { focused ? 0.22 : 1 }
-
-        /// Region fills exist to show shape from far away. At street zoom the
-        /// nearest border is off-screen and the fill is just a brown sheet over
-        /// the roads you came to look at — including the SELECTED region's,
-        /// which covered the whole screen until this stopped excluding it.
-        ///
-        /// Asks the map for its live renderers rather than keeping a
-        /// dictionary of them: the old one was keyed by `ObjectIdentifier` and
-        /// nothing ever removed an entry, so every overlay swap leaked a
-        /// renderer — and once an overlay was deallocated its address could be
-        /// handed to a new one, pointing the key at the wrong object.
-        ///
-        /// Only ever called when the zoom level actually changed. It used to
-        /// run from `applyLevel` on every data sync, and `updateUIView` fires
-        /// on every published change — so opening a card forced a redraw of
-        /// every region polygon on screen for an alpha that had not moved.
-        private func refreshRegionAlpha() {
-            guard let map = mapView else { return }
-            for overlay in map.overlays {
-                guard let polygon = overlay as? RegionPolygon,
-                      let renderer = map.renderer(for: polygon) else { continue }
-                renderer.alpha = regionAlpha(for: polygon)
-                renderer.setNeedsDisplay()
-            }
-        }
-
-        private func regionAlpha(for polygon: RegionPolygon) -> CGFloat {
-            guard level == .close else { return 1 }
-            return polygon.style == .opened ? 0 : 0.35
         }
 
         // MARK: Camera
@@ -412,28 +415,15 @@ struct MyMapRepresentable: UIViewRepresentable {
         // MARK: Delegate
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            let renderer: MKOverlayRenderer
-            if let region = overlay as? RegionPolygon {
-                // Set here rather than patched afterwards: a polygon added
-                // while zoomed in used to arrive at full opacity and only fade
-                // on the next zoom change.
-                let polygonRenderer = RegionPolygonRenderer(region: region)
-                polygonRenderer.alpha = regionAlpha(for: region)
-                renderer = polygonRenderer
-            } else if let fog = overlay as? RoadFogOverlay {
-                let fogRenderer = RoadFogRenderer(fog: fog)
-                // A fog overlay installed while a trip is open must arrive
-                // already dimmed, not at full strength until the next change.
-                fogRenderer.alpha = Self.fogAlpha(focused: selectedTripId != nil)
-                renderer = fogRenderer
-            } else if let veil = overlay as? FogOfWarOverlay {
-                renderer = FogOfWarRenderer(veil: veil)
-            } else if let segment = overlay as? SpeedGradientPolyline {
-                renderer = SelectedRouteRenderer(route: segment)
-            } else {
-                renderer = MKOverlayRenderer(overlay: overlay)
+            // Вуаль НИКОГДА не приглушается: приглушённый туман — это снова
+            // полупрозрачная вуаль, ради снятия которой всё и затевалось.
+            if let veil = overlay as? FogVeilOverlay {
+                return FogVeilRenderer(veil: veil)
             }
-            return renderer
+            if let vein = overlay as? RouteVeinOverlay {
+                return RouteVeinRenderer(vein: vein)
+            }
+            return MKOverlayRenderer(overlay: overlay)
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
@@ -447,9 +437,9 @@ struct MyMapRepresentable: UIViewRepresentable {
             case let city as CityDotAnnotation:
                 return mapView.dequeueReusableAnnotationView(
                     withIdentifier: CityDotView.reuseID, for: city)
-            case let chip as CountryChipAnnotation:
+            case let label as RegionLabelAnnotation:
                 return mapView.dequeueReusableAnnotationView(
-                    withIdentifier: CountryChipView.reuseID, for: chip)
+                    withIdentifier: RegionLabelView.reuseID, for: label)
             case let endpoint as RouteEndpointAnnotation:
                 return mapView.dequeueReusableAnnotationView(
                     withIdentifier: RouteEndpointView.reuseID, for: endpoint)
@@ -483,7 +473,6 @@ struct MyMapRepresentable: UIViewRepresentable {
             guard newLevel != level else { return }
             level = newLevel
             applyLevel(mapView, animated: true)
-            refreshRegionAlpha()
             onZoomLevelChange?(newLevel)
         }
 
@@ -526,7 +515,7 @@ struct MyMapRepresentable: UIViewRepresentable {
                     Haptics.tap()
                     onSelectTrip?(pin.tripId)
                 }
-                // City dots and country chips are labels, not controls.
+                // Точки городов и подписи регионов — подписи, не контролы.
                 return
             }
 
@@ -630,47 +619,27 @@ struct MyMapRepresentable: UIViewRepresentable {
             shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
         ) -> Bool { true }
 
-        // MARK: Helpers
+    }
+}
 
-        private static func polygons(
-            for region: RegionAtlas.Region,
-            style: RegionPolygon.Style
-        ) -> [RegionPolygon] {
-            region.rings.compactMap { ring in
-                let count = ring.count / 2
-                guard count > 2 else { return nil }
-                var coords: [CLLocationCoordinate2D] = []
-                coords.reserveCapacity(count)
-                for i in 0..<count {
-                    coords.append(CLLocationCoordinate2D(latitude: ring[2 * i], longitude: ring[2 * i + 1]))
-                }
-                let polygon = RegionPolygon(coordinates: coords, count: coords.count)
-                polygon.regionId = region.id
-                polygon.style = style
-                return polygon
-            }
-        }
+// MARK: - Нижняя панель
 
-        private static func countryChips(
-            for exploration: MapExploration,
-            language: LanguageManager.Language
-        ) -> [CountryChipAnnotation] {
-            var byCountry: [String: [MapRegionStat]] = [:]
-            for region in exploration.regions {
-                byCountry[region.countryCode, default: []].append(region)
+extension View {
+    /// Сообщает карте, сколько низа экрана занимает её нижняя панель, — карта
+    /// ровно на столько поднимает логотип Apple и ссылку «Legal»
+    /// (`additionalSafeAreaInsets`).
+    ///
+    /// Измеряется, а не вписано числом: у сводки чужой карты высота зависит от
+    /// содержимого (загрузка, отказ, пустота, числа), и неверная константа
+    /// оставила бы «Legal» под панелью — то самое, из-за чего ревью
+    /// возвращает сборки.
+    func measuredBottomOverlay(_ height: Binding<CGFloat>) -> some View {
+        background(
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { height.wrappedValue = geo.size.height }
+                    .onChange(of: geo.size.height) { _, new in height.wrappedValue = new }
             }
-            return byCountry.compactMap { code, regions in
-                guard let name = RegionAtlas.shared.countryName(code, language) else { return nil }
-                // Weight by km so the chip lands where you actually drove.
-                let totalKm = max(regions.reduce(0) { $0 + $1.km }, 0.001)
-                let lat = regions.reduce(0) { $0 + $1.center.latitude * $1.km } / totalKm
-                let lon = regions.reduce(0) { $0 + $1.center.longitude * $1.km } / totalKm
-                return CountryChipAnnotation(
-                    coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
-                    countryCode: code,
-                    name: name
-                )
-            }
-        }
+        )
     }
 }

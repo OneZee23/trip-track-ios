@@ -20,6 +20,7 @@ struct VehicleMapView: View {
     @Environment(\.dismiss) private var dismiss
 
     @StateObject private var vm: MyMapViewModel
+    @State private var summaryHeight: CGFloat = 0
 
     init(vehicleId: UUID, vehicleName: String) {
         self.vehicleId = vehicleId
@@ -35,12 +36,13 @@ struct VehicleMapView: View {
         ZStack {
             MyMapRepresentable(
                 exploration: vm.exploration,
-                fog: vm.fogOverlay,
+                revealed: vm.revealed,
                 veil: MyMapView.showsVeil ? vm.fogVeil : nil,
+                vein: vm.routeVein,
                 selectedRoute: vm.selectedRoute,
                 selection: vm.selection,
-                highlightedRegionId: vm.highlightedRegionId,
                 language: l,
+                bottomOverlayHeight: summaryHeight,
                 onZoomLevelChange: { _ in },
                 onSelectTrip: { _ in },
                 onSelectRoad: { _ in },
@@ -53,6 +55,7 @@ struct VehicleMapView: View {
                 header(c, l)
                 Spacer(minLength: 0)
                 summary(c, l)
+                    .measuredBottomOverlay($summaryHeight)
             }
 
             if vm.isLoading { CarLoadingView() }

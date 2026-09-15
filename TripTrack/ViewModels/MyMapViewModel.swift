@@ -21,9 +21,13 @@ final class MyMapViewModel: ObservableObject {
     static let shared = MyMapViewModel()
 
     /// What the sheet is currently showing. `nil` = the collapsed summary.
+    ///
+    /// «Закрытого» региона здесь больше нет (0.7.0). Туман не показывает
+    /// границ того, чего ты не видел: непосещённого региона на карте нет
+    /// вовсе — ни контура, ни пунктира, ни карточки «ещё не открыт», — а
+    /// значит и выбрать его нечем.
     enum Selection: Equatable {
         case region(String)         // atlas region id, opened
-        case lockedRegion(String)   // atlas region id, never driven
         case trip(UUID)
         /// Every trip that used the road under your finger, newest first.
         /// A street you drive daily belongs to a dozen trips, and handing back
@@ -33,23 +37,22 @@ final class MyMapViewModel: ObservableObject {
 
     @Published private(set) var isLoading = true
     @Published private(set) var exploration = MapExploration()
-    /// The driven network as one overlay. Rebuilt only when the data does.
-    @Published private(set) var fogOverlay: RoadFogOverlay?
-    /// The dark over everywhere the network has not reached — same geometry,
-    /// used as a mask instead of as lines.
-    @Published private(set) var fogVeil: FogOfWarOverlay?
-    /// The one route drawn in full speed-gradient detail — the trip you
-    /// selected, and nothing else. Drawing all of them at once is what turned
-    /// the map into a green smear; the unified fog carries the network now.
+    /// Открытый мир, как он лежит в базе (0.7.0). Из него строятся ОБА
+    /// оверлея — и дыра, и линия в ней, — поэтому разъехаться им нечем.
+    @Published private(set) var revealed = RevealedLayer.empty
+    /// Непрозрачный туман поверх всего мира.
+    @Published private(set) var fogVeil: FogVeilOverlay?
+    /// Тонкая тёплая линия по оси коридоров.
+    @Published private(set) var routeVein: RouteVeinOverlay?
+    /// Выбранная поездка — та же жилка, шире и светлее.
     ///
-    /// Built on demand. Colouring it needs per-point speeds, and loading the
-    /// track points of every trip up front to colour one line was the single
-    /// most expensive thing this screen did.
-    @Published private(set) var selectedRoute: SpeedGradientPolyline?
-    /// Last few built routes, so flipping between trips does not re-fetch.
-    private var routeCache: [UUID: SpeedGradientPolyline] = [:]
-    private var routeCacheOrder: [UUID] = []
-    private var routeTask: Task<Void, Never>?
+    /// Градиента скорости на Атласе больше нет: он был вторым, куда более
+    /// ярким «страва-следом» прямо поверх коридора, ради снятия которого всё
+    /// и затевалось. Заодно ушёл и единственный на этом экране поход за
+    /// точками поездки — жилка рисуется по превью, которое уже в памяти.
+    /// Градиент скорости остался там, где он отвечает на вопрос, — на экране
+    /// поездки.
+    @Published private(set) var selectedRoute: RouteVeinOverlay?
     /// Set through `select` / `selectRoad` only — the drawn route is kept in
     /// step from there, and a direct write would leave the two disagreeing.
     @Published private(set) var selection: Selection?
@@ -101,8 +104,7 @@ final class MyMapViewModel: ObservableObject {
                 fromTrips: trips.map { $0.previewCoordinates }, precision: 6)
             let exploration = MapExploration.build(
                 trips: trips, visitedHashes: hashes, atlas: atlas)
-            let fog = exploration.fog.isEmpty ? nil : RoadFogOverlay(fog: exploration.fog)
-            return (exploration, fog)
+            return (exploration, Self.remoteLayer(trips: trips, atlas: atlas))
         }.value
 
         guard generation == loadGeneration else { return }
@@ -110,13 +112,35 @@ final class MyMapViewModel: ObservableObject {
         // Под тем же гейтом, что и всё остальное: обогнавшая устаревшая
         // загрузка иначе накрыла бы свежие маршруты сообщением об отказе.
         remoteFailed = result.failed
-        exploration = built.0
-        fogOverlay = built.1
-        fogVeil = built.1.map { FogOfWarOverlay(fog: $0) }
-        routeCache.removeAll()
-        routeCacheOrder.removeAll()
+        apply(exploration: built.0, layer: built.1)
         loaded = true
         isLoading = false
+    }
+
+    /// Туман чужой (и машинной) карты — на лету, тем же `RevealBuilder`, и
+    /// НИ ОДНОЙ строки в базу.
+    ///
+    /// «Застолблено» здесь копится в памяти вызова: первая поездка через
+    /// ячейку владеет геометрией, следующая по той же улице не добавляет
+    /// ничего — ровно как на финише своей поездки, только без хранилища.
+    /// Своя таблица открытого — единственное хранилище своего тумана, и чужие
+    /// ячейки, попавшие туда, закрасили бы его необратимо.
+    private nonisolated static func remoteLayer(
+        trips: [Trip], atlas: RegionAtlas
+    ) -> RevealedLayer {
+        var claimed: [String: Set<RevealGrid.Cell>] = [:]
+        var runs: [[CLLocationCoordinate2D]] = []
+        for trip in trips.sorted(by: { $0.startDate < $1.startDate }) {
+            let coords = trip.previewCoordinates
+            guard coords.count > 1 else { continue }
+            let patches = RevealBuilder.patches(for: coords) { claimed[$0] ?? [] }
+            for (key, patch) in patches {
+                claimed[key, default: []].formUnion(patch.cells)
+                runs.append(contentsOf: patch.runs)
+            }
+        }
+        return RevealedLayer.build(
+            runs: runs, cellCount: claimed.values.reduce(0) { $0 + $1.count }, atlas: atlas)
     }
 
     init() {
@@ -127,7 +151,11 @@ final class MyMapViewModel: ObservableObject {
         // .syncPullCompleted: restore-on-fresh-device / second-device trips
         // land via Cloud-Sync pull, which touches neither territory nor
         // recording — without it the Maps tab stays empty all session.
-        for name: Notification.Name in [.territoryRebuilt, .tripRecordingEnded, .tripDeleted, .syncPullCompleted] {
+        // .revealedLayerChanged: финиш поездки и фоновая сборка после
+        // обновления пишут открытое мимо этого объекта, прямо в свой контекст
+        // CoreData, — без подписки туман не двинулся бы до перезапуска.
+        for name: Notification.Name in [.territoryRebuilt, .tripRecordingEnded, .tripDeleted,
+                                        .syncPullCompleted, .revealedLayerChanged] {
             NotificationCenter.default.addObserver(
                 forName: name, object: nil, queue: .main
             ) { [weak self] _ in
@@ -165,84 +193,73 @@ final class MyMapViewModel: ObservableObject {
         let trips = tripManager.fetchTripsForMap()
         let hashes = territory.visitedGeohashes
         let atlas = RegionAtlas.shared
+        // Открытое читается ГОТОВЫМ — своим фоновым контекстом, не главным
+        // актёром. Пересчитывать туман по всем поездкам на каждое открытие
+        // вкладки стоило бы 0.5–2 с; чтение тайлов — 50–150 мс.
+        let tiles = await RevealedLayerStore.shared.tiles()
 
         let built = await Task.detached(priority: .userInitiated) {
             let exploration = MapExploration.build(trips: trips, visitedHashes: hashes, atlas: atlas)
-            // The overlays are built here too: turning the network into
-            // MKPolylines is thousands of allocations, and doing it on the
-            // main actor stalled the first frame of the map.
-            let fog = exploration.fog.isEmpty ? nil : RoadFogOverlay(fog: exploration.fog)
-            return (exploration, fog)
+            // Оверлеи собираются здесь же: превращение сети в `MKPolyline` —
+            // это тысячи аллокаций, и на главном актёре они задерживали первый
+            // кадр карты.
+            return (exploration, RevealedLayer.build(tiles: tiles, atlas: atlas))
         }.value
 
         // A newer reload superseded this one while the build was detached.
         guard generation == loadGeneration else { return }
 
-        exploration = built.0
-        fogOverlay = built.1
-        fogVeil = built.1.map { FogOfWarOverlay(fog: $0) }
-        // The trips underneath the cached lines may have changed.
-        routeCache.removeAll()
-        routeCacheOrder.removeAll()
+        apply(exploration: built.0, layer: built.1)
+        isLoading = false
+    }
+
+    /// Единственное место, где меняются модель экрана и оверлеи — вместе.
+    private func apply(exploration: MapExploration, layer: RevealedLayer) {
+        self.exploration = exploration
+        revealed = layer
+        // Вуаль есть ВСЕГДА, даже над пустым слоем: угол без неё читался бы
+        // как открытый, а «мир тёмный, пока ты не поехал» — это и есть весь
+        // замысел.
+        fogVeil = FogVeilOverlay(layer: layer)
+        routeVein = layer.isEmpty ? nil : RouteVeinOverlay(layer: layer)
         // Drop a selection whose subject no longer exists (trip deleted on
         // another device, region emptied by a rebuild).
         if let current = selection, resolve(current) == nil { selection = nil }
         refreshSelectedRoute()
-        isLoading = false
     }
 
     // MARK: - Selected route
 
-    /// Keeps `selectedRoute` in step with the selection, fetching the one
-    /// trip's track points off the main actor only when it has to.
+    /// Держит `selectedRoute` в шаге с выбором.
+    ///
+    /// Синхронно и без кэша: жилка рисуется по превью, которое уже лежит в
+    /// `exploration`. Прежняя версия ходила в CoreData за точками поездки,
+    /// считала им скорости и держала восемь построенных линий в памяти —
+    /// всё это было ценой градиента скорости, которого на Атласе больше нет.
     private func refreshSelectedRoute() {
-        routeTask?.cancel()
-        routeTask = nil
-
-        guard case .trip(let id) = selection else {
+        guard case .trip(let id) = selection, let pin = exploration.trip(id: id) else {
             selectedRoute = nil
             return
         }
-        if let cached = routeCache[id] {
-            selectedRoute = cached
-            return
-        }
-
-        selectedRoute = nil
-        guard let manager = tripManagerRef else { return }
-        routeTask = Task { [weak self] in
-            // One trip's points, not every trip's.
-            guard let trip = manager.tripDetail(id: id) else { return }
-            let route = await Task.detached(priority: .userInitiated) {
-                Self.buildRoute(from: trip)
-            }.value
-            guard !Task.isCancelled, let self, let route else { return }
-            self.cacheRoute(route, for: id)
-            if case .trip(id) = self.selection { self.selectedRoute = route }
-        }
-    }
-
-    private func cacheRoute(_ route: SpeedGradientPolyline, for id: UUID) {
-        routeCache[id] = route
-        routeCacheOrder.removeAll { $0 == id }
-        routeCacheOrder.append(id)
-        while routeCacheOrder.count > 8 {
-            routeCache.removeValue(forKey: routeCacheOrder.removeFirst())
-        }
+        selectedRoute = RouteVeinOverlay(route: pin.route)
     }
 
     // MARK: - Selection
 
-    /// Tap on the map background: open region → region card, anything else
-    /// the atlas knows → the locked-region card (canon: «регион (открытый И
-    /// закрытый) → автозум + sheet»), sea or unknown → back to the summary.
+    /// Тап по фону карты: открытый регион — его карточка, всё остальное —
+    /// назад к сводке.
+    ///
+    /// «Закрытый регион» карточки больше не открывает: в 0.7.0 его на карте
+    /// нет вовсе, и предлагать разбор того, чего человек не видит, значило бы
+    /// вернуть игровую карту территорий, из-за которой карта и читалась как
+    /// Risk, а не как туман.
     func selectRegion(at coordinate: CLLocationCoordinate2D, zoom: Bool = true) {
-        guard let region = RegionAtlas.shared.region(containing: coordinate) else {
+        guard let region = RegionAtlas.shared.region(containing: coordinate),
+              exploration.region(id: region.id) != nil else {
             select(nil)
             return
         }
-        let isOpen = exploration.region(id: region.id) != nil
-        select(isOpen ? .region(region.id) : .lockedRegion(region.id), zoom: zoom)
+        select(.region(region.id), zoom: zoom)
     }
 
     /// Tap on a road. One trip goes straight to its card; several open the
@@ -266,7 +283,7 @@ final class MyMapViewModel: ObservableObject {
         refreshSelectedRoute()
         guard zoom, let new else { return }
         switch new {
-        case .region(let id), .lockedRegion(let id):
+        case .region(let id):
             if let region = RegionAtlas.shared.region(id: id) {
                 cameraCommand = .fit(region.bounds, padding: .region)
             }
@@ -285,7 +302,6 @@ final class MyMapViewModel: ObservableObject {
     private func resolve(_ selection: Selection) -> Any? {
         switch selection {
         case .region(let id):       return exploration.region(id: id)
-        case .lockedRegion(let id): return RegionAtlas.shared.region(id: id)
         case .trip(let id):         return exploration.trip(id: id)
         case .road(let ids):        return selectedRoadTrips(ids).isEmpty ? nil : ids
         }
@@ -306,142 +322,9 @@ final class MyMapViewModel: ObservableObject {
         return exploration.region(id: id)
     }
 
-    var selectedLockedRegion: RegionAtlas.Region? {
-        guard case .lockedRegion(let id) = selection else { return nil }
-        return RegionAtlas.shared.region(id: id)
-    }
-
     var selectedTrip: MapTripPin? {
         guard case .trip(let id) = selection else { return nil }
         return exploration.trip(id: id)
-    }
-
-    /// The region whose border should be traced right now — the selected one,
-    /// open or locked.
-    var highlightedRegionId: String? {
-        switch selection {
-        case .region(let id), .lockedRegion(let id): return id
-        default: return nil
-        }
-    }
-
-    // MARK: - Locked-region teaser
-
-    /// «Ближайший твой след — 40 км западнее: Кропоткин, май 2026».
-    ///
-    /// Measured to the nearest city you have actually opened, because a
-    /// distance to a bare coordinate says nothing — the point of the line is
-    /// to name a place you remember and make the gap feel crossable.
-    struct NearestTrace {
-        /// Метры — потому что показать их надо будет в том, что выбрал
-        /// человек, а округление до целого километра уже съело бы мили.
-        let distanceMetres: Double
-        let bearing: Bearing
-        let cityName: String
-        let date: Date?
-
-        enum Bearing { case north, south, east, west }
-    }
-
-    func nearestTrace(to region: RegionAtlas.Region) -> NearestTrace? {
-        var best: (city: MapCityStat, regionId: String, metres: Double)?
-        let target = CLLocation(latitude: region.center.latitude, longitude: region.center.longitude)
-        for stat in exploration.regions {
-            for city in stat.cities {
-                let metres = target.distance(
-                    from: CLLocation(latitude: city.coordinate.latitude, longitude: city.coordinate.longitude)
-                )
-                if best == nil || metres < best!.metres {
-                    best = (city, stat.id, metres)
-                }
-            }
-        }
-        guard let best else { return nil }
-
-        // Distance to the region's edge, not to the label in its middle —
-        // otherwise a neighbouring region reads as «300 км» when its border
-        // is half an hour away.
-        let edge = region.bounds.nearestEdgeDistance(from: best.city.coordinate)
-        let latestTrip = exploration.trips
-            .filter { $0.regionId == best.regionId }
-            .max { $0.startDate < $1.startDate }
-
-        // From the REGION towards the trace, not the other way round: the
-        // sentence is «твой след — 40 км западнее», so it describes where the
-        // trace sits relative to the region you are looking at.
-        let dLat = best.city.coordinate.latitude - region.center.latitude
-        let dLon = best.city.coordinate.longitude - region.center.longitude
-        let bearing: NearestTrace.Bearing
-        if abs(dLat) > abs(dLon) * 1.2 {
-            bearing = dLat > 0 ? .north : .south
-        } else {
-            bearing = dLon > 0 ? .east : .west
-        }
-
-        return NearestTrace(
-            distanceMetres: max(1000, edge),
-            bearing: bearing,
-            cityName: best.city.name,
-            date: latestTrip?.startDate
-        )
-    }
-
-    // MARK: - Overlay construction (off-main, value types only)
-
-    /// Figma speed→color stops (My-Map-local palette; thresholds shared with
-    /// `SpeedColorScale` so the semantics stay consistent app-wide).
-    ///
-    /// Третья ступень намеренно осталась ярко-оранжевой (#EB571E) и НЕ поехала
-    /// за брендом в терракоту: это шкала данных, а не акцент. Приглушённый
-    /// кирпич схлопнулся бы с красной ступенью, и «быстро» перестало бы
-    /// отличаться от «очень быстро».
-    private nonisolated static func color(forSpeedKmh v: Double) -> UIColor {
-        switch v {
-        case ..<50:   return UIColor(red: 0x30/255, green: 0xD1/255, blue: 0x58/255, alpha: 1)
-        case ..<90:   return UIColor(red: 0xF5/255, green: 0xBE/255, blue: 0x1E/255, alpha: 1)
-        case ..<110:  return UIColor(red: 0xEB/255, green: 0x57/255, blue: 0x1E/255, alpha: 1)
-        default:      return UIColor(red: 0xFF/255, green: 0x45/255, blue: 0x3A/255, alpha: 1)
-        }
-    }
-
-    nonisolated static func buildRoute(from trip: Trip) -> SpeedGradientPolyline? {
-        let coords = trip.previewCoordinates
-        guard coords.count >= 2 else { return nil }
-
-        // NO gap-splitting here: preview polylines are RDP-simplified, so
-        // legitimate straight stretches leave >1km between vertices and a
-        // distance-based splitter shreds them to nothing (the exact trap
-        // RouteMapView documents for sparse social previews).
-        let points = trip.trackPoints
-        let speeds: [Double]
-        if points.count >= 2 {
-            // Proportional-index speed sampling: preview vertex i of m
-            // maps to trackpoint round(i/(m-1)·(n-1)).
-            let n = points.count, m = coords.count
-            speeds = (0..<m).map { i in
-                let idx = Int((Double(i) / Double(m - 1) * Double(n - 1)).rounded())
-                return points[min(max(idx, 0), n - 1)].speed * 3.6
-            }
-        } else {
-            speeds = Array(repeating: trip.averageSpeed * 3.6, count: coords.count)
-        }
-
-        let poly = SpeedGradientPolyline(coordinates: coords, count: coords.count)
-        poly.tripId = trip.id
-        poly.gradientColors = speeds.map { color(forSpeedKmh: $0) }
-        poly.gradientLocations = Self.distanceFractions(coords)
-        return poly
-    }
-
-    /// Cumulative-distance fractions (0…1) for gradient stop locations.
-    private nonisolated static func distanceFractions(_ coords: [CLLocationCoordinate2D]) -> [CGFloat] {
-        guard coords.count >= 2 else { return coords.map { _ in 0 } }
-        var cumulative: [Double] = [0]
-        for i in 1..<coords.count {
-            cumulative.append(cumulative[i - 1] + GeometryUtils.haversineDistance(coords[i - 1], coords[i]))
-        }
-        let total = max(cumulative.last ?? 1, 1)
-        return cumulative.map { CGFloat($0 / total) }
     }
 }
 

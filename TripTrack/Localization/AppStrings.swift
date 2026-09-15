@@ -1210,8 +1210,18 @@ enum AppStrings {
         case .pt: return "Seu rastro mais próximo — \(head). Passe por lá e a região acende."
         }
     }
+    /// Стороны света для подписей на карте.
+    ///
+    /// Жил этот тип у `MyMapViewModel.NearestTrace` — подсказки «ближайший
+    /// твой след 40 км западнее» на карточке ЗАКРЫТОГО региона. В 0.7.0
+    /// закрытых регионов на карте нет вовсе (туман не рисует границ того, чего
+    /// ты не видел), карточка ушла вместе с ними, а строки остались: ключи
+    /// переведены на тринадцать языков, и выбрасывать их ради одного вызова
+    /// дороже, чем оставить.
+    enum Bearing { case north, south, east, west }
+
     static func mapBearing(
-        _ lang: LanguageManager.Language, _ bearing: MyMapViewModel.NearestTrace.Bearing
+        _ lang: LanguageManager.Language, _ bearing: Bearing
     ) -> String {
         switch bearing {
         case .north:

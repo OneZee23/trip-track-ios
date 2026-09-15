@@ -367,12 +367,6 @@ final class UnitsDisciplineTests: XCTestCase {
         ("TripTrack/Services/RoadCollectionManager.swift",
          "Пишет и читает ту же колонку."),
 
-        // --- Пороги отрисовки ----------------------------------------------
-
-        ("TripTrack/ViewModels/MyMapViewModel.swift",
-         "Градиент трека по скорости: пороги КРАСЯТ линию, а не подписывают число. Для "
-         + "миль это была бы перерисовка шкалы (30/60/70), а не деление на 1.609."),
-
         // --- Слова ----------------------------------------------------------
 
         ("TripTrack/Localization/Translations",

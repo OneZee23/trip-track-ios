@@ -1,0 +1,259 @@
+import XCTest
+import MapKit
+@testable import TripTrack
+
+/// Туман 0.7.0 рисуется не «тёмной картой», а непрозрачной вуалью с мягкими
+/// коридорами. Три вещи в этом рендерере обязаны быть чистыми функциями, иначе
+/// проверить их нечем: перо (сколько проходов и какой альфой), выбор уровня
+/// детали по зуму и пространственный индекс путей.
+///
+/// Четвёртая — сама заливка: у неё нет «правильного значения», но есть
+/// свойство, которое видно глазом и ловится числом — край коридора обязан
+/// гаснуть монотонно, без террас (ровно тем, чем была плоха подобранная руками
+/// таблица пера в 0.6.x).
+final class FogVeilRendererTests: XCTestCase {
+
+    // MARK: - Перо
+
+    /// Ширины идут от полной к узкой и НИКОГДА не растут: каждый следующий
+    /// проход стирает уже внутри того, что стёр предыдущий.
+    func testFeatherWidthsShrinkMonotonically() {
+        for passes in [8, 14] {
+            let table = FogVeilRenderer.feather(passes: passes)
+            XCTAssertEqual(table.count, passes)
+            XCTAssertEqual(table[0].width, 1, accuracy: 0.0001, "первый проход — вся ширина коридора")
+            for i in 1..<table.count {
+                XCTAssertLessThan(table[i].width, table[i - 1].width,
+                                  "проход \(i) шире предыдущего — перо вывернулось наизнанку")
+            }
+            XCTAssertEqual(
+                table[table.count - 1].width, 0.18, accuracy: 0.001,
+                "последний проход обязан прочистить середину коридора, а не оставить нитку")
+        }
+    }
+
+    /// Альфы не подобраны руками, а выведены из кривой `pow(1-t, 1.7)`:
+    /// произведение «сколько вуали осталось» после k проходов обязано лежать
+    /// точно на ней. Подобранные руками четыре ступени рисовали вокруг каждой
+    /// дороги террасы, как на топографической карте, — отсюда и правило.
+    func testFeatherAlphasFollowTheCurve() {
+        let passes = 14
+        let table = FogVeilRenderer.feather(passes: passes)
+        var remaining: CGFloat = 1
+        for (index, pass) in table.enumerated() {
+            XCTAssertGreaterThanOrEqual(pass.alpha, 0)
+            XCTAssertLessThanOrEqual(pass.alpha, 1)
+            remaining *= (1 - pass.alpha)
+            let t = CGFloat(index + 1) / CGFloat(passes)
+            XCTAssertEqual(remaining, pow(1 - t, 1.7), accuracy: 0.002,
+                           "после \(index + 1) проходов вуали осталось не по кривой")
+        }
+        XCTAssertEqual(remaining, 0, accuracy: 0.002, "середина коридора обязана очиститься полностью")
+    }
+
+    /// Число проходов — от ЭКРАННОЙ ширины коридора, а не константой: на
+    /// широком коридоре восьми ступеней хватает ровно до тех пор, пока вуаль
+    /// полупрозрачна (её прозрачность и съедала ступени). На альфе 1.0 их
+    /// становится видно, и только там платим четырнадцатью.
+    func testPassCountFollowsScreenWidth() {
+        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 20), 8)
+        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 60), 8)
+        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 61), 14)
+        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 400), 14)
+    }
+
+    // MARK: - Уровни детали
+
+    func testLodThresholds() {
+        XCTAssertEqual(FogVeilRenderer.lod(for: 0.06), .fine, "улица")
+        XCTAssertEqual(FogVeilRenderer.lod(for: 2e-3), .fine, "город")
+        XCTAssertEqual(FogVeilRenderer.lod(for: 1.5e-3), .mid, "граница: ровно порог — уже средний")
+        XCTAssertEqual(FogVeilRenderer.lod(for: 5e-4), .mid, "регион")
+        XCTAssertEqual(FogVeilRenderer.lod(for: 1.5e-4), .far, "граница: ровно порог — уже дальний")
+        XCTAssertEqual(FogVeilRenderer.lod(for: 3e-5), .far, "страна")
+    }
+
+    /// Ширина коридора: метры побеждают на улице, экранный пол — на стране.
+    /// Обе половины формулы обязаны работать, иначе туман либо съедает город,
+    /// либо теряет дорогу на масштабе страны.
+    func testCorridorWidthTakesMetresUpCloseAndScreenPointsFarAway() {
+        let latitude = 45.035
+        let metre = MKMapPointsPerMeterAtLatitude(latitude)
+
+        let street = FogVeilRenderer.corridorWidth(zoomScale: 0.06, metre: metre)
+        XCTAssertEqual(street, CGFloat(FogVeilRenderer.streetHalfWidthMetres * 2 * metre), accuracy: 0.001,
+                       "на улице коридор обязан быть ±50 м, а не экранным полом")
+
+        let country = FogVeilRenderer.corridorWidth(zoomScale: 3e-5, metre: metre)
+        XCTAssertEqual(country, FogVeilRenderer.minVeinPoints / 3e-5, accuracy: 0.001,
+                       "на стране побеждает пол в экранных точках")
+        XCTAssertEqual(country * 3e-5, FogVeilRenderer.minVeinPoints, accuracy: 0.001,
+                       "на экране это ровно 12 точек, ниже которых коридор читается линией по чёрному")
+    }
+
+    // MARK: - Индекс путей
+
+    /// Двухуровневый индекс: на улице тайл обязан получать только свои
+    /// несколько километров сети, а не весь город одним `CGPath`.
+    func testChunksAreBucketedTwiceSoStreetZoomSkipsTheRestOfTheCity() {
+        // Восемь коротких отрезков по 100 м, по прямой с шагом 12 км —
+        // разные мелкие бакеты (4.8 км), один-два крупных (78 км).
+        var lines: [MKPolyline] = []
+        for i in 0..<8 {
+            let lat = 45.0 + Double(i) * 12_000 / 111_320
+            var coords = [
+                CLLocationCoordinate2D(latitude: lat, longitude: 38.9),
+                CLLocationCoordinate2D(latitude: lat + 100 / 111_320, longitude: 38.9),
+            ]
+            lines.append(MKPolyline(coordinates: &coords, count: 2))
+        }
+        let chunks = MapPathChunks(lines) { CGPoint(x: $0.x, y: $0.y) }
+
+        // Спрашиваем про середину цепочки: крайние отрезки попадают в свой
+        // крупный бакет поодиночке, и тогда сравнивать было бы нечего.
+        let middle = lines[3].boundingMapRect
+        let fine = chunks.visiblePaths(in: middle, zoomScale: 0.01)
+        let coarse = chunks.visiblePaths(in: middle, zoomScale: 1e-5)
+
+        // Считать надо не число путей, а ГЕОМЕТРИЮ в них: бакет отдаёт один
+        // склеенный `CGPath`, и крупный бакет — это один путь на всю сеть.
+        let fineSpan = fine.reduce(0) { max($0, $1.boundingBox.height) }
+        let coarseSpan = coarse.reduce(0) { max($0, $1.boundingBox.height) }
+
+        XCTAssertFalse(fine.isEmpty, "своя дорога обязана прийти на любом зуме")
+        XCTAssertGreaterThan(
+            coarseSpan, fineSpan * 20,
+            "на дальнем зуме бакет крупный и тащит сеть целиком — это и дешевле")
+        // 100 м пути на широте 45° — около тысячи точек карты; вся цепочка в
+        // 84 км — около восьмисот тысяч.
+        XCTAssertLessThan(
+            fineSpan, 2_000,
+            "на улице в тайл приехала чужая геометрия: пролёт \(fineSpan) точек карты")
+    }
+
+    func testChunksReturnNothingFarFromTheNetwork() {
+        var coords = [
+            CLLocationCoordinate2D(latitude: 45.0, longitude: 38.9),
+            CLLocationCoordinate2D(latitude: 45.01, longitude: 38.91),
+        ]
+        let chunks = MapPathChunks([MKPolyline(coordinates: &coords, count: 2)]) {
+            CGPoint(x: $0.x, y: $0.y)
+        }
+        // Степь в 900 км.
+        let origin = MKMapPoint(CLLocationCoordinate2D(latitude: 53.0, longitude: 45.0))
+        let empty = MKMapRect(x: origin.x, y: origin.y, width: 1_000, height: 1_000)
+
+        XCTAssertTrue(chunks.visiblePaths(in: empty, zoomScale: 0.01).isEmpty)
+        XCTAssertTrue(chunks.visiblePaths(in: empty, zoomScale: 1e-5).isEmpty)
+    }
+
+    func testEmptyChunksAreEmptyAtEveryZoom() {
+        let chunks = MapPathChunks([]) { CGPoint(x: $0.x, y: $0.y) }
+        XCTAssertTrue(chunks.visiblePaths(in: .world, zoomScale: 0.01).isEmpty)
+        XCTAssertTrue(chunks.visiblePaths(in: .world, zoomScale: 1e-5).isEmpty)
+    }
+
+    // MARK: - Сама заливка
+
+    /// Снимок пера на фиксированной геометрии: одна прямая дорога посреди
+    /// тайла. По перпендикуляру к ней вуаль обязана нарастать МОНОТОННО от
+    /// прочищенной середины к сплошной темноте — ни одной ступени назад.
+    ///
+    /// Это тот самый тест, который отличает мягкий край от контурной карты, и
+    /// он ходит через `FogVeilPainter`, а не через рендерер: постер
+    /// «Поделиться» рисует тем же кодом (`MKMapSnapshotter` оверлеев не
+    /// рендерит), и разъехаться этим двум картинкам нельзя.
+    func testPainterEdgeFadesWithoutTerraces() {
+        let size = 240
+        let pixels = Self.drawn(size: size) { context, rect in
+            // Горизонтальная дорога по центру.
+            let road = CGMutablePath()
+            road.move(to: CGPoint(x: -20, y: rect.midY))
+            road.addLine(to: CGPoint(x: rect.maxX + 20, y: rect.midY))
+            FogVeilPainter.paint(
+                context: context, paths: [road], corridorWidth: 90, passes: 14,
+                tileRect: rect, depth: .flat
+            )
+        }
+
+        let column = size / 2
+        let alphas = ((size / 2)..<size).map { Int(pixels[($0 * size + column) * 4 + 3]) }
+
+        XCTAssertLessThan(alphas[0], 12, "середина коридора обязана быть прочищена насквозь")
+        XCTAssertGreaterThan(alphas[alphas.count - 1], 245, "за коридором вуаль непрозрачна")
+        for i in 1..<alphas.count {
+            XCTAssertGreaterThanOrEqual(
+                alphas[i], alphas[i - 1] - 1,
+                "альфа упала на \(i)-м пикселе от оси: \(alphas[i - 1]) → \(alphas[i]) — это терраса"
+            )
+        }
+    }
+
+    /// Тайл, до которого не доехали, — сплошная темнота: ни одного пикселя
+    /// светлее объёмной дымки и ни одного прозрачного.
+    func testPainterFillsAnEmptyTileOpaque() {
+        let size = 64
+        let pixels = Self.drawn(size: size) { context, rect in
+            FogVeilPainter.paint(
+                context: context, paths: [], corridorWidth: 90, passes: 8,
+                tileRect: rect, depth: .flat
+            )
+        }
+
+        for i in stride(from: 0, to: size * size * 4, by: 4) {
+            XCTAssertEqual(Int(pixels[i + 3]), 255, "вуаль обязана быть непрозрачной")
+            // Объёмная дымка не светлее ~(0.10, 0.11, 0.15): ярче — и полоса
+            // недогруженных плиток Apple на панораме станет видна.
+            XCTAssertLessThan(Int(pixels[i + 2]), 64, "дымка светлее тёмной подложки Apple")
+        }
+    }
+
+    /// Дымка объёмная, а не плоская: у верха и низа тайла разный цвет.
+    func testFillHasDepth() {
+        let size = 64
+        let pixels = Self.drawn(size: size) { context, rect in
+            FogVeilPainter.paint(
+                context: context, paths: [], corridorWidth: 90, passes: 8,
+                tileRect: rect, depth: .flat
+            )
+        }
+        let top = Int(pixels[(2 * size + 2) * 4 + 2])
+        let bottom = Int(pixels[((size - 3) * size + 2) * 4 + 2])
+        XCTAssertNotEqual(top, bottom, "заливка плоская — объёма в тумане нет")
+    }
+
+    /// Глубина считается от МИРОВОЙ координаты тайла, а не от его собственной:
+    /// у двух соседних тайлов общий край обязан совпасть по цвету, иначе на
+    /// панораме видна сетка стыков.
+    func testDepthIsContinuousAcrossNeighbouringTiles() {
+        let span = MKMapSize.world.height / 4096
+        let upper = MKMapRect(x: 1_000_000, y: 2_000_000, width: span, height: span)
+        let lower = MKMapRect(x: 1_000_000, y: 2_000_000 + span, width: span, height: span)
+
+        let a = FogVeilRenderer.depth(for: upper)
+        let b = FogVeilRenderer.depth(for: lower)
+
+        XCTAssertEqual(a.bottom, b.top, accuracy: 0.0001,
+                       "нижний край верхнего тайла и верхний край нижнего разошлись по цвету")
+    }
+
+    // MARK: - Инструменты
+
+    /// Рисует в свой буфер и отдаёт пиксели копией: указатель на память
+    /// массива, переживший `withUnsafeMutableBytes`, — это UB, а тут он ещё и
+    /// читается вторым вызовом.
+    private static func drawn(size: Int, _ body: (CGContext, CGRect) -> Void) -> [UInt8] {
+        let count = size * size * 4
+        let data = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+        data.initialize(repeating: 0, count: count)
+        defer { data.deallocate() }
+        let context = CGContext(
+            data: data, width: size, height: size,
+            bitsPerComponent: 8, bytesPerRow: size * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        body(context, CGRect(x: 0, y: 0, width: size, height: size))
+        return Array(UnsafeBufferPointer(start: data, count: count))
+    }
+}

@@ -37,12 +37,15 @@ struct MyMapView: View {
         ZStack {
             MyMapRepresentable(
                 exploration: vm.exploration,
-                fog: vm.fogOverlay,
+                revealed: vm.revealed,
                 veil: Self.showsVeil ? vm.fogVeil : nil,
+                vein: vm.routeVein,
                 selectedRoute: vm.selectedRoute,
                 selection: vm.selection,
-                highlightedRegionId: vm.highlightedRegionId,
                 language: lang.language,
+                // Логотип Apple и «Legal» встают над свёрнутым листом: под
+                // непрозрачным туманом он накрыл бы их насовсем.
+                bottomOverlayHeight: MyMapSheet.collapsedHeight,
                 onZoomLevelChange: { zoomLevel = $0 },
                 onSelectTrip: { vm.select(.trip($0)) },
                 onSelectRoad: { vm.selectRoad($0) },

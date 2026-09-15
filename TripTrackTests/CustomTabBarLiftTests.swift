@@ -28,4 +28,16 @@ final class CustomTabBarLiftTests: XCTestCase {
         XCTAssertEqual(CustomTabBar.clearanceAboveSafeArea(bottomInset: 34), 72)
         XCTAssertEqual(CustomTabBar.clearanceAboveSafeArea(bottomInset: 0), 96)
     }
+
+    /// Свёрнутый лист «Атласа» (0.7.0): карточка, клиренс под баром и зазор.
+    /// Это же число уезжает в `additionalSafeAreaInsets.bottom` карты — под
+    /// непрозрачным туманом логотип Apple и ссылка «Legal» иначе остаются под
+    /// листом навсегда, а прятать «Legal» нельзя.
+    func testAtlasCollapsedSheetLeavesRoomForTheLegalLink() {
+        XCTAssertEqual(MyMapSheet.collapsedHeight(bottomInset: 34), 64 + 106 + 6)
+        XCTAssertEqual(MyMapSheet.collapsedHeight(bottomInset: 0), 64 + 96 + 6)
+        XCTAssertGreaterThan(
+            MyMapSheet.collapsedHeight(bottomInset: 34), 34,
+            "инсет обязан быть больше безопасной зоны, иначе поднимать нечего")
+    }
 }

@@ -10,13 +10,11 @@ struct MapExploration {
     var regions: [MapRegionStat] = []
     var trips: [MapTripPin] = []
     var totalKm: Double = 0
-    /// The driven network, collapsed into heat tiers — the map's main layer.
-    var fog = RoadFog()
 
     var isEmpty: Bool { trips.isEmpty }
     var tripCount: Int { trips.count }
     var regionCount: Int { regions.count }
-    /// Countries you have driven in, most-driven first — the far-zoom chips.
+    /// Страны, в которых ты ездил, по убыванию километров.
     var countryCodes: [String] {
         var km: [String: Double] = [:]
         for region in regions { km[region.countryCode, default: 0] += region.km }
@@ -205,8 +203,11 @@ extension MapExploration {
             ))
         }
 
-        // The fog is built from the SAME preview polylines the map draws, so
-        // what you see lit and what the card counts can never disagree.
+        // `RoadFog` остался здесь ТОЛЬКО как данные: карточке региона нужно
+        // «Дороги края» (`openedRoadKm`), а это его сетка 150 м с дедупом по
+        // ячейкам. Рисовать им больше нечего — ни ярусов, ни тепловой шкалы,
+        // ни `allPolylines` для вуали: форму тумана даёт `RevealedLayer`, и
+        // единственный источник у дыры и у жилки теперь он.
         let fog = RoadFog.build(trips: routes) { atlas.regionIndex(containing: $0) }
 
         // Tiles → regions, and a coarse spatial bucket reused for the city
@@ -262,7 +263,7 @@ extension MapExploration {
         }
         regions.sort { $0.km > $1.km }
 
-        return MapExploration(regions: regions, trips: pins, totalKm: totalKm, fog: fog)
+        return MapExploration(regions: regions, trips: pins, totalKm: totalKm)
     }
 
     /// Share of the city's disc you have driven through, 0…1. The denominator

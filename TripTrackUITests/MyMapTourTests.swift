@@ -162,20 +162,6 @@ final class MyMapTourTests: XCTestCase {
                       "a row opens that region's card")
     }
 
-    /// Canon frame «04 · Карта · закрытый регион»: tapping a region you have
-    /// never driven in still opens a card — «ещё не открыт», zero stats and
-    /// the teaser pointing at your nearest trace.
-    func test_locked_region_card() {
-        app.buttons.matching(identifier: "tab_maps").firstMatch.tap()
-        usleep(2_500_000)
-
-        // East of the seeded territory: Stavropol Krai / Kalmykia, dark.
-        tapPoint(0.90, 0.42)
-        snap("06_locked_region")
-        XCTAssertTrue(app.otherElements["mymap_locked_card"].waitForExistence(timeout: 5),
-                      "a region with no trips still opens its own card")
-    }
-
     /// The fog of roads has to hold up at street zoom — that is where both
     /// earlier cuts fell apart: first sixty traces of one commute stacking
     /// into a green smear, then a ground-space stroke floor turning every

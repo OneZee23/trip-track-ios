@@ -12,8 +12,9 @@ import MapKit
 final class MapRenderCostTests: XCTestCase {
 
     /// A small driven network around Krasnodar — one person's real shape.
-    private func fog() -> RoadFogOverlay {
-        var trips: [(id: UUID, coordinates: [CLLocationCoordinate2D])] = []
+    private func layer() -> RevealedLayer {
+        var claimed: [String: Set<RevealGrid.Cell>] = [:]
+        var runs: [[CLLocationCoordinate2D]] = []
         for pass in 0..<8 {
             let coords = (0..<120).map { i -> CLLocationCoordinate2D in
                 let t = Double(i) / 119
@@ -23,9 +24,13 @@ final class MapRenderCostTests: XCTestCase {
                     longitude: 38.95 + 0.09 * t + cos(phase) * 0.00008
                 )
             }
-            trips.append((UUID(), coords))
+            for (key, patch) in RevealBuilder.patches(for: coords, claimed: { claimed[$0] ?? [] }) {
+                claimed[key, default: []].formUnion(patch.cells)
+                runs.append(contentsOf: patch.runs)
+            }
         }
-        return RoadFogOverlay(fog: RoadFog.build(trips: trips) { _ in 0 })
+        return RevealedLayer.build(
+            runs: runs, cellCount: claimed.values.reduce(0) { $0 + $1.count }, atlas: nil)
     }
 
     private func context() -> CGContext {
@@ -70,8 +75,7 @@ final class MapRenderCostTests: XCTestCase {
     /// must not pay for the transparency layer and the stroke passes that
     /// punching corridors needs.
     func testVeilTilesWithNoRoadsAreFarCheaperThanTilesWithThem() {
-        let veil = FogOfWarOverlay(fog: fog())
-        let renderer = FogOfWarRenderer(veil: veil)
+        let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: layer()))
         let ctx = context()
         // Region scale: 256 pt of tile over ~48 km, where the veil is at full
         // strength and every stroke pass actually runs.
@@ -101,32 +105,76 @@ final class MapRenderCostTests: XCTestCase {
         XCTAssertLessThan(bare, 0.002, "empty veil tile took \(bare * 1000) ms")
     }
 
-    /// The heat network culls by bucket, so a tile with nothing in it should
-    /// cost almost nothing at all.
-    func testFogTilesWithNoRoadsCostAlmostNothing() {
-        let overlay = fog()
-        let renderer = RoadFogRenderer(fog: overlay)
+    /// Жилка тоже режется бакетами, поэтому тайл, в котором её нет, обязан
+    /// стоить почти ничего.
+    func testVeinTilesWithNoRoadsCostAlmostNothing() {
+        let renderer = RouteVeinRenderer(vein: RouteVeinOverlay(layer: layer()))
         let ctx = context()
         let zoom: MKZoomScale = 0.0008
         let empty = tile(at: CLLocationCoordinate2D(latitude: 53.0, longitude: 45.0),
                          span: 256 / Double(zoom))
 
         let bare = timePerCall { drawTile(renderer, empty, zoom: zoom, in: ctx) }
-        print("[fog] empty tile \(bare * 1000) ms")
-        XCTAssertLessThan(bare, 0.001, "empty fog tile took \(bare * 1000) ms")
+        print("[vein] empty tile \(bare * 1000) ms")
+        XCTAssertLessThan(bare, 0.001, "empty vein tile took \(bare * 1000) ms")
     }
 
-    /// At country scale the veil is gone entirely: it carries no information
-    /// there, and a full-coverage overlay is where MapKit's tiling latency
-    /// turns into a visible rectangle.
-    func testVeilIsAbsentAtCountryZoomAndFullAtStreetZoom() {
-        XCTAssertEqual(FogOfWarRenderer.strength(at: 0.06), 1, "street zoom keeps it")
-        XCTAssertEqual(FogOfWarRenderer.strength(at: 0.0008), 1, "region zoom keeps it")
-        XCTAssertEqual(FogOfWarRenderer.strength(at: 3e-5), 0, "country zoom drops it")
-        // And it gets there by fading, not by switching off at a threshold.
-        let midway = FogOfWarRenderer.strength(at: 1.2e-4)
-        XCTAssertGreaterThan(midway, 0.1)
-        XCTAssertLessThan(midway, 0.9)
+    /// Туман непрозрачен на ВСЕХ масштабах, и первым делом на масштабе
+    /// страны — именно там до 0.7.0 его не было вовсе.
+    ///
+    /// Решение снимать вуаль на дальнем зуме было принято сознательно («одна
+    /// поздно пришедшая плитка — яркий прямоугольник размером с область»), но
+    /// именно оно убивало жанр: туман войны обязан быть первым, что видишь,
+    /// а человек открывает вкладку как раз на стране целиком. Вспышку это
+    /// всё равно не лечило — прототип 15 сен показал, что она одинакова у
+    /// полного пера и у одной заливки, то есть она не наша.
+    func testVeilIsOpaqueAtEveryZoom() {
+        let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: layer()))
+        // Страна, регион, город, улица — везде заведомо мимо сети.
+        for zoom: MKZoomScale in [3e-5, 8e-4, 4e-3, 0.06] {
+            let span = 200 / Double(zoom)
+            let empty = tile(at: CLLocationCoordinate2D(latitude: 53.0, longitude: 45.0), span: span)
+            let alphas = Self.alphaColumn(renderer, empty, zoom: zoom)
+            XCTAssertEqual(
+                alphas.min() ?? 0, 255,
+                "на зуме \(zoom) в тумане есть просвет — вуаль не непрозрачна")
+        }
+    }
+
+    /// Тайл без дорог — это ОДНА заливка: ни слоя прозрачности, ни проходов
+    /// пера. Вуаль накрывает весь мир, и этим путём идёт большинство тайлов.
+    func testEmptyVeilTileIsJustAFill() {
+        let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: layer()))
+        let zoom: MKZoomScale = 4e-3
+        let empty = tile(at: CLLocationCoordinate2D(latitude: 53.0, longitude: 45.0),
+                         span: 200 / Double(zoom))
+        let alphas = Set(Self.alphaColumn(renderer, empty, zoom: zoom))
+        XCTAssertEqual(alphas, [255], "прочищенного в пустом тайле быть не может")
+    }
+
+    /// Альфа по вертикали через середину тайла.
+    private static func alphaColumn(
+        _ renderer: MKOverlayRenderer, _ mapRect: MKMapRect, zoom: MKZoomScale
+    ) -> [UInt8] {
+        let size = 200
+        let count = size * size * 4
+        let data = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+        data.initialize(repeating: 0, count: count)
+        defer { data.deallocate() }
+        guard let ctx = CGContext(
+            data: data, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return [] }
+
+        let rect = renderer.rect(for: mapRect)
+        ctx.saveGState()
+        ctx.scaleBy(x: zoom, y: zoom)
+        ctx.translateBy(x: -rect.origin.x, y: -rect.origin.y)
+        renderer.draw(mapRect, zoomScale: zoom, in: ctx)
+        ctx.restoreGState()
+
+        return (0..<size).map { data[($0 * size + size / 2) * 4 + 3] }
     }
 
     /// The selected trip's line has to be the same thickness on screen however
@@ -140,15 +188,16 @@ final class MapRenderCostTests: XCTestCase {
     func testSelectedRouteKeepsOneWidthAtEveryZoom() {
         let west = CLLocationCoordinate2D(latitude: 45.0, longitude: 38.80)
         let east = CLLocationCoordinate2D(latitude: 45.0, longitude: 39.20)
-        var coords = [west, east]
-        let line = SpeedGradientPolyline(coordinates: &coords, count: 2)
-        line.gradientColors = [.green, .green]
-        line.gradientLocations = [0, 1]
-        let renderer = SelectedRouteRenderer(route: line)
+        guard let route = RouteVeinOverlay(route: [west, east]) else {
+            return XCTFail("жилка из двух точек обязана построиться")
+        }
+        let renderer = RouteVeinRenderer(vein: route)
         let middle = CLLocationCoordinate2D(latitude: 45.0, longitude: 39.0)
 
+        // Оба зума — внутри одного уровня детали: между уровнями жилка МЕНЯЕТ
+        // ширину нарочно (2.2 / 2.0 / 1.6 экранных точки).
         let close = strokePixels(renderer, at: 0.004, centre: middle)
-        let far = strokePixels(renderer, at: 0.0004, centre: middle)
+        let far = strokePixels(renderer, at: 0.002, centre: middle)
 
         print("[route] \(close) px close · \(far) px far")
         XCTAssertGreaterThan(close, 2, "the line has to be drawn at all")

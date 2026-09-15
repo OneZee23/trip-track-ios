@@ -23,6 +23,25 @@ struct MyMapSheet: View {
     /// 10 pt narrower than the bar, so the card caps 10 lower.
     static let summaryMaxWidth: CGFloat = 370
 
+    /// Высота самой карточки: ручка (4 + 8 сверху), строка 32, отступы 8 и 12.
+    static let collapsedCardHeight: CGFloat = 64
+
+    /// Сколько низа экрана занимает свёрнутый лист вместе с зазором до
+    /// плавающего таб-бара.
+    ///
+    /// Это же число карта отдаёт в `additionalSafeAreaInsets.bottom`: логотип
+    /// Apple и ссылка «Legal» — сабвью `MKMapView`, и под непрозрачным туманом
+    /// лист накрыл бы их насовсем. Прятать «Legal» нельзя (API нет, а попытка
+    /// рискует ревью), поэтому её поднимают ровно на свёрнутый лист —
+    /// развёрнутый не считается, он состояние на пару секунд.
+    static func collapsedHeight(bottomInset: CGFloat) -> CGFloat {
+        collapsedCardHeight + CustomTabBar.clearance(bottomInset: bottomInset) + 6
+    }
+
+    static var collapsedHeight: CGFloat {
+        collapsedHeight(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0)
+    }
+
     /// Grabber + title + one row per region + the bottom padding.
     static func regionListHeight(count: Int) -> CGFloat {
         50 + CGFloat(max(count, 1)) * 56 + 24
@@ -293,8 +312,6 @@ struct MyMapSheet: View {
                         tripCard(trip, c)
                     } else if let road = vm.selectedRoad {
                         roadCard(road, c)
-                    } else if let locked = vm.selectedLockedRegion {
-                        lockedCard(locked, c)
                     } else if let region = vm.selectedRegion {
                         regionCard(region, c)
                     }
@@ -336,7 +353,6 @@ struct MyMapSheet: View {
     private var panelIdentifier: String {
         if vm.selectedTrip != nil { return "mymap_trip_card" }
         if vm.selectedRoad != nil { return "mymap_road_card" }
-        if vm.selectedLockedRegion != nil { return "mymap_locked_card" }
         return "mymap_region_card"
     }
 
@@ -344,7 +360,6 @@ struct MyMapSheet: View {
         if vm.selectedTrip != nil { return 176 }
         // Header plus three rows — enough to read as a list worth pulling up.
         if vm.selectedRoad != nil { return 260 }
-        if vm.selectedLockedRegion != nil { return 178 }
         return 214
     }
 
@@ -733,53 +748,6 @@ struct MyMapSheet: View {
         let a = Measure.speed(ms: trip.avgSpeedMS, unit: distanceUnit, lang: lang.language)
         let m = Measure.speed(ms: trip.maxSpeedMS, unit: distanceUnit, lang: lang.language)
         return "\(avg) \(a) · \(max) \(m)"
-    }
-
-    // MARK: - Locked region
-
-    @ViewBuilder
-    private func lockedCard(_ region: RegionAtlas.Region, _ c: AppTheme.Colors) -> some View {
-        HStack(spacing: 8) {
-            Text(region.localizedName(lang.language))
-                .font(.inter(17, weight: .heavy))
-                .foregroundStyle(c.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Text(AppStrings.mapRegionLocked(lang.language))
-                .font(.inter(11, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(c.cardAlt, in: Capsule())
-            Spacer(minLength: 40)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-
-        Text(AppStrings.mapLockedStats(
-            lang.language, unit: distanceUnit,
-            totalCities: RegionAtlas.shared.cities(in: region.id).count))
-            .font(.inter(14))
-            .foregroundStyle(c.textSecondary)
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-
-        if let trace = vm.nearestTrace(to: region) {
-            Text(AppStrings.mapLockedTeaser(
-                lang.language,
-                distance: Measure.distance(
-                    metres: trace.distanceMetres, unit: distanceUnit,
-                    lang: lang.language, style: .grouped),
-                bearing: AppStrings.mapBearing(lang.language, trace.bearing),
-                city: trace.cityName,
-                when: trace.date.map { AppStrings.monthYear(lang.language, $0) }
-            ))
-            .font(.inter(12))
-            .foregroundStyle(c.textTertiary)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-        }
     }
 }
 

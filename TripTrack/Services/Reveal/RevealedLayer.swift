@@ -90,6 +90,26 @@ struct RevealedLayer {
     /// Регионы, которых коснулось открытое (ISO 3166-2). Пусто, если атлас не
     /// передан — итоги листа считает тот, кто атлас загрузил.
     let regionIds: Set<String>
+    /// Середина ОТКРЫТОЙ части региона — туда карта ставит его подпись.
+    ///
+    /// Не центр региона из атласа: подпись обязана стоять там, где человек
+    /// был, а не посреди темноты в географическом центре края, до которого он
+    /// не доезжал. Считается здесь, а не на экране, потому что здешний цикл
+    /// уже спрашивает атлас про концы каждого прогона — второй такой цикл был
+    /// бы вторым проходом по всей библиотеке ради одной точки.
+    var regionCentroids: [String: CLLocationCoordinate2D] = [:]
+
+    /// Три уровня детали — какой рисовать, решает зум
+    /// (`FogVeilRenderer.lod(for:)`).
+    enum LOD: CaseIterable { case fine, mid, far }
+
+    func polylines(for lod: LOD) -> [MKPolyline] {
+        switch lod {
+        case .fine: return fine.polylines
+        case .mid:  return mid.polylines
+        case .far:  return far.polylines
+        }
+    }
 
     /// Шаг прореживания среднего уровня (≈250 м).
     static let midDegrees = 250.0 / 111_320.0
@@ -121,6 +141,7 @@ struct RevealedLayer {
         var far: [MKPolyline] = []
         var metres: Double = 0
         var regions = Set<String>()
+        var centroidSums: [String: (lat: Double, lon: Double, count: Double)] = [:]
 
         for run in runs where run.count > 1 {
             fine.append(MKPolyline(coordinates: run, count: run.count))
@@ -139,7 +160,13 @@ struct RevealedLayer {
             // не появился бы в итогах.
             if let atlas {
                 for end in [run.first, run.last].compactMap({ $0 }) {
-                    if let region = atlas.region(containing: end) { regions.insert(region.id) }
+                    guard let region = atlas.region(containing: end) else { continue }
+                    regions.insert(region.id)
+                    var sum = centroidSums[region.id] ?? (0, 0, 0)
+                    sum.lat += end.latitude
+                    sum.lon += end.longitude
+                    sum.count += 1
+                    centroidSums[region.id] = sum
                 }
             }
         }
@@ -148,7 +175,10 @@ struct RevealedLayer {
             fine: MKMultiPolyline(fine), mid: MKMultiPolyline(mid), far: MKMultiPolyline(far),
             cellCount: cellCount,
             openedKm: metres / 1000,
-            regionIds: regions
+            regionIds: regions,
+            regionCentroids: centroidSums.mapValues {
+                CLLocationCoordinate2D(latitude: $0.lat / $0.count, longitude: $0.lon / $0.count)
+            }
         )
     }
 }
