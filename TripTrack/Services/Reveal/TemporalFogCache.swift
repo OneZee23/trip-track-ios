@@ -24,15 +24,25 @@ final class TemporalFogCache {
     /// строка положила бы в только что очищенный кэш уже устаревший ответ.
     private var generation = 0
 
-    init() {
+    private var observer: NSObjectProtocol?
+
+    /// `private`, и это часть правила: кэш один на приложение. Заведённый
+    /// вторым экземпляр подписался бы на то же уведомление и пережил бы тест,
+    /// который его создал, — XCTest держит свои объекты до конца прогона, и
+    /// такой хвост роняет ЧУЖОЙ класс (см. «Ловушки» в CLAUDE.md).
+    private init() {
         // Открытое изменилось (финиш поездки, фоновая сборка, стирание) —
         // снимок на дату мог измениться тоже: поездка, доехавшая со второго
         // телефона, лежит в прошлом.
-        NotificationCenter.default.addObserver(
+        observer = NotificationCenter.default.addObserver(
             forName: .revealedLayerChanged, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.invalidate() }
         }
+    }
+
+    deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 
     func invalidate() {

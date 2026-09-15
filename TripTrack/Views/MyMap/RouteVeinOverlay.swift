@@ -101,6 +101,11 @@ final class RouteVeinRenderer: MKOverlayRenderer {
     init(vein: RouteVeinOverlay) {
         self.vein = vein
         super.init(overlay: vein)
+        // Индекс — вне главного потока, как у вуали; `point(for:)` при этом
+        // зовётся с фоновой очереди, и это законно: MapKit сам зовёт
+        // `draw(_:zoomScale:in:)` параллельно на своих потоках, а система
+        // координат рендерера выведена из `boundingMapRect` и зафиксирована с
+        // `super.init` (подробнее — в `FogVeilRenderer.init`).
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             self.index.prepare(

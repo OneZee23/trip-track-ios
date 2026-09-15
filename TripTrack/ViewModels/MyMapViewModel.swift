@@ -64,6 +64,13 @@ final class MyMapViewModel: ObservableObject {
     private var loaded = false
     private var stale = false
     private var loadGeneration = 0
+    /// Три уведомления финиша — одна пересборка. Почему это не «три лишних
+    /// выборки», а видимая вспышка «всё закрыто», — см. `ReloadCoalescer`.
+    private lazy var coalescer = ReloadCoalescer { [weak self] in
+        guard let self, self.loaded,
+              let tm = self.tripManagerRef, let territory = self.territoryRef else { return }
+        await self.reload(tripManager: tm, territory: territory)
+    }
     private weak var tripManagerRef: TripManager?
     private weak var territoryRef: TerritoryManager?
 
@@ -163,12 +170,12 @@ final class MyMapViewModel: ObservableObject {
             NotificationCenter.default.addObserver(
                 forName: name, object: nil, queue: .main
             ) { [weak self] _ in
-                Task { @MainActor in
+                MainActor.assumeIsolated {
                     guard let self else { return }
                     self.stale = true
-                    if self.loaded, let tm = self.tripManagerRef, let t = self.territoryRef {
-                        await self.reload(tripManager: tm, territory: t)
-                    }
+                    // Не `reload()` прямо здесь: на финише этих уведомлений
+                    // три, и каждое стоит полной пересборки индекса путей.
+                    self.coalescer.schedule()
                 }
             }
         }

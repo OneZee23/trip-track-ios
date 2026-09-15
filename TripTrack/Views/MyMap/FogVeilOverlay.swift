@@ -139,6 +139,15 @@ final class MapPathIndex {
     private let lock = NSLock()
     private var built: [RevealedLayer.LOD: MapPathChunks] = [:]
     private var levelsBuilt = 0
+    private var mainThreadBuild = false
+
+    /// Собиралась ли хоть одна порция на ГЛАВНОМ потоке. Для теста: «ноль
+    /// сборок сразу после `init`» проверяло не правило, а то, что фоновая
+    /// очередь не успела, — и на маленьком слое это флейк, а не сторож.
+    var builtOnMainThread: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return mainThreadBuild
+    }
 
     /// Сколько НАБОРОВ БАКЕТОВ собрано за жизнь индекса. Потолок — четыре
     /// (`.fine` мелкий, `.mid` оба, `.far` грубый), и вырасти он не имеет
@@ -163,10 +172,12 @@ final class MapPathIndex {
         source: (RevealedLayer.LOD) -> [MKPolyline],
         transform: @escaping (MKMapPoint) -> CGPoint
     ) {
+        let onMain = Thread.isMainThread
         for lod in RevealedLayer.LOD.allCases {
             let chunks = MapPathChunks(
                 source(lod), levels: MapPathChunks.levels(for: lod), transform: transform)
             lock.lock()
+            if onMain { mainThreadBuild = true }
             built[lod] = chunks
             levelsBuilt += chunks.builtLevels
             lock.unlock()
@@ -562,6 +573,10 @@ final class FogVeilRenderer: MKOverlayRenderer {
     /// открытого мира. Держит `FogVeilTemporalTests`.
     var chunkBuilds: Int { index.builds }
 
+    /// Собирался ли индекс на главном потоке — сторож того же правила, только
+    /// не зависящий от того, успела ли фоновая очередь (см. `MapPathIndex`).
+    var indexBuiltOnMainThread: Bool { index.builtOnMainThread }
+
     /// Полуширина коридора на улице, в метрах.
     ///
     /// Измерено прототипом 15 сентября на настоящей сетке улиц, а не на глаз:
@@ -599,6 +614,16 @@ final class FogVeilRenderer: MKOverlayRenderer {
         // рендереру. Сам `init` зовёт `rendererFor` на ГЛАВНОМ потоке перед
         // первым кадром карты, поэтому пути собираются на фоновой очереди, а
         // до готовности тайл — сплошная заливка без коридоров.
+        //
+        // Звать `point(for:)` вне главного потока можно: Apple его
+        // потокобезопасность не документирует, но MapKit сам зовёт
+        // `draw(_:zoomScale:in:)` параллельно на нескольких фоновых потоках, и
+        // любая реализация внутри зовёт `point(for:)` — по использованию это
+        // контракт. А вызов ДО первой отрисовки держится тем, что система
+        // координат рендерера выводится из `boundingMapRect` оверлея и
+        // зафиксирована с `super.init`. Сломанный трансформ не молчал бы:
+        // `MapRenderCostTests.testVeilTilesWithNoRoadsAreFarCheaperThanTilesWithThem`
+        // сравнивает тайл над сетью с тайлом в 900 км от неё.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             self.index.prepare(
