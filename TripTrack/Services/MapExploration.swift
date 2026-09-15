@@ -39,6 +39,13 @@ struct MapRegionStat: Identifiable, Equatable {
     let cities: [MapCityStat]
     let totalCities: Int
     let openedTiles: Int
+    /// Когда регион открылся впервые — начало САМОЙ РАННЕЙ поездки в нём.
+    ///
+    /// Считается здесь, а не на экране: лист печатает «с мая 2026» у каждой
+    /// строки, а поиск поездки по id — линейный (`trip(id:)`), и на каждом
+    /// кадре перетаскивания это выходило квадратично. Тип для того и заведён:
+    /// «the screen never computes, it only renders what lands here».
+    let firstVisited: Date?
     /// Length of distinct road opened here — «Дороги края». Counts each
     /// ~150 m cell once no matter how often you drove it, so it grows only
     /// when you go somewhere new.
@@ -127,6 +134,7 @@ extension MapExploration {
     ) -> MapExploration {
         var kmByRegion: [Int: Double] = [:]
         var tripIdsByRegion: [Int: [UUID]] = [:]
+        var firstVisitByRegion: [Int: Date] = [:]
         var pins: [MapTripPin] = []
         var totalKm: Double = 0
         var routes: [(id: UUID, coordinates: [CLLocationCoordinate2D])] = []
@@ -183,6 +191,11 @@ extension MapExploration {
                 for (index, metres) in metresHere {
                     kmByRegion[index, default: 0] += realMetres * (metres / pathMetres)
                     tripIdsByRegion[index, default: []].append(trip.id)
+                    if let known = firstVisitByRegion[index] {
+                        firstVisitByRegion[index] = min(known, trip.startDate)
+                    } else {
+                        firstVisitByRegion[index] = trip.startDate
+                    }
                 }
             }
 
@@ -256,6 +269,7 @@ extension MapExploration {
                 cities: visited,
                 totalCities: all.count,
                 openedTiles: tilesByRegion[index] ?? 0,
+                firstVisited: firstVisitByRegion[index],
                 openedRoadKm: Double(fog.openedCellsByRegion[index] ?? 0) * RoadFog.cellKm,
                 center: region.center,
                 bounds: region.bounds

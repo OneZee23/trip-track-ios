@@ -217,6 +217,49 @@ final class LocalizationTests: XCTestCase {
         }
     }
 
+    // MARK: - «с мая 2026»
+
+    /// Полдень 12 мая 2026 — середина месяца, чтобы часовой пояс прогона не
+    /// утащил дату в соседний.
+    private static let may2026: Date = {
+        var c = DateComponents()
+        c.year = 2026; c.month = 5; c.day = 12; c.hour = 12
+        return Calendar(identifier: .gregorian).date(from: c)!
+    }()
+
+    /// Месяц после предлога стоит в РОДИТЕЛЬНОМ падеже.
+    ///
+    /// `AppStrings.monthYear` построен на `LLLL` — standalone-форме, — и после
+    /// предлога давал «с май 2026». Тот же баг проект уже чинил в «В гараже с
+    /// апрель 2026 г.», и `mapRegionSince` повторила его буква в букву.
+    func testRegionSinceTakesTheGenitiveMonth() {
+        let line = AppStrings.mapRegionSince(.ru, date: Self.may2026)
+        XCTAssertTrue(line.contains("мая"), "именительный падеж вернулся: \(line)")
+        XCTAssertFalse(line.contains("май "), "«с май 2026» — \(line)")
+        XCTAssertTrue(line.contains("2026"), line)
+        XCTAssertTrue(AppStrings.mapRegionSince(.uk, date: Self.may2026).contains("травня"))
+    }
+
+    /// Паритет подстановки: ряд, потерявший `{date}`, напечатал бы «seit» без
+    /// даты — молча, на одном языке из тринадцати.
+    func testRegionSinceCarriesTheDateTokenInEveryLanguage() {
+        for (lang, table) in completeLanguages + inProgressLanguages {
+            guard let row = table["mapRegionSince"] else {
+                XCTFail("\(lang.rawValue): ряда mapRegionSince нет")
+                continue
+            }
+            XCTAssertEqual(
+                row.components(separatedBy: "{date}").count, 2,
+                "\(lang.rawValue): токен {date} должен встречаться ровно раз — «\(row)»"
+            )
+        }
+        for lang in LanguageManager.Language.allCases {
+            let line = AppStrings.mapRegionSince(lang, date: Self.may2026)
+            XCTAssertFalse(line.contains("{date}"), "\(lang.rawValue): токен не подставлен — \(line)")
+            XCTAssertTrue(line.contains("2026"), "\(lang.rawValue): даты в строке нет — \(line)")
+        }
+    }
+
     /// The Live Activity cannot see `AppStrings`, so its strings live in the
     /// shared target and key off the raw code — including the fallback.
     func testLiveActivityStringsCoverEveryLanguage() {

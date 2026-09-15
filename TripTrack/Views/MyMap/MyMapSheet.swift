@@ -169,7 +169,9 @@ struct MyMapSheet: View {
                     .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
-                if let since = regionSince(region) {
+                // Дата уже посчитана `MapExploration.build` вне главного
+                // актёра: строка только печатает её.
+                if let since = region.firstVisited {
                     Text(AppStrings.mapRegionSince(lang.language, date: since))
                         .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
@@ -188,15 +190,6 @@ struct MyMapSheet: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
         .contentShape(Rectangle())
-    }
-
-    /// «с мая 2026» — когда этот регион открылся впервые.
-    ///
-    /// Дата берётся из САМОЙ РАННЕЙ поездки региона, а не из отдельного поля:
-    /// второе хранимое число про то же самое однажды разошлось бы с первым,
-    /// а поездки региона лист и так держит в руках.
-    private func regionSince(_ region: MapRegionStat) -> Date? {
-        region.tripIds.compactMap { vm.exploration.trip(id: $0)?.startDate }.min()
     }
 
     /// Одна строка итога, та же на карточке и над списком: «1 910 км открыто ·

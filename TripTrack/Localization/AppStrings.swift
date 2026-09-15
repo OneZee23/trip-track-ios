@@ -1019,13 +1019,23 @@ enum AppStrings {
     }
     /// Подпись региона в списке открытого: «с мая 2026».
     ///
-    /// Дата приходит датой, а не строкой: месяц с годом собирает `monthYear`
-    /// по языку телефона, и второй копии этого формата в проекте быть не
-    /// должно. Подстановка — токеном `{date}`: одиннадцать таблиц получают
-    /// ГОТОВУЮ строку, и интерполяция внутри `tr` до них не доедет.
+    /// Месяц — РОДИТЕЛЬНЫЙ падеж (`StatsPeriodFormat.monthYearGenitive`), а не
+    /// `monthYear`: тот построен на `LLLL`, то есть на standalone-форме, и
+    /// после предлога даёт «с май 2026» / «з травень 2026» / «od maj 2026».
+    /// Проект ловил ровно это в «В гараже с апрель 2026 г.» — третьей копии
+    /// формата не заводим, зовём ту же функцию.
+    ///
+    /// Казахский ряд поэтому не «{date} бастап»: послелог требует исходного
+    /// падежа («мамырдан бастап»), которого ICU не отдаёт, — там строка
+    /// «Алғаш рет: {date}», не требующая склонения вовсе.
+    ///
+    /// Дата приходит датой, а не строкой; подстановка — токеном `{date}`:
+    /// одиннадцать таблиц получают ГОТОВУЮ строку, и интерполяция внутри `tr`
+    /// до них не доедет.
     static func mapRegionSince(_ lang: LanguageManager.Language, date: Date) -> String {
         tr(lang, "mapRegionSince", ru: "с {date}", en: "since {date}")
-            .replacingOccurrences(of: "{date}", with: monthYear(lang, date))
+            .replacingOccurrences(
+                of: "{date}", with: StatsPeriodFormat.monthYearGenitive(date, lang))
     }
     /// «км проехано» / «миль проехано» — подпись под цифрой на «Моей карте».
     static func mapKmDriven(_ lang: LanguageManager.Language, unit: DistanceUnit) -> String {
@@ -1145,30 +1155,6 @@ enum AppStrings {
     }
     static func mapRouteFinish(_ lang: LanguageManager.Language) -> String {
         tr(lang, "mapRouteFinish", ru: "Конец поездки", en: "Trip finish")
-    }
-    /// Стороны света для подписей на карте.
-    ///
-    /// Жил этот тип у `MyMapViewModel.NearestTrace` — подсказки «ближайший
-    /// твой след 40 км западнее» на карточке ЗАКРЫТОГО региона. В 0.7.0
-    /// закрытых регионов на карте нет вовсе (туман не рисует границ того, чего
-    /// ты не видел), карточка ушла вместе с ними, а строки остались: ключи
-    /// переведены на тринадцать языков, и выбрасывать их ради одного вызова
-    /// дороже, чем оставить.
-    enum Bearing { case north, south, east, west }
-
-    static func mapBearing(
-        _ lang: LanguageManager.Language, _ bearing: Bearing
-    ) -> String {
-        switch bearing {
-        case .north:
-            return tr(lang, "bearingNorth", ru: "севернее", en: "to the north")
-        case .south:
-            return tr(lang, "bearingSouth", ru: "южнее", en: "to the south")
-        case .east:
-            return tr(lang, "bearingEast", ru: "восточнее", en: "to the east")
-        case .west:
-            return tr(lang, "bearingWest", ru: "западнее", en: "to the west")
-        }
     }
     /// «май 2026» / «May 2026».
     static func monthYear(_ lang: LanguageManager.Language, _ date: Date) -> String {

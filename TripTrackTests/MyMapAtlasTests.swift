@@ -123,6 +123,33 @@ final class MyMapAtlasTests: XCTestCase {
         XCTAssertLessThan(krasnodar?.coverage ?? 1, 0.5)
     }
 
+    /// «с мая 2026» под именем региона в листе «Атласа» — дата ПЕРВОЙ поездки
+    /// сюда, и считает её агрегат, а не экран.
+    ///
+    /// Считал экран: строка перебирала `tripIds` линейным `trip(id:)` на
+    /// каждом кадре перетаскивания листа. Тип для того и заведён — «the screen
+    /// never computes, it only renders what lands here».
+    func testRegionKeepsTheEarliestTripDate() {
+        let route = Self.line(
+            from: CLLocationCoordinate2D(latitude: 45.035, longitude: 38.975),
+            to: CLLocationCoordinate2D(latitude: 44.630, longitude: 39.130),
+            steps: 40
+        )
+        let hashes = Set(route.map {
+            GeohashEncoder.encode(latitude: $0.latitude, longitude: $0.longitude, precision: 6)
+        })
+        let earlier = Date(timeIntervalSince1970: 1_700_000_000)
+        let later = Date(timeIntervalSince1970: 1_780_000_000)
+
+        // Самая ранняя приходит ВТОРОЙ — порядок списка ничего не решает.
+        let exploration = MapExploration.build(
+            trips: [Self.trip(route: route, start: later),
+                    Self.trip(route: route, start: earlier)],
+            visitedHashes: hashes, atlas: atlas)
+
+        XCTAssertEqual(exploration.region(id: "RU-KDA")?.firstVisited, earlier)
+    }
+
     /// A pause or a GPS glitch leaves a huge gap between two consecutive
     /// points. Counting it would credit every region on the straight line
     /// between them.
@@ -241,8 +268,10 @@ final class MyMapAtlasTests: XCTestCase {
         }
     }
 
-    private static func trip(route: [CLLocationCoordinate2D]) -> Trip {
-        let start = Date(timeIntervalSince1970: 1_750_000_000)
+    private static func trip(
+        route: [CLLocationCoordinate2D],
+        start: Date = Date(timeIntervalSince1970: 1_750_000_000)
+    ) -> Trip {
         let points = route.enumerated().map { index, coordinate in
             TrackPoint(
                 latitude: coordinate.latitude,
