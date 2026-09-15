@@ -307,7 +307,8 @@ struct RouteMapView: UIViewRepresentable {
         // дефект («на щипке наружу видна живая карта Apple, пока не приедут
         // наши тайлы») у всех трёх карт с туманом один. Ставится верхней
         // сабвью самой карты — своего контейнера у этой нет.
-        if showsFog, isInteractive { context.coordinator.curtain.install(over: mapView) }
+        context.coordinator.curtain.install(
+            over: mapView, showsFog: showsFog, isInteractive: isInteractive)
         mapView.showsUserLocation = false
         mapView.isScrollEnabled = isInteractive
         mapView.isZoomEnabled = isInteractive
@@ -616,6 +617,8 @@ struct RouteMapView: UIViewRepresentable {
         /// на каждый кадр реплея) нельзя.
         var fogRequested = false
         private var fogCutoff: Date?
+        /// Кто из двух загрузок ложится на карту — см. `FogLoadSequencer`.
+        private var fogLoads = FogLoadSequencer()
         private var installedVeil: FogVeilOverlay?
         private var revealObserver: NSObjectProtocol?
 
@@ -628,11 +631,15 @@ struct RouteMapView: UIViewRepresentable {
         /// прочищен только у одной.
         func loadFog(before cutoff: Date?, on mapView: MKMapView, fresh: Bool = false) {
             fogCutoff = cutoff
+            let token = fogLoads.begin()
             Task { @MainActor [weak self, weak mapView] in
                 let layer = fresh
                     ? await TemporalFogCache.shared.reload(before: cutoff)
                     : await TemporalFogCache.shared.layer(before: cutoff)
-                guard let self, let mapView, !layer.isEmpty else { return }
+                guard let self, let mapView else { return }
+                // Обогнавшая старая загрузка сняла бы свежую вуаль и положила
+                // дотуристическую — молча и ровно на карточке итогов.
+                guard self.fogLoads.isCurrent(token), !layer.isEmpty else { return }
                 if let old = self.installedVeil { mapView.removeOverlay(old) }
                 let veil = FogVeilOverlay(layer: layer)
                 self.installedVeil = veil
