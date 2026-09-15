@@ -148,8 +148,11 @@ final class FogVeilPainterTests: XCTestCase {
             rect: rect, sizePoints: sizePoints, scale: 1, index: prepared, selected: []
         ) else { return XCTFail("растр обязан собраться") }
 
-        let width = Int(sizePoints.width.rounded())
-        let height = Int(sizePoints.height.rounded())
+        // Картинка на пиксель выше логической полосы (припуск на стык), и
+        // читать её надо в СВОЁМ размере: вписав её в контекст на пиксель
+        // ниже, мы добавили бы к расхождению собственный подпиксельный сдвиг.
+        let width = band.image.width
+        let height = band.image.height
         guard let mine = pixels(of: band.image, width: width, height: height),
               let theirs = tiledReference(rect: rect, sizePoints: sizePoints,
                                           revealed: revealed, width: width, height: height)
@@ -157,14 +160,16 @@ final class FogVeilPainterTests: XCTestCase {
 
         var worse = 0
         var total = 0.0
-        for i in stride(from: 0, to: mine.count, by: 4) {
+        // Последний ряд — тот самый припуск, у эталона его нет.
+        let compared = (height - 1) * width * 4
+        for i in stride(from: 0, to: compared, by: 4) {
             for channel in 0..<3 {
                 let delta = abs(Int(mine[i + channel]) - Int(theirs[i + channel]))
                 total += Double(delta)
                 if delta > 8 { worse += 1; break }
             }
         }
-        let count = mine.count / 4
+        let count = compared / 4
         let share = Double(worse) / Double(count)
         let mean = total / Double(count * 3)
         print(String(format: "[veil] растр против тайлов: расходятся %.3f %% пикселей, "
