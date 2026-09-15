@@ -38,7 +38,8 @@ final class RevealedLayerStoreTests: XCTestCase {
         northMetres: Double,
         from origin: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753),
         endDate: Date = Date(),
-        withPreview: Bool = true
+        withPreview: Bool = true,
+        lastModifiedAt: Date? = Date()
     ) -> UUID {
         let context = pc.container.viewContext
         let entity = TripEntity(context: context)
@@ -47,6 +48,7 @@ final class RevealedLayerStoreTests: XCTestCase {
         entity.startDate = endDate.addingTimeInterval(-1_800)
         entity.endDate = endDate
         entity.syncStatus = SyncStatus.synced.rawValue
+        entity.lastModifiedAt = lastModifiedAt
         if withPreview {
             let coords = (0..<3).map { i -> CLLocationCoordinate2D in
                 let t = Double(i) / 2
@@ -181,6 +183,103 @@ final class RevealedLayerStoreTests: XCTestCase {
         let after = await store.tiles().reduce(0) { $0 + $1.cellSet.count }
         XCTAssertEqual(after, cells,
                        "сборка после обновления — один раз; новые поездки приносит финиш")
+    }
+
+    /// Проба 1 расследования 15 сен: библиотека ЕСТЬ, превью ещё нет —
+    /// строки пула приезжают раньше разобранного превью. Прежняя проверка
+    /// «выборка не пуста» их считала за работу: латч вставал, стор оставался
+    /// пуст, и второго шанса у сборки не было никогда.
+    func testRebuildDoesNotLatchWhenPreviewsAreMissing() async {
+        makeTrip(northMetres: 3_000, withPreview: false)
+        makeTrip(northMetres: 3_000, withPreview: false)
+
+        await store.rebuildIfNeeded()
+
+        XCTAssertFalse(defaults.bool(forKey: RevealedLayerStore.rebuildFlagKey))
+        XCTAssertEqual(storedTileCount(), 0)
+    }
+
+    /// Проба 2: стирание не имеет права идти раньше, чем стало известно, что
+    /// есть из чего собирать. Иначе запуск с ещё не разобранными превью сносит
+    /// накопленный слой и пишет взамен ноль — ровно то, что случилось на
+    /// телефоне владельца.
+    func testRebuildKeepsOldFogWhenPreviewsAreMissing() async {
+        let id = makeTrip(northMetres: 3_000)
+        await store.ingest(tripId: id)
+        let before = storedTileCount()
+        XCTAssertGreaterThan(before, 0)
+
+        let context = pc.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        for entity in (try? context.fetch(request)) ?? [] { entity.previewPolyline = nil }
+        try? context.save()
+
+        await store.rebuildIfNeeded()
+
+        XCTAssertEqual(storedTileCount(), before, "сборке нечего собрать — сносить тоже нечего")
+        XCTAssertFalse(defaults.bool(forKey: RevealedLayerStore.rebuildFlagKey))
+    }
+
+    /// Ноль открытого — не «сборка прошла». Превью из двух одинаковых точек
+    /// проходит проверку на пригодность по длине, но `RevealBuilder` на нём
+    /// молчит.
+    func testRebuildDoesNotLatchWhenNothingWasOpened() async {
+        let context = pc.container.viewContext
+        let entity = TripEntity(context: context)
+        entity.id = UUID()
+        entity.startDate = Date().addingTimeInterval(-1_800)
+        entity.endDate = Date()
+        entity.syncStatus = SyncStatus.synced.rawValue
+        let point = CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753)
+        entity.previewPolyline = Trip.encodePolyline([point, point])
+        try? context.save()
+
+        await store.rebuildIfNeeded()
+
+        XCTAssertFalse(defaults.bool(forKey: RevealedLayerStore.rebuildFlagKey))
+        XCTAssertEqual(storedTileCount(), 0)
+    }
+
+    /// Ключ формы поднят до `v18` нарочно: телефоны, залатченные на пустой
+    /// сборке `v17`, обязаны собрать ещё раз.
+    func testRebuildLatchKeyIsV18() {
+        XCTAssertEqual(RevealedLayerStore.rebuildFlagKey, "reveal_rebuild_v18_done")
+    }
+
+    /// Честная сборка разобрала библиотеку целиком — сверка после первого пула
+    /// не обязана проходить по ней второй раз.
+    func testRebuildSeedsTheIngestStamp() async {
+        let modified = Date().addingTimeInterval(-3_600)
+        makeTrip(northMetres: 3_000, lastModifiedAt: modified)
+
+        await store.rebuildIfNeeded()
+
+        let stamp = defaults.object(forKey: RevealedLayerStore.lastIngestKey) as? Date
+        XCTAssertEqual(stamp?.timeIntervalSince1970 ?? 0, modified.timeIntervalSince1970, accuracy: 0.001)
+    }
+
+    /// `fetchBatchSize` на выборке-словаре без `objectID` CoreData не исполняет,
+    /// зато печатает «Returning unbatched results» на каждый вызов — и этот шум
+    /// прятал настоящие ошибки стора.
+    func testPreviewRequestIsNotBatched() {
+        let request = RevealedLayerStore.previewRequest(endedBefore: nil, changedSince: nil)
+
+        XCTAssertEqual(request.fetchBatchSize, 0)
+        XCTAssertEqual(request.resultType, .dictionaryResultType)
+        XCTAssertEqual(request.propertiesToFetch as? [String],
+                       ["id", "previewPolyline", "lastModifiedAt", "serverCreatedAt"])
+    }
+
+    /// Отметка сверки снимается вместе с данными: иначе вернувшиеся синком
+    /// поездки «уже разобраны», а разбирать их некому.
+    func testWipeClearsTheIngestStamp() async {
+        makeTrip(northMetres: 3_000)
+        await store.rebuildIfNeeded()
+        XCTAssertNotNil(defaults.object(forKey: RevealedLayerStore.lastIngestKey))
+
+        store.wipe()
+
+        XCTAssertNil(defaults.object(forKey: RevealedLayerStore.lastIngestKey))
     }
 
     // MARK: - Стирание

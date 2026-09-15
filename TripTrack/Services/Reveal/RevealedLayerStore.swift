@@ -35,13 +35,42 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// `v17` — запрет на вторую нитку в двадцати пяти метрах от первой
     /// (`RevealBuilder.neighbourClaimed`, 15 сен 2026): без пересборки двойные
     /// жилки остались бы у всех, кто уже успел собрать слой.
-    static let rebuildFlagKey = "reveal_rebuild_v17_done"
+    /// `v18` — не форма, а ЛАТЧ: `v17` взводился и на нулевой работе, и телефон,
+    /// прошедший сборку на ещё не приехавшей библиотеке, оставался без тумана
+    /// НАВСЕГДА. У кого `v17` собрался честно — цена одна лишняя сборка.
+    static let rebuildFlagKey = "reveal_rebuild_v18_done"
+    /// Докуда стор разобрал библиотеку: самая свежая `lastModifiedAt` среди
+    /// разобранных поездок — не «когда мы последний раз считали».
+    ///
+    /// Отметка в `UserDefaults`, своей колонки у поездки в этой волне не
+    /// заводим. Сравнивается она именно с `lastModifiedAt`, потому что пул
+    /// пишет это поле КАЖДОЙ применённой поездке и оно непустое по типу
+    /// (`TripSyncPayload.lastModifiedAt: Date`, `applyRemoteTrip`), тогда как
+    /// `serverCreatedAt` ставится один раз и говорит «у строки есть серверный
+    /// близнец», а не «строка изменилась».
+    static let lastIngestKey = "reveal_last_ingest_at"
+    /// Запас назад от отметки. У поездки пула `lastModifiedAt` серверная, у
+    /// своей — телефонная, и одних часов у них нет: без запаса поездка,
+    /// правленная на втором телефоне за минуту до нашего финиша, не попала бы
+    /// в сверку никогда. Повторный разбор не стоит ничего — ячейки
+    /// идемпотентны, второй заход открывает ноль.
+    static let ingestSlack: TimeInterval = 86_400
     /// Сколько поездок сборки идёт одним сохранением.
     static let rebuildBatch = 40
+
+    /// Чем кончилась сверка. `busy` — не «ошибка», а «уже идёт»: пул поверх
+    /// стартовой сверки обычное дело.
+    enum ReconcileOutcome: Equatable {
+        case busy
+        case done(trips: Int, cells: Int)
+    }
 
     private let persistence: PersistenceController
     private let defaults: UserDefaults
     private let context: NSManagedObjectContext
+    /// Сверка в одном экземпляре. Трогается ТОЛЬКО внутри `context.perform` —
+    /// очередь контекста и есть её замок.
+    private var isReconciling = false
 
     init(persistence: PersistenceController = .shared, defaults: UserDefaults = .standard) {
         self.persistence = persistence
@@ -98,7 +127,7 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// «проехал там, где уже был», и это нормальный ответ, а не поломка.
     @discardableResult
     func ingest(tripId: UUID) async -> Int {
-        let added = await context.perform { () -> Int in
+        let result = await context.perform { () -> (added: Int, changedAt: Date?) in
             let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
             request.predicate = NSPredicate(
                 format: "id == %@ AND endDate != nil AND syncStatus != %d",
@@ -106,9 +135,10 @@ final class RevealedLayerStore: @unchecked Sendable {
             )
             request.fetchLimit = 1
             guard let entity = try? self.context.fetch(request).first,
-                  let polyline = entity.previewPolyline else { return 0 }
+                  let polyline = entity.previewPolyline else { return (0, nil) }
+            let changedAt = Self.changedAt(entity.lastModifiedAt, entity.serverCreatedAt)
             let coords = Trip.decodePolyline(polyline)
-            guard coords.count > 1 else { return 0 }
+            guard coords.count > 1 else { return (0, nil) }
 
             var cache: [String: Set<RevealGrid.Cell>] = [:]
             let patches = RevealBuilder.patches(for: coords) { key in
@@ -118,11 +148,18 @@ final class RevealedLayerStore: @unchecked Sendable {
                 return cells
             }
             let opened = self.mergeInContext(patches)
-            self.saveContext()
-            return opened
+            guard self.saveContext() else {
+                self.context.rollback()
+                return (0, nil)
+            }
+            return (opened, changedAt)
         }
-        if added > 0 { postChanged() }
-        return added
+        // Отметку двигает и финиш: иначе пул через секунду после него разбирал
+        // бы ту же поездку заново. Ячейки от этого не пострадали бы (второй
+        // заход открывает ноль), но работа была бы честно лишней.
+        advanceStamp(to: result.changedAt)
+        if result.added > 0 { postChanged() }
+        return result.added
     }
 
     func merge(_ patches: [String: TilePatch]) async {
@@ -147,20 +184,27 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// оставить карту пустой навсегда (та же ловушка, что в
     /// `TerritoryManager.backfillIfNeeded`). Поездка без превью пропускается —
     /// поднимать её точки нельзя.
+    ///
+    /// «Не из чего собирать» — это И пустая библиотека, И библиотека БЕЗ
+    /// превью: поездка пула приезжает строкой раньше, чем разобранным превью,
+    /// и на ней старая проверка `!previews.isEmpty` честно проходила — стирала
+    /// накопленное и писала взамен ноль. Поэтому смотрим на ПРИГОДНЫЕ превью,
+    /// и только после этого стираем.
     func rebuildIfNeeded() async {
         guard !defaults.bool(forKey: Self.rebuildFlagKey) else { return }
 
         let previews = await context.perform { self.fetchPreviews(endedBefore: nil) }
-        guard !previews.isEmpty else {
-            revealLog.notice("reveal rebuild: no trips yet, latch stays open")
+        let usable = previews.filter { ($0.polyline?.count ?? 0) >= 16 }
+        guard !usable.isEmpty else {
+            revealLog.notice("reveal rebuild: nothing to build from, latch stays open")
             return
         }
 
         await context.perform { self.deleteAllInContext() }
 
         var total = 0
-        for start in stride(from: 0, to: previews.count, by: Self.rebuildBatch) {
-            let batch = Array(previews[start..<min(start + Self.rebuildBatch, previews.count)])
+        for start in stride(from: 0, to: usable.count, by: Self.rebuildBatch) {
+            let batch = Array(usable[start..<min(start + Self.rebuildBatch, usable.count)])
             total += await context.perform { () -> Int in
                 var opened = 0
                 var cache: [String: Set<RevealGrid.Cell>] = [:]
@@ -185,9 +229,98 @@ final class RevealedLayerStore: @unchecked Sendable {
             await Task.yield()
         }
 
+        // Ноль открытого — не «сборка прошла». Латч говорит «библиотека
+        // разобрана», и взвести его на нулевой работе значит запереть телефон
+        // без тумана навсегда: второго шанса у сборки нет.
+        guard total > 0 else {
+            revealLog.notice("reveal rebuild: nothing was opened, latch stays open")
+            return
+        }
         defaults.set(true, forKey: Self.rebuildFlagKey)
-        revealLog.notice("reveal rebuild: \(total, privacy: .public) cells from \(previews.count, privacy: .public) trips")
+        // Сборка разобрала библиотеку целиком — сверке после первого пула
+        // незачем проходить по ней второй раз.
+        advanceStamp(to: usable.compactMap(\.changedAt).max())
+        revealLog.notice("reveal rebuild: \(total, privacy: .public) cells from \(usable.count, privacy: .public) trips")
         postChanged()
+    }
+
+    /// Сверка после пула: поездки со второго телефона (и вся библиотека на
+    /// восстановленном) приезжают прямо в CoreData, мимо финиша и мимо
+    /// разовой сборки.
+    ///
+    /// Разовая сборка их не спасает: миграции идут из `MapViewModel.init`, а
+    /// первый пул — по `didBecomeActive`, то есть ПОСЛЕ. На запуске, где
+    /// библиотека приходит пулом, сборка видит пустую базу и выходит, и без
+    /// этой двери тумана не было бы весь сеанс (а с прежним безусловным латчем
+    /// — никогда). Точки поездке пула не нужны: стор читает только превью, а
+    /// оно приезжает вместе с поездкой.
+    ///
+    /// Идемпотентна: берёт поездки, изменившиеся после отметки, а повторный
+    /// разбор уже открытого добавляет ноль ячеек.
+    @discardableResult
+    func reconcile() async -> ReconcileOutcome {
+        let started = await context.perform { () -> Bool in
+            guard !self.isReconciling else { return false }
+            self.isReconciling = true
+            return true
+        }
+        guard started else {
+            revealLog.notice("reveal reconcile: already running")
+            return .busy
+        }
+        let outcome = await runReconcile()
+        await context.perform { self.isReconciling = false }
+        return outcome
+    }
+
+    private func runReconcile() async -> ReconcileOutcome {
+        let stamp = defaults.object(forKey: Self.lastIngestKey) as? Date
+        let since = stamp?.addingTimeInterval(-Self.ingestSlack)
+        let previews = await context.perform {
+            self.fetchPreviews(endedBefore: nil, changedSince: since)
+        }
+        let usable = previews.filter { ($0.polyline?.count ?? 0) >= 16 }
+        guard !usable.isEmpty else { return .done(trips: 0, cells: 0) }
+
+        var total = 0
+        var high: Date?
+        for start in stride(from: 0, to: usable.count, by: Self.rebuildBatch) {
+            let batch = Array(usable[start..<min(start + Self.rebuildBatch, usable.count)])
+            let step = await context.perform { () -> (opened: Int, high: Date?) in
+                var opened = 0
+                var cache: [String: Set<RevealGrid.Cell>] = [:]
+                for preview in batch {
+                    guard let polyline = preview.polyline else { continue }
+                    let coords = Trip.decodePolyline(polyline)
+                    guard coords.count > 1 else { continue }
+                    let patches = RevealBuilder.patches(for: coords) { key in
+                        if let hit = cache[key] { return hit }
+                        let cells = self.claimedInContext(key)
+                        cache[key] = cells
+                        return cells
+                    }
+                    for (key, patch) in patches {
+                        cache[key, default: []].formUnion(patch.cells)
+                    }
+                    opened += self.mergeInContext(patches)
+                }
+                // Отметка двигается ТОЛЬКО за сохранением: упавшее сохранение,
+                // отмеченное как сделанное, потеряло бы эти поездки навсегда.
+                guard self.saveContext() else {
+                    self.context.rollback()
+                    return (0, nil)
+                }
+                return (opened, batch.compactMap(\.changedAt).max())
+            }
+            total += step.opened
+            if let stepHigh = step.high, high == nil || high! < stepHigh { high = stepHigh }
+            await Task.yield()
+        }
+
+        advanceStamp(to: high)
+        revealLog.notice("reveal reconcile: \(total, privacy: .public) cells from \(usable.count, privacy: .public) trips")
+        if total > 0 { postChanged() }
+        return .done(trips: usable.count, cells: total)
     }
 
     /// Стереть открытое. Флаг сборки снимается вместе с данными: он говорит
@@ -203,6 +336,9 @@ final class RevealedLayerStore: @unchecked Sendable {
             context.reset()
         }
         defaults.set(false, forKey: Self.rebuildFlagKey)
+        // Вместе с данными снимается и отметка сверки: иначе вернувшиеся
+        // синком поездки «уже разобраны», а разбирать их некому.
+        defaults.removeObject(forKey: Self.lastIngestKey)
         postChanged()
     }
 
@@ -222,6 +358,28 @@ final class RevealedLayerStore: @unchecked Sendable {
     private struct Preview {
         let id: UUID
         let polyline: Data?
+        /// Когда строка последний раз менялась — тем полем, которое пишет пул.
+        let changedAt: Date?
+    }
+
+    /// Дата правки строки. `lastModifiedAt` — то, что пул ставит каждой
+    /// применённой поездке; `serverCreatedAt` подстраховывает строки, у
+    /// которых колонка правки пуста (наследство до sync-ready полей).
+    private static func changedAt(_ modified: Date?, _ created: Date?) -> Date? {
+        switch (modified, created) {
+        case let (m?, c?): return max(m, c)
+        case let (m?, nil): return m
+        case let (nil, c?): return c
+        case (nil, nil): return nil
+        }
+    }
+
+    /// Отметка идёт только вперёд: сверка и финиш ходят вперемешку.
+    private func advanceStamp(to date: Date?) {
+        guard let date else { return }
+        let current = defaults.object(forKey: Self.lastIngestKey) as? Date
+        guard current == nil || current! < date else { return }
+        defaults.set(date, forKey: Self.lastIngestKey)
     }
 
     private func fetchTiles() -> [RevealedTile] {
@@ -279,29 +437,63 @@ final class RevealedLayerStore: @unchecked Sendable {
 
     /// Превью завершённых поездок, по возрастанию даты: кто проехал первым, тот
     /// и владеет геометрией — как и на живом финише.
-    private func fetchPreviews(endedBefore date: Date?) -> [Preview] {
+    private func fetchPreviews(endedBefore date: Date?, changedSince: Date? = nil) -> [Preview] {
+        let request = Self.previewRequest(endedBefore: date, changedSince: changedSince)
+        return ((try? context.fetch(request)) ?? []).compactMap { row in
+            guard let id = row["id"] as? UUID else { return nil }
+            return Preview(
+                id: id,
+                polyline: row["previewPolyline"] as? Data,
+                changedAt: Self.changedAt(
+                    row["lastModifiedAt"] as? Date,
+                    row["serverCreatedAt"] as? Date
+                )
+            )
+        }
+    }
+
+    /// Запрос превью отдельно от выполнения — чтобы его настройки проверял
+    /// тест, а не глаз в логе.
+    ///
+    /// `fetchBatchSize` здесь НЕ ставится, и это не забывчивость: на
+    /// `dictionaryResultType` без `objectID` в `propertiesToFetch` CoreData
+    /// печатает «Returning unbatched results» на КАЖДЫЙ вызов и всё равно
+    /// отдаёт выборку одной порцией — то есть настройка не работала, а шум
+    /// в логе прятал настоящие ошибки стора.
+    ///
+    /// `changedSince` — сверка: строки без обеих дат сюда не попадают, и это
+    /// решение. Пул ставит `lastModifiedAt` всегда (поле непустое по типу),
+    /// значит пустые обе даты бывают только у местной строки, которую уже
+    /// разобрала разовая сборка; брать их каждый пул значило бы перебирать
+    /// доисторическую библиотеку заново на каждом заходе в приложение.
+    static func previewRequest(endedBefore date: Date?, changedSince: Date?) -> NSFetchRequest<NSDictionary> {
         let request = NSFetchRequest<NSDictionary>(entityName: "TripEntity")
         request.resultType = .dictionaryResultType
-        request.propertiesToFetch = ["id", "previewPolyline"]
+        request.propertiesToFetch = ["id", "previewPolyline", "lastModifiedAt", "serverCreatedAt"]
         var predicates = [NSPredicate(
             format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue
         )]
         if let date { predicates.append(NSPredicate(format: "endDate <= %@", date as NSDate)) }
+        if let changedSince {
+            predicates.append(NSPredicate(
+                format: "lastModifiedAt >= %@ OR serverCreatedAt >= %@",
+                changedSince as NSDate, changedSince as NSDate
+            ))
+        }
         request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         request.sortDescriptors = [NSSortDescriptor(key: "startDate", ascending: true)]
-        request.fetchBatchSize = 200
-        return ((try? context.fetch(request)) ?? []).compactMap { row in
-            guard let id = row["id"] as? UUID else { return nil }
-            return Preview(id: id, polyline: row["previewPolyline"] as? Data)
-        }
+        return request
     }
 
-    private func saveContext() {
-        guard context.hasChanges else { return }
+    @discardableResult
+    private func saveContext() -> Bool {
+        guard context.hasChanges else { return true }
         do {
             try context.save()
+            return true
         } catch {
             revealLog.error("save failed: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 

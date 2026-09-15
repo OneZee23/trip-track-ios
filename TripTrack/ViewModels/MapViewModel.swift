@@ -309,6 +309,11 @@ final class MapViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Туман (0.7.0): дверь пула в открытый мир. Взводится ЗДЕСЬ, а не в
+        // задаче миграций ниже: первый пул приходит по `didBecomeActive`, и
+        // подписка обязана стоять раньше него.
+        RevealedLayerSync.shared.start()
+
         Task { @MainActor [tripManager, gamificationManager, territoryManager] in
             StartupTrace.mark("migrations begin")
             // Mark existing trips as processed (one-time migration)
