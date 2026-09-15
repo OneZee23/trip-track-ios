@@ -312,7 +312,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             language: LanguageManager.Language
         ) -> [RegionLabelAnnotation] {
             exploration.regions.compactMap { region in
-                guard region.openedRoadKm > 0,
+                guard region.openedKm > 0,
                       let centre = revealed.regionCentroids[region.id] else { return nil }
                 return RegionLabelAnnotation(
                     regionId: region.id,

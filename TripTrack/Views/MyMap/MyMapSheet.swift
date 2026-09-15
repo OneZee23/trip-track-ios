@@ -180,7 +180,7 @@ struct MyMapSheet: View {
             }
             Spacer(minLength: 8)
             Text(Measure.distance(
-                km: region.openedRoadKm, unit: distanceUnit, lang: lang.language))
+                km: region.openedKm, unit: distanceUnit, lang: lang.language))
                 .font(.inter(12, weight: .bold))
                 .foregroundStyle(AppTheme.accent)
             Image(systemName: "chevron.right")

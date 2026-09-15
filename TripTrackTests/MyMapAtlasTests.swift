@@ -216,6 +216,55 @@ final class MyMapAtlasTests: XCTestCase {
         }
     }
 
+    // MARK: - Одна цифра «открыто»
+
+    /// Шапка «1 910 км открыто» и строка региона в листе — ОДНО число,
+    /// разложенное по краям. Сумма строк обязана сходиться с шапкой.
+    ///
+    /// До 0.7.0 их было два: шапка печатала длину прогонов слоя (сетка 75 м),
+    /// а строка — ячейки `RoadFog` (сетка 150 м), и сойтись они не могли
+    /// никогда. Ровно та поломка, из-за которой километры поездки собрали в
+    /// `TripDistanceGate`, а высоту вынули из `GarageFormat.odometer`.
+    func testOpenedKilometresPerRegionSumToTheHeaderNumber() {
+        // Краснодар → Ставрополь: дорога пересекает границу края и идёт
+        // посуху — над морем регион не нашёлся бы, и сумма честно не сошлась.
+        let route = Self.line(
+            from: CLLocationCoordinate2D(latitude: 45.035, longitude: 38.975),
+            to: CLLocationCoordinate2D(latitude: 45.045, longitude: 41.969),
+            steps: 400
+        )
+        let layer = RevealedLayer.build(runs: [route], cellCount: 0, atlas: atlas)
+
+        XCTAssertGreaterThan(layer.openedKm, 100)
+        XCTAssertGreaterThanOrEqual(layer.regionKm.count, 2, "дорога пересекает границу")
+        let sum = layer.regionKm.values.reduce(0, +)
+        XCTAssertEqual(sum, layer.openedKm, accuracy: 0.001,
+                       "сумма по краям разошлась с шапкой — снова два счёта одного")
+        XCTAssertEqual(layer.openedKm(regionId: "RU-KDA"), layer.regionKm["RU-KDA"] ?? -1)
+        XCTAssertEqual(layer.openedKm(regionId: "RU-ARK"), 0, "не были — ноль, а не пусто")
+    }
+
+    /// То же число доезжает до строки листа: карточка региона печатает
+    /// `MapRegionStat.openedKm`, и приходит он из слоя, а не из своего счёта.
+    func testExplorationCarriesTheLayersOpenedKilometres() {
+        let route = Self.line(
+            from: CLLocationCoordinate2D(latitude: 45.035, longitude: 38.975),
+            to: CLLocationCoordinate2D(latitude: 44.630, longitude: 39.130),
+            steps: 200
+        )
+        let layer = RevealedLayer.build(runs: [route], cellCount: 0, atlas: atlas)
+        let exploration = MapExploration.build(
+            trips: [Self.trip(route: route)], visitedHashes: [], atlas: atlas,
+            openedKmByRegion: layer.regionKm)
+
+        XCTAssertEqual(exploration.region(id: "RU-KDA")?.openedKm ?? -1,
+                       layer.openedKm(regionId: "RU-KDA"), accuracy: 0.0001)
+        // Без слоя — ноль, а не выдуманное число: своего счёта у экрана нет.
+        let bare = MapExploration.build(
+            trips: [Self.trip(route: route)], visitedHashes: [], atlas: atlas)
+        XCTAssertEqual(bare.region(id: "RU-KDA")?.openedKm ?? -1, 0)
+    }
+
     // MARK: - Bounds
 
     /// A trip that never moved collapses to a zero-size rect, and

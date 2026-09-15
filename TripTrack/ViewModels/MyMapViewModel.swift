@@ -102,9 +102,13 @@ final class MyMapViewModel: ObservableObject {
         let built = await Task.detached(priority: .userInitiated) {
             let hashes = TerritoryManager.geohashes(
                 fromTrips: trips.map { $0.previewCoordinates }, precision: 6)
+            // Слой ПЕРВЫМ: открытые километры по регионам считает он, и строка
+            // региона обязана печатать то же число, что шапка.
+            let layer = Self.remoteLayer(trips: trips, atlas: atlas)
             let exploration = MapExploration.build(
-                trips: trips, visitedHashes: hashes, atlas: atlas)
-            return (exploration, Self.remoteLayer(trips: trips, atlas: atlas))
+                trips: trips, visitedHashes: hashes, atlas: atlas,
+                openedKmByRegion: layer.regionKm)
+            return (exploration, layer)
         }.value
 
         guard generation == loadGeneration else { return }
@@ -199,11 +203,15 @@ final class MyMapViewModel: ObservableObject {
         let tiles = await RevealedLayerStore.shared.tiles()
 
         let built = await Task.detached(priority: .userInitiated) {
-            let exploration = MapExploration.build(trips: trips, visitedHashes: hashes, atlas: atlas)
             // Оверлеи собираются здесь же: превращение сети в `MKPolyline` —
             // это тысячи аллокаций, и на главном актёре они задерживали первый
-            // кадр карты.
-            return (exploration, RevealedLayer.build(tiles: tiles, atlas: atlas))
+            // кадр карты. И слой строится ПЕРВЫМ: открытые километры по
+            // регионам приходят из него, а не из второго счёта рядом.
+            let layer = RevealedLayer.build(tiles: tiles, atlas: atlas)
+            let exploration = MapExploration.build(
+                trips: trips, visitedHashes: hashes, atlas: atlas,
+                openedKmByRegion: layer.regionKm)
+            return (exploration, layer)
         }.value
 
         // A newer reload superseded this one while the build was detached.

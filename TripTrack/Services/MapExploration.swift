@@ -46,24 +46,17 @@ struct MapRegionStat: Identifiable, Equatable {
     /// кадре перетаскивания это выходило квадратично. Тип для того и заведён:
     /// «the screen never computes, it only renders what lands here».
     let firstVisited: Date?
-    /// Length of distinct road opened here — «Дороги края». Counts each
-    /// ~150 m cell once no matter how often you drove it, so it grows only
-    /// when you go somewhere new.
-    let openedRoadKm: Double
+    /// Сколько РАЗНОЙ дороги здесь открыто. Приходит готовым из
+    /// `RevealedLayer.regionKm` — из того же прохода по прогонам, которым
+    /// набрана шапка «1 910 км открыто», поэтому сумма строк с шапкой сходится
+    /// по построению. Своего счёта у экрана нет и заводить его нельзя:
+    /// до 0.7.0 их было два (75 м против 150 м), и расходились они молча.
+    let openedKm: Double
     let center: CLLocationCoordinate2D
     let bounds: GeoBounds
 
     var tripCount: Int { tripIds.count }
     var visitedCityCount: Int { cities.count }
-
-    /// «Дороги края» — opened road against a stated per-region goal. There is
-    /// no road-network dataset to divide by, so the bar is progress toward a
-    /// goal rather than a share of all roads, and the card prints the real
-    /// kilometres next to it so the number never pretends to be something
-    /// it isn't.
-    var progress: Double {
-        min(1, openedRoadKm / MapExploration.roadGoalKm)
-    }
 
     func localizedName(_ language: LanguageManager.Language) -> String {
         language == .ru ? nameRu : nameEn
@@ -72,7 +65,7 @@ struct MapRegionStat: Identifiable, Equatable {
     static func == (lhs: MapRegionStat, rhs: MapRegionStat) -> Bool {
         lhs.id == rhs.id && lhs.km == rhs.km && lhs.tripIds == rhs.tripIds
             && lhs.openedTiles == rhs.openedTiles && lhs.cities == rhs.cities
-            && lhs.openedRoadKm == rhs.openedRoadKm
+            && lhs.openedKm == rhs.openedKm
     }
 }
 
@@ -122,22 +115,25 @@ extension MapExploration {
     static let km2PerTile = 0.72
     /// «Region opened» goal, in tiles (≈3 600 km²).
     static let regionTileTarget = 5_000
-    /// Per-region goal for opened road, in km.
-    static let roadGoalKm: Double = 1_000
 
     /// Build the whole screen model. Runs off the main actor — pass in data
     /// already fetched from CoreData.
+    /// `openedKmByRegion` — открытые километры из `RevealedLayer.build`, по
+    /// id региона. Считает их слой открытого, а не этот билдер: открытое и его
+    /// разложение по краям обязаны выходить из ОДНОГО прохода, иначе шапка и
+    /// строка региона на одном экране разъедутся. Пусто — карточка региона
+    /// покажет ноль, и это честно: слоя ещё нет.
     static func build(
         trips: [Trip],
         visitedHashes: Set<String>,
-        atlas: RegionAtlas
+        atlas: RegionAtlas,
+        openedKmByRegion: [String: Double] = [:]
     ) -> MapExploration {
         var kmByRegion: [Int: Double] = [:]
         var tripIdsByRegion: [Int: [UUID]] = [:]
         var firstVisitByRegion: [Int: Date] = [:]
         var pins: [MapTripPin] = []
         var totalKm: Double = 0
-        var routes: [(id: UUID, coordinates: [CLLocationCoordinate2D])] = []
         // Reused across trips instead of reallocated — this is the hot loop.
         var metresHere: [Int: Double] = [:]
 
@@ -200,7 +196,6 @@ extension MapExploration {
             }
 
             totalKm += trip.distance / 1000
-            routes.append((trip.id, coords))
             pins.append(MapTripPin(
                 id: trip.id,
                 coordinate: coords[coords.count / 2],
@@ -215,13 +210,6 @@ extension MapExploration {
                 regionId: homeRegion.map { atlas.regions[$0].id }
             ))
         }
-
-        // `RoadFog` остался здесь ТОЛЬКО как данные: карточке региона нужно
-        // «Дороги края» (`openedRoadKm`), а это его сетка 150 м с дедупом по
-        // ячейкам. Рисовать им больше нечего — ни ярусов, ни тепловой шкалы,
-        // ни `allPolylines` для вуали: форму тумана даёт `RevealedLayer`, и
-        // единственный источник у дыры и у жилки теперь он.
-        let fog = RoadFog.build(trips: routes) { atlas.regionIndex(containing: $0) }
 
         // Tiles → regions, and a coarse spatial bucket reused for the city
         // coverage pass below.
@@ -270,7 +258,7 @@ extension MapExploration {
                 totalCities: all.count,
                 openedTiles: tilesByRegion[index] ?? 0,
                 firstVisited: firstVisitByRegion[index],
-                openedRoadKm: Double(fog.openedCellsByRegion[index] ?? 0) * RoadFog.cellKm,
+                openedKm: openedKmByRegion[region.id] ?? 0,
                 center: region.center,
                 bounds: region.bounds
             ))

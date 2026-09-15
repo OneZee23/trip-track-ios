@@ -90,6 +90,16 @@ struct RevealedLayer {
     /// Регионы, которых коснулось открытое (ISO 3166-2). Пусто, если атлас не
     /// передан — итоги листа считает тот, кто атлас загрузил.
     let regionIds: Set<String>
+    /// Открытые километры ПО РЕГИОНАМ — те же самые, что в `openedKm`, только
+    /// разложенные. Сумма сходится с итогом по построению: и то и другое
+    /// набирается ОДНИМ проходом по прогонам, одним шагом и одним якорем.
+    ///
+    /// Второго счёта открытого в приложении нет и быть не может. До 0.7.0 их
+    /// было два: шапка печатала эту длину прогонов по сетке 75 м, а строка
+    /// региона — ячейки `RoadFog` по сетке 150 м, и сумма строк с шапкой не
+    /// сходилась никогда. Ровно та поломка, из-за которой километры поездки
+    /// собрали в `TripDistanceGate`, а высоту вынули из `GarageFormat.odometer`.
+    var regionKm: [String: Double] = [:]
     /// Середина ОТКРЫТОЙ части региона — туда карта ставит его подпись.
     ///
     /// Не центр региона из атласа: подпись обязана стоять там, где человек
@@ -108,6 +118,10 @@ struct RevealedLayer {
     /// Три уровня детали — какой рисовать, решает зум
     /// (`FogVeilRenderer.lod(for:)`).
     enum LOD: CaseIterable { case fine, mid, far }
+
+    /// Открыто в этом регионе. Ноль — регион атласа, до которого не доезжали,
+    /// и это законный ответ, а не отсутствие данных.
+    func openedKm(regionId: String) -> Double { regionKm[regionId] ?? 0 }
 
     func polylines(for lod: LOD) -> [MKPolyline] {
         switch lod {
@@ -173,6 +187,7 @@ struct RevealedLayer {
         var mid: [MKPolyline] = []
         var far: [MKPolyline] = []
         var metres: Double = 0
+        var regionMetres: [String: Double] = [:]
         var regions = Set<String>()
         var centroidSums: [String: (lat: Double, lon: Double, count: Double)] = [:]
         var centroidSamples: [String: [CLLocationCoordinate2D]] = [:]
@@ -185,26 +200,46 @@ struct RevealedLayer {
             let farRun = RoadFog.decimate(run, minDegrees: farDegrees)
             if farRun.count > 1 { far.append(MKPolyline(coordinates: farRun, count: farRun.count)) }
 
-            metres += TripDistanceGate.totalDistance(run.map {
-                TripDistanceGate.Sample(latitude: $0.latitude, longitude: $0.longitude, timestamp: nil)
-            })
-
-            // Пробы по всему прогону, а не два конца: прогон длиной с тайл
-            // (5–7 км) умеет пересечь границу региона, и по концам соседний
-            // край либо не появился бы в итогах вовсе, либо получил бы всю
-            // тяжесть прогона, лежащего в чужом.
-            if let atlas {
-                for (i, point) in run.enumerated()
-                where i % centroidSampleStride == 0 || i == run.count - 1 {
-                    guard let region = atlas.region(containing: point) else { continue }
-                    regions.insert(region.id)
-                    var sum = centroidSums[region.id] ?? (0, 0, 0)
-                    sum.lat += point.latitude
-                    sum.lon += point.longitude
-                    sum.count += 1
-                    centroidSums[region.id] = sum
-                    centroidSamples[region.id, default: []].append(point)
+            // Длина, регионы, подпись и километры по регионам — ОДНИМ проходом
+            // и одним якорем. Второй цикл со своим порогом однажды разошёлся бы
+            // с первым, и разошлись бы ровно те два числа, которые человек
+            // видит на одном экране (шапка и строка региона).
+            //
+            // Пробы региона по всему прогону, а не два конца: прогон длиной с
+            // тайл (5–7 км) умеет пересечь границу региона, и по концам
+            // соседний край либо не появился бы в итогах вовсе, либо получил
+            // бы всю тяжесть прогона, лежащего в чужом. Между пробами регион
+            // держится прежний — то есть километры ложатся с точностью до
+            // ≈375 м дороги; спрашивать атлас на каждой точке значило бы
+            // впятеро больше запросов ради разницы, которой не видно в строке.
+            var currentRegion: String?
+            var anchor: CLLocationCoordinate2D?
+            for (i, point) in run.enumerated() {
+                if atlas != nil, i % centroidSampleStride == 0 || i == run.count - 1 {
+                    currentRegion = atlas?.region(containing: point)?.id
+                    if let id = currentRegion {
+                        regions.insert(id)
+                        var sum = centroidSums[id] ?? (0, 0, 0)
+                        sum.lat += point.latitude
+                        sum.lon += point.longitude
+                        sum.count += 1
+                        centroidSums[id] = sum
+                        centroidSamples[id, default: []].append(point)
+                    }
                 }
+
+                guard let from = anchor else { anchor = point; continue }
+                let step = CLLocation(latitude: point.latitude, longitude: point.longitude)
+                    .distance(from: CLLocation(latitude: from.latitude, longitude: from.longitude))
+                // Тот же шаг и тот же перенос якоря, что у `TripDistanceGate
+                // .totalDistance`: километры открытого обязаны набираться тем
+                // же способом, что и километры поездки.
+                guard step >= TripDistanceGate.minStep else { continue }
+                if TripDistanceGate.isPlausibleSegment(meters: step, dt: 0) {
+                    metres += step
+                    if let id = currentRegion { regionMetres[id, default: 0] += step }
+                }
+                anchor = point
             }
         }
 
@@ -213,6 +248,7 @@ struct RevealedLayer {
             cellCount: cellCount,
             openedKm: metres / 1000,
             regionIds: regions,
+            regionKm: regionMetres.mapValues { $0 / 1000 },
             regionCentroids: centroidSums.reduce(into: [:]) { out, entry in
                 let mean = CLLocationCoordinate2D(
                     latitude: entry.value.lat / entry.value.count,
