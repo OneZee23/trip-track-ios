@@ -242,25 +242,8 @@ final class UnitLabelTests: XCTestCase {
         XCTAssertEqual(mile(1000), "1000-на миля") // тисячна
     }
 
-    /// Карточка неоткрытого региона на «Моей карте»: «0 км · 0 поездок · 0 из
-    /// 26 городов».
-    ///
-    /// Ноль есть ноль в любой единице — соврать тут может только ПОДПИСЬ, и
-    /// она врала: до 0.6.7 функция звала `AppStrings.km` напрямую и печатала
-    /// километры человеку, выбравшему мили. Последнее такое место в проекте.
-    func testLockedRegionCardFollowsTheUnit() {
-        XCTAssertTrue(AppStrings.mapLockedStats(.ru, unit: .km, totalCities: 26)
-            .hasPrefix("0 км"))
-        XCTAssertTrue(AppStrings.mapLockedStats(.ru, unit: .miles, totalCities: 26)
-            .hasPrefix("0 миль"))
-        XCTAssertTrue(AppStrings.mapLockedStats(.en, unit: .miles, totalCities: 26)
-            .hasPrefix("0 mi"))
-        for lang in langs {
-            let line = AppStrings.mapLockedStats(lang, unit: .miles, totalCities: 26)
-            XCTAssertFalse(line.contains("км"),
-                           "\(lang.rawValue): в милях осталось «км» — \(line)")
-            XCTAssertFalse(line.hasPrefix("0 km"),
-                           "\(lang.rawValue): в милях осталось «km» — \(line)")
-        }
-    }
+    /// Тест «карточка закрытого региона следует единице» жил здесь до 0.7.0.
+    /// Его предмета — `mapLockedStats` и самой карточки — больше нет: туман
+    /// не рисует границ того, чего человек не видел, и закрытых регионов на
+    /// «Атласе» не существует. Единицу открытого держит `MeasureFormatTests`.
 }

@@ -22,7 +22,6 @@ struct MyMapView: View {
     /// Lives here, not in the sheet, so the tab bar can hide under the
     /// pulled-up region list too.
     @State private var isSummaryExpanded = false
-    @State private var showBetaNote = false
 
     /// «Есть туман или нет» is not a question a screenshot can settle by eye —
     /// a night map is dark either way. `-no-fog-veil` draws the same map
@@ -84,23 +83,6 @@ struct MyMapView: View {
         .task {
             await vm.loadIfNeeded(tripManager: mapVM.tripManager, territory: mapVM.territoryManager)
         }
-        // House dialog, never the system's (CLAUDE.md «Dialogs»). «ОК» is the
-        // way out, so it rides the component's own cancel row; «Сообщить»
-        // leaves the app for Telegram, which is why the component dismissing
-        // itself first matters here.
-        .appConfirm(
-            isPresented: $showBetaNote,
-            title: AppStrings.mapBetaTitle(lang.language),
-            message: AppStrings.mapBetaBody(lang.language),
-            actions: [
-                AppDialogAction(AppStrings.mapBetaReport(lang.language)) {
-                    if let url = URL(string: "https://t.me/onezee_co") {
-                        UIApplication.shared.open(url)
-                    }
-                }
-            ],
-            cancelTitle: AppStrings.ok(lang.language)
-        )
         .fullScreenCover(item: $openedTrip) { opened in
             NavigationStack {
                 TripDetailView(
@@ -127,38 +109,46 @@ struct MyMapView: View {
         .allowsHitTesting(false)
     }
 
+    /// «Атлас» и под ним одна строка итога.
+    ///
+    /// Значка «БЕТА» с диалогом больше нет: он объяснял карту, которой тут
+    /// больше нет, а карта, которая объясняется значком, объясняется плохо.
     private var title: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(AppStrings.myMapTitle(lang.language))
                     .font(.inter(22, weight: .heavy))
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.5), radius: 8, y: 1)
 
-                // The map ships ahead of the rest of the app. Saying so where
-                // it lives — rather than nowhere — is the difference between
-                // «это баг?» and a bug report.
-                Button {
-                    Haptics.tap()
-                    showBetaNote = true
-                } label: {
-                    Text(AppStrings.mapBetaBadge(lang.language))
-                        .font(.inter(10, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(AppTheme.accent.opacity(0.9), in: Capsule())
+                if !vm.isEmpty {
+                    Text(openedSummary)
+                        .font(.inter(12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .shadow(color: .black.opacity(0.5), radius: 6, y: 1)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("map_beta_badge")
-                .accessibilityLabel(AppStrings.mapBetaTitle(lang.language))
-
-                Spacer()
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.top, 4)
             Spacer()
         }
+        .allowsHitTesting(false)
+    }
+
+    /// «1 910 км открыто · 4 региона» — километры берутся из слоя открытого,
+    /// а не из суммы поездок: сотый проезд по своей улице не открывает
+    /// ничего, и подпись под «Атласом» обязана считать то же, что видно
+    /// глазами на карте.
+    private var openedSummary: String {
+        AppStrings.mapOpenedSummary(
+            lang.language,
+            distance: Measure.distance(
+                km: vm.revealed.openedKm, unit: distanceUnit, lang: lang.language),
+            regions: vm.exploration.regionCount
+        )
     }
 
     // MARK: - Empty state
@@ -184,13 +174,7 @@ struct MyMapView: View {
     /// one line the summary already states — the numbers, not a rendered
     /// poster of the map (that lives on the trip share screen).
     private func shareSummary() {
-        let text = AppStrings.mapSummary(
-            lang.language,
-            regions: vm.exploration.regionCount,
-            distance: Measure.distance(
-                km: vm.exploration.totalKm, unit: distanceUnit, lang: lang.language),
-            trips: vm.exploration.tripCount
-        )
+        let text = openedSummary
         let activity = UIActivityViewController(activityItems: [text], applicationActivities: nil)
         var controller = UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }

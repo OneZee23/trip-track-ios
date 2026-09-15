@@ -14,8 +14,10 @@ enum AppStrings {
     static func profile(_ lang: LanguageManager.Language) -> String {
         tr(lang, "profile", ru: "Профиль", en: "Profile")
     }
+    /// Вкладка карты зовётся «Атлас» с 0.7.0: карта — это то, что рисует
+    /// Apple, а атлас — то, что человек собрал сам, лист за листом.
     static func tabMap(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "tabMap", ru: "Карта", en: "Map")
+        tr(lang, "tabMap", ru: "Атлас", en: "Atlas")
     }
     static func tabMe(_ lang: LanguageManager.Language) -> String {
         tr(lang, "tabMe", ru: "Я", en: "Me")
@@ -989,23 +991,41 @@ enum AppStrings {
 
     // MARK: - My Map (0.6.0)
 
+    /// Заголовок экрана — то же слово, что на вкладке: два разных названия
+    /// одного места читались бы как два места.
     static func myMapTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "myMapTitle", ru: "Моя карта", en: "My Map")
+        tr(lang, "myMapTitle", ru: "Атлас", en: "Atlas")
     }
     // The «Маршруты · Территория · Всё» segment is gone on purpose: the canon
     // note on the Карта page reads «Слоёв-переключателей нет» — territory and
     // trips share one layer, and depth comes from zoom instead.
 
-    /// Collapsed sheet: «8 регионов · 12 890 км · 47 поездок».
+    /// Свёрнутый лист «Атласа»: «1 910 км открыто · 4 региона».
+    ///
+    /// Не «8 регионов · 12 890 км · 47 поездок», как до 0.7.0: километры
+    /// поездок отвечают на вопрос статистики, а лист атласа — на вопрос
+    /// «сколько мира я открыл». Сотый проезд по своей улице не открывает
+    /// ничего, и число обязано это показывать (`RevealedLayer.openedKm`).
+    ///
     /// - Parameter distance: уже собранное `Measure` расстояние ВМЕСТЕ с
     ///   подписью. Строка, а не число: единицу выбирает человек, и склонять
     ///   милю приходится по этому самому числу.
-    static func mapSummary(
-        _ lang: LanguageManager.Language, regions: Int, distance: String, trips: Int
+    static func mapOpenedSummary(
+        _ lang: LanguageManager.Language, distance: String, regions: Int
     ) -> String {
+        let opened = tr(lang, "mapOpenedSummary", ru: "открыто", en: "opened")
         let r = "\(groupedNumber(regions, lang)) \(nounRegions(lang, regions))"
-        let t = "\(groupedNumber(trips, lang)) \(nounTrips(lang, trips))"
-        return "\(r) · \(distance) · \(t)"
+        return "\(distance) \(opened) · \(r)"
+    }
+    /// Подпись региона в списке открытого: «с мая 2026».
+    ///
+    /// Дата приходит датой, а не строкой: месяц с годом собирает `monthYear`
+    /// по языку телефона, и второй копии этого формата в проекте быть не
+    /// должно. Подстановка — токеном `{date}`: одиннадцать таблиц получают
+    /// ГОТОВУЮ строку, и интерполяция внутри `tr` до них не доедет.
+    static func mapRegionSince(_ lang: LanguageManager.Language, date: Date) -> String {
+        tr(lang, "mapRegionSince", ru: "с {date}", en: "since {date}")
+            .replacingOccurrences(of: "{date}", with: monthYear(lang, date))
     }
     /// «км проехано» / «миль проехано» — подпись под цифрой на «Моей карте».
     static func mapKmDriven(_ lang: LanguageManager.Language, unit: DistanceUnit) -> String {
@@ -1051,27 +1071,6 @@ enum AppStrings {
         case .pt: return "de"
         }
     }
-    /// Progress bar over the region card — canon copy. The value beside it is
-    /// real opened road in km; the bar itself is progress toward a stated
-    /// per-region goal, since no road-network dataset exists to divide by.
-    static func mapRoadsProgress(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "mapRoadsProgress", ru: "Дороги края", en: "Roads opened")
-    }
-    /// «84 км · 8%» — the kilometres first, because they are the honest part.
-    /// «143 км · 12 %» — сколько дорог края открыто.
-    ///
-    /// Число и подпись собирает `Measure`, а не эта функция: своя копия
-    /// правила «до десяти — с десятыми» стояла здесь четвёртой в проекте, и
-    /// на милях, где порог шесть, все четыре разъехались бы.
-    static func mapRoadsValue(
-        _ lang: LanguageManager.Language,
-        metres: Double,
-        unit: DistanceUnit,
-        percent: String
-    ) -> String {
-        "\(Measure.distance(metres: metres, unit: unit, lang: lang)) · \(percent)"
-    }
-
     /// Всегда точка, на любом языке — решение владельца от 11 сентября 2026.
     ///
     /// Само правило и причина, по которой его нельзя вернуть к правилам локали,
@@ -1094,9 +1093,6 @@ enum AppStrings {
     }
     static func mapTripsSection(_ lang: LanguageManager.Language, count: Int) -> String {
         "\(tr(lang, "mapTripsSectionHead", ru: "ПОЕЗДКИ ЗДЕСЬ", en: "TRIPS HERE")) · \(count)"
-    }
-    static func mapCityLocked(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "mapCityLocked", ru: "не открыт", en: "not opened")
     }
     /// Section-header action. Short on purpose — it sits beside the heading,
     /// not on a line of its own at the bottom of the list.
@@ -1142,22 +1138,6 @@ enum AppStrings {
     static func mapRoadPullHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "mapRoadPullHint", ru: "Потяни вверх — все поездки", en: "Pull up — all of them")
     }
-    /// The map ships ahead of the rest — say so on the screen rather than
-    /// leaving people to wonder whether what they see is a bug or the design.
-    static func mapBetaBadge(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "mapBetaBadge", ru: "БЕТА", en: "BETA")
-    }
-    static func mapBetaTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "mapBetaTitle", ru: "Карта — бета", en: "The map is in beta")
-    }
-    static func mapBetaBody(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "mapBetaBody",
-           ru: "Мы её ещё дорабатываем. Если что-то выглядит не так или работает странно — напишите нам, это правда помогает.",
-           en: "We are still working on it. If something looks wrong or behaves oddly, tell us — it genuinely helps.")
-    }
-    static func mapBetaReport(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "mapBetaReport", ru: "Написать в Telegram", en: "Message us on Telegram")
-    }
     /// Endpoints of the selected route. Voice-over only — on screen they are
     /// the same green-start / white-finish dots the share poster uses.
     static func mapRouteStart(_ lang: LanguageManager.Language) -> String {
@@ -1165,50 +1145,6 @@ enum AppStrings {
     }
     static func mapRouteFinish(_ lang: LanguageManager.Language) -> String {
         tr(lang, "mapRouteFinish", ru: "Конец поездки", en: "Trip finish")
-    }
-    static func mapRegionLocked(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "mapRegionLocked", ru: "ещё не открыт", en: "not opened yet")
-    }
-    /// «0 км · 0 поездок · 0 из 26 городов» — the zeroes are the point.
-    ///
-    /// Ноль есть ноль в любой единице, и величина здесь соврать не может —
-    /// а подпись может: до 0.6.7 она была прибита к «км» и печатала их
-    /// человеку, выбравшему мили. Поэтому единица тут параметр, как у соседней
-    /// `mapLockedTeaser`, хотя число всегда одно и то же.
-    static func mapLockedStats(
-        _ lang: LanguageManager.Language, unit: DistanceUnit, totalCities: Int
-    ) -> String {
-        let zeroDistance = "0 \(unitDistanceShort(lang, unit: unit, value: 0, fractionDigits: 0))"
-        let zeroTrips = "0 \(nounTrips(lang, 0))"
-        let cities = "0 \(ofWord(lang)) \(totalCities) \(nounCities(lang, totalCities))"
-        return "\(zeroDistance) · \(zeroTrips) · \(cities)"
-    }
-    /// «Ближайший твой след — 40 км западнее: Кропоткин, май 2026.
-    /// Заедешь — регион загорится на карте.»
-    /// - Parameter distance: уже собранное `Measure` расстояние ВМЕСТЕ с
-    ///   подписью — «40 км», «25 mi». Строка, а не число: единицу выбирает
-    ///   смотрящий, а форма слова у мили зависит от этого самого числа.
-    static func mapLockedTeaser(
-        _ lang: LanguageManager.Language, distance: String, bearing: String,
-        city: String, when: String?
-    ) -> String {
-        let place = when.map { "\(city), \($0)" } ?? city
-        let head = "\(distance) \(bearing): \(place)"
-        switch lang {
-        case .ru: return "Ближайший твой след — \(head). Заедешь — регион загорится на карте."
-        case .en: return "Your nearest trace — \(head). Drive in and the region lights up."
-        case .de: return "Deine nächste Spur — \(head). Fahr hin, und die Region leuchtet auf."
-        case .es: return "Tu rastro más cercano — \(head). Pasa por allí y la región se enciende."
-        case .fr: return "Votre trace la plus proche — \(head). Passez-y et la région s'allume."
-        case .it: return "La tua traccia più vicina — \(head). Passaci e la regione si accende."
-        case .pl: return "Twój najbliższy ślad — \(head). Zajedź tam, a region się zapali."
-        case .id: return "Jejak terdekatmu — \(head). Lewati, dan wilayahnya menyala."
-        case .tr: return "Sana en yakın iz — \(head). Oradan geç, bölge yansın."
-        case .fil: return "Ang pinakamalapit mong bakas — \(head). Daanan mo, at magliliwanag ang rehiyon."
-        case .uk: return "Найближчий твій слід — \(head). Заїдеш — регіон засвітиться на карті."
-        case .kk: return "Ең жақын ізің — \(head). Барсаң, аймақ картада жанады."
-        case .pt: return "Seu rastro mais próximo — \(head). Passe por lá e a região acende."
-        }
     }
     /// Стороны света для подписей на карте.
     ///

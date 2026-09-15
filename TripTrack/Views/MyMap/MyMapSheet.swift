@@ -108,13 +108,7 @@ struct MyMapSheet: View {
                 )
 
             HStack(spacing: 8) {
-                Text(AppStrings.mapSummary(
-                    lang.language,
-                    regions: vm.exploration.regionCount,
-                    distance: Measure.distance(
-                        km: vm.exploration.totalKm, unit: distanceUnit, lang: lang.language),
-                    trips: vm.exploration.tripCount
-                ))
+                Text(openedSummary)
                 .font(.inter(15, weight: .bold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
@@ -175,13 +169,16 @@ struct MyMapSheet: View {
                     .font(.inter(15, weight: .semibold))
                     .foregroundStyle(c.text)
                     .lineLimit(1)
-                Text(regionRowSubtitle(region))
-                    .font(.inter(12))
-                    .foregroundStyle(c.textTertiary)
-                    .lineLimit(1)
+                if let since = regionSince(region) {
+                    Text(AppStrings.mapRegionSince(lang.language, date: since))
+                        .font(.inter(12))
+                        .foregroundStyle(c.textTertiary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 8)
-            Text(percentText(region.progress))
+            Text(Measure.distance(
+                km: region.openedRoadKm, unit: distanceUnit, lang: lang.language))
                 .font(.inter(12, weight: .bold))
                 .foregroundStyle(AppTheme.accent)
             Image(systemName: "chevron.right")
@@ -193,13 +190,24 @@ struct MyMapSheet: View {
         .contentShape(Rectangle())
     }
 
-    private func regionRowSubtitle(_ region: MapRegionStat) -> String {
-        let km = Measure.distance(km: region.km, unit: distanceUnit, lang: lang.language)
-        let trips = "\(region.tripCount) \(AppStrings.tripsGenitive(lang.language, count: region.tripCount))"
-        guard region.totalCities > 0 else { return "\(km) · \(trips)" }
-        let cities = AppStrings.mapCitiesOfTotal(
-            lang.language, opened: region.visitedCityCount, total: region.totalCities)
-        return "\(km) · \(trips) · \(cities) \(AppStrings.citiesGenitive(lang.language, count: region.totalCities))"
+    /// «с мая 2026» — когда этот регион открылся впервые.
+    ///
+    /// Дата берётся из САМОЙ РАННЕЙ поездки региона, а не из отдельного поля:
+    /// второе хранимое число про то же самое однажды разошлось бы с первым,
+    /// а поездки региона лист и так держит в руках.
+    private func regionSince(_ region: MapRegionStat) -> Date? {
+        region.tripIds.compactMap { vm.exploration.trip(id: $0)?.startDate }.min()
+    }
+
+    /// Одна строка итога, та же на карточке и над списком: «1 910 км открыто ·
+    /// 4 региона». Километры — из слоя открытого, а не из суммы поездок.
+    private var openedSummary: String {
+        AppStrings.mapOpenedSummary(
+            lang.language,
+            distance: Measure.distance(
+                km: vm.revealed.openedKm, unit: distanceUnit, lang: lang.language),
+            regions: vm.exploration.regionCount
+        )
     }
 
     // MARK: - Collapsed summary
@@ -223,13 +231,7 @@ struct MyMapSheet: View {
                 .padding(.top, 8)
 
             HStack(spacing: 6) {
-                Text(AppStrings.mapSummary(
-                    lang.language,
-                    regions: vm.exploration.regionCount,
-                    distance: Measure.distance(
-                        km: vm.exploration.totalKm, unit: distanceUnit, lang: lang.language),
-                    trips: vm.exploration.tripCount
-                ))
+                Text(openedSummary)
                 .font(.inter(13, weight: .semibold))
                 .foregroundStyle(vm.isEmpty ? c.textTertiary : c.text)
                 .lineLimit(1)
@@ -423,10 +425,6 @@ struct MyMapSheet: View {
         }
         .padding(.top, 16)
 
-        progressBar(region, c)
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-
         if isExpanded {
             citiesSection(region, c)
             tripsSection(region, c)
@@ -475,33 +473,6 @@ struct MyMapSheet: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func progressBar(_ region: MapRegionStat, _ c: AppTheme.Colors) -> some View {
-        let value = region.progress
-        return VStack(spacing: 8) {
-            HStack {
-                Text(AppStrings.mapRoadsProgress(lang.language))
-                    .font(.inter(11, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-                Spacer()
-                Text(AppStrings.mapRoadsValue(
-                    lang.language,
-                    metres: region.openedRoadKm * 1000,
-                    unit: distanceUnit,
-                    percent: percentText(value)))
-                    .font(.inter(11, weight: .bold))
-                    .foregroundStyle(AppTheme.accent)
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(c.cardAlt)
-                    Capsule().fill(AppTheme.accent)
-                        .frame(width: max(6, geo.size.width * value))
-                }
-            }
-            .frame(height: 6)
-        }
-    }
-
     /// «<1%» rather than «0%»: you HAVE been there, and the card saying zero
     /// after a real trip reads as a bug.
     private func percentText(_ value: Double) -> String {
@@ -534,30 +505,6 @@ struct MyMapSheet: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 7)
         }
-
-        ForEach(lockedCities(region), id: \.self) { name in
-            HStack {
-                Text(name)
-                    .font(.inter(15, weight: .semibold))
-                    .foregroundStyle(c.textTertiary)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                Text(AppStrings.mapCityLocked(lang.language))
-                    .font(.inter(12))
-                    .foregroundStyle(c.textTertiary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
-        }
-    }
-
-    /// The biggest cities you have NOT opened — the ones worth driving to.
-    private func lockedCities(_ region: MapRegionStat) -> [String] {
-        let opened = Set(region.cities.map(\.name))
-        return RegionAtlas.shared.cities(in: region.id)
-            .filter { !opened.contains($0.name) }
-            .prefix(4)
-            .map { $0.localizedName(lang.language) }
     }
 
     @ViewBuilder
