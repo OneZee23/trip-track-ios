@@ -47,7 +47,6 @@ struct TrackingView: View {
             MapViewRepresentable(
                 userTrackingMode: $viewModel.userTrackingMode,
                 overlays: viewModel.trackOverlays,
-                isDarkMap: viewModel.isDarkMap,
                 bottomInset: viewModel.isRecording ? 0 : idleHUDInset,
                 zoomDelta: $viewModel.zoomDelta,
                 isRecording: viewModel.isRecording,

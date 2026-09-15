@@ -455,17 +455,40 @@ enum FogVeilPainter {
 /// Накрывает весь мир нарочно: угол без вуали читался бы как открытый.
 final class FogVeilOverlay: NSObject, MKOverlay {
     let layer: RevealedLayer
-    /// Растущая прорезь у машины на экране записи. `nil` у Атласа.
-    ///
-    /// `var`: прорезь растёт ШЕСТЬДЕСЯТ раз в секунду, и подменять ради этого
-    /// сам оверлей значило бы шестьдесят раз в секунду пересобирать индекс
-    /// путей всего открытого мира. Меняется только эта величина, а рендерер
-    /// перерисовывает коробку вокруг точки (`FogRevealAnimation.rect`).
-    var revealAround: RevealPoint?
     let coordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0)
     var boundingMapRect: MKMapRect { .world }
 
     /// Где и насколько раскрыт туман прямо сейчас.
+    ///
+    /// Читается из `draw`, а его MapKit зовёт ОДНОВРЕМЕННО на нескольких
+    /// фоновых потоках — по тайлу на поток. Пишется с главного, шестьдесят раз
+    /// в секунду. Четыре `Double` и флаг опционала атомарно не записываются
+    /// ничем: порванное чтение даёт прорезь не в том месте или радиус из
+    /// чужого кадра, и заметить это можно только глазами на движущейся машине.
+    /// Поэтому замок, а не `var` — тот же `NSLock`, что у `LazyPathIndex`, и
+    /// по той же причине.
+    ///
+    /// Точка меняется целиком, одним присваиванием: подменять ради неё сам
+    /// оверлей значило бы шестьдесят раз в секунду пересобирать индекс путей
+    /// всего открытого мира, а рендерер и так перерисовывает только коробку
+    /// вокруг точки (`FogRevealAnimation.rect`).
+    var revealAround: RevealPoint? {
+        get {
+            revealLock.lock()
+            defer { revealLock.unlock() }
+            return storedReveal
+        }
+        set {
+            revealLock.lock()
+            storedReveal = newValue
+            revealLock.unlock()
+        }
+    }
+
+    private let revealLock = NSLock()
+    private var storedReveal: RevealPoint?
+
+    /// Где и насколько раскрыт туман — ЦЕЛИКОМ, одним значением.
     struct RevealPoint {
         let coordinate: CLLocationCoordinate2D
         /// 0…1. Радиус прорези — доля от `FogVeilRenderer.revealMetres`.
@@ -474,7 +497,7 @@ final class FogVeilOverlay: NSObject, MKOverlay {
 
     init(layer: RevealedLayer, revealAround: RevealPoint? = nil) {
         self.layer = layer
-        self.revealAround = revealAround
+        self.storedReveal = revealAround
         super.init()
     }
 }

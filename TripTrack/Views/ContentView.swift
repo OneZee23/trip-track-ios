@@ -126,6 +126,9 @@ struct ContentView: View {
                 TrackingView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.colorScheme, mapVM.isDarkMap ? .dark : systemScheme)
+                    // Схема выше подсунута под ночную карту, а глифы
+                    // статус-бара живут по окну — дымке нужен второй ответ.
+                    .environment(\.windowColorScheme, systemScheme)
             case .places:
                 PlacesView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

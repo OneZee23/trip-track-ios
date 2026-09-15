@@ -84,7 +84,15 @@ struct TripCompleteSummaryView: View {
             if !trip.trackPoints.isEmpty {
                 RouteMapView(
                     coordinates: trip.trackPoints.map(\.coordinate),
-                    speeds: trip.trackPoints.map(\.speed)
+                    speeds: trip.trackPoints.map(\.speed),
+                    // Карточка итогов — это и есть момент раскрытия: срез без
+                    // даты («мир, как он есть сейчас»), а поездка ложится в
+                    // него секундой позже, на финишном `ingest`. Карта его
+                    // дождётся сама — у среза без даты она переспрашивает слой
+                    // по `.revealedLayerChanged` (`RouteMapView.installFog`), и
+                    // коридор сегодняшней дороги проступает прямо на глазах.
+                    fogCutoffDate: nil,
+                    showsFog: true
                 )
                 .frame(height: 139)
                 .clipShape(RoundedRectangle(cornerRadius: 16))

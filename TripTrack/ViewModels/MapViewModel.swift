@@ -15,7 +15,15 @@ private let recLog = Logger(subsystem: "com.triptrack", category: "record-screen
 final class MapViewModel: ObservableObject {
     // MARK: - Map State
     @Published var userTrackingMode: MKUserTrackingMode = .follow
-    @Published var isDarkMap: Bool = false
+    /// Карта записи ночная ВСЕГДА (0.7.0).
+    ///
+    /// Раньше это решало солнце: днём карта светлая, и половина проблем с
+    /// контрастом HUD существовала только в светлой половине суток
+    /// (`LightMapChromeTests` — про неё). С непрозрачной вуалью выбора больше
+    /// нет: три экрана под одной вуалью обязаны быть одной картой, а значит
+    /// ночной. Свойство осталось — его читает хром `TrackingView` как «насколько
+    /// ярка карта подо мной», — но ответ у него теперь один.
+    @Published private(set) var isDarkMap: Bool = true
 
     // MARK: - Recording State
     @Published var isRecording: Bool = false
@@ -1263,16 +1271,15 @@ final class MapViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    /// Pins the map to its daylight look. The recording HUD floats straight on
-    /// the map, so half its contrast problems only exist while the map is
-    /// light — and whether it is light depends on the sun where you are
-    /// standing, which a screenshot test cannot arrange. Same shape as
-    /// `-no-fog-veil` on My Map.
+    /// Прежний ключ «показать карту дневной». С 0.7.0 сама карта записи ночная
+    /// всегда (под вуалью светлой карты не бывает), поэтому аргумент управляет
+    /// только видом ЖИВОЙ АКТИВНОСТИ — у неё своей вуали нет.
     static let forcesLightMap = ProcessInfo.processInfo.arguments.contains("-force-light-map")
 
+    /// Солнце решает вид живой активности, а не карты.
     private func updateThemeForSun(coordinate: CLLocationCoordinate2D) {
-        isDarkMap = Self.forcesLightMap ? false : SunCalculator.isNight(at: coordinate)
-        UserDefaults.standard.set(isDarkMap, forKey: "liveActivityDarkMode")
+        let night = Self.forcesLightMap ? false : SunCalculator.isNight(at: coordinate)
+        UserDefaults.standard.set(night, forKey: "liveActivityDarkMode")
     }
 
     func checkSunTheme() {

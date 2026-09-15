@@ -29,19 +29,36 @@ final class SpeedPolyline: MKPolyline {
 /// Путь собирается САМ, а не берётся из `path` родителя: `MKOverlayPathRenderer`
 /// создаёт его лениво, и полагаться на момент, когда он появится, значит
 /// однажды нарисовать обводку в пустоту.
+///
+/// И собирается он ДО первой отрисовки, явным вызовом `buildCasing()` — по той
+/// же причине, по которой `FogVeilRenderer` не строит индекс в `draw`: MapKit
+/// рисует тайлы на нескольких потоках сразу.
 final class CasedPolylineRenderer: MKPolylineRenderer {
     /// Насколько обводка шире линии, в экранных точках (по 1 pt на сторону).
     static let casingExtra: CGFloat = 2.0
 
-    private lazy var casingPath: CGPath = {
-        let path = CGMutablePath()
+    /// `var` и не `let`: трансформ `point(for:)` появляется только после
+    /// `super.init`, а трогать `self` до инициализации всех полей нельзя.
+    private var casingPath = CGMutablePath()
+
+    /// Собрать обводку. Зовётся тем, кто создал рендерер, — на ГЛАВНОМ потоке,
+    /// до первой отрисовки (`Coordinator.routeRenderer`).
+    ///
+    /// Не `lazy var` и не `init`. `lazy var` в Swift не синхронизирован, а
+    /// `draw` MapKit зовёт на нескольких потоках сразу — два тайла вошли бы в
+    /// инициализатор вдвоём. Свой `init` тоже не годится: `init(polyline:)` у
+    /// MapKit зовёт `init(overlay:)` через `objc`, и подкласс, переопределивший
+    /// одно из двух, падает на ловушке «use of unimplemented initializer» в
+    /// `makeUIView` (проверено падением 15 сен).
+    func buildCasing() {
         let line = polyline
-        guard line.pointCount > 1 else { return path }
+        guard line.pointCount > 1 else { return }
+        let path = CGMutablePath()
         let points = line.points()
         path.move(to: point(for: points[0]))
         for i in 1..<line.pointCount { path.addLine(to: point(for: points[i])) }
-        return path
-    }()
+        casingPath = path
+    }
 
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
         context.setLineCap(.round)
@@ -454,15 +471,18 @@ struct RouteMapView: UIViewRepresentable {
     ///
     /// Вставляется в САМЫЙ НИЗ `.aboveLabels` — над дорогами и подписями
     /// Apple, но под маршрутом, который уже лежит на этом уровне.
+    ///
+    /// Срез без даты — это «мир, как он есть сейчас», и он умеет измениться
+    /// прямо под открытым экраном: так живёт карточка итогов, которую
+    /// показывают в ту же секунду, когда только что законченная поездка ещё
+    /// не легла в слой. Поэтому у него, и только у него, карта переспрашивает
+    /// слой по `.revealedLayerChanged` — это и есть момент, когда туман
+    /// выгорает по сегодняшней дороге.
     private func installFog(on mapView: MKMapView, coordinator: Coordinator) {
         guard showsFog, !coordinator.fogRequested else { return }
         coordinator.fogRequested = true
-        let cutoff = fogCutoffDate
-        Task { @MainActor [weak mapView] in
-            let layer = await TemporalFogCache.shared.layer(before: cutoff)
-            guard let mapView, !layer.isEmpty else { return }
-            mapView.insertOverlay(FogVeilOverlay(layer: layer), at: 0, level: .aboveLabels)
-        }
+        coordinator.loadFog(before: fogCutoffDate, on: mapView)
+        if fogCutoffDate == nil { coordinator.watchRevealedLayer(on: mapView) }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -590,6 +610,46 @@ struct RouteMapView: UIViewRepresentable {
         /// библиотеку, и повторять его на каждый `updateUIView` (а тот приходит
         /// на каждый кадр реплея) нельзя.
         var fogRequested = false
+        private var fogCutoff: Date?
+        private var installedVeil: FogVeilOverlay?
+        private var revealObserver: NSObjectProtocol?
+
+        deinit {
+            if let revealObserver { NotificationCenter.default.removeObserver(revealObserver) }
+        }
+
+        /// Забрать слой и подменить вуаль. Старую снимаем сами: две вуали,
+        /// лежащие друг на друге, дают двойную плотность там, где коридор
+        /// прочищен только у одной.
+        func loadFog(before cutoff: Date?, on mapView: MKMapView, fresh: Bool = false) {
+            fogCutoff = cutoff
+            Task { @MainActor [weak self, weak mapView] in
+                let layer = fresh
+                    ? await TemporalFogCache.shared.reload(before: cutoff)
+                    : await TemporalFogCache.shared.layer(before: cutoff)
+                guard let self, let mapView, !layer.isEmpty else { return }
+                if let old = self.installedVeil { mapView.removeOverlay(old) }
+                let veil = FogVeilOverlay(layer: layer)
+                self.installedVeil = veil
+                mapView.insertOverlay(veil, at: 0, level: .aboveLabels)
+            }
+        }
+
+        /// Открытое пополнилось — перечитать. Только для среза «сейчас»:
+        /// прошлое поездки на её собственную дату не меняется.
+        func watchRevealedLayer(on mapView: MKMapView) {
+            guard revealObserver == nil else { return }
+            revealObserver = NotificationCenter.default.addObserver(
+                forName: .revealedLayerChanged, object: nil, queue: .main
+            ) { [weak self, weak mapView] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let mapView else { return }
+                    // `fresh`: кэш мог не успеть узнать о том же уведомлении —
+                    // порядок наблюдателей у `NotificationCenter` не наш.
+                    self.loadFog(before: self.fogCutoff, on: mapView, fresh: true)
+                }
+            }
+        }
         /// Своя ли это поездка — от этого зависит толщина линии и обводка.
         /// Ставится в `makeUIView`, до первой отрисовки.
         var showsFog = false
@@ -600,9 +660,16 @@ struct RouteMapView: UIViewRepresentable {
         /// самую живую карту, ради которой коридор и прожигали. Внутри тумана
         /// — 3.2 pt с тёмной обводкой, как у выбранной жилки Атласа.
         func routeRenderer(for polyline: MKPolyline) -> MKPolylineRenderer {
-            let renderer = showsFog
-                ? CasedPolylineRenderer(polyline: polyline)
-                : MKPolylineRenderer(polyline: polyline)
+            let renderer: MKPolylineRenderer
+            if showsFog {
+                let cased = CasedPolylineRenderer(polyline: polyline)
+                // Здесь, а не в `draw`: мы на главном потоке и ещё до первой
+                // отрисовки — см. `CasedPolylineRenderer.buildCasing`.
+                cased.buildCasing()
+                renderer = cased
+            } else {
+                renderer = MKPolylineRenderer(polyline: polyline)
+            }
             renderer.lineWidth = showsFog ? RouteVeinRenderer.selectedWidth : 4
             renderer.lineCap = .round
             renderer.lineJoin = .round

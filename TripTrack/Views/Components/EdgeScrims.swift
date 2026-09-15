@@ -25,9 +25,32 @@ import SwiftUI
 /// Низ по умолчанию выключен: домашний индикатор система рисует сама и
 /// подкрашивает под фон, а у большинства наших полноэкранных карт внизу и так
 /// стоит своя плашка. Включать его стоит там, где под индикатором пусто.
+/// Каким увидит экран ОКНО — то есть какого цвета будут глифы статус-бара.
+///
+/// Обычно это и есть `\.colorScheme`, но экран записи получает схему
+/// подсунутой (`ContentView` красит его под ночную карту), а глифы статус-бара
+/// от подсунутой схемы не меняются: их решает `overrideUserInterfaceStyle`
+/// окна, который ставит `ThemeManager`. Дымке нужен именно оконный ответ —
+/// она существует ровно затем, чтобы эти глифы читались.
+private struct WindowColorSchemeKey: EnvironmentKey {
+    static let defaultValue: ColorScheme? = nil
+}
+
+extension EnvironmentValues {
+    var windowColorScheme: ColorScheme? {
+        get { self[WindowColorSchemeKey.self] }
+        set { self[WindowColorSchemeKey.self] = newValue }
+    }
+}
+
 struct EdgeScrims: ViewModifier {
     let top: Bool
     let bottom: Bool
+    /// Принудительно тёмная дымка. Ставится ТОЛЬКО там, где вместе с ней в
+    /// светлый уходят и глифы статус-бара (`FullscreenMapSheet` —
+    /// `.preferredColorScheme(.dark)`): чёрная дымка под чёрными глифами —
+    /// это чёрное на чёрном, то есть хуже белой полосы, которую она чинит.
+    var dark: Bool?
     /// Непрозрачность ЧЁРНОЙ дымки — то есть тёмной темы. У светлой свои числа
     /// (`lightTop` / `lightBottom`): пересчитать одно из другого нечем, белизна
     /// и чернота гасят карту по-разному.
@@ -35,6 +58,7 @@ struct EdgeScrims: ViewModifier {
     let bottomStrength: Double
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.windowColorScheme) private var windowScheme
 
     private static let lightTop: Double = 0.72
     private static let lightBottom: Double = 0.55
@@ -50,11 +74,15 @@ struct EdgeScrims: ViewModifier {
 
     private var bottomHeight: CGFloat { (UIApplication.tt_safeAreaInsets?.bottom ?? 34) + 24 }
 
-    private var haze: Color { scheme == .dark ? .black : .white }
+    /// Тёмная ли дымка. Явный ответ сильнее всего, иначе спрашивается ОКНО, и
+    /// только потом своя схема.
+    private var isDark: Bool { dark ?? ((windowScheme ?? scheme) == .dark) }
 
-    private var topOpacity: Double { scheme == .dark ? topStrength : Self.lightTop }
+    private var haze: Color { isDark ? .black : .white }
 
-    private var bottomOpacity: Double { scheme == .dark ? bottomStrength : Self.lightBottom }
+    private var topOpacity: Double { isDark ? topStrength : Self.lightTop }
+
+    private var bottomOpacity: Double { isDark ? bottomStrength : Self.lightBottom }
 
     func body(content: Content) -> some View {
         content.overlay {
@@ -90,11 +118,12 @@ extension View {
     func edgeScrims(
         top: Bool = true,
         bottom: Bool = false,
+        dark: Bool? = nil,
         topStrength: Double = 0.42,
         bottomStrength: Double = 0.30
     ) -> some View {
         modifier(EdgeScrims(
-            top: top, bottom: bottom,
+            top: top, bottom: bottom, dark: dark,
             topStrength: topStrength, bottomStrength: bottomStrength
         ))
     }

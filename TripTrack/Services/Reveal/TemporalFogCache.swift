@@ -18,6 +18,11 @@ final class TemporalFogCache {
 
     private var entry: (cutoff: Date?, layer: RevealedLayer)?
     private var pending: (cutoff: Date?, task: Task<RevealedLayer, Never>)?
+    /// Растёт на каждой инвалидации. Считанный слой ложится в кэш ТОЛЬКО если
+    /// поколение с начала счёта не сменилось: уведомление «открытое
+    /// изменилось» приходит и посреди `await`, и без этой проверки следующая
+    /// строка положила бы в только что очищенный кэш уже устаревший ответ.
+    private var generation = 0
 
     init() {
         // Открытое изменилось (финиш поездки, фоновая сборка, стирание) —
@@ -31,8 +36,22 @@ final class TemporalFogCache {
     }
 
     func invalidate() {
+        generation &+= 1
         entry = nil
+        // Отменяем, а не просто забываем: ответ этого перебора уже никому не
+        // нужен, и помечать его отменённым честнее, чем терять ссылку.
+        pending?.task.cancel()
         pending = nil
+    }
+
+    /// Пересчитать, не веря кэшу.
+    ///
+    /// Зовётся тем, кто САМ услышал `.revealedLayerChanged`: порядок
+    /// наблюдателей у `NotificationCenter` не наш, и кэш мог ещё не узнать о
+    /// том же уведомлении.
+    func reload(before cutoff: Date?) async -> RevealedLayer {
+        invalidate()
+        return await layer(before: cutoff)
     }
 
     /// Снимок мира на дату. `nil` — открытое, как оно есть.
@@ -48,7 +67,9 @@ final class TemporalFogCache {
             await RevealedLayerStore.shared.layer(before: cutoff)
         }
         pending = (cutoff, task)
+        let started = generation
         let layer = await task.value
+        guard started == generation else { return layer }
         if pending?.cutoff == cutoff { pending = nil }
         entry = (cutoff, layer)
         return layer

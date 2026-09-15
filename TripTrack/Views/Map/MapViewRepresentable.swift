@@ -12,7 +12,6 @@ struct MapViewRepresentable: UIViewRepresentable {
     var annotations: [MKPointAnnotation] = []
     var selectedAnnotation: MKPointAnnotation?
     var overlays: [MKOverlay] = []
-    var isDarkMap: Bool = false
     var bottomInset: CGFloat = 0
     @Binding var zoomDelta: Double
     var isRecording: Bool = false
@@ -61,9 +60,16 @@ struct MapViewRepresentable: UIViewRepresentable {
             )
         }
 
+        // Та же карта, что у Атласа и у экрана поездки: три экрана под ОДНОЙ
+        // непрозрачной вуалью обязаны быть одной картой. До 0.7.0 здесь был
+        // рельеф и стиль по солнцу — днём под чёрным туманом оказывалась
+        // дневная рельефная карта, и внутри коридоров она была белой там, где
+        // на двух других экранах серая. Конфигурация ставится ОДИН раз:
+        // MapKit падает, если менять её у живой карты.
         mapView.preferredConfiguration = MKStandardMapConfiguration(
-            elevationStyle: .realistic
+            elevationStyle: .flat, emphasisStyle: .muted
         )
+        mapView.overrideUserInterfaceStyle = .dark
 
         mapView.showsCompass = false
         mapView.showsScale = true
@@ -97,12 +103,6 @@ struct MapViewRepresentable: UIViewRepresentable {
         mapView.isPitchEnabled = !isRecording
 
         context.coordinator.applyCarState(on: mapView)
-
-        // Dark/light map
-        let style: UIUserInterfaceStyle = isDarkMap ? .dark : .light
-        if mapView.overrideUserInterfaceStyle != style {
-            mapView.overrideUserInterfaceStyle = style
-        }
 
         // Diff annotations
         let existing = mapView.annotations.compactMap { $0 as? MKPointAnnotation }

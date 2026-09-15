@@ -169,7 +169,10 @@ struct FullscreenMapSheet: View {
             // На самой карте, а не на всём экране: хром рисуется следующими
             // слоями ZStack и остаётся поверх дымки. Низ не трогаем — там
             // и так стоит своя плашка (зум, транспорт, карточка отметки).
-            .edgeScrims(top: true)
+            // Под туманом карта ночная всегда, и дымка уходит в тёмную
+            // ВМЕСТЕ с глифами статус-бара (`.preferredColorScheme` ниже):
+            // порознь получилось бы чёрное на чёрном.
+            .edgeScrims(top: true, dark: showsFog ? true : nil)
 
             // Pinned to the MAP's centre, not the chrome's: the map ignores
             // the safe area, so the two centres are ~12pt apart and the bubble
@@ -285,6 +288,10 @@ struct FullscreenMapSheet: View {
             engine.stop()
             crawl.stop()
         }
+        // Полноэкранная карта — своя презентация, и схема здесь меняется
+        // одна: глифы статус-бара уходят в светлые над ночной картой, а лист
+        // ниже (экран поездки) остаётся каким был. Без тумана — как было.
+        .preferredColorScheme(showsFog ? .dark : nil)
     }
 
     // MARK: - Replay chrome

@@ -118,7 +118,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
         map.preferredConfiguration = config
         // The memory map is ALWAYS night — Figma draws it dark regardless of
-        // app theme (unlike the tracking map's sun-driven isDarkMap).
+        // app theme — как и карта записи, и карта поездки с 0.7.0.
         map.overrideUserInterfaceStyle = .dark
         map.pointOfInterestFilter = .excludingAll
         map.showsCompass = false
