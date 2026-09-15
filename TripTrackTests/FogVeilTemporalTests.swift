@@ -195,7 +195,12 @@ final class FogVeilTemporalTests: XCTestCase {
         let veil = FogVeilOverlay(layer: layer)
         let renderer = FogVeilRenderer(veil: veil)
         let builds = renderer.chunkBuilds
-        XCTAssertEqual(builds, RevealedLayer.LOD.allCases.count)
+        // Ноль: с 15 сентября индекс собирается на ПЕРВОЙ отрисовке своего
+        // уровня, а не в `init` (тот случается на главном потоке в момент
+        // открытия карты). Сколько наборов бакетов достижимо и что второй тайл
+        // того же уровня не собирает их заново — держит
+        // `FogVeilRendererTests.testPathIndexBuildsOnlyReachableBucketSets`.
+        XCTAssertEqual(builds, 0, "индекс путей собрался в init рендерера")
 
         for step in 0...10 {
             veil.revealAround = FogVeilOverlay.RevealPoint(
@@ -203,7 +208,8 @@ final class FogVeilTemporalTests: XCTestCase {
             )
         }
 
-        XCTAssertEqual(renderer.chunkBuilds, builds, "индекс собран один раз на жизнь рендерера")
+        XCTAssertEqual(renderer.chunkBuilds, builds,
+                       "прогресс прорези пересобрал индекс путей")
         XCTAssertEqual(veil.revealAround?.progress ?? -1, 1, accuracy: 0.0001)
         XCTAssertTrue(renderer.overlay === veil, "оверлей тот же — рендерер не пересоздавали")
     }

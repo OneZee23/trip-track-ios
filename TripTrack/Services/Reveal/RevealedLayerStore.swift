@@ -27,8 +27,15 @@ private let revealLog = Logger(subsystem: "com.triptrack", category: "reveal")
 final class RevealedLayerStore: @unchecked Sendable {
     static let shared = RevealedLayerStore()
 
-    /// Флаг «фоновая сборка после обновления до v16 прошла».
-    static let rebuildFlagKey = "reveal_rebuild_v16_done"
+    /// Флаг «фоновая сборка после обновления прошла».
+    ///
+    /// Номер в ключе — версия ФОРМЫ накопленного, а не версия схемы. Поднимать
+    /// его обязан всякий, кто меняет `RevealBuilder`: прогоны лежат в базе, и
+    /// правило, по которому они рисуются, задним числом на них не действует.
+    /// `v17` — запрет на вторую нитку в двадцати пяти метрах от первой
+    /// (`RevealBuilder.neighbourClaimed`, 15 сен 2026): без пересборки двойные
+    /// жилки остались бы у всех, кто уже успел собрать слой.
+    static let rebuildFlagKey = "reveal_rebuild_v17_done"
     /// Сколько поездок сборки идёт одним сохранением.
     static let rebuildBatch = 40
 
@@ -129,6 +136,12 @@ final class RevealedLayerStore: @unchecked Sendable {
 
     /// Фоновая сборка открытого из всей библиотеки — один раз после обновления.
     ///
+    /// Собирает с НУЛЯ: ключ флага меняется вместе с формой прогонов
+    /// (см. `rebuildFlagKey`), а уже накопленное новое правило задним числом не
+    /// исправит — старые ячейки застолблены, и `patches` на них просто промолчит.
+    /// Стирание идёт ПОСЛЕ проверки на пустую выборку, иначе запуск, потерявший
+    /// библиотеку, снёс бы туман и не собрал ничего.
+    ///
     /// Пустая выборка флаг НЕ взводит: на запуске, потерявшем стор, «поездок
     /// нет» значит «данные ещё не вернулись», и залатчить там значило бы
     /// оставить карту пустой навсегда (та же ловушка, что в
@@ -142,6 +155,8 @@ final class RevealedLayerStore: @unchecked Sendable {
             revealLog.notice("reveal rebuild: no trips yet, latch stays open")
             return
         }
+
+        await context.perform { self.deleteAllInContext() }
 
         var total = 0
         for start in stride(from: 0, to: previews.count, by: Self.rebuildBatch) {
@@ -182,9 +197,7 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// синхронная точка на главном актёре, а работы здесь на один delete.
     func wipe() {
         context.performAndWait {
-            let request: NSFetchRequest<RevealedCellEntity> = RevealedCellEntity.fetchRequest()
-            for entity in (try? context.fetch(request)) ?? [] { context.delete(entity) }
-            saveContext()
+            deleteAllInContext()
             // `LocalDataWipe` стирает пакетом мимо контекстов, и в этом
             // остались бы зарегистрированные «призраки» стёртых строк.
             context.reset()
@@ -194,6 +207,14 @@ final class RevealedLayerStore: @unchecked Sendable {
     }
 
     // MARK: - Внутри контекста
+
+    /// Снести открытое целиком. Зовут двое: `wipe()` (стирание аккаунта) и
+    /// пересборка после смены формы прогонов.
+    private func deleteAllInContext() {
+        let request: NSFetchRequest<RevealedCellEntity> = RevealedCellEntity.fetchRequest()
+        for entity in (try? context.fetch(request)) ?? [] { context.delete(entity) }
+        saveContext()
+    }
 
     /// Поездка без превью — законная строка выборки: она ГОВОРИТ, что
     /// библиотека не пуста, хотя открыть ею нечего. Отличать «поездок нет» от

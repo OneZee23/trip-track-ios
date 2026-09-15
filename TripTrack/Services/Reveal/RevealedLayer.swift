@@ -95,8 +95,14 @@ struct RevealedLayer {
     /// Не центр региона из атласа: подпись обязана стоять там, где человек
     /// был, а не посреди темноты в географическом центре края, до которого он
     /// не доезжал. Считается здесь, а не на экране, потому что здешний цикл
-    /// уже спрашивает атлас про концы каждого прогона — второй такой цикл был
-    /// бы вторым проходом по всей библиотеке ради одной точки.
+    /// уже спрашивает атлас про точки прогонов — второй такой цикл был бы
+    /// вторым проходом по всей библиотеке ради одной точки.
+    ///
+    /// И это ТОЧКА НА ПРОГОНЕ, а не среднее координат. Среднее двух далёких
+    /// кусков (дача на севере, море на юге) попадает ровно между ними, то есть
+    /// в темноту, — ту самую, которой доккоммент обещает избегать. Поэтому
+    /// среднее считается по всем точкам прогонов, а потом ПРИТЯГИВАЕТСЯ к
+    /// ближайшей из них.
     var regionCentroids: [String: CLLocationCoordinate2D] = [:]
 
     /// Три уровня детали — какой рисовать, решает зум
@@ -110,6 +116,11 @@ struct RevealedLayer {
         case .far:  return far.polylines
         }
     }
+
+    /// Через сколько точек прогона берётся проба для подписи региона. Точки
+    /// лежат через ≈75 м, то есть проба — примерно через 375 м: чаще незачем
+    /// (подпись стоит одна на край), реже — и короткий прогон не даст ни одной.
+    static let centroidSampleStride = 5
 
     /// Шаг прореживания среднего уровня (≈250 м).
     static let midDegrees = 250.0 / 111_320.0
@@ -133,6 +144,28 @@ struct RevealedLayer {
         return build(runs: runs, cellCount: cellCount, atlas: atlas)
     }
 
+    /// Ближайшая к точке проба — или сама точка, если проб не осталось.
+    ///
+    /// Сравнение по градусам, не по метрам: нужен МИНИМУМ, а не расстояние, и
+    /// косинус широты внутри одного края его не переставляет.
+    static func nearest(
+        to target: CLLocationCoordinate2D, among samples: [CLLocationCoordinate2D]
+    ) -> CLLocationCoordinate2D {
+        var best = target
+        var bestDistance = Double.infinity
+        for sample in samples {
+            let dLat = sample.latitude - target.latitude
+            let dLon = (sample.longitude - target.longitude)
+                * cos(target.latitude * .pi / 180)
+            let distance = dLat * dLat + dLon * dLon
+            if distance < bestDistance {
+                bestDistance = distance
+                best = sample
+            }
+        }
+        return best
+    }
+
     static func build(
         runs: [[CLLocationCoordinate2D]], cellCount: Int, atlas: RegionAtlas?
     ) -> RevealedLayer {
@@ -142,6 +175,7 @@ struct RevealedLayer {
         var metres: Double = 0
         var regions = Set<String>()
         var centroidSums: [String: (lat: Double, lon: Double, count: Double)] = [:]
+        var centroidSamples: [String: [CLLocationCoordinate2D]] = [:]
 
         for run in runs where run.count > 1 {
             fine.append(MKPolyline(coordinates: run, count: run.count))
@@ -155,18 +189,21 @@ struct RevealedLayer {
                 TripDistanceGate.Sample(latitude: $0.latitude, longitude: $0.longitude, timestamp: nil)
             })
 
-            // Оба конца, а не только начало: прогон длиной с тайл (5–7 км)
-            // умеет пересечь границу региона, и по первой точке сосед просто
-            // не появился бы в итогах.
+            // Пробы по всему прогону, а не два конца: прогон длиной с тайл
+            // (5–7 км) умеет пересечь границу региона, и по концам соседний
+            // край либо не появился бы в итогах вовсе, либо получил бы всю
+            // тяжесть прогона, лежащего в чужом.
             if let atlas {
-                for end in [run.first, run.last].compactMap({ $0 }) {
-                    guard let region = atlas.region(containing: end) else { continue }
+                for (i, point) in run.enumerated()
+                where i % centroidSampleStride == 0 || i == run.count - 1 {
+                    guard let region = atlas.region(containing: point) else { continue }
                     regions.insert(region.id)
                     var sum = centroidSums[region.id] ?? (0, 0, 0)
-                    sum.lat += end.latitude
-                    sum.lon += end.longitude
+                    sum.lat += point.latitude
+                    sum.lon += point.longitude
                     sum.count += 1
                     centroidSums[region.id] = sum
+                    centroidSamples[region.id, default: []].append(point)
                 }
             }
         }
@@ -176,8 +213,12 @@ struct RevealedLayer {
             cellCount: cellCount,
             openedKm: metres / 1000,
             regionIds: regions,
-            regionCentroids: centroidSums.mapValues {
-                CLLocationCoordinate2D(latitude: $0.lat / $0.count, longitude: $0.lon / $0.count)
+            regionCentroids: centroidSums.reduce(into: [:]) { out, entry in
+                let mean = CLLocationCoordinate2D(
+                    latitude: entry.value.lat / entry.value.count,
+                    longitude: entry.value.lon / entry.value.count
+                )
+                out[entry.key] = nearest(to: mean, among: centroidSamples[entry.key] ?? [])
             }
         )
     }

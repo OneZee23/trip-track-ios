@@ -63,7 +63,9 @@ final class RouteVeinOverlay: NSObject, MKOverlay {
 
 final class RouteVeinRenderer: MKOverlayRenderer {
     private let vein: RouteVeinOverlay
-    private var chunks: [RevealedLayer.LOD: MapPathChunks] = [:]
+    /// Тот же ленивый индекс, что у вуали, и по той же причине: `init`
+    /// рендерера — главный поток в момент первого показа карты.
+    private var index: LazyPathIndex!
 
     /// Тёплый янтарь из эталонных кадров владельца. Не акцент бренда: жилка —
     /// это свет внутри тумана, а не элемент интерфейса.
@@ -77,22 +79,50 @@ final class RouteVeinRenderer: MKOverlayRenderer {
     static let selectedWidth: CGFloat = 3.2
     static let casingExtra: CGFloat = 2.0
 
-    init(vein: RouteVeinOverlay) {
-        self.vein = vein
-        super.init(overlay: vein)
-        for lod in RevealedLayer.LOD.allCases {
-            chunks[lod] = MapPathChunks(vein.polylines(for: lod)) { self.point(for: $0) }
+    /// Ширина ореола и его альфа на этом уровне детали, в ЭКРАННЫХ точках.
+    ///
+    /// На стране жилка в 1.6 pt — волосок: до 0.7.0 рядом с ней лежал хитмап и
+    /// «горячий» ореол втрое шире линии, а теперь на весь кадр остаётся одна
+    /// нитка, и спека обещает светящуюся вену, а не царапину. Ореол — первый,
+    /// самый широкий и самый бледный проход тем же янтарём.
+    ///
+    /// Потолок ширины — `FogVeilRenderer.corridorWidth × 1.2`: шире, и янтарь
+    /// ляжет на вуаль сплошняком вместо того, чтобы светиться внутри
+    /// прочищенного коридора. На `.fine` ореола нет вовсе — там свет даёт сам
+    /// коридор, а второй светящийся след вернул бы «страва-ленту».
+    static func halo(for lod: RevealedLayer.LOD) -> (width: CGFloat, alpha: CGFloat)? {
+        switch lod {
+        case .fine: return nil
+        case .mid:  return (8, 0.10)
+        case .far:  return (10, 0.14)
         }
     }
 
-    /// Ширина жилки в экранных точках. Вблизи чуть толще, издали тоньше —
-    /// иначе на масштабе страны сеть сливается в пятно, а на улице линия
-    /// выглядит царапиной.
+    init(vein: RouteVeinOverlay) {
+        self.vein = vein
+        super.init(overlay: vein)
+        index = LazyPathIndex(
+            source: { [unowned vein] in vein.polylines(for: $0) },
+            transform: { [unowned self] in self.point(for: $0) }
+        )
+    }
+
+    /// Сколько наборов бакетов собрано — для тех же тестов, что у вуали.
+    var chunkBuilds: Int { index.builds }
+
+    /// Ширина сердцевины жилки в экранных точках.
+    ///
+    /// Издали ТОЛЩЕ, а не тоньше, — и это правка по кадрам 15 сентября. Раньше
+    /// на стране стояло 1.6 pt из соображения «сеть сольётся в пятно», но
+    /// сливаться там давно нечему: хитмапа рядом нет, и на весь кадр остаётся
+    /// одна нитка в волос. Коридор на стране тоже уходит на свой экранный пол
+    /// (12 pt), так что 3 pt внутри него — по-прежнему линия внутри
+    /// прочищенного, а не заливка.
     static func width(for lod: RevealedLayer.LOD) -> CGFloat {
         switch lod {
         case .fine: return 2.2
-        case .mid:  return 2.0
-        case .far:  return 1.6
+        case .mid:  return 2.8
+        case .far:  return 3.0
         }
     }
 
@@ -100,13 +130,28 @@ final class RouteVeinRenderer: MKOverlayRenderer {
         let lod = FogVeilRenderer.lod(for: zoomScale)
         let screenWidth = vein.style == .selected ? Self.selectedWidth : Self.width(for: lod)
         let width = screenWidth / zoomScale
-        let reach = Double(width) + 1
-        let paths = chunks[lod]?
-            .visiblePaths(in: mapRect.insetBy(dx: -reach, dy: -reach), zoomScale: zoomScale) ?? []
+        // Запрос расширяется по САМОМУ широкому проходу: ореол вылезает за
+        // сердцевину втрое, и бакет за краем тайла всё равно светит в него.
+        let widest = max(screenWidth, Self.halo(for: lod)?.width ?? 0) / zoomScale
+        let reach = Double(widest) + 1
+        let paths = index.chunks(for: lod)
+            .visiblePaths(in: mapRect.insetBy(dx: -reach, dy: -reach), zoomScale: zoomScale)
         guard !paths.isEmpty else { return }
 
         context.setLineCap(.round)
         context.setLineJoin(.round)
+
+        // Ореол — первым: сердцевина ложится поверх него, а не наоборот.
+        if let halo = Self.halo(for: lod) {
+            let metre = MKMapPointsPerMeterAtLatitude(
+                MKMapPoint(x: mapRect.midX, y: mapRect.midY).coordinate.latitude)
+            let ceiling = FogVeilRenderer.corridorWidth(zoomScale: zoomScale, metre: metre) * 1.2
+            context.beginPath()
+            paths.forEach(context.addPath)
+            context.setLineWidth(min(halo.width / zoomScale, ceiling))
+            context.setStrokeColor(Self.veinColor.withAlphaComponent(halo.alpha).cgColor)
+            context.strokePath()
+        }
 
         if vein.style == .selected {
             context.beginPath()

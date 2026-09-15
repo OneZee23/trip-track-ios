@@ -153,6 +153,33 @@ final class FogVeilRendererTests: XCTestCase {
         XCTAssertTrue(chunks.visiblePaths(in: .world, zoomScale: 1e-5).isEmpty)
     }
 
+    /// Путь, пересекающий границу мелкого бакета, обязан находиться С ОБЕИХ
+    /// сторон. Поведение верное и без этого теста — ключ бакета берётся по
+    /// середине bbox, а `rect` чанка это ОБЪЕДИНЕНИЕ bbox всех его линий, — но
+    /// держится оно ровно на объединении, а не на очевидности: стоит кому-то
+    /// заменить `union` на «прямоугольник бакета», и половина улицы пропадёт с
+    /// одной стороны границы, причём только на близком зуме.
+    func testPathCrossingAFineBucketBorderIsFoundFromTheOtherSide() {
+        let bucket = MKMapSize.world.width / 8_192
+        let anchor = MKMapPoint(CLLocationCoordinate2D(latitude: 45.0, longitude: 38.9))
+        let border = (anchor.x / bucket).rounded(.down) * bucket + bucket
+
+        let west = MKMapPoint(x: border - bucket * 0.45, y: anchor.y).coordinate
+        let east = MKMapPoint(x: border + bucket * 0.45, y: anchor.y).coordinate
+        var coords = [west, east]
+        let chunks = MapPathChunks([MKPolyline(coordinates: &coords, count: 2)]) {
+            CGPoint(x: $0.x, y: $0.y)
+        }
+
+        // Тайл целиком по западную сторону границы — то есть в бакете, который
+        // ключом НЕ выбирался (середина bbox пришлась ровно на границу).
+        let probe = MKMapRect(
+            x: border - bucket * 0.4, y: anchor.y - 10, width: bucket * 0.1, height: 20)
+        XCTAssertFalse(
+            chunks.visiblePaths(in: probe, zoomScale: 0.01).isEmpty,
+            "дорога, перешагнувшая границу бакета, пропала с одной из сторон")
+    }
+
     // MARK: - Сама заливка
 
     /// Снимок пера на фиксированной геометрии: одна прямая дорога посреди
@@ -230,14 +257,181 @@ final class FogVeilRendererTests: XCTestCase {
         let upper = MKMapRect(x: 1_000_000, y: 2_000_000, width: span, height: span)
         let lower = MKMapRect(x: 1_000_000, y: 2_000_000 + span, width: span, height: span)
 
-        let a = FogVeilRenderer.depth(for: upper)
-        let b = FogVeilRenderer.depth(for: lower)
+        let a = FogVeilRenderer.depth(for: upper, lod: .mid)
+        let b = FogVeilRenderer.depth(for: lower, lod: .mid)
 
         XCTAssertEqual(a.bottom, b.top, accuracy: 0.0001,
                        "нижний край верхнего тайла и верхний край нижнего разошлись по цвету")
     }
 
+    // MARK: - Дымка
+
+    /// Пятна сеются на МИРОВОЙ сетке, поэтому стык двух соседних тайлов не
+    /// виден: пятно, севшее на границу, обе стороны считают от одних и тех же
+    /// координат и рисуют одинаково.
+    ///
+    /// До правки 15 сентября бесшовность держалась тем, что пятно стояло ровно
+    /// в центре тайла и гасло к его краю в ноль, — и ровно это выстраивало
+    /// узор правильной сеткой.
+    func testHazeMeetsAtTheBorderOfTwoTiles() {
+        let size = 64
+        let span = FogVeilRenderer.hazeCell(for: .mid)
+        let left = MKMapRect(x: 60_000_000, y: 40_000_000, width: span, height: span)
+        let right = MKMapRect(x: 60_000_000 + span, y: 40_000_000, width: span, height: span)
+
+        let a = Self.drawnTile(size: size, mapRect: left)
+        let b = Self.drawnTile(size: size, mapRect: right)
+
+        for row in 0..<size {
+            let edgeA = Int(a[(row * size + size - 1) * 4 + 2])
+            let edgeB = Int(b[(row * size) * 4 + 2])
+            XCTAssertEqual(
+                Double(edgeA), Double(edgeB), accuracy: 3,
+                "на строке \(row) правый край левого тайла и левый край правого разошлись: "
+                    + "\(edgeA) против \(edgeB) — на панораме это видимая сетка")
+        }
+    }
+
+    /// Тот же тайл на том же зуме — тот же узор, до пикселя. Иначе каждая
+    /// перерисовка (а MapKit перерисовывает тайл по любому поводу) давала бы
+    /// мигание там, где должен быть неподвижный туман.
+    func testHazeIsDeterministicForTheSameTile() {
+        let span = FogVeilRenderer.hazeCell(for: .far)
+        let tile = MKMapRect(x: 12_345_678, y: 87_654_321, width: span, height: span)
+
+        XCTAssertEqual(Self.drawnTile(size: 32, mapRect: tile),
+                       Self.drawnTile(size: 32, mapRect: tile),
+                       "узор дымки изменился между двумя отрисовками одного тайла")
+    }
+
+    /// Пятен на тайле НЕСКОЛЬКО и лежат они не в центре: узор обязан быть
+    /// неровным по обеим осям. (До правки пятно было одно, всегда в середине.)
+    func testHazeIsNotOneBlobInTheMiddle() {
+        let cell = FogVeilRenderer.hazeCell(for: .mid)
+        var seen = Set<String>()
+        for col in Int64(0)..<3 {
+            for row in Int64(0)..<3 {
+                let blobs = FogVeilPainter.hazeBlobs(col: col, row: row, cell: cell)
+                XCTAssertEqual(blobs.count, FogVeilPainter.hazeBlobsPerCell)
+                for blob in blobs {
+                    XCTAssertTrue(FogVeilPainter.hazeAlphaRange.contains(blob.alpha))
+                    // Центр — ВНУТРИ своей ячейки, но не в её середине.
+                    let dx = blob.x - Double(col) * cell
+                    XCTAssertTrue((0...cell).contains(dx))
+                    seen.insert(String(format: "%.4f", dx / cell))
+                }
+            }
+        }
+        XCTAssertGreaterThan(seen.count, 6, "пятна выстроились в сетку — узор регулярен")
+    }
+
+    /// Верхняя граница светлоты — та же, что у пустого тайла: дымка не имеет
+    /// права подняться до уровня, на котором полоса недогруженных плиток Apple
+    /// на панораме становится видна.
+    func testHazeStaysDarkerThanTheAppleUnderlay() {
+        let span = FogVeilRenderer.hazeCell(for: .mid) / 2
+        for origin in [40_000_000.0, 133_700_000.0, 220_000_000.0] {
+            let pixels = Self.drawnTile(
+                size: 48, mapRect: MKMapRect(x: origin, y: origin, width: span, height: span))
+            for i in stride(from: 0, to: pixels.count, by: 4) {
+                XCTAssertEqual(Int(pixels[i + 3]), 255, "вуаль обязана быть непрозрачной")
+                XCTAssertLessThan(Int(pixels[i + 2]), 64, "дымка светлее тёмной подложки Apple")
+            }
+        }
+    }
+
+    // MARK: - Ореол жилки
+
+    /// На стране жилка в 1.6 pt была волоском, а спека обещает светящуюся
+    /// вену. Ореол — первый проход тем же янтарём: шире, бледнее, и только там,
+    /// где коридор уже ушёл на свой экранный пол.
+    func testVeinHaloOnlyExistsWhereTheCorridorIsAtItsFloor() {
+        XCTAssertNil(RouteVeinRenderer.halo(for: .fine),
+                     "на улице свет даёт сам коридор — второй след вернул бы «страва-ленту»")
+
+        for lod in [RevealedLayer.LOD.mid, .far] {
+            guard let halo = RouteVeinRenderer.halo(for: lod) else {
+                return XCTFail("на \(lod) ореол обязан быть")
+            }
+            XCTAssertGreaterThanOrEqual(halo.width, 8)
+            XCTAssertLessThanOrEqual(halo.width, 10)
+            XCTAssertGreaterThanOrEqual(halo.alpha, 0.10)
+            XCTAssertLessThanOrEqual(halo.alpha, 0.14)
+            XCTAssertGreaterThan(halo.width, RouteVeinRenderer.width(for: lod),
+                                 "ореол не шире сердцевины — это не ореол")
+            XCTAssertGreaterThanOrEqual(RouteVeinRenderer.width(for: lod), 2.5,
+                                        "сердцевина издали обязана быть толще волоска")
+        }
+    }
+
+    /// Ореол не имеет права быть шире коридора больше чем на пятую часть:
+    /// иначе янтарь ложится на вуаль сплошняком вместо того, чтобы светиться
+    /// внутри прочищенного.
+    func testVeinHaloNeverOutgrowsTheCorridor() {
+        let metre = MKMapPointsPerMeterAtLatitude(45.0)
+        for zoom: MKZoomScale in [1e-3, 3e-4, 1e-4, 3e-5] {
+            let lod = FogVeilRenderer.lod(for: zoom)
+            guard let halo = RouteVeinRenderer.halo(for: lod) else { continue }
+            let corridor = FogVeilRenderer.corridorWidth(zoomScale: zoom, metre: metre)
+            XCTAssertLessThanOrEqual(
+                Double(min(halo.width / zoom, corridor * 1.2)), Double(corridor) * 1.2,
+                "ореол шире коридора ×1.2 на зуме \(zoom)")
+        }
+    }
+
+    // MARK: - Индекс собирается лениво и только достижимый
+
+    /// Мёртвых наборов бакетов больше нет: `.fine` никогда не спрашивает грубый
+    /// уровень, `.far` — мелкий. Четыре набора на три уровня детали вместо
+    /// шести, и самый дорогой из выброшенных — грубые бакеты полноразрядной
+    /// геометрии.
+    ///
+    /// И собирается всё это на ПЕРВОЙ ОТРИСОВКЕ, а не в `init`: `init`
+    /// рендерера — главный поток в момент открытия Атласа.
+    func testPathIndexBuildsOnlyReachableBucketSets() {
+        let route = (0..<60).map { i in
+            CLLocationCoordinate2D(latitude: 45.0 + Double(i) * 0.002, longitude: 38.97)
+        }
+        let veil = FogVeilOverlay(layer: RevealedLayer.build(runs: [route], cellCount: 60, atlas: nil))
+        let renderer = FogVeilRenderer(veil: veil)
+        XCTAssertEqual(renderer.chunkBuilds, 0, "индекс собрался в init — это хитч на открытии")
+
+        let context = CGContext(
+            data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        func draw(at zoom: MKZoomScale) {
+            let span = 64 / Double(zoom)
+            let origin = MKMapPoint(CLLocationCoordinate2D(latitude: 45.06, longitude: 38.97))
+            renderer.draw(
+                MKMapRect(x: origin.x - span / 2, y: origin.y - span / 2,
+                          width: span, height: span),
+                zoomScale: zoom, in: context)
+        }
+
+        draw(at: 0.01)                              // .fine — только мелкий набор
+        XCTAssertEqual(renderer.chunkBuilds, 1)
+        draw(at: 0.01)
+        XCTAssertEqual(renderer.chunkBuilds, 1, "второй тайл того же уровня собрал индекс заново")
+        draw(at: 5e-4)                              // .mid — оба набора
+        XCTAssertEqual(renderer.chunkBuilds, 3)
+        draw(at: 3e-5)                              // .far — только грубый
+        XCTAssertEqual(renderer.chunkBuilds, 4, "четыре достижимых набора, ни одним больше")
+    }
+
     // MARK: - Инструменты
+
+    /// Рисует один тайл кистью — так же, как это делает рендерер, включая
+    /// глубину и дымку от МИРОВЫХ координат тайла.
+    private static func drawnTile(size: Int, mapRect: MKMapRect) -> [UInt8] {
+        drawn(size: size) { context, rect in
+            FogVeilPainter.paint(
+                context: context, paths: [], corridorWidth: 90, passes: 8,
+                tileRect: rect, depth: FogVeilRenderer.depth(for: mapRect, lod: .mid)
+            )
+        }
+    }
 
     /// Рисует в свой буфер и отдаёт пиксели копией: указатель на память
     /// массива, переживший `withUnsafeMutableBytes`, — это UB, а тут он ещё и

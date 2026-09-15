@@ -95,8 +95,17 @@ final class MapRenderCostTests: XCTestCase {
         // An empty tile still has to blend 65 000 pixels of flat colour, so it
         // is never free — the win is skipping the transparency layer and the
         // stroke passes on top of that.
+        //
+        // Порог 0.55, а не половина: с 15 сентября заливка несёт ещё и дымку
+        // (`FogVeilPainter.hazeBlobs`), и платят её ВСЕ тайлы. Замер на этой
+        // машине: 0.26 мс заливка, +0.08 мс дымка, +0.35 мс коридоры. То есть
+        // пропускаемая работа по-прежнему больше той, что платится всегда, —
+        // но запаса на шум замера при ровно половине не остаётся. Смысл
+        // сторожа не изменился: если пустой тайл начнёт платить за слой
+        // прозрачности и четырнадцать проходов пера, он сравняется с занятым,
+        // а не подберётся к 0.55.
         XCTAssertLessThan(
-            bare, busy / 2,
+            bare, busy * 0.55,
             "an empty tile must not cost what a corridor-punching one does — "
                 + "empty \(bare * 1000) ms vs busy \(busy * 1000) ms"
         )
@@ -128,9 +137,13 @@ final class MapRenderCostTests: XCTestCase {
     /// а человек открывает вкладку как раз на стране целиком. Вспышку это
     /// всё равно не лечило — прототип 15 сен показал, что она одинакова у
     /// полного пера и у одной заливки, то есть она не наша.
-    func testVeilIsOpaqueAtEveryZoom() {
+    func testVeilFillHasNoSeeThroughAtAnyZoom() {
         let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: layer()))
-        // Страна, регион, город, улица — везде заведомо мимо сети.
+        // Тайл заведомо МИМО сети — и имя теста говорит именно про это:
+        // проверяется заливка, а не «нет просветов рядом с коридором». Край
+        // коридора держит `FogVeilRendererTests.testPainterEdgeFadesWithoutTerraces`,
+        // где видно каждый пиксель поперёк дороги.
+        // Страна, регион, город, улица.
         for zoom: MKZoomScale in [3e-5, 8e-4, 4e-3, 0.06] {
             let span = 200 / Double(zoom)
             let empty = tile(at: CLLocationCoordinate2D(latitude: 53.0, longitude: 45.0), span: span)

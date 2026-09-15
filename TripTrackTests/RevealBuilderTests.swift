@@ -34,6 +34,37 @@ final class RevealBuilderTests: XCTestCase {
         patches.values.flatMap(\.runs)
     }
 
+    /// Сколько метров линии нарисовано всеми прогонами.
+    private func drawnMetres(_ patches: [String: TilePatch]) -> Double {
+        allRuns(patches).reduce(0.0) { sum, run in
+            sum + zip(run, run.dropFirst()).reduce(0.0) { $0 + metres($1.0, $1.1) }
+        }
+    }
+
+    private func shifted(
+        _ coords: [CLLocationCoordinate2D], eastMetres: Double
+    ) -> [CLLocationCoordinate2D] {
+        let degrees = eastMetres / (111_320.0 * cos(start.latitude * .pi / 180))
+        return coords.map {
+            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude + degrees)
+        }
+    }
+
+    /// Тот же путь в СОСЕДНЕЙ ячейке по долготе — ровно то, что делает с
+    /// повторным проездом разброс GPS: асфальт один, а ячейка другая.
+    ///
+    /// Сдвиг считается от шага сетки, а не «плюс 25 метров»: сдвиг меньше
+    /// ячейки попал бы в соседнюю не везде (шаг по долготе у соседних тайлов
+    /// чуть разный), и тест то ловил бы дефект, то нет.
+    private func oneCellAside(
+        _ coords: [CLLocationCoordinate2D]
+    ) -> [CLLocationCoordinate2D] {
+        let step = RevealGrid.lonDegrees(inTile: RevealGrid.tileIndex(for: start))
+        return coords.map {
+            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude + step)
+        }
+    }
+
     // MARK: - Первый проезд
 
     func testStraightTripBecomesOneRunWithSeventyFiveMetreStep() {
@@ -126,6 +157,52 @@ final class RevealBuilderTests: XCTestCase {
         }
         let far = runs.flatMap { $0 }.map(\.latitude).max() ?? 0
         XCTAssertGreaterThan(far, coords.last!.latitude - 0.002, "вторая половина открыта")
+    }
+
+    // MARK: - Вторая нитка рядом с первой
+
+    /// Та самая клякса с кадров 15 сентября: второй проезд по той же улице ушёл
+    /// шумом GPS за границу ячейки, получил `fresh = true` и нарисовал свою
+    /// нитку в двадцати пяти метрах от чужой. На улице это три параллельные
+    /// линии, а под непрозрачной вуалью ещё и расплывшийся втрое коридор.
+    ///
+    /// Ячейки при этом обязаны застолбиться: открытое РАСТЁТ, не рисуется
+    /// только линия.
+    func testSecondPassAsideClaimsCellsButDrawsNothing() {
+        let first = line(northMetres: 5_000, points: 3)
+        let opened = RevealBuilder.patches(for: first) { _ in [] }
+        let aside = oneCellAside(first)
+
+        XCTAssertLessThan(metres(first[0], aside[0]), 80,
+                          "сдвиг — одна ячейка, то есть разброс GPS, а не соседняя улица")
+
+        let patches = RevealBuilder.patches(for: aside) { key in opened[key]?.cells ?? [] }
+        XCTAssertTrue(allRuns(patches).isEmpty, "второй проезд нарисовал параллельную нитку")
+        XCTAssertGreaterThan(allCells(patches), 50, "ячейки обязаны застолбиться и со второго раза")
+    }
+
+    /// «Туда и обратно» ОДНОЙ поездкой: обратный проезд тоже уходит шумом в
+    /// соседнюю ячейку, и запрет обязан смотреть на то, что застолбила эта же
+    /// поездка, — иначе двоит она сама себя.
+    func testThereAndBackAsideIsStillOneLine() {
+        let out = line(northMetres: 5_000, points: 3)
+        let back = Array(oneCellAside(out).reversed())
+        let patches = RevealBuilder.patches(for: out + back) { _ in [] }
+
+        XCTAssertEqual(
+            drawnMetres(patches), 5_000, accuracy: 900,
+            "дорога туда и обратно — одна линия, а не две в двадцати пяти метрах")
+    }
+
+    /// Обратная половина правила: соседняя улица в двухстах метрах — это
+    /// НАСТОЯЩАЯ новая дорога, и запрет не имеет права её съесть.
+    func testANewStreetTwoHundredMetresAwayIsStillDrawn() {
+        let first = line(northMetres: 5_000, points: 3)
+        let opened = RevealBuilder.patches(for: first) { _ in [] }
+        let street = shifted(first, eastMetres: 200)
+
+        let patches = RevealBuilder.patches(for: street) { key in opened[key]?.cells ?? [] }
+        XCTAssertEqual(drawnMetres(patches), 5_000, accuracy: 400, "новая улица не нарисована")
     }
 
     // MARK: - Разрывы
