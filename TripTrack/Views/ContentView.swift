@@ -26,6 +26,9 @@ extension Notification.Name {
     static let tripRecordingEnded = Notification.Name("tripRecordingEnded")
     static let territoryRebuilt = Notification.Name("territoryRebuilt")
     static let syncPullCompleted = Notification.Name("syncPullCompleted")
+    /// Открытое на карте изменилось (0.7.0): финиш поездки, фоновая сборка
+    /// после обновления, стирание данных. Слушает «Атлас».
+    static let revealedLayerChanged = Notification.Name("revealedLayerChanged")
     /// Места или проезды изменились (0.6.8): вкладка «Места» и чип у отметки
     /// перечитывают историю.
     static let placesChanged = Notification.Name("placesChanged")

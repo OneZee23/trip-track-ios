@@ -37,6 +37,8 @@ enum LocalDataWipe {
             // Места и проезды — без связей — каскад не заберёт.
             "PlacePassEntity", "PlaceEntity",
             "VisitedGeohashEntity", "RoadEntity",
+            // Открытое на карте (0.7.0) — тоже без связей.
+            "RevealedCellEntity",
             "GeocodeCacheEntity",
         ]
         for name in entities {
@@ -89,6 +91,11 @@ enum LocalDataWipe {
         // через `reload()`. Без этой строки вкладка мест после «удалить
         // безвозвратно, везде» рисовала бы стёртое до перезапуска.
         PlaceManager.shared.reload()
+        // Открытое на карте стёрто тем же пакетом, но у него есть ещё и флаг
+        // фоновой сборки: не сняв его, вернувшиеся синком поездки остались бы
+        // без тумана навсегда — флаг говорит «сборка прошла». `wipe()` снимает
+        // флаг и сообщает «Атласу», что снимок мира устарел.
+        RevealedLayerStore.shared.wipe()
 
         wipeLog.notice("[data.wipe] local user data erased")
     }

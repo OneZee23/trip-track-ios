@@ -313,6 +313,9 @@ final class MapViewModel: ObservableObject {
             // Места (0.6.8): отметки без места и поездки без сверки. После
             // первого раза — пустые выборки, ноль работы.
             await PlaceManager.shared.reconcile()
+            // Туман (0.7.0): открытое из всей библиотеки — один раз после
+            // обновления. Пустая выборка флаг не взводит.
+            await RevealedLayerStore.shared.rebuildIfNeeded()
             gamificationManager.backfillBadgesIfNeeded(trips: allTrips)
             StartupTrace.mark("migrations+backfill done")
         }
@@ -848,6 +851,10 @@ final class MapViewModel: ObservableObject {
                 // выбросов; мусорная поездка к этому моменту уже удалена, и
                 // `process` для неё ничего не найдёт.
                 await PlaceManager.shared.process(tripId: trip.id)
+                // Туман (0.7.0): что поездка открыла НОВОГО — на том же
+                // окончательном треке, из превью. Копится инкрементально,
+                // поэтому открытие «Атласа» ничего не пересчитывает.
+                RevealedLayerStore.shared.ingest(tripId: trip.id)
             }
         }
 
