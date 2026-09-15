@@ -103,7 +103,7 @@ final class SyncCoordinator {
         do {
             let res: SyncPullResponse = try await client.post(APIEndpoint.syncPull, body: req)
             coordinatorLog.debug("pull got trips=\(res.trips.upserted.count) vehicles=\(res.vehicles.upserted.count) photos=\(res.photos.upserted.count) settings=\(res.settings != nil) serverTime=\(res.serverTime)")
-            pullApplier.apply(res)
+            let appliedTripIds = pullApplier.apply(res)
             if let serverTime = ISODate.parse(res.serverTime) {
                 LastSyncedAtStore.set(serverTime, for: accountId)
                 coordinatorLog.debug("lastSyncedAt advanced to \(serverTime)")
@@ -118,10 +118,23 @@ final class SyncCoordinator {
                 await reconcileAfterPull(counts: counts)
                 await healIfLibraryIsShort(counts: counts, accountId: accountId)
             }
-            NotificationCenter.default.post(name: .syncPullCompleted, object: nil)
+            postPullCompleted(appliedTripIds)
         } catch {
             coordinatorLog.debug("pull failed: \(error)")
         }
+    }
+
+    /// Пул кончился — и говорит, ЧТО привёз.
+    ///
+    /// Ключ ставится всегда, в том числе пустым списком: «ничего не приехало»
+    /// и «неизвестно, что приехало» — разные ответы, и второй стоит слушателю
+    /// полного прохода по библиотеке на каждом заходе в приложение.
+    private func postPullCompleted(_ appliedTripIds: [UUID]) {
+        NotificationCenter.default.post(
+            name: .syncPullCompleted,
+            object: nil,
+            userInfo: [SyncPullNotification.appliedTripIds: appliedTripIds]
+        )
     }
 
     // MARK: - Client data-loss healing
@@ -190,7 +203,7 @@ final class SyncCoordinator {
             lastSyncedAt: nil, entityTypes: ["trip", "vehicle", "photo", "journey"])
         do {
             let res: SyncPullResponse = try await client.post(APIEndpoint.syncPull, body: req)
-            pullApplier.apply(res)
+            let appliedTripIds = pullApplier.apply(res)
             if let serverTime = ISODate.parse(res.serverTime) {
                 LastSyncedAtStore.set(serverTime, for: accountId)
             }
@@ -200,7 +213,7 @@ final class SyncCoordinator {
             // mileage it had before the loss.
             CoreDataTripRepository().recomputeAllVehicleOdometers()
             coordinatorLog.warning("heal applied trips=\(res.trips.upserted.count)")
-            NotificationCenter.default.post(name: .syncPullCompleted, object: nil)
+            postPullCompleted(appliedTripIds)
         } catch {
             coordinatorLog.error("heal pull failed: \(error.localizedDescription)")
         }

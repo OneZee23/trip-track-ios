@@ -15,7 +15,13 @@ import Combine
 /// ПОСЛЕ. Поэтому подписка взводится в `init` менеджера записи, до первого
 /// пула, а не откладывается в задачу миграций.
 ///
-/// Сам разбор живёт в сторе (`reconcile()`): здесь только подписка и задача,
+/// Разбирается РОВНО то, что привёз пул: список применённых id едет в
+/// `userInfo` уведомления (`SyncPullNotification.appliedTripIds`). Отметки по
+/// времени здесь нет и быть не может — см. `RevealedLayerStore.ReconcileRequest`.
+/// Уведомление БЕЗ ключа (чужой постер, тест) — «неизвестно», и стоит одного
+/// полного прохода: он идемпотентен, просто длиннее.
+///
+/// Сам разбор живёт в сторе (`reconcile(_:)`): здесь только подписка и задача,
 /// которую можно дождаться в тесте.
 @MainActor
 final class RevealedLayerSync {
@@ -25,15 +31,28 @@ final class RevealedLayerSync {
     private var cancellables = Set<AnyCancellable>()
     private var task: Task<Void, Never>?
 
-    init(store: RevealedLayerStore = .shared) {
+    /// `center` инжектируется ради тестов: пост в общий
+    /// `NotificationCenter.default` разбудил бы продакшен-синглтоны поверх
+    /// `PersistenceController.shared` — тот самый «хвост, роняющий чужой класс».
+    init(store: RevealedLayerStore = .shared, center: NotificationCenter = .default) {
         self.store = store
-        NotificationCenter.default.publisher(for: .syncPullCompleted)
+        center.publisher(for: .syncPullCompleted)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] note in
                 guard let self else { return }
-                self.task = Task { await self.store.reconcile() }
+                let request = Self.request(from: note)
+                self.task = Task { await self.store.reconcile(request) }
             }
             .store(in: &cancellables)
+    }
+
+    /// Что просить у стора по этому уведомлению. Чистая функция: контракт
+    /// «нет ключа — полный проход, пустой список — ничего» держит тест.
+    static func request(from note: Notification) -> RevealedLayerStore.ReconcileRequest {
+        guard let ids = note.userInfo?[SyncPullNotification.appliedTripIds] as? [UUID] else {
+            return .full
+        }
+        return .ids(Set(ids))
     }
 
     /// Взвести подписку. Ничего не делает сверх `init` — но зовётся явно,

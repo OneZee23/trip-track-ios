@@ -1,11 +1,31 @@
 import Foundation
 import CoreData
 
+/// Что пул кладёт в `userInfo` своего `.syncPullCompleted`.
+///
+/// Ключ ОДИН и типизирован нарочно: слушателям пула (`RevealedLayerSync`)
+/// нужно знать не «когда», а «ЧТО приехало». Время для этого не годится —
+/// `lastModifiedAt` у своей поездки ставят часы этого телефона, у чужой она
+/// приезжает как есть с другого устройства, а дельта на сервере режется
+/// серверными часами: три шкалы, и любое окно по времени однажды отсекает
+/// поездку, которой ещё не было. Список применённых id не зависит ни от
+/// одних часов.
+///
+/// Пустой список — законный ответ «пул ничего не привёз», а ОТСУТСТВИЕ ключа
+/// значит «неизвестно» (старый постер, чужой вызов, тест) и стоит слушателю
+/// полного прохода.
+enum SyncPullNotification {
+    /// `[UUID]` — поездки, применённые этим пулом.
+    static let appliedTripIds = "syncPullAppliedTripIds"
+}
+
 @MainActor
 final class PullApplier {
     private let repo: TripRepository = CoreDataTripRepository()
 
-    func apply(_ response: SyncPullResponse) {
+    /// Возвращает id применённых поездок — их несёт `.syncPullCompleted`.
+    @discardableResult
+    func apply(_ response: SyncPullResponse) -> [UUID] {
         for p in response.trips.upserted { repo.applyRemoteTrip(p) }
 
         // A tombstone for a trip this device never mirrored is not about our
@@ -55,6 +75,7 @@ final class PullApplier {
         if response.settings != nil || vehiclesChanged {
             SettingsManager.shared.reloadFromCoreData()
         }
+        return response.trips.upserted.map(\.id)
     }
 
     /// То же, что называет руками `SettingsManager.deleteVehicle`, — но для

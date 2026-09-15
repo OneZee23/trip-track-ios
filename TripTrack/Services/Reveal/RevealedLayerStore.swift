@@ -39,42 +39,67 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// прошедший сборку на ещё не приехавшей библиотеке, оставался без тумана
     /// НАВСЕГДА. У кого `v17` собрался честно — цена одна лишняя сборка.
     static let rebuildFlagKey = "reveal_rebuild_v18_done"
-    /// Докуда стор разобрал библиотеку: самая свежая `lastModifiedAt` среди
-    /// разобранных поездок — не «когда мы последний раз считали».
-    ///
-    /// Отметка в `UserDefaults`, своей колонки у поездки в этой волне не
-    /// заводим. Сравнивается она именно с `lastModifiedAt`, потому что пул
-    /// пишет это поле КАЖДОЙ применённой поездке и оно непустое по типу
-    /// (`TripSyncPayload.lastModifiedAt: Date`, `applyRemoteTrip`), тогда как
-    /// `serverCreatedAt` ставится один раз и говорит «у строки есть серверный
-    /// близнец», а не «строка изменилась».
-    static let lastIngestKey = "reveal_last_ingest_at"
-    /// Запас назад от отметки. У поездки пула `lastModifiedAt` серверная, у
-    /// своей — телефонная, и одних часов у них нет: без запаса поездка,
-    /// правленная на втором телефоне за минуту до нашего финиша, не попала бы
-    /// в сверку никогда. Повторный разбор не стоит ничего — ячейки
-    /// идемпотентны, второй заход открывает ноль.
-    static let ingestSlack: TimeInterval = 86_400
     /// Сколько поездок сборки идёт одним сохранением.
     static let rebuildBatch = 40
 
-    /// Чем кончилась сверка. `busy` — не «ошибка», а «уже идёт»: пул поверх
-    /// стартовой сверки обычное дело.
+    /// Что разобрать сверке.
+    ///
+    /// Отметки по времени здесь НЕТ и быть не может: `lastModifiedAt` у своей
+    /// поездки ставят часы этого телефона, у чужой она приезжает как есть с
+    /// другого устройства, а дельта на сервере режется серверными часами. Окно
+    /// по любой из трёх шкал однажды отсекает поездку, которой ещё не было, —
+    /// и это ровно та поломка, ради которой сверка написана. Поэтому пул
+    /// говорит, ЧТО он привёз (`SyncPullNotification.appliedTripIds`), а
+    /// молчание («ключа нет») стоит одного полного прохода: он идемпотентен и
+    /// открывает ноль ячеек там, где уже открыто.
+    enum ReconcileRequest: Equatable {
+        case full
+        case ids(Set<UUID>)
+
+        /// Сложение запросов: полный проход поглощает всё, списки id
+        /// объединяются. Чистая функция — очередь проверяется тестом, а не
+        /// гонкой двух пулов.
+        static func merged(_ queued: Self?, _ incoming: Self) -> Self {
+            switch (queued, incoming) {
+            case (nil, let incoming): return incoming
+            case (.full, _), (_, .full): return .full
+            case let (.ids(a)?, .ids(b)): return .ids(a.union(b))
+            }
+        }
+
+        var isEmpty: Bool {
+            if case let .ids(ids) = self { return ids.isEmpty }
+            return false
+        }
+    }
+
+    /// Чем кончилась сверка. `queued` — не «работа потеряна», а «её сделает
+    /// идущий проход»: запрос сложен в очередь и выполнится сразу за ним.
     enum ReconcileOutcome: Equatable {
-        case busy
+        case queued
         case done(trips: Int, cells: Int)
     }
 
     private let persistence: PersistenceController
     private let defaults: UserDefaults
     private let context: NSManagedObjectContext
-    /// Сверка в одном экземпляре. Трогается ТОЛЬКО внутри `context.perform` —
-    /// очередь контекста и есть её замок.
+    /// Сверка в одном экземпляре. Оба поля трогаются ТОЛЬКО внутри
+    /// `context.perform` — очередь контекста и есть их замок.
     private var isReconciling = false
+    /// Запрос, пришедший во время прохода: выполняется сразу за ним, сложением
+    /// (`ReconcileRequest.merged`). Терять его нельзя — это пул, чьи строки
+    /// легли в базу уже ПОСЛЕ того, как идущий проход выбрал превью.
+    private var queued: ReconcileRequest?
+    /// Тестовый шлагбаум перед каждым проходом. В продакшене `nil`: очередь
+    /// сверки иначе проверялась бы скоростью машины, а не решением теста.
+    private let beforePass: (@Sendable () async -> Void)?
 
-    init(persistence: PersistenceController = .shared, defaults: UserDefaults = .standard) {
+    init(persistence: PersistenceController = .shared,
+         defaults: UserDefaults = .standard,
+         beforePass: (@Sendable () async -> Void)? = nil) {
         self.persistence = persistence
         self.defaults = defaults
+        self.beforePass = beforePass
         context = persistence.container.newBackgroundContext()
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
@@ -127,7 +152,7 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// «проехал там, где уже был», и это нормальный ответ, а не поломка.
     @discardableResult
     func ingest(tripId: UUID) async -> Int {
-        let result = await context.perform { () -> (added: Int, changedAt: Date?) in
+        let added = await context.perform { () -> Int in
             let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
             request.predicate = NSPredicate(
                 format: "id == %@ AND endDate != nil AND syncStatus != %d",
@@ -135,10 +160,9 @@ final class RevealedLayerStore: @unchecked Sendable {
             )
             request.fetchLimit = 1
             guard let entity = try? self.context.fetch(request).first,
-                  let polyline = entity.previewPolyline else { return (0, nil) }
-            let changedAt = Self.changedAt(entity.lastModifiedAt, entity.serverCreatedAt)
+                  let polyline = entity.previewPolyline else { return 0 }
             let coords = Trip.decodePolyline(polyline)
-            guard coords.count > 1 else { return (0, nil) }
+            guard coords.count > 1 else { return 0 }
 
             var cache: [String: Set<RevealGrid.Cell>] = [:]
             let patches = RevealBuilder.patches(for: coords) { key in
@@ -150,16 +174,12 @@ final class RevealedLayerStore: @unchecked Sendable {
             let opened = self.mergeInContext(patches)
             guard self.saveContext() else {
                 self.context.rollback()
-                return (0, nil)
+                return 0
             }
-            return (opened, changedAt)
+            return opened
         }
-        // Отметку двигает и финиш: иначе пул через секунду после него разбирал
-        // бы ту же поездку заново. Ячейки от этого не пострадали бы (второй
-        // заход открывает ноль), но работа была бы честно лишней.
-        advanceStamp(to: result.changedAt)
-        if result.added > 0 { postChanged() }
-        return result.added
+        if added > 0 { postChanged() }
+        return added
     }
 
     func merge(_ patches: [String: TilePatch]) async {
@@ -195,7 +215,11 @@ final class RevealedLayerStore: @unchecked Sendable {
 
         let previews = await context.perform { self.fetchPreviews(endedBefore: nil) }
         let usable = previews.filter { ($0.polyline?.count ?? 0) >= 16 }
-        guard !usable.isEmpty else {
+        // «Пригодно по длине» ещё не значит «что-то откроет»: превью из двух
+        // одинаковых точек до `RevealBuilder` доходит, а ячеек не даёт. Спросить
+        // об этом надо ДО стирания — чистым счётом, без базы, — иначе запуск с
+        // вырожденной библиотекой сносит накопленное и не пишет ничего.
+        guard usable.contains(where: Self.opensSomething) else {
             revealLog.notice("reveal rebuild: nothing to build from, latch stays open")
             return
         }
@@ -237,9 +261,6 @@ final class RevealedLayerStore: @unchecked Sendable {
             return
         }
         defaults.set(true, forKey: Self.rebuildFlagKey)
-        // Сборка разобрала библиотеку целиком — сверке после первого пула
-        // незачем проходить по ней второй раз.
-        advanceStamp(to: usable.compactMap(\.changedAt).max())
         revealLog.notice("reveal rebuild: \(total, privacy: .public) cells from \(usable.count, privacy: .public) trips")
         postChanged()
     }
@@ -255,38 +276,59 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// — никогда). Точки поездке пула не нужны: стор читает только превью, а
     /// оно приезжает вместе с поездкой.
     ///
-    /// Идемпотентна: берёт поездки, изменившиеся после отметки, а повторный
-    /// разбор уже открытого добавляет ноль ячеек.
+    /// `request` — ЧТО разобрать: `.ids` от самого пула (он знает, что привёз),
+    /// `.full` когда неизвестно. Времени здесь нет нигде: см. `ReconcileRequest`.
+    /// Идемпотентна — повторный разбор открытого добавляет ноль ячеек.
     @discardableResult
-    func reconcile() async -> ReconcileOutcome {
-        let started = await context.perform { () -> Bool in
+    func reconcile(_ request: ReconcileRequest = .full) async -> ReconcileOutcome {
+        // Запрос, пришедший во время прохода, складывается с очередью и
+        // выполняется сразу за ним: идущий проход выбрал превью РАНЬШЕ, чем
+        // строки этого пула легли в базу, и ответить ему «занято» значило бы
+        // потерять их до следующего запуска.
+        let mine = await context.perform { () -> Bool in
+            self.queued = ReconcileRequest.merged(self.queued, request)
             guard !self.isReconciling else { return false }
             self.isReconciling = true
             return true
         }
-        guard started else {
-            revealLog.notice("reveal reconcile: already running")
-            return .busy
+        guard mine else {
+            revealLog.notice("reveal reconcile: queued behind a running pass")
+            return .queued
         }
-        let outcome = await runReconcile()
-        await context.perform { self.isReconciling = false }
-        return outcome
+
+        var trips = 0
+        var cells = 0
+        while let next = await context.perform({ () -> ReconcileRequest? in
+            guard let next = self.queued else {
+                self.isReconciling = false
+                return nil
+            }
+            self.queued = nil
+            return next
+        }) {
+            let step = await runPass(next)
+            trips += step.trips
+            cells += step.cells
+        }
+        if cells > 0 { postChanged() }
+        return .done(trips: trips, cells: cells)
     }
 
-    private func runReconcile() async -> ReconcileOutcome {
-        let stamp = defaults.object(forKey: Self.lastIngestKey) as? Date
-        let since = stamp?.addingTimeInterval(-Self.ingestSlack)
-        let previews = await context.perform {
-            self.fetchPreviews(endedBefore: nil, changedSince: since)
-        }
+    private func runPass(_ request: ReconcileRequest) async -> (trips: Int, cells: Int) {
+        await beforePass?()
+        guard !request.isEmpty else { return (0, 0) }
+        let ids: Set<UUID>? = {
+            if case let .ids(ids) = request { return ids }
+            return nil
+        }()
+        let previews = await context.perform { self.fetchPreviews(endedBefore: nil, ids: ids) }
         let usable = previews.filter { ($0.polyline?.count ?? 0) >= 16 }
-        guard !usable.isEmpty else { return .done(trips: 0, cells: 0) }
+        guard !usable.isEmpty else { return (0, 0) }
 
         var total = 0
-        var high: Date?
         for start in stride(from: 0, to: usable.count, by: Self.rebuildBatch) {
             let batch = Array(usable[start..<min(start + Self.rebuildBatch, usable.count)])
-            let step = await context.perform { () -> (opened: Int, high: Date?) in
+            total += await context.perform { () -> Int in
                 var opened = 0
                 var cache: [String: Set<RevealGrid.Cell>] = [:]
                 for preview in batch {
@@ -304,23 +346,16 @@ final class RevealedLayerStore: @unchecked Sendable {
                     }
                     opened += self.mergeInContext(patches)
                 }
-                // Отметка двигается ТОЛЬКО за сохранением: упавшее сохранение,
-                // отмеченное как сделанное, потеряло бы эти поездки навсегда.
                 guard self.saveContext() else {
                     self.context.rollback()
-                    return (0, nil)
+                    return 0
                 }
-                return (opened, batch.compactMap(\.changedAt).max())
+                return opened
             }
-            total += step.opened
-            if let stepHigh = step.high, high == nil || high! < stepHigh { high = stepHigh }
             await Task.yield()
         }
-
-        advanceStamp(to: high)
         revealLog.notice("reveal reconcile: \(total, privacy: .public) cells from \(usable.count, privacy: .public) trips")
-        if total > 0 { postChanged() }
-        return .done(trips: usable.count, cells: total)
+        return (usable.count, total)
     }
 
     /// Стереть открытое. Флаг сборки снимается вместе с данными: он говорит
@@ -336,9 +371,6 @@ final class RevealedLayerStore: @unchecked Sendable {
             context.reset()
         }
         defaults.set(false, forKey: Self.rebuildFlagKey)
-        // Вместе с данными снимается и отметка сверки: иначе вернувшиеся
-        // синком поездки «уже разобраны», а разбирать их некому.
-        defaults.removeObject(forKey: Self.lastIngestKey)
         postChanged()
     }
 
@@ -358,28 +390,15 @@ final class RevealedLayerStore: @unchecked Sendable {
     private struct Preview {
         let id: UUID
         let polyline: Data?
-        /// Когда строка последний раз менялась — тем полем, которое пишет пул.
-        let changedAt: Date?
     }
 
-    /// Дата правки строки. `lastModifiedAt` — то, что пул ставит каждой
-    /// применённой поездке; `serverCreatedAt` подстраховывает строки, у
-    /// которых колонка правки пуста (наследство до sync-ready полей).
-    private static func changedAt(_ modified: Date?, _ created: Date?) -> Date? {
-        switch (modified, created) {
-        case let (m?, c?): return max(m, c)
-        case let (m?, nil): return m
-        case let (nil, c?): return c
-        case (nil, nil): return nil
-        }
-    }
-
-    /// Отметка идёт только вперёд: сверка и финиш ходят вперемешку.
-    private func advanceStamp(to date: Date?) {
-        guard let date else { return }
-        let current = defaults.object(forKey: Self.lastIngestKey) as? Date
-        guard current == nil || current! < date else { return }
-        defaults.set(date, forKey: Self.lastIngestKey)
+    /// Откроет ли это превью хоть что-нибудь. Чистый счёт, без базы: `claimed`
+    /// отвечает «пусто», то есть вопрос — «есть ли тут вообще геометрия».
+    private static func opensSomething(_ preview: Preview) -> Bool {
+        guard let polyline = preview.polyline else { return false }
+        let coords = Trip.decodePolyline(polyline)
+        guard coords.count > 1 else { return false }
+        return !RevealBuilder.patches(for: coords, claimed: { _ in [] }).isEmpty
     }
 
     private func fetchTiles() -> [RevealedTile] {
@@ -437,18 +456,11 @@ final class RevealedLayerStore: @unchecked Sendable {
 
     /// Превью завершённых поездок, по возрастанию даты: кто проехал первым, тот
     /// и владеет геометрией — как и на живом финише.
-    private func fetchPreviews(endedBefore date: Date?, changedSince: Date? = nil) -> [Preview] {
-        let request = Self.previewRequest(endedBefore: date, changedSince: changedSince)
+    private func fetchPreviews(endedBefore date: Date?, ids: Set<UUID>? = nil) -> [Preview] {
+        let request = Self.previewRequest(endedBefore: date, ids: ids)
         return ((try? context.fetch(request)) ?? []).compactMap { row in
             guard let id = row["id"] as? UUID else { return nil }
-            return Preview(
-                id: id,
-                polyline: row["previewPolyline"] as? Data,
-                changedAt: Self.changedAt(
-                    row["lastModifiedAt"] as? Date,
-                    row["serverCreatedAt"] as? Date
-                )
-            )
+            return Preview(id: id, polyline: row["previewPolyline"] as? Data)
         }
     }
 
@@ -461,25 +473,16 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// отдаёт выборку одной порцией — то есть настройка не работала, а шум
     /// в логе прятал настоящие ошибки стора.
     ///
-    /// `changedSince` — сверка: строки без обеих дат сюда не попадают, и это
-    /// решение. Пул ставит `lastModifiedAt` всегда (поле непустое по типу),
-    /// значит пустые обе даты бывают только у местной строки, которую уже
-    /// разобрала разовая сборка; брать их каждый пул значило бы перебирать
-    /// доисторическую библиотеку заново на каждом заходе в приложение.
-    static func previewRequest(endedBefore date: Date?, changedSince: Date?) -> NSFetchRequest<NSDictionary> {
+    /// `ids` — сверка по списку от пула: разбираем ровно то, что приехало.
+    static func previewRequest(endedBefore date: Date?, ids: Set<UUID>? = nil) -> NSFetchRequest<NSDictionary> {
         let request = NSFetchRequest<NSDictionary>(entityName: "TripEntity")
         request.resultType = .dictionaryResultType
-        request.propertiesToFetch = ["id", "previewPolyline", "lastModifiedAt", "serverCreatedAt"]
+        request.propertiesToFetch = ["id", "previewPolyline"]
         var predicates = [NSPredicate(
             format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue
         )]
         if let date { predicates.append(NSPredicate(format: "endDate <= %@", date as NSDate)) }
-        if let changedSince {
-            predicates.append(NSPredicate(
-                format: "lastModifiedAt >= %@ OR serverCreatedAt >= %@",
-                changedSince as NSDate, changedSince as NSDate
-            ))
-        }
+        if let ids { predicates.append(NSPredicate(format: "id IN %@", ids as NSSet)) }
         request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         request.sortDescriptors = [NSSortDescriptor(key: "startDate", ascending: true)]
         return request

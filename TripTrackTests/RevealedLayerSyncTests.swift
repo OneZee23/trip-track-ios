@@ -4,8 +4,8 @@ import CoreLocation
 @testable import TripTrack
 
 /// Дверь пула в открытый мир: поездка, приехавшая `/sync/pull`, обязана
-/// получить туман в ТОМ ЖЕ сеансе, а сверка — не перебирать библиотеку заново
-/// на каждом заходе в приложение.
+/// получить туман в ТОМ ЖЕ сеансе, а разбирается ровно то, что пул привёз, —
+/// по списку id, а не по окну времени.
 @MainActor
 final class RevealedLayerSyncTests: XCTestCase {
     private var pc: PersistenceController!
@@ -13,6 +13,9 @@ final class RevealedLayerSyncTests: XCTestCase {
     private var suiteName: String!
     private var store: RevealedLayerStore!
     private var sync: RevealedLayerSync!
+    /// Свой центр уведомлений: пост в общий разбудил бы продакшен-синглтоны
+    /// поверх `PersistenceController.shared` — тот самый чужой хвост.
+    private var center: NotificationCenter!
 
     override func setUp() {
         super.setUp()
@@ -20,6 +23,7 @@ final class RevealedLayerSyncTests: XCTestCase {
         suiteName = "reveal-sync-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         store = RevealedLayerStore(persistence: pc, defaults: defaults)
+        center = NotificationCenter()
     }
 
     /// Каждое поле обнуляется: XCTest держит экземпляры до конца прогона, и
@@ -27,6 +31,7 @@ final class RevealedLayerSyncTests: XCTestCase {
     /// это «Multiple NSEntityDescriptions claim TripEntity» в ЧУЖОМ классе.
     override func tearDown() {
         sync = nil
+        center = nil
         store = nil
         defaults?.removePersistentDomain(forName: suiteName)
         defaults = nil
@@ -43,8 +48,7 @@ final class RevealedLayerSyncTests: XCTestCase {
     @discardableResult
     private func makePulledTrip(
         northMetres: Double = 3_000,
-        from origin: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753),
-        lastModifiedAt: Date = Date()
+        from origin: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753)
     ) -> UUID {
         let context = pc.container.viewContext
         let entity = TripEntity(context: context)
@@ -53,8 +57,6 @@ final class RevealedLayerSyncTests: XCTestCase {
         entity.startDate = Date().addingTimeInterval(-1_800)
         entity.endDate = Date()
         entity.syncStatus = SyncStatus.synced.rawValue
-        entity.lastModifiedAt = lastModifiedAt
-        entity.serverCreatedAt = lastModifiedAt
         let coords = (0..<3).map { i -> CLLocationCoordinate2D in
             let t = Double(i) / 2
             return CLLocationCoordinate2D(
@@ -72,7 +74,17 @@ final class RevealedLayerSyncTests: XCTestCase {
         return (try? pc.container.viewContext.count(for: request)) ?? 0
     }
 
-    private var stamp: Date? { defaults.object(forKey: RevealedLayerStore.lastIngestKey) as? Date }
+    private func cellCount() async -> Int {
+        await store.tiles().reduce(0) { $0 + $1.cellSet.count }
+    }
+
+    private func postPull(appliedTripIds: [UUID]?) {
+        center.post(
+            name: .syncPullCompleted,
+            object: nil,
+            userInfo: appliedTripIds.map { [SyncPullNotification.appliedTripIds: $0] }
+        )
+    }
 
     // MARK: - Пул
 
@@ -82,11 +94,11 @@ final class RevealedLayerSyncTests: XCTestCase {
     func testPulledTripReachesTheStoreWithinTheSession() async {
         await store.rebuildIfNeeded()
         XCTAssertEqual(storedTileCount(), 0, "запуск: библиотека ещё не приехала")
-        sync = RevealedLayerSync(store: store)
+        sync = RevealedLayerSync(store: store, center: center)
 
         let opened = expectation(forNotification: .revealedLayerChanged, object: nil)
-        makePulledTrip()
-        NotificationCenter.default.post(name: .syncPullCompleted, object: nil)
+        let id = makePulledTrip()
+        postPull(appliedTripIds: [id])
         await fulfillment(of: [opened], timeout: 5)
         await sync.settle()
 
@@ -95,99 +107,136 @@ final class RevealedLayerSyncTests: XCTestCase {
         XCTAssertGreaterThan(tiles.reduce(0) { $0 + $1.cellSet.count }, 30)
     }
 
-    // MARK: - Отметка
+    /// Уведомление БЕЗ ключа — «неизвестно, что приехало»: полный проход.
+    /// Так выглядит чужой постер и старый бинарник.
+    func testPullWithoutIdsSweepsTheWholeLibrary() async {
+        sync = RevealedLayerSync(store: store, center: center)
+        makePulledTrip(from: CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753))
+        makePulledTrip(from: CLLocationCoordinate2D(latitude: 46.5, longitude: 39.5))
 
-    /// Без отметки сверка перебирала бы всю библиотеку на каждом пуле.
-    func testReconcileSkipsTripsOlderThanTheStamp() async {
-        defaults.set(Date(), forKey: RevealedLayerStore.lastIngestKey)
-        makePulledTrip(lastModifiedAt: Date().addingTimeInterval(-86_400 * 10))
+        let opened = expectation(forNotification: .revealedLayerChanged, object: nil)
+        postPull(appliedTripIds: nil)
+        await fulfillment(of: [opened], timeout: 5)
+        await sync.settle()
 
-        let outcome = await store.reconcile()
+        let layer = await store.layer()
+        XCTAssertEqual(layer.openedKm, 6.0, accuracy: 0.8, "обе поездки разобраны")
+    }
+
+    func testRequestFromNotificationReadsTheIds() {
+        let id = UUID()
+        let withIds = Notification(
+            name: .syncPullCompleted, object: nil,
+            userInfo: [SyncPullNotification.appliedTripIds: [id]]
+        )
+        let withoutIds = Notification(name: .syncPullCompleted, object: nil, userInfo: nil)
+
+        XCTAssertEqual(RevealedLayerSync.request(from: withIds), .ids([id]))
+        XCTAssertEqual(RevealedLayerSync.request(from: withoutIds), .full)
+    }
+
+    // MARK: - Разбирается ровно привезённое
+
+    func testOnlyTheAppliedTripsAreIngested() async {
+        let pulled = makePulledTrip(from: CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753))
+        makePulledTrip(from: CLLocationCoordinate2D(latitude: 46.5, longitude: 39.5))
+
+        let outcome = await store.reconcile(.ids([pulled]))
+
+        let cells = await cellCount()
+        XCTAssertEqual(outcome, .done(trips: 1, cells: cells))
+        let layer = await store.layer()
+        XCTAssertEqual(layer.openedKm, 3.0, accuracy: 0.4, "вторая поездка пулом не приезжала")
+    }
+
+    /// Пустой список — «пул ничего не привёз», и это НЕ повод идти по
+    /// библиотеке: иначе каждый заход в приложение стоил бы полного прохода.
+    func testEmptyPullDoesNothing() async {
+        makePulledTrip()
+
+        let outcome = await store.reconcile(.ids([]))
 
         XCTAssertEqual(outcome, .done(trips: 0, cells: 0))
         XCTAssertEqual(storedTileCount(), 0)
     }
 
-    func testReconcileTakesTripsChangedAfterTheStamp() async {
-        defaults.set(Date().addingTimeInterval(-86_400 * 10), forKey: RevealedLayerStore.lastIngestKey)
-        makePulledTrip(lastModifiedAt: Date())
-
-        let outcome = await store.reconcile()
-
-        guard case let .done(trips, cells) = outcome else { return XCTFail("сверка не прошла") }
-        XCTAssertEqual(trips, 1)
-        XCTAssertGreaterThan(cells, 30)
-        XCTAssertGreaterThan(storedTileCount(), 0)
-    }
-
-    /// Первый заход — отметки нет вовсе: библиотека берётся целиком, ради этого
-    /// дверь и делалась (69 поездок владельца приехали пулом).
-    func testFirstReconcileSweepsTheWholeLibrary() async {
-        makePulledTrip(from: CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753))
-        makePulledTrip(from: CLLocationCoordinate2D(latitude: 46.5, longitude: 39.5))
-        makePulledTrip(from: CLLocationCoordinate2D(latitude: 43.1, longitude: 40.2))
-
-        let outcome = await store.reconcile()
-
-        let cells = await cellCount()
-        XCTAssertEqual(outcome, .done(trips: 3, cells: cells))
-        XCTAssertGreaterThanOrEqual(storedTileCount(), 3)
-    }
-
-    /// Отметка двигается ПОСЛЕ сохранения и только вперёд.
-    func testStampAdvancesToTheNewestIngestedTrip() async {
-        let older = Date().addingTimeInterval(-7_200)
-        let newer = Date().addingTimeInterval(-60)
-        makePulledTrip(from: CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753),
-                       lastModifiedAt: older)
-        makePulledTrip(from: CLLocationCoordinate2D(latitude: 46.5, longitude: 39.5),
-                       lastModifiedAt: newer)
-
-        await store.reconcile()
-
-        XCTAssertEqual(stamp?.timeIntervalSince1970 ?? 0, newer.timeIntervalSince1970, accuracy: 0.001)
-    }
-
-    /// Финиш своей поездки двигает ту же отметку: иначе пул через секунду после
-    /// него разбирал бы её заново.
-    func testFinishAdvancesTheSameStamp() async {
-        let modified = Date().addingTimeInterval(-30)
-        let id = makePulledTrip(lastModifiedAt: modified)
-
-        await store.ingest(tripId: id)
-
-        XCTAssertEqual(stamp?.timeIntervalSince1970 ?? 0, modified.timeIntervalSince1970, accuracy: 0.001)
-    }
-
     /// Повторная сверка не открывает ничего: ячейки идемпотентны.
     func testSecondReconcileOpensNothing() async {
-        makePulledTrip()
-        await store.reconcile()
+        let id = makePulledTrip()
+        await store.reconcile(.ids([id]))
         let cells = await cellCount()
 
-        let outcome = await store.reconcile()
+        let outcome = await store.reconcile(.ids([id]))
 
-        guard case let .done(_, opened) = outcome else { return XCTFail("сверка не прошла") }
-        XCTAssertEqual(opened, 0)
+        XCTAssertEqual(outcome, .done(trips: 1, cells: 0))
         let after = await cellCount()
         XCTAssertEqual(after, cells)
     }
 
-    /// Пул поверх стартовой сверки — обычное дело: второй проход выходит сразу,
-    /// а не считает ту же библиотеку вторым потоком.
-    func testOverlappingReconcileExits() async {
-        for i in 0..<20 {
-            makePulledTrip(from: CLLocationCoordinate2D(latitude: 45.0 + Double(i) * 0.2, longitude: 38.9))
-        }
+    // MARK: - Очередь
 
-        async let first = store.reconcile()
-        async let second = store.reconcile()
-        let outcomes = await [first, second]
-
-        XCTAssertEqual(outcomes.filter { $0 == .busy }.count, 1, "работает ровно одна сверка")
+    func testMergedRequestUnionsIds() {
+        let a = UUID(), b = UUID()
+        XCTAssertEqual(RevealedLayerStore.ReconcileRequest.merged(nil, .ids([a])), .ids([a]))
+        XCTAssertEqual(RevealedLayerStore.ReconcileRequest.merged(.ids([a]), .ids([b])), .ids([a, b]))
+        XCTAssertEqual(RevealedLayerStore.ReconcileRequest.merged(.ids([a]), .full), .full)
+        XCTAssertEqual(RevealedLayerStore.ReconcileRequest.merged(.full, .ids([a])), .full)
+        XCTAssertEqual(RevealedLayerStore.ReconcileRequest.merged(nil, .full), .full)
     }
 
-    private func cellCount() async -> Int {
-        await store.tiles().reduce(0) { $0 + $1.cellSet.count }
+    /// Пул, пришедший во время идущей сверки, обязан быть разобран — его
+    /// строки легли в базу уже ПОСЛЕ того, как идущий проход выбрал превью.
+    /// Шлагбаум держит тест, а не скорость машины.
+    func testQueuedPullIsRunAfterTheCurrentPass() async {
+        let gate = PassGate()
+        store = RevealedLayerStore(persistence: pc, defaults: defaults,
+                                   beforePass: { await gate.wait() })
+        let first = makePulledTrip(from: CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753))
+        let running = Task { await self.store.reconcile(.ids([first])) }
+        await gate.waitUntilArrived()
+
+        // Второй пул приезжает, пока первый проход стоит у шлагбаума.
+        let second = makePulledTrip(from: CLLocationCoordinate2D(latitude: 46.5, longitude: 39.5))
+        let queued = await store.reconcile(.ids([second]))
+        XCTAssertEqual(queued, .queued)
+
+        await gate.open()
+        let outcome = await running.value
+
+        let cells = await cellCount()
+        XCTAssertEqual(outcome, .done(trips: 2, cells: cells),
+                       "оба прохода сделаны одной задачей")
+        let layer = await store.layer()
+        XCTAssertEqual(layer.openedKm, 6.0, accuracy: 0.8, "поездка второго пула не потеряна")
+    }
+}
+
+/// Шлагбаум перед проходом сверки: первый проход встаёт и сообщает об этом,
+/// открывается — навсегда.
+private actor PassGate {
+    private var opened = false
+    private var arrived = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var arrival: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        if !arrived {
+            arrived = true
+            arrival?.resume()
+            arrival = nil
+        }
+        guard !opened else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func waitUntilArrived() async {
+        guard !arrived else { return }
+        await withCheckedContinuation { arrival = $0 }
+    }
+
+    func open() {
+        opened = true
+        for waiter in waiters { waiter.resume() }
+        waiters.removeAll()
     }
 }
