@@ -119,51 +119,58 @@ struct MapPathChunks {
     }
 }
 
-// MARK: - Ленивый индекс
+// MARK: - Индекс путей
 
-/// Индекс путей, который собирается на первой отрисовке своего уровня детали, а
-/// не в `init` рендерера.
+/// Индекс путей, который собирается ОДИН раз и ВНЕ главного потока, а до
+/// готовности честно говорит «меня ещё нет».
 ///
-/// `init` рендерера случается на ГЛАВНОМ потоке в момент первого показа карты,
-/// и собрать там всю открытую сеть по трём уровням — это и есть хитч на
-/// открытии Атласа. Уровней за сессию нужно обычно один-два: человек смотрит на
-/// свой город, а не пролетает от страны до улицы.
+/// Собирать в `draw` нельзя: MapKit зовёт его на своих потоках отрисовки, и
+/// тайл, которому не повезло прийти первым, ждал бы всю сеть целиком — а
+/// остальные ждали бы его на замке. Собирать в `init` рендерера тоже нельзя:
+/// `rendererFor` MapKit зовёт на ГЛАВНОМ потоке, перед первым кадром карты,
+/// то есть ровно тогда, когда человек ждёт картинку.
 ///
-/// `NSLock`, потому что MapKit зовёт `draw` на НЕСКОЛЬКИХ потоках сразу: два
-/// тайла одного уровня, пришедшие одновременно, иначе собрали бы индекс дважды
-/// (и по-разному — второй затёр бы первый посреди чужой отрисовки).
-final class LazyPathIndex {
+/// Поэтому: `prepare` на фоновой очереди из `init`, а пока не готово — тайл
+/// рисуется сплошной заливкой без коридоров. Это честный промежуточный кадр:
+/// он не показывает карту Apple там, где её показывать нельзя.
+///
+/// `NSLock`, потому что читают его потоки отрисовки, а пишет фоновый.
+final class MapPathIndex {
     private let lock = NSLock()
     private var built: [RevealedLayer.LOD: MapPathChunks] = [:]
     private var levelsBuilt = 0
-    private let source: (RevealedLayer.LOD) -> [MKPolyline]
-    private let transform: (MKMapPoint) -> CGPoint
-
-    init(
-        source: @escaping (RevealedLayer.LOD) -> [MKPolyline],
-        transform: @escaping (MKMapPoint) -> CGPoint
-    ) {
-        self.source = source
-        self.transform = transform
-    }
 
     /// Сколько НАБОРОВ БАКЕТОВ собрано за жизнь индекса. Потолок — четыре
     /// (`.fine` мелкий, `.mid` оба, `.far` грубый), и вырасти он не имеет
-    /// права: прорезь на экране записи растёт шестьдесят раз в секунду.
+    /// права: прорезь на экране записи растёт шестьдесят раз в секунду, и
+    /// если ради неё подменять оверлей, каждый кадр пересобирал бы пути всего
+    /// открытого мира. Держит `FogVeilTemporalTests`.
     var builds: Int {
         lock.lock(); defer { lock.unlock() }
         return levelsBuilt
     }
 
-    func chunks(for lod: RevealedLayer.LOD) -> MapPathChunks {
-        lock.lock()
-        defer { lock.unlock() }
-        if let ready = built[lod] { return ready }
-        let chunks = MapPathChunks(
-            source(lod), levels: MapPathChunks.levels(for: lod), transform: transform)
-        built[lod] = chunks
-        levelsBuilt += chunks.builtLevels
-        return chunks
+    /// Готовый индекс уровня — или `nil`, пока сборка не дошла до него.
+    func ready(for lod: RevealedLayer.LOD) -> MapPathChunks? {
+        lock.lock(); defer { lock.unlock() }
+        return built[lod]
+    }
+
+    /// Собрать все достижимые наборы. Зовётся один раз и не с главного потока.
+    /// Уровни складываются по одному: первый готовый начинает рисовать
+    /// коридоры, не дожидаясь остальных.
+    func prepare(
+        source: (RevealedLayer.LOD) -> [MKPolyline],
+        transform: @escaping (MKMapPoint) -> CGPoint
+    ) {
+        for lod in RevealedLayer.LOD.allCases {
+            let chunks = MapPathChunks(
+                source(lod), levels: MapPathChunks.levels(for: lod), transform: transform)
+            lock.lock()
+            built[lod] = chunks
+            levelsBuilt += chunks.builtLevels
+            lock.unlock()
+        }
     }
 }
 
@@ -239,6 +246,25 @@ enum FogVeilPainter {
 
     /// Сколько пятен сеется в ячейку.
     static let hazeBlobsPerCell = 2
+
+    /// Потолок пятен на ОДИН тайл.
+    ///
+    /// Сеялка ходит по ячейкам, накрывающим тайл, то есть по
+    /// `(ширина тайла / ячейка)²`. Ограничения зума у «Атласа» нет, и на
+    /// выведенной в мир карте тайл шире дальней ячейки в восемьдесят раз —
+    /// это пятнадцать тысяч градиентов на ОДИН тайл вместо десятка, за
+    /// границей той полосы зумов, которую мерит `MapRenderCostTests`.
+    ///
+    /// Потолок ставится двумя правилами сразу: ячейка не мельче полутора
+    /// тайлов (`hazeMinCellTiles` — на таком зуме пятна мельче всё равно
+    /// субпиксельные) и жёсткий срез списка здесь. Второе — страховка на
+    /// случай, если первое кто-то ослабит.
+    static let hazeBlobsPerTile = 3
+
+    /// Во сколько раз ячейка сеялки обязана быть крупнее рисуемого куска.
+    /// Полтора: при меньшем в кусок попадает больше четырёх ячеек, и потолок
+    /// начинает срезать пятна, которые сосед нарисует, — то есть шов.
+    static let hazeMinCellTiles: Double = 1.6
     /// Альфа пятна. Ниже 6 % — те самые 2–4 уровня RGB, которых глаз не видит;
     /// выше 10 % — начинает спорить с верхней границей светлоты (см.
     /// `testPainterFillsAnEmptyTileOpaque`: полоса недогруженных плиток Apple
@@ -260,6 +286,42 @@ enum FogVeilPainter {
     /// никогда), +0.10 мс здесь. Сторож — `MapRenderCostTests
     /// .testVeilTilesWithNoRoadsAreFarCheaperThanTilesWithThem`.
     static let hazeRadiusRange: ClosedRange<Double> = 0.10...0.18
+
+    /// Пятна, которые видит ЭТОТ кусок мира: свои и соседних ячеек, с клипом
+    /// по куску и с потолком `hazeBlobsPerTile`.
+    ///
+    /// Чистая функция, потому что и цена, и бесшовность проверяются только
+    /// счётом: «сколько пятен на мировом тайле» глазами не увидеть.
+    static func hazeBlobs(in haze: Haze) -> [HazeBlob] {
+        let world = haze.world
+        guard haze.cell > 0, world.width > 0, world.height > 0 else { return [] }
+        // Ячейка НЕ МЕЛЬЧЕ куска: иначе их в куске сотни, и каждая со своими
+        // пятнами. Правило общее для всех тайлов одного зума (ширина тайла у
+        // них одна), поэтому соседи по-прежнему считают пятна одинаково.
+        let cell = max(haze.cell, world.width * hazeMinCellTiles)
+        let reach = cell * hazeRadiusRange.upperBound
+        let minCol = Int64(((world.minX - reach) / cell).rounded(.down))
+        let maxCol = Int64(((world.maxX + reach) / cell).rounded(.down))
+        let minRow = Int64(((world.minY - reach) / cell).rounded(.down))
+        let maxRow = Int64(((world.maxY + reach) / cell).rounded(.down))
+        guard maxCol >= minCol, maxRow >= minRow else { return [] }
+
+        var out: [HazeBlob] = []
+        for col in minCol...maxCol {
+            for row in minRow...maxRow {
+                for blob in hazeBlobs(col: col, row: row, cell: cell) {
+                    // Пятно, не дотянувшееся до куска, стоит одного сравнения,
+                    // а нарисованное — целого прохода градиента.
+                    guard blob.x + blob.radius > world.minX, blob.x - blob.radius < world.maxX,
+                          blob.y + blob.radius > world.minY, blob.y - blob.radius < world.maxY
+                    else { continue }
+                    out.append(blob)
+                    if out.count == hazeBlobsPerTile { return out }
+                }
+            }
+        }
+        return out
+    }
 
     /// Пятна одной ячейки сеялки — чистая функция от её координат.
     ///
@@ -372,8 +434,9 @@ enum FogVeilPainter {
     /// одного числа.
     private static func paintHaze(context: CGContext, rect: CGRect, haze: Haze) {
         let world = haze.world
-        guard haze.cell > 0, world.width > 0, world.height > 0,
-              rect.width > 0, rect.height > 0 else { return }
+        let blobs = hazeBlobs(in: haze)
+        guard !blobs.isEmpty, rect.width > 0, rect.height > 0,
+              world.width > 0, world.height > 0 else { return }
         let stops = [
             hazeColor.withAlphaComponent(1).cgColor,
             hazeColor.withAlphaComponent(0).cgColor,
@@ -382,36 +445,20 @@ enum FogVeilPainter {
             colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: stops, locations: [0, 1]
         ) else { return }
 
-        let reach = haze.cell * hazeRadiusRange.upperBound
-        let minCol = Int64(((world.minX - reach) / haze.cell).rounded(.down))
-        let maxCol = Int64(((world.maxX + reach) / haze.cell).rounded(.down))
-        let minRow = Int64(((world.minY - reach) / haze.cell).rounded(.down))
-        let maxRow = Int64(((world.maxY + reach) / haze.cell).rounded(.down))
-        guard maxCol >= minCol, maxRow >= minRow else { return }
-
         let sx = rect.width / CGFloat(world.width)
         let sy = rect.height / CGFloat(world.height)
         context.saveGState()
         context.clip(to: rect)
-        for col in minCol...maxCol {
-            for row in minRow...maxRow {
-                for blob in hazeBlobs(col: col, row: row, cell: haze.cell) {
-                    // Пятно, не дотянувшееся до куска, стоит одного сравнения,
-                    // а нарисованное — целого прохода градиента.
-                    guard blob.x + blob.radius > world.minX, blob.x - blob.radius < world.maxX,
-                          blob.y + blob.radius > world.minY, blob.y - blob.radius < world.maxY
-                    else { continue }
-                    let centre = CGPoint(
-                        x: rect.minX + CGFloat(blob.x - world.minX) * sx,
-                        y: rect.minY + CGFloat(blob.y - world.minY) * sy
-                    )
-                    context.setAlpha(blob.alpha)
-                    context.drawRadialGradient(
-                        glow, startCenter: centre, startRadius: 0,
-                        endCenter: centre, endRadius: CGFloat(blob.radius) * sx, options: []
-                    )
-                }
-            }
+        for blob in blobs {
+            let centre = CGPoint(
+                x: rect.minX + CGFloat(blob.x - world.minX) * sx,
+                y: rect.minY + CGFloat(blob.y - world.minY) * sy
+            )
+            context.setAlpha(blob.alpha)
+            context.drawRadialGradient(
+                glow, startCenter: centre, startRadius: 0,
+                endCenter: centre, endRadius: CGFloat(blob.radius) * sx, options: []
+            )
         }
         context.setAlpha(1)
         context.restoreGState()
@@ -465,7 +512,7 @@ final class FogVeilOverlay: NSObject, MKOverlay {
     /// в секунду. Четыре `Double` и флаг опционала атомарно не записываются
     /// ничем: порванное чтение даёт прорезь не в том месте или радиус из
     /// чужого кадра, и заметить это можно только глазами на движущейся машине.
-    /// Поэтому замок, а не `var` — тот же `NSLock`, что у `LazyPathIndex`, и
+    /// Поэтому замок, а не `var` — тот же `NSLock`, что у `MapPathIndex`, и
     /// по той же причине.
     ///
     /// Точка меняется целиком, одним присваиванием: подменять ради неё сам
@@ -506,10 +553,7 @@ final class FogVeilOverlay: NSObject, MKOverlay {
 
 final class FogVeilRenderer: MKOverlayRenderer {
     private let veil: FogVeilOverlay
-    /// `var` и не `let` нарочно: индексу нужен `point(for:)`, а он появляется
-    /// только после `super.init` — трогать `self` до инициализации всех полей
-    /// нельзя.
-    private var index: LazyPathIndex!
+    private let index = MapPathIndex()
 
     /// Сколько наборов бакетов собрано. Потолок — четыре достижимых пары
     /// (уровень детали × уровень бакетов), и вырасти он не имеет права:
@@ -550,18 +594,22 @@ final class FogVeilRenderer: MKOverlayRenderer {
     init(veil: FogVeilOverlay) {
         self.veil = veil
         super.init(overlay: veil)
-        // Трансформ `point(for:)` появляется только после `super.init` и не
-        // меняется всю жизнь рендерера — поэтому индекс заводится здесь. Сами
-        // пути он соберёт на первой отрисовке своего уровня: `init` рендерера
-        // случается на главном потоке, и собирать там всю открытую сеть —
-        // это хитч на открытии Атласа.
-        //
-        // `unowned` обязателен: индекс — поле рендерера, и замыкание,
-        // держащее `self`, сделало бы цикл.
-        index = LazyPathIndex(
-            source: { [unowned veil] in veil.layer.polylines(for: $0) },
-            transform: { [unowned self] in self.point(for: $0) }
-        )
+        // Трансформ `point(for:)` появляется только после `super.init` — и это
+        // единственная причина, по которой сборка вообще привязана к
+        // рендереру. Сам `init` зовёт `rendererFor` на ГЛАВНОМ потоке перед
+        // первым кадром карты, поэтому пути собираются на фоновой очереди, а
+        // до готовности тайл — сплошная заливка без коридоров.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            self.index.prepare(
+                source: { veil.layer.polylines(for: $0) },
+                transform: { self.point(for: $0) }
+            )
+            // Один раз на жизнь рендерера: тайлы, нарисованные заливкой,
+            // обязаны получить свои коридоры. По ходу поездки так звать
+            // нельзя — прорезь перерисовывает КОРОБКУ (`FogRevealAnimation`).
+            DispatchQueue.main.async { self.setNeedsDisplay() }
+        }
     }
 
     // MARK: Чистые функции
@@ -580,8 +628,18 @@ final class FogVeilRenderer: MKOverlayRenderer {
         max(CGFloat(streetHalfWidthMetres * 2 * metre), minVeinPoints / zoomScale)
     }
 
-    static func passes(forScreenWidth width: CGFloat) -> Int {
-        width > wideCorridorPoints ? 14 : 8
+    /// Сколько ступеней пера класть на коридор.
+    ///
+    /// Четырнадцать нужны широкому коридору на улице: на альфе 1.0 терраса
+    /// видна там, где на полупрозрачной вуали её съедала сама прозрачность. На
+    /// среднем и дальнем уровне коридор — вена шириной в двенадцать экранных
+    /// точек, и разницы между четырьмя ступенями и восемью на ней не видит
+    /// никто, а платятся они полной пропускной способностью памяти на КАЖДОМ
+    /// тайле — в тот самый момент, когда после зума наружу их разом просят
+    /// десяток (спайк 15 сен).
+    static func passes(forScreenWidth width: CGFloat, lod: RevealedLayer.LOD) -> Int {
+        guard lod == .fine else { return 4 }
+        return width > wideCorridorPoints ? 14 : 8
     }
 
     /// От самого широкого и бледного к самому узкому и плотному:
@@ -614,7 +672,11 @@ final class FogVeilRenderer: MKOverlayRenderer {
     /// значение, поэтому стыка не видно, а на экране всё равно видно, что
     /// дымка не плоская. Длина волны привязана к размеру тайла, а не к миру,
     /// иначе на масштабе улицы весь экран был бы одного цвета.
-    static func depth(for mapRect: MKMapRect, lod: RevealedLayer.LOD) -> FogVeilPainter.Depth {
+    /// `haze: false` — только рампа, без пятен: так рисуется тайл, пока индекс
+    /// путей ещё собирается (дешевле некуда, и цвет тот же).
+    static func depth(
+        for mapRect: MKMapRect, lod: RevealedLayer.LOD, haze: Bool = true
+    ) -> FogVeilPainter.Depth {
         let wave = mapRect.height * 6
         guard wave > 0 else { return .flat }
         func shade(_ y: Double) -> CGFloat {
@@ -623,7 +685,7 @@ final class FogVeilRenderer: MKOverlayRenderer {
         return FogVeilPainter.Depth(
             top: shade(mapRect.minY),
             bottom: shade(mapRect.maxY),
-            haze: FogVeilPainter.Haze(world: mapRect, cell: hazeCell(for: lod))
+            haze: haze ? FogVeilPainter.Haze(world: mapRect, cell: hazeCell(for: lod)) : nil
         )
     }
 
@@ -646,29 +708,41 @@ final class FogVeilRenderer: MKOverlayRenderer {
 
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
         let tile = rect(for: mapRect)
+        let level = Self.lod(for: zoomScale)
         // Метров на точку карты зависит от широты, поэтому берётся у ЭТОГО
         // тайла, а не у середины сети: иначе коридор в Мурманске нарисован по
         // мерке Сочи.
         let metre = MKMapPointsPerMeterAtLatitude(
             MKMapPoint(x: mapRect.midX, y: mapRect.midY).coordinate.latitude)
+
+        // Индекс ещё собирается — рисуем сплошную заливку. Ждать его здесь
+        // нельзя: это поток отрисовки MapKit, и ожидание встало бы полосой
+        // недогруженных тайлов на всём экране. Прорезь у машины при этом
+        // рисуется всё равно: она не про сеть, а про «я здесь».
+        guard let chunks = index.ready(for: level) else {
+            FogVeilPainter.paint(
+                context: context, paths: [], corridorWidth: 0, passes: 0,
+                tileRect: tile, depth: Self.depth(for: mapRect, lod: level, haze: false),
+                reveal: reveal(in: mapRect, zoomScale: zoomScale, metre: metre)
+            )
+            return
+        }
         let width = Self.corridorWidth(zoomScale: zoomScale, metre: metre)
-        let lod = Self.lod(for: zoomScale)
 
         // Запрос расширяется на половину штриха: бакет, чья линия лежит за
         // краем тайла, всё равно рисует в него — на дальнем зуме коридор шире
         // километра.
         let reach = Double(width) / 2 + 1
         let query = mapRect.insetBy(dx: -reach, dy: -reach)
-        let paths = index.chunks(for: lod)
-            .visiblePaths(in: query, zoomScale: zoomScale)
+        let paths = chunks.visiblePaths(in: query, zoomScale: zoomScale)
 
         FogVeilPainter.paint(
             context: context,
             paths: paths,
             corridorWidth: width,
-            passes: Self.passes(forScreenWidth: width * zoomScale),
+            passes: Self.passes(forScreenWidth: width * zoomScale, lod: level),
             tileRect: tile,
-            depth: Self.depth(for: mapRect, lod: lod),
+            depth: Self.depth(for: mapRect, lod: level),
             reveal: reveal(in: mapRect, zoomScale: zoomScale, metre: metre)
         )
     }

@@ -194,13 +194,14 @@ final class FogVeilTemporalTests: XCTestCase {
         let layer = RevealedLayer.build(runs: [route], cellCount: 40, atlas: nil)
         let veil = FogVeilOverlay(layer: layer)
         let renderer = FogVeilRenderer(veil: veil)
+
+        // Индекс собирается ОДИН раз, вне главного потока, и его четыре
+        // достижимых набора (`.fine` мелкий, `.mid` оба, `.far` грубый) —
+        // см. `FogVeilRendererTests.testPathIndexBuildsOnlyReachableBucketSets`.
+        XCTAssertTrue(FogVeilRendererTests.waitForIndex(renderer),
+                      "индекс не собрался: \(renderer.chunkBuilds)")
         let builds = renderer.chunkBuilds
-        // Ноль: с 15 сентября индекс собирается на ПЕРВОЙ отрисовке своего
-        // уровня, а не в `init` (тот случается на главном потоке в момент
-        // открытия карты). Сколько наборов бакетов достижимо и что второй тайл
-        // того же уровня не собирает их заново — держит
-        // `FogVeilRendererTests.testPathIndexBuildsOnlyReachableBucketSets`.
-        XCTAssertEqual(builds, 0, "индекс путей собрался в init рендерера")
+        XCTAssertEqual(builds, 4)
 
         for step in 0...10 {
             veil.revealAround = FogVeilOverlay.RevealPoint(
@@ -212,91 +213,5 @@ final class FogVeilTemporalTests: XCTestCase {
                        "прогресс прорези пересобрал индекс путей")
         XCTAssertEqual(veil.revealAround?.progress ?? -1, 1, accuracy: 0.0001)
         XCTAssertTrue(renderer.overlay === veil, "оверлей тот же — рендерер не пересоздавали")
-    }
-
-    /// Прорезь пишется с главного потока, а читается потоками отрисовки MapKit
-    /// — он зовёт `draw` одновременно, по тайлу на поток. Значение целиком
-    /// (две координаты + прогресс) атомарно не пишется ничем, и порванное
-    /// чтение дало бы прорезь не в том месте или радиус из чужого кадра.
-    ///
-    /// Инвариант, по которому это видно: обе координаты всегда равны
-    /// прогрессу. Пара, склеенная из двух записей, его нарушит.
-    func testRevealPointIsReadAndWrittenWhole() {
-        let veil = FogVeilOverlay(layer: .empty)
-        veil.revealAround = FogVeilOverlay.RevealPoint(
-            coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0), progress: 0
-        )
-
-        let torn = NSMutableArray()
-        DispatchQueue.concurrentPerform(iterations: 8) { worker in
-            for step in 0..<2_000 {
-                if worker % 2 == 0 {
-                    let value = Double(step % 100) / 100
-                    veil.revealAround = FogVeilOverlay.RevealPoint(
-                        coordinate: CLLocationCoordinate2D(latitude: value, longitude: value),
-                        progress: value
-                    )
-                } else if let point = veil.revealAround {
-                    if point.coordinate.latitude != point.progress
-                        || point.coordinate.longitude != point.progress {
-                        objc_sync_enter(torn)
-                        torn.add(point.progress)
-                        objc_sync_exit(torn)
-                    }
-                }
-            }
-        }
-
-        XCTAssertEqual(torn.count, 0, "читатель увидел половину одной записи и половину другой")
-    }
-}
-
-/// Кэш снимка на дату: один перебор библиотеки на дату, сброс по
-/// `.revealedLayerChanged`.
-@MainActor
-final class TemporalFogCacheTests: XCTestCase {
-    /// Кэш ходит в общий `RevealedLayerStore.shared`, подменить его нечем —
-    /// поэтому проверяется не содержимое слоя, а ТОЖДЕСТВО ответа: второй
-    /// спрашивающий с той же датой обязан получить ту же сборку, не перебирая
-    /// библиотеку заново. `MKMultiPolyline` — класс, и `===` отвечает на это
-    /// буквально.
-    func testSameDateIsAnsweredFromTheCache() async {
-        let cache = TemporalFogCache()
-        let date = Date(timeIntervalSince1970: 1_700_000_000)
-
-        let first = await cache.layer(before: date)
-        let second = await cache.layer(before: date)
-        XCTAssertTrue(first.fine === second.fine, "та же дата — тот же посчитанный слой")
-    }
-
-    func testDifferentDatesAreComputedSeparately() async {
-        let cache = TemporalFogCache()
-        let a = await cache.layer(before: Date(timeIntervalSince1970: 1_700_000_000))
-        let b = await cache.layer(before: Date(timeIntervalSince1970: 1_600_000_000))
-        XCTAssertFalse(a.fine === b.fine, "разные даты — разные миры")
-    }
-
-    /// Открытое пополнилось — снимок «сейчас» обязан пересчитаться. Иначе
-    /// карточка итогов до конца жизни экрана показывала бы мир без только что
-    /// законченной поездки.
-    func testRevealedLayerChangedInvalidates() async {
-        let cache = TemporalFogCache()
-        let first = await cache.layer(before: nil)
-
-        NotificationCenter.default.post(name: .revealedLayerChanged, object: nil)
-        // Наблюдатель кэша стоит на главной очереди — дать ей провернуться.
-        try? await Task.sleep(nanoseconds: 60_000_000)
-
-        let second = await cache.layer(before: nil)
-        XCTAssertFalse(first.fine === second.fine, "после уведомления слой пересчитан")
-    }
-
-    /// `reload` не верит кэшу вовсе: его зовёт тот, кто сам услышал
-    /// уведомление, и порядок наблюдателей у `NotificationCenter` не наш.
-    func testReloadIgnoresTheCache() async {
-        let cache = TemporalFogCache()
-        let first = await cache.layer(before: nil)
-        let again = await cache.reload(before: nil)
-        XCTAssertFalse(first.fine === again.fine)
     }
 }

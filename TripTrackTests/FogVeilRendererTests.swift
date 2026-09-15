@@ -56,10 +56,22 @@ final class FogVeilRendererTests: XCTestCase {
     /// полупрозрачна (её прозрачность и съедала ступени). На альфе 1.0 их
     /// становится видно, и только там платим четырнадцатью.
     func testPassCountFollowsScreenWidth() {
-        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 20), 8)
-        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 60), 8)
-        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 61), 14)
-        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 400), 14)
+        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 20, lod: .fine), 8)
+        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 60, lod: .fine), 8)
+        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 61, lod: .fine), 14)
+        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 400, lod: .fine), 14)
+    }
+
+    /// На среднем и дальнем уровне перьев вчетверо меньше, и ширина на это не
+    /// влияет: коридор там шириной в двенадцать экранных точек, разницы между
+    /// четырьмя ступенями и четырнадцатью на ней не видит никто, а платятся
+    /// они на КАЖДОМ тайле — в тот самый момент, когда после зума наружу их
+    /// разом просят десяток.
+    func testFarAndMidAlwaysGetFourPasses() {
+        for lod in [RevealedLayer.LOD.mid, .far] {
+            XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 20, lod: lod), 4)
+            XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 400, lod: lod), 4)
+        }
     }
 
     // MARK: - Уровни детали
@@ -367,17 +379,73 @@ final class FogVeilRendererTests: XCTestCase {
     /// Ореол не имеет права быть шире коридора больше чем на пятую часть:
     /// иначе янтарь ложится на вуаль сплошняком вместо того, чтобы светиться
     /// внутри прочищенного.
+    ///
+    /// Проверяется СЫРАЯ ширина, до зажима. Прежняя версия этого теста
+    /// повторяла внутри себя `min(…, потолок)` из продакшена и потому не могла
+    /// упасть никогда: `min(a, b) <= b` истинно всегда.
     func testVeinHaloNeverOutgrowsTheCorridor() {
         let metre = MKMapPointsPerMeterAtLatitude(45.0)
-        for zoom: MKZoomScale in [1e-3, 3e-4, 1e-4, 3e-5] {
+        for zoom: MKZoomScale in [1.5e-3, 1e-3, 3e-4, 1.5e-4, 1e-4, 3e-5, 1e-6] {
             let lod = FogVeilRenderer.lod(for: zoom)
             guard let halo = RouteVeinRenderer.halo(for: lod) else { continue }
-            let corridor = FogVeilRenderer.corridorWidth(zoomScale: zoom, metre: metre)
+            let corridor = Double(FogVeilRenderer.corridorWidth(zoomScale: zoom, metre: metre))
             XCTAssertLessThanOrEqual(
-                Double(min(halo.width / zoom, corridor * 1.2)), Double(corridor) * 1.2,
-                "ореол шире коридора ×1.2 на зуме \(zoom)")
+                Double(halo.width / zoom), corridor * 1.2,
+                "на зуме \(zoom) ореол (\(halo.width) pt) шире коридора ×1.2 — "
+                    + "янтарь ляжет на вуаль сплошняком, и зажим это только спрячет")
         }
     }
+
+    /// Конкретные числа, а не «что-то меньше чего-то»: коридор на среднем и
+    /// дальнем уровне стоит на своём экранном полу (12 pt), ×1.2 — это 14.4,
+    /// и оба ореола обязаны быть под ним с запасом.
+    func testHaloCeilingInScreenPoints() {
+        let ceiling = Double(FogVeilRenderer.minVeinPoints) * 1.2
+        XCTAssertEqual(ceiling, 14.4, accuracy: 0.001)
+        XCTAssertEqual(Double(RouteVeinRenderer.halo(for: .mid)?.width ?? 0), 8)
+        XCTAssertEqual(Double(RouteVeinRenderer.halo(for: .far)?.width ?? 0), 10)
+        XCTAssertLessThan(Double(RouteVeinRenderer.halo(for: .far)?.width ?? 0), ceiling)
+    }
+
+    // MARK: - Дымка не растёт с тайлом
+
+    /// Потолок пятен на тайл. Цикл сеялки идёт по ячейкам, накрывающим тайл, —
+    /// и на выведенном в мир «Атласе» (ограничения зума у карты нет) тайл шире
+    /// дальней ячейки в восемьдесят раз: пятнадцать тысяч градиентов на ОДИН
+    /// тайл. `MapRenderCostTests` этого не видит — он меряет один зум в
+    /// середине полосы.
+    func testHazeBlobsAreCappedEvenOnAWorldSizedTile() {
+        for lod in RevealedLayer.LOD.allCases {
+            let cell = FogVeilRenderer.hazeCell(for: lod)
+            let world = FogVeilPainter.hazeBlobs(
+                in: FogVeilPainter.Haze(world: .world, cell: cell))
+            XCTAssertLessThanOrEqual(
+                world.count, FogVeilPainter.hazeBlobsPerTile,
+                "на мировом тайле (\(lod)) сеялка выдала \(world.count) пятен")
+
+            // И на обычном тайле своего уровня — тоже потолок, не «повезло».
+            let tile = MKMapRect(x: 30_000_000, y: 40_000_000, width: cell, height: cell)
+            XCTAssertLessThanOrEqual(
+                FogVeilPainter.hazeBlobs(in: .init(world: tile, cell: cell)).count,
+                FogVeilPainter.hazeBlobsPerTile)
+        }
+    }
+
+    /// Пятна на тайле всё-таки ЕСТЬ: потолок не имеет права выродиться в
+    /// «дымки нет вовсе».
+    func testHazeStillDrawsSomethingOnAnOrdinaryTile() {
+        let cell = FogVeilRenderer.hazeCell(for: .mid)
+        var seen = 0
+        for step in 0..<12 {
+            let tile = MKMapRect(
+                x: 30_000_000 + Double(step) * cell, y: 40_000_000,
+                width: cell, height: cell)
+            seen += FogVeilPainter.hazeBlobs(in: .init(world: tile, cell: cell)).count
+        }
+        XCTAssertGreaterThan(seen, 6, "на дюжине тайлов подряд дымки почти нет")
+    }
+
+    // MARK: - Индекс собирается вне главного потока и только достижимый
 
     // MARK: - Индекс собирается лениво и только достижимый
 
@@ -389,19 +457,24 @@ final class FogVeilRendererTests: XCTestCase {
     /// И собирается всё это на ПЕРВОЙ ОТРИСОВКЕ, а не в `init`: `init`
     /// рендерера — главный поток в момент открытия Атласа.
     func testPathIndexBuildsOnlyReachableBucketSets() {
-        let route = (0..<60).map { i in
-            CLLocationCoordinate2D(latitude: 45.0 + Double(i) * 0.002, longitude: 38.97)
-        }
-        let veil = FogVeilOverlay(layer: RevealedLayer.build(runs: [route], cellCount: 60, atlas: nil))
-        let renderer = FogVeilRenderer(veil: veil)
+        let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: Self.smallLayer()))
+        // Ноль сразу после `init`: сборка ушла на фоновую очередь, а `init`
+        // зовёт `rendererFor` на главном потоке перед первым кадром карты.
         XCTAssertEqual(renderer.chunkBuilds, 0, "индекс собрался в init — это хитч на открытии")
 
+        XCTAssertTrue(Self.waitForIndex(renderer),
+                      "индекс не собрался за пять секунд: \(renderer.chunkBuilds)")
+        XCTAssertEqual(
+            renderer.chunkBuilds, 4,
+            "четыре достижимых набора (.fine мелкий, .mid оба, .far грубый), ни одним больше")
+
+        // Отрисовка индекс не трогает вовсе — ни на одном уровне.
         let context = CGContext(
             data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         )!
-        func draw(at zoom: MKZoomScale) {
+        for zoom: MKZoomScale in [0.01, 0.01, 5e-4, 3e-5] {
             let span = 64 / Double(zoom)
             let origin = MKMapPoint(CLLocationCoordinate2D(latitude: 45.06, longitude: 38.97))
             renderer.draw(
@@ -409,18 +482,57 @@ final class FogVeilRendererTests: XCTestCase {
                           width: span, height: span),
                 zoomScale: zoom, in: context)
         }
+        XCTAssertEqual(renderer.chunkBuilds, 4, "отрисовка собрала индекс заново")
+    }
 
-        draw(at: 0.01)                              // .fine — только мелкий набор
-        XCTAssertEqual(renderer.chunkBuilds, 1)
-        draw(at: 0.01)
-        XCTAssertEqual(renderer.chunkBuilds, 1, "второй тайл того же уровня собрал индекс заново")
-        draw(at: 5e-4)                              // .mid — оба набора
-        XCTAssertEqual(renderer.chunkBuilds, 3)
-        draw(at: 3e-5)                              // .far — только грубый
-        XCTAssertEqual(renderer.chunkBuilds, 4, "четыре достижимых набора, ни одним больше")
+    /// Пока индекс собирается, тайл — сплошная заливка, а НЕ прозрачная дыра.
+    /// Это и есть «дешёвый тайл»: карту Apple нельзя показывать ни на кадр.
+    func testTileBeforeTheIndexIsReadyIsStillOpaque() {
+        let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: Self.smallLayer()))
+        let size = 32
+        let pixels = Self.drawn(size: size) { context, rect in
+            // Прямо сейчас, не дожидаясь фоновой сборки.
+            let zoom: MKZoomScale = 5e-4
+            let span = Double(size) / Double(zoom)
+            let origin = MKMapPoint(CLLocationCoordinate2D(latitude: 45.06, longitude: 38.97))
+            context.saveGState()
+            context.scaleBy(x: zoom, y: zoom)
+            let mapRect = MKMapRect(x: origin.x - span / 2, y: origin.y - span / 2,
+                                    width: span, height: span)
+            context.translateBy(x: -renderer.rect(for: mapRect).origin.x,
+                                y: -renderer.rect(for: mapRect).origin.y)
+            renderer.draw(mapRect, zoomScale: zoom, in: context)
+            context.restoreGState()
+            _ = rect
+        }
+        for i in stride(from: 0, to: size * size * 4, by: 4) {
+            XCTAssertEqual(Int(pixels[i + 3]), 255, "тайл до готовности индекса прозрачен")
+        }
     }
 
     // MARK: - Инструменты
+
+    /// Маленькая сеть — чтобы фоновая сборка индекса была мгновенной.
+    static func smallLayer() -> RevealedLayer {
+        let route = (0..<60).map { i in
+            CLLocationCoordinate2D(latitude: 45.0 + Double(i) * 0.002, longitude: 38.97)
+        }
+        return RevealedLayer.build(runs: [route], cellCount: 60, atlas: nil)
+    }
+
+    /// Ждёт фоновую сборку индекса, крутя главный цикл: сборка идёт на
+    /// `DispatchQueue.global`, и просто `sleep` здесь тоже сработал бы — но
+    /// цикл не мешает остальным тестам.
+    static func waitForIndex(
+        _ renderer: FogVeilRenderer, expected: Int = 4, timeout: TimeInterval = 5
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if renderer.chunkBuilds >= expected { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        return renderer.chunkBuilds >= expected
+    }
 
     /// Рисует один тайл кистью — так же, как это делает рендерер, включая
     /// глубину и дымку от МИРОВЫХ координат тайла.

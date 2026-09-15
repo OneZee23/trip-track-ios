@@ -76,10 +76,12 @@ final class MapRenderCostTests: XCTestCase {
     /// punching corridors needs.
     func testVeilTilesWithNoRoadsAreFarCheaperThanTilesWithThem() {
         let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: layer()))
+        XCTAssertTrue(FogVeilRendererTests.waitForIndex(renderer), "индекс не собрался")
         let ctx = context()
-        // Region scale: 256 pt of tile over ~48 km, where the veil is at full
-        // strength and every stroke pass actually runs.
-        let zoom: MKZoomScale = 0.0008
+        // Уличный зум, а не региональный: с 15 сентября на `.mid`/`.far`
+        // перьев вчетверо меньше (`passes(forScreenWidth:lod:)`), и мерить
+        // «пропускается ли работа коридоров» надо там, где эта работа полная.
+        let zoom: MKZoomScale = 0.01
         let span = 256 / Double(zoom)
 
         // Over the network, and 900 km away over open steppe.
@@ -114,11 +116,34 @@ final class MapRenderCostTests: XCTestCase {
         XCTAssertLessThan(bare, 0.002, "empty veil tile took \(bare * 1000) ms")
     }
 
+    /// Пустой тайл обязан оставаться дешёвым НА ВСЕХ зумах, включая тот, где
+    /// «Атлас» выведен в мир целиком.
+    ///
+    /// Сторож выше меряет один зум в середине полосы — и именно поэтому не
+    /// увидел бы, что сеялка дымки ходит по ячейкам, накрывающим тайл: на
+    /// мировом зуме тайл шире дальней ячейки в восемьдесят раз, и пятен на
+    /// него приходилось бы пятнадцать тысяч (ограничения зума у карты нет).
+    func testEmptyVeilTileStaysCheapAtEveryZoom() {
+        let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: layer()))
+        XCTAssertTrue(FogVeilRendererTests.waitForIndex(renderer), "индекс не собрался")
+        let ctx = context()
+        // Регион, страна, континент, весь мир в одном тайле.
+        for zoom: MKZoomScale in [8e-4, 3e-5, 4e-6, 1e-6] {
+            let span = min(256 / Double(zoom), MKMapSize.world.width)
+            let empty = tile(at: CLLocationCoordinate2D(latitude: 53.0, longitude: 45.0),
+                             span: span)
+            let bare = timePerCall({ drawTile(renderer, empty, zoom: zoom, in: ctx) }, rounds: 20)
+            print("[veil] empty tile at zoom \(zoom): \(bare * 1000) ms")
+            XCTAssertLessThan(bare, 0.002, "пустой тайл на зуме \(zoom) занял \(bare * 1000) мс")
+        }
+    }
+
     /// Жилка тоже режется бакетами, поэтому тайл, в котором её нет, обязан
     /// стоить почти ничего.
     func testVeinTilesWithNoRoadsCostAlmostNothing() {
         let renderer = RouteVeinRenderer(vein: RouteVeinOverlay(layer: layer()))
         let ctx = context()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         let zoom: MKZoomScale = 0.0008
         let empty = tile(at: CLLocationCoordinate2D(latitude: 53.0, longitude: 45.0),
                          span: 256 / Double(zoom))
@@ -139,6 +164,7 @@ final class MapRenderCostTests: XCTestCase {
     /// полного пера и у одной заливки, то есть она не наша.
     func testVeilFillHasNoSeeThroughAtAnyZoom() {
         let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: layer()))
+        XCTAssertTrue(FogVeilRendererTests.waitForIndex(renderer), "индекс не собрался")
         // Тайл заведомо МИМО сети — и имя теста говорит именно про это:
         // проверяется заливка, а не «нет просветов рядом с коридором». Край
         // коридора держит `FogVeilRendererTests.testPainterEdgeFadesWithoutTerraces`,
@@ -158,6 +184,7 @@ final class MapRenderCostTests: XCTestCase {
     /// пера. Вуаль накрывает весь мир, и этим путём идёт большинство тайлов.
     func testEmptyVeilTileIsJustAFill() {
         let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: layer()))
+        XCTAssertTrue(FogVeilRendererTests.waitForIndex(renderer), "индекс не собрался")
         let zoom: MKZoomScale = 4e-3
         let empty = tile(at: CLLocationCoordinate2D(latitude: 53.0, longitude: 45.0),
                          span: 200 / Double(zoom))
@@ -205,6 +232,7 @@ final class MapRenderCostTests: XCTestCase {
             return XCTFail("жилка из двух точек обязана построиться")
         }
         let renderer = RouteVeinRenderer(vein: route)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         let middle = CLLocationCoordinate2D(latitude: 45.0, longitude: 39.0)
 
         // Оба зума — внутри одного уровня детали: между уровнями жилка МЕНЯЕТ

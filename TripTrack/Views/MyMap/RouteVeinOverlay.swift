@@ -63,9 +63,9 @@ final class RouteVeinOverlay: NSObject, MKOverlay {
 
 final class RouteVeinRenderer: MKOverlayRenderer {
     private let vein: RouteVeinOverlay
-    /// Тот же ленивый индекс, что у вуали, и по той же причине: `init`
-    /// рендерера — главный поток в момент первого показа карты.
-    private var index: LazyPathIndex!
+    /// Тот же индекс, что у вуали, и по той же причине: `init` рендерера —
+    /// главный поток в момент первого показа карты.
+    private let index = MapPathIndex()
 
     /// Тёплый янтарь из эталонных кадров владельца. Не акцент бренда: жилка —
     /// это свет внутри тумана, а не элемент интерфейса.
@@ -101,10 +101,14 @@ final class RouteVeinRenderer: MKOverlayRenderer {
     init(vein: RouteVeinOverlay) {
         self.vein = vein
         super.init(overlay: vein)
-        index = LazyPathIndex(
-            source: { [unowned vein] in vein.polylines(for: $0) },
-            transform: { [unowned self] in self.point(for: $0) }
-        )
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            self.index.prepare(
+                source: { vein.polylines(for: $0) },
+                transform: { self.point(for: $0) }
+            )
+            DispatchQueue.main.async { self.setNeedsDisplay() }
+        }
     }
 
     /// Сколько наборов бакетов собрано — для тех же тестов, что у вуали.
@@ -134,7 +138,10 @@ final class RouteVeinRenderer: MKOverlayRenderer {
         // сердцевину втрое, и бакет за краем тайла всё равно светит в него.
         let widest = max(screenWidth, Self.halo(for: lod)?.width ?? 0) / zoomScale
         let reach = Double(widest) + 1
-        let paths = index.chunks(for: lod)
+        // Индекс ещё собирается — жилки просто нет: её отсутствие на долю
+        // секунды честнее, чем ожидание на потоке отрисовки.
+        guard let chunks = index.ready(for: lod) else { return }
+        let paths = chunks
             .visiblePaths(in: mapRect.insetBy(dx: -reach, dy: -reach), zoomScale: zoomScale)
         guard !paths.isEmpty else { return }
 
