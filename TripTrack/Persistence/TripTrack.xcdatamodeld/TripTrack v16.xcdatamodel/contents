@@ -238,5 +238,10 @@
         <fetchIndex name="byKey">
             <fetchIndexElement property="key" type="Binary" order="ascending"/>
         </fetchIndex>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="key"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
     </entity>
 </model>

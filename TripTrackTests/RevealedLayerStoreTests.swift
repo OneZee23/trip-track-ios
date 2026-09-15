@@ -68,44 +68,47 @@ final class RevealedLayerStoreTests: XCTestCase {
 
     // MARK: - Финиш поездки
 
-    func testIngestWritesTilesAndReturnsNewCells() {
+    func testIngestWritesTilesAndReturnsNewCells() async {
         let id = makeTrip(northMetres: 3_000)
-        let added = store.ingest(tripId: id)
+        let added = await store.ingest(tripId: id)
 
         XCTAssertGreaterThan(added, 30, "три километра — это десятки ячеек по 75 м")
-        XCTAssertGreaterThan(store.tiles().count, 0)
-        let cells = store.tiles().reduce(0) { $0 + $1.cellSet.count }
+        let tiles = await store.tiles()
+        XCTAssertGreaterThan(tiles.count, 0)
+        let cells = tiles.reduce(0) { $0 + $1.cellSet.count }
         XCTAssertEqual(cells, added)
     }
 
-    func testSecondIngestOfTheSameTripOpensNothing() {
+    func testSecondIngestOfTheSameTripOpensNothing() async {
         let id = makeTrip(northMetres: 3_000)
-        let first = store.ingest(tripId: id)
+        let first = await store.ingest(tripId: id)
         let tilesAfterFirst = storedTileCount()
 
-        XCTAssertEqual(store.ingest(tripId: id), 0)
+        let again = await store.ingest(tripId: id)
+        XCTAssertEqual(again, 0)
         XCTAssertEqual(storedTileCount(), tilesAfterFirst)
-        let cells = store.tiles().reduce(0) { $0 + $1.cellSet.count }
+        let cells = await store.tiles().reduce(0) { $0 + $1.cellSet.count }
         XCTAssertEqual(cells, first, "повторный финиш не удваивает открытое")
     }
 
-    func testTripWithoutPreviewIsSkipped() {
+    func testTripWithoutPreviewIsSkipped() async {
         let id = makeTrip(northMetres: 3_000, withPreview: false)
-        XCTAssertEqual(store.ingest(tripId: id), 0)
+        let added = await store.ingest(tripId: id)
+        XCTAssertEqual(added, 0)
         XCTAssertEqual(storedTileCount(), 0)
     }
 
-    func testTwoTripsInOneTileMerge() {
+    func testTwoTripsInOneTileMerge() async {
         let origin = CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753)
         let east = CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9773)
         let a = makeTrip(northMetres: 600, from: origin)
         let b = makeTrip(northMetres: 600, from: east)
 
-        let first = store.ingest(tripId: a)
-        let second = store.ingest(tripId: b)
+        let first = await store.ingest(tripId: a)
+        let second = await store.ingest(tripId: b)
         XCTAssertGreaterThan(second, 0, "соседняя улица — тоже открытие")
 
-        let tiles = store.tiles()
+        let tiles = await store.tiles()
         XCTAssertEqual(tiles.count, 1, "две улицы одного квартала — один тайл")
         XCTAssertEqual(tiles[0].cellSet.count, first + second)
         XCTAssertGreaterThanOrEqual(tiles[0].runs.count, 2)
@@ -113,29 +116,29 @@ final class RevealedLayerStoreTests: XCTestCase {
 
     // MARK: - Снимок
 
-    func testLayerReadsWhatIngestWrote() {
+    func testLayerReadsWhatIngestWrote() async {
         let id = makeTrip(northMetres: 3_000)
-        store.ingest(tripId: id)
+        await store.ingest(tripId: id)
 
-        let layer = store.layer()
-        XCTAssertFalse(layer.fine.isEmpty)
-        XCTAssertLessThanOrEqual(layer.mid.count, layer.fine.count)
+        let layer = await store.layer()
+        XCTAssertFalse(layer.fine.polylines.isEmpty)
+        XCTAssertEqual(layer.mid.polylines.count, layer.fine.polylines.count)
         XCTAssertEqual(layer.openedKm, 3.0, accuracy: 0.4)
         XCTAssertGreaterThan(layer.cellCount, 30)
     }
 
     /// Временной туман — состояние ОДНОГО экрана. Он считается на лету и в
     /// базу не пишет ничего: иначе открытие старой поездки переписывало бы мир.
-    func testLayerBeforeDateDoesNotWrite() {
+    func testLayerBeforeDateDoesNotWrite() async {
         let old = Date().addingTimeInterval(-86_400 * 10)
         makeTrip(northMetres: 3_000, endDate: old)
         makeTrip(northMetres: 3_000, from: CLLocationCoordinate2D(latitude: 46.0, longitude: 39.5))
 
-        let layer = store.layer(before: old.addingTimeInterval(60))
-        XCTAssertFalse(layer.fine.isEmpty)
+        let layer = await store.layer(before: old.addingTimeInterval(60))
+        XCTAssertFalse(layer.fine.polylines.isEmpty)
         XCTAssertEqual(storedTileCount(), 0, "снимок на дату ничего не сохраняет")
 
-        let now = store.layer(before: Date())
+        let now = await store.layer(before: Date())
         XCTAssertGreaterThan(now.cellCount, layer.cellCount, "вторая поездка открыла ещё")
     }
 
@@ -170,12 +173,13 @@ final class RevealedLayerStoreTests: XCTestCase {
     func testRebuildIsSkippedOnceLatched() async {
         makeTrip(northMetres: 3_000)
         await store.rebuildIfNeeded()
-        let cells = store.tiles().reduce(0) { $0 + $1.cellSet.count }
+        let cells = await store.tiles().reduce(0) { $0 + $1.cellSet.count }
 
         makeTrip(northMetres: 3_000, from: CLLocationCoordinate2D(latitude: 46.0, longitude: 39.5))
         await store.rebuildIfNeeded()
 
-        XCTAssertEqual(store.tiles().reduce(0) { $0 + $1.cellSet.count }, cells,
+        let after = await store.tiles().reduce(0) { $0 + $1.cellSet.count }
+        XCTAssertEqual(after, cells,
                        "сборка после обновления — один раз; новые поездки приносит финиш")
     }
 

@@ -70,10 +70,18 @@ struct RevealedTile {
 /// в пиксель: рисовать её по точкам через 75 м значит платить за каждую сотню
 /// километров тысячей вершин, которых никто не увидит. 250 м и 1 км — те же
 /// прогоны, прорежённые `RoadFog.decimate`.
+///
+/// **Уровень — ОДИН оверлей (`MKMultiPolyline`), а не список полилиний.**
+/// Прогонов у зрелой библиотеки десятки тысяч (каждый новый фронт в тайле
+/// добавляет свой), и по оверлею на прогон значило бы тысячи оверлеев и
+/// тысяч вызовов рендерера на кадр. Второе, не менее важное: собранные в один
+/// путь прогоны композитятся за ОДИН проход, и намеренный «шаг внахлёст» на
+/// границе уже открытого (≤ 75 м, см. `RevealBuilder`) перестаёт быть видимым
+/// швом — альфа применяется к объединению, а не к каждой линии отдельно.
 struct RevealedLayer {
-    let fine: [MKPolyline]
-    let mid: [MKPolyline]
-    let far: [MKPolyline]
+    let fine: MKMultiPolyline
+    let mid: MKMultiPolyline
+    let far: MKMultiPolyline
     let cellCount: Int
     /// Длина открытых дорог. Считается по прогонам `fine` — то есть по тому,
     /// что реально открыто, а не по километрам поездок: сотый проезд по своей
@@ -89,10 +97,11 @@ struct RevealedLayer {
     static let farDegrees = 1_000.0 / 111_320.0
 
     static let empty = RevealedLayer(
-        fine: [], mid: [], far: [], cellCount: 0, openedKm: 0, regionIds: []
+        fine: MKMultiPolyline(), mid: MKMultiPolyline(), far: MKMultiPolyline(),
+        cellCount: 0, openedKm: 0, regionIds: []
     )
 
-    var isEmpty: Bool { fine.isEmpty }
+    var isEmpty: Bool { fine.polylines.isEmpty }
 
     static func build(tiles: [RevealedTile], atlas: RegionAtlas?) -> RevealedLayer {
         var runs: [[CLLocationCoordinate2D]] = []
@@ -125,14 +134,18 @@ struct RevealedLayer {
                 TripDistanceGate.Sample(latitude: $0.latitude, longitude: $0.longitude, timestamp: nil)
             })
 
-            if let atlas, let first = run.first,
-               let region = atlas.region(containing: first) {
-                regions.insert(region.id)
+            // Оба конца, а не только начало: прогон длиной с тайл (5–7 км)
+            // умеет пересечь границу региона, и по первой точке сосед просто
+            // не появился бы в итогах.
+            if let atlas {
+                for end in [run.first, run.last].compactMap({ $0 }) {
+                    if let region = atlas.region(containing: end) { regions.insert(region.id) }
+                }
             }
         }
 
         return RevealedLayer(
-            fine: fine, mid: mid, far: far,
+            fine: MKMultiPolyline(fine), mid: MKMultiPolyline(mid), far: MKMultiPolyline(far),
             cellCount: cellCount,
             openedKm: metres / 1000,
             regionIds: regions

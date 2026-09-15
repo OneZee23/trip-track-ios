@@ -64,16 +64,11 @@ enum RevealBuilder {
         for i in 0..<points.count {
             let key = tiles[i]
             if claimedCache[key] == nil { claimedCache[key] = claimed(key) }
-            var patch = patches[key] ?? TilePatch()
-            let isNew = !(claimedCache[key]?.contains(cells[i]) ?? false)
-                && !patch.cells.contains(cells[i])
-            if isNew {
-                patch.cells.insert(cells[i])
-                patches[key] = patch
-                fresh[i] = true
-            } else if patches[key] == nil {
-                patches[key] = patch
-            }
+            guard claimedCache[key]?.contains(cells[i]) != true else { continue }
+            // Доступ по месту (`default:` + `_modify`): `patches[key]` отдавал
+            // бы КОПИЮ множества на каждую ячейку, и вставка била бы по CoW —
+            // внутри тайла это квадрат от числа ячеек.
+            fresh[i] = patches[key, default: TilePatch()].cells.insert(cells[i]).inserted
         }
 
         // MARK: Какие шаги рисуются

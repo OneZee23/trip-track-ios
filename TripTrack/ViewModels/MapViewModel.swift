@@ -854,7 +854,7 @@ final class MapViewModel: ObservableObject {
                 // Туман (0.7.0): что поездка открыла НОВОГО — на том же
                 // окончательном треке, из превью. Копится инкрементально,
                 // поэтому открытие «Атласа» ничего не пересчитывает.
-                RevealedLayerStore.shared.ingest(tripId: trip.id)
+                await RevealedLayerStore.shared.ingest(tripId: trip.id)
             }
         }
 

@@ -13,12 +13,17 @@ private let revealLog = Logger(subsystem: "com.triptrack", category: "reveal")
 /// библиотеку (0.5–2 с). Источник ВСЕГДА превью-полилиния: сырые точки на карту
 /// не приходят никогда — это условие производительности, а не деталь.
 ///
+/// Открытое КУМУЛЯТИВНО: удаление поездки туман не сжимает — «где был, там
+/// был». Отсюда законное расхождение, о котором надо знать: после удалений
+/// `layer(before: Date())` (он считает по живым поездкам) окажется МЕНЬШЕ, чем
+/// `layer()`. Это решение, а не рассинхрон.
+///
 /// Всё идёт на своём фоновом контексте: финиш поездки и так занят, а первая
-/// сборка после обновления перебирает всю библиотеку.
+/// сборка после обновления перебирает всю библиотеку. Поэтому чтение и запись
+/// здесь `async` — главный актёр не имеет права стоять в очереди этого
+/// контекста за фоновой сборкой.
 /// `@unchecked Sendable` — осознанно: всё изменяемое состояние типа это ОДИН
 /// фоновый контекст CoreData, и трогают его только внутри его же `perform`.
-/// Без этого фоновая сборка (единственный `async` метод) ругается на захват
-/// `self` в `@Sendable` замыкании `performAndWait`.
 final class RevealedLayerStore: @unchecked Sendable {
     static let shared = RevealedLayerStore()
 
@@ -40,20 +45,12 @@ final class RevealedLayerStore: @unchecked Sendable {
 
     // MARK: - Чтение
 
-    func tiles() -> [RevealedTile] {
-        var result: [RevealedTile] = []
-        context.performAndWait {
-            result = fetchTiles()
-        }
-        return result
+    func tiles() async -> [RevealedTile] {
+        await context.perform { self.fetchTiles() }
     }
 
-    func claimed(in tile: String) -> Set<RevealGrid.Cell> {
-        var result = Set<RevealGrid.Cell>()
-        context.performAndWait {
-            result = claimedInContext(tile)
-        }
-        return result
+    func claimed(in tile: String) async -> Set<RevealGrid.Cell> {
+        await context.perform { self.claimedInContext(tile) }
     }
 
     /// Снимок для рендерера.
@@ -62,15 +59,18 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// мир, каким он был на эту дату, собирается на лету из превью поездок,
     /// завершённых до неё, и в базу НЕ пишется: это состояние одного экрана, а
     /// не состояние мира.
-    func layer(before date: Date? = nil, atlas: RegionAtlas? = nil) -> RevealedLayer {
+    ///
+    /// Считает ВСЮ библиотеку до даты на каждый вызов — звать только вне
+    /// главного актёра и кэшировать результат на экран, а не звать из `body`.
+    func layer(before date: Date? = nil, atlas: RegionAtlas? = nil) async -> RevealedLayer {
         guard let date else {
-            return RevealedLayer.build(tiles: tiles(), atlas: atlas)
+            return RevealedLayer.build(tiles: await tiles(), atlas: atlas)
         }
 
-        var runs: [[CLLocationCoordinate2D]] = []
-        var claimedCells: [String: Set<RevealGrid.Cell>] = [:]
-        context.performAndWait {
-            for preview in fetchPreviews(endedBefore: date) {
+        let built: (runs: [[CLLocationCoordinate2D]], cells: Int) = await context.perform {
+            var runs: [[CLLocationCoordinate2D]] = []
+            var claimedCells: [String: Set<RevealGrid.Cell>] = [:]
+            for preview in self.fetchPreviews(endedBefore: date) {
                 guard let polyline = preview.polyline else { continue }
                 let coords = Trip.decodePolyline(polyline)
                 guard coords.count > 1 else { continue }
@@ -80,9 +80,9 @@ final class RevealedLayerStore: @unchecked Sendable {
                     runs.append(contentsOf: patch.runs)
                 }
             }
+            return (runs, claimedCells.values.reduce(0) { $0 + $1.count })
         }
-        let cellCount = claimedCells.values.reduce(0) { $0 + $1.count }
-        return RevealedLayer.build(runs: runs, cellCount: cellCount, atlas: atlas)
+        return RevealedLayer.build(runs: built.runs, cellCount: built.cells, atlas: atlas)
     }
 
     // MARK: - Запись
@@ -90,39 +90,39 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// Что открыла ОДНА поездка. Возвращает число новых ячеек — ноль значит
     /// «проехал там, где уже был», и это нормальный ответ, а не поломка.
     @discardableResult
-    func ingest(tripId: UUID) -> Int {
-        var added = 0
-        context.performAndWait {
+    func ingest(tripId: UUID) async -> Int {
+        let added = await context.perform { () -> Int in
             let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
             request.predicate = NSPredicate(
                 format: "id == %@ AND endDate != nil AND syncStatus != %d",
                 tripId as CVarArg, SyncStatus.pendingDelete.rawValue
             )
             request.fetchLimit = 1
-            guard let entity = try? context.fetch(request).first,
-                  let polyline = entity.previewPolyline else { return }
+            guard let entity = try? self.context.fetch(request).first,
+                  let polyline = entity.previewPolyline else { return 0 }
             let coords = Trip.decodePolyline(polyline)
-            guard coords.count > 1 else { return }
+            guard coords.count > 1 else { return 0 }
 
             var cache: [String: Set<RevealGrid.Cell>] = [:]
             let patches = RevealBuilder.patches(for: coords) { key in
                 if let hit = cache[key] { return hit }
-                let cells = claimedInContext(key)
+                let cells = self.claimedInContext(key)
                 cache[key] = cells
                 return cells
             }
-            added = mergeInContext(patches)
-            saveContext()
+            let opened = self.mergeInContext(patches)
+            self.saveContext()
+            return opened
         }
         if added > 0 { postChanged() }
         return added
     }
 
-    func merge(_ patches: [String: TilePatch]) {
-        var added = 0
-        context.performAndWait {
-            added = mergeInContext(patches)
-            saveContext()
+    func merge(_ patches: [String: TilePatch]) async {
+        let added = await context.perform { () -> Int in
+            let opened = self.mergeInContext(patches)
+            self.saveContext()
+            return opened
         }
         if added > 0 { postChanged() }
     }
@@ -137,8 +137,7 @@ final class RevealedLayerStore: @unchecked Sendable {
     func rebuildIfNeeded() async {
         guard !defaults.bool(forKey: Self.rebuildFlagKey) else { return }
 
-        var previews: [Preview] = []
-        context.performAndWait { previews = fetchPreviews(endedBefore: nil) }
+        let previews = await context.perform { self.fetchPreviews(endedBefore: nil) }
         guard !previews.isEmpty else {
             revealLog.notice("reveal rebuild: no trips yet, latch stays open")
             return
@@ -146,8 +145,9 @@ final class RevealedLayerStore: @unchecked Sendable {
 
         var total = 0
         for start in stride(from: 0, to: previews.count, by: Self.rebuildBatch) {
-            let batch = previews[start..<min(start + Self.rebuildBatch, previews.count)]
-            context.performAndWait {
+            let batch = Array(previews[start..<min(start + Self.rebuildBatch, previews.count)])
+            total += await context.perform { () -> Int in
+                var opened = 0
                 var cache: [String: Set<RevealGrid.Cell>] = [:]
                 for preview in batch {
                     guard let polyline = preview.polyline else { continue }
@@ -155,16 +155,17 @@ final class RevealedLayerStore: @unchecked Sendable {
                     guard coords.count > 1 else { continue }
                     let patches = RevealBuilder.patches(for: coords) { key in
                         if let hit = cache[key] { return hit }
-                        let cells = claimedInContext(key)
+                        let cells = self.claimedInContext(key)
                         cache[key] = cells
                         return cells
                     }
                     for (key, patch) in patches {
                         cache[key, default: []].formUnion(patch.cells)
                     }
-                    total += mergeInContext(patches)
+                    opened += self.mergeInContext(patches)
                 }
-                saveContext()
+                self.saveContext()
+                return opened
             }
             await Task.yield()
         }
@@ -177,11 +178,16 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// Стереть открытое. Флаг сборки снимается вместе с данными: он говорит
     /// «сборка прошла», а не «сборка когда-то запускалась», — иначе после
     /// «удалить везде» вернувшиеся синком поездки остались бы без тумана.
+    /// Синхронный нарочно: единственный вызывающий — `LocalDataWipe.run()`,
+    /// синхронная точка на главном актёре, а работы здесь на один delete.
     func wipe() {
         context.performAndWait {
             let request: NSFetchRequest<RevealedCellEntity> = RevealedCellEntity.fetchRequest()
             for entity in (try? context.fetch(request)) ?? [] { context.delete(entity) }
             saveContext()
+            // `LocalDataWipe` стирает пакетом мимо контекстов, и в этом
+            // остались бы зарегистрированные «призраки» стёртых строк.
+            context.reset()
         }
         defaults.set(false, forKey: Self.rebuildFlagKey)
         postChanged()
