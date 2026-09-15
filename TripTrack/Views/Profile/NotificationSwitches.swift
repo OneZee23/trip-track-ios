@@ -5,7 +5,7 @@ private let notifSwitchLog = Logger(subsystem: "com.triptrack", category: "setti
 
 // MARK: - Notification switches
 
-private struct NotificationSwitchesResponse: Decodable {
+struct NotificationSwitchesResponse: Decodable {
     let notifyReactions: Bool
     let notifyFollows: Bool
     /// Optional: some deployed backends predate the comments and companions
@@ -13,14 +13,24 @@ private struct NotificationSwitchesResponse: Decodable {
     let notifyComments: Bool?
     let notifyWeeklyRecap: Bool
     let notifyCompanions: Bool?
+    /// 0.7.0. Оба ключа опциональны: сервер, задеплоенный до этой версии, их
+    /// не шлёт — и отсутствие `isAdmin` значит «не админ», то есть карточки
+    /// нет. Молчание никогда не выдаёт админские права.
+    let isAdmin: Bool?
+    let notifyNewAccounts: Bool?
 }
 
-private struct NotificationSwitchesUpdate: Encodable {
+struct NotificationSwitchesUpdate: Encodable {
     let notifyReactions: Bool
     let notifyFollows: Bool
     let notifyComments: Bool
     let notifyWeeklyRecap: Bool
     let notifyCompanions: Bool
+    /// Уезжает всегда, у кого угодно: сервер пишет его ТОЛЬКО админу, а
+    /// у остальных молча игнорирует (см. план 0.7.0). Условная отправка
+    /// потребовала бы второй формы пейлоада ради ключа, который и так
+    /// никому не вредит.
+    let notifyNewAccounts: Bool
 }
 
 /// The «Уведомления» master canon puts in Настройки, over the same
@@ -48,6 +58,17 @@ final class NotificationSwitches: ObservableObject {
     @Published private(set) var isLoaded = false
     @Published private(set) var master = true
 
+    /// Флаг `is_admin` из ответа сервера. Единственный источник — БД, где его
+    /// ставят руками; ни эндпоинта, ни списка email в клиенте нет. `false`
+    /// при любом сомнении: старый сервер, ошибка загрузки, гость.
+    @Published private(set) var isAdmin = false
+
+    /// «Новые пользователи» — пуш админу о КАЖДОЙ чужой регистрации.
+    /// В `master` НЕ входит нарочно: общий выключатель «Уведомления»
+    /// обещает тишину про твои события, а это событие чужое, и схлопнуть
+    /// их в один тумблер значило бы соврать в обе стороны.
+    @Published private(set) var newAccounts = true
+
     /// Published because «Приватность» edits it (`PrivacySettingsView`). The
     /// other four are not: they belong to the detailed screen (Входящие → ⚙),
     /// and are held here only because the master is DERIVED from all five and
@@ -63,16 +84,41 @@ final class NotificationSwitches: ObservableObject {
 
     private static let preMuteKey = "com.triptrack.settings.notificationsPreMute"
 
+    /// Вставной клиент — чтобы тесты читали тело POST'а с провода через
+    /// `MockURLProtocol`, как `CompanionsStore`. В приложении всегда `.shared`.
+    private let client: APIClient
+
+    #if DEBUG
+    /// `-debug-admin` рисует карточку «Админ» так, как её увидит владелец:
+    /// без сервера с `is_admin = true` её не показать ни на симуляторе, ни на
+    /// снимке. Компилируется только в debug и в релиз не попадает.
+    static let forcesAdmin = ProcessInfo.processInfo.arguments.contains("-debug-admin")
+    #endif
+
+    init(client: APIClient = .shared) {
+        self.client = client
+        #if DEBUG
+        if Self.forcesAdmin {
+            isAdmin = true
+            // Тумблеры рисуются активными: дальше `load()` выйдет на первом
+            // же `guard`, а сервера, который ответил бы, на симуляторе нет.
+            isLoaded = true
+        }
+        #endif
+    }
+
     func load() async {
         guard !isLoaded else { return }
         do {
-            let res: NotificationSwitchesResponse = try await APIClient.shared.post(
+            let res: NotificationSwitchesResponse = try await client.post(
                 APIEndpoint.notificationPrefsGet, body: EmptyRequest())
             reactions = res.notifyReactions
             follows = res.notifyFollows
             comments = res.notifyComments ?? true
             weeklyRecap = res.notifyWeeklyRecap
             companions = res.notifyCompanions ?? true
+            isAdmin = Self.resolveAdmin(res.isAdmin)
+            newAccounts = res.notifyNewAccounts ?? true
             refreshMaster()
         } catch {
             // Same optimistic default as the detailed screen: a load failure
@@ -116,6 +162,24 @@ final class NotificationSwitches: ObservableObject {
         scheduleSave()
     }
 
+    /// «Новые пользователи». Оптимистично — и тем же отложенным POST'ом,
+    /// что остальные категории; `master` он не трогает.
+    func setNewAccounts(_ on: Bool) {
+        guard on != newAccounts else { return }
+        newAccounts = on
+        scheduleSave()
+    }
+
+    /// Отсутствие ключа — это «не админ», а не «неизвестно»: карточку,
+    /// которую нечем подтвердить, не показываем.
+    static func resolveAdmin(_ remote: Bool?) -> Bool {
+        #if DEBUG
+        return (remote ?? false) || forcesAdmin
+        #else
+        return remote ?? false
+        #endif
+    }
+
     private func refreshMaster() {
         master = reactions || follows || comments || weeklyRecap || companions
     }
@@ -142,14 +206,15 @@ final class NotificationSwitches: ObservableObject {
 
     private func save() async {
         do {
-            let _: NotificationSwitchesResponse = try await APIClient.shared.post(
+            let _: NotificationSwitchesResponse = try await client.post(
                 APIEndpoint.notificationPrefsUpdate,
                 body: NotificationSwitchesUpdate(
                     notifyReactions: reactions,
                     notifyFollows: follows,
                     notifyComments: comments,
                     notifyWeeklyRecap: weeklyRecap,
-                    notifyCompanions: companions
+                    notifyCompanions: companions,
+                    notifyNewAccounts: newAccounts
                 ))
         } catch {
             notifSwitchLog.error("notification prefs save failed: \(error.localizedDescription)")

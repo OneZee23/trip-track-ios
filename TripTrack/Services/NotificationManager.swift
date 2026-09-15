@@ -10,6 +10,10 @@ final class NotificationManager: NSObject, ObservableObject {
     static let tripStartPromptCategory = "TRIP_START_PROMPT"
     static let tripStopPromptCategory = "TRIP_STOP_PROMPT"
     static let tripAutoStartedCategory = "TRIP_AUTO_STARTED"
+    /// 0.7.0. Пуш админу о чужой регистрации. В «Входящие» не попадает —
+    /// сервер его не записывает, — поэтому нажатие просто открывает
+    /// приложение: вести некуда, и притворяться, что есть, не надо.
+    static let newAccountCategory = "NEW_ACCOUNT"
 
     // Action identifiers
     static let startRecordingAction = "START_RECORDING"
@@ -288,14 +292,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let category = notification.request.content.categoryIdentifier
-        // Local trip-start / trip-stop prompts are presented inline via the
-        // recording UI itself, so silencing them in foreground avoids a
-        // double surface. Remote social pushes (REACTION / FOLLOW / COMMENT)
-        // DO get a foreground banner — the user is already in the app, so a
-        // quiet announcement is the right interaction (matches Strava,
-        // Twitter).
-        switch category {
-        case "REACTION", "FOLLOW", "COMMENT", "COMPANION_INVITE", "COMPANION_ACCEPTED":
+        if Self.refreshesInbox(category) {
             // Refresh the inbox synchronously with banner display — this
             // is the canonical "foreground push received" hook (vs
             // `application(_:didReceiveRemoteNotification:)` which only
@@ -303,9 +300,38 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             Task { @MainActor in
                 await NotificationsInboxStore.shared.refresh()
             }
-            completionHandler([.banner, .sound])
+        }
+        completionHandler(Self.presentationOptions(for: category))
+    }
+
+    /// Что показать в форграунде, чистой функцией — чтобы правило проверялось
+    /// тестом, а не пушем на телефоне: поднять `UNNotification` с нужной
+    /// категорией в юнит-тесте нечем.
+    ///
+    /// Local trip-start / trip-stop prompts are presented inline via the
+    /// recording UI itself, so silencing them in foreground avoids a double
+    /// surface. Remote pushes DO get a foreground banner — the user is
+    /// already in the app, so a quiet announcement is the right interaction
+    /// (matches Strava, Twitter).
+    static func presentationOptions(for category: String) -> UNNotificationPresentationOptions {
+        switch category {
+        case "REACTION", "FOLLOW", "COMMENT", "COMPANION_INVITE", "COMPANION_ACCEPTED",
+             newAccountCategory:
+            return [.banner, .sound]
         default:
-            completionHandler([])
+            return []
+        }
+    }
+
+    /// Приход какого пуша меняет «Входящие». `NEW_ACCOUNT` — НЕ меняет:
+    /// бэкенд его не записывает (`NotificationsService.record` не зовётся),
+    /// и лишний запрос показал бы тот же список.
+    static func refreshesInbox(_ category: String) -> Bool {
+        switch category {
+        case "REACTION", "FOLLOW", "COMMENT", "COMPANION_INVITE", "COMPANION_ACCEPTED":
+            return true
+        default:
+            return false
         }
     }
 }

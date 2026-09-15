@@ -1260,6 +1260,9 @@ extension Translations {
         "homeQuestionHint": "Böylece uygulama yolculukların nerede başladığını bilir",
         "homeYes": "Evet, burası evim",
         "homeNo": "Hayır",
+        "adminSectionTitle": "Yönetici",
+        "adminNotifyNewUsers": "Yeni kullanıcılar",
+        "adminHintNewUsers": "TripTrack'e yeni biri kaydolduğunda bildirim",
     ]
 
 }

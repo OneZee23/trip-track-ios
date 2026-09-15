@@ -4232,6 +4232,28 @@ enum AppStrings {
         tr(lang, "settingsNotifications", ru: "Уведомления", en: "Notifications")
     }
 
+    // MARK: - «Админ» (карточка видна только аккаунту с is_admin)
+
+    /// Заголовок карточки, которую видит ровно один человек — тот, кому флаг
+    /// `is_admin` поставили руками в базе. Переводы всё равно нужны все
+    /// тринадцать: таблицы обязаны сходиться ключ в ключ, а язык у владельца
+    /// свой, как у всех.
+    static func adminSectionTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "adminSectionTitle", ru: "Админ", en: "Admin")
+    }
+    /// Единственная строка карточки. Не «Уведомления о регистрациях» — общий
+    /// выключатель «Уведомления» строкой выше про СВОИ события, а этот
+    /// тумблер про чужие, и путать их названием нельзя.
+    static func adminNotifyNewUsers(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "adminNotifyNewUsers", ru: "Новые пользователи", en: "New users")
+    }
+    /// Тело «?» — что именно произойдёт, а не как называется тумблер.
+    static func adminHintNewUsers(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "adminHintNewUsers",
+           ru: "Пуш, когда в TripTrack регистрируется новый человек",
+           en: "A push when someone new signs up for TripTrack")
+    }
+
     // MARK: - «Приватность» (nested screen — PrivacySettingsView)
 
     /// The row in Настройки, and the title of the screen it opens.

@@ -1260,6 +1260,9 @@ extension Translations {
         "homeQuestionHint": "Agar aplikasi tahu dari mana perjalanan dimulai",
         "homeYes": "Ya, ini rumahku",
         "homeNo": "Bukan",
+        "adminSectionTitle": "Admin",
+        "adminNotifyNewUsers": "Pengguna baru",
+        "adminHintNewUsers": "Notifikasi saat ada orang baru mendaftar di TripTrack",
     ]
 
 }

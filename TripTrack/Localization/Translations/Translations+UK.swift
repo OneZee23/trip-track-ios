@@ -1260,6 +1260,9 @@ extension Translations {
         "homeQuestionHint": "Так застосунок зрозуміє, де починаються подорожі",
         "homeYes": "Так, це дім",
         "homeNo": "Ні",
+        "adminSectionTitle": "Адмін",
+        "adminNotifyNewUsers": "Нові користувачі",
+        "adminHintNewUsers": "Пуш, коли в TripTrack реєструється нова людина",
     ]
 
 }

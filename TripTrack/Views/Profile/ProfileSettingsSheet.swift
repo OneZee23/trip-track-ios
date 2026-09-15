@@ -19,6 +19,9 @@ private let settingsLog = Logger(subsystem: "com.triptrack", category: "settings
 ///    author, which is the card they belong in and why the row now carries a
 ///    subtitle like its two neighbours.
 ///
+/// Четвёртая карточка, «Админ», существует только у аккаунта с `is_admin`
+/// (0.7.0) и стоит между первой и второй — см. `adminGroup`.
+///
 /// What left this sheet, and where it went: «Страна» → «Мой профиль» (it is
 /// profile data, not app config, and that row already existed); «Добавление в
 /// попутчики» → Входящие → ⚙ (same server field, and the master switch right
@@ -82,6 +85,9 @@ struct ProfileSettingsSheet: View {
                 VStack(spacing: 4) {
                     if auth.isSignedIn {
                         accountGroup(c, l)
+                    }
+                    if notifications.isAdmin {
+                        adminGroup(c, l)
                     }
                     appGroup(c, l)
                     supportGroup(c, l)
@@ -285,6 +291,41 @@ struct ProfileSettingsSheet: View {
             batchProcessed: syncQueue.batchProcessed,
             batchTotal: syncQueue.batchTotal
         )
+    }
+
+    // MARK: - Card A2 — admin (is_admin accounts only)
+
+    /// Видна ровно одному человеку — тому, кому флаг `is_admin` поставили
+    /// руками в базе. Своя карточка, а не строка в «Аккаунте», потому что
+    /// «Аккаунт» — это про ТВОЙ аккаунт: кто тебя видит, что тебе приходит,
+    /// где лежит синк. Регистрация чужого человека к этому не относится
+    /// никак, и строка внутри той карточки читалась бы как ещё одно
+    /// обещание про себя.
+    ///
+    /// Заголовок нужен по той же причине: три обычные карточки живут без
+    /// подписей, потому что их содержимое само себя называет, а эта —
+    /// исключение, которого нет больше ни у кого, и его стоит назвать вслух.
+    private func adminGroup(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AccountSectionLabel(text: AppStrings.adminSectionTitle(l))
+                .padding(.leading, 2)
+                .padding(.top, 6)
+
+            VStack(spacing: 0) {
+                SettingsToggleRow(
+                    icon: "person.badge.plus",
+                    title: AppStrings.adminNotifyNewUsers(l),
+                    hint: AppStrings.adminHintNewUsers(l),
+                    isOn: Binding(
+                        get: { notifications.newAccounts },
+                        set: { notifications.setNewAccounts($0) }
+                    ),
+                    isEnabled: notifications.isLoaded
+                )
+                .accessibilityIdentifier("settings_admin_new_accounts")
+            }
+            .surfaceCard(cornerRadius: 16)
+        }
     }
 
     // MARK: - Card B — the app itself

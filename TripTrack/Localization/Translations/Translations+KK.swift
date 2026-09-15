@@ -1260,6 +1260,9 @@ extension Translations {
         "homeQuestionHint": "Осылай қолданба саяхаттардың қайдан басталатынын біледі",
         "homeYes": "Иә, бұл үй",
         "homeNo": "Жоқ",
+        "adminSectionTitle": "Әкімші",
+        "adminNotifyNewUsers": "Жаңа қолданушылар",
+        "adminHintNewUsers": "TripTrack-те жаңа адам тіркелгенде хабарлама",
     ]
 
 }

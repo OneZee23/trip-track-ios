@@ -1260,6 +1260,9 @@ extension Translations {
         "homeQuestionHint": "Così l'app sa dove iniziano i viaggi",
         "homeYes": "Sì, è casa mia",
         "homeNo": "No",
+        "adminSectionTitle": "Admin",
+        "adminNotifyNewUsers": "Nuovi utenti",
+        "adminHintNewUsers": "Una notifica quando qualcuno si registra su TripTrack",
     ]
 
 }
