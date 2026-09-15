@@ -17,8 +17,18 @@ extension UIApplication {
     ///
     /// nil — окна ещё нет (первый кадр, сцена в фоне).
     static var tt_safeAreaInsets: UIEdgeInsets? {
+        tt_keyWindow?.safeAreaInsets
+    }
+
+    /// Высота окна — для тех, кому нужно расстояние до ФИЗИЧЕСКОГО низа
+    /// экрана, а не до края безопасной зоны (см. `measuredBottomOverlay`).
+    static var tt_windowHeight: CGFloat? {
+        tt_keyWindow?.bounds.height
+    }
+
+    private static var tt_keyWindow: UIWindow? {
         shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.safeAreaInsets
+            .first?.windows.first
     }
 }

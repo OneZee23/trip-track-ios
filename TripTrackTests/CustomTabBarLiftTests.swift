@@ -40,4 +40,40 @@ final class CustomTabBarLiftTests: XCTestCase {
             MyMapSheet.collapsedHeight(bottomInset: 34), 34,
             "инсет обязан быть больше безопасной зоны, иначе поднимать нечего")
     }
+
+    /// Панель сообщает карте расстояние до ФИЗИЧЕСКОГО низа окна, а не свою
+    /// высоту.
+    ///
+    /// Сводка чужой карты и карты машины лежит в `VStack`, который безопасную
+    /// зону уважает: её низ стоит на 34 pt выше физического низа экрана. Пока
+    /// она отдавала одну свою высоту, карта считала `extra = высота − 34` и
+    /// поднимала «Legal» ровно на эти 34 pt меньше нужного — то есть прятала
+    /// его под сводку. У листа «Атласа» ошибки не было: его высота и так
+    /// считается от низа окна.
+    func testBottomOverlayIsMeasuredToThePhysicalBottomOfTheWindow() {
+        let window: CGFloat = 874
+        let safeArea: CGFloat = 34
+        let summary: CGFloat = 120
+
+        // Сводка в уважающем безопасную зону `VStack`: её верх — на
+        // 874 − 34 − 120.
+        let reported = MapBottomInset.overlayHeight(
+            panelTop: window - safeArea - summary, windowHeight: window)
+        XCTAssertEqual(reported, summary + safeArea, "панель отдала свою высоту вместо расстояния")
+        XCTAssertEqual(
+            MapBottomInset.additional(overlayHeight: reported, safeAreaBottom: safeArea),
+            summary,
+            "логотип и «Legal» поднялись не на всю сводку")
+
+        // Лист «Атласа» стоит от физического низа — контракт тот же, а число
+        // уже верное и без правки.
+        let atlas = MyMapSheet.collapsedHeight(bottomInset: safeArea)
+        XCTAssertEqual(
+            MapBottomInset.overlayHeight(panelTop: window - atlas, windowHeight: window), atlas)
+
+        // Панель ниже низа окна (первый кадр, окна ещё нет) не имеет права
+        // дать отрицательный инсет.
+        XCTAssertEqual(MapBottomInset.overlayHeight(panelTop: window + 10, windowHeight: window), 0)
+        XCTAssertEqual(MapBottomInset.additional(overlayHeight: 10, safeAreaBottom: 34), 0)
+    }
 }

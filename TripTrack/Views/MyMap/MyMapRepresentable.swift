@@ -47,10 +47,39 @@ final class MapHostController: UIViewController {
     /// меняет собственный `safeAreaInsets`, и считать от него значит гонять
     /// вью-контроллер по кругу.
     private func applyBottomInset() {
-        let base = UIApplication.tt_safeAreaInsets?.bottom ?? 0
-        let extra = max(0, bottomOverlayHeight - base)
+        let extra = MapBottomInset.additional(
+            overlayHeight: bottomOverlayHeight,
+            safeAreaBottom: UIApplication.tt_safeAreaInsets?.bottom ?? 0
+        )
         guard abs(additionalSafeAreaInsets.bottom - extra) > 0.5 else { return }
         additionalSafeAreaInsets.bottom = extra
+    }
+}
+
+/// Арифметика подъёма логотипа Apple и ссылки «Legal» над нижней панелью.
+///
+/// Чистыми функциями, потому что ошибка здесь видна только глазами на живом
+/// экране, а стоит она возврата из ревью: «Legal» обязан быть виден.
+enum MapBottomInset {
+    /// Сколько низа экрана занимает панель — от её ВЕРХНЕГО края до
+    /// физического низа окна.
+    ///
+    /// Панель сообщает карте именно это, а не свою высоту. Сводка чужой карты
+    /// и карты машины лежит в `VStack`, который безопасную зону УВАЖАЕТ:
+    /// между её низом и физическим низом окна остаются те самые 34 pt
+    /// индикатора «домой», и карта, получив одну высоту сводки, поднимала
+    /// «Legal» ровно на 34 pt меньше нужного — то есть прятала его под сводку.
+    /// У листа Атласа высота и так считается от физического низа
+    /// (`CustomTabBar.clearance`), поэтому контракт «расстояние до низа окна»
+    /// — единственный, который верен для всех трёх экранов сразу.
+    static func overlayHeight(panelTop: CGFloat, windowHeight: CGFloat) -> CGFloat {
+        max(0, windowHeight - panelTop)
+    }
+
+    /// Добавочный инсет карты: `MKMapView` уже уважает безопасную зону окна,
+    /// поэтому доплачивать надо только за то, что панель выше неё.
+    static func additional(overlayHeight: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
+        max(0, overlayHeight - safeAreaBottom)
     }
 }
 
@@ -499,6 +528,11 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // Route endpoints are labels on the trip already open. Letting
                 // them win the hit test would swallow taps meant for the road.
                 guard !(annotation is RouteEndpointAnnotation) else { continue }
+                // Подпись региона стоит ровно в СЕРЕДИНЕ открытого, то есть
+                // поверх дорог, и «попал в подпись» там значит «попал в свою
+                // дорогу». Выбывает из хит-теста по той же причине, что и
+                // концы маршрута: тап обязан дойти до дороги под ней.
+                guard !(annotation is RegionLabelAnnotation) else { continue }
                 guard let view = map.view(for: annotation), !view.isHidden else { continue }
                 let target = view.frame.insetBy(dx: -6, dy: -6)
                 guard target.contains(point) else { continue }
@@ -515,7 +549,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                     Haptics.tap()
                     onSelectTrip?(pin.tripId)
                 }
-                // Точки городов и подписи регионов — подписи, не контролы.
+                // Точка города — подпись, а не контрол: тап по ней не делает
+                // ничего (так было и до 0.7.0).
                 return
             }
 
@@ -633,12 +668,25 @@ extension View {
     /// содержимого (загрузка, отказ, пустота, числа), и неверная константа
     /// оставила бы «Legal» под панелью — то самое, из-за чего ревью
     /// возвращает сборки.
+    ///
+    /// Меряется РАССТОЯНИЕ ДО НИЗА ОКНА, а не собственная высота панели: см.
+    /// `MapBottomInset.overlayHeight`. Следить достаточно за верхним краем —
+    /// он двигается и когда панель растёт, и когда её кто-то поднял.
     func measuredBottomOverlay(_ height: Binding<CGFloat>) -> some View {
         background(
             GeometryReader { geo in
+                let top = geo.frame(in: .global).minY
                 Color.clear
-                    .onAppear { height.wrappedValue = geo.size.height }
-                    .onChange(of: geo.size.height) { _, new in height.wrappedValue = new }
+                    .onAppear { height.wrappedValue = MapBottomInset.overlayHeight(
+                        panelTop: top,
+                        windowHeight: UIApplication.tt_windowHeight ?? (top + geo.size.height)
+                    ) }
+                    .onChange(of: top) { _, new in
+                        height.wrappedValue = MapBottomInset.overlayHeight(
+                            panelTop: new,
+                            windowHeight: UIApplication.tt_windowHeight ?? (new + geo.size.height)
+                        )
+                    }
             }
         )
     }
