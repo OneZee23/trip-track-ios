@@ -37,10 +37,6 @@ struct MapViewRepresentable: UIViewRepresentable {
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
-        // Штора на время зума — та же, что у «Атласа» и у экрана поездки:
-        // щипок наружу оголяет живую карту Apple до прихода наших тайлов, и
-        // на экране записи это тот же дефект (см. `MapZoomCurtain`).
-        context.coordinator.curtain.install(over: mapView)
 
         mapView.showsUserLocation = true
         mapView.userTrackingMode = userTrackingMode
@@ -221,8 +217,6 @@ struct MapViewRepresentable: UIViewRepresentable {
 
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: MapViewRepresentable
-        /// Штора на время зума.
-        let curtain = MapCurtain()
         var suppressTrackingCallback = false
         var restoreTrackingWork: DispatchWorkItem?
         var savedTrackingMode: MKUserTrackingMode?
@@ -347,12 +341,7 @@ struct MapViewRepresentable: UIViewRepresentable {
         /// Карта повернулась — сама (режим «по курсу») или пальцами. Экранный
         /// угол маркера считается от поворота камеры, и без этого нос
         /// отвязывается от дороги под собой.
-        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
-            curtain.willChange(mapView)
-        }
-
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
-            curtain.changing(mapView)
             guard let view = carView(on: mapView) else { return }
             view.applyScreenAngle(cameraHeading: mapView.camera.heading)
             // Тем же жестом меняется масштаб — отсюда круг точности, конус и
@@ -396,7 +385,6 @@ struct MapViewRepresentable: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            curtain.didChange(mapView)
             let distance = mapView.camera.centerCoordinateDistance
             let cameraCallback = parent.onCameraDistanceChanged
             let rectCallback = parent.onVisibleRectChanged

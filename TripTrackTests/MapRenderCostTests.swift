@@ -276,6 +276,56 @@ final class MapRenderCostTests: XCTestCase {
         }
     }
 
+    /// Полный кадр экранной вуали на УЛИЦЕ — самый дорогой, какой бывает:
+    /// четырнадцать проходов пера на коридор и вся площадь растра сразу.
+    ///
+    /// Порог 90 мс, и вот откуда он. На устройстве (iPhone 17 Pro Max, спайк
+    /// 15 сен) тот же кадр стоил 211 мс, потому что слой прозрачности
+    /// открывался на КАЖДЫЙ из 24 тайлов; после сборки коридоров в один слой
+    /// ожидание было 60–80 мс. Симулятор считает на процессоре Mac и обычно
+    /// быстрее телефона, так что 90 мс здесь — не «столько это стоит», а
+    /// потолок, ниже которого кадр остаётся незаметным на фоновой очереди при
+    /// пяти заказах в секунду (`VeilRenderGate.throttle`). Вернётся слой на
+    /// тайл — тест упадёт втрое.
+    func testFullVeilFrameAtStreetZoomFitsTheBudget() {
+        let revealed = layer()
+        let index = MapPathIndex()
+        index.prepare(
+            source: { revealed.polylines(for: $0) },
+            transform: { CGPoint(x: $0.x, y: $0.y) }
+        )
+
+        // Кадр телефона: 440×956 pt видимого на 500 м ширины, запас 1.5×.
+        let centre = CLLocationCoordinate2D(latitude: 45.03, longitude: 38.99)
+        let metre = MKMapPointsPerMeterAtLatitude(centre.latitude)
+        let visibleWidth = 500 * metre
+        let origin = MKMapPoint(centre)
+        let visible = MKMapRect(
+            x: origin.x - visibleWidth / 2, y: origin.y - visibleWidth * 956 / 440 / 2,
+            width: visibleWidth, height: visibleWidth * 956 / 440)
+        let rect = FogVeilView.renderRect(visible: visible, margin: FogVeilView.margin)
+        let ppmp = 440 / visible.width
+        let sizePoints = CGSize(width: CGFloat(rect.width * ppmp),
+                                height: CGFloat(rect.height * ppmp))
+
+        var times: [TimeInterval] = []
+        for _ in 0..<5 {
+            let started = Date()
+            let band = FogVeilBitmap.render(
+                rect: rect, sizePoints: sizePoints, scale: FogVeilView.renderScale,
+                index: index, selected: [])
+            times.append(Date().timeIntervalSince(started))
+            XCTAssertNotNil(band, "растр обязан собраться")
+            XCTAssertEqual(band?.layers, 1, "слой прозрачности обязан быть один на растр")
+        }
+        let median = times.sorted()[times.count / 2]
+        print(String(format: "[veil] полный кадр .fine %.0f×%.0f pt @%.1fx: медиана %.1f мс, "
+                     + "минимум %.1f мс", sizePoints.width, sizePoints.height,
+                     FogVeilView.renderScale, median * 1000, times.min()! * 1000))
+        XCTAssertLessThan(median, 0.09,
+                          "полный кадр вуали занял \(median * 1000) мс")
+    }
+
     /// Region outlines are drawn from the bundled atlas, and a heavy one would
     /// show up as the border crawling in behind the camera.
     func testRegionOutlinesAreSmallEnoughToDrawAtOnce() async {

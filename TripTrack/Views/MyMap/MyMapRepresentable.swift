@@ -29,10 +29,20 @@ enum MapZoomLevel: Int, Comparable {
 final class MapHostController: UIViewController {
     let map = MKMapView()
 
-    /// Штора на время зума — НАД картой и под SwiftUI-хромом (хром лежит в
-    /// `ZStack` выше представимого). Почему она вообще нужна и чем платим —
-    /// см. `MapZoomCurtain`.
-    let curtain = MapCurtain()
+    /// Экранная вуаль — туман растром ВНУТРИ дерева карты, под контейнером
+    /// аннотаций. Не сабвью этого контроллера: вставить её надо между
+    /// плитками Apple и пинами, а туда достаёт только сама карта
+    /// (`FogVeilView.attach(inside:)`).
+    let screenVeil = FogVeilView()
+    /// Встала ли вуаль в дерево. `false` — иерархия `MKMapView` незнакомая,
+    /// и туман рисует плиточный `FogVeilRenderer`, как до 0.7.0.
+    private(set) var screenVeilAttached = false
+    private var attachTries = 0
+    /// Зовётся, когда вуаль встала в дерево: оверлеи тумана с карты надо
+    /// снять, иначе одно и то же рисуется дважды.
+    var onVeilAttached: (() -> Void)?
+    /// Зовётся, когда вуаль ушла с экрана: оверлеи надо вернуть.
+    var onVeilDetached: (() -> Void)?
 
     /// Сколько нижней части экрана занимает постоянный лист. Логотип и
     /// «Legal» встают над ним.
@@ -45,8 +55,50 @@ final class MapHostController: UIViewController {
         map.frame = view.bounds
         map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(map)
-        curtain.install(over: map, in: view)
         applyBottomInset()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        tryAttachVeil()
+    }
+
+    /// Экран ушёл — вуаль уходит с ним, а туман возвращается плиточному
+    /// рендереру: восемь мегабайт растра и `CADisplayLink` за кадром не живут.
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        guard screenVeilAttached else { return }
+        screenVeilAttached = false
+        attachTries = 0
+        screenVeil.detach()
+        onVeilDetached?()
+    }
+
+    /// Поворот устройства меняет не камеру, а сам кадр: привязка растра
+    /// осталась бы верной, но его запас лёг бы не по той стороне.
+    override func viewWillTransition(
+        to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator
+    ) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.screenVeil.invalidate()
+        }
+    }
+
+    /// Встраивание с повторами: контейнер аннотаций появляется в дереве не
+    /// обязательно к первому кадру, а падать из-за этого нельзя.
+    private func tryAttachVeil() {
+        guard !screenVeilAttached else { return }
+        attachTries += 1
+        if screenVeil.attach(inside: map, map: map) {
+            screenVeilAttached = true
+            onVeilAttached?()
+            return
+        }
+        guard attachTries < 25 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.tryAttachVeil()
+        }
     }
 
     /// Считается от инсетов ОКНА, а не от своих: `additionalSafeAreaInsets`
@@ -59,6 +111,9 @@ final class MapHostController: UIViewController {
         )
         guard abs(additionalSafeAreaInsets.bottom - extra) > 0.5 else { return }
         additionalSafeAreaInsets.bottom = extra
+        // Инсет двигает центр видимой области, то есть запас растра
+        // перестаёт лежать вокруг того, что человек видит.
+        if screenVeilAttached { screenVeil.invalidate() }
     }
 }
 
@@ -153,6 +208,14 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         map.addGestureRecognizer(fingers)
         context.coordinator.fingers = fingers
         context.coordinator.host = controller
+        controller.onVeilAttached = { [weak controller, weak coordinator = context.coordinator] in
+            guard let controller, let coordinator else { return }
+            coordinator.screenVeilTookOver(controller)
+        }
+        controller.onVeilDetached = { [weak controller, weak coordinator = context.coordinator] in
+            guard let controller, let coordinator else { return }
+            coordinator.screenVeilStoodDown(controller)
+        }
 
         return controller
     }
@@ -215,6 +278,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// meant hundreds of thousands of view calls before a finger got an
         /// answer; map points are the same geometry with plain arithmetic.
         private var routePoints: [(id: UUID, points: [MKMapPoint], box: MKMapRect)] = []
+        /// Последний открытый слой: экранная вуаль встаёт в дерево карты
+        /// позже первой синхронизации данных и забирает его у координатора.
+        private var lastRevealed = RevealedLayer.empty
 
         // MARK: Data
 
@@ -240,17 +306,24 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             let regionsChanged = regionIds != installedRegionIds
             if regionsChanged { installedRegionIds = regionIds }
 
+            // При живой экранной вуали оверлеев тумана и жилки на карте нет
+            // вовсе: они лежали бы ПОД ней, то есть рисовались бы второй раз
+            // и невидимо. Вуаль рисует и то и другое в свой растр.
+            lastRevealed = revealed
+            let screenVeil = host?.screenVeilAttached == true
+
             if installedVeil !== veil {
                 map.removeOverlays(map.overlays.compactMap { $0 as? FogVeilOverlay })
-                if let veil { map.addOverlay(veil, level: .aboveLabels) }
+                if let veil, !screenVeil { map.addOverlay(veil, level: .aboveLabels) }
                 installedVeil = veil
+                if screenVeil { host?.screenVeil.setLayer(revealed) }
             }
 
             if installedVein !== vein {
                 map.removeOverlays(map.overlays.compactMap {
                     ($0 as? RouteVeinOverlay)?.style == .network ? $0 : nil
                 })
-                if let vein { map.addOverlay(vein, level: .aboveLabels) }
+                if let vein, !screenVeil { map.addOverlay(vein, level: .aboveLabels) }
                 installedVein = vein
             }
 
@@ -332,9 +405,16 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             map.removeAnnotations(map.annotations.filter { $0 is RouteEndpointAnnotation })
             installedRoute = route
             guard let route, let line = route.polylines(for: .fine).first,
-                  line.pointCount > 1 else { return }
+                  line.pointCount > 1 else {
+                if host?.screenVeilAttached == true { host?.screenVeil.setSelectedRoute(nil) }
+                return
+            }
 
-            map.addOverlay(route, level: .aboveLabels)
+            if host?.screenVeilAttached == true {
+                host?.screenVeil.setSelectedRoute(line)
+            } else {
+                map.addOverlay(route, level: .aboveLabels)
+            }
             let points = line.points()
             map.addAnnotations([
                 RouteEndpointAnnotation(
@@ -506,18 +586,65 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             mapView.deselectAnnotation(annotation, animated: false)
         }
 
-        // MARK: Штора на время зума
+        // MARK: Экранная вуаль
+
+        /// Вуаль встала в дерево карты: снимаем оверлеи тумана и жилки (иначе
+        /// одно и то же рисуется дважды и невидимо) и отдаём ей данные.
+        func screenVeilTookOver(_ host: MapHostController) {
+            let map = host.map
+            map.removeOverlays(map.overlays.filter {
+                $0 is FogVeilOverlay || ($0 as? RouteVeinOverlay)?.style == .network
+            })
+            host.screenVeil.setLayer(lastRevealed)
+            if let route = installedRoute, let line = route.polylines(for: .fine).first {
+                map.removeOverlays(map.overlays.compactMap {
+                    ($0 as? RouteVeinOverlay)?.style == .selected ? $0 : nil
+                })
+                host.screenVeil.setSelectedRoute(line)
+            }
+            host.screenVeil.startTracking(tail: 1.5)
+        }
+
+        /// Вуаль ушла с экраном: туман возвращается плиточному рендереру,
+        /// иначе карта осталась бы голой.
+        func screenVeilStoodDown(_ host: MapHostController) {
+            let map = host.map
+            if let veil = installedVeil, !map.overlays.contains(where: { $0 is FogVeilOverlay }) {
+                map.addOverlay(veil, level: .aboveLabels)
+            }
+            if let vein = installedVein, !map.overlays.contains(where: {
+                ($0 as? RouteVeinOverlay)?.style == .network
+            }) {
+                map.addOverlay(vein, level: .aboveLabels)
+            }
+            if let route = installedRoute, !map.overlays.contains(where: {
+                ($0 as? RouteVeinOverlay)?.style == .selected
+            }) {
+                map.addOverlay(route, level: .aboveLabels)
+            }
+        }
 
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
-            host?.curtain.willChange(mapView)
+            guard let host, host.screenVeilAttached else { return }
+            host.screenVeil.startTracking()
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
-            host?.curtain.changing(mapView)
+            guard let host, host.screenVeilAttached else { return }
+            // Ремень и подтяжки: `CADisplayLink` тянет привязку каждый кадр, а
+            // этот колбэк ловит движения, начавшиеся без `regionWillChange`
+            // (программный полёт камеры).
+            host.screenVeil.extendTracking()
+            host.screenVeil.sync(map: mapView)
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            host?.curtain.didChange(mapView)
+            if let host, host.screenVeilAttached {
+                // Камера встала — один ЧЁТКИЙ кадр под новый масштаб.
+                host.screenVeil.extendTracking(tail: 0.6)
+                host.screenVeil.sync(map: mapView)
+                host.screenVeil.maybeRender(map: mapView, settled: true)
+            }
             let newLevel = MapZoomLevel.of(mapView.region.span.latitudeDelta)
             guard newLevel != level else { return }
             level = newLevel
