@@ -1,0 +1,299 @@
+import XCTest
+import MapKit
+import CoreLocation
+@testable import TripTrack
+
+/// Экранная вуаль на ТРЁХ картах: одна и та же вью, разные места в дереве и
+/// разные запасы растра.
+///
+/// Проверяется здесь именно то, что нельзя увидеть глазами: место в иерархии
+/// (сел не туда — либо поездки не видно под туманом, либо тумана нет вовсе),
+/// запас (не тот — полный кадр на каждый поворот руля) и главное обещание
+/// прорези у машины — «растёт, ничего не заказывая».
+@MainActor
+final class VeilSeatTests: XCTestCase {
+
+    // MARK: Дерево карты — подставное
+
+    /// Дерево `MKMapView`, снятое спайком на устройстве: контейнер оверлеев
+    /// (в нём рисует `MKOverlayRenderer`) и контейнер аннотаций — соседи, а
+    /// хостинг самой карты Apple лежит левее обоих.
+    private func mapTree() -> (root: UIView, content: UIView,
+                               base: UIView, overlays: UIView, annotations: UIView) {
+        let root = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let content = UIView(frame: root.bounds)
+        root.addSubview(content)
+        let base = UIView(frame: content.bounds)
+        content.addSubview(base)
+        let overlays = ScrollContainerStub(frame: content.bounds)
+        content.addSubview(overlays)
+        let annotations = AnnotationContainerStub(frame: content.bounds)
+        content.addSubview(annotations)
+        return (root, content, base, overlays, annotations)
+    }
+
+    // MARK: Место в дереве
+
+    /// «Атлас»: вуаль ВЫШЕ оверлеев (свои он с карты снимает и рисует в растр),
+    /// но ниже пинов и подписей регионов.
+    func testAtlasSeatsTheVeilAboveOverlaysAndBelowAnnotations() {
+        let tree = mapTree()
+        let veil = FogVeilView()
+
+        XCTAssertTrue(veil.attach(inside: tree.root, seat: .belowAnnotations))
+        let order = tree.content.subviews
+        XCTAssertLessThan(order.firstIndex(of: veil)!, order.firstIndex(of: tree.annotations)!,
+                          "вуаль обязана лежать ПОД аннотациями")
+        XCTAssertGreaterThan(order.firstIndex(of: veil)!, order.firstIndex(of: tree.overlays)!,
+                             "на «Атласе» оверлеи сняты — вуаль лежит выше их контейнера")
+    }
+
+    /// Экран поездки и экран записи: вуаль НИЖЕ контейнера оверлеев.
+    ///
+    /// Иначе она накроет собой то, ради чего экран открыт: линию поездки с
+    /// отрезками по скорости, обводку, гашение непройденного на реплее и
+    /// светящуюся голову на записи. Увести это в растр нельзя — растр стоит
+    /// десятки миллисекунд, а реплей идёт кадрами.
+    func testTripAndRecordingSeatTheVeilUnderTheOverlayContainer() {
+        let tree = mapTree()
+        let veil = FogVeilView(margin: FogVeilView.rotatingMargin)
+
+        XCTAssertTrue(veil.attach(inside: tree.root, seat: .aboveBaseMap))
+        let order = tree.content.subviews
+        XCTAssertLessThan(order.firstIndex(of: veil)!, order.firstIndex(of: tree.overlays)!,
+                          "маршрут рисуется оверлеем и обязан остаться ВЫШЕ тумана")
+        XCTAssertGreaterThan(order.firstIndex(of: veil)!, order.firstIndex(of: tree.base)!,
+                             "но саму карту Apple с её подписями туман обязан накрыть")
+    }
+
+    /// Контейнера оверлеев в дереве нет — вуаль НЕ садится вовсе.
+    ///
+    /// Это откат, а не «сядем куда придётся»: вуаль, севшая выше оверлеев,
+    /// нарисовала бы точно такой же туман и молча спрятала бы под ним поездку.
+    func testTripFallsBackWhenTheOverlayContainerIsMissing() {
+        let root = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let content = UIView(frame: root.bounds)
+        root.addSubview(content)
+        content.addSubview(AnnotationContainerStub(frame: content.bounds))
+
+        let veil = FogVeilView()
+        XCTAssertFalse(veil.attach(inside: root, seat: .aboveBaseMap))
+        XCTAssertNil(veil.superview, "не встроились — значит на экране нас нет вовсе")
+    }
+
+    /// Вуаль вылетела из дерева — садится обратно НА СВОЁ место, а не на
+    /// «Атласово».
+    func testReseatingKeepsTheSameSeat() {
+        let tree = mapTree()
+        let veil = FogVeilView()
+        XCTAssertTrue(veil.attach(inside: tree.root, seat: .aboveBaseMap))
+
+        veil.removeFromSuperview()
+        veil.verifySeating()
+
+        let order = tree.content.subviews
+        XCTAssertLessThan(order.firstIndex(of: veil)!, order.firstIndex(of: tree.overlays)!,
+                          "после возврата вуаль снова под оверлеями")
+    }
+
+    // MARK: Кто какую вуаль заказывает
+
+    /// Три карты — три заказа, и все три отличаются по существу.
+    func testEachMapAsksForItsOwnSeatAndMargin() {
+        let atlas = MapHostController().veilSeat
+        XCTAssertEqual(atlas.placement, .belowAnnotations)
+        XCTAssertEqual(atlas.veil.margin, FogVeilView.defaultMargin, accuracy: 0.0001)
+
+        let recording = MapViewRepresentable(
+            userTrackingMode: .constant(.none), zoomDelta: .constant(0)
+        ).makeCoordinator().veilSeat
+        XCTAssertEqual(recording.placement, .aboveBaseMap)
+        XCTAssertEqual(recording.veil.margin, FogVeilView.rotatingMargin, accuracy: 0.0001,
+                       "карту записи вращает режим «по курсу» — запас обязан это переживать")
+
+        let fullscreenTrip = RouteMapView(coordinates: [], isInteractive: true, showsFog: true)
+            .makeCoordinator().veilSeat
+        XCTAssertEqual(fullscreenTrip?.placement, .aboveBaseMap)
+        XCTAssertEqual(fullscreenTrip?.veil.margin ?? 0, FogVeilView.rotatingMargin,
+                       accuracy: 0.0001, "полноэкранную карту поездки поворачивают пальцами")
+
+        let hero = RouteMapView(coordinates: [], isInteractive: false, showsFog: true)
+            .makeCoordinator().veilSeat
+        XCTAssertEqual(hero?.veil.margin ?? 0, FogVeilView.defaultMargin, accuracy: 0.0001,
+                       "карта-герой поворота не знает — платить за него вчетверо не за что")
+    }
+
+    /// Чужая поездка и путешествие (`showsFog == false`): вуали нет вовсе.
+    /// Не «есть, но пустая» — её не создают, и восьми мегабайт растра там
+    /// не появляется ни на секунду.
+    func testForeignTripCreatesNoVeilAtAll() {
+        let coordinator = RouteMapView(coordinates: [], showsFog: false).makeCoordinator()
+        XCTAssertNil(coordinator.veilSeat)
+    }
+
+    // MARK: Временной слой доезжает до вуали
+
+    /// Срез «как было на финише ЭТОЙ поездки» кладётся либо в вуаль, либо
+    /// плиточным оверлеем — но НИКОГДА в оба сразу.
+    func testTemporalLayerGoesToTheVeilOrToTheOverlayButNeverToBoth() throws {
+        let layer = revealedLayer()
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+
+        // Вуаль не села (незнакомая иерархия) — работает откат.
+        let fallback = RouteMapView(coordinates: [], showsFog: true).makeCoordinator()
+        fallback.installFogLayer(layer, on: map)
+        XCTAssertEqual(map.overlays.compactMap { $0 as? FogVeilOverlay }.count, 1,
+                       "без вуали туман обязан остаться плиточным оверлеем")
+        XCTAssertFalse(fallback.veilSeat?.veil.hasInstalledLayer ?? true)
+
+        // Вуаль села — оверлея не появляется вовсе.
+        let seated = RouteMapView(coordinates: [], showsFog: true).makeCoordinator()
+        let live = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        seated.adoptMap(live)
+        try XCTSkipUnless(seated.veilSeat?.isAttached == true,
+                          "MapKit не собрал дерево у карты без окна — проверять нечего")
+        seated.installFogLayer(layer, on: live)
+        XCTAssertTrue(live.overlays.compactMap { $0 as? FogVeilOverlay }.isEmpty,
+                      "туман на вуали и оверлеем сразу — это двойная плотность")
+        XCTAssertTrue(seated.veilSeat?.veil.hasInstalledLayer ?? false)
+    }
+
+    // MARK: Прорезь у машины
+
+    /// Главное обещание прорези: она растёт шестьдесят раз в секунду и НЕ
+    /// заказывает при этом ни одного кадра тумана.
+    ///
+    /// Заказала бы — и запись встала бы: полный кадр растра стоит десятки
+    /// миллисекунд, а кадров в секунду шестьдесят.
+    func testLiveRevealNeverOrdersARaster() {
+        let tree = mapTree()
+        let map = MKMapView(frame: tree.root.bounds)
+        map.setRegion(MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 45.03, longitude: 38.99),
+            latitudinalMeters: 1_000, longitudinalMeters: 1_000), animated: false)
+
+        let veil = FogVeilView(margin: FogVeilView.rotatingMargin)
+        XCTAssertTrue(veil.attach(inside: tree.root, map: map, seat: .aboveBaseMap))
+        veil.setLayer(revealedLayer())
+
+        // Индекс путей собирается вне главного потока — ждём его, иначе
+        // заказывать было бы нечего и тест ничего не проверял бы.
+        let ready = expectation(description: "индекс путей собран")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { ready.fulfill() }
+        wait(for: [ready], timeout: 3)
+        veil.maybeRender(map: map, settled: true)
+        let ordered = veil.renderOrders
+        XCTAssertGreaterThan(ordered, 0, "без единого заказанного кадра проверять нечего")
+
+        // Секунда анимации прорези — БЕЗ единого возврата в главный цикл,
+        // чтобы отложенных заказов сюда не попало.
+        let car = CLLocationCoordinate2D(latitude: 45.031, longitude: 38.991)
+        for frame in 1...60 {
+            veil.setLiveReveal(coordinate: car, progress: Double(frame) / 60)
+        }
+        XCTAssertEqual(veil.renderOrders, ordered,
+                       "прорезь заказала \(veil.renderOrders - ordered) кадров тумана")
+        XCTAssertTrue(veil.hasLiveReveal)
+
+        // Финиш: коридор прожжён по-настоящему, маска снимается.
+        veil.setLiveReveal(coordinate: nil, progress: 0)
+        XCTAssertFalse(veil.hasLiveReveal)
+        XCTAssertEqual(veil.renderOrders, ordered)
+    }
+
+    /// Непрозрачное вокруг прорези — точное дополнение её коробки до экрана.
+    /// Дыра там, где её быть не должно, — это дыра в тумане, и видно её только
+    /// глазами на движущейся машине.
+    func testRevealMaskCoversEverythingButTheHole() {
+        let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let cases: [(String, CGRect)] = [
+            ("прорезь в середине", CGRect(x: 150, y: 400, width: 90, height: 90)),
+            ("прорезь у края", CGRect(x: -30, y: 700, width: 120, height: 120)),
+            ("прорезь за экраном", CGRect(x: 600, y: 900, width: 60, height: 60)),
+        ]
+        for (name, hole) in cases {
+            let bars = VeilRevealMask.barsAround(bounds: bounds, hole: hole)
+            var holes = 0
+            for x in stride(from: 0.5, to: bounds.width, by: 3.0) {
+                for y in stride(from: 0.5, to: bounds.height, by: 3.0) {
+                    let point = CGPoint(x: x, y: y)
+                    if hole.contains(point) { continue }
+                    if bars.contains(where: { $0.contains(point) }) { continue }
+                    holes += 1
+                }
+            }
+            XCTAssertEqual(holes, 0, "\(name): \(holes) точек тумана прозрачны")
+            for bar in bars where !bar.isEmpty {
+                XCTAssertFalse(bar.intersects(hole.insetBy(dx: 0.5, dy: 0.5)),
+                               "\(name): полоса залезла в прорезь")
+            }
+        }
+    }
+
+    // MARK: Поворот карты
+
+    /// Режим «по курсу» крутит карту сам. Поворот аффинная матрица выражает
+    /// ТОЧНО — невязка ноль на любом курсе; наклон не выражает никак, и на
+    /// этом стоит запрет `isPitchEnabled`.
+    func testHeadingLeavesNoResidualWhilePitchDoes() {
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let centre = CLLocationCoordinate2D(latitude: 45.03, longitude: 38.99)
+
+        for heading in [0.0, 17.0, 45.0, 90.0, 137.0, 270.0] {
+            map.camera = MKMapCamera(lookingAtCenter: centre, fromDistance: 2_000,
+                                     pitch: 0, heading: heading)
+            guard let residual = residualOfRasterFrame(on: map) else {
+                return XCTFail("матрица из трёх точек обязана собраться на курсе \(heading)")
+            }
+            XCTAssertLessThan(residual, 0.5,
+                              "на курсе \(heading) коридор уехал от дороги на \(residual) pt")
+        }
+
+        map.camera = MKMapCamera(lookingAtCenter: centre, fromDistance: 2_000,
+                                 pitch: 55, heading: 30)
+        if let tilted = residualOfRasterFrame(on: map) {
+            XCTAssertGreaterThan(tilted, 1,
+                                 "при наклоне невязка обязана вырасти — иначе сторожа нет")
+        }
+    }
+
+    /// Невязка четвёртого угла растра, посчитанная самой картой: три угла
+    /// задают матрицу, четвёртый её проверяет.
+    private func residualOfRasterFrame(on map: MKMapView) -> CGFloat? {
+        let rect = FogVeilView.renderRect(visible: map.visibleMapRect,
+                                          margin: FogVeilView.rotatingMargin)
+        let size = CGSize(width: 800, height: 1_400)
+        guard let frame = VeilFrame(
+            p00: map.convert(MKMapPoint(x: rect.minX, y: rect.minY).coordinate, toPointTo: map),
+            p10: map.convert(MKMapPoint(x: rect.maxX, y: rect.minY).coordinate, toPointTo: map),
+            p01: map.convert(MKMapPoint(x: rect.minX, y: rect.maxY).coordinate, toPointTo: map),
+            size: size
+        ) else { return nil }
+        return frame.residual(
+            measured: map.convert(MKMapPoint(x: rect.maxX, y: rect.maxY).coordinate,
+                                  toPointTo: map),
+            atX: 1, y: 1)
+    }
+
+    // MARK: Фикстура открытого мира
+
+    private func revealedLayer() -> RevealedLayer {
+        var claimed: [String: Set<RevealGrid.Cell>] = [:]
+        var runs: [[CLLocationCoordinate2D]] = []
+        let coords = (0..<200).map { i -> CLLocationCoordinate2D in
+            let t = Double(i) / 199
+            return CLLocationCoordinate2D(latitude: 45.02 + 0.02 * t, longitude: 38.98 + 0.03 * t)
+        }
+        for (key, patch) in RevealBuilder.patches(for: coords, claimed: { claimed[$0] ?? [] }) {
+            claimed[key, default: []].formUnion(patch.cells)
+            runs.append(contentsOf: patch.runs)
+        }
+        return RevealedLayer.build(
+            runs: runs, cellCount: claimed.values.reduce(0) { $0 + $1.count }, atlas: nil)
+    }
+}
+
+/// Подставной контейнер оверлеев: настоящий (`MKScrollContainerView`)
+/// приватный, а поиск идёт по подстроке имени класса — ровно это и
+/// проверяется.
+final class ScrollContainerStub: UIView {}

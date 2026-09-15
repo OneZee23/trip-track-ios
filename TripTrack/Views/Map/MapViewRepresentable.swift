@@ -19,6 +19,10 @@ struct MapViewRepresentable: UIViewRepresentable {
     var onCameraDistanceChanged: ((Double) -> Void)?
     var onVisibleRectChanged: ((MKMapRect) -> Void)?
     var onFogRendererCreated: ((FogVeilRenderer) -> Void)?
+    /// Экранная вуаль встала в дерево карты (или ушла из него). Через неё
+    /// модель ведёт прорезь у машины: растущая дыра — это маска на слое вуали,
+    /// а не перерисовка тумана.
+    var onScreenVeilChanged: ((FogVeilView?) -> Void)?
     /// Fires once when the map first finishes rendering. Lets the host clear its
     /// loading spinner from a real signal instead of a fragile timed Task.
     var onMapReady: (() -> Void)?
@@ -35,7 +39,7 @@ struct MapViewRepresentable: UIViewRepresentable {
     var gpsSignalStale: Bool = false
 
     func makeUIView(context: Context) -> MKMapView {
-        let mapView = MKMapView()
+        let mapView = VeilHostMapView()
         mapView.delegate = context.coordinator
 
         mapView.showsUserLocation = true
@@ -73,16 +77,39 @@ struct MapViewRepresentable: UIViewRepresentable {
 
         mapView.showsCompass = false
         mapView.showsScale = true
-        mapView.isPitchEnabled = true
+        // Наклон запрещён на всей жизни карты: под экранной вуалью аффинная
+        // матрица перспективу не выражает, и коридор уехал бы от дороги под
+        // ним (`VeilFrame.residual`). Поворот при этом остаётся — на нём
+        // держится режим «по курсу», и матрица его выражает точно.
+        mapView.isPitchEnabled = false
         mapView.isRotateEnabled = true
         mapView.isZoomEnabled = true
         mapView.isScrollEnabled = true
 
+        let coordinator = context.coordinator
+        coordinator.adoptMap(mapView)
+        // Вуаль уходит вместе с экраном: два растра по запасу 2.2× и
+        // `CADisplayLink` за кадром не живут.
+        mapView.onWindowChange = { [weak coordinator, weak mapView] window in
+            guard let coordinator, let mapView else { return }
+            if window == nil {
+                coordinator.veilSeat.detach()
+            } else {
+                coordinator.adoptMap(mapView)
+            }
+        }
+
         return mapView
+    }
+
+    /// Экран закрылся — вуаль уходит с ним.
+    static func dismantleUIView(_ mapView: MKMapView, coordinator: Coordinator) {
+        coordinator.veilSeat.detach()
     }
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.adoptMap(mapView)
 
         // Tracking mode sync
         if !context.coordinator.suppressTrackingCallback,
@@ -100,7 +127,6 @@ struct MapViewRepresentable: UIViewRepresentable {
         mapView.isScrollEnabled = !isRecording
         mapView.isZoomEnabled = !isRecording
         mapView.isRotateEnabled = !isRecording
-        mapView.isPitchEnabled = !isRecording
 
         context.coordinator.applyCarState(on: mapView)
 
@@ -187,7 +213,14 @@ struct MapViewRepresentable: UIViewRepresentable {
             // re-added last. The route line is rebuilt every 0.5s and would
             // otherwise come back ON TOP of the glowing head; the head is
             // appended (= topmost), the route inserted right above the veil.
-            if overlay is FogVeilOverlay {
+            if let fog = overlay as? FogVeilOverlay {
+                // Экранная вуаль на месте — плиточный оверлей на карту не
+                // кладём вовсе: рисовали бы одно и то же дважды, причём нижнее
+                // всё равно не видно. Слой при этом отдаём ей — он тот же.
+                if context.coordinator.veilSeat.isAttached {
+                    context.coordinator.veilSeat.veil.setLayer(fog.layer)
+                    continue
+                }
                 // Непрозрачная вуаль обязана лежать ВЫШЕ подписей Apple
                 // (иначе названия городов висят поверх темноты) и НИЖЕ всего
                 // своего. Поэтому уровень у всех трёх один, а порядок внутри
@@ -222,8 +255,50 @@ struct MapViewRepresentable: UIViewRepresentable {
         var savedTrackingMode: MKUserTrackingMode?
         var didSendInitialRect = false
 
+        /// Посадка экранной вуали — та же, что у «Атласа» и у экрана поездки.
+        ///
+        /// Место — ПОД контейнером оверлеев: трек, светящаяся голова и линия
+        /// маршрута рисуются `MKOverlayRenderer`-ом, и вуаль выше них спрятала
+        /// бы запись под собой. Запас 2.2×, потому что карта на записи
+        /// ВРАЩАЕТСЯ («по курсу»), а с поворотом меняет форму и та коробка, по
+        /// которой считается растр.
+        let veilSeat = VeilSeat(margin: FogVeilView.rotatingMargin, seat: .aboveBaseMap)
+        private weak var mapRef: MKMapView?
+
         init(_ parent: MapViewRepresentable) {
             self.parent = parent
+            super.init()
+            veilSeat.onAttached = { [weak self] in self?.screenVeilTookOver() }
+            veilSeat.onDetached = { [weak self] in self?.screenVeilStoodDown() }
+        }
+
+        /// Карта готова — запоминаем её и сажаем вуаль. Идемпотентно.
+        func adoptMap(_ mapView: MKMapView) {
+            mapRef = mapView
+            veilSeat.attach(to: mapView)
+        }
+
+        /// Вуаль встала: снимаем плиточный оверлей и отдаём ей тот же слой.
+        private func screenVeilTookOver() {
+            if let map = mapRef {
+                map.removeOverlays(map.overlays.filter { $0 is FogVeilOverlay })
+            }
+            if let fog = parent.overlays.compactMap({ $0 as? FogVeilOverlay }).first {
+                veilSeat.veil.setLayer(fog.layer)
+            }
+            veilSeat.startTracking(tail: 1.5)
+            parent.onScreenVeilChanged?(veilSeat.veil)
+        }
+
+        /// Вуаль ушла: туман возвращается плиточному рендереру, иначе карта
+        /// осталась бы голой.
+        private func screenVeilStoodDown() {
+            parent.onScreenVeilChanged?(nil)
+            guard let map = mapRef,
+                  !map.overlays.contains(where: { $0 is FogVeilOverlay }),
+                  let fog = parent.overlays.compactMap({ $0 as? FogVeilOverlay }).first
+            else { return }
+            map.insertOverlay(fog, at: 0, level: .aboveLabels)
         }
 
         func mapViewDidFinishRenderingMap(_ mapView: MKMapView, fullyRendered: Bool) {
@@ -341,7 +416,15 @@ struct MapViewRepresentable: UIViewRepresentable {
         /// Карта повернулась — сама (режим «по курсу») или пальцами. Экранный
         /// угол маркера считается от поворота камеры, и без этого нос
         /// отвязывается от дороги под собой.
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            veilSeat.startTracking()
+        }
+
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            // Камера на записи едет сама, без `regionWillChange`: машина
+            // тянет её за собой каждым фиксом, а в режиме «по курсу» ещё и
+            // крутит. Здесь и заводится привязка растра.
+            veilSeat.startTracking()
             guard let view = carView(on: mapView) else { return }
             view.applyScreenAngle(cameraHeading: mapView.camera.heading)
             // Тем же жестом меняется масштаб — отсюда круг точности, конус и
@@ -385,6 +468,8 @@ struct MapViewRepresentable: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            // Камера встала — один ЧЁТКИЙ кадр под новый масштаб.
+            veilSeat.settle(on: mapView)
             let distance = mapView.camera.centerCoordinateDistance
             let cameraCallback = parent.onCameraDistanceChanged
             let rectCallback = parent.onVisibleRectChanged

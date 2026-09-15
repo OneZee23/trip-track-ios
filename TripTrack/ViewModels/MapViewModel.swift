@@ -168,6 +168,12 @@ final class MapViewModel: ObservableObject {
 
     // Fog reveal animation
     weak var fogRenderer: FogVeilRenderer? // set by MapViewRepresentable callback
+    /// Экранная вуаль, когда она встала в дерево карты. Прорезь у машины на
+    /// ней — МАСКА, а не перерисовка: растр вуали стоит десятки миллисекунд, а
+    /// прорезь растёт шестьдесят раз в секунду. У плиточного рендерера
+    /// (`fogRenderer`) прорезь так и остаётся отрисовкой коробки вокруг точки —
+    /// два пути, потому что и рисуют они по-разному.
+    weak var fogVeilView: FogVeilView?
     private var fogAnimationLink: CADisplayLink?
     private var fogAnimationStart: Date?
     /// Где сейчас растёт прорезь. Одна на всю запись: она едет с машиной, а не
@@ -1171,6 +1177,9 @@ final class MapViewModel: ObservableObject {
             guard let self else { return }
             self.fogOverlay = FogVeilOverlay(layer: layer)
             self.fogRevealCoordinate = nil
+            // Коридор по пройденному теперь в самом слое — прорезь свою работу
+            // сделала, и держать её поверх нового растра больше не за чем.
+            self.fogVeilView?.setLiveReveal(coordinate: nil, progress: 0)
             self.updateTrackOverlays()
         }
     }
@@ -1200,9 +1209,12 @@ final class MapViewModel: ObservableObject {
         overlay.revealAround = FogVeilOverlay.RevealPoint(
             coordinate: coordinate, progress: progress
         )
-        // По коробке вокруг точки, а не по всему миру: вуаль накрывает мир по
-        // определению, и голый `setNeedsDisplay()` пересобирал бы каждый
-        // видимый тайл шестьдесят раз в секунду.
+        // Экранная вуаль: прорезь — маска на её слое, никакой отрисовки.
+        fogVeilView?.setLiveReveal(coordinate: coordinate, progress: progress)
+        // Плиточный рендерер (откат): по коробке вокруг точки, а не по всему
+        // миру — вуаль накрывает мир по определению, и голый
+        // `setNeedsDisplay()` пересобирал бы каждый видимый тайл шестьдесят раз
+        // в секунду.
         fogRenderer?.setNeedsDisplay(FogRevealAnimation.rect(around: coordinate))
     }
 

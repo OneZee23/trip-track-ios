@@ -50,7 +50,7 @@ final class FogVeilPainterTests: XCTestCase {
             x: origin.x - visibleWidth / 2,
             y: origin.y - visibleWidth * 956 / 440 / 2,
             width: visibleWidth, height: visibleWidth * 956 / 440)
-        let rect = FogVeilView.renderRect(visible: visible, margin: FogVeilView.margin)
+        let rect = FogVeilView.renderRect(visible: visible, margin: FogVeilView.defaultMargin)
         let ppmp = 440 / visible.width
         return (rect, CGSize(width: CGFloat(rect.width * ppmp),
                              height: CGFloat(rect.height * ppmp)))

@@ -29,20 +29,28 @@ enum MapZoomLevel: Int, Comparable {
 final class MapHostController: UIViewController {
     let map = MKMapView()
 
-    /// Экранная вуаль — туман растром ВНУТРИ дерева карты, под контейнером
-    /// аннотаций. Не сабвью этого контроллера: вставить её надо между
-    /// плитками Apple и пинами, а туда достаёт только сама карта
-    /// (`FogVeilView.attach(inside:)`).
-    let screenVeil = FogVeilView()
+    /// Посадка экранной вуали — общая на три карты (`VeilSeat`). Вуаль не
+    /// сабвью этого контроллера: вставить её надо между плитками Apple и
+    /// пинами, а туда достаёт только сама карта.
+    ///
+    /// Место — ПОД контейнером аннотаций: жилку сети и выбранный маршрут
+    /// «Атлас» уводит в растр, и оверлеев под вуалью не остаётся.
+    let veilSeat = VeilSeat(margin: FogVeilView.defaultMargin, seat: .belowAnnotations)
+    var screenVeil: FogVeilView { veilSeat.veil }
     /// Встала ли вуаль в дерево. `false` — иерархия `MKMapView` незнакомая,
     /// и туман рисует плиточный `FogVeilRenderer`, как до 0.7.0.
-    private(set) var screenVeilAttached = false
-    private var attachTries = 0
+    var screenVeilAttached: Bool { veilSeat.isAttached }
     /// Зовётся, когда вуаль встала в дерево: оверлеи тумана с карты надо
     /// снять, иначе одно и то же рисуется дважды.
-    var onVeilAttached: (() -> Void)?
+    var onVeilAttached: (() -> Void)? {
+        get { veilSeat.onAttached }
+        set { veilSeat.onAttached = newValue }
+    }
     /// Зовётся, когда вуаль ушла с экрана: оверлеи надо вернуть.
-    var onVeilDetached: (() -> Void)?
+    var onVeilDetached: (() -> Void)? {
+        get { veilSeat.onDetached }
+        set { veilSeat.onDetached = newValue }
+    }
 
     /// Сколько нижней части экрана занимает постоянный лист. Логотип и
     /// «Legal» встают над ним.
@@ -60,18 +68,14 @@ final class MapHostController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        tryAttachVeil()
+        veilSeat.attach(to: map)
     }
 
     /// Экран ушёл — вуаль уходит с ним, а туман возвращается плиточному
     /// рендереру: восемь мегабайт растра и `CADisplayLink` за кадром не живут.
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        guard screenVeilAttached else { return }
-        screenVeilAttached = false
-        attachTries = 0
-        screenVeil.detach()
-        onVeilDetached?()
+        veilSeat.detach()
     }
 
     /// Поворот устройства меняет не камеру, а сам кадр: привязка растра
@@ -81,34 +85,7 @@ final class MapHostController: UIViewController {
     ) {
         super.viewWillTransition(to: size, with: coordinator)
         coordinator.animate(alongsideTransition: nil) { [weak self] _ in
-            self?.screenVeil.invalidate()
-        }
-    }
-
-    /// Вуаль выпала из дерева карты и вернуться не смогла. Туман обязан
-    /// остаться на экране, поэтому оверлеи возвращаются на карту, а вуаль
-    /// пробует встать заново на следующем появлении экрана.
-    func screenVeilLost() {
-        guard screenVeilAttached else { return }
-        screenVeilAttached = false
-        attachTries = 0
-        screenVeil.detach()
-        onVeilDetached?()
-    }
-
-    /// Встраивание с повторами: контейнер аннотаций появляется в дереве не
-    /// обязательно к первому кадру, а падать из-за этого нельзя.
-    private func tryAttachVeil() {
-        guard !screenVeilAttached else { return }
-        attachTries += 1
-        if screenVeil.attach(inside: map, map: map) {
-            screenVeilAttached = true
-            onVeilAttached?()
-            return
-        }
-        guard attachTries < 25 else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            self?.tryAttachVeil()
+            self?.veilSeat.invalidate()
         }
     }
 
@@ -124,7 +101,7 @@ final class MapHostController: UIViewController {
         additionalSafeAreaInsets.bottom = extra
         // Инсет двигает центр видимой области, то есть запас растра
         // перестаёт лежать вокруг того, что человек видит.
-        if screenVeilAttached { screenVeil.invalidate() }
+        veilSeat.invalidate()
     }
 }
 
@@ -227,10 +204,6 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             guard let controller, let coordinator else { return }
             coordinator.screenVeilStoodDown(controller)
         }
-        controller.screenVeil.onLostFromHierarchy = { [weak controller] in
-            controller?.screenVeilLost()
-        }
-
         return controller
     }
 

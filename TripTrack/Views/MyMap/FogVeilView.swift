@@ -16,15 +16,22 @@ import os
 ///
 /// Три вещи, без которых приём не работает и которые поэтому записаны здесь:
 ///
-/// 1. **Вуаль лежит ПОД контейнером аннотаций** (`attach(inside:)`), то есть
-///    выше карты и выше оверлеев, но ниже пинов, подписей регионов и точки «я
-///    здесь». Логотип Apple и «Legal» оказываются выше по построению: они
-///    сабвью САМОГО `MKMapView`, а вуаль живёт внутри `_MKMapContentView`.
+/// 1. **Вуаль лежит НИЖЕ пинов и выше карты Apple** (`attach(inside:seat:)`).
+///    Мест два, и выбирает их карта: «Атлас» садится ПОД контейнером
+///    аннотаций (выше оверлеев — свои он с карты снимает), экран поездки и
+///    экран записи — ПОД контейнером оверлеев (иначе вуаль спрятала бы под
+///    собой саму линию поездки). Логотип Apple и «Legal» выше любого из двух
+///    по построению: они сабвью САМОГО `MKMapView`, а вуаль живёт внутри
+///    `_MKMapContentView`.
 /// 2. **Наклон запрещён** (`isPitchEnabled = false`): перспективу аффинной
-///    матрицей не выразить. Сторож — `VeilFrame.residual`.
-/// 3. **За краем растра — ровный туман полосами** (`letterbox`), а не подложка
-///    ПОД растром: подложка светилась бы сквозь прожжённые коридоры, и дыр не
-///    было бы видно вовсе.
+///    матрицей не выразить. Сторож — `VeilFrame.residual`. Поворот, наоборот,
+///    выражается точно — им и живёт режим «по курсу» на записи.
+/// 3. **За краем растра — ровный туман** (`letterbox`), маскированный
+///    четырёхугольником растра, а не подложка ПОД растром: подложка светилась
+///    бы сквозь прожжённые коридоры, и дыр не было бы видно вовсе.
+/// 4. **Прорезь у машины на живой записи — маска, а не растр**
+///    (`setLiveReveal`): она растёт шестьдесят раз в секунду, и перерисовка
+///    под неё остановила бы карту.
 final class FogVeilView: UIView {
 
     // MARK: Настройки
@@ -32,7 +39,23 @@ final class FogVeilView: UIView {
     /// Во сколько раз растр шире видимой области. За его краем показывается
     /// ровный туман, поэтому запас — это не «чтобы не было дыр», а «сколько
     /// щипка переживём без ровного края».
-    static let margin: Double = 1.5
+    static let defaultMargin: Double = 1.5
+    /// Запас для карты, которую можно ПОВЕРНУТЬ (экран записи в режиме «по
+    /// курсу», полноэкранная карта поездки под двумя пальцами).
+    ///
+    /// Дело не в дырах: растр привязывается к `visibleMapRect`, а тот у
+    /// повёрнутой карты — уже осевая коробка повёрнутого экрана, поэтому
+    /// повёрнутый растр накрывает экран при любом запасе ≥ 1, а дополнение до
+    /// экрана считает четырёхугольник (`letterboxPath`), которому поворот
+    /// безразличен. Дело в ЦЕНЕ: коробка меняет форму вместе с курсом — на 45°
+    /// она шире по каждой стороне в 1.41 раза, — и от запаса 1.5 остаётся
+    /// шесть процентов, то есть полный кадр тумана на каждое движение пальцем.
+    /// 2.2 ≈ 1.5 × 1.41 оставляет те же полтора, на которых стоит расписание
+    /// перерисовки. Держит `testRotatingMarginKeepsItsSlackThroughAQuarterTurn`.
+    static let rotatingMargin: Double = 2.2
+    /// Запас ЭТОЙ вуали. Свойство, а не константа: три карты живут по разным
+    /// правилам, а вуаль у них одна.
+    let margin: Double
     /// Пикселей на точку экрана. Полтора, а не три: у тумана нет ни одной
     /// резкой границы, кроме перьевого края коридора, а память и время
     /// отрисовки растут квадратом.
@@ -66,6 +89,10 @@ final class FogVeilView: UIView {
         var bands: [(rect: MKMapRect, drawn: MKMapRect, image: CGImage)] = []
         var bytes = 0
         var expected: Int
+        /// Где растр лежит НА ЭКРАНЕ прямо сейчас — четыре его угла по часовой
+        /// стрелке. Считается той же матрицей, что и привязка слоя, поэтому
+        /// верен и при повороте карты; пустой, пока привязки не было.
+        var quad: [CGPoint] = []
 
         init(rect: MKMapRect, sizePoints: CGSize, scale: CGFloat, expected: Int) {
             self.rect = rect
@@ -94,8 +121,16 @@ final class FogVeilView: UIView {
         }
     }
 
-    /// Ровный туман вокруг растра, четырьмя полосами. Лежит НИЖЕ растров.
-    private let letterbox: [CALayer] = (0..<4).map { _ in CALayer() }
+    /// Ровный туман вокруг растра. Лежит НИЖЕ растров и маскируется их
+    /// ЧЕТЫРЁХУГОЛЬНИКОМ на экране — не осевой коробкой: у повёрнутой карты
+    /// коробка больше самого растра, и ровный туман залез бы под него, то есть
+    /// подсветил бы изнутри каждый прожжённый коридор.
+    private let letterbox = CALayer()
+    private let letterboxMask = CAShapeLayer()
+    /// Прорезь у машины на живой записи. Маска на СВОЁМ слое: она обязана
+    /// резать и растр, и ровный туман вокруг него.
+    private let revealMask = VeilRevealMask()
+    private var liveReveal: (coordinate: CLLocationCoordinate2D, progress: Double)?
     /// Самое большее два: тот, что на экране, и тот, что въезжает поверх него.
     private var rasters: [Raster] = []
 
@@ -119,6 +154,7 @@ final class FogVeilView: UIView {
     /// сидит, — по ним проверяется, что она всё ещё на месте.
     private weak var attachedRoot: UIView?
     private weak var seatContainer: UIView?
+    private var seat: Seat = .belowAnnotations
     /// Вуаль потеряла своё место и вернуться не смогла: зовущий обязан
     /// вернуть на карту `FogVeilOverlay`.
     var onLostFromHierarchy: (() -> Void)?
@@ -132,14 +168,18 @@ final class FogVeilView: UIView {
 
     /// Числа для теста и отладки.
     private(set) var renderCount = 0
+    /// Сколько раз гейт ПРОПУСТИЛ заказ растра. Им проверяется главное
+    /// обещание прорези: она растёт, ничего не заказывая.
+    var renderOrders: Int { gate.renders }
     private(set) var lastDriftCentre: CGFloat = 0
     private(set) var lastDriftCorner: CGFloat = 0
     var rasterBytes: Int { rasters.reduce(0) { $0 + $1.bytes } }
 
     // MARK: Жизнь
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(margin: Double = FogVeilView.defaultMargin) {
+        self.margin = margin
+        super.init(frame: .zero)
         // Хит-тест обязан проходить насквозь: под вуалью лежит сама карта, и
         // тап по дороге, пину и кластеру должен доходить до неё.
         isUserInteractionEnabled = false
@@ -148,11 +188,15 @@ final class FogVeilView: UIView {
         // которые вместе накрывают экран целиком.
         backgroundColor = .clear
         layer.masksToBounds = true
-        for box in letterbox {
-            box.backgroundColor = FogVeilPainter.veilColorBottom.cgColor
-            box.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
-            layer.addSublayer(box)
-        }
+        letterbox.backgroundColor = FogVeilPainter.veilColorBottom.cgColor
+        letterbox.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
+        letterboxMask.fillRule = .evenOdd
+        letterboxMask.fillColor = UIColor.white.cgColor
+        letterboxMask.actions = [
+            "path": NSNull(), "position": NSNull(), "bounds": NSNull(),
+        ]
+        letterbox.mask = letterboxMask
+        layer.addSublayer(letterbox)
         NotificationCenter.default.addObserver(
             self, selector: #selector(handleMemoryWarning),
             name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
@@ -210,6 +254,54 @@ final class FogVeilView: UIView {
         invalidate()
     }
 
+    // MARK: Прорезь у машины на живой записи
+
+    /// Где и насколько раскрыт туман вокруг машины прямо сейчас.
+    ///
+    /// Растра это НЕ КАСАЕТСЯ. Прорезь растёт шестьдесят раз в секунду
+    /// (`FogRevealAnimation`, 0.7 с), и заказать под неё перерисовку значило бы
+    /// шестьдесят полных кадров в секунду по сорок миллисекунд каждый — то
+    /// есть запись, у которой карта стоит. Поэтому дыра живёт маской на слое
+    /// вуали: она режет и растр, и ровный туман за его краем, а трогает при
+    /// этом четыре `frame` и один градиент.
+    ///
+    /// После финиша коридор по-настоящему прожигает уже слой открытого
+    /// (`RevealedLayerStore`), новый растр приходит с ним, и маска снимается
+    /// тем же `nil`, которым её завёл `MapViewModel.rebuildFog`.
+    func setLiveReveal(coordinate: CLLocationCoordinate2D?, progress: Double) {
+        guard let coordinate, progress > 0 else {
+            guard liveReveal != nil else { return }
+            liveReveal = nil
+            layer.mask = nil
+            return
+        }
+        liveReveal = (coordinate, progress)
+        if layer.mask !== revealMask.layer { layer.mask = revealMask.layer }
+        guard let map else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        positionLiveReveal(map: map)
+        CATransaction.commit()
+    }
+
+    /// Стоит ли сейчас прорезь — для теста.
+    var hasLiveReveal: Bool { liveReveal != nil }
+
+    /// Отдали ли вуали слой открытого мира — для теста: им проверяется, что
+    /// временной срез поездки доезжает до вуали, а не до снятого оверлея.
+    var hasInstalledLayer: Bool { hasLayer }
+
+    /// Ставит маску на место. Зовётся из `sync`, то есть на каждом кадре
+    /// движения карты: прорезь привязана к ЗЕМЛЕ, а не к экрану.
+    private func positionLiveReveal(map: MKMapView) {
+        guard let live = liveReveal else { return }
+        let centre = map.convert(live.coordinate, toPointTo: self)
+        let metresPerPoint = map.metersPerScreenPoint
+        guard metresPerPoint > 0, metresPerPoint.isFinite else { return }
+        let radius = CGFloat(FogVeilRenderer.revealMetres * live.progress / metresPerPoint)
+        revealMask.update(bounds: bounds, centre: centre, radius: max(radius, 1))
+    }
+
     /// Всё, что лежит на экране, устарело: следующий заказ идёт без задержки.
     /// Зовётся на смену данных, на поворот устройства и на смену
     /// `additionalSafeAreaInsets` — там меняется не камера, а сам кадр.
@@ -220,6 +312,24 @@ final class FogVeilView: UIView {
     }
 
     // MARK: Встраивание в иерархию MKMapView
+
+    /// Куда именно садится вуаль в дереве карты.
+    ///
+    /// Разница между двумя местами — это разница между «оверлеев подо мной нет»
+    /// и «оверлеи рисуют поверх меня», и она не косметическая.
+    enum Seat {
+        /// ПОД контейнером аннотаций, то есть ВЫШЕ оверлеев. «Атлас»: жилка
+        /// сети и выбранный маршрут уходят в растр, а оверлеи с карты
+        /// снимаются — под вуалью их не осталось.
+        case belowAnnotations
+        /// Над картой Apple, но ПОД контейнером оверлеев. Экран поездки и экран
+        /// записи рисуют маршрут `MKOverlayRenderer`-ом — отрезками по скорости,
+        /// с обводкой, с гашением непройденного на реплее и со светящейся
+        /// головой на записи. Увести это в растр значило бы перерисовывать
+        /// восьмимегабайтную картинку на каждом кадре реплея; посадить вуаль
+        /// выше — спрятать под ней саму поездку.
+        case aboveBaseMap
+    }
 
     /// Ищет контейнер аннотаций. Имя класса приватное, поэтому ищем по
     /// ПОДСТРОКЕ имени и честно отваливаемся, если не нашли: ни одного
@@ -250,27 +360,61 @@ final class FogVeilView: UIView {
         return nil
     }
 
-    /// Ставит вуаль ПОД контейнер аннотаций. `false` — иерархия незнакомая,
-    /// зовущий обязан остаться на плиточном рендерере.
+    /// Контейнер оверлеев — точнее, тот прямой сосед контейнера аннотаций, в
+    /// котором `MKOverlayRenderer` рисует. В снятом дереве это
+    /// `MKScrollContainerView` с `MKOverlayContainerView` внутри; ищем по обоим
+    /// именам и берём САМОГО РАННЕГО по порядку сабвью — если контейнеров на
+    /// уровень оверлеев окажется два, вуаль обязана лечь под нижний.
+    static func overlayContainer(among siblings: [UIView]) -> UIView? {
+        siblings.first { view in
+            let name = NSStringFromClass(type(of: view))
+            if name.contains("ScrollContainer") || name.contains("OverlayContainer") { return true }
+            return firstView(in: view, matching: "OverlayContainer") != nil
+        }
+    }
+
+    /// Ставит вуаль на своё место. `false` — иерархия незнакомая, зовущий
+    /// обязан остаться на плиточном рендерере.
+    ///
+    /// Промах на `.aboveBaseMap` — это именно откат, а не «сядем куда
+    /// придётся»: вуаль, севшая выше оверлеев, спрятала бы под собой линию
+    /// поездки, а туман нарисовала бы точно так же, и заметить подмену было бы
+    /// нечем.
     @discardableResult
-    func attach(inside root: UIView, map: MKMapView? = nil) -> Bool {
+    func attach(inside root: UIView, map: MKMapView? = nil, seat: Seat = .belowAnnotations) -> Bool {
         self.map = map ?? (root as? MKMapView)
         attachedRoot = root
-        guard let container = Self.annotationContainer(in: root),
-              let parent = container.superview else {
+        self.seat = seat
+        guard let annotations = Self.annotationContainer(in: root),
+              let parent = annotations.superview else {
             seatContainer = nil
-            if !Self.loggedFallback {
-                Self.loggedFallback = true
-                Self.log.notice(
-                    "экранная вуаль: контейнер аннотаций не найден — откат на FogVeilOverlay")
-            }
+            logFallback("контейнер аннотаций не найден")
             return false
+        }
+        let container: UIView
+        switch seat {
+        case .belowAnnotations:
+            container = annotations
+        case .aboveBaseMap:
+            guard let overlays = Self.overlayContainer(among: parent.subviews) else {
+                seatContainer = nil
+                logFallback("контейнер оверлеев не найден")
+                return false
+            }
+            container = overlays
         }
         frame = parent.bounds
         autoresizingMask = [.flexibleWidth, .flexibleHeight]
         parent.insertSubview(self, belowSubview: container)
         seatContainer = container
         return true
+    }
+
+    /// Про откат рассказываем один раз за запуск — см. `loggedFallback`.
+    private func logFallback(_ reason: String) {
+        guard !Self.loggedFallback else { return }
+        Self.loggedFallback = true
+        Self.log.notice("экранная вуаль: \(reason, privacy: .public) — откат на FogVeilOverlay")
     }
 
     /// Сидит ли вуаль там, где её поставили: в том же родителе, что контейнер
@@ -290,7 +434,7 @@ final class FogVeilView: UIView {
            mine < theirs { return }
 
         removeFromSuperview()
-        guard attach(inside: root, map: map) else {
+        guard attach(inside: root, map: map, seat: seat) else {
             attachedRoot = nil
             Self.log.notice("экранная вуаль выпала из дерева карты — откат на FogVeilOverlay")
             onLostFromHierarchy?()
@@ -347,11 +491,11 @@ final class FogVeilView: UIView {
     /// это перенос, масштаб и поворот, и больше ничего.
     func sync(map: MKMapView) {
         verifySeating()
-        guard !rasters.isEmpty else { layoutLetterbox(); return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for raster in rasters { apply(frameOf: raster, map: map) }
         layoutLetterbox()
+        positionLiveReveal(map: map)
         CATransaction.commit()
     }
 
@@ -365,6 +509,13 @@ final class FogVeilView: UIView {
         raster.container.bounds = CGRect(origin: .zero, size: raster.sizePoints)
         raster.container.position = veil.centre
         raster.container.setAffineTransform(veil.transform)
+        // Четыре угла ТОЙ ЖЕ матрицей: при повороте карты осевая коробка слоя
+        // больше самого растра, и ровный туман, посчитанный по ней, залез бы
+        // растру под низ.
+        raster.quad = [
+            veil.point(atX: 0, y: 0), veil.point(atX: 1, y: 0),
+            veil.point(atX: 1, y: 1), veil.point(atX: 0, y: 1),
+        ]
 
         // Невязка: четвёртый угол и центр считаем и матрицей, и картой. Если
         // карта наклонена, они разъедутся — и это единственный способ увидеть
@@ -383,54 +534,49 @@ final class FogVeilView: UIView {
         #endif
     }
 
-    /// Прямоугольник, который НА САМОМ ДЕЛЕ непрозрачен прямо сейчас.
+    /// Четырёхугольник, который НА САМОМ ДЕЛЕ непрозрачен прямо сейчас.
     ///
     /// Последний ПОЛНЫЙ растр, а не просто последний. Пустой растр, только что
-    /// заказанный, накрывает экран по построению (запас 1.5×) — посчитать
+    /// заказанный, накрывает экран по построению (запас ≥ 1.5×) — посчитать
     /// дополнение по нему значит объявить непрозрачным то, чего ещё нет, и
     /// кольцо вокруг старого растра станет прозрачным на все 20–120 мс
     /// отрисовки, а на ПЕРВОМ кадре «Атласа» прозрачным будет весь экран.
     /// Плиточные оверлеи к этому моменту уже сняты — там была бы голая карта
     /// Apple, то есть ровно то, ради чего вуаль и делалась.
-    static func coveredRect(rasters: [(frame: CGRect, isComplete: Bool)]) -> CGRect {
-        rasters.last(where: { $0.isComplete })?.frame ?? .zero
+    static func coveredQuad(rasters: [(quad: [CGPoint], isComplete: Bool)]) -> [CGPoint] {
+        rasters.last(where: { $0.isComplete && $0.quad.count == 4 })?.quad ?? []
     }
 
-    /// Полосы ровного тумана — точное дополнение непрозрачного прямоугольника
-    /// до экрана. Чистая функция: «ни одного прозрачного пикселя» проверяется
-    /// только счётом, а стоит ошибка показа сырой карты.
+    /// Где лежит ровный туман — весь экран МИНУС четырёхугольник растра.
     ///
-    /// Верно, пока карта не повёрнута (`isRotateEnabled = false` на «Атласе»):
-    /// у повёрнутого растра осевая коробка больше его самого, и её углы четыре
-    /// осевые полосы не закроют. Это записанное ограничение, а не забытый
-    /// случай.
-    static func letterboxRects(bounds full: CGRect, covered f: CGRect) -> [CGRect] {
-        let top = max(0, min(full.height, f.minY))
-        let bottom = max(0, min(full.height, f.maxY))
-        return [
-            CGRect(x: 0, y: 0, width: full.width, height: top),
-            CGRect(x: 0, y: bottom, width: full.width, height: max(0, full.height - bottom)),
-            CGRect(x: 0, y: top, width: max(0, min(full.width, f.minX)),
-                   height: max(0, bottom - top)),
-            CGRect(x: min(full.width, max(0, f.maxX)), y: top,
-                   width: max(0, full.width - max(0, f.maxX)),
-                   height: max(0, bottom - top)),
-        ]
+    /// Путь с правилом «чётное-нечётное», а не четыре осевые полосы: полосами
+    /// дополнение повёрнутого растра не выражается вовсе, а осевая коробка
+    /// вместо самого растра либо оставила бы прозрачные углы (сырая карта
+    /// Apple), либо подложила бы ровный туман ПОД коридоры — и те засветились
+    /// бы изнутри вместо живой карты.
+    ///
+    /// Чистая функция: «ни одного прозрачного пикселя» и «ровный туман не лезет
+    /// на растр» проверяются только счётом по точкам.
+    static func letterboxPath(bounds full: CGRect, quad: [CGPoint]) -> CGPath {
+        let path = CGMutablePath()
+        path.addRect(full)
+        if quad.count == 4 {
+            path.move(to: quad[0])
+            for point in quad.dropFirst() { path.addLine(to: point) }
+            path.closeSubpath()
+        }
+        return path
     }
 
     /// Что сейчас накрыто растром — для теста и для `layoutLetterbox`.
-    var coveredFrame: CGRect {
-        Self.coveredRect(rasters: rasters.map { ($0.container.frame, $0.isComplete) })
+    var coveredQuadPoints: [CGPoint] {
+        Self.coveredQuad(rasters: rasters.map { ($0.quad, $0.isComplete) })
     }
 
-    /// Рамки четырёх полос ровного тумана — для теста.
-    var letterboxFrames: [CGRect] { letterbox.map(\.frame) }
-
     private func layoutLetterbox() {
-        for (box, rect) in zip(letterbox, Self.letterboxRects(bounds: bounds,
-                                                              covered: coveredFrame)) {
-            box.frame = rect
-        }
+        letterbox.frame = bounds
+        letterboxMask.frame = bounds
+        letterboxMask.path = Self.letterboxPath(bounds: bounds, quad: coveredQuadPoints)
     }
 
     override func layoutSubviews() {
@@ -459,7 +605,7 @@ final class FogVeilView: UIView {
         guard !rendering, indexReady else { return }
         let needed = Self.renderRect(visible: map.visibleMapRect, margin: 1)
         guard gate.allows(now: CACurrentMediaTime(), needed: needed,
-                          settled: settled, margin: Self.margin) else { return }
+                          settled: settled, margin: margin) else { return }
         render(map: map, gated: true)
     }
 
@@ -468,10 +614,10 @@ final class FogVeilView: UIView {
         if !gated {
             guard gate.allows(now: CACurrentMediaTime(),
                               needed: Self.renderRect(visible: map.visibleMapRect, margin: 1),
-                              settled: true, margin: Self.margin) else { return }
+                              settled: true, margin: margin) else { return }
         }
         let visible = map.visibleMapRect
-        let rect = Self.renderRect(visible: visible, margin: Self.margin)
+        let rect = Self.renderRect(visible: visible, margin: margin)
         // Масштаб берём у самой карты, а не из `bounds/visible`: так он верен
         // и при инсетах, и при любом положении листа.
         let a = map.convert(MKMapPoint(x: visible.minX, y: visible.midY).coordinate, toPointTo: self)

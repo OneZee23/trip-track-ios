@@ -221,6 +221,24 @@ final class FogVeilViewTests: XCTestCase {
 
     // MARK: Летербокс — «сырая карта не видна никогда»
 
+    /// Четыре угла прямоугольника — тот же четырёхугольник, только без
+    /// поворота: им проверяются случаи, где поворота нет.
+    private func quad(_ rect: CGRect) -> [CGPoint] {
+        [CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+         CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY)]
+    }
+
+    /// Четырёхугольник, повёрнутый на угол вокруг своего центра, — так растр
+    /// лежит на экране записи в режиме «по курсу».
+    private func rotatedQuad(_ rect: CGRect, by angle: CGFloat) -> [CGPoint] {
+        let centre = CGPoint(x: rect.midX, y: rect.midY)
+        return quad(rect).map { point in
+            let dx = point.x - centre.x, dy = point.y - centre.y
+            return CGPoint(x: centre.x + dx * cos(angle) - dy * sin(angle),
+                           y: centre.y + dx * sin(angle) + dy * cos(angle))
+        }
+    }
+
     /// Дополнение считается по последнему ПОЛНОМУ растру.
     ///
     /// Заказанный, но ещё пустой растр накрывает экран по построению (запас
@@ -229,39 +247,48 @@ final class FogVeilViewTests: XCTestCase {
     /// 20–120 мс отрисовки, а на ПЕРВОМ кадре «Атласа» прозрачным будет весь
     /// экран. Плиточные оверлеи к этому моменту уже сняты — там голая карта
     /// Apple.
-    func testCoveredRectIgnoresTheRasterStillBeingDrawn() {
-        let old = CGRect(x: 60, y: 140, width: 200, height: 400)
-        let incoming = CGRect(x: -100, y: -200, width: 600, height: 1_300)
+    func testCoveredQuadIgnoresTheRasterStillBeingDrawn() {
+        let old = quad(CGRect(x: 60, y: 140, width: 200, height: 400))
+        let incoming = quad(CGRect(x: -100, y: -200, width: 600, height: 1_300))
 
         XCTAssertEqual(
-            FogVeilView.coveredRect(rasters: [(old, true), (incoming, false)]), old,
+            FogVeilView.coveredQuad(rasters: [(old, true), (incoming, false)]), old,
             "пока новый растр пуст, непрозрачен только старый")
         XCTAssertEqual(
-            FogVeilView.coveredRect(rasters: [(old, true), (incoming, true)]), incoming,
+            FogVeilView.coveredQuad(rasters: [(old, true), (incoming, true)]), incoming,
             "новый растр дорисован — дополнение считается по нему")
         XCTAssertEqual(
-            FogVeilView.coveredRect(rasters: [(incoming, false)]), .zero,
-            "первый кадр: накрыто НИЧЕГО, и полосы обязаны закрыть весь экран")
+            FogVeilView.coveredQuad(rasters: [(incoming, false)]), [],
+            "первый кадр: накрыто НИЧЕГО, и ровный туман обязан закрыть весь экран")
+        XCTAssertEqual(
+            FogVeilView.coveredQuad(rasters: [([CGPoint.zero, .zero], true)]), [],
+            "растр без привязки к экрану не накрывает ничего")
     }
 
     /// Ни одной прозрачной точки на экране — ни при каком положении растра,
-    /// включая «растра ещё нет» и «старый растр мельче экрана».
-    func testLetterboxLeavesNoTransparentPointOnScreen() {
+    /// включая «растра ещё нет», «растр мельче экрана» и ПОВЁРНУТЫЙ растр.
+    func testFlatVeilLeavesNoTransparentPointOnScreen() {
         let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
-        let cases: [(String, CGRect)] = [
-            ("растра ещё нет", .zero),
-            ("старый растр мельче экрана", CGRect(x: 60, y: 140, width: 200, height: 400)),
-            ("растр шире экрана", CGRect(x: -100, y: -200, width: 600, height: 1_300)),
-            ("растр уехал за край", CGRect(x: -700, y: 300, width: 200, height: 200)),
+        let cases: [(String, [CGPoint])] = [
+            ("растра ещё нет", []),
+            ("старый растр мельче экрана", quad(CGRect(x: 60, y: 140, width: 200, height: 400))),
+            ("растр шире экрана", quad(CGRect(x: -100, y: -200, width: 600, height: 1_300))),
+            ("растр уехал за край", quad(CGRect(x: -700, y: 300, width: 200, height: 200))),
+            ("повёрнут на 30°",
+             rotatedQuad(CGRect(x: 40, y: 120, width: 300, height: 500), by: .pi / 6)),
+            ("повёрнут на 45° и мельче экрана",
+             rotatedQuad(CGRect(x: 90, y: 300, width: 200, height: 200), by: .pi / 4)),
         ]
         for (name, covered) in cases {
-            let rects = FogVeilView.letterboxRects(bounds: bounds, covered: covered)
+            let path = FogVeilView.letterboxPath(bounds: bounds, quad: covered)
+            let raster = CGMutablePath()
+            if covered.count == 4 { raster.addLines(between: covered + [covered[0]]) }
             var holes = 0
             for x in stride(from: 0.5, to: bounds.width, by: 3.0) {
                 for y in stride(from: 0.5, to: bounds.height, by: 3.0) {
                     let point = CGPoint(x: x, y: y)
-                    if covered.contains(point) { continue }
-                    if rects.contains(where: { $0.contains(point) }) { continue }
+                    if covered.count == 4, raster.contains(point) { continue }
+                    if path.contains(point, using: CGPathFillRule.evenOdd) { continue }
                     holes += 1
                 }
             }
@@ -269,14 +296,58 @@ final class FogVeilViewTests: XCTestCase {
         }
     }
 
-    /// Полосы не лезут на растр: иначе ровный туман накрыл бы коридоры.
-    func testLetterboxDoesNotCoverTheRasterItself() {
+    /// Ровный туман не лезет ПОД растр — ни при каком повороте.
+    ///
+    /// Лез бы — и каждый прожжённый коридор светился бы изнутри собственным
+    /// туманом вместо живой карты: дыра есть, а в дыре темнота.
+    func testFlatVeilDoesNotCreepUnderTheRaster() {
         let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
-        let covered = CGRect(x: 60, y: 140, width: 200, height: 400)
-        for rect in FogVeilView.letterboxRects(bounds: bounds, covered: covered) {
-            XCTAssertFalse(rect.intersects(covered.insetBy(dx: 0.5, dy: 0.5)),
-                           "полоса ровного тумана легла поверх растра")
+        let angles: [CGFloat] = [0, .pi / 8, .pi / 4, .pi / 3]
+        for angle in angles {
+            let covered = rotatedQuad(CGRect(x: 40, y: 120, width: 300, height: 500), by: angle)
+            let path = FogVeilView.letterboxPath(bounds: bounds, quad: covered)
+            // Точки заведомо ВНУТРИ растра: центр и четыре четверти от центра.
+            let centre = CGPoint(
+                x: covered.reduce(CGFloat(0)) { $0 + $1.x } / 4,
+                y: covered.reduce(CGFloat(0)) { $0 + $1.y } / 4)
+            var inside = [centre]
+            for corner in covered {
+                inside.append(CGPoint(x: centre.x + (corner.x - centre.x) * 0.5,
+                                      y: centre.y + (corner.y - centre.y) * 0.5))
+            }
+            for point in inside {
+                XCTAssertFalse(path.contains(point, using: CGPathFillRule.evenOdd),
+                               "ровный туман лёг под растр на повороте \(angle)")
+            }
         }
+    }
+
+    /// Запас 2.2× на карте, которую вращают, — про то, что с курсом МЕНЯЕТСЯ
+    /// ФОРМА видимой коробки: у повёрнутого на 45° экрана она шире по каждой
+    /// стороне в 1.41 раза. Сам растр от этого за край не вылезает, а вот
+    /// ЗАПАС съедается почти весь: от полутора остаётся шесть процентов, то
+    /// есть полный кадр тумана на каждое движение пальцем. 2.2 оставляет те же
+    /// полтора, на которых построено расписание перерисовки.
+    func testRotatingMarginKeepsItsSlackThroughAQuarterTurn() {
+        let visible = MKMapRect(x: 1_000_000, y: 2_000_000, width: 100_000, height: 200_000)
+        // Коробка того же экрана, повёрнутого на 45°: обе стороны × √2.
+        let turned = visible.insetBy(dx: -visible.width * (1.4143 - 1) / 2,
+                                     dy: -visible.height * (1.4143 - 1) / 2)
+
+        let roomy = FogVeilView.renderRect(visible: visible, margin: FogVeilView.rotatingMargin)
+        XCTAssertGreaterThan(roomy.width / turned.width, 1.5,
+                             "после поворота запас обязан остаться тем же, на котором стоит "
+                             + "расписание перерисовки")
+
+        let tight = FogVeilView.renderRect(visible: visible, margin: FogVeilView.defaultMargin)
+        XCTAssertLessThan(tight.width / turned.width, 1.1,
+                          "с запасом 1.5 после поворота остаётся шесть процентов — это кадр "
+                          + "тумана на каждое движение пальцем")
+
+        // И тот и другой растр повёрнутую коробку всё-таки НАКРЫВАЮТ: дыр в
+        // тумане поворот не делает, разговор только о цене.
+        XCTAssertTrue(roomy.contains(MKMapPoint(x: turned.minX, y: turned.minY)))
+        XCTAssertTrue(tight.contains(MKMapPoint(x: turned.minX, y: turned.minY)))
     }
 
     // MARK: Встраивание и откат
