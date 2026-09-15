@@ -219,6 +219,66 @@ final class FogVeilViewTests: XCTestCase {
         XCTAssertTrue(gate.allows(now: 100.06, needed: needed, settled: true, margin: 1.5))
     }
 
+    // MARK: Летербокс — «сырая карта не видна никогда»
+
+    /// Дополнение считается по последнему ПОЛНОМУ растру.
+    ///
+    /// Заказанный, но ещё пустой растр накрывает экран по построению (запас
+    /// 1.5×). Посчитать дополнение по нему — значит объявить непрозрачным то,
+    /// чего ещё нет: кольцо вокруг старого растра станет прозрачным на все
+    /// 20–120 мс отрисовки, а на ПЕРВОМ кадре «Атласа» прозрачным будет весь
+    /// экран. Плиточные оверлеи к этому моменту уже сняты — там голая карта
+    /// Apple.
+    func testCoveredRectIgnoresTheRasterStillBeingDrawn() {
+        let old = CGRect(x: 60, y: 140, width: 200, height: 400)
+        let incoming = CGRect(x: -100, y: -200, width: 600, height: 1_300)
+
+        XCTAssertEqual(
+            FogVeilView.coveredRect(rasters: [(old, true), (incoming, false)]), old,
+            "пока новый растр пуст, непрозрачен только старый")
+        XCTAssertEqual(
+            FogVeilView.coveredRect(rasters: [(old, true), (incoming, true)]), incoming,
+            "новый растр дорисован — дополнение считается по нему")
+        XCTAssertEqual(
+            FogVeilView.coveredRect(rasters: [(incoming, false)]), .zero,
+            "первый кадр: накрыто НИЧЕГО, и полосы обязаны закрыть весь экран")
+    }
+
+    /// Ни одной прозрачной точки на экране — ни при каком положении растра,
+    /// включая «растра ещё нет» и «старый растр мельче экрана».
+    func testLetterboxLeavesNoTransparentPointOnScreen() {
+        let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let cases: [(String, CGRect)] = [
+            ("растра ещё нет", .zero),
+            ("старый растр мельче экрана", CGRect(x: 60, y: 140, width: 200, height: 400)),
+            ("растр шире экрана", CGRect(x: -100, y: -200, width: 600, height: 1_300)),
+            ("растр уехал за край", CGRect(x: -700, y: 300, width: 200, height: 200)),
+        ]
+        for (name, covered) in cases {
+            let rects = FogVeilView.letterboxRects(bounds: bounds, covered: covered)
+            var holes = 0
+            for x in stride(from: 0.5, to: bounds.width, by: 3.0) {
+                for y in stride(from: 0.5, to: bounds.height, by: 3.0) {
+                    let point = CGPoint(x: x, y: y)
+                    if covered.contains(point) { continue }
+                    if rects.contains(where: { $0.contains(point) }) { continue }
+                    holes += 1
+                }
+            }
+            XCTAssertEqual(holes, 0, "\(name): \(holes) точек экрана прозрачны")
+        }
+    }
+
+    /// Полосы не лезут на растр: иначе ровный туман накрыл бы коридоры.
+    func testLetterboxDoesNotCoverTheRasterItself() {
+        let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let covered = CGRect(x: 60, y: 140, width: 200, height: 400)
+        for rect in FogVeilView.letterboxRects(bounds: bounds, covered: covered) {
+            XCTAssertFalse(rect.intersects(covered.insetBy(dx: 0.5, dy: 0.5)),
+                           "полоса ровного тумана легла поверх растра")
+        }
+    }
+
     // MARK: Встраивание и откат
 
     /// Имя `MKAnnotationContainerView` приватное, поэтому ищем по подстроке —
@@ -241,6 +301,62 @@ final class FogVeilViewTests: XCTestCase {
                           "вуаль обязана лежать ПОД аннотациями")
     }
 
+    /// Контейнер ищется ВШИРЬ. В настоящем дереве он — прямая сабвью
+    /// `_MKMapContentView`, но её сосед слева (`MKBasicMapView`) при обходе в
+    /// глубину разбирается целиком раньше: любой приватный класс внутри
+    /// хостинга карты с тем же словом в имени увёл бы вуаль ПОД слой Metal —
+    /// молча, с `attach == true` и снятыми оверлеями, то есть без тумана.
+    func testAnnotationContainerSearchIsBreadthFirst() {
+        let root = UIView()
+        let basicMap = UIView()
+        let hosting = UIView()
+        let deep = DeepAnnotationContainerStub()
+        hosting.addSubview(deep)
+        basicMap.addSubview(hosting)
+        let container = AnnotationContainerStub()
+        root.addSubview(basicMap)      // сосед слева, глубже
+        root.addSubview(container)     // нужный, мельче
+
+        XCTAssertTrue(FogVeilView.annotationContainer(in: root) === container,
+                      "в глубину нашёлся бы контейнер внутри хостинга карты")
+    }
+
+    /// MapKit вправе пересобрать свои сабвью, и вуаль из дерева вылетит. Пока
+    /// `screenVeilAttached == true`, плиточных оверлеев на карте нет — значит
+    /// «Атлас» остался бы БЕЗ тумана вовсе, хуже, чем до 0.7.0.
+    func testVeilReseatsItselfWhenMapKitRebuildsTheTree() {
+        let root = UIView()
+        let content = UIView()
+        root.addSubview(content)
+        let container = AnnotationContainerStub()
+        content.addSubview(container)
+
+        let veil = FogVeilView()
+        var lost = 0
+        veil.onLostFromHierarchy = { lost += 1 }
+        XCTAssertTrue(veil.attach(inside: root))
+
+        // Вылетела из дерева.
+        veil.removeFromSuperview()
+        veil.verifySeating()
+        XCTAssertTrue(veil.superview === content, "вуаль обязана вернуться в дерево")
+        XCTAssertEqual(lost, 0)
+
+        // Оказалась ПОВЕРХ аннотаций — тоже не своё место.
+        content.bringSubviewToFront(veil)
+        veil.verifySeating()
+        let order = content.subviews
+        XCTAssertLessThan(order.firstIndex(of: veil)!, order.firstIndex(of: container)!)
+        XCTAssertEqual(lost, 0)
+
+        // Контейнера в дереве больше нет — вернуться некуда, зовущий обязан
+        // поставить обратно плиточный оверлей.
+        container.removeFromSuperview()
+        veil.verifySeating()
+        XCTAssertEqual(lost, 1, "потерю места обязаны сообщить ровно один раз")
+        XCTAssertNil(veil.superview)
+    }
+
     /// Иерархию Apple вправе переписать в любой версии. Тогда вуаль не
     /// встаёт, а туман рисует плиточный `FogVeilRenderer` — без падения и без
     /// голой карты.
@@ -259,3 +375,6 @@ final class FogVeilViewTests: XCTestCase {
 /// Подставной контейнер аннотаций: настоящий приватный, а поиск идёт по
 /// подстроке имени класса — ровно это и проверяется.
 final class AnnotationContainerStub: UIView {}
+
+/// Такой же по имени, но ГЛУБЖЕ — им проверяется, что поиск идёт вширь.
+final class DeepAnnotationContainerStub: UIView {}

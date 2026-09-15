@@ -102,6 +102,10 @@ final class FogVeilView: UIView {
     private var index = MapPathIndex()
     private var indexReady = false
     private var revealed = RevealedLayer.empty
+    /// Чем узнаётся уже установленный слой: полилинии пересоздаются только
+    /// вместе с ним.
+    private var layerSignature: [ObjectIdentifier] = []
+    private var hasLayer = false
     private var selectedPoints: [MKMapPoint] = []
 
     private var gate = VeilRenderGate()
@@ -110,6 +114,14 @@ final class FogVeilView: UIView {
 
     private var displayLink: CADisplayLink?
     private var linkStopAt: Date = .distantPast
+
+    /// Дерево карты, в которое вуаль встроена, и контейнер, под которым она
+    /// сидит, — по ним проверяется, что она всё ещё на месте.
+    private weak var attachedRoot: UIView?
+    private weak var seatContainer: UIView?
+    /// Вуаль потеряла своё место и вернуться не смогла: зовущий обязан
+    /// вернуть на карту `FogVeilOverlay`.
+    var onLostFromHierarchy: (() -> Void)?
 
     /// Поколение отрисовки: заказ, который успели обогнать, свою картинку не
     /// показывает и на фоне не досчитывается.
@@ -153,6 +165,14 @@ final class FogVeilView: UIView {
     /// Открытый мир. Индекс путей собирается ОДИН раз и вне главного потока —
     /// по той же причине, что у `FogVeilRenderer`.
     func setLayer(_ incoming: RevealedLayer) {
+        // Тот же слой — тот же индекс. `screenVeilTookOver` зовёт это на
+        // КАЖДОМ появлении «Атласа», а сборка индекса стоит 10–13 мс на
+        // главном потоке ожидания и вспышку «всё закрыто» на экране: до
+        // готовности тайл рисуется заливкой без коридоров.
+        let signature = incoming.polylines(for: .fine).map(ObjectIdentifier.init)
+        if hasLayer, signature == layerSignature { return }
+        hasLayer = true
+        layerSignature = signature
         revealed = incoming
         indexReady = false
         gate.invalidate()
@@ -211,10 +231,21 @@ final class FogVeilView: UIView {
         return firstView(in: root, matching: "Annotation")
     }
 
+    /// Обход ВШИРЬ, и это не вкус. В снятом дереве контейнер аннотаций —
+    /// прямая сабвью `_MKMapContentView`, но её сосед слева, `MKBasicMapView`,
+    /// при обходе в глубину разбирается ЦЕЛИКОМ раньше. Любой приватный класс
+    /// внутри хостинга карты со словом `Annotation` в имени увёл бы вуаль под
+    /// слой Metal — молча, с `attach == true` и снятыми оверлеями, то есть без
+    /// тумана вовсе. Вширь побеждает самый мелкий по глубине, а он и есть
+    /// нужный.
     private static func firstView(in root: UIView, matching needle: String) -> UIView? {
-        for sub in root.subviews {
-            if NSStringFromClass(type(of: sub)).contains(needle) { return sub }
-            if let deeper = firstView(in: sub, matching: needle) { return deeper }
+        var queue = root.subviews
+        var head = 0
+        while head < queue.count {
+            let view = queue[head]
+            head += 1
+            if NSStringFromClass(type(of: view)).contains(needle) { return view }
+            queue.append(contentsOf: view.subviews)
         }
         return nil
     }
@@ -224,8 +255,10 @@ final class FogVeilView: UIView {
     @discardableResult
     func attach(inside root: UIView, map: MKMapView? = nil) -> Bool {
         self.map = map ?? (root as? MKMapView)
+        attachedRoot = root
         guard let container = Self.annotationContainer(in: root),
               let parent = container.superview else {
+            seatContainer = nil
             if !Self.loggedFallback {
                 Self.loggedFallback = true
                 Self.log.notice(
@@ -236,7 +269,33 @@ final class FogVeilView: UIView {
         frame = parent.bounds
         autoresizingMask = [.flexibleWidth, .flexibleHeight]
         parent.insertSubview(self, belowSubview: container)
+        seatContainer = container
         return true
+    }
+
+    /// Сидит ли вуаль там, где её поставили: в том же родителе, что контейнер
+    /// аннотаций, и НИЖЕ него.
+    ///
+    /// Проверяется каждый кадр движения, потому что цена ошибки несимметрична:
+    /// плиточные оверлеи с карты уже сняты, и вуаль, вылетевшая из дерева
+    /// (перестроение сабвью MapKit, восстановление после нехватки памяти,
+    /// будущая iOS), оставит «Атлас» БЕЗ тумана вовсе — хуже, чем было до
+    /// 0.7.0. Сама проверка — два `firstIndex` по пяти сабвью.
+    func verifySeating() {
+        guard let root = attachedRoot else { return }
+        if let parent = superview, let container = seatContainer,
+           container.superview === parent,
+           let mine = parent.subviews.firstIndex(of: self),
+           let theirs = parent.subviews.firstIndex(of: container),
+           mine < theirs { return }
+
+        removeFromSuperview()
+        guard attach(inside: root, map: map) else {
+            attachedRoot = nil
+            Self.log.notice("экранная вуаль выпала из дерева карты — откат на FogVeilOverlay")
+            onLostFromHierarchy?()
+            return
+        }
     }
 
     /// Экран ушёл — вуаль уходит с ним: восемь мегабайт растра и
@@ -246,6 +305,11 @@ final class FogVeilView: UIView {
         rendering = false
         dropRasters(keepingNewest: false)
         map = nil
+        // Корень забывается ПЕРЕД выходом из дерева: иначе ближайшая проверка
+        // места вернула бы вуаль обратно на экран, с которого её только что
+        // сняли.
+        attachedRoot = nil
+        seatContainer = nil
         removeFromSuperview()
     }
 
@@ -282,6 +346,7 @@ final class FogVeilView: UIView {
     /// преобразование ТОЧНО: без наклона проекция «мировые точки → экран» —
     /// это перенос, масштаб и поворот, и больше ничего.
     func sync(map: MKMapView) {
+        verifySeating()
         guard !rasters.isEmpty else { layoutLetterbox(); return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -304,35 +369,73 @@ final class FogVeilView: UIView {
         // Невязка: четвёртый угол и центр считаем и матрицей, и картой. Если
         // карта наклонена, они разъедутся — и это единственный способ увидеть
         // уход коридора от дороги числом, а не «кажется, поехало».
+        //
+        // Только в отладке: это два ЛИШНИХ `convert` на каждый растр и на
+        // каждый кадр движения, а читает их отладка и `-spike-sweep`. Само
+        // правило держит `VeilFrameTests` чистой функцией, а не этот счёт.
+        #if DEBUG
         lastDriftCorner = veil.residual(
             measured: map.convert(MKMapPoint(x: r.maxX, y: r.maxY).coordinate, toPointTo: self),
             atX: 1, y: 1)
         lastDriftCentre = veil.residual(
             measured: map.convert(MKMapPoint(x: r.midX, y: r.midY).coordinate, toPointTo: self),
             atX: 0.5, y: 0.5)
+        #endif
     }
 
-    /// Полосы ровного тумана — точное дополнение растра до экрана. Верно, пока
-    /// карта не повёрнута (`isRotateEnabled = false` на «Атласе»), и это
-    /// записанное ограничение, а не забытый случай.
-    private func layoutLetterbox() {
-        let full = bounds
-        let f: CGRect = rasters.last.map { $0.container.frame } ?? .zero
-        let rects = [
-            CGRect(x: 0, y: 0, width: full.width, height: max(0, f.minY)),
-            CGRect(x: 0, y: min(full.height, max(0, f.maxY)),
-                   width: full.width, height: max(0, full.height - f.maxY)),
-            CGRect(x: 0, y: max(0, f.minY), width: max(0, f.minX),
-                   height: max(0, min(full.height, f.maxY) - max(0, f.minY))),
-            CGRect(x: min(full.width, max(0, f.maxX)), y: max(0, f.minY),
-                   width: max(0, full.width - f.maxX),
-                   height: max(0, min(full.height, f.maxY) - max(0, f.minY))),
+    /// Прямоугольник, который НА САМОМ ДЕЛЕ непрозрачен прямо сейчас.
+    ///
+    /// Последний ПОЛНЫЙ растр, а не просто последний. Пустой растр, только что
+    /// заказанный, накрывает экран по построению (запас 1.5×) — посчитать
+    /// дополнение по нему значит объявить непрозрачным то, чего ещё нет, и
+    /// кольцо вокруг старого растра станет прозрачным на все 20–120 мс
+    /// отрисовки, а на ПЕРВОМ кадре «Атласа» прозрачным будет весь экран.
+    /// Плиточные оверлеи к этому моменту уже сняты — там была бы голая карта
+    /// Apple, то есть ровно то, ради чего вуаль и делалась.
+    static func coveredRect(rasters: [(frame: CGRect, isComplete: Bool)]) -> CGRect {
+        rasters.last(where: { $0.isComplete })?.frame ?? .zero
+    }
+
+    /// Полосы ровного тумана — точное дополнение непрозрачного прямоугольника
+    /// до экрана. Чистая функция: «ни одного прозрачного пикселя» проверяется
+    /// только счётом, а стоит ошибка показа сырой карты.
+    ///
+    /// Верно, пока карта не повёрнута (`isRotateEnabled = false` на «Атласе»):
+    /// у повёрнутого растра осевая коробка больше его самого, и её углы четыре
+    /// осевые полосы не закроют. Это записанное ограничение, а не забытый
+    /// случай.
+    static func letterboxRects(bounds full: CGRect, covered f: CGRect) -> [CGRect] {
+        let top = max(0, min(full.height, f.minY))
+        let bottom = max(0, min(full.height, f.maxY))
+        return [
+            CGRect(x: 0, y: 0, width: full.width, height: top),
+            CGRect(x: 0, y: bottom, width: full.width, height: max(0, full.height - bottom)),
+            CGRect(x: 0, y: top, width: max(0, min(full.width, f.minX)),
+                   height: max(0, bottom - top)),
+            CGRect(x: min(full.width, max(0, f.maxX)), y: top,
+                   width: max(0, full.width - max(0, f.maxX)),
+                   height: max(0, bottom - top)),
         ]
-        for (box, rect) in zip(letterbox, rects) { box.frame = rect }
+    }
+
+    /// Что сейчас накрыто растром — для теста и для `layoutLetterbox`.
+    var coveredFrame: CGRect {
+        Self.coveredRect(rasters: rasters.map { ($0.container.frame, $0.isComplete) })
+    }
+
+    /// Рамки четырёх полос ровного тумана — для теста.
+    var letterboxFrames: [CGRect] { letterbox.map(\.frame) }
+
+    private func layoutLetterbox() {
+        for (box, rect) in zip(letterbox, Self.letterboxRects(bounds: bounds,
+                                                              covered: coveredFrame)) {
+            box.frame = rect
+        }
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        verifySeating()
         layoutLetterbox()
         if let map { maybeRender(map: map, settled: true) }
     }
@@ -473,6 +576,16 @@ final class FogVeilView: UIView {
         guard token == generation else { return }
         rendering = false
         renderCount += 1
+        // Последний кадр жеста мог заказать отрисовку длиннее хвоста
+        // `CADisplayLink` — тогда чёткий кадр под новый масштаб не заказал бы
+        // никто, и туман остался бы растянутым до следующего жеста. Один
+        // повтор после окна расписания это закрывает; если растр уже свежий,
+        // `maybeRender` выйдет на первой же проверке.
+        DispatchQueue.main.asyncAfter(deadline: .now() + VeilRenderGate.throttle + 0.02) {
+            [weak self] in
+            guard let self, let map = self.map, self.displayLink == nil else { return }
+            self.maybeRender(map: map, settled: true)
+        }
         // Прежний растр держится ровно до конца кроссфейда — иначе под
         // полупрозрачной полосой на мгновение показалась бы карта Apple.
         guard rasters.count > 1 else { layoutLetterbox(); return }
@@ -491,6 +604,10 @@ final class FogVeilView: UIView {
         genLock.lock(); liveGeneration += 1; generation = liveGeneration; genLock.unlock()
         rendering = false
         dropRasters(keepingNewest: true)
+        // Если отдать пришлось всё, экран остался ровной заливкой: сырой карты
+        // на нём нет, но и открытых дорог тоже. Заказываем кадр сразу, а не
+        // ждём, пока человек тронет карту.
+        if rasters.isEmpty, let map { render(map: map) }
     }
 
     private func dropRasters(keepingNewest: Bool) {

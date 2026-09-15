@@ -85,6 +85,17 @@ final class MapHostController: UIViewController {
         }
     }
 
+    /// Вуаль выпала из дерева карты и вернуться не смогла. Туман обязан
+    /// остаться на экране, поэтому оверлеи возвращаются на карту, а вуаль
+    /// пробует встать заново на следующем появлении экрана.
+    func screenVeilLost() {
+        guard screenVeilAttached else { return }
+        screenVeilAttached = false
+        attachTries = 0
+        screenVeil.detach()
+        onVeilDetached?()
+    }
+
     /// Встраивание с повторами: контейнер аннотаций появляется в дереве не
     /// обязательно к первому кадру, а падать из-за этого нельзя.
     private func tryAttachVeil() {
@@ -215,6 +226,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         controller.onVeilDetached = { [weak controller, weak coordinator = context.coordinator] in
             guard let controller, let coordinator else { return }
             coordinator.screenVeilStoodDown(controller)
+        }
+        controller.screenVeil.onLostFromHierarchy = { [weak controller] in
+            controller?.screenVeilLost()
         }
 
         return controller
@@ -631,11 +645,12 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
             guard let host, host.screenVeilAttached else { return }
-            // Ремень и подтяжки: `CADisplayLink` тянет привязку каждый кадр, а
-            // этот колбэк ловит движения, начавшиеся без `regionWillChange`
-            // (программный полёт камеры).
-            host.screenVeil.extendTracking()
-            host.screenVeil.sync(map: mapView)
+            // Ловит движения, начавшиеся без `regionWillChange` (программный
+            // полёт камеры): `startTracking` заводит `CADisplayLink`, если его
+            // нет, и продлевает хвост, если есть. Своего `sync` здесь нет —
+            // привязку в том же кадре сделает тот же `CADisplayLink`, а два
+            // вызова подряд считают одно и то же дважды.
+            host.screenVeil.startTracking()
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
