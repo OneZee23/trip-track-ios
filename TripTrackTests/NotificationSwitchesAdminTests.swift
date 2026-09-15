@@ -21,18 +21,19 @@ final class NotificationSwitchesAdminTests: XCTestCase {
     /// Тела POST'ов, снятые С ПРОВОДА. `nonisolated(unsafe)` — обработчик
     /// `MockURLProtocol` зовётся с очереди сессии, как и он сам.
     private nonisolated(unsafe) static var bodies: [[String: Any]] = []
-    private nonisolated(unsafe) static var paths: [String] = []
 
     private static let preMuteKey = "com.triptrack.settings.notificationsPreMute"
     private var savedPreMute: Any?
+    private var savedForcesAdmin = false
 
     override func setUp() async throws {
         try await super.setUp()
+        savedForcesAdmin = NotificationSwitches.forcesAdmin
+        NotificationSwitches.forcesAdmin = false
         savedPreMute = UserDefaults.standard.object(forKey: Self.preMuteKey)
         UserDefaults.standard.removeObject(forKey: Self.preMuteKey)
         MockURLProtocol.reset()
         Self.bodies = []
-        Self.paths = []
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
         session = URLSession(configuration: config)
@@ -48,9 +49,9 @@ final class NotificationSwitchesAdminTests: XCTestCase {
             UserDefaults.standard.removeObject(forKey: Self.preMuteKey)
         }
         savedPreMute = nil
+        NotificationSwitches.forcesAdmin = savedForcesAdmin
         MockURLProtocol.reset()
         Self.bodies = []
-        Self.paths = []
         // Без этого сессия не отпускает ни очередь, ни `MockURLProtocol`, и
         // роняет ЧУЖОЙ класс где-то в конце прогона — см. CLAUDE.md.
         session?.invalidateAndCancel()
@@ -61,13 +62,24 @@ final class NotificationSwitchesAdminTests: XCTestCase {
 
     // MARK: - Мир на другом конце провода
 
-    private func serve(_ payload: String) {
-        let body = Data(#"{"status":"ok","payload":\#(payload)}"#.utf8)
+    /// GET отдаёт `payload`; UPDATE — то, что ему прислали, плюс `isAdmin`,
+    /// как настоящий сервер: ответ на апдейт это СОХРАНЁННОЕ состояние, и
+    /// экран теперь читает именно его.
+    private func serve(_ payload: String, admin: Bool = true) {
+        let getBody = Data(#"{"status":"ok","payload":\#(payload)}"#.utf8)
         MockURLProtocol.requestHandler = { req in
-            Self.paths.append(req.url?.path ?? "")
-            if let data = Self.bodyData(of: req),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                Self.bodies.append(json)
+            let path = req.url?.path ?? ""
+            var json: [String: Any]?
+            if let data = Self.bodyData(of: req) {
+                json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            }
+            if let json { Self.bodies.append(json) }
+            var body = getBody
+            if path.hasSuffix("/update"), var echo = json {
+                echo["isAdmin"] = admin
+                if let saved = try? JSONSerialization.data(withJSONObject: echo) {
+                    body = Data(#"{"status":"ok","payload":"#.utf8) + saved + Data("}".utf8)
+                }
             }
             return (HTTPURLResponse(url: req.url!, statusCode: 200,
                                     httpVersion: nil, headerFields: nil)!, body)
@@ -143,6 +155,38 @@ final class NotificationSwitchesAdminTests: XCTestCase {
         XCTAssertTrue(NotificationSwitches.resolveAdmin(true))
     }
 
+    /// `-debug-admin` рисует карточку — и НИЧЕГО больше. Флаг, взводивший
+    /// заодно `isLoaded`, выключал `load()` на его же `guard`: настройки
+    /// оставались дефолтными «всё включено», и первый щелчок любого тумблера
+    /// записывал эти дефолты поверх настоящих настроек аккаунта. Поэтому
+    /// здесь ответ сервера НАРОЧНО не дефолтный.
+    func testDebugAdminFlagDoesNotSkipTheRealLoad() async throws {
+        NotificationSwitches.forcesAdmin = true
+        serve("""
+        {"notifyReactions":false,"notifyFollows":true,"notifyComments":false,
+         "notifyWeeklyRecap":true,"notifyCompanions":true,
+         "isAdmin":false,"notifyNewAccounts":false}
+        """, admin: false)
+
+        let switches = NotificationSwitches(client: client)
+        XCTAssertTrue(switches.isAdmin, "карточка обязана появиться и без сервера")
+        XCTAssertFalse(switches.isLoaded, "загрузка ещё не шла")
+
+        await switches.load()
+        XCTAssertTrue(switches.isLoaded, "`load()` обязан отработать по-настоящему")
+        XCTAssertTrue(switches.isAdmin, "флаг держит карточку и поверх ответа «не админ»")
+        XCTAssertFalse(switches.newAccounts, "значение из ответа, не дефолт")
+        Self.bodies = []
+
+        switches.setCompanions(false)
+        try await Task.sleep(nanoseconds: 900_000_000)
+        let update = try XCTUnwrap(Self.bodies.last)
+        XCTAssertEqual(update["notifyReactions"] as? Bool, false,
+                       "уехали настоящие настройки аккаунта, а не дефолты")
+        XCTAssertEqual(update["notifyComments"] as? Bool, false)
+        XCTAssertEqual(update["notifyCompanions"] as? Bool, false)
+    }
+
     // MARK: - Что уезжает на сервер
 
     func testSetNewAccountsPostsTheFlag() async throws {
@@ -172,6 +216,34 @@ final class NotificationSwitchesAdminTests: XCTestCase {
         switches.setNewAccounts(true)
         try await Task.sleep(nanoseconds: 900_000_000)
         XCTAssertTrue(Self.bodies.isEmpty, "щелчок в ту же сторону — не правка")
+    }
+
+    /// Ответ на UPDATE — это СОХРАНЁННОЕ сервером состояние, а не эхо
+    /// запроса: `notifyNewAccounts` у не-админа сервер игнорирует. Без
+    /// применения ответа экран показывал бы значение, которого в базе нет.
+    func testUpdateResponseWins() async throws {
+        let switches = NotificationSwitches(client: client)
+        serve(prefs(admin: false, newAccounts: true), admin: false)
+        await switches.load()
+        XCTAssertFalse(switches.isAdmin)
+
+        // Сервер не-админа: присланный `notifyNewAccounts` отброшен, в базе
+        // осталось прежнее `true`.
+        MockURLProtocol.requestHandler = { req in
+            let path = req.url?.path ?? ""
+            let payload = path.hasSuffix("/update")
+                ? #"{"notifyReactions":true,"notifyFollows":true,"notifyComments":true,"notifyWeeklyRecap":true,"notifyCompanions":false,"isAdmin":false,"notifyNewAccounts":true}"#
+                : #"{"notifyReactions":true,"notifyFollows":true,"notifyComments":true,"notifyWeeklyRecap":true,"notifyCompanions":true,"isAdmin":false,"notifyNewAccounts":true}"#
+            let body = Data(#"{"status":"ok","payload":"#.utf8) + Data(payload.utf8) + Data("}".utf8)
+            return (HTTPURLResponse(url: req.url!, statusCode: 200,
+                                    httpVersion: nil, headerFields: nil)!, body)
+        }
+
+        switches.setNewAccounts(false)
+        XCTAssertFalse(switches.newAccounts, "оптимистично — до ответа")
+        try await Task.sleep(nanoseconds: 900_000_000)
+        XCTAssertTrue(switches.newAccounts, "сервер не сохранил — экран обязан это показать")
+        XCTAssertFalse(switches.companions, "остальные флаги тоже из ответа")
     }
 
     // MARK: - Общий выключатель про СВОИ события
@@ -223,15 +295,28 @@ final class NotificationSwitchesAdminTests: XCTestCase {
 
     // MARK: - Строки
 
+    /// Проверяется НАЛИЧИЕ КЛЮЧА в каждой таблице, а не получившаяся строка:
+    /// `tr` при промахе молча отдаёт английский, и сравнение результатов
+    /// прошло бы на непереведённом ключе. Сравнить с английским тоже нельзя —
+    /// «Admin» по-немецки и правда «Admin».
     func testCopyExistsInEveryTable() {
-        for lang in LanguageManager.Language.allCases {
-            for text in [AppStrings.adminSectionTitle(lang),
-                         AppStrings.adminNotifyNewUsers(lang),
-                         AppStrings.adminHintNewUsers(lang)] {
-                XCTAssertFalse(text.isEmpty, "\(lang.rawValue)")
+        let tables: [(String, [String: String])] = [
+            ("de", Translations.de), ("es", Translations.es), ("fr", Translations.fr),
+            ("it", Translations.it), ("pl", Translations.pl), ("tr", Translations.tr),
+            ("id", Translations.id), ("uk", Translations.uk), ("pt", Translations.pt),
+            ("kk", Translations.kk), ("fil", Translations.fil),
+        ]
+        XCTAssertEqual(tables.count, 11)
+        for key in ["adminSectionTitle", "adminNotifyNewUsers", "adminHintNewUsers"] {
+            for (name, table) in tables {
+                let value = table[key]
+                XCTAssertNotNil(value, "\(name): ключа «\(key)» нет в таблице")
+                XCTAssertFalse(value?.isEmpty ?? true, "\(name): «\(key)» пустой")
             }
         }
         XCTAssertEqual(AppStrings.adminSectionTitle(.ru), "Админ")
         XCTAssertEqual(AppStrings.adminSectionTitle(.en), "Admin")
+        XCTAssertEqual(AppStrings.adminNotifyNewUsers(.de), "Neue Nutzer")
+        XCTAssertEqual(AppStrings.adminNotifyNewUsers(.tr), "Yeni kullanıcılar")
     }
 }

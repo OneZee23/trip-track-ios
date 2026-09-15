@@ -92,18 +92,19 @@ final class NotificationSwitches: ObservableObject {
     /// `-debug-admin` рисует карточку «Админ» так, как её увидит владелец:
     /// без сервера с `is_admin = true` её не показать ни на симуляторе, ни на
     /// снимке. Компилируется только в debug и в релиз не попадает.
-    static let forcesAdmin = ProcessInfo.processInfo.arguments.contains("-debug-admin")
+    /// `var`, а не `let`, и только в debug: тестам нужен этот же путь, а
+    /// подменить аргументы запуска у работающего прогона нечем.
+    static var forcesAdmin = ProcessInfo.processInfo.arguments.contains("-debug-admin")
     #endif
 
     init(client: APIClient = .shared) {
         self.client = client
         #if DEBUG
-        if Self.forcesAdmin {
-            isAdmin = true
-            // Тумблеры рисуются активными: дальше `load()` выйдет на первом
-            // же `guard`, а сервера, который ответил бы, на симуляторе нет.
-            isLoaded = true
-        }
+        // ТОЛЬКО `isAdmin`. Взводить здесь ещё и `isLoaded` нельзя: `load()`
+        // вышел бы на своём `guard`, флаги остались бы дефолтными «всё
+        // включено», и первый же щелчок любого тумблера записал бы эти
+        // дефолты поверх НАСТОЯЩИХ настроек аккаунта.
+        if Self.forcesAdmin { isAdmin = true }
         #endif
     }
 
@@ -112,14 +113,7 @@ final class NotificationSwitches: ObservableObject {
         do {
             let res: NotificationSwitchesResponse = try await client.post(
                 APIEndpoint.notificationPrefsGet, body: EmptyRequest())
-            reactions = res.notifyReactions
-            follows = res.notifyFollows
-            comments = res.notifyComments ?? true
-            weeklyRecap = res.notifyWeeklyRecap
-            companions = res.notifyCompanions ?? true
-            isAdmin = Self.resolveAdmin(res.isAdmin)
-            newAccounts = res.notifyNewAccounts ?? true
-            refreshMaster()
+            apply(res)
         } catch {
             // Same optimistic default as the detailed screen: a load failure
             // shows an account that isn't muted, because it isn't.
@@ -206,7 +200,7 @@ final class NotificationSwitches: ObservableObject {
 
     private func save() async {
         do {
-            let _: NotificationSwitchesResponse = try await client.post(
+            let res: NotificationSwitchesResponse = try await client.post(
                 APIEndpoint.notificationPrefsUpdate,
                 body: NotificationSwitchesUpdate(
                     notifyReactions: reactions,
@@ -216,8 +210,32 @@ final class NotificationSwitches: ObservableObject {
                     notifyCompanions: companions,
                     notifyNewAccounts: newAccounts
                 ))
+            // Ответ на UPDATE — это состояние, которое сервер СОХРАНИЛ, а оно
+            // не обязано совпадать с отправленным: `notifyNewAccounts` у
+            // не-админа он молча игнорирует (см. план 0.7.0), и без этой
+            // строки экран показывал бы значение, которого в базе нет.
+            //
+            // Но не поверх более свежей правки: пока запрос был в полёте,
+            // человек мог щёлкнуть ещё раз, и `scheduleSave` отменил эту
+            // задачу — отменённой ответ уже не принадлежит.
+            guard !Task.isCancelled else { return }
+            apply(res)
         } catch {
             notifSwitchLog.error("notification prefs save failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Единственное место, где ответ сервера становится состоянием экрана —
+    /// и у GET, и у UPDATE он одной формы. Две копии этого разбора однажды
+    /// разошлись бы на новом ключе.
+    private func apply(_ res: NotificationSwitchesResponse) {
+        reactions = res.notifyReactions
+        follows = res.notifyFollows
+        comments = res.notifyComments ?? true
+        weeklyRecap = res.notifyWeeklyRecap
+        companions = res.notifyCompanions ?? true
+        isAdmin = Self.resolveAdmin(res.isAdmin)
+        newAccounts = res.notifyNewAccounts ?? true
+        refreshMaster()
     }
 }
