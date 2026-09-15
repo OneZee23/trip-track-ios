@@ -369,6 +369,15 @@ enum FogVeilPainter {
     }
 
     /// Заливка + перья. Всё в координатах контекста; про карту не знает ничего.
+    ///
+    /// Это композиция двух половин ниже, и единственная причина, по которой она
+    /// осталась отдельной функцией, — плиточный рендерер: у него кусок и слой
+    /// прозрачности совпадают, потому что MapKit даёт ему ровно один тайл за
+    /// раз. У экранной вуали (`FogVeilBitmap`) кусков десятки, а слой обязан
+    /// быть ОДИН на всю картинку — иначе платятся двадцать четыре открытия
+    /// буфера и триста проходов пера (замер 15 сен: полный кадр `.fine` 211 мс
+    /// при 24 тайлах против 142 мс при 15 — цену держит число тайлов, а не
+    /// число пикселей).
     static func paint(
         context: CGContext,
         paths: [CGPath],
@@ -384,7 +393,7 @@ enum FogVeilPainter {
         // тайлу за раз. Вуаль накрывает весь мир, так что этим путём идёт
         // большинство тайлов.
         guard !paths.isEmpty || reveal != nil else {
-            fill(context: context, rect: tileRect, depth: depth)
+            fillAndHaze(context: context, tile: tileRect, depth: depth)
             return
         }
 
@@ -394,25 +403,55 @@ enum FogVeilPainter {
         // и есть дорогая часть, и платят за неё только тайлы, которым дыры
         // действительно нужны.
         context.beginTransparencyLayer(auxiliaryInfo: nil)
-        fill(context: context, rect: tileRect, depth: depth)
+        fillAndHaze(context: context, tile: tileRect, depth: depth)
+        punch(context: context, corridors: paths, corridorWidth: corridorWidth,
+              passes: passes, reveal: reveal)
+        context.endTransparencyLayer()
+    }
 
+    /// Первая половина кисти: заливка и дымка ОДНОГО куска.
+    ///
+    /// Кусок здесь не «оптимизация по частям», а условие рисунка: и рампа
+    /// глубины, и сеялка дымки привязаны к МИРОВЫМ координатам куска
+    /// (`FogVeilRenderer.depth`), поэтому один прямоугольник на весь экран дал
+    /// бы другую картинку, а не ту же быстрее. Слой прозрачности НЕ
+    /// открывается: у заливки стирать нечего.
+    static func fillAndHaze(context: CGContext, tile: CGRect, depth: Depth) {
+        fill(context: context, rect: tile, depth: depth)
+    }
+
+    /// Вторая половина: коридоры и прорезь у машины, прожжённые в то, что уже
+    /// лежит в контексте.
+    ///
+    /// Зовущий ОБЯЗАН быть внутри слоя прозрачности (`beginTransparencyLayer`):
+    /// `.destinationOut` стирает всё, до чего дотянется, включая чужие оверлеи
+    /// под вуалью. Функция про свой слой не знает нарочно — именно это
+    /// позволяет экранной вуали открыть его ОДИН раз на весь растр, а
+    /// плиточному рендереру — на каждый тайл.
+    static func punch(
+        context: CGContext,
+        corridors: [CGPath],
+        corridorWidth: CGFloat,
+        passes: Int,
+        reveal: Reveal? = nil
+    ) {
+        guard !corridors.isEmpty || reveal != nil else { return }
         context.setLineCap(.round)
         context.setLineJoin(.round)
         context.setBlendMode(.destinationOut)
-        if !paths.isEmpty {
+        if !corridors.isEmpty {
             for pass in FogVeilRenderer.feather(passes: passes) {
                 context.beginPath()
-                paths.forEach(context.addPath)
+                corridors.forEach(context.addPath)
                 context.setLineWidth(corridorWidth * pass.width)
                 context.setStrokeColor(UIColor(white: 0, alpha: pass.alpha).cgColor)
                 context.strokePath()
             }
         }
         if let reveal, reveal.radius > 0 {
-            punch(context: context, reveal: reveal)
+            punchReveal(context: context, reveal: reveal)
         }
         context.setBlendMode(.normal)
-        context.endTransparencyLayer()
     }
 
     // MARK: Внутри
@@ -476,7 +515,7 @@ enum FogVeilPainter {
     }
 
     /// Круглая прорезь с мягким краем — тем же приёмом, что и коридор.
-    private static func punch(context: CGContext, reveal: Reveal) {
+    private static func punchReveal(context: CGContext, reveal: Reveal) {
         let space = CGColorSpaceCreateDeviceRGB()
         let stops = [
             UIColor(white: 0, alpha: 1).cgColor,
