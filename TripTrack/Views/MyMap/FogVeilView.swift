@@ -63,7 +63,7 @@ final class FogVeilView: UIView {
         let sizePoints: CGSize
         let scale: CGFloat
         let container = CALayer()
-        var bands: [(rect: MKMapRect, image: CGImage)] = []
+        var bands: [(rect: MKMapRect, drawn: MKMapRect, image: CGImage)] = []
         var bytes = 0
         var expected: Int
 
@@ -82,11 +82,15 @@ final class FogVeilView: UIView {
 
         /// Готовая полоса ровно на этот мировой прямоугольник и тот же
         /// масштаб — её можно взять, не рисуя.
-        func image(for band: MKMapRect, scale other: CGFloat, sizePoints other2: CGSize) -> CGImage? {
+        func band(
+            for band: MKMapRect, scale other: CGFloat, sizePoints other2: CGSize
+        ) -> (image: CGImage, drawn: MKMapRect)? {
             guard abs(scale - other) < 0.0001,
                   abs(sizePoints.width - other2.width) < 0.5,
                   abs(sizePoints.height - other2.height) < 0.5 else { return nil }
-            return bands.first { FogVeilBitmap.sameRect($0.rect, band) }?.image
+            guard let hit = bands.first(where: { FogVeilBitmap.sameRect($0.rect, band) })
+            else { return nil }
+            return (hit.image, hit.drawn)
         }
     }
 
@@ -405,8 +409,9 @@ final class FogVeilView: UIView {
         let indexRef = index
 
         for band in bands {
-            if let ready = reusable?.image(for: band, scale: scale, sizePoints: sizePoints) {
-                install(image: ready, band: band, token: token, faded: false)
+            if let ready = reusable?.band(for: band, scale: scale, sizePoints: sizePoints) {
+                install(image: ready.image, band: band, drawn: ready.drawn,
+                        token: token, faded: false)
                 continue
             }
             queue.async { [weak self] in
@@ -416,8 +421,8 @@ final class FogVeilView: UIView {
                     grid: grid, index: indexRef, selected: route)
                 DispatchQueue.main.async {
                     guard let made else { self.finish(token: token) ; return }
-                    self.install(image: made.image, band: band, token: token,
-                                 faded: true, bytes: made.bytes)
+                    self.install(image: made.image, band: band, drawn: made.drawnRect,
+                                 token: token, faded: true, bytes: made.bytes)
                 }
             }
         }
@@ -432,15 +437,16 @@ final class FogVeilView: UIView {
     /// лежит прежний растр, поэтому дыр не появляется, а новая площадь
     /// довозится третями.
     private func install(
-        image: CGImage, band: MKMapRect, token: Int, faded: Bool, bytes: Int = 0
+        image: CGImage, band: MKMapRect, drawn: MKMapRect,
+        token: Int, faded: Bool, bytes: Int = 0
     ) {
         guard token == generation, let raster = rasters.last, raster.expected > 0 else { return }
         let ppmp = raster.sizePoints.width / CGFloat(raster.rect.width)
         let layerFrame = CGRect(
-            x: CGFloat(band.minX - raster.rect.minX) * ppmp,
-            y: CGFloat(band.minY - raster.rect.minY) * ppmp,
-            width: CGFloat(band.width) * ppmp,
-            height: CGFloat(band.height) * ppmp
+            x: CGFloat(drawn.minX - raster.rect.minX) * ppmp,
+            y: CGFloat(drawn.minY - raster.rect.minY) * ppmp,
+            width: CGFloat(drawn.width) * ppmp,
+            height: CGFloat(drawn.height) * ppmp
         )
         let bandLayer = CALayer()
         bandLayer.actions = ["contents": NSNull(), "position": NSNull(), "bounds": NSNull()]
@@ -450,7 +456,7 @@ final class FogVeilView: UIView {
         bandLayer.frame = layerFrame
         bandLayer.contents = image
         raster.container.addSublayer(bandLayer)
-        raster.bands.append((band, image))
+        raster.bands.append((band, drawn, image))
         raster.bytes += bytes
 
         if faded {
@@ -519,7 +525,13 @@ enum FogVeilBitmap {
     }
 
     struct Band {
+        /// Логический прямоугольник полосы — по нему полоса узнаётся при
+        /// переиспользовании.
         let rect: MKMapRect
+        /// Что на самом деле нарисовано: полоса плюс пиксель снизу. Соседние
+        /// полосы — РАЗНЫЕ картинки, и на их общей границе при любом
+        /// растяжении растра иначе остаётся волосяная щель в живую карту.
+        let drawnRect: MKMapRect
         let image: CGImage
         let bytes: Int
         let tiles: Int
@@ -590,6 +602,11 @@ enum FogVeilBitmap {
         guard whole.width > 0, whole.height > 0, band.width > 0, band.height > 0,
               sizePoints.width > 0, sizePoints.height > 0 else { return nil }
         let pixelsPerMapPoint = Double(sizePoints.width) * Double(scale) / whole.width
+        // Пиксель припуска снизу: полосы — разные картинки, и без нахлёста их
+        // общая граница светит живой картой Apple.
+        let bleed = 1 / pixelsPerMapPoint
+        let band = MKMapRect(x: band.minX, y: band.minY,
+                             width: band.width, height: band.height + bleed)
         let px = max(1, Int((band.width * pixelsPerMapPoint).rounded()))
         let py = max(1, Int((band.height * pixelsPerMapPoint).rounded()))
         guard let context = CGContext(
@@ -633,10 +650,16 @@ enum FogVeilBitmap {
                                      width: tileW, height: tileH)
                 guard tile.intersects(band) else { continue }
                 tiles += 1
+                // Клип тайла сглаживается, и два соседа оставляют на общей
+                // границе по половине пикселя — линию, сквозь которую видно
+                // карту Apple. Полпикселя припуска в каждую сторону: сосед
+                // накрывает шов своей же заливкой, а рампа глубины на этом
+                // пикселе меняется меньше чем на уровень.
+                let half = 0.5 / pixelsPerMapPoint
                 FogVeilPainter.fillAndHaze(
                     context: context,
-                    tile: CGRect(x: tile.minX, y: tile.minY,
-                                 width: tile.width, height: tile.height),
+                    tile: CGRect(x: tile.minX - half, y: tile.minY - half,
+                                 width: tile.width + half * 2, height: tile.height + half * 2),
                     depth: FogVeilRenderer.depth(for: tile, lod: lod, haze: chunks != nil)
                 )
             }
@@ -657,7 +680,9 @@ enum FogVeilBitmap {
         }
 
         guard let image = context.makeImage() else { return nil }
-        return Band(rect: band, image: image, bytes: context.bytesPerRow * py,
+        return Band(rect: MKMapRect(x: band.minX, y: band.minY,
+                                   width: band.width, height: band.height - bleed),
+                    drawnRect: band, image: image, bytes: context.bytesPerRow * py,
                     tiles: tiles, layers: layers, lod: lod)
     }
 

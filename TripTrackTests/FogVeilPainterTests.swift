@@ -86,6 +86,49 @@ final class FogVeilPainterTests: XCTestCase {
         XCTAssertEqual(band.layers, 0)
     }
 
+    // MARK: Непрозрачность
+
+    /// В растре НЕ ДОЛЖНО быть ни одного полупрозрачного пикселя, кроме
+    /// прожжённых коридоров.
+    ///
+    /// Стык тайлов — это место, где полупрозрачность заводится сама: клип
+    /// сглаживается, и два соседних тайла оставляют на общей границе по
+    /// половине пикселя. У плиточного рендерера этого не видно (соседа рисует
+    /// MapKit в общий буфер), а в растре сквозь такую линию светит живая
+    /// карта Apple — ровно то, что туман обязан прятать.
+    func testRasterHasNoSeamsBetweenTiles() {
+        // Растр ЗАВЕДОМО мимо сети: коридоров в нём нет вовсе, поэтому любая
+        // полупрозрачность в нём — шов, а не перьевой край дыры.
+        let revealed = layer()
+        let far = MKMapRect(
+            origin: MKMapPoint(CLLocationCoordinate2D(latitude: 53, longitude: 45)),
+            size: MKMapSize(width: 40_000, height: 90_000))
+        let sizePoints = CGSize(width: 660, height: 1_434)
+        guard let band = FogVeilBitmap.render(
+            rect: far, sizePoints: sizePoints, scale: 1,
+            index: index(for: revealed), selected: []
+        ) else { return XCTFail("растр обязан собраться") }
+        let grid = FogVeilBitmap.grid(sizePoints: sizePoints)
+        XCTAssertGreaterThan(grid.cols * grid.rows, 4, "мерить нечего: тайлов должно быть много")
+
+        // Картинка на пиксель выше логической полосы — это припуск, который
+        // накрывает стык с соседней полосой; сама полоса кончается раньше.
+        let width = band.image.width
+        let height = band.image.height
+        guard let data = pixels(of: band.image, width: width, height: height)
+        else { return XCTFail("пиксели обязаны прочитаться") }
+
+        var seams: [(Int, Int)] = []
+        for y in 0..<(height - 1) {
+            for x in 0..<width where data[(y * width + x) * 4 + 3] != 255 {
+                seams.append((x, y))
+            }
+        }
+        print("[veil] щелей в туман: \(seams.count), первые "
+              + "\(seams.prefix(5).map { "\($0.0)×\($0.1)" }.joined(separator: " "))")
+        XCTAssertTrue(seams.isEmpty, "на стыке тайлов остаётся щель в туман")
+    }
+
     // MARK: Равенство с откатом
 
     /// Растр целиком и тот же кадр, собранный ПЛИТОЧНЫМ рендерером тайл за
