@@ -156,7 +156,8 @@ final class APISyncTransport: SyncTransport {
     }
 
     /// Batch trip upload via `/sync/push`. Builds payloads off the main actor,
-    /// chunks them under the 25 MB body limit, and POSTs each chunk. Returns the
+    /// chunks them by estimated JSON bytes (`SyncChunkBudget`, 16 MB against
+    /// the server's 40 MB body limit), and POSTs each chunk. Returns the
     /// entityIds it fully handled (synced or conflict-resolved). Anything not
     /// returned — a privacy-skip, a chunk that failed, or a trip that vanished —
     /// is left for `SyncQueue`'s per-op `execute()` to drain, so this can never
@@ -168,16 +169,15 @@ final class APISyncTransport: SyncTransport {
         // building ALL payloads up front), so (a) memory stays bounded to one
         // chunk's track points and (b) progress advances per chunk via
         // onChunkSynced rather than jumping 0→N at the very end.
-        let maxTripsPerChunk = 25
-        let maxPointsPerChunk = 80_000
+        // Бюджет чанка — в байтах JSON, не в точках: см. `SyncChunkBudget`.
         var current: [TripSyncPayload] = []
-        var points = 0
+        var bytes = 0
 
         func flush() async {
             guard !current.isEmpty else { return }
             let chunk = current
             current = []
-            points = 0
+            bytes = 0
             do {
                 let res: SyncPushResponse = try await client.post(
                     APIEndpoint.syncPush, body: SyncPushRequest(trips: chunk))
@@ -237,12 +237,12 @@ final class APISyncTransport: SyncTransport {
                 continue  // vanished between gate and build → leave for per-op
             }
             // Flush BEFORE appending when this trip would overflow the chunk.
-            if !current.isEmpty,
-               current.count >= maxTripsPerChunk || points + (payload.trackPoints?.count ?? 0) > maxPointsPerChunk {
+            let next = payload.estimatedWireBytes
+            if SyncChunkBudget.shouldFlush(currentTrips: current.count, currentBytes: bytes, nextBytes: next) {
                 await flush()
             }
             current.append(payload)
-            points += payload.trackPoints?.count ?? 0
+            bytes += next
         }
         await flush()
         return handled
