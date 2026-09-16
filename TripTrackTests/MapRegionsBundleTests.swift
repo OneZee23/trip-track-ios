@@ -105,4 +105,147 @@ final class MapRegionsBundleTests: XCTestCase {
                 "\(testCase.coordinate.latitude), \(testCase.coordinate.longitude)")
         }
     }
+
+    /// A duplicate `iso_3166_2` in a future Natural Earth update, or a bad
+    /// `ISO_FIXES` entry, could reintroduce two rows sharing one `id` — the
+    /// exact bug the 0.6.8 merge fix in `Tools/build_map_regions.py` already
+    /// closed on the Python side. `regionIndexById` is a plain dictionary
+    /// assignment, so nothing on the Swift side notices a repeat unless this
+    /// asserts it.
+    func testRegionIdsAreUnique() {
+        let ids = atlas.regions.map(\.id)
+        XCTAssertEqual(Set(ids).count, ids.count, "duplicate region id shipped in the bundle")
+    }
+
+    /// Review round 1: Russia's country-level outline dropped Kaliningrad —
+    /// its ring ranked 14th by span, two past the old `max_rings=12` cutoff,
+    /// so at world zoom the exclave read as unclaimed space between Poland
+    /// and Lithuania. `country_geometry()` now force-keeps any ring covering
+    /// one of the country's OWN region centroids, independent of rank.
+    func testCountryOutlinesCoverTheirOwnExclaveRegions() {
+        let cases: [(code: String, coordinate: CLLocationCoordinate2D)] = [
+            ("RU", CLLocationCoordinate2D(latitude: 54.71, longitude: 20.51)),   // Kaliningrad
+            ("AZ", CLLocationCoordinate2D(latitude: 39.21, longitude: 45.41)),   // Nakhchivan
+        ]
+        let byId = Dictionary(uniqueKeysWithValues: atlas.countries.map { ($0.id, $0) })
+        for testCase in cases {
+            guard let country = byId[testCase.code] else {
+                XCTFail("no MapCountry entry for \(testCase.code)")
+                continue
+            }
+            XCTAssertTrue(
+                RegionAtlas.contains(
+                    lat: testCase.coordinate.latitude, lon: testCase.coordinate.longitude,
+                    rings: country.rings),
+                "\(testCase.code) outline does not cover \(testCase.coordinate)")
+        }
+    }
+
+    /// A synthetic duplicate, independent of whatever the shipped bundle
+    /// happens to contain today: `RegionAtlas.parse(data:)` keeps the FIRST
+    /// row on a repeated id and drops the rest, rather than the dictionary
+    /// silently letting the last one win.
+    func testParseKeepsFirstRegionOnDuplicateId() throws {
+        let json = """
+        {"v":1,"regions":[
+          {"id":"XX-DUP","cc":"XX","ru":"Первый","en":"First",
+           "c":[10.0,20.0],"b":[9.0,19.0,11.0,21.0],
+           "r":[[9.0,19.0,9.0,21.0,11.0,21.0,11.0,19.0]]},
+          {"id":"XX-DUP","cc":"XX","ru":"Второй","en":"Second",
+           "c":[30.0,40.0],"b":[29.0,39.0,31.0,41.0],
+           "r":[[29.0,39.0,29.0,41.0,31.0,41.0,31.0,39.0]]}
+        ],"countries":[],"cities":[]}
+        """
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let parsed = try XCTUnwrap(RegionAtlas.parse(data: data))
+        XCTAssertEqual(parsed.regions.count, 1)
+        XCTAssertEqual(parsed.regions.first?.nameRu, "Первый")
+        XCTAssertEqual(parsed.regionIndexById, ["XX-DUP": 0])
+    }
+
+    /// A tiny, seeded (reproducible) linear-congruential generator — the
+    /// stdlib has no seedable `RandomNumberGenerator`, and a fuzz test that
+    /// can't be reproduced on failure is not much of a regression guard.
+    private struct SeededGenerator: RandomNumberGenerator {
+        private var state: UInt64
+        init(seed: UInt64) { state = seed }
+        mutating func next() -> UInt64 {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return state
+        }
+    }
+
+    /// A second, independently-written ray-caster (plain array subscripting,
+    /// no `withUnsafeBufferPointer`) — the same algorithm `RegionAtlas
+    /// .contains` used before its 0.7.0 speed-up, kept apart from it on
+    /// purpose so this test can't pass by sharing a bug.
+    private static func referenceContains(lat: Double, lon: Double, rings: [[Double]]) -> Bool {
+        var inside = false
+        for ring in rings {
+            let count = ring.count / 2
+            guard count > 2 else { continue }
+            var j = count - 1
+            for i in 0..<count {
+                let yi = ring[2 * i], xi = ring[2 * i + 1]
+                let yj = ring[2 * j], xj = ring[2 * j + 1]
+                if (yi > lat) != (yj > lat) {
+                    let crossing = (xj - xi) * (lat - yi) / (yj - yi) + xi
+                    if lon < crossing { inside.toggle() }
+                }
+                j = i
+            }
+        }
+        return inside
+    }
+
+    /// Behavioural equivalence for the `withUnsafeBufferPointer` rewrite:
+    /// 2 000 seeded random points across five real regions, plus every
+    /// actual ring vertex (the on-edge case a fuzz pass over a bounding box
+    /// would only hit by luck), compared against an independent reference
+    /// implementation. It's a hot path — one lookup per sampled track point
+    /// across the whole library — so a silent divergence here would be wrong
+    /// answers at scale, not a crash.
+    func testContainsMatchesReferenceRayCasting() {
+        let regionIds = ["RU-KDA", "GE-AJ", "GE-TB", "RU-ROS", "RU-STA"]
+        var generator = SeededGenerator(seed: 42)
+        var checked = 0
+
+        for id in regionIds {
+            guard let region = atlas.region(id: id) else {
+                XCTFail("missing region \(id)")
+                continue
+            }
+            let bounds = region.bounds
+
+            // On-vertex: every real vertex of the region's own rings.
+            for ring in region.rings {
+                let count = ring.count / 2
+                for i in 0..<count {
+                    let lat = ring[2 * i], lon = ring[2 * i + 1]
+                    XCTAssertEqual(
+                        RegionAtlas.contains(lat: lat, lon: lon, rings: region.rings),
+                        Self.referenceContains(lat: lat, lon: lon, rings: region.rings),
+                        "\(id) vertex (\(lat), \(lon))")
+                    checked += 1
+                }
+            }
+
+            // Random: padded bbox so some points fall just outside the ring too.
+            let latPad = max(0.01, (bounds.maxLat - bounds.minLat) * 0.1)
+            let lonPad = max(0.01, (bounds.maxLon - bounds.minLon) * 0.1)
+            for _ in 0..<400 {
+                let lat = Double.random(
+                    in: (bounds.minLat - latPad)...(bounds.maxLat + latPad), using: &generator)
+                let lon = Double.random(
+                    in: (bounds.minLon - lonPad)...(bounds.maxLon + lonPad), using: &generator)
+                XCTAssertEqual(
+                    RegionAtlas.contains(lat: lat, lon: lon, rings: region.rings),
+                    Self.referenceContains(lat: lat, lon: lon, rings: region.rings),
+                    "\(id) (\(lat), \(lon))")
+                checked += 1
+            }
+        }
+
+        XCTAssertGreaterThanOrEqual(checked, 2_000)
+    }
 }

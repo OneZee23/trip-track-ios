@@ -228,12 +228,24 @@ def simplify_rings(rings, min_span, max_rings, detail=0.002, lo=0.003, hi=0.012,
     return [r for _, r in scored]
 
 
-def country_geometry(raw_rings, min_span=0.15, max_rings=12, eps=0.01):
+def country_geometry(raw_rings, min_span=0.15, max_rings=12, eps=0.01, force_centroids=None):
     """Country outline: flat 0.01° tolerance, rings under `min_span` (~micro-
-    states) dropped, capped at twelve. `centroid`/`bbox` come from the FULL
-    unfiltered geometry — a country whose only ring fell under the span floor
-    still needs a label anchor and a box for LOD sizing, just no polygon to
-    fill. Returns ([], None, None) when there is no usable geometry at all.
+    states) dropped, the twelve largest by span kept. `centroid`/`bbox` come
+    from the FULL unfiltered geometry — a country whose only ring fell under
+    the span floor still needs a label anchor and a box for LOD sizing, just
+    no polygon to fill. Returns ([], None, None) when there is no usable
+    geometry at all.
+
+    `force_centroids` — `[lat, lon]` pairs (a country's own driveable
+    regions' centroids) that MUST end up covered by a kept ring, independent
+    of span rank. Without this, Russia's Kaliningrad ring (span ≈3.37°) sat
+    at rank 14 among Russia's 189 span-qualifying rings — two past
+    `max_rings=12` — while Crimea (rank 11) kept its slot; Kaliningrad read
+    as unclaimed space between Poland and Lithuania at world zoom. A region
+    exists in the bundle only because someone can drive there, so its
+    country's outline can never silently drop the ground under it. This can
+    push a country past `max_rings` (Russia now carries 13) — the overall
+    4 MB bundle budget is what's held to, not a fixed ring count per country.
     """
     usable = [r for r in raw_rings if len(r) >= 4]
     if not usable:
@@ -249,7 +261,19 @@ def country_geometry(raw_rings, min_span=0.15, max_rings=12, eps=0.01):
             continue
         scored.append((span, simple))
     scored.sort(key=lambda x: -x[0])
-    rings = [flat(r) for _, r in scored[:max_rings]]
+
+    kept = list(scored[:max_rings])
+    if force_centroids:
+        kept_ids = {id(simple) for _, simple in kept}
+        for span, simple in scored[max_rings:]:
+            if id(simple) in kept_ids:
+                continue
+            ring_flat = flat(simple)
+            if any(point_in_rings(lat, lon, [ring_flat]) for lat, lon in force_centroids):
+                kept.append((span, simple))
+                kept_ids.add(id(simple))
+
+    rings = [flat(r) for _, r in kept]
     return rings, centroid_of(all_flat), bbox_of(all_flat)
 
 
@@ -347,14 +371,22 @@ def english_city_names():
     return table
 
 
-def build_countries():
+def build_countries(regions):
     """One entry per country on earth: the 20 atlas countries keep their
     hand-picked names (Natural Earth's «Молдавия»/«Туркмения»/«Белоруссия»/
     Turkey disagree with product decisions already made), everyone else
     takes NAME_RU/NAME_EN straight from admin-0. Multiple admin-0 features
-    sharing one ISO_A2 (dependencies) are pooled into a single entry."""
+    sharing one ISO_A2 (dependencies) are pooled into a single entry.
+
+    `regions` — the already-built region list, so each country's outline can
+    be forced to cover every one of its OWN regions' centroids (exclaves like
+    Kaliningrad, Nakhchivan) regardless of span rank; see `country_geometry`.
+    """
     admin0 = json.load(open(ADMIN0_PATH, encoding="utf-8"))
     by_cc = {cc: (ru, en) for cc, ru, en in COUNTRIES.values()}
+    centroids_by_cc = {}
+    for region in regions:
+        centroids_by_cc.setdefault(region["cc"], []).append(region["c"])
 
     grouped = {}
     for feat in admin0["features"]:
@@ -385,7 +417,8 @@ def build_countries():
             if not ru or not en:
                 continue
         raw_rings = [ring for f in feats for ring in rings_of(f["geometry"])]
-        rings, centroid, bbox = country_geometry(raw_rings)
+        rings, centroid, bbox = country_geometry(
+            raw_rings, force_centroids=centroids_by_cc.get(code))
         if bbox is None:
             continue
         row = {"id": code, "ru": ru, "en": en, "c": centroid, "b": bbox}
@@ -464,7 +497,7 @@ def main():
             "r": flat_rings,
         })
 
-    countries = build_countries()
+    countries = build_countries(regions)
 
     # --- Cities, assigned to a region by point-in-polygon ------------------
     ru_regions = [r for r in regions if r["cc"] == "RU"]

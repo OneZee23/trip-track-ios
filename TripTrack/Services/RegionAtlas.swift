@@ -1,5 +1,8 @@
 import Foundation
 import CoreLocation
+import os
+
+private let regionAtlasLog = Logger(subsystem: "com.triptrack", category: "region-atlas")
 
 /// Bundled administrative geometry for «Моя карта» — the «границы из
 /// локального GeoJSON» the canon note asks for.
@@ -233,7 +236,10 @@ final class RegionAtlas {
 
     // MARK: - Parsing (off-main, value types only)
 
-    private struct Parsed {
+    /// Internal, not private: `parse(data:)` below is a test seam, and its
+    /// return type has to be visible to `@testable import` for a test to
+    /// read it back.
+    struct Parsed {
         let regions: [Region]
         let citiesByRegion: [String: [City]]
         let countryNames: [String: (ru: String, en: String)]
@@ -312,6 +318,14 @@ final class RegionAtlas {
             print("[RegionAtlas] cannot read \(url.lastPathComponent)")
             return nil
         }
+        return parse(data: data)
+    }
+
+    /// Split from `parseBundle()` so a test can feed synthetic JSON — a
+    /// duplicate `id` in the bundle is rare enough that the real
+    /// `MapRegions.json` will likely never exercise this path, and the
+    /// dedup guard below deserves its own coverage independent of that.
+    static func parse(data: Data) -> Parsed? {
         let payload: Payload
         do {
             payload = try JSONDecoder().decode(Payload.self, from: data)
@@ -328,6 +342,17 @@ final class RegionAtlas {
         for raw in payload.regions {
             guard raw.b.count == 4, raw.c.count == 2,
                   let ru = raw.ru, let en = raw.en, !ru.isEmpty else { continue }
+            // A silent `indexById[raw.id] = index` overwrite once let a
+            // duplicate row hide a region from every lookup while its
+            // orphaned bbox kept polluting `grid` (0.7.0 fix-up). The first
+            // row wins and the rest are dropped — the same "don't fabricate,
+            // don't silently prefer the last" instinct as everywhere else in
+            // this file, just enforced at parse time instead of only in the
+            // build script.
+            guard indexById[raw.id] == nil else {
+                regionAtlasLog.error("duplicate region id in MapRegions.json, keeping first: \(raw.id, privacy: .public)")
+                continue
+            }
             let index = regions.count
             regions.append(Region(
                 id: raw.id,
