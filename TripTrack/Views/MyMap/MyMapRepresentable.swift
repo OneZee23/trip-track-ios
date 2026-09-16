@@ -296,6 +296,11 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
 
         private var installedTripIds: Set<UUID> = []
         private var installedRegionIds: Set<String> = []
+        /// Регионы, где есть открытые километры (`FogVeilOverlay.visitedRegions`)
+        /// — тот же набор, что красит заливку. Своего счёта подписи не ведут,
+        /// поэтому отслеживают именно ЭТОТ набор, а не `installedRegionIds`
+        /// (тот про поездки, а не про открытый слой).
+        private var installedVisitedRegionIds: Set<String> = []
         private var installedVeil: FogVeilOverlay?
         private var installedVein: RouteVeinOverlay?
         private var installedRoute: RouteVeinOverlay?
@@ -407,11 +412,17 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 }
             }
 
+            // Регионы, где есть открытые километры — тот же набор, что уже
+            // красит заливку (`FogVeilOverlay.visitedRegions`), не второй.
+            let visitedRegionIds = veil?.visitedRegions ?? []
+            let visitedChanged = visitedRegionIds != installedVisitedRegionIds
+
             // City dots and region labels are derived data, and `updateUIView`
             // runs on every published change — a selection, a camera command.
             // Rebuilding these arrays each time was pure allocation.
-            if tripsChanged || regionsChanged || language != installedLanguage {
+            if tripsChanged || regionsChanged || visitedChanged || language != installedLanguage {
                 installedLanguage = language
+                installedVisitedRegionIds = visitedRegionIds
                 // Только внутри коридоров: город, до которого ты не доезжал,
                 // на карте тумана не существует. `MapExploration` уже отдаёт
                 // лишь города с покрытием, но правило записано и здесь —
@@ -425,36 +436,29 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                         )
                     }
                 }
-                regionLabels = Self.labels(for: exploration, revealed: revealed, language: language)
+                // Регионы — только посещённые; страны — все, ярче у
+                // посещённых. Подписи стоят на карте ВСЕГДА с этого момента:
+                // масштаб решает не добавление/удаление, а видимость каждой
+                // (`updateRegionLabelLOD`), как у `installedHints`.
+                let visitedCountryCodes = Set(
+                    visitedRegionIds.compactMap { RegionAtlas.shared.region(id: $0)?.countryCode }
+                )
+                regionLabels = RegionLabelModel.regionLabels(
+                    regions: RegionAtlas.shared.regions, revealed: revealed,
+                    visitedRegionIds: visitedRegionIds, unit: DistanceUnit.current, language: language
+                ) + RegionLabelModel.countryLabels(
+                    countries: RegionAtlas.shared.countries,
+                    visitedCountryCodes: visitedCountryCodes, language: language
+                )
                 // The annotations on screen are stale copies of what just
                 // changed underneath them.
                 map.removeAnnotations(map.annotations.filter {
                     $0 is CityDotAnnotation || $0 is RegionLabelAnnotation
                 })
+                map.addAnnotations(regionLabels)
+                updateRegionLabelLOD(map)
             }
             applyLevel(map, animated: false)
-        }
-
-        /// Подписи — только у регионов, где есть ОТКРЫТАЯ дорога, и только в
-        /// середине открытого куска.
-        ///
-        /// Регион без центроида пропускается молча: центр края из атласа стоял
-        /// бы посреди темноты, в которой человек не был, — а подпись там
-        /// обещает открытое там, где его нет.
-        static func labels(
-            for exploration: MapExploration,
-            revealed: RevealedLayer,
-            language: LanguageManager.Language
-        ) -> [RegionLabelAnnotation] {
-            exploration.regions.compactMap { region in
-                guard region.openedKm > 0,
-                      let centre = revealed.regionCentroids[region.id] else { return nil }
-                return RegionLabelAnnotation(
-                    regionId: region.id,
-                    coordinate: centre,
-                    title: region.localizedName(language).uppercased(language)
-                )
-            }
         }
 
         /// The selected trip's own line, laid over the fog, with a dot at each
@@ -609,6 +613,21 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             }
         }
 
+        /// Видна ли подпись региона/страны на этом масштабе — считает карта
+        /// (bbox из бандла в точках экрана) и ставит сюда на каждом кадре
+        /// жеста, по уже стоящему списку, тем же приёмом, что `updateHintLOD`.
+        func updateRegionLabelLOD(_ map: MKMapView) {
+            guard map.bounds.width > 0, map.visibleMapRect.size.width > 0 else { return }
+            let zoomScale = MKZoomScale(Double(map.bounds.width) / map.visibleMapRect.size.width)
+            guard zoomScale > 0, zoomScale.isFinite else { return }
+            let lod = FogVeilRenderer.lod(for: zoomScale)
+            for label in regionLabels {
+                guard let view = map.view(for: label) as? RegionLabelView else { continue }
+                let side = label.bounds.minSidePt(zoomScale: zoomScale)
+                view.visible = RegionLabelLOD.level(bboxMinSidePt: side, lod: lod, isCountry: label.isCountry)
+            }
+        }
+
         // MARK: «Печать проступает»
 
         /// Новая печать на открытом «Атласе»: прорезь в тумане 0 → 120 м за
@@ -678,16 +697,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 map.removeAnnotations(map.annotations.filter { $0 is CityDotAnnotation })
             }
 
-            // Имена регионов: страна и регион. На улице ближайшая граница за
-            // экраном, и подпись края там — шум поверх дорог, за которыми
-            // человек и пришёл.
-            let wantLabels = level <= .region
-            let hasLabels = map.annotations.contains { $0 is RegionLabelAnnotation }
-            if wantLabels && !hasLabels {
-                map.addAnnotations(regionLabels)
-            } else if !wantLabels && hasLabels {
-                map.removeAnnotations(map.annotations.filter { $0 is RegionLabelAnnotation })
-            }
+            // Имена регионов и стран стоят на карте всегда с первой сборки;
+            // масштаб решает `updateRegionLabelLOD` — каждая подпись сама, по
+            // своему bbox, а не общий переключатель уровня, как у городов.
 
             syncTripPins(map)
         }
@@ -879,8 +891,11 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             // Значок подсказки живёт в точках экрана, а круг под ним — в
             // метрах: «что от значка видно» меняется прямо под пальцем, и
             // ждать `regionDidChange` нельзя — именно так три «?» и съезжались
-            // в кучу посреди щипка.
+            // в кучу посреди щипка. Подпись региона/страны живёт в точках
+            // экрана тем же приёмом — bbox из бандла, а не сама карта, растёт
+            // и сжимается вместе с ней.
             updateHintLOD(mapView)
+            updateRegionLabelLOD(mapView)
             guard let host, host.screenVeilAttached else { return }
             // Ловит движения, начавшиеся без `regionWillChange` (программный
             // полёт камеры): `startTracking` заводит `CADisplayLink`, если его
@@ -898,6 +913,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 host.screenVeil.maybeRender(map: mapView, settled: true)
             }
             updateHintLOD(mapView)
+            updateRegionLabelLOD(mapView)
             let newLevel = MapZoomLevel.of(mapView.region.span.latitudeDelta)
             guard newLevel != level else { return }
             level = newLevel
