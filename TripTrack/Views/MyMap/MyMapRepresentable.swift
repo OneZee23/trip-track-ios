@@ -564,6 +564,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 guard let hint = annotation as? RiddleHintAnnotation,
                       let view = map.view(for: hint) as? RiddleHintView else { continue }
                 let diameter = CGFloat(hint.radiusMetres * 2 / metresPerPoint)
+                // Присваиваем всегда: вью сама решает, что менять, и заодно
+                // возвращает на место то, что MapKit показал по-своему.
                 view.lod = HintBadgeLOD.level(diameterPt: diameter)
             }
         }

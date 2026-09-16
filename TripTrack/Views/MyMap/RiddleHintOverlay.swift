@@ -261,11 +261,12 @@ final class RiddleHintView: MKAnnotationView {
 
     /// Что показывать на текущем масштабе. Считает карта (диаметр круга в
     /// точках экрана) и ставит сюда — на каждом кадре жеста, три аннотации.
+    /// Применяется БЕЗУСЛОВНО, а не только на смену: скрытую аннотацию MapKit
+    /// вправе показать сам (пересчёт столкновений, переиспользование вью), и
+    /// проверка «значение то же» оставила бы на стране «?», который мы уже
+    /// прятали. Три аннотации и три булевых поля на кадр.
     var lod: HintBadgeLOD.Level = .full {
-        didSet {
-            guard lod != oldValue else { return }
-            applyLOD()
-        }
+        didSet { applyLOD() }
     }
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
@@ -328,9 +329,11 @@ final class RiddleHintView: MKAnnotationView {
     }
 
     private func applyLOD() {
-        isHidden = lod == .none
-        chip.isHidden = lod == .none
-        caption.isHidden = lod != .full
+        let hidden = lod == .none
+        if isHidden != hidden { isHidden = hidden }
+        if chip.isHidden != hidden { chip.isHidden = hidden }
+        let captionHidden = lod != .full
+        if caption.isHidden != captionHidden { caption.isHidden = captionHidden }
     }
 
     @available(*, unavailable)
