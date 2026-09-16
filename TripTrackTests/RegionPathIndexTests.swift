@@ -226,6 +226,39 @@ final class RegionPathIndexTests: XCTestCase {
                                     "одной вершины мало: в кадре должен быть ОТРЕЗОК границы")
     }
 
+    /// Анклав побеждает обёртку: Майкоп — это Адыгея, а не Краснодарский край.
+    ///
+    /// Natural Earth отдаёт край сплошным кольцом, БЕЗ дырки под республикой,
+    /// поэтому обе геометрии накрывают Майкоп. До правила «меньшая рамка
+    /// побеждает» ответ зависел от порядка строк в бандле: километры,
+    /// «посещённые регионы» и заливка на «Атласе» доставались краю. Правило
+    /// живёт в ОДНОМ резолвере, и обе его двери — полный поиск и быстрый путь
+    /// по прошлой точке — обязаны отвечать одинаково, иначе Майкоп получает
+    /// то край, то республику в зависимости от того, откуда приехал трек.
+    func testEnclaveWinsOverTheRegionAroundIt() async {
+        let atlas = RegionAtlas.shared
+        await atlas.loadIfNeeded()
+        let maykop = CLLocationCoordinate2D(latitude: 44.61, longitude: 40.10)
+        let krasnodar = CLLocationCoordinate2D(latitude: 45.035, longitude: 38.975)
+
+        XCTAssertEqual(atlas.region(containing: maykop)?.id, "RU-AD")
+        XCTAssertEqual(atlas.region(containing: krasnodar)?.id, "RU-KDA")
+
+        // Быстрый путь: трек пришёл из края — и всё равно обязан отдать
+        // республику, а не подтвердить прошлый ответ.
+        guard let krai = atlas.regionIndex(containing: krasnodar) else {
+            return XCTFail("Краснодар обязан находиться")
+        }
+        XCTAssertFalse(atlas.regionAtIndex(krai, contains: maykop),
+                       "быстрый путь подтвердил край над анклавом — резолвера стало два")
+        guard let republic = atlas.regionIndex(containing: maykop) else {
+            return XCTFail("Майкоп обязан находиться")
+        }
+        XCTAssertTrue(atlas.regionAtIndex(republic, contains: maykop))
+        // И обратно: анклав не должен «съедать» точки вокруг себя.
+        XCTAssertFalse(atlas.regionAtIndex(republic, contains: krasnodar))
+    }
+
     /// Читать можно во время сборки: пишет фоновый поток, читают потоки
     /// отрисовки MapKit — по тайлу на поток.
     ///

@@ -79,8 +79,15 @@ final class MyMapAtlasTests: XCTestCase {
 
     // MARK: - Exploration
 
+    /// Krasnodar → Goryachy Klyuch. NOT «entirely inside Krasnodar Krai», as
+    /// this test used to say: the road runs through Adygea, and since the
+    /// enclave rule (fix round 3) the atlas says so. Natural Earth ships the
+    /// krai as ONE solid ring with no hole under the republic, so before the
+    /// rule both geometries covered these points and the krai won purely
+    /// because it came first in the grid bucket — the whole 50 km landed on
+    /// the wrapper. The claim of the test is unchanged: kilometres land where
+    /// they were DRIVEN, and their sum is still the trip's own distance.
     func testTripKilometresLandInTheRegionTheyWereDrivenIn() {
-        // Krasnodar → Goryachy Klyuch, entirely inside Krasnodar Krai.
         let route = Self.line(
             from: CLLocationCoordinate2D(latitude: 45.035, longitude: 38.975),
             to: CLLocationCoordinate2D(latitude: 44.630, longitude: 39.130),
@@ -93,12 +100,14 @@ final class MyMapAtlasTests: XCTestCase {
 
         let exploration = MapExploration.build(trips: [trip], visitedHashes: hashes, atlas: atlas)
 
-        XCTAssertEqual(exploration.regionCount, 1)
-        let region = try? XCTUnwrap(exploration.region(id: "RU-KDA"))
-        XCTAssertNotNil(region)
-        XCTAssertEqual(region?.tripCount, 1)
-        // ~50 km as the crow flies.
-        XCTAssertEqual(region?.km ?? 0, 50, accuracy: 8)
+        XCTAssertEqual(exploration.regionCount, 2, "дорога идёт через Адыгею")
+        let krai = try? XCTUnwrap(exploration.region(id: "RU-KDA"))
+        XCTAssertNotNil(krai)
+        XCTAssertEqual(krai?.tripCount, 1)
+        XCTAssertNotNil(exploration.region(id: "RU-AD"), "анклав обязан получить свои километры")
+        // ~50 km as the crow flies — сумма по обоим регионам, а не по одному.
+        XCTAssertEqual(exploration.totalKm, 50, accuracy: 8)
+        XCTAssertGreaterThan(krai?.km ?? 0, 0)
         XCTAssertEqual(exploration.tripCount, 1)
         XCTAssertFalse(exploration.isEmpty)
     }
@@ -186,7 +195,10 @@ final class MyMapAtlasTests: XCTestCase {
         let exploration = MapExploration.build(trips: [trip], visitedHashes: [], atlas: atlas)
 
         XCTAssertEqual(exploration.tripCount, 1)
-        XCTAssertEqual(exploration.region(id: "RU-KDA")?.km ?? 0, 50, accuracy: 1)
+        // Сумма по регионам, а не по одному: дорога идёт через Адыгею, и с
+        // правилом анклава километры делятся между ней и краем.
+        XCTAssertEqual(exploration.totalKm, 50, accuracy: 1)
+        XCTAssertGreaterThan(exploration.region(id: "RU-KDA")?.km ?? 0, 0)
         XCTAssertFalse(exploration.trips.first?.route.isEmpty ?? true,
                        "the pin still needs a route to draw and to be tapped on")
     }

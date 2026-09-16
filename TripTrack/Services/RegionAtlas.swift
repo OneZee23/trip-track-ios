@@ -100,6 +100,15 @@ final class RegionAtlas {
     /// three polygons instead of six hundred.
     private var grid: [Int: [Int]] = [:]
     private var regionIndexById: [String: Int] = [:]
+    /// Для каждого региона — индексы регионов МЕНЬШЕЙ рамки, чья рамка его
+    /// задевает. Считается один раз при разборе бандла.
+    ///
+    /// Нужен быстрому пути (`regionAtIndex(_:contains:)`), и нужен именно
+    /// СПИСКОМ, а не походом в сетку: правило анклава добавляет ему работу на
+    /// каждой точке трека, а точек в разборе финиша сотни тысяч. У
+    /// подавляющего большинства регионов список пуст, и тогда быстрый путь
+    /// стоит ровно столько же, сколько стоил до правила.
+    private var enclaves: [[Int]] = []
     private var loadTask: Task<Void, Never>?
 
     private init() {}
@@ -135,6 +144,7 @@ final class RegionAtlas {
         countries = parsed.countries
         grid = parsed.grid
         regionIndexById = parsed.regionIndexById
+        enclaves = parsed.enclaves
         isLoaded = true
         loadTask = nil
     }
@@ -155,9 +165,21 @@ final class RegionAtlas {
 
     /// Index form — used by the per-track-point attribution loop, which runs
     /// hundreds of thousands of times and must not build structs.
+    ///
+    /// **Правило анклава: из нескольких накрывших точку регионов побеждает
+    /// тот, у кого рамка МЕНЬШЕ.** Natural Earth отдаёт Краснодарский край
+    /// сплошным кольцом, без дырки под Адыгеей, — и до этого правила Майкоп
+    /// отвечал «Краснодарский край» просто потому, что край лежал в ячейке
+    /// сетки раньше. Ответ зависел от порядка строк в бандле, то есть был
+    /// случайным; километры и «посещённые регионы» доставались обёртке, а не
+    /// анклаву. Вложенные регионы различает только площадь: анклав по
+    /// определению меньше того, внутри чего он лежит.
     func regionIndex(containing coordinate: CLLocationCoordinate2D) -> Int? {
         let lat = coordinate.latitude, lon = coordinate.longitude
         guard let candidates = grid[Self.cellKey(lat: lat, lon: lon)] else { return nil }
+        // Кандидаты в ячейке лежат ПО ВОЗРАСТАНИЮ площади рамки (сортируются
+        // при разборе бандла), поэтому первое же попадание и есть самое
+        // мелкое — цикл не стал дороже, чем был до правила анклава.
         for index in candidates {
             let region = regions[index]
             guard region.bounds.contains(coordinate) else { continue }
@@ -169,11 +191,28 @@ final class RegionAtlas {
     /// Same test against one known region — the attribution loop tries the
     /// previous point's region first, and consecutive GPS points almost
     /// always share it.
+    ///
+    /// Быстрый путь обязан отвечать ТО ЖЕ, что и полный поиск, иначе правило
+    /// анклава живёт в одном резолвере из двух и Майкоп получает край или
+    /// республику в зависимости от того, откуда приехала предыдущая точка.
+    /// Поэтому «да» здесь значит «и никакой МЕНЬШИЙ регион эту точку не
+    /// накрывает»; кандидаты с рамкой не меньше отбрасываются сравнением, и
+    /// лишний луч по кольцу платится только у настоящего анклава.
     func regionAtIndex(_ index: Int, contains coordinate: CLLocationCoordinate2D) -> Bool {
         guard regions.indices.contains(index) else { return false }
         let region = regions[index]
-        guard region.bounds.contains(coordinate) else { return false }
-        return Self.contains(lat: coordinate.latitude, lon: coordinate.longitude, rings: region.rings)
+        guard region.bounds.contains(coordinate),
+              Self.contains(lat: coordinate.latitude, lon: coordinate.longitude,
+                            rings: region.rings) else { return false }
+        guard enclaves.indices.contains(index) else { return true }
+        for other in enclaves[index] {
+            let smaller = regions[other]
+            guard smaller.bounds.contains(coordinate),
+                  Self.contains(lat: coordinate.latitude, lon: coordinate.longitude,
+                                rings: smaller.rings) else { continue }
+            return false
+        }
+        return true
     }
 
     func cities(in regionId: String) -> [City] { citiesByRegion[regionId] ?? [] }
@@ -246,6 +285,7 @@ final class RegionAtlas {
         let countries: [MapCountry]
         let grid: [Int: [Int]]
         let regionIndexById: [String: Int]
+        let enclaves: [[Int]]
     }
 
     private struct Payload: Decodable {
@@ -376,6 +416,31 @@ final class RegionAtlas {
             }
         }
 
+        // Ячейки сортируются по площади рамки: правило анклава после этого —
+        // просто «первое попадание», без второго прохода и без сравнения
+        // площадей в цикле по точкам трека.
+        for key in grid.keys {
+            grid[key]?.sort { regions[$0].bounds.area < regions[$1].bounds.area }
+        }
+        // Кто в кого может быть вложен — ПО ЯЧЕЙКАМ СЕТКИ, а не парами по всем
+        // регионам. Вложенные обязаны делить хотя бы одну ячейку, а в ячейке
+        // их два-три; полный перебор 606 × 606 стоил бы под сотню
+        // миллисекунд отладочной сборки прямо в загрузке атласа, и первый же
+        // финиш поездки заплатил бы их на экране итогов.
+        var nested = [Set<Int>](repeating: [], count: regions.count)
+        for bucket in grid.values where bucket.count > 1 {
+            for outer in bucket {
+                let big = regions[outer].bounds
+                let area = big.area
+                for inner in bucket where inner != outer {
+                    let small = regions[inner].bounds
+                    guard small.area < area, small.intersects(big) else { continue }
+                    nested[outer].insert(inner)
+                }
+            }
+        }
+        let enclaves = nested.map(Array.init)
+
         var citiesByRegion: [String: [City]] = [:]
         for raw in payload.cities where raw.c.count == 2 {
             citiesByRegion[raw.r, default: []].append(City(
@@ -412,7 +477,8 @@ final class RegionAtlas {
             countryNames: countryNames,
             countries: countries,
             grid: grid,
-            regionIndexById: indexById
+            regionIndexById: indexById,
+            enclaves: enclaves
         )
     }
 }

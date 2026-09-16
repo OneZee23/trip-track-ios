@@ -421,6 +421,20 @@ struct GeoBounds {
         c.latitude >= minLat && c.latitude <= maxLat &&
         c.longitude >= minLon && c.longitude <= maxLon
     }
+
+    /// Площадь рамки в квадратных градусах.
+    ///
+    /// Не в квадратных километрах нарочно: единственный её читатель —
+    /// правило анклава (`RegionAtlas.regionIndex(containing:)`), а оно
+    /// СРАВНИВАЕТ две рамки, лежащие друг в друге. На одной широте искажение
+    /// Меркатора у обеих одно, и перевод в метры не изменил бы ни одного
+    /// ответа, зато добавил бы тригонометрию в цикл по точкам трека.
+    var area: Double { (maxLat - minLat) * (maxLon - minLon) }
+
+    func intersects(_ other: GeoBounds) -> Bool {
+        minLat <= other.maxLat && maxLat >= other.minLat &&
+        minLon <= other.maxLon && maxLon >= other.minLon
+    }
 }
 
 /// Running mean + extremes over coordinates; one instance per place.
