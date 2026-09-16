@@ -1277,6 +1277,8 @@ extension Translations {
         "sealKindRiddle": "жұмбақ",
         "sealKindMilestone": "белес",
         "sealAccessibility": "Мөр: {kind}",
+        "revealedTitle": "Ашылды",
+        "revealedNewPath": "{km} жаңа жол",
     ]
 
 }

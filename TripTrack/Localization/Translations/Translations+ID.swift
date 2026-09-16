@@ -1277,6 +1277,8 @@ extension Translations {
         "sealKindRiddle": "teka-teki",
         "sealKindMilestone": "tonggak",
         "sealAccessibility": "Segel: {kind}",
+        "revealedTitle": "Ditemukan",
+        "revealedNewPath": "{km} jalan baru",
     ]
 
 }

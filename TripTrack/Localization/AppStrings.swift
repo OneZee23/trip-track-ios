@@ -1069,6 +1069,22 @@ enum AppStrings {
         tr(lang, "sealAccessibility", ru: "Печать: {kind}", en: "Seal: {kind}")
             .replacingOccurrences(of: "{kind}", with: sealKind(lang, kind: kind))
     }
+
+    /// Заголовок блока на экране итогов: что эта поездка открыла на карте.
+    static func revealedTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "revealedTitle", ru: "Открыто", en: "Revealed")
+    }
+
+    /// «42 км нового пути» — первая часть строки блока «Открыто».
+    ///
+    /// Расстояние приходит УЖЕ НАПЕЧАТАННЫМ (`Measure`), токеном `{km}`:
+    /// единицу выбирает человек, и вписать её в текст значило бы соврать на
+    /// мильном телефоне. Одиннадцать таблиц получают готовую строку — живая
+    /// интерполяция внутри `ru:`/`en:` до них не доедет.
+    static func revealedNewPath(_ lang: LanguageManager.Language, km: String) -> String {
+        tr(lang, "revealedNewPath", ru: "{km} нового пути", en: "{km} of new road")
+            .replacingOccurrences(of: "{km}", with: km)
+    }
     /// Подпись региона в списке открытого: «с мая 2026».
     ///
     /// Месяц — РОДИТЕЛЬНЫЙ падеж (`StatsPeriodFormat.monthYearGenitive`), а не

@@ -141,6 +141,11 @@ struct TripCompleteSummaryView: View {
             .padding(.horizontal, 20)
             .padding(.top, 16)
 
+            // «Открыто» — между числами поездки и наградами: сначала
+            // «сколько проехал», потом «что от этого изменилось на карте»,
+            // потом опыт и значки.
+            revealedSection
+
             // Gamification section
             if let data = completionData {
                 gamificationSection(data: data, c: c)
@@ -226,17 +231,7 @@ struct TripCompleteSummaryView: View {
             .accessibilityIdentifier("summary_photo")
 
             Button {
-                if publishToFeed {
-                    mapVM.tripManager.updatePrivacy(for: trip.id, isPrivate: false)
-                    NotificationCenter.default.post(
-                        name: .tripPrivacyChanged,
-                        object: PrivacyChangePayload(tripId: trip.id, isPrivate: false)
-                    )
-                }
-                let saved = tripNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-                if saved != (trip.tripDescription ?? "") {
-                    mapVM.tripManager.updateNotes(for: trip.id, notes: saved)
-                }
+                commitEdits()
                 onDone()
                 // The trip you just made is the thing you want to look at, and
                 // the summary is a card, not the trip. Hand off to its detail.
@@ -258,6 +253,26 @@ struct TripCompleteSummaryView: View {
         .background(c.bg)
         .onChange(of: photoSelection) { _, items in
             syncPhotos(items)
+        }
+    }
+
+    /// Что человек наменял на этом экране — в базу.
+    ///
+    /// Своим методом, потому что выходов с экрана стало ДВА: «Готово» и тап по
+    /// блоку «Открыто». Второй уводит на «Атлас», и написанное описание с
+    /// галочкой публикации обязано пережить этот уход — иначе выход через
+    /// печать молча съедал бы работу.
+    private func commitEdits() {
+        if publishToFeed {
+            mapVM.tripManager.updatePrivacy(for: trip.id, isPrivate: false)
+            NotificationCenter.default.post(
+                name: .tripPrivacyChanged,
+                object: PrivacyChangePayload(tripId: trip.id, isPrivate: false)
+            )
+        }
+        let saved = tripNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if saved != (trip.tripDescription ?? "") {
+            mapVM.tripManager.updateNotes(for: trip.id, notes: saved)
         }
     }
 
@@ -438,6 +453,44 @@ struct TripCompleteSummaryView: View {
         .padding(16)
         .background(.white, in: RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
+    }
+
+    // MARK: - «Открыто» (0.7.0)
+
+    /// Блок находок — отдельным свойством, а не веткой в `body`: тело этого
+    /// экрана и так близко к пределу вывода типов SwiftUI (см. `CLAUDE.md`,
+    /// «Ловушки»), и вставлять в него ещё одно `if let` с собственной вёрсткой
+    /// нельзя.
+    ///
+    /// Разбор трека кончается ПОЗЖЕ остальных чисел финиша, поэтому сводка
+    /// доезжает до уже показанной карточки — и блок появляется пружиной, а не
+    /// подменяет содержимое рывком. `nil` — «ещё считается»: ни блока, ни
+    /// каркаса, ни надписи «ищем» (искать может и нечего).
+    @ViewBuilder
+    private var revealedSection: some View {
+        let found = completionData?.discoveries
+        Group {
+            if let found, !found.isEmpty {
+                TripRevealedBlock(
+                    trip: trip,
+                    discoveries: found,
+                    onOpen: { id in
+                        // Тем же путём, что «Готово»: правки человека
+                        // сохраняются ДО ухода с экрана, иначе тап по печати
+                        // молча выбрасывал бы набранное описание и снятую
+                        // галочку публикации.
+                        commitEdits()
+                        onDone()
+                        NotificationCenter.default.post(name: .openDiscovery, object: id)
+                    }
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .transition(.scale(scale: 0.96).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.42, dampingFraction: 0.82),
+                   value: completionData?.discoveries)
     }
 
     // MARK: - Gamification Section

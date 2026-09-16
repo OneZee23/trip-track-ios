@@ -1277,6 +1277,8 @@ extension Translations {
         "sealKindRiddle": "bilmece",
         "sealKindMilestone": "dönüm noktası",
         "sealAccessibility": "Mühür: {kind}",
+        "revealedTitle": "Keşfedildi",
+        "revealedNewPath": "{km} yeni yol",
     ]
 
 }

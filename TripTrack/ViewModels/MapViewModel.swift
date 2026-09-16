@@ -1007,6 +1007,50 @@ final class MapViewModel: ObservableObject {
             roadCard: nil
         )
         lastCompletedTrip = trip
+        debugAttachSampleDiscoveries(to: trip)
+    }
+
+    /// Кладёт в отладочный финиш правдоподобную сводку находок — иначе блок
+    /// «Открыто» на симуляторе не показать вовсе.
+    ///
+    /// Печати берутся НАСТОЯЩИЕ, из базы (`-seed-discoveries` кладёт их на
+    /// демо-поездку), и перештампованы на показанную поездку: сид садит их на
+    /// «Краснодар → Горячий Ключ», а отладочный вход открывает самую свежую
+    /// поездку, и без перештамповки `attach` их бы отбросил по `tripId`. Если
+    /// в базе пусто — две находки собираются на точках самого трека, чтобы
+    /// блок было видно и без сида.
+    ///
+    /// Километры и регион — числа, а не пересчёт: дельту тумана считает
+    /// `RevealedLayerStore` на финише, и звать её ради отладочного экрана
+    /// значило бы записать открытое, которого не было.
+    private func debugAttachSampleDiscoveries(to trip: Trip) {
+        Task { @MainActor in
+            var found = await DiscoveryStore.shared.all()
+            if found.isEmpty, trip.trackPoints.count > 4 {
+                let points = trip.trackPoints
+                found = [
+                    Discovery(
+                        kind: .riddle, key: "bridge:debug-sample", tripId: trip.id,
+                        coordinate: points[points.count / 2].coordinate,
+                        foundAt: trip.endDate ?? trip.startDate,
+                        symbol: .bridge, title: "Мост"),
+                    Discovery(
+                        kind: .milestone,
+                        key: "\(Milestone.firstRegion.rawValue):RU-KDA", tripId: trip.id,
+                        coordinate: points[0].coordinate,
+                        foundAt: trip.endDate ?? trip.startDate,
+                        symbol: Milestone.firstRegion.symbol)
+                ]
+            }
+            let sample = TripDiscoveries(
+                tripId: trip.id,
+                newKm: 42.4,
+                newRegionIds: ["RU-KDA"],
+                secrets: found.filter { $0.kind == .secret },
+                riddles: found.filter { $0.kind == .riddle },
+                milestones: found.filter { $0.kind == .milestone })
+            Self.attach(sample, to: &lastCompletionData, ifTrip: lastCompletedTrip?.id)
+        }
     }
     #endif
 

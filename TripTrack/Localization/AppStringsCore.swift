@@ -443,6 +443,49 @@ extension AppStrings {
         }
     }
 
+    /// «секрет» — авторская находка на треке (0.7.0).
+    ///
+    /// Отдельно от `nounSeals`: на карте все три вида — один медальон и одно
+    /// слово «знак», а в строке «Открыто» человек читает, ЧТО именно нашлось,
+    /// и «1 знак · 1 знак» не ответило бы ни на что.
+    static func nounSecrets(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "секрет", few: "секрета", many: "секретов")
+        case .en: return plural(lang, n, one: "secret", many: "secrets")
+        case .de: return plural(lang, n, one: "Geheimnis", many: "Geheimnisse")
+        case .es: return plural(lang, n, one: "secreto", many: "secretos")
+        case .fr: return plural(lang, n, one: "secret", many: "secrets")
+        case .it: return plural(lang, n, one: "segreto", many: "segreti")
+        case .pl: return plural(lang, n, one: "sekret", few: "sekrety", many: "sekretów")
+        case .id: return "rahasia"
+        case .tr: return "sır"
+        case .fil: return "lihim"
+        case .uk: return plural(lang, n, one: "секрет", few: "секрети", many: "секретів")
+        case .kk: return "құпия"
+        case .pt: return plural(lang, n, one: "segredo", many: "segredos")
+        }
+    }
+
+    /// «веха» — отметка собственной географии (0.7.0).
+    static func nounMilestones(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "веха", few: "вехи", many: "вех")
+        case .en: return plural(lang, n, one: "milestone", many: "milestones")
+        case .de: return plural(lang, n, one: "Meilenstein", many: "Meilensteine")
+        case .es: return plural(lang, n, one: "hito", many: "hitos")
+        case .fr: return plural(lang, n, one: "jalon", many: "jalons")
+        case .it: return plural(lang, n, one: "traguardo", many: "traguardi")
+        case .pl: return plural(lang, n, one: "kamień milowy", few: "kamienie milowe",
+                                many: "kamieni milowych")
+        case .id: return "tonggak"
+        case .tr: return "dönüm noktası"
+        case .fil: return "milyahe"
+        case .uk: return plural(lang, n, one: "віха", few: "віхи", many: "віх")
+        case .kk: return "белес"
+        case .pt: return plural(lang, n, one: "marco", many: "marcos")
+        }
+    }
+
     /// «проезд» — how many times a trip has gone past a place (0.6.8).
     static func nounPasses(_ lang: LanguageManager.Language, _ n: Int) -> String {
         switch lang {

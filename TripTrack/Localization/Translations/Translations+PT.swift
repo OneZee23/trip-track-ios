@@ -1277,6 +1277,8 @@ extension Translations {
         "sealKindRiddle": "enigma",
         "sealKindMilestone": "marco",
         "sealAccessibility": "Selo: {kind}",
+        "revealedTitle": "Descoberto",
+        "revealedNewPath": "{km} de estrada nova",
     ]
 
 }

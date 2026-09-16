@@ -84,6 +84,8 @@ final class MyMapViewModel: ObservableObject {
     private let discoveryStore: DiscoveryStore
     private let riddleCatalog: RiddleCatalog
     private var discoveryGeneration = 0
+    /// Печать, которую попросили показать раньше, чем приехал список печатей.
+    private var pendingDiscovery: UUID?
     /// Три уведомления финиша — одна пересборка. Почему это не «три лишних
     /// выборки», а видимая вспышка «всё закрыто», — см. `ReloadCoalescer`.
     private lazy var coalescer = ReloadCoalescer { [weak self] in
@@ -306,6 +308,11 @@ final class MyMapViewModel: ObservableObject {
 
         seals = found
         riddleHints = hints
+        // Печать, которую попросили показать, пока её ещё не было в списке.
+        if let awaited = pendingDiscovery, found.contains(where: { $0.id == awaited }) {
+            pendingDiscovery = nil
+            focusDiscovery(awaited)
+        }
         // Печать, которой больше нет (стёрли аккаунт, пересчитали базу), не
         // имеет права оставаться выбранной — карточка показывала бы призрак.
         if let current = selection, resolve(current) == nil { selection = nil }
@@ -401,6 +408,35 @@ final class MyMapViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Переход к находке
+
+    /// Показать печать, названную снаружи (блок «Открыто» на экране итогов,
+    /// вторая фаза `.openDiscovery → .navigateToDiscovery`).
+    ///
+    /// Камера здесь ДВИГАЕТСЯ — в отличие от тапа по самой печати: человек
+    /// пришёл с другого экрана и не знает, в какой угол мира смотрит карта.
+    /// Масштаб городской (`focusSpanMetres`), а не «весь регион»: печать
+    /// стоит в конкретном месте, и показывать её точкой посреди края значит
+    /// не показывать вовсе.
+    ///
+    /// Печати может ещё не быть: вкладка только смонтировалась, и выборка идёт.
+    /// Тогда id запоминается и применяется, как только список приедет, —
+    /// молчать было бы хуже всего, переход просто не случился бы.
+    func focusDiscovery(_ id: UUID) {
+        guard let seal = seals.first(where: { $0.id == id }) else {
+            pendingDiscovery = id
+            return
+        }
+        pendingDiscovery = nil
+        select(.discovery(id), zoom: false)
+        cameraCommand = .fit(
+            GeoBounds(around: seal.coordinate, metres: Self.focusSpanMetres), padding: .trip)
+    }
+
+    /// Ширина кадра вокруг печати — двенадцать километров: город целиком и
+    /// дорога, которой к печати приехали.
+    static let focusSpanMetres: Double = 12_000
+
     /// Selection → the thing it points at, or nil if it went away.
     private func resolve(_ selection: Selection) -> Any? {
         switch selection {
@@ -459,6 +495,22 @@ enum MapCameraCommand: Equatable {
 }
 
 extension GeoBounds: Equatable {
+    /// Квадрат заданной ширины вокруг точки.
+    ///
+    /// Чистой функцией и здесь же, рядом с `covering`: вторая арифметика
+    /// «градусы из метров» в проекте однажды разъехалась бы с первой. Долгота
+    /// делится на косинус широты — иначе на шестидесятой параллели кадр
+    /// выходит вдвое уже, чем просили.
+    init(around centre: CLLocationCoordinate2D, metres: Double) {
+        let metresPerDegree = 111_320.0
+        let half = metres / 2
+        let dLat = half / metresPerDegree
+        let dLon = half / (metresPerDegree * max(0.01, cos(centre.latitude * .pi / 180)))
+        self = GeoBounds(
+            minLat: centre.latitude - dLat, maxLat: centre.latitude + dLat,
+            minLon: centre.longitude - dLon, maxLon: centre.longitude + dLon)
+    }
+
     init?(covering coordinates: [CLLocationCoordinate2D]) {
         guard !coordinates.isEmpty else { return nil }
         var box = GeoBounds(minLat: 90, maxLat: -90, minLon: 180, maxLon: -180)

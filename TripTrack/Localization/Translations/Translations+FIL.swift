@@ -1277,6 +1277,8 @@ extension Translations {
         "sealKindRiddle": "palaisipan",
         "sealKindMilestone": "palatandaan",
         "sealAccessibility": "Selyo: {kind}",
+        "revealedTitle": "Natuklasan",
+        "revealedNewPath": "{km} na bagong daan",
     ]
 
 }

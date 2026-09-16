@@ -39,6 +39,11 @@ extension Notification.Name {
     /// а тот — в ленте или профиле): двухфазно, как `.openTripDetail`.
     static let openPlace = Notification.Name("openPlace")
     static let navigateToPlace = Notification.Name("navigateToPlace")
+    /// Открыть находку с экрана итогов (0.7.0): блок «Открыто» живёт в листе
+    /// финиша, а печать — во вкладке «Атлас». Тот же двухфазный переход, что у
+    /// `.openPlace`. Object — `Discovery.id`.
+    static let openDiscovery = Notification.Name("openDiscovery")
+    static let navigateToDiscovery = Notification.Name("navigateToDiscovery")
     /// Открыть чужое путешествие из чужого стека (тот же двухфазный переход,
     /// что у `.openTripDetail`/`.openPlace`) — deep link `triptrack://journey/<uuid>`
     /// и push-уведомления шлют сюда. Object — `UUID` путешествия.
@@ -291,6 +296,23 @@ struct ContentView: View {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(300))
                 NotificationCenter.default.post(name: .navigateToPlace, object: id)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openDiscovery)) { notification in
+            // Блок «Открыто» живёт в листе финиша, печать — на «Атласе». Тот же
+            // двухфазный переход, что у `.openPlace`: сначала вкладка, потом
+            // повтор — уже для смонтированной карты.
+            //
+            // Лист финиша закрывает САМ блок (он сначала сохраняет описание и
+            // публикацию — `commitEdits`), а эта строка — страховка на случай
+            // второго отправителя: карта под непрозрачным листом не видна, и
+            // переход выглядел бы как ничего не произошло.
+            guard let id = notification.object as? UUID else { return }
+            mapVM.lastCompletedTrip = nil
+            selectedTab = .maps
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                NotificationCenter.default.post(name: .navigateToDiscovery, object: id)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .dismissTripSummary)) { _ in

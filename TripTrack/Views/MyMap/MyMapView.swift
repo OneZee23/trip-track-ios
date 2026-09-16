@@ -87,6 +87,13 @@ struct MyMapView: View {
         .task {
             await vm.loadIfNeeded(tripManager: mapVM.tripManager, territory: mapVM.territoryManager)
         }
+        // Вторая фаза перехода с экрана итогов: вкладка уже переключена, стек
+        // карты смонтирован — можно везти камеру к печати (`focusDiscovery`
+        // сам дождётся выборки, если печати ещё нет в списке).
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToDiscovery)) { note in
+            guard let id = note.object as? UUID else { return }
+            vm.focusDiscovery(id)
+        }
         .fullScreenCover(item: $openedTrip) { opened in
             NavigationStack {
                 TripDetailView(
