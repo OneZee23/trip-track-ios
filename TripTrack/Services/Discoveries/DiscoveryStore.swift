@@ -166,7 +166,10 @@ final class DiscoveryStore: @unchecked Sendable {
         let id: UUID
         let kind: DiscoveryKind
         let key: String
-        let tripId: UUID
+        /// Поездка, на которой находку сделал ДРУГОЙ телефон. `nil` — строка
+        /// пришла без неё: дописать такую можно, завести — нет (открывать
+        /// поездку будет нечем).
+        let tripId: UUID?
         let coordinate: CLLocationCoordinate2D?
         let foundAt: Date
         let symbol: SealSymbol
@@ -182,10 +185,11 @@ final class DiscoveryStore: @unchecked Sendable {
     /// сервер знает, а этот телефон — нет. Новую строку кладём как обычно;
     /// `foundAt` у уже лежащей не трогаем по тому же правилу.
     ///
-    /// **Новую строку заводим только там, где знаем МЕСТО.** Уже лежащей
-    /// находке место не нужно — оно у неё своё; а новая без координаты встала
-    /// бы печатью в Гвинейском заливе. Поэтому `coordinate == nil` дописывает,
-    /// но не заводит.
+    /// **Новую строку заводим только там, где знаем МЕСТО и ПОЕЗДКУ.** Уже
+    /// лежащей находке ни то ни другое не нужно — они у неё свои; а новая без
+    /// координаты встала бы печатью в Гвинейском заливе, и открывать её было
+    /// бы нечем. Поэтому `coordinate == nil` (как и `tripId == nil`)
+    /// дописывает, но не заводит.
     ///
     /// Синхронный (`performAndWait`), как `wipe()`: зовёт его `PullApplier` —
     /// синхронная точка на главном актёре, — а работы здесь на десяток строк.
@@ -206,12 +210,12 @@ final class DiscoveryStore: @unchecked Sendable {
                         entity.story = story
                     }
                     if item.verified && !entity.verified { entity.verified = true }
-                } else if let coordinate = item.coordinate {
+                } else if let coordinate = item.coordinate, let tripId = item.tripId {
                     let entity = DiscoveryEntity(context: context)
                     entity.id = item.id
                     entity.kind = item.kind.rawValue
                     entity.key = item.key
-                    entity.tripId = item.tripId
+                    entity.tripId = tripId
                     entity.latitude = coordinate.latitude
                     entity.longitude = coordinate.longitude
                     entity.foundAt = item.foundAt

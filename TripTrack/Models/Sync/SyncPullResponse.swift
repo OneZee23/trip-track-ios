@@ -23,9 +23,16 @@ struct SyncPullResponse: Codable {
     /// снимают поштучно. Поле остаётся, потому что форма секции общая для всех
     /// типов, и сервер, который однажды начнёт его наполнять, не должен ронять
     /// разбор пула.
+    ///
+    /// **`[String]`, а не `[UUID]`,** — и это не вкусовщина: ключ находки это
+    /// id секрета из каталога или `"<type>:<geohash7>"` загадки
+    /// (`"pass:ubcr4xk"`), то есть строка, которая UUID не является никогда.
+    /// Пока список пуст, `[]` декодируется любым типом; в день, когда сервер
+    /// положит в него первую строку, `[UUID]` уронил бы не секцию находок, а
+    /// ВЕСЬ `/sync/pull`.
     struct DiscoveriesSection: Codable {
         let upserted: [DiscoverySyncPayload]
-        let deleted: [UUID]?
+        let deleted: [String]?
     }
 
     /// Count of non-deleted entities the server currently holds for this
@@ -56,10 +63,15 @@ struct SyncPullResponse: Codable {
     let discoveries: DiscoveriesSection?
 }
 
-/// Находка на проводе. Координаты в ней НЕТ — и это контракт волны 3, а не
-/// упущение разбора: сервер хранит заявку `secret_find(secretId, accountId,
-/// tripId, foundAt, verified)`, а где именно человек проехал, знает только сам
-/// телефон. Что с этим делает клиент — см. `PullApplier.applyDiscoveries`.
+/// Находка на проводе.
+///
+/// Координата у строки ЕСТЬ, но не у каждой: фикс-волна волны 3 научила сервер
+/// отдавать `latitude`/`longitude` (центр первой ячейки заявки) **только для
+/// подтверждённых** находок — у неподтверждённой сервер своего трека не видел
+/// и ручаться за место не может. Отсюда и разбор: пара пришла целиком —
+/// секрет со второго телефона встаёт печатью здесь; не пришла — прежний вывод
+/// по ключу (загадка) или «дописать, но не заводить» (секрет). Что с этим
+/// делает клиент — см. `PullApplier.remote(from:)`.
 struct DiscoverySyncPayload: Codable {
     /// Ключ находки: id секрета из каталога или `"<type>:<geohash7>"` загадки.
     let secretId: String
@@ -68,6 +80,11 @@ struct DiscoverySyncPayload: Codable {
     let foundAt: Date
     let verified: Bool?
     let tripId: UUID?
+    /// Центр первой ячейки заявки. `nil` у неподтверждённой находки и у
+    /// сервера до фикс-волны волны 3 — обе половины обязаны прийти вместе,
+    /// одна без другой не значит ничего.
+    let latitude: Double?
+    let longitude: Double?
     let title: String?
     let story: String?
 }

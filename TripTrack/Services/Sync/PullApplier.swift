@@ -94,10 +94,12 @@ final class PullApplier {
     /// ни поездки он не двигает (правило «первая находка побеждает» то же, что
     /// у `upsert`).
     ///
-    /// Координаты в контракте нет: сервер её не хранит. У загадки место
-    /// выводится из собственного ключа (`"<type>:<geohash7>"`, центр ячейки —
-    /// ±75 м, то есть тот же объект), у секрета вывести неоткуда — в каталоге
-    /// лежат одни усечённые хеши. Что делать с находкой без места, решает
+    /// Место находки берётся в трёх шагах, и первый из них появился только
+    /// после фикс-волны волны 3: координата из СТРОКИ ПУЛА (её сервер шлёт
+    /// для подтверждённых находок), иначе собственный ключ загадки
+    /// (`"<type>:<geohash7>"`, центр ячейки — ±75 м, то есть тот же объект),
+    /// иначе ничего — у секрета вывести неоткуда, в каталоге лежат одни
+    /// усечённые хеши. Что делать с находкой без места, решает
     /// `DiscoveryStore.applyRemote`: дописать можно, завести — нет.
     private func applyDiscoveries(_ section: SyncPullResponse.DiscoveriesSection) {
         let rows = section.upserted.compactMap(Self.remote(from:))
@@ -105,23 +107,46 @@ final class PullApplier {
         discoveries.applyRemote(rows)
     }
 
-    /// Чистое превращение строки пула в находку. `nil` — строку не применить
-    /// вовсе: незнакомый вид или нет поездки, по которой её открывать.
+    /// Чистое превращение строки пула в находку. `nil` — вид незнаком, и
+    /// применить строку нечем вовсе.
+    ///
+    /// `tripId` здесь НЕ обязателен: он нужен только для ЗАВЕДЕНИЯ строки
+    /// (без него не открыть поездку), а дописать `title`/`story`/`verified`
+    /// к уже лежащей находке можно и без него. Отсекает такую строку
+    /// `DiscoveryStore.applyRemote`, на ветке заведения.
     static func remote(from payload: DiscoverySyncPayload) -> DiscoveryStore.Remote? {
-        guard let kind = DiscoveryKind(rawValue: payload.kind),
-              let tripId = payload.tripId
-        else { return nil }
+        guard let kind = DiscoveryKind(rawValue: payload.kind) else { return nil }
         return DiscoveryStore.Remote(
             id: Discovery.id(kind: kind, key: payload.secretId),
             kind: kind,
             key: payload.secretId,
-            tripId: tripId,
-            coordinate: coordinate(forKind: kind, key: payload.secretId),
+            tripId: payload.tripId,
+            coordinate: coordinate(for: payload, kind: kind),
             foundAt: payload.foundAt,
             symbol: payload.symbol.flatMap(SealSymbol.init(rawValue:)) ?? .generic,
             title: payload.title,
             story: payload.story,
             verified: payload.verified ?? false)
+    }
+
+    /// Место находки: своя координата строки, иначе вывод по ключу загадки.
+    ///
+    /// Координату сервер шлёт только у ПОДТВЕРЖДЁННОЙ находки — своей проверки
+    /// клиенту заводить не обязательно, но она стоит: пара чисел, пришедшая
+    /// без `verified`, означала бы, что контракт на той стороне изменился, и
+    /// ставить по ней печать нельзя. Ровные нули отбрасываются отдельно: у
+    /// координаты в базе нет пустого значения, и (0, 0) — это не «неизвестно»,
+    /// а точка в Гвинейском заливе.
+    private static func coordinate(
+        for payload: DiscoverySyncPayload, kind: DiscoveryKind
+    ) -> CLLocationCoordinate2D? {
+        if payload.verified == true,
+           let latitude = payload.latitude, let longitude = payload.longitude,
+           !(latitude == 0 && longitude == 0) {
+            let sent = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            if CLLocationCoordinate2DIsValid(sent) { return sent }
+        }
+        return coordinate(forKind: kind, key: payload.secretId)
     }
 
     /// Место находки по её ключу. Умеет ровно один вид — загадку, у которой
@@ -131,7 +156,7 @@ final class PullApplier {
     ) -> CLLocationCoordinate2D? {
         guard kind == .riddle else { return nil }
         let parts = key.split(separator: ":")
-        guard parts.count == 2, parts[1].count >= 5 else { return nil }
+        guard parts.count == 2, parts[1].count >= 7 else { return nil }
         return GeohashEncoder.centerCoordinate(of: String(parts[1]))
     }
 
