@@ -310,6 +310,7 @@ final class LocalizationTests: XCTestCase {
         check("roadRarity", RoadRarity.self) { "\($0)" }
         check("roadLevel", RoadLevel.self) { "\($0)" }
         check("zoneStatus", ZoneStatus.self) { "\($0)" }
+        check("riddleLine", RiddleType.self) { $0.rawValue }
     }
 
     /// Badge copy actually reaches the table rather than falling back.

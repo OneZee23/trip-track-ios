@@ -16,6 +16,7 @@ extension Translations {
         table.merge(tr3) { _, new in new }
         table.merge(tr4) { _, new in new }
         table.merge(tr5) { _, new in new }
+        table.merge(tr6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Mühür: {kind}",
         "revealedTitle": "Keşfedildi",
         "revealedNewPath": "{km} yeni yol",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let tr6: [String: String] = [
+        "riddleLine.pass": "Buralarda bir yerde yol bir sırtı aşıyor",
+        "riddleLine.lighthouse": "Bu dairenin içinde bir yerde bir deniz feneri var",
+        "riddleLine.border": "Bu dairenin içinde bir yerde yol bir sınır kapısına varıyor",
+        "riddleLine.ferry": "Buralarda bir yerde yol bir feribot iskelesinde bitiyor",
+        "riddleLine.dam": "Bu dairenin içinde bir yerde bir baraj suyu tutuyor",
+        "riddleLine.bridge": "Buralarda bir yerde bir köprü yolu büyük bir nehrin üzerinden geçiriyor",
+        "riddleLine.viewpoint": "Bu dairenin içinde bir yerde manzaralı bir nokta var",
+        "riddleLine.observatory": "Buralarda bir yerde bir gözlemevi var",
+        "riddleLine.seaRoad": "Bu dairenin içinde bir yerde yol denize çıkıyor",
+        "riddleLine.extreme": "Buralarda bir yerde ülkenin en uç noktası var",
+        "riddleLine.centre": "Bu dairenin içinde bir yerde coğrafi bir merkez var",
+        "riddleLine.tripoint": "Buralarda bir yerde üç ülkenin sınırları birleşiyor",
+        "riddleSolvedTitle": "Bilmece çözüldü",
     ]
 
 }

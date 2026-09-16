@@ -16,6 +16,7 @@ extension Translations {
         table.merge(fr3) { _, new in new }
         table.merge(fr4) { _, new in new }
         table.merge(fr5) { _, new in new }
+        table.merge(fr6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Sceau : {kind}",
         "revealedTitle": "Découvert",
         "revealedNewPath": "{km} de route inédite",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let fr6: [String: String] = [
+        "riddleLine.pass": "Quelque part ici, la route franchit une crête",
+        "riddleLine.lighthouse": "Quelque part dans ce cercle se dresse un phare",
+        "riddleLine.border": "Quelque part dans ce cercle, une route mène à un poste frontière",
+        "riddleLine.ferry": "Quelque part ici, la route s'arrête à un embarcadère de bac",
+        "riddleLine.dam": "Quelque part dans ce cercle, un barrage retient l'eau",
+        "riddleLine.bridge": "Quelque part ici, un pont porte la route au-dessus d'un grand fleuve",
+        "riddleLine.viewpoint": "Quelque part dans ce cercle, il y a un point de vue",
+        "riddleLine.observatory": "Quelque part ici se trouve un observatoire",
+        "riddleLine.seaRoad": "Quelque part dans ce cercle, une route se termine dans la mer",
+        "riddleLine.extreme": "Quelque part ici se trouve l'extrémité du pays",
+        "riddleLine.centre": "Quelque part dans ce cercle se trouve un centre géographique",
+        "riddleLine.tripoint": "Quelque part ici se rejoignent les frontières de trois pays",
+        "riddleSolvedTitle": "Énigme résolue",
     ]
 
 }

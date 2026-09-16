@@ -16,6 +16,7 @@ extension Translations {
         table.merge(kk3) { _, new in new }
         table.merge(kk4) { _, new in new }
         table.merge(kk5) { _, new in new }
+        table.merge(kk6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Мөр: {kind}",
         "revealedTitle": "Ашылды",
         "revealedNewPath": "{km} жаңа жол",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let kk6: [String: String] = [
+        "riddleLine.pass": "Осы маңда бір жерде жол жотадан асып өтеді",
+        "riddleLine.lighthouse": "Осы шеңбердің ішінде бір жерде шамшырақ тұр",
+        "riddleLine.border": "Осы шеңбердің ішінде бір жерде жол шекара бекетіне жетеді",
+        "riddleLine.ferry": "Осы маңда бір жерде жол паром айлағында аяқталады",
+        "riddleLine.dam": "Осы шеңбердің ішінде бір жерде бөген суды ұстап тұр",
+        "riddleLine.bridge": "Осы маңда бір жерде көпір жолды үлкен өзеннен өткізеді",
+        "riddleLine.viewpoint": "Осы шеңбердің ішінде бір жерде көрініс ашылатын орын бар",
+        "riddleLine.observatory": "Осы маңда бір жерде обсерватория бар",
+        "riddleLine.seaRoad": "Осы шеңбердің ішінде бір жерде жол теңізге тіреледі",
+        "riddleLine.extreme": "Осы маңда бір жерде елдің шеткі нүктесі жатыр",
+        "riddleLine.centre": "Осы шеңбердің ішінде бір жерде географиялық орталық жатыр",
+        "riddleLine.tripoint": "Осы маңда бір жерде үш елдің шекарасы түйіседі",
+        "riddleSolvedTitle": "Жұмбақ шешілді",
     ]
 
 }

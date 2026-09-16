@@ -227,6 +227,12 @@ targets:
       # а без этой строки тест молча проходит на пустом каталоге.
       - path: TripTrack/Resources/VehicleCatalog.json
         buildPhase: resources
+      # И с бандлом загадок 0.7.0 — по той же причине: `RiddleCatalogTests`
+      # проверяет НАСТОЯЩИЙ файл, а без этой строки он проверял бы пустоту.
+      - path: TripTrack/Resources/Riddles.json
+        buildPhase: resources
+      - path: TripTrack/Resources/Secrets.json
+        buildPhase: resources
     dependencies:
       - target: TripTrack
     settings:

@@ -3,6 +3,7 @@
 xcuserdata/
 *.xcworkspace/
 DerivedData/
+.dd/
 build/
 *.pbxuser
 *.mode1v3
@@ -60,3 +61,6 @@ crashes/
 
 # Python bytecode from the asset tooling
 Tools/__pycache__/
+
+# Overpass/Wikidata response cache for Tools/build_secrets.py
+Tools/cache/

@@ -6723,4 +6723,72 @@ enum AppStrings {
            ru: "Ссылка устарела, профиль закрыт или его владелец вас заблокировал. Мы не показываем, какой именно случай — иначе по ссылке можно было бы проверять, существует ли аккаунт.",
            en: "The link is stale, the profile is private, or its owner blocked you. We do not say which — otherwise a link could be used to check whether an account exists.")
     }
+
+    // MARK: - Находки (0.7.0)
+
+    /// Строка загадки: круг на карте и одно предложение о том, что в нём
+    /// искать. Саму точку не называем — в этом и загадка; имя объекта
+    /// показывается только после того, как трек прошёл мимо.
+    ///
+    /// Единицы в тексте не пишутся никогда: радиус рисует круг на карте, а
+    /// расстояние до него печатает `Measure`. И ни одна из двенадцати строк
+    /// не зовёт ехать быстрее и не просит остановиться у обочины — загадка
+    /// решается тем, что человек и так проехал мимо.
+    static func riddleLine(_ lang: LanguageManager.Language, type: RiddleType) -> String {
+        switch type {
+        case .pass:
+            return tr(lang, "riddleLine.pass",
+                      ru: "Где-то здесь дорога переваливает через хребет",
+                      en: "Somewhere here the road crosses a ridge")
+        case .lighthouse:
+            return tr(lang, "riddleLine.lighthouse",
+                      ru: "Где-то в этом круге стоит маяк",
+                      en: "Somewhere in this circle there is a lighthouse")
+        case .border:
+            return tr(lang, "riddleLine.border",
+                      ru: "Где-то в этом круге дорога подходит к пограничному посту",
+                      en: "Somewhere in this circle a road comes up to a border post")
+        case .ferry:
+            return tr(lang, "riddleLine.ferry",
+                      ru: "Где-то здесь дорога заканчивается причалом парома",
+                      en: "Somewhere here the road ends at a ferry pier")
+        case .dam:
+            return tr(lang, "riddleLine.dam",
+                      ru: "Где-то в этом круге воду держит плотина",
+                      en: "Somewhere in this circle a dam holds back the water")
+        case .bridge:
+            return tr(lang, "riddleLine.bridge",
+                      ru: "Где-то здесь мост переносит дорогу через большую реку",
+                      en: "Somewhere here a bridge carries the road over a big river")
+        case .viewpoint:
+            return tr(lang, "riddleLine.viewpoint",
+                      ru: "Где-то в этом круге есть место, откуда открывается вид",
+                      en: "Somewhere in this circle there is a spot with a view")
+        case .observatory:
+            return tr(lang, "riddleLine.observatory",
+                      ru: "Где-то здесь есть обсерватория",
+                      en: "Somewhere here there is an observatory")
+        case .seaRoad:
+            return tr(lang, "riddleLine.seaRoad",
+                      ru: "Где-то в этом круге дорога упирается в море",
+                      en: "Somewhere in this circle a road runs into the sea")
+        case .extreme:
+            return tr(lang, "riddleLine.extreme",
+                      ru: "Где-то здесь проходит самый край страны",
+                      en: "Somewhere here lies the very edge of the country")
+        case .centre:
+            return tr(lang, "riddleLine.centre",
+                      ru: "Где-то в этом круге — географический центр",
+                      en: "Somewhere in this circle lies a geographic centre")
+        case .tripoint:
+            return tr(lang, "riddleLine.tripoint",
+                      ru: "Где-то здесь сходятся границы трёх стран",
+                      en: "Somewhere here the borders of three countries meet")
+        }
+    }
+
+    /// Заголовок карточки решённой загадки.
+    static func riddleSolvedTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "riddleSolvedTitle", ru: "Загадка решена", en: "Riddle solved")
+    }
 }

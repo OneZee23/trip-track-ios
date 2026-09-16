@@ -16,6 +16,7 @@ extension Translations {
         table.merge(de3) { _, new in new }
         table.merge(de4) { _, new in new }
         table.merge(de5) { _, new in new }
+        table.merge(de6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Siegel: {kind}",
         "revealedTitle": "Entdeckt",
         "revealedNewPath": "{km} neue Strecke",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let de6: [String: String] = [
+        "riddleLine.pass": "Irgendwo hier führt die Straße über einen Bergkamm",
+        "riddleLine.lighthouse": "Irgendwo in diesem Kreis steht ein Leuchtturm",
+        "riddleLine.border": "Irgendwo in diesem Kreis führt eine Straße zu einem Grenzposten",
+        "riddleLine.ferry": "Irgendwo hier endet die Straße an einem Fähranleger",
+        "riddleLine.dam": "Irgendwo in diesem Kreis hält eine Staumauer das Wasser",
+        "riddleLine.bridge": "Irgendwo hier trägt eine Brücke die Straße über einen großen Fluss",
+        "riddleLine.viewpoint": "Irgendwo in diesem Kreis gibt es einen Platz mit Aussicht",
+        "riddleLine.observatory": "Irgendwo hier steht eine Sternwarte",
+        "riddleLine.seaRoad": "Irgendwo in diesem Kreis läuft eine Straße ins Meer",
+        "riddleLine.extreme": "Irgendwo hier liegt der äußerste Rand des Landes",
+        "riddleLine.centre": "Irgendwo in diesem Kreis liegt ein geografischer Mittelpunkt",
+        "riddleLine.tripoint": "Irgendwo hier treffen die Grenzen von drei Ländern aufeinander",
+        "riddleSolvedTitle": "Rätsel gelöst",
     ]
 
 }

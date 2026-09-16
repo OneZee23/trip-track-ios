@@ -16,6 +16,7 @@ extension Translations {
         table.merge(pl3) { _, new in new }
         table.merge(pl4) { _, new in new }
         table.merge(pl5) { _, new in new }
+        table.merge(pl6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Pieczęć: {kind}",
         "revealedTitle": "Odkryte",
         "revealedNewPath": "{km} nowej drogi",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let pl6: [String: String] = [
+        "riddleLine.pass": "Gdzieś tutaj droga przecina grzbiet górski",
+        "riddleLine.lighthouse": "Gdzieś w tym okręgu stoi latarnia morska",
+        "riddleLine.border": "Gdzieś w tym okręgu droga dochodzi do przejścia granicznego",
+        "riddleLine.ferry": "Gdzieś tutaj droga kończy się przystanią promu",
+        "riddleLine.dam": "Gdzieś w tym okręgu zapora trzyma wodę",
+        "riddleLine.bridge": "Gdzieś tutaj most prowadzi drogę nad dużą rzeką",
+        "riddleLine.viewpoint": "Gdzieś w tym okręgu jest punkt widokowy",
+        "riddleLine.observatory": "Gdzieś tutaj jest obserwatorium",
+        "riddleLine.seaRoad": "Gdzieś w tym okręgu droga kończy się w morzu",
+        "riddleLine.extreme": "Gdzieś tutaj leży skrajny punkt kraju",
+        "riddleLine.centre": "Gdzieś w tym okręgu leży środek geograficzny",
+        "riddleLine.tripoint": "Gdzieś tutaj spotykają się granice trzech państw",
+        "riddleSolvedTitle": "Zagadka rozwiązana",
     ]
 
 }

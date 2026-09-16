@@ -16,6 +16,7 @@ extension Translations {
         table.merge(uk3) { _, new in new }
         table.merge(uk4) { _, new in new }
         table.merge(uk5) { _, new in new }
+        table.merge(uk6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Печатка: {kind}",
         "revealedTitle": "Відкрито",
         "revealedNewPath": "{km} нового шляху",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let uk6: [String: String] = [
+        "riddleLine.pass": "Десь тут дорога переходить через хребет",
+        "riddleLine.lighthouse": "Десь у цьому колі стоїть маяк",
+        "riddleLine.border": "Десь у цьому колі дорога підходить до прикордонного пункту",
+        "riddleLine.ferry": "Десь тут дорога закінчується причалом порома",
+        "riddleLine.dam": "Десь у цьому колі воду тримає гребля",
+        "riddleLine.bridge": "Десь тут міст переносить дорогу через велику річку",
+        "riddleLine.viewpoint": "Десь у цьому колі є місце, звідки відкривається краєвид",
+        "riddleLine.observatory": "Десь тут є обсерваторія",
+        "riddleLine.seaRoad": "Десь у цьому колі дорога впирається в море",
+        "riddleLine.extreme": "Десь тут проходить самий край країни",
+        "riddleLine.centre": "Десь у цьому колі — географічний центр",
+        "riddleLine.tripoint": "Десь тут сходяться кордони трьох країн",
+        "riddleSolvedTitle": "Загадку розгадано",
     ]
 
 }

@@ -16,6 +16,7 @@ extension Translations {
         table.merge(pt3) { _, new in new }
         table.merge(pt4) { _, new in new }
         table.merge(pt5) { _, new in new }
+        table.merge(pt6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Selo: {kind}",
         "revealedTitle": "Descoberto",
         "revealedNewPath": "{km} de estrada nova",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let pt6: [String: String] = [
+        "riddleLine.pass": "Em algum lugar por aqui a estrada atravessa uma serra",
+        "riddleLine.lighthouse": "Em algum lugar deste círculo há um farol",
+        "riddleLine.border": "Em algum lugar deste círculo uma estrada chega a um posto de fronteira",
+        "riddleLine.ferry": "Em algum lugar por aqui a estrada termina num cais de ferry",
+        "riddleLine.dam": "Em algum lugar deste círculo uma barragem segura a água",
+        "riddleLine.bridge": "Em algum lugar por aqui uma ponte leva a estrada sobre um grande rio",
+        "riddleLine.viewpoint": "Em algum lugar deste círculo há um miradouro",
+        "riddleLine.observatory": "Em algum lugar por aqui há um observatório",
+        "riddleLine.seaRoad": "Em algum lugar deste círculo uma estrada termina no mar",
+        "riddleLine.extreme": "Em algum lugar por aqui fica o extremo do país",
+        "riddleLine.centre": "Em algum lugar deste círculo fica um centro geográfico",
+        "riddleLine.tripoint": "Em algum lugar por aqui encontram-se as fronteiras de três países",
+        "riddleSolvedTitle": "Enigma resolvido",
     ]
 
 }

@@ -16,6 +16,7 @@ extension Translations {
         table.merge(id3) { _, new in new }
         table.merge(id4) { _, new in new }
         table.merge(id5) { _, new in new }
+        table.merge(id6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Segel: {kind}",
         "revealedTitle": "Ditemukan",
         "revealedNewPath": "{km} jalan baru",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let id6: [String: String] = [
+        "riddleLine.pass": "Di suatu tempat di sini jalan melintasi punggung pegunungan",
+        "riddleLine.lighthouse": "Di suatu tempat dalam lingkaran ini ada mercusuar",
+        "riddleLine.border": "Di suatu tempat dalam lingkaran ini jalan menuju pos perbatasan",
+        "riddleLine.ferry": "Di suatu tempat di sini jalan berakhir di dermaga feri",
+        "riddleLine.dam": "Di suatu tempat dalam lingkaran ini bendungan menahan air",
+        "riddleLine.bridge": "Di suatu tempat di sini jembatan membawa jalan melintasi sungai besar",
+        "riddleLine.viewpoint": "Di suatu tempat dalam lingkaran ini ada tempat berpemandangan",
+        "riddleLine.observatory": "Di suatu tempat di sini ada observatorium",
+        "riddleLine.seaRoad": "Di suatu tempat dalam lingkaran ini jalan berakhir di laut",
+        "riddleLine.extreme": "Di suatu tempat di sini terletak ujung negeri",
+        "riddleLine.centre": "Di suatu tempat dalam lingkaran ini terletak pusat geografis",
+        "riddleLine.tripoint": "Di suatu tempat di sini batas tiga negara bertemu",
+        "riddleSolvedTitle": "Teka-teki terpecahkan",
     ]
 
 }

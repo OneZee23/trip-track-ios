@@ -16,6 +16,7 @@ extension Translations {
         table.merge(it3) { _, new in new }
         table.merge(it4) { _, new in new }
         table.merge(it5) { _, new in new }
+        table.merge(it6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Sigillo: {kind}",
         "revealedTitle": "Scoperto",
         "revealedNewPath": "{km} di strada nuova",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let it6: [String: String] = [
+        "riddleLine.pass": "Da qualche parte qui la strada valica un crinale",
+        "riddleLine.lighthouse": "Da qualche parte in questo cerchio c'è un faro",
+        "riddleLine.border": "Da qualche parte in questo cerchio una strada arriva a un posto di frontiera",
+        "riddleLine.ferry": "Da qualche parte qui la strada finisce a un pontile del traghetto",
+        "riddleLine.dam": "Da qualche parte in questo cerchio una diga trattiene l'acqua",
+        "riddleLine.bridge": "Da qualche parte qui un ponte porta la strada oltre un grande fiume",
+        "riddleLine.viewpoint": "Da qualche parte in questo cerchio c'è un punto panoramico",
+        "riddleLine.observatory": "Da qualche parte qui c'è un osservatorio",
+        "riddleLine.seaRoad": "Da qualche parte in questo cerchio una strada finisce nel mare",
+        "riddleLine.extreme": "Da qualche parte qui c'è l'estremità del paese",
+        "riddleLine.centre": "Da qualche parte in questo cerchio c'è un centro geografico",
+        "riddleLine.tripoint": "Da qualche parte qui si incontrano i confini di tre paesi",
+        "riddleSolvedTitle": "Enigma risolto",
     ]
 
 }

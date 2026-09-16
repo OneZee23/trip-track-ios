@@ -16,6 +16,7 @@ extension Translations {
         table.merge(es3) { _, new in new }
         table.merge(es4) { _, new in new }
         table.merge(es5) { _, new in new }
+        table.merge(es6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Sello: {kind}",
         "revealedTitle": "Descubierto",
         "revealedNewPath": "{km} de camino nuevo",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let es6: [String: String] = [
+        "riddleLine.pass": "En algún lugar de aquí la carretera cruza una cordillera",
+        "riddleLine.lighthouse": "En algún lugar de este círculo hay un faro",
+        "riddleLine.border": "En algún lugar de este círculo una carretera llega a un puesto fronterizo",
+        "riddleLine.ferry": "En algún lugar de aquí la carretera termina en un embarcadero de ferri",
+        "riddleLine.dam": "En algún lugar de este círculo una presa retiene el agua",
+        "riddleLine.bridge": "En algún lugar de aquí un puente lleva la carretera sobre un gran río",
+        "riddleLine.viewpoint": "En algún lugar de este círculo hay un sitio con vistas",
+        "riddleLine.observatory": "En algún lugar de aquí hay un observatorio",
+        "riddleLine.seaRoad": "En algún lugar de este círculo una carretera acaba en el mar",
+        "riddleLine.extreme": "En algún lugar de aquí está el extremo del país",
+        "riddleLine.centre": "En algún lugar de este círculo está un centro geográfico",
+        "riddleLine.tripoint": "En algún lugar de aquí se juntan las fronteras de tres países",
+        "riddleSolvedTitle": "Enigma resuelto",
     ]
 
 }

@@ -16,6 +16,7 @@ extension Translations {
         table.merge(fil3) { _, new in new }
         table.merge(fil4) { _, new in new }
         table.merge(fil5) { _, new in new }
+        table.merge(fil6) { _, new in new }
         return table
     }()
 
@@ -1279,6 +1280,23 @@ extension Translations {
         "sealAccessibility": "Selyo: {kind}",
         "revealedTitle": "Natuklasan",
         "revealedNewPath": "{km} na bagong daan",
+    ]
+
+    // Находки 0.7.0: двенадцать строк загадок и заголовок решённой.
+    private static let fil6: [String: String] = [
+        "riddleLine.pass": "May lugar dito kung saan tumatawid ang daan sa tagaytay",
+        "riddleLine.lighthouse": "May parola sa loob ng bilog na ito",
+        "riddleLine.border": "May daan sa loob ng bilog na ito na umaabot sa himpilan ng hangganan",
+        "riddleLine.ferry": "May lugar dito kung saan nagtatapos ang daan sa pantalan ng ferry",
+        "riddleLine.dam": "May dam sa loob ng bilog na ito na humahawak sa tubig",
+        "riddleLine.bridge": "May lugar dito kung saan may tulay na nagdadala ng daan sa ibabaw ng malaking ilog",
+        "riddleLine.viewpoint": "May lugar na may magandang tanawin sa loob ng bilog na ito",
+        "riddleLine.observatory": "May obserbatoryo sa lugar na ito",
+        "riddleLine.seaRoad": "May daan sa loob ng bilog na ito na nagtatapos sa dagat",
+        "riddleLine.extreme": "May lugar dito na siyang dulo ng bansa",
+        "riddleLine.centre": "May sentrong heograpiko sa loob ng bilog na ito",
+        "riddleLine.tripoint": "May lugar dito kung saan nagtatagpo ang hangganan ng tatlong bansa",
+        "riddleSolvedTitle": "Nasagot ang palaisipan",
     ]
 
 }
