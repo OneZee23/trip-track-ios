@@ -86,18 +86,22 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// ячеек прибавилось к открытому, сколько это километров и какие регионы
     /// человек увидел впервые.
     ///
-    /// **Километры здесь считаются по ЯЧЕЙКАМ, а не по прогонам.** Ячейка —
-    /// 75 м (`RevealGrid.cellDegrees`), и `openedKm` это `openedCells` на её
-    /// сторону: столько новой дороги поездка застолбила. `RevealedLayer.openedKm`
-    /// считает другое и по-другому — длину НАРИСОВАННЫХ прогонов всего мира, а
-    /// второй проезд рядом с открытой улицей ячейки добавляет, а прогона не
-    /// рисует (`RevealBuilder.neighbourClaimed`). Это не второй счёт одного и
-    /// того же: у одного вопрос «сколько всего открыто», у другого — «что
-    /// прибавила эта поездка».
+    /// **Километры — длина НАРИСОВАННЫХ прогонов**, тем же счётом, каким их
+    /// считает шапка «Атласа» (`RevealedLayer.openedMetres`, и внутри у обеих
+    /// один `RevealedLayer.step`). Иначе два числа, которые человек видит на
+    /// одном экране и вычитает глазами, не сошлись бы: счёт по ячейкам
+    /// (сторона × число) на дороге под 45° к сетке даёт в полтора раза больше,
+    /// чем метров пути, а на дороге вдоль сетки — примерно столько же.
+    /// Расхождение при этом не шум, а функция от курса дороги, то есть в поле
+    /// его видно.
+    ///
+    /// `openedCells` рядом остаётся: это единица ОТКРЫТОГО (сколько мира
+    /// прибавилось), а не пути. Два числа отвечают на разные вопросы, и ни
+    /// одно не выводится из другого.
     struct IngestDelta: Equatable {
         /// Ячеек 75 м, которых в открытом мире не было.
         let openedCells: Int
-        /// Те же ячейки в километрах.
+        /// Новый путь в километрах — длина прогонов, дорисованных этой поездкой.
         let openedKm: Double
         /// Регионы (ISO 3166-2), которых открытое ещё не касалось. Пусто, если
         /// атлас не загружен: врать регионом нельзя, а ждать его на финише —
@@ -107,15 +111,17 @@ final class RevealedLayerStore: @unchecked Sendable {
         static let none = IngestDelta(openedCells: 0, openedKm: 0, newRegionIds: [])
     }
 
-    /// Сторона ячейки в километрах — ею меряется `IngestDelta.openedKm`.
-    /// Широта здесь и есть мера: по долготе ячейка тянется на косинус, но
-    /// площадь при этом сохраняется, а не расстояние вдоль дороги.
-    static let cellKm = RevealGrid.cellDegrees * 111.320
-
-    /// Регионы, которых открытое уже касалось. Ключ в `UserDefaults`, а не в
-    /// базе: это ПРОИЗВОДНОЕ от ячеек, и потерять его не страшнее, чем
-    /// пересчитать (см. `knownRegionIds` — при отсутствии ключа он сеется из
-    /// тайлов, чтобы человеку со стажем не объявили новыми все его края).
+    /// Регионы, которых открытое уже касалось.
+    ///
+    /// Ключ в `UserDefaults`, а не в базе: это ПРОИЗВОДНОЕ от ячеек, и потерять
+    /// его не страшнее, чем пересчитать (см. `knownRegionIds` — при отсутствии
+    /// ключа он сеется из тайлов, чтобы человеку со стажем не объявили новыми
+    /// все его края).
+    ///
+    /// Пополняют его ВСЕ четыре двери, а не только финиш: край, открытый
+    /// поездкой со второго телефона (пул → `reconcile`), на «Атласе» уже
+    /// светится, и объявить его новым на первом своём проезде значило бы
+    /// поздравить человека с тем, что он и так видит открытым.
     static let regionsKey = "reveal.regions.v1"
 
     private let persistence: PersistenceController
@@ -226,18 +232,21 @@ final class RevealedLayerStore: @unchecked Sendable {
                 cache[key] = cells
                 return cells
             }
-            var inserted: [(tile: String, cell: RevealGrid.Cell)] = []
-            let opened = self.mergeInContext(patches, inserted: &inserted)
+            let merged = self.mergeInContext(patches)
             guard self.saveContext() else {
                 self.context.rollback()
                 return .none
             }
 
-            let fresh = self.regionIds(of: inserted).subtracting(before)
+            let fresh = self.regionIds(at: merged.samples).subtracting(before)
             if !fresh.isEmpty { self.rememberRegionIds(before.union(fresh)) }
+            // Считаются ровно те прогоны, что дорисовала эта поездка: patches
+            // собраны против УЖЕ открытого, и второй круг по своей улице не
+            // приносит ни ячейки, ни метра.
+            let metres = RevealedLayer.openedMetres(runs: patches.values.flatMap(\.runs))
             return IngestDelta(
-                openedCells: opened,
-                openedKm: Double(opened) * Self.cellKm,
+                openedCells: merged.added,
+                openedKm: metres / 1000,
                 newRegionIds: fresh.sorted()
             )
         }
@@ -247,9 +256,10 @@ final class RevealedLayerStore: @unchecked Sendable {
 
     func merge(_ patches: [String: TilePatch]) async {
         let added = await context.perform { () -> Int in
-            let opened = self.mergeInContext(patches)
+            let merged = self.mergeInContext(patches)
             self.saveContext()
-            return opened
+            self.noteRegions(at: merged.samples)
+            return merged.added
         }
         if added > 0 { postChanged() }
     }
@@ -294,6 +304,7 @@ final class RevealedLayerStore: @unchecked Sendable {
             let batch = Array(usable[start..<min(start + Self.rebuildBatch, usable.count)])
             total += await context.perform { () -> Int in
                 var opened = 0
+                var samples: [(tile: String, cell: RevealGrid.Cell)] = []
                 var cache: [String: Set<RevealGrid.Cell>] = [:]
                 for preview in batch {
                     guard let polyline = preview.polyline else { continue }
@@ -308,9 +319,12 @@ final class RevealedLayerStore: @unchecked Sendable {
                     for (key, patch) in patches {
                         cache[key, default: []].formUnion(patch.cells)
                     }
-                    opened += self.mergeInContext(patches)
+                    let merged = self.mergeInContext(patches)
+                    opened += merged.added
+                    samples.append(contentsOf: merged.samples)
                 }
                 self.saveContext()
+                self.noteRegions(at: samples)
                 return opened
             }
             await Task.yield()
@@ -393,6 +407,7 @@ final class RevealedLayerStore: @unchecked Sendable {
             let batch = Array(usable[start..<min(start + Self.rebuildBatch, usable.count)])
             total += await context.perform { () -> Int in
                 var opened = 0
+                var samples: [(tile: String, cell: RevealGrid.Cell)] = []
                 var cache: [String: Set<RevealGrid.Cell>] = [:]
                 for preview in batch {
                     guard let polyline = preview.polyline else { continue }
@@ -407,12 +422,15 @@ final class RevealedLayerStore: @unchecked Sendable {
                     for (key, patch) in patches {
                         cache[key, default: []].formUnion(patch.cells)
                     }
-                    opened += self.mergeInContext(patches)
+                    let merged = self.mergeInContext(patches)
+                    opened += merged.added
+                    samples.append(contentsOf: merged.samples)
                 }
                 guard self.saveContext() else {
                     self.context.rollback()
                     return 0
                 }
+                self.noteRegions(at: samples)
                 return opened
             }
             await Task.yield()
@@ -518,15 +536,24 @@ final class RevealedLayerStore: @unchecked Sendable {
         defaults.set(ids.sorted(), forKey: Self.regionsKey)
     }
 
-    /// Регионы вставленных ячеек — по центру каждой. Ячейки одного тайла
-    /// спрашиваются подряд, и атлас на соседних точках почти всегда отвечает
-    /// тем же регионом, поэтому дешевле, чем выглядит.
-    private func regionIds(of cells: [(tile: String, cell: RevealGrid.Cell)]) -> Set<String> {
+    /// Регионы проб слияния — по центру каждой пробной ячейки.
+    private func regionIds(at samples: [(tile: String, cell: RevealGrid.Cell)]) -> Set<String> {
         var out = Set<String>()
-        for item in cells {
+        for item in samples {
             if let id = regionId(RevealGrid.center(of: item.cell, in: item.tile)) { out.insert(id) }
         }
         return out
+    }
+
+    /// Запомнить края, которых коснулось слияние. Зовут все двери, кроме
+    /// финиша: тому нужна ещё и РАЗНИЦА, и он складывает набор сам.
+    private func noteRegions(at samples: [(tile: String, cell: RevealGrid.Cell)]) {
+        guard !samples.isEmpty else { return }
+        let found = regionIds(at: samples)
+        guard !found.isEmpty else { return }
+        let known = knownRegionIds()
+        guard !found.isSubset(of: known) else { return }
+        rememberRegionIds(known.union(found))
     }
 
     private func claimedInContext(_ key: String) -> Set<RevealGrid.Cell> {
@@ -534,22 +561,23 @@ final class RevealedLayerStore: @unchecked Sendable {
         return Set(RevealGrid.decode(cells, in: key))
     }
 
-    @discardableResult
-    private func mergeInContext(_ patches: [String: TilePatch]) -> Int {
-        var ignored: [(tile: String, cell: RevealGrid.Cell)] = []
-        return mergeInContext(patches, inserted: &ignored)
+    /// Что дало слияние: сколько ячеек легло впервые и ГДЕ — по одной пробе на
+    /// тайл.
+    ///
+    /// Проба — это реальная новая ячейка, а не центр тайла: она лежит на
+    /// дороге, по которой проехали, и потому называет край правильно даже в
+    /// тайле, наполовину лежащем в соседнем. Одна на тайл, а не на ячейку:
+    /// пересборка библиотеки кладёт сотни тысяч ячеек, и вопрос атласу на
+    /// каждую был бы минутами на ровном месте.
+    struct MergeResult {
+        let added: Int
+        let samples: [(tile: String, cell: RevealGrid.Cell)]
     }
 
-    /// То же слияние, но говорит и КАКИЕ ячейки легли впервые: по ним финиш
-    /// считает свою дельту (`IngestDelta`). Список собирается только тогда,
-    /// когда за ним пришли, — пересборка и сверка зовут версию выше и не
-    /// платят за него ни памятью, ни временем.
     @discardableResult
-    private func mergeInContext(
-        _ patches: [String: TilePatch],
-        inserted: inout [(tile: String, cell: RevealGrid.Cell)]
-    ) -> Int {
+    private func mergeInContext(_ patches: [String: TilePatch]) -> MergeResult {
         var added = 0
+        var samples: [(tile: String, cell: RevealGrid.Cell)] = []
         let now = Date()
         for (key, patch) in patches {
             let entity = fetchEntity(key) ?? {
@@ -560,8 +588,10 @@ final class RevealedLayerStore: @unchecked Sendable {
             }()
             var cells = Set(RevealGrid.decode(entity.cells ?? Data(), in: key))
             let before = cells.count
-            for cell in patch.cells where cells.insert(cell).inserted {
-                inserted.append((tile: key, cell: cell))
+            // Первая легшая ячейка тайла и есть его проба.
+            for cell in patch.cells.sorted(by: { ($0.row, $0.col) < ($1.row, $1.col) })
+            where cells.insert(cell).inserted {
+                if samples.last?.tile != key { samples.append((tile: key, cell: cell)) }
             }
             added += cells.count - before
 
@@ -573,7 +603,7 @@ final class RevealedLayerStore: @unchecked Sendable {
             entity.cellCount = Int32(cells.count)
             entity.updatedAt = now
         }
-        return added
+        return MergeResult(added: added, samples: samples)
     }
 
     /// Превью завершённых поездок, по возрастанию даты: кто проехал первым, тот

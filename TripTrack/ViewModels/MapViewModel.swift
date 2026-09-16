@@ -1015,16 +1015,29 @@ final class MapViewModel: ObservableObject {
     /// Разбор трека кончается ПОЗЖЕ, чем собираются остальные числа финиша
     /// (он ждёт `PostTripTrackProcessor`), поэтому сводка доезжает до уже
     /// показанной карточки — или до той, что ждёт за празднованием значков.
-    /// Проверка по `id` обязательна: пока шёл разбор, человек мог закрыть
-    /// итоги и записать следующую поездку.
+    /// Проверка по `id` — единственное условие: пока шёл разбор, человек мог
+    /// закрыть итоги и записать следующую поездку.
+    ///
+    /// **Пустая сводка кладётся ТОЖЕ.** `nil` в `TripCompletionData.discoveries`
+    /// значит «ещё считается», а «ничего не нашлось» — это пустой
+    /// `TripDiscoveries`; выйти здесь на `isEmpty` значило бы оставить экран
+    /// навсегда в состоянии ожидания на поездке по знакомым улицам, то есть
+    /// сделать два состояния неразличимыми ровно в том месте, где на них
+    /// написано, что они разные.
     private func attachDiscoveries(_ found: TripDiscoveries) {
-        guard !found.isEmpty else { return }
-        if pendingCompletedTrip?.id == found.tripId {
-            pendingCompletionData?.discoveries = found
-        }
-        if lastCompletedTrip?.id == found.tripId {
-            lastCompletionData?.discoveries = found
-        }
+        Self.attach(found, to: &pendingCompletionData, ifTrip: pendingCompletedTrip?.id)
+        Self.attach(found, to: &lastCompletionData, ifTrip: lastCompletedTrip?.id)
+    }
+
+    /// Само правило — чистой функцией, чтобы контракт «`nil` — ещё считается,
+    /// пустая сводка — ничего не нашлось» держал тест, а не открытый экран на
+    /// телефоне (то же соображение, что у `AutoTripPolicy` и
+    /// `JourneyEditSheet.startBounds`).
+    static func attach(
+        _ found: TripDiscoveries, to data: inout TripCompletionData?, ifTrip tripId: UUID?
+    ) {
+        guard tripId == found.tripId else { return }
+        data?.discoveries = found
     }
 
     func showPendingSummary() {

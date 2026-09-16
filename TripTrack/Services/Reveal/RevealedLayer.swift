@@ -131,6 +131,49 @@ struct RevealedLayer {
         }
     }
 
+    /// Шаг вдоль прогона: считать ли его и переносить ли якорь.
+    ///
+    /// Тот же шаг и тот же перенос якоря, что у `TripDistanceGate.totalDistance`:
+    /// километры открытого обязаны набираться тем же способом, что и километры
+    /// поездки. Вынесено в функцию, потому что считающих два — шапка «Атласа»
+    /// (`build` выше) и дельта финиша (`openedMetres`, её зовёт
+    /// `RevealedLayerStore.ingest`), — и разойтись им нельзя: человек видит оба
+    /// числа на одном экране и вычитает их глазами.
+    ///
+    /// `advance` отдельно от `metres`: якорь переносится на любом шаге длиннее
+    /// `minStep`, даже неправдоподобном, — иначе прыжок GPS оставил бы якорь
+    /// позади и раздул бы следующий шаг.
+    static func step(
+        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D
+    ) -> (advance: Bool, metres: Double) {
+        let metres = CLLocation(latitude: to.latitude, longitude: to.longitude)
+            .distance(from: CLLocation(latitude: from.latitude, longitude: from.longitude))
+        guard metres >= TripDistanceGate.minStep else { return (false, 0) }
+        return (true, TripDistanceGate.isPlausibleSegment(meters: metres, dt: 0) ? metres : 0)
+    }
+
+    /// Длина прогонов — тем же счётом, каким её считает `build`.
+    ///
+    /// Нужна дельте финиша: «столько-то нового пути» на экране итогов обязано
+    /// сойтись с тем, на сколько подрастёт шапка «Атласа», а шапка считает
+    /// НАРИСОВАННЫЕ прогоны. Счёт по ячейкам (сторона × число) этого не даёт:
+    /// на дороге под 45° к сетке ячеек набирается в полтора раза больше, чем
+    /// метров пути.
+    static func openedMetres(runs: [[CLLocationCoordinate2D]]) -> Double {
+        var metres: Double = 0
+        for run in runs where run.count > 1 {
+            var anchor: CLLocationCoordinate2D?
+            for point in run {
+                guard let from = anchor else { anchor = point; continue }
+                let step = self.step(from: from, to: point)
+                guard step.advance else { continue }
+                metres += step.metres
+                anchor = point
+            }
+        }
+        return metres
+    }
+
     /// Через сколько точек прогона берётся проба для подписи региона. Точки
     /// лежат через ≈75 м, то есть проба — примерно через 375 м: чаще незачем
     /// (подпись стоит одна на край), реже — и короткий прогон не даст ни одной.
@@ -229,16 +272,10 @@ struct RevealedLayer {
                 }
 
                 guard let from = anchor else { anchor = point; continue }
-                let step = CLLocation(latitude: point.latitude, longitude: point.longitude)
-                    .distance(from: CLLocation(latitude: from.latitude, longitude: from.longitude))
-                // Тот же шаг и тот же перенос якоря, что у `TripDistanceGate
-                // .totalDistance`: километры открытого обязаны набираться тем
-                // же способом, что и километры поездки.
-                guard step >= TripDistanceGate.minStep else { continue }
-                if TripDistanceGate.isPlausibleSegment(meters: step, dt: 0) {
-                    metres += step
-                    if let id = currentRegion { regionMetres[id, default: 0] += step }
-                }
+                let step = Self.step(from: from, to: point)
+                guard step.advance else { continue }
+                metres += step.metres
+                if let id = currentRegion { regionMetres[id, default: 0] += step.metres }
                 anchor = point
             }
         }

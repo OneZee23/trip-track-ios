@@ -61,6 +61,37 @@ final class RevealedLayerStoreTests: XCTestCase {
         return id
     }
 
+    /// Прямая под 45° к сетке ячеек, длиной `metres` по земле. Широта и
+    /// долгота растут вместе, с поправкой на косинус — иначе «диагональ» на
+    /// широте Краснодара легла бы под 35°.
+    private func makeDiagonalTrip(
+        metres: Double,
+        from origin: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9753)
+    ) -> UUID {
+        let context = pc.container.viewContext
+        let entity = TripEntity(context: context)
+        let id = UUID()
+        entity.id = id
+        entity.startDate = Date().addingTimeInterval(-3_600)
+        entity.endDate = Date()
+        entity.syncStatus = SyncStatus.synced.rawValue
+        let leg = metres / 2.0.squareRoot()
+        let lonScale = cos(origin.latitude * .pi / 180)
+        // Точки через 200 м: превью настоящей поездки упрощено примерно так же,
+        // а `RevealGrid.walkCells` всё равно проходит отрезок шагом в треть ячейки.
+        let steps = max(2, Int(metres / 200))
+        let coords = (0...steps).map { i -> CLLocationCoordinate2D in
+            let t = Double(i) / Double(steps)
+            return CLLocationCoordinate2D(
+                latitude: origin.latitude + leg * t / 111_320.0,
+                longitude: origin.longitude + leg * t / (111_320.0 * lonScale)
+            )
+        }
+        entity.previewPolyline = Trip.encodePolyline(coords)
+        try? context.save()
+        return id
+    }
+
     private func storedTileCount() -> Int {
         let request: NSFetchRequest<RevealedCellEntity> = RevealedCellEntity.fetchRequest()
         return (try? pc.container.viewContext.count(for: request)) ?? 0
@@ -116,20 +147,36 @@ final class RevealedLayerStoreTests: XCTestCase {
 
     // MARK: - Дельта финиша
 
-    /// Километры дельты — это ВСТАВЛЕННЫЕ ячейки на сторону ячейки, и ничего
-    /// больше. Трёхкилометровая прямая по нетронутому месту даёт три километра
-    /// открытого; второй такой же финиш — ноль, а не ещё три.
-    func testDeltaCountsKilometresFromTheCellsItActuallyInserted() async {
+    /// Километры дельты — это длина ДОРИСОВАННЫХ прогонов, а не число ячеек на
+    /// их сторону. Трёхкилометровая прямая по нетронутому месту даёт три
+    /// километра; второй такой же финиш — ноль, а не ещё три.
+    func testDeltaCountsKilometresAlongTheRunsItPainted() async {
         let id = makeTrip(northMetres: 3_000)
         let delta = await store.ingest(tripId: id)
 
         XCTAssertGreaterThan(delta.openedCells, 30)
-        XCTAssertEqual(delta.openedKm,
-                       Double(delta.openedCells) * RevealedLayerStore.cellKm, accuracy: 0.0001)
-        XCTAssertEqual(delta.openedKm, 3.0, accuracy: 0.5)
+        XCTAssertEqual(delta.openedKm, 3.0, accuracy: 0.09, "3 км прямой — это 3 км нового пути")
 
         let again = await store.ingest(tripId: id)
         XCTAssertEqual(again, .none, "поездка по уже открытому не открывает ничего")
+    }
+
+    /// Дорога ПОД УГЛОМ к сетке ячеек — тот случай, на котором счёт по ячейкам
+    /// врал в полтора раза: ячеек под 45° набирается ≈√2 на километр пути.
+    ///
+    /// И второе, ради чего этот тест написан: на сколько подрастает шапка
+    /// «Атласа», ровно столько же и говорит дельта. Два числа человек видит на
+    /// одном экране и вычитает глазами.
+    func testDiagonalStreetAgreesWithTheAtlasHeader() async {
+        let before = await store.layer().openedKm
+        let id = makeDiagonalTrip(metres: 10_000)
+
+        let delta = await store.ingest(tripId: id)
+        let after = await store.layer().openedKm
+
+        XCTAssertEqual(delta.openedKm, 10.0, accuracy: 0.3, "десять километров по диагонали")
+        XCTAssertEqual(after - before, delta.openedKm, accuracy: 0.3,
+                       "шапка «Атласа» и дельта финиша считают одно и то же")
     }
 
     /// Регион считается новым по ячейкам, которые ЛЕГЛИ, а не по треку: второй
@@ -145,6 +192,27 @@ final class RevealedLayerStoreTests: XCTestCase {
             from: CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9773)))
         XCTAssertGreaterThan(second.openedCells, 0, "соседняя улица открылась")
         XCTAssertTrue(second.newRegionIds.isEmpty, "а край уже был не новым")
+    }
+
+    /// Край, открытый поездкой со второго телефона (пул → `reconcile`), на
+    /// «Атласе» уже светится — и свой проезд по нему новым его не объявляет.
+    func testARegionOpenedByAPulledTripIsNotNewLater() async {
+        let counted = RevealedLayerStore(
+            persistence: pc, defaults: defaults, regionId: { _ in "RU-KDA" })
+        // Поездка приехала пулом: строки легли в базу мимо финиша.
+        makeTrip(northMetres: 3_000)
+        let outcome = await counted.reconcile(.full)
+        guard case let .done(_, cells) = outcome else { return XCTFail("сверка не прошла") }
+        XCTAssertGreaterThan(cells, 0, "пул что-то открыл")
+
+        // А теперь своя поездка по тому же краю, соседней улицей.
+        let mine = makeTrip(
+            northMetres: 600,
+            from: CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9773))
+        let delta = await counted.ingest(tripId: mine)
+        XCTAssertGreaterThan(delta.openedCells, 0, "соседняя улица открылась")
+        XCTAssertTrue(delta.newRegionIds.isEmpty,
+                      "край уже был открыт пулом — поздравлять человека нечем")
     }
 
     /// Стирание аккаунта забирает и регионы: иначе вернувшиеся синком поездки

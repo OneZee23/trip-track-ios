@@ -246,6 +246,43 @@ final class DiscoveryProcessorTests: XCTestCase {
             "значок находки обязан оставаться на полке")
     }
 
+    // MARK: - Сводка на экране итогов
+
+    /// `nil` — «ещё считается», пустая сводка — «ничего не нашлось». Два
+    /// состояния обязаны различаться: экран волны 6 вправе крутить ожидание на
+    /// `nil`, и на поездке по знакомым улицам он крутил бы его вечно.
+    func testEmptySummaryIsAttachedToo() {
+        let id = UUID()
+        var data: TripCompletionData? = Self.completion()
+        XCTAssertNil(data?.discoveries, "до разбора — «ещё считается»")
+
+        MapViewModel.attach(.empty(tripId: id), to: &data, ifTrip: id)
+        XCTAssertNotNil(data?.discoveries, "разбор кончился — сводка обязана лечь")
+        XCTAssertTrue(data?.discoveries?.isEmpty ?? false)
+    }
+
+    /// А чужая поездка сводку не получает: пока шёл разбор, человек мог закрыть
+    /// итоги и записать следующую.
+    func testSummaryOfAnotherTripIsNotAttached() {
+        var data: TripCompletionData? = Self.completion()
+        MapViewModel.attach(.empty(tripId: UUID(), newKm: 12.5), to: &data, ifTrip: UUID())
+        XCTAssertNil(data?.discoveries)
+
+        // И «поездки нет вовсе» — тоже не повод класть.
+        MapViewModel.attach(.empty(tripId: UUID()), to: &data, ifTrip: nil)
+        XCTAssertNil(data?.discoveries)
+    }
+
+    private static func completion() -> TripCompletionData {
+        TripCompletionData(
+            xpEarned: 0, xpBreakdown: XPBreakdown(base: 0),
+            previousLevel: 1, newLevel: 1, previousXP: 0, newXP: 0,
+            previousRank: DriverRank.from(level: 1), newRank: DriverRank.from(level: 1),
+            vehicleOdometerBefore: 0, vehicleOdometerAfter: 0,
+            vehicleLevelBefore: 1, vehicleLevelAfter: 1,
+            newBadges: [], repeatedBadgeCounts: [:], currentStreak: 0, roadCard: nil)
+    }
+
     /// Скрытые все четыре: находка перестаёт быть находкой, если показать её
     /// списком заранее.
     func testDiscoveryBadgesAreHiddenExplorationBadges() {
