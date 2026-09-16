@@ -1115,6 +1115,52 @@ enum AppStrings {
             .replacingOccurrences(of: "{distance}", with: distance)
     }
 
+    // MARK: - Карточка находки (0.7.0)
+
+    /// «нашли 7 человек · первым — Илья» — счётчик первооткрывателей.
+    ///
+    /// Показывается ТОЛЬКО при Cloud Sync и только при живом `finders`: без
+    /// облака счётчика не существует, и ноль вместо «не спрашивали» был бы
+    /// враньём. Число и имя приходят токенами: одиннадцать таблиц получают
+    /// готовую строку, живая интерполяция внутри `ru:`/`en:` до них не доедет.
+    /// Счётное слово — через `nounPeople`, а не `if .ru`.
+    static func cardFoundBy(
+        _ lang: LanguageManager.Language, count: Int, name: String
+    ) -> String {
+        let people = "\(groupedNumber(count, lang)) \(nounPeople(lang, count))"
+        return tr(lang, "cardFoundBy",
+                  ru: "нашли {count} · первым — {name}",
+                  en: "found by {count} · first was {name}")
+            .replacingOccurrences(of: "{count}", with: people)
+            .replacingOccurrences(of: "{name}", with: name)
+    }
+
+    /// Имя первого, когда его профиль закрыт: он «кто-то», а не пустое место.
+    static func cardFirstSomeone(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "cardFirstSomeone", ru: "кто-то", en: "someone")
+    }
+
+    /// «решена проездом 12.09» — когда загадка засчиталась на треке.
+    static func cardSolvedOn(_ lang: LanguageManager.Language, date: String) -> String {
+        tr(lang, "cardSolvedOn", ru: "решена проездом {date}", en: "solved on a drive {date}")
+            .replacingOccurrences(of: "{date}", with: date)
+    }
+
+    /// Кнопка карточки, открытой из журнала: увезти камеру к печати.
+    static func cardOnMap(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "cardOnMap", ru: "На карте", en: "Show on map")
+    }
+
+    /// Заглушка вместо истории секрета — ТОЛЬКО в Debug (см.
+    /// `DiscoveryCardModel.story`). Переведена на все тринадцать ради
+    /// паритета ключей: таблицы сверяются целиком, и ключ без строки уронил бы
+    /// `LocalizationTests` независимо от конфигурации сборки.
+    static func cardStoryPending(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "cardStoryPending",
+           ru: "История появится с обновлением",
+           en: "The story arrives with an update")
+    }
+
     /// Заголовок блока на экране итогов: что эта поездка открыла на карте.
     static func revealedTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "revealedTitle", ru: "Открыто", en: "Revealed")

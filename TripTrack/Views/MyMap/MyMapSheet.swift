@@ -73,6 +73,10 @@ struct MyMapSheet: View {
 
     @State private var isExpanded = false
     @State private var showAllTrips = false
+    /// Находка, чья карточка открыта НАД журналом. Печать, а не id: сетка
+    /// журнала уже держит готовые находки, и второй поход за ней в `vm` в
+    /// момент показа ничего бы не уточнил.
+    @State private var cardDiscovery: Discovery?
     @GestureState private var drag: CGFloat = 0
 
     var body: some View {
@@ -105,6 +109,17 @@ struct MyMapSheet: View {
             isExpanded = false
             isSummaryExpanded = false
             showAllTrips = false
+        }
+        .sheet(item: $cardDiscovery) { find in
+            DiscoveryCardSheet(discovery: find, showsOnMap: true) {
+                // Сначала убрать карточку, потом вести камеру: `focusDiscovery`
+                // выбирает печать, а выбор схлопывает журнал под листом — и
+                // лист остался бы висеть над уже закрытым журналом.
+                cardDiscovery = nil
+                onOpenDiscovery(find.id)
+            }
+            .padding(.bottom, 20)
+            .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
         }
     }
 
@@ -239,7 +254,12 @@ struct MyMapSheet: View {
                 ForEach(vm.journal.finds) { find in
                     Button {
                         Haptics.tap()
-                        onOpenDiscovery(find.id)
+                        // Карточка ложится ЛИСТОМ ПОВЕРХ журнала, а не
+                        // подменяет его: человек разглядывает сетку печатей, и
+                        // закрытая карточка обязана вернуть его в ту же сетку,
+                        // а не на карту. На карту уводит кнопка внутри
+                        // карточки — то есть по его решению.
+                        cardDiscovery = find
                     } label: {
                         // Картинка кэширована по (вид, символ, масштаб) —
                         // `SealPainter` рисует её один раз на всё приложение.
@@ -445,7 +465,7 @@ struct MyMapSheet: View {
                     if let trip = vm.selectedTrip {
                         tripCard(trip, c)
                     } else if let discovery = vm.selectedDiscovery {
-                        DiscoveryPeekSheet(discovery: discovery)
+                        DiscoveryCardSheet(discovery: discovery)
                     } else if let road = vm.selectedRoad {
                         roadCard(road, c)
                     } else if let region = vm.selectedRegion {
@@ -495,17 +515,20 @@ struct MyMapSheet: View {
 
     private var baseHeight: CGFloat {
         if vm.selectedTrip != nil { return 176 }
-        // Печать: медальон, вид, дата и строка загадки — и ни кнопки больше.
-        // «На карте» здесь не нужна, мы уже на карте; полная карточка находки
-        // — волна 4.
-        if vm.selectedDiscovery != nil { return 180 }
+        // Карточка находки: медальон, имя, дата — и, у секрета, история; у
+        // загадки — мини-карта с кругом. «На карте» здесь нет, мы уже на
+        // карте (`DiscoveryCardSheet.showsOnMap`).
+        if vm.selectedDiscovery != nil { return 300 }
         // Header plus three rows — enough to read as a list worth pulling up.
         if vm.selectedRoad != nil { return 260 }
         return 214
     }
 
-    /// The region card and the road list are the two with more underneath.
-    private var canExpand: Bool { vm.selectedRegion != nil || vm.selectedRoad != nil }
+    /// Карточки, под которыми есть ещё что-то: список поездок региона, список
+    /// поездок дороги — и история секрета, которая бывает в несколько абзацев.
+    private var canExpand: Bool {
+        vm.selectedRegion != nil || vm.selectedRoad != nil || vm.selectedDiscovery != nil
+    }
 
     private var expandedHeight: CGFloat { canExpand ? 560 : baseHeight }
 
@@ -806,92 +829,6 @@ struct MyMapSheet: View {
         let a = Measure.speed(ms: trip.avgSpeedMS, unit: distanceUnit, lang: lang.language)
         let m = Measure.speed(ms: trip.maxSpeedMS, unit: distanceUnit, lang: lang.language)
         return "\(avg) \(a) · \(max) \(m)"
-    }
-}
-
-/// Карточка печати: что это было, когда и — у загадки — про что она.
-///
-/// Заглядывание, а не экран: у находки будет своя карточка с историей и
-/// журналом (волна 4), а здесь ответ на один вопрос — «что это за кружок». И
-/// ни одной кнопки: «На карте» вела бы туда, где человек уже стоит.
-struct DiscoveryPeekSheet: View {
-    let discovery: Discovery
-
-    @EnvironmentObject private var lang: LanguageManager
-    @Environment(\.colorScheme) private var scheme
-
-    /// Формат живёт в `static let`, а не собирается в `body`: `DateFormatter`
-    /// дорог, а карточка перерисовывается на каждое движение листа.
-    private static let dayMonthYear = LocalizedDateFormatter.templates("dMMMyyyy")
-
-    var body: some View {
-        let c = AppTheme.colors(for: scheme)
-        HStack(alignment: .top, spacing: 14) {
-            // Картинка кэширована по (вид, символ, масштаб) — `SealPainter`
-            // рисует её один раз на всё приложение.
-            Image(uiImage: SealPainter.image(
-                kind: discovery.kind, symbol: discovery.symbol, size: 56, scale: 3))
-                .frame(width: 56, height: 56)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(AppStrings.sealKind(lang.language, kind: discovery.kind))
-                    .font(.inter(11, weight: .heavy))
-                    .textCase(.uppercase)
-                    .foregroundStyle(Color(SealPainter.ring(for: discovery.kind)))
-
-                if let headline {
-                    Text(headline)
-                        .font(.inter(17, weight: .heavy))
-                        .foregroundStyle(c.text)
-                        .lineLimit(2)
-                }
-
-                Text(Self.dayMonthYear[lang.language]?.string(from: discovery.foundAt) ?? "")
-                    .font(.inter(12))
-                    .foregroundStyle(c.textTertiary)
-
-                if let detail {
-                    Text(detail)
-                        .font(.inter(12))
-                        .foregroundStyle(c.textTertiary)
-                        .lineLimit(2)
-                }
-            }
-            Spacer(minLength: 40)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 14)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("mymap_discovery_peek")
-    }
-
-    /// Имя объекта, если оно есть; иначе — слова, собранные из ключа.
-    ///
-    /// У вехи имени в базе нет вовсе (оно зависит от языка телефона), у
-    /// безымянной загадки бандла — тоже: без этих двух веток карточка
-    /// показывала бы одно слово «ВЕХА» и дату, то есть не отвечала бы на тот
-    /// единственный вопрос, ради которого написана.
-    private var headline: String? {
-        if let name = discovery.title, !name.isEmpty { return name }
-        switch discovery.kind {
-        case .milestone: return MilestoneCopy.title(forKey: discovery.key, lang.language)
-        case .riddle:    return AppStrings.riddleSolvedTitle(lang.language)
-        case .secret:    return nil
-        }
-    }
-
-    /// Строка под датой: у загадки — про что она была, у вехи — где это
-    /// случилось (регион, пара стран). У секрета — ничего: в бандле лежит
-    /// только хеш, и сказать о нём нечего до волны 3.
-    private var detail: String? {
-        switch discovery.kind {
-        case .riddle:
-            return RiddleCopy.line(for: RiddleCopy.type(ofRiddleKey: discovery.key), lang.language)
-        case .milestone:
-            return MilestoneCopy.place(forKey: discovery.key, lang.language)
-        case .secret:
-            return nil
-        }
     }
 }
 
