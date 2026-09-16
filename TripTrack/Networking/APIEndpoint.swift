@@ -42,6 +42,22 @@ enum APIEndpoint {
     static let vehiclePhotoMain   = "/vehicles/photos/main"
     static let vehiclePhotoList   = "/vehicles/photos/list"
 
+    /// Каталог секретов (0.7.0) — ПУБЛИЧНЫЙ маршрут: ни аккаунта, ни личных
+    /// данных, одни усечённые хеши. `version` пустой не шлём вовсе: пустая
+    /// строка на сервере значит «версии нет», и лишний параметр только сбивал
+    /// бы с толку в логах.
+    static func secretsCatalog(version: String?) -> String {
+        guard let version, !version.isEmpty else { return "/secrets/catalog" }
+        let escaped = version.addingPercentEncoding(
+            withAllowedCharacters: .alphanumerics) ?? version
+        return "/secrets/catalog?version=\(escaped)"
+    }
+    /// Раскрытие находки — уже с аккаунтом: история, счётчик, первооткрыватель.
+    static let secretsReveal = "/secrets/reveal"
+    /// «Стереть мои данные с сервера» для находок: один запрос вместо цикла —
+    /// заявок у человека бывают сотни, и у сервера нет удаления по одной.
+    static let secretsForgetAll = "/secrets/forget-all"
+
     static let syncPull = "/sync/pull"
     static let syncPush = "/sync/push"
     static let syncManifest = "/sync/manifest"

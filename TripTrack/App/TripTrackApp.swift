@@ -109,6 +109,14 @@ struct TripTrackApp: App {
                         handleDeepLink(url)
                     }
                     .task {
+                        // Каталог секретов (0.7.0) — публичный список хешей,
+                        // без аккаунта и без Cloud Sync. Спрашивается не чаще
+                        // раза в сутки и ВНЕ главного актёра: на старте здесь
+                        // рисуется первый экран, а разбор ответа и запись кэша
+                        // на диск — работа, которой там не место.
+                        Task.detached(priority: .utility) {
+                            await CachedSecretCatalog.shared.refreshIfNeeded()
+                        }
                         // Keep the on-device journal alive across relaunches:
                         // the system store only holds THIS process, so sweep
                         // it into our own files now and every couple of
