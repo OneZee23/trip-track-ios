@@ -48,7 +48,10 @@ run is nearly free — delete `Tools/cache/` to refetch):
 
 If a source stays unreachable for three attempts the script does NOT invent
 points: it drops that type, says so on stderr and in the printed summary, and
-writes the bundle from the types that did build.
+writes the bundle from the types that did build. A type whose sources DID
+answer but produced nothing lands in the same `missing` list (`note_empty_types`)
+— a silent hole is worse than a missing type, and the first build shipped two
+of them (`seaRoad`, `extreme`).
 """
 import argparse
 import hashlib
@@ -684,6 +687,10 @@ def thin(points, kind):
             continue
         grid.setdefault(key, []).append(point)
         point["cell"] = cell
+        # Rank position inside its own type, kept for `fit_budget`: by the time
+        # the payload is built the list is sorted by id, and without this the
+        # budget trim would cut by geohash alphabet instead of significance.
+        point["rank"] = len(kept)
         kept.append(point)
     print(f"  {kind:11} {len(points):6} raw → {len(kept):5} kept "
           f"(same cell: {dropped_cell}, too close: {dropped_dense})")
@@ -691,15 +698,23 @@ def thin(points, kind):
 
 
 def build_payload(points, atlas, missing):
-    riddles = []
+    """The bundle itself plus the rank of every riddle inside its type.
+
+    Two return values on purpose: the file is sorted by `id` (so a diff between
+    two builds is readable), and after that sort nothing in it remembers which
+    point was the significant one — which is exactly what the budget trim needs.
+    """
+    riddles, ranks = [], {}
     for point in points:
+        rid = f"{point['t']}:{point['cell']}"
         riddles.append({
-            "id": f"{point['t']}:{point['cell']}",
+            "id": rid,
             "t": point["t"],
             "c": [point["lat"], point["lon"]],
             "n": point["name"] or "",
             "r": atlas.region_id(point["lat"], point["lon"]),
         })
+        ranks[rid] = point.get("rank", 0)
     riddles.sort(key=lambda r: r["id"])
     return {
         "v": 1,
@@ -708,12 +723,37 @@ def build_payload(points, atlas, missing):
         "missing": missing,
         "gaps": sorted(set(GAPS)),
         "riddles": riddles,
-    }
+    }, ranks
 
 
-def fit_budget(payload):
-    """400 KB is the ceiling. Over it, the biggest type loses its tail — the
-    least significant points are already last in each type's list."""
+def trim_by_rank(riddles, kind, limit, ranks):
+    """Keep the `limit` most significant riddles of `kind`, drop the rest.
+
+    Significance is the rank `thin` gave the point (`wikidata` > `ele` upper
+    quartile > the rest), NOT the position in the file: the payload is sorted by
+    id long before the budget is measured, so «drop the tail» would mean «drop
+    the geohashes late in the alphabet» — a silent, invisible-in-review bias.
+
+    >>> rs = [{"id": "pass:c", "t": "pass"}, {"id": "pass:a", "t": "pass"},
+    ...       {"id": "dam:b", "t": "dam"}]
+    >>> ranks = {"pass:c": 0, "pass:a": 1, "dam:b": 0}
+    >>> [r["id"] for r in trim_by_rank(rs, "pass", 1, ranks)]
+    ['pass:c', 'dam:b']
+    >>> [r["id"] for r in trim_by_rank(rs, "pass", 0, ranks)]
+    ['dam:b']
+    >>> [r["id"] for r in trim_by_rank(rs, "ferry", 0, ranks)]
+    ['pass:c', 'pass:a', 'dam:b']
+    """
+    ofkind = sorted((r for r in riddles if r["t"] == kind),
+                    key=lambda r: ranks.get(r["id"], 0))
+    doomed = {r["id"] for r in ofkind[limit:]}
+    return [r for r in riddles if r["id"] not in doomed]
+
+
+def fit_budget(payload, ranks):
+    """400 KB is the ceiling. Over it, the biggest type loses its LEAST
+    SIGNIFICANT points — see `trim_by_rank` for why that is not the same as its
+    tail."""
     while True:
         blob = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         if len(blob.encode("utf-8")) <= MAX_BYTES:
@@ -723,15 +763,30 @@ def fit_budget(payload):
             counts[riddle["t"]] = counts.get(riddle["t"], 0) + 1
         fattest = max(counts, key=lambda k: counts[k])
         limit = int(counts[fattest] * 0.9)
-        kept, seen = [], 0
-        for riddle in payload["riddles"]:
-            if riddle["t"] == fattest:
-                seen += 1
-                if seen > limit:
-                    continue
-            kept.append(riddle)
         print(f"  over budget: trimmed {fattest} to {limit}")
-        payload["riddles"] = kept
+        payload["riddles"] = trim_by_rank(payload["riddles"], fattest, limit, ranks)
+
+
+def note_empty_types(missing, produced):
+    """Every requested type that yielded nothing ends up in `missing` — not only
+    the ones whose source threw.
+
+    `collect_sea_roads` and `keep_reachable` answer `[]` when every query comes
+    back empty instead of raising `SourceUnreachable`, so in the first build
+    `seaRoad` and `extreme` were absent from the bundle AND absent from its list
+    of absences. «A silent hole is worse than a missing type» is this script's
+    own rule; this is where it is enforced.
+
+    >>> note_empty_types(["dam"], {"pass": 12, "dam": 0, "seaRoad": 0})
+    ['dam', 'seaRoad']
+    >>> note_empty_types([], {"pass": 1})
+    []
+    """
+    out = list(missing)
+    for kind in produced:
+        if produced[kind] == 0 and kind not in out:
+            out.append(kind)
+    return out
 
 
 def main():
@@ -753,21 +808,25 @@ def main():
     collectors["centre"] = lambda: keep_reachable(collect_centres())
     collectors["tripoint"] = lambda: keep_reachable(collect_tripoints())
 
-    kept, missing = [], []
+    kept, missing, produced = [], [], {}
     for kind, collect in collectors.items():
         if wanted and kind not in wanted:
             continue
         print(f"== {kind}", flush=True)
+        produced.setdefault(kind, 0)
         try:
             raw = collect()
         except SourceUnreachable as error:
             print(f"  DROPPED: {error}", file=sys.stderr)
             missing.append(kind)
             continue
-        kept.extend(thin(raw, kind))
+        survivors = thin(raw, kind)
+        produced[kind] = len(survivors)
+        kept.extend(survivors)
 
-    payload = build_payload(kept, atlas, missing)
-    blob = fit_budget(payload)
+    missing = note_empty_types(missing, produced)
+    payload, ranks = build_payload(kept, atlas, missing)
+    blob = fit_budget(payload, ranks)
     out_path = os.path.join(HERE, "riddles.json")
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(blob)
@@ -781,7 +840,7 @@ def main():
     unplaced = sum(1 for r in payload["riddles"] if not r["r"])
     print(f"total={len(payload['riddles'])}  outside any atlas region={unplaced}")
     if missing:
-        print("MISSING TYPES (source unreachable, nothing invented): "
+        print("MISSING TYPES (source unreachable or silent, nothing invented): "
               + ", ".join(missing))
     if GAPS:
         print("gaps (country/type pairs the source would not answer): "

@@ -109,7 +109,7 @@ final class MyMapViewModel: ObservableObject {
     init(source: TripSource) {
         self.remoteSource = source
         self.discoveryStore = .shared
-        self.riddleCatalog = RiddleHintSource.catalog
+        self.riddleCatalog = DiscoveryProcessor.shared.riddleCatalog
     }
 
     /// Строит чужую карту из публичных поездок аккаунта.
@@ -178,10 +178,12 @@ final class MyMapViewModel: ObservableObject {
             runs: runs, cellCount: claimed.values.reduce(0) { $0 + $1.count }, atlas: atlas)
     }
 
-    /// Каталог загадок приходит через `RiddleHintSource`, а не напрямую: имя
-    /// `DiscoveryProcessor` за пределами `Services/Discoveries/` и
-    /// `Views/MyMap/` запрещено сторожем `NoLiveSecretPromptsTests`, а этот
-    /// файл лежит в `ViewModels/`.
+    /// Каталог загадок берётся у `DiscoveryProcessor.shared` — ЧИТАЕТСЯ, а не
+    /// зовётся: ни один матчер отсюда не вызывается, подсказка это загадки из
+    /// бандла минус уже решённые. Поэтому файл вписан в allowlist сторожа
+    /// `NoLiveSecretPromptsTests` с причиной, а не спрятан за прокладкой с
+    /// другим именем: сторож читает текст, и переименование обошло бы его, не
+    /// изменив ничего по существу.
     ///
     /// Каталог `nil` — «взять обычный»: значением по умолчанию его не написать,
     /// умолчания считаются на СТОРОНЕ ВЫЗОВА, то есть вне главного актёра.
@@ -189,7 +191,7 @@ final class MyMapViewModel: ObservableObject {
          riddleCatalog: RiddleCatalog? = nil) {
         self.remoteSource = nil
         self.discoveryStore = discoveryStore
-        self.riddleCatalog = riddleCatalog ?? RiddleHintSource.catalog
+        self.riddleCatalog = riddleCatalog ?? DiscoveryProcessor.shared.riddleCatalog
         // Data changes invalidate the map. When the tab is off-screen the
         // reload happens here directly (the view can't); loadIfNeeded also
         // rechecks `stale` on the next appearance as a belt-and-braces.

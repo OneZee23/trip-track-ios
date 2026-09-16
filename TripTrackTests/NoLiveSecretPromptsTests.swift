@@ -22,7 +22,9 @@ final class NoLiveSecretPromptsTests: XCTestCase {
     // MARK: Правило A — кто вообще смеет звать разбор
 
     /// Имена, которые за пределами разрешённых мест не должны встречаться.
-    private static let matcherTokens = ["SecretMatcher", "RiddleMatcher", "DiscoveryProcessor"]
+    private static let matcherTokens = [
+        "SecretMatcher", "RiddleMatcher", "MilestoneDetector", "DiscoveryProcessor"
+    ]
 
     /// Места, где имя разбора — это норма, а не нарушение: сама папка находок
     /// и два экрана волны.
@@ -51,7 +53,13 @@ final class NoLiveSecretPromptsTests: XCTestCase {
         ("TripTrack/ViewModels/MapViewModel.swift",
          "Цепочка финиша: зовётся только после `stopRecording`, последним за "
          + "`PostTripTrackProcessor`, `PlaceManager.process` и `RevealedLayerStore.ingest`. "
-         + "Единственная дверь в разбор во всём приложении.")
+         + "Единственная дверь в разбор во всём приложении."),
+        ("TripTrack/ViewModels/MyMapViewModel.swift",
+         "«Атлас» ЧИТАЕТ каталог загадок (`DiscoveryProcessor.shared.riddleCatalog`), "
+         + "чтобы вычесть из него решённое и показать три круга подсказок. Ни одного "
+         + "матчера отсюда не зовут. Строка стоит здесь, а не обходится прокладкой с "
+         + "другим именем в разрешённой папке: сторож читает текст, и переименование "
+         + "сняло бы предупреждение, не изменив ничего по существу.")
     ]
 
     // MARK: Правило B — чего не смеет сама папка
@@ -187,6 +195,7 @@ final class NoLiveSecretPromptsTests: XCTestCase {
                     // рядом секрет — подсказать бы
                     let hits = SecretMatcher.matches(track: live, catalog: c, salt: s)
                     let solved = RiddleMatcher.solved(track: live, candidates: near)
+                    let vehi = MilestoneDetector.detect(trip: t, track: live, history: h, atlas: a)
                     Task { await DiscoveryProcessor.shared.process(tripId: id, delta: d) }
                     UNUserNotificationCenter.current().add(request)
                     AVAudioPlayer.chime()
@@ -202,6 +211,7 @@ final class NoLiveSecretPromptsTests: XCTestCase {
         }
         XCTAssertTrue(caught.contains("SecretMatcher"), "не увидел матчер секретов")
         XCTAssertTrue(caught.contains("RiddleMatcher"), "не увидел матчер загадок")
+        XCTAssertTrue(caught.contains("MilestoneDetector"), "не увидел детектор вех")
         XCTAssertTrue(caught.contains("DiscoveryProcessor"), "не увидел процессор")
         XCTAssertTrue(caught.contains("UNUserNotificationCenter"), "не увидел уведомление")
         XCTAssertTrue(caught.contains("AVAudioPlayer"), "не увидел звук")
