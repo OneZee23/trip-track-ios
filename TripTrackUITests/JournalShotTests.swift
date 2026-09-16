@@ -8,7 +8,7 @@ import XCTest
 /// непрозрачным туманом, и панель растёт под содержимое. Такое проверяется
 /// только снимком.
 ///
-/// `-seed-discoveries` кладёт на демо-поездку две находки — без него сетка
+/// `-seed-discoveries` кладёт на демо-поездку три находки — без него сетка
 /// печатей была бы пустой строкой.
 final class JournalShotTests: XCTestCase {
     private var app: XCUIApplication!

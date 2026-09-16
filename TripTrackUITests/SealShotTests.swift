@@ -8,7 +8,8 @@ import XCTest
 /// снимка: масштаб страны, масштаб города и карточка печати.
 ///
 /// Сид `-seed-discoveries` кладёт на демо-поездку «Краснодар → Горячий Ключ»
-/// две находки — загадку-мост и веху «первый регион».
+/// три находки — загадку-мост, веху «первый регион» и авторский секрет «Знак
+/// Комсомольского» (волна 5).
 final class SealShotTests: XCTestCase {
     private var app: XCUIApplication!
 
@@ -48,7 +49,7 @@ final class SealShotTests: XCTestCase {
         snap("w070_w2_seals_country")
 
         XCTAssertTrue(sealCluster.waitForExistence(timeout: 10),
-                      "две печати на мелком масштабе слипаются в горсть")
+                      "печати на мелком масштабе слипаются в горсть")
         sealCluster.tap()
         usleep(2_500_000)
         snap("w070_w2_seals_city")

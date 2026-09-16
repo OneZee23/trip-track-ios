@@ -15,7 +15,15 @@ final class MyMapTourTests: XCTestCase {
         app = XCUIApplication()
         // Seeds a fresh store with drives across three regions and lands on
         // the Maps tab. No-op if the store already has trips.
-        app.launchArguments += ["-hasCompletedOnboarding", "<true/>", "-seed-map-demo"]
+        //
+        // `-seed-discoveries` (0.7.0, волна 5) кладёт на демо-поездку три
+        // печати — загадку, веху и секрет. Тур обязан пройти С НИМИ: печати
+        // стоят аннотациями поверх той же карты, по которой он тапает в
+        // регионы и в булавки поездок, и перехваченный ими тап выглядел бы как
+        // «карточка не открылась», а не как новая аннотация.
+        app.launchArguments += [
+            "-hasCompletedOnboarding", "<true/>", "-seed-map-demo", "-seed-discoveries",
+        ]
         app.launch()
     }
 

@@ -35,8 +35,9 @@ enum DebugMapSeed {
     /// одной дороге дают трём проездам появиться там, где их посчитает
     /// штатная сверка `PlaceManager.reconcile()` на запуске.
     static let placesRichArgument = "-seed-places-rich"
-    /// Шестым аргументом кладёт на демо-поездку две находки — загадку у
-    /// Горячего Ключа и веху «первый регион» в Краснодарском крае.
+    /// Шестым аргументом кладёт на демо-поездку три находки — загадку у
+    /// Горячего Ключа, веху «первый регион» в Краснодарском крае и авторский
+    /// секрет «Знак Комсомольского» (волна 5).
     ///
     /// Кладёт ПРЯМО в базу, через `DiscoveryStore`, а не разбором трека
     /// (`DiscoveryProcessor`): бандл загадок приезжает отдельной задачей волны,
@@ -44,6 +45,11 @@ enum DebugMapSeed {
     /// волны (печати на «Атласе», блок «Открыто», журнал) нужны СТРОКИ, а
     /// откуда они взялись, им всё равно.
     static let discoveriesArgument = "-seed-discoveries"
+    /// Седьмым аргументом ОТКРЫВАЕТ именной значок секрета
+    /// (`secret_komsomolsky`) — отдельным аргументом нарочно: полка
+    /// «Достижения» показывает секрет двумя разными плитками до находки и
+    /// после, и один сид не может дать оба кадра сразу.
+    static let secretBadgeArgument = "-seed-secret-badge"
 
     static var isRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
@@ -67,6 +73,10 @@ enum DebugMapSeed {
 
     static var isDiscoveriesRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(discoveriesArgument)
+    }
+
+    static var isSecretBadgeRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(secretBadgeArgument)
     }
 
     private struct Route {
@@ -198,14 +208,18 @@ enum DebugMapSeed {
 
     // MARK: - Находки (0.7.0)
 
-    /// Две находки на настоящей демо-поездке: загадка у Горячего Ключа и веха
-    /// «первый регион» в её начале.
+    /// Три находки на настоящей демо-поездке: загадка у Горячего Ключа, веха
+    /// «первый регион» в её начале и авторский секрет «Знак Комсомольского».
     ///
     /// Поездка выбирается та, что через эти точки и проходит («Краснодар →
     /// Горячий Ключ»), — печать обязана стоять НА треке, иначе экран поездки и
     /// «Атлас» покажут её посреди поля. Идемпотентно по построению: `id`
     /// находки выведен из вида и ключа, и повторный запуск кладёт ноль строк.
     private static func seedDiscoveries(persistence: PersistenceController) {
+        // Значок — до поиска поездки: он не про трек, а про полку значков, и
+        // повтор ничего не делает (`unlock` отвечает `nil` на уже открытый).
+        if isSecretBadgeRequested { BadgeManager.unlock(id: "secret_komsomolsky") }
+
         let context = persistence.container.viewContext
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = NSPredicate(format: "title == %@", "Краснодар → Горячий Ключ")
@@ -223,7 +237,39 @@ enum DebugMapSeed {
         let milestoneAt = points[0].coordinate
 
         let store = DiscoveryStore(persistence: persistence)
-        let seeded = [
+        let seeded = seededDiscoveries(
+            tripId: tripId, riddleAt: riddleAt, milestoneAt: milestoneAt, startDate: startDate)
+        Task { try? await store.upsert(seeded) }
+    }
+
+    /// Центр Комсомольского (Краснодар) — середина рамки полигона района из
+    /// `Tools/komsomolsky.geojson`, а не хеш из `Secrets.json`.
+    ///
+    /// Координата в бандле приложения запрещена, координата в Debug-сиде — нет:
+    /// файл целиком под `#if DEBUG` и в релизную сборку не попадает. Разобрать
+    /// секрет по ней всё равно нельзя — район и так назван в описании значка
+    /// `secret_komsomolsky`, закрыты в 0.7.0 ЯЧЕЙКИ, а не сам факт района.
+    static let komsomolskyCentre = CLLocationCoordinate2D(
+        latitude: 45.034346, longitude: 39.101372)
+
+    /// Что именно кладёт `-seed-discoveries` — чистой функцией, чтобы состав
+    /// проверялся тестом, а не открытым «Атласом» на симуляторе.
+    ///
+    /// Секрет заполнен ПО ВСЕМ полям волны 4 (`finders`, `firstFinderName`,
+    /// `rarity`), кроме `story`: она остаётся `nil` нарочно — тогда карточка
+    /// показывает Debug-заглушку `cardStoryPending`, то есть ровно то, что
+    /// увидит человек до ответа `/secrets/reveal`. `verified: false` — по той
+    /// же причине: подтверждает находку сервер по треку, а сид трека никуда не
+    /// отправлял. Значок `secret_komsomolsky` при этом НЕ открывается: его
+    /// открывает `DiscoveryProcessor` на настоящем разборе, а сид — это строки
+    /// в базе (см. `-seed-secret-badge`, если нужен открытый).
+    static func seededDiscoveries(
+        tripId: UUID,
+        riddleAt: CLLocationCoordinate2D,
+        milestoneAt: CLLocationCoordinate2D,
+        startDate: Date
+    ) -> [Discovery] {
+        [
             Discovery(
                 kind: .riddle, key: "bridge:demo-psekups", tripId: tripId,
                 coordinate: riddleAt, foundAt: startDate,
@@ -232,9 +278,17 @@ enum DebugMapSeed {
                 kind: .milestone,
                 key: "\(Milestone.firstRegion.rawValue):RU-KDA", tripId: tripId,
                 coordinate: milestoneAt, foundAt: startDate,
-                symbol: Milestone.firstRegion.symbol)
+                symbol: Milestone.firstRegion.symbol),
+            Discovery(
+                kind: .secret, key: "komsomolsky", tripId: tripId,
+                coordinate: komsomolskyCentre, foundAt: startDate,
+                symbol: .komsomolsky, title: "Знак Комсомольского",
+                story: nil, verified: false, finders: 7, firstFinderName: "OneZee",
+                // Дата фиксированная, а не «раньше на столько-то»: кадр
+                // карточки обязан повторяться от прогона к прогону.
+                firstFinderAt: Date(timeIntervalSince1970: 1_781_784_000),
+                rarity: "few")
         ]
-        Task { try? await store.upsert(seeded) }
     }
 
     // MARK: - Богатый сид мест (0.6.8)
