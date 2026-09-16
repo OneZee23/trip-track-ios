@@ -113,6 +113,16 @@ struct FullscreenMapSheet: View {
     /// который безопасную зону игнорирует, и без этого «×» садится прямо на
     /// часы. Решает вызывающий, потому что ответ у двух презентаций разный.
     var addsSafeAreaInsets: Bool = false
+    /// Через сколько после начала движения проявляется хром. Гаснет он
+    /// всегда без задержки: уходящая карта не должна уносить кнопки с собой.
+    var chromeDelay: Double = 0
+    /// Ставить ли `.preferredColorScheme(.dark)`.
+    ///
+    /// У презентации (путешествие) — да: схема живёт внутри неё. У слоя
+    /// ВНУТРИ экрана поездки — нет: тот же модификатор уходит до контроллера
+    /// всего экрана и перекрашивает страницу под картой, а на сворачивании
+    /// возвращает её отдельным кадром. Слой красит свою ветку сам.
+    var scopesColorScheme: Bool = true
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -192,7 +202,7 @@ struct FullscreenMapSheet: View {
                 playbackTrailIndex: canReplay ? engine.trailIndex : crawl.currentTrailIndex,
                 playbackCoords: (canReplay || canCrawl) ? playbackSeries : nil,
                 playbackFollow: followsCar,
-                fitInsets: (canReplay || canCrawl) ? replayFitInsets : nil,
+                fitInsets: (canReplay || canCrawl) ? replayFitInsets : plainFitInsets,
                 host: host,
                 fitTick: fitTick
             )
@@ -286,7 +296,8 @@ struct FullscreenMapSheet: View {
             }
             .opacity(chromeVisible ? 1 : 0)
             .allowsHitTesting(chromeVisible)
-            .animation(.easeOut(duration: 0.2), value: chromeVisible)
+            .animation(.easeOut(duration: 0.2).delay(chromeVisible ? chromeDelay : 0),
+                       value: chromeVisible)
             .padding(.horizontal, 16)
             .padding(.top, 8 + chromeTopInset)
             .animation(.spring(response: 0.32, dampingFraction: 0.86), value: shownMarker?.id)
@@ -305,7 +316,8 @@ struct FullscreenMapSheet: View {
             }
             .opacity(chromeVisible ? 1 : 0)
             .allowsHitTesting(chromeVisible)
-            .animation(.easeOut(duration: 0.2), value: chromeVisible)
+            .animation(.easeOut(duration: 0.2).delay(chromeVisible ? chromeDelay : 0),
+                       value: chromeVisible)
             .animation(.spring(response: 0.32, dampingFraction: 0.86), value: hintDismissed)
         }
         .task {
@@ -334,7 +346,7 @@ struct FullscreenMapSheet: View {
         // Полноэкранная карта — своя презентация, и схема здесь меняется
         // одна: глифы статус-бара уходят в светлые над ночной картой, а лист
         // ниже (экран поездки) остаётся каким был. Без тумана — как было.
-        .preferredColorScheme(showsFog ? .dark : nil)
+        .preferredColorScheme(scopesColorScheme && showsFog ? .dark : nil)
     }
 
     // MARK: - Replay chrome
@@ -355,6 +367,19 @@ struct FullscreenMapSheet: View {
             // which is not a thing we are allowed to do to it.
             top: safeAreaTop + 56, left: 28,
             bottom: safeAreaBottom + 190, right: 28
+        )
+    }
+
+    /// Рамка для карты БЕЗ реплея.
+    ///
+    /// Стояло `nil`, и до 0.7.0 это ничего не значило: подгонка на полном
+    /// экране не заказывалась вовсе. Теперь она заказывается на приехавшем
+    /// кадре, и `nil` означал бы 30 pt со всех сторон — то есть маршрут под
+    /// «×» сверху и под строкой «Apple Maps · Legal» снизу.
+    private var plainFitInsets: UIEdgeInsets {
+        UIEdgeInsets(
+            top: safeAreaTop + 56, left: 28,
+            bottom: safeAreaBottom + 56, right: 28
         )
     }
 
@@ -906,7 +931,11 @@ struct FullscreenMapSheet: View {
             openPreviewedPhoto(id)
             return
         }
-        guard let preview = MapPhotoPreview.build(photoId: id, pins: photoPins) else {
+        // Карточке нужно что показать. Вызывающий, не заполнивший ни
+        // миниатюру, ни «сколько до сюда», получил бы серый квадрат с одной
+        // ссылкой — такому лучше сразу полный экран.
+        guard let preview = MapPhotoPreview.build(photoId: id, pins: photoPins),
+              preview.filename != nil || preview.reading != nil || preview.total > 1 else {
             onPhotoTap?(id)
             return
         }

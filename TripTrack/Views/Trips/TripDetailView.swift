@@ -194,9 +194,6 @@ struct TripDetailView: View {
     /// Считается с самой `MKMapView`, а не через `preference`: та
     /// пересчитывалась бы на каждый кадр прокрутки ради числа, нужного раз.
     @State private var heroMapFrame: CGRect = .zero
-    /// Хром полноэкранной карты. Отдельно от состояния: он проявляется
-    /// ПОСЛЕ движения (`MapExpansionState.chromeDelay`).
-    @State private var mapChromeVisible = false
     /// Меняется — карта вписывает маршрут в свои нынешние границы. Бумается
     /// ровно дважды на раскрытие: когда кадр приехал и когда вернулся.
     @State private var mapFitTick = 0
@@ -224,6 +221,10 @@ struct TripDetailView: View {
     @State private var signInPrompt: SignInPromptSheet.Action?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    /// Человек попросил меньше движения — раскрытие карты становится
+    /// кроссфейдом на месте. Читается из окружения, а не у `UIAccessibility`:
+    /// так перерисовка приходит вместе с переключением настройки.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.distanceUnit) private var distanceUnit
     @EnvironmentObject private var lang: LanguageManager
     @EnvironmentObject private var mapVM: MapViewModel
@@ -735,6 +736,26 @@ struct TripDetailView: View {
         // что в герое, и переезд ей стоит переноса вида, а не сборки второй
         // `MKMapView` за едущей шторкой.
         .overlay { fullscreenMapLayer() }
+        // Просмотрщик — ПОСЛЕ карты и в том же корне.
+        //
+        // Двух системных презентаций подряд UIKit не даёт вовсе, и раньше это
+        // стоило 450 мс ожидания между картой и снимком. Слой снимает и
+        // запрет, и ожидание, и заодно шторку — но порядок накладок здесь
+        // важнее всего остального: накладки ложатся в порядке ПРИМЕНЕНИЯ, и
+        // просмотрщик, повешенный раньше карты, оказался бы ПОД ней. Снимок
+        // разворачивался бы под непрозрачной картой, а «Открыть снимок»
+        // выглядела бы мёртвой кнопкой. Ставишь сюда третий слой — ставь его
+        // после этой строки и подумай, кто кого закрывает.
+        .overlay { photoViewerLayer() }
+    }
+
+    /// Просмотрщик снимков — слой поверх всего, включая раскрытую карту.
+    @ViewBuilder
+    private func photoViewerLayer() -> some View {
+        if let index = selectedPhotoIndex {
+            photoViewer(index: index)
+                .transition(.opacity)
+        }
     }
 
     /// Лист отметки — отдельным методом по той же причине, что и остальные:
@@ -918,10 +939,6 @@ struct TripDetailView: View {
             enabled: pushPath == nil
         ))
         .hideAppTabBar()
-        // Экран ушёл — карта уходит с ним. Единственное место, где с общей
-        // карты снимается вуаль: `dismantleUIView` у неё молчит, иначе
-        // каждое раскрытие роняло бы посадку (см. `TripMapHost`).
-        .onDisappear { mapHost.tearDown() }
         .appConfirm(
             isPresented: $showDeleteConfirm,
             title: AppStrings.deleteTrip(lang.language),
@@ -1033,19 +1050,6 @@ struct TripDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .placesChanged)) { _ in
             reloadPlaceChips()
             reloadSegmentHistory()
-        }
-        // Просмотрщик — тоже слой, а не `fullScreenCover`.
-        //
-        // Двух системных презентаций подряд UIKit не даёт вовсе, и раньше
-        // это стоило 450 мс ожидания между картой и снимком. Слой снимает
-        // и запрет, и ожидание, и заодно шторку: снимок проявляется
-        // кроссфейдом за 0.2 с, а не выезжает снизу поверх карты, с которой
-        // его открыли.
-        .overlay {
-            if let index = selectedPhotoIndex {
-                photoViewer(index: index)
-                    .transition(.opacity)
-            }
         }
         .overlay {
             if showReactionPicker {
@@ -1810,6 +1814,9 @@ isOwn
             onDelete: deletePhotoHandler,
             onMarkPlace: markPlaceHandler,
             canMarkPlace: canMarkPlaceHandler,
+            // Просмотрщик здесь — СЛОЙ, а не презентация: вставок безопасной
+            // зоны в его поддереве нет, и «×» сел бы на часы.
+            addsSafeAreaInsets: true,
             onDismiss: { withAnimation(.easeInOut(duration: 0.2)) { selectedPhotoIndex = nil } }
         )
     }
@@ -2007,38 +2014,33 @@ isOwn
     /// Раскрыть карту: она не пересоздаётся и не открывается шторкой, а
     /// переезжает из слота героя в слой поверх экрана и растёт до его
     /// размера одной пружиной.
+    ///
+    /// Ни одного `Task.sleep` здесь нет и быть не может (CLAUDE.md, «Анимацию
+    /// можно прервать»): цепочку из сна нечем отменить, она доигрывает на
+    /// ушедшем экране и пишет в его `@State`. Фазы ведёт состояние:
+    /// монтирование — сам слой (`onAppear`), рост — `withAnimation` с
+    /// `completionCriteria`, хром — `.animation(_:value:)` с задержкой внутри
+    /// `FullscreenMapSheet`. Второй тап прерывает любую из них.
     private func expandMap() {
         guard mapExpansion == .collapsed else { return }
         heroMapFrame = heroMapFrameInWindow() ?? .zero
         mapHost.captureSnapshot()
-        mapChromeVisible = false
-        let reduceMotion = UIAccessibility.isReduceMotionEnabled
-        guard !reduceMotion else {
-            // Reduce Motion: движения нет вовсе — кроссфейд на месте.
-            withAnimation(MapExpansionState.animation(reduceMotion: true)) {
-                mapExpansion = .expanded
-            }
-            mapChromeVisible = true
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(MapExpansionState.settleDelay(reduceMotion: true)))
-                guard mapExpansion == .expanded else { return }
-                mapFitTick += 1
-            }
-            return
-        }
+        // ВНЕ анимации: этот переход меняет ветку `if` в слоте героя (живая
+        // карта → снимок) и монтирует слой. Анимированная смена ветки держала
+        // бы в дереве ДВА представления одной `MKMapView` разом — второе
+        // отбирало бы её у первого прямо посреди перехода.
         mapExpansion = .expanding
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(MapExpansionState.mountDelay))
-            guard mapExpansion == .expanding else { return }
-            withAnimation(MapExpansionState.animation(reduceMotion: false)) {
-                mapExpansion = .expanded
-            }
-            try? await Task.sleep(for: .seconds(MapExpansionState.chromeDelay(reduceMotion: false)))
-            guard mapExpansion == .expanded else { return }
-            mapChromeVisible = true
-            try? await Task.sleep(
-                for: .seconds(MapExpansionState.settleDelay(reduceMotion: false)
-                    - MapExpansionState.chromeDelay(reduceMotion: false)))
+    }
+
+    /// Слой встал в дерево — можно расти. Толчок даёт сам слой, а не таймер:
+    /// пружине нужно от чего оттолкнуться, а «от чего» появляется ровно
+    /// тогда, когда кадр карты получил свои границы.
+    private func mapLayerDidMount() {
+        guard mapExpansion == .expanding else { return }
+        withAnimation(MapExpansionState.animation(reduceMotion: reduceMotion),
+                      completionCriteria: .logicallyComplete) {
+            mapExpansion = .expanded
+        } completion: {
             guard mapExpansion == .expanded else { return }
             // Подгонка камеры — только на приехавшем кадре: MapKit вписывает
             // маршрут в ТЕКУЩИЕ границы вида.
@@ -2046,18 +2048,20 @@ isOwn
         }
     }
 
-    /// Закрыть: хром гаснет первым, карта возвращается в рамку героя, и
-    /// только приехав перестаёт быть полноэкранной.
+    /// Закрыть: хром гаснет первым (задержку снимает сам лист), карта
+    /// возвращается в рамку героя, и только приехав перестаёт быть
+    /// полноэкранной.
     private func collapseMap() {
         guard mapExpansion == .expanded else { return }
-        let reduceMotion = UIAccessibility.isReduceMotionEnabled
-        mapChromeVisible = false
-        withAnimation(MapExpansionState.animation(reduceMotion: reduceMotion)) {
+        // Рамка переснимается: поворот экрана или перекладка, пока карта была
+        // раскрыта, сделали прежнюю неверной, и карта уехала бы мимо слота.
+        heroMapFrame = heroMapFrameInWindow() ?? heroMapFrame
+        withAnimation(MapExpansionState.animation(reduceMotion: reduceMotion),
+                      completionCriteria: .logicallyComplete) {
             mapExpansion = .collapsing
-        }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(MapExpansionState.settleDelay(reduceMotion: reduceMotion)))
+        } completion: {
             guard mapExpansion == .collapsing else { return }
+            // Снова ВНЕ анимации — по той же причине, что и монтирование.
             mapExpansion = .collapsed
             mapFitTick += 1
             mapHost.clearSnapshot()
@@ -2082,15 +2086,30 @@ isOwn
                 let hero = heroMapFrame == .zero
                     ? full
                     : heroMapFrame.offsetBy(dx: -here.minX, dy: -here.minY)
-                let target = mapExpansion.fillsScreen ? full : hero
+                // Reduce Motion: кадр сразу полноэкранный и НЕ едет вовсе —
+                // меняется одна прозрачность, то есть кроссфейд на месте.
+                let target = (mapExpansion.fillsScreen || reduceMotion) ? full : hero
                 fullscreenMapSheet()
                     .frame(width: max(1, target.width), height: max(1, target.height))
                     .clipped()
                     .position(x: target.midX, y: target.midY)
+                    .opacity(reduceMotion && !mapExpansion.fillsScreen ? 0 : 1)
+                    .onAppear { mapLayerDidMount() }
             }
             .ignoresSafeArea()
+            // Тёмная схема — только у СВОЕЙ ветки.
+            //
+            // Раньше лист звал `.preferredColorScheme(.dark)`, и это было
+            // верно, пока он был отдельной презентацией. Слоем внутри экрана
+            // тот же модификатор уходит до контроллера ВСЕГО экрана поездки:
+            // на светлой теме страница под картой перекрашивалась в тёмную, а
+            // на сворачивании возвращалась отдельным кадром — видимая вспышка.
+            .environment(\.colorScheme, showsFogOnMap ? .dark : scheme)
         }
     }
+
+    /// Лежит ли на карте свой туман — от этого и ночная карта, и тёмный хром.
+    private var showsFogOnMap: Bool { isOwn }
 
     /// Та же раскладка, что открывалась шторкой, — только теперь она слой
     /// внутри экрана поездки, а карта в ней общая с героем (`mapHost`).
@@ -2125,10 +2144,12 @@ isOwn
             host: mapHost,
             fitTick: mapFitTick,
             mapIsInteractive: mapExpansion.isInteractive,
-            chromeVisible: mapChromeVisible,
+            chromeVisible: mapExpansion.showsChrome,
             onClose: { collapseMap() },
             onOpenPhoto: { openPhoto(id: $0) },
-            addsSafeAreaInsets: true
+            addsSafeAreaInsets: true,
+            chromeDelay: MapExpansionState.chromeDelay(reduceMotion: reduceMotion),
+            scopesColorScheme: false
         )
     }
 
