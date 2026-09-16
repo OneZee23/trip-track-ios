@@ -990,15 +990,27 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
 с обеих сторон и ВЫКЛЮЧЕН: истории у него ещё нет, а секрет без истории
 нечего показывать.
 
+- **В БАНДЛЕ СЕКРЕТОВ НЕТ.** `TripTrack/Resources/Secrets.json` уезжает пустым
+  (`{"v":1,"salt":"tt-secrets-v1","secrets":[]}`), и это решение, а не задел.
+  `CachedSecretCatalog` откатывается на бандл при пустом ответе сервера — то
+  есть хеши, положенные туда до активации строки, нашлись бы ЛОКАЛЬНО у
+  каждого, кто проехал через район: золотая печать без имени и без истории
+  (взять их неоткуда — в бандле только хеш) и при этом эпический значок,
+  который район НАЗЫВАЕТ. Секрет приходит каталогом с сервера, опрос раз в
+  сутки, — активация не требует обновления приложения. Настоящие 139 хешей
+  живут тестовой фикстурой `TripTrackTests/Fixtures/Secrets-komsomolsky.json`
+  (`SecretFixtures`), потому что арифметику нельзя проверять на выдуманных
+  числах. Держат `SecretCatalogTests.testShippedBundleCarriesNoSecrets` (бандл
+  пуст) и всё остальное там же (фикстура — настоящая).
 - **Что где лежит.** Контур — `Tools/komsomolsky.geojson` (OSM
   `way/582275604`, `place=quarter`, `wikidata=Q48956008`, © OpenStreetMap
   contributors, ODbL) и его копия в бэкендовых `docs/secrets/`; в бандл
-  приложения он НЕ копируется. Хеши — `TripTrack/Resources/Secrets.json`,
-  собирает их `Tools/build_secrets.py --authored Tools/authored.json`
-  (как воспроизвести — `Tools/README`). Сервер — `docs/secrets/komsomolsky.sql`
-  из `tools/secret-cells.ts --polygon`. Значок — `secret_komsomolsky` в
-  `BadgeDefinitions`, скрытый, `.exploration`, `.epic`, в
-  `externallyUnlockedIds`.
+  приложения он НЕ копируется. Хеши — `Tools/build_secrets.py --authored
+  Tools/authored.json --out <файл>` (`--out` и появился ради того, чтобы они
+  уезжали в фикстуру, а не в бандл; как воспроизвести — `Tools/README`).
+  Сервер — `docs/secrets/komsomolsky.sql` из `tools/secret-cells.ts --polygon`.
+  Значок — `secret_komsomolsky` в `BadgeDefinitions`, скрытый, `.exploration`,
+  `.epic`, в `externallyUnlockedIds`.
 - **139 ячеек, и это ОДНО число на две стороны.** Правило покрытия у обоих
   инструментов одно — центр ячейки geohash-7 внутри полигона, без буфера, —
   потому что сервер подтверждает трек по своим `cells`, а телефон находит по
@@ -1025,7 +1037,7 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
 - **Координата района живёт в ТЕСТЕ и в `Tools/`, больше нигде.** В коде
   приложения её нет вовсе — иначе список «найди сам» читался бы прямо из
   бандла. `SecretMatcherTests` проверяет проезд по настоящей записи из
-  бандла, а не по выдуманной; координату совпавшей ячейки там сравнивают «в
+  фикстуры, а не по выдуманной; координату совпавшей ячейки там сравнивают «в
   районе» (< 1 км), а не «в той самой ячейке»: `firstHit` идёт по
   отсортированным хешам, и восьмисотметровый трек задевает их полдюжины.
 
@@ -1077,6 +1089,21 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   найти: он в классе, который отработал раньше и зелёным. Ищется
   `-skip-testing:` по подозреваемому, лечится обнулением полей — как в
   `PrivacyFlowE2ETests` и `RemoteSettingsMergeTests`.
+- **Модель у CoreData ОДНА на процесс, и это не оптимизация.**
+  `PersistenceController.managedObjectModel` — `static let` из `TripTrack.momd`
+  (семантика `.xccurrentversion` сохраняется: `momd` несёт `VersionInfo.plist`),
+  и контейнер собирается `NSPersistentContainer(name:managedObjectModel:)`.
+  Пока моделей было по одной на экземпляр, каждый невыпущенный in-memory стор
+  добавлял ещё одно описание `TripEntity`, `+entity` переставал их различать
+  («Multiple NSEntityDescriptions claim…»), и объект, созданный `Entity(context:)`
+  ПОСЛЕ этого, ложился в контекст с описанием из ЧУЖОЙ модели — ни одна выборка
+  его больше не находила. Симптом — ноль вместо числа в тесте, который сам по
+  себе зелёный. 0.7.0: 24 таких предупреждения в полном прогоне, и последним
+  их держал `TripSyncPayloadMapperTests`, звавший `NSPersistentContainer(name:)`
+  напрямую и не обнулявший поле, — он ронял `VehicleOdometerTests`,
+  `VehicleAssignmentTests` и `WithMeSectionTests` через три буквы алфавита.
+  Пишешь тест со своим контейнером — бери ту же модель и обнуляй поле в
+  `tearDown`; после фикса предупреждений ноль, и так и должно остаться.
 
 - **Высоту печатала функция про ПРОБЕГ.** `GarageFormat.odometer` звали
   четыре места показа высоты, и конверсия, вставленная в неё «заодно», увезла

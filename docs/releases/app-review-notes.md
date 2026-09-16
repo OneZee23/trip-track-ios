@@ -79,7 +79,7 @@ No new permissions are requested. Location usage is unchanged from 0.6.8.
 
 ```
 This release adds no new data type, no new SDK and no new permission. The App
-Privacy answers are unchanged from 0.6.7.
+Privacy answers are unchanged from 0.6.8.
 
 The opened layer — the fog — is computed on the phone from the user's own
 recorded trips and stays on the phone. It is not uploaded, it is not part of any
@@ -90,8 +90,8 @@ nothing personal: per secret, 32-bit truncations of SHA-256(salt + cell
 geohash) plus a symbol. No coordinates, no names, no user data, and the request
 itself carries no location. The catalogue is public by design; the matching
 happens entirely on the phone, against a track the phone already holds. Offline,
-the app falls back to the cached catalogue and then to one shipped in the
-bundle.
+the app falls back to the cached catalogue; the copy shipped in the bundle is
+empty in this release.
 
 A find leaves the phone only when the user has signed in AND turned Cloud Sync
 on — both off by default. Then the id of the find and the trip that produced it
@@ -100,10 +100,14 @@ track it already stores, and report how many people have found it. "Erase my
 data from the server" issues an explicit call that deletes these records, and
 deleting the account deletes them as well.
 
-Riddles are derived from public OpenStreetMap data and ship inside the app;
-evaluating them involves no network request at all. Milestones are computed from
-the user's own trips and never leave the phone except as the user's own find,
-under the same Cloud Sync condition.
+Riddles are derived from public OpenStreetMap data (© OpenStreetMap
+contributors, ODbL) and ship inside the app as a dataset of public objects —
+the extraction script is published with the app's source (Tools/build_secrets.py)
+and the attribution is shown in the app, on the riddle card and in Settings, with
+a link to openstreetmap.org/copyright. Evaluating a riddle involves no network
+request at all. Milestones are computed from the user's own trips and never
+leave the phone except as the user's own find, under the same Cloud Sync
+condition.
 ```
 
 ### Длинная версия — для нас
