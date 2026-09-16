@@ -284,7 +284,24 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// накопленное и писала взамен ноль. Поэтому смотрим на ПРИГОДНЫЕ превью,
     /// и только после этого стираем.
     func rebuildIfNeeded() async {
-        guard !defaults.bool(forKey: Self.rebuildFlagKey) else { return }
+        if defaults.bool(forKey: Self.rebuildFlagKey) {
+            // Латч стоит — обычно это и значит «библиотека разобрана». Но
+            // ровно одно состояние он описывает неверно: ПУСТОЕ хранилище при
+            // взведённом латче. Само по себе оно не заводится (латч пишется
+            // только после `total > 0`, а стирание идёт ДО него, так что
+            // смерть процесса посреди сборки оставляет латч открытым), —
+            // однако ячейки живут в CoreData, а латч в `UserDefaults`, и
+            // разъехаться этим двум хранилищам есть чем: пересоздание стора,
+            // ручная чистка, будущая миграция. Поймано на симуляторе
+            // 17 сентября: поездки на месте, «0 км открыто», латч взведён,
+            // и чинилось это только переустановкой.
+            //
+            // Поэтому латч перестал быть односторонним: пустое хранилище
+            // открывает его обратно. Цена — один `count` на запуск.
+            let stored = await context.perform { self.countCellsInContext() }
+            guard stored == 0 else { return }
+            revealLog.notice("reveal rebuild: latch armed over an empty store — reopening")
+        }
 
         let previews = await context.perform { self.fetchPreviews(endedBefore: nil) }
         let usable = previews.filter { ($0.polyline?.count ?? 0) >= 16 }
@@ -340,6 +357,12 @@ final class RevealedLayerStore: @unchecked Sendable {
         defaults.set(true, forKey: Self.rebuildFlagKey)
         revealLog.notice("reveal rebuild: \(total, privacy: .public) cells from \(usable.count, privacy: .public) trips")
         postChanged()
+    }
+
+    /// Сколько ячеек открытого лежит в базе. Зовётся из `context.perform`.
+    private func countCellsInContext() -> Int {
+        let request: NSFetchRequest<RevealedCellEntity> = RevealedCellEntity.fetchRequest()
+        return (try? context.count(for: request)) ?? 0
     }
 
     /// Сверка после пула: поездки со второго телефона (и вся библиотека на

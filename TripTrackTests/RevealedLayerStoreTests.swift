@@ -274,6 +274,42 @@ final class RevealedLayerStoreTests: XCTestCase {
         XCTAssertGreaterThan(storedTileCount(), 0)
     }
 
+    /// Взведённый латч над ПУСТЫМ хранилищем открывается обратно.
+    ///
+    /// Само по себе это состояние не заводится: латч пишется только после
+    /// `total > 0`, а стирание идёт ДО него, так что смерть процесса посреди
+    /// сборки оставляет латч открытым. Но ячейки живут в CoreData, а латч — в
+    /// `UserDefaults`, и разъехаться этим двум хранилищам есть чем
+    /// (пересоздание стора, ручная чистка, будущая миграция). Поймано на
+    /// симуляторе 17 сентября: поездки на месте, «0 км открыто», латч взведён,
+    /// и лечилось это только переустановкой приложения.
+    func testArmedLatchOverAnEmptyStoreReopensItself() async {
+        makeTrip(northMetres: 3_000)
+        await store.rebuildIfNeeded()
+        XCTAssertGreaterThan(storedTileCount(), 0)
+
+        // Ячейки ушли мимо латча — ровно то состояние, которое было на
+        // телефоне.
+        store.wipe()
+        defaults.set(true, forKey: RevealedLayerStore.rebuildFlagKey)
+        XCTAssertEqual(storedTileCount(), 0)
+
+        await store.rebuildIfNeeded()
+        XCTAssertGreaterThan(storedTileCount(), 0,
+                             "пустое хранилище при взведённом латче обязано пересобраться")
+        XCTAssertTrue(defaults.bool(forKey: RevealedLayerStore.rebuildFlagKey))
+    }
+
+    /// И НЕ пересобирается, когда работать не с чем: пустая библиотека при
+    /// взведённом латче оставляет всё как есть, а не крутит сборку на каждом
+    /// запуске.
+    func testArmedLatchOverAnEmptyStoreWithNoTripsStaysQuiet() async {
+        defaults.set(true, forKey: RevealedLayerStore.rebuildFlagKey)
+        await store.rebuildIfNeeded()
+        XCTAssertEqual(storedTileCount(), 0)
+        XCTAssertTrue(defaults.bool(forKey: RevealedLayerStore.rebuildFlagKey))
+    }
+
     func testRebuildRunsAfterTheLibraryComesBack() async {
         await store.rebuildIfNeeded()
         makeTrip(northMetres: 3_000)
