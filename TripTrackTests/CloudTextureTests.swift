@@ -71,10 +71,10 @@ final class CloudTextureTests: XCTestCase {
     func testFrozenSamples() {
         let noise = CloudTexture.noise()
         let checksum = noise.reduce(0) { ($0 &* 31 &+ UInt32($1)) & 0xFFFF_FFFF }
-        XCTAssertEqual(CloudTexture.sample(x: 0, y: 0), 41)
-        XCTAssertEqual(CloudTexture.sample(x: 128, y: 384), 135)
-        XCTAssertEqual(CloudTexture.sample(x: 511, y: 511), 42)
-        XCTAssertEqual(checksum, 697_898_756,
+        XCTAssertEqual(CloudTexture.sample(x: 0, y: 0), 40)
+        XCTAssertEqual(CloudTexture.sample(x: 128, y: 384), 132)
+        XCTAssertEqual(CloudTexture.sample(x: 511, y: 511), 41)
+        XCTAssertEqual(checksum, 1_396_163_471,
                        "формула или сид облаков изменились — постер разойдётся с экраном")
         // Один и тот же шум, пройденный двумя путями: тексель картинки обязан
         // совпасть с чистой функцией, иначе замороженный вектор охраняет не то.

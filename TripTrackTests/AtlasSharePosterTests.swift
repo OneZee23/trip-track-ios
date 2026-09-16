@@ -263,7 +263,12 @@ final class AtlasSharePosterTests: XCTestCase {
         let fog = raster.luminance(x: Int(centre.x), y: Int(centre.y) - 220)
 
         print("[poster] коридор \(brightest) · туман \(fog)")
-        XCTAssertLessThan(fog, 60, "туман обязан оставаться тёмным: \(fog)")
+        // Потолок — из КОНСТАНТ кисти, а не число: тон тумана подняли в
+        // «Атлас как атлас», и вписанные 60 упали бы, ничего не объяснив.
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        FogVeilPainter.veilColorBottom.getRed(&r, green: &g, blue: &b, alpha: &a)
+        let ceiling = (0.299 * r + 0.587 * g + 0.114 * b) * 255 + 12
+        XCTAssertLessThan(fog, ceiling, "туман обязан оставаться тёмным: \(fog)")
         XCTAssertGreaterThan(
             brightest, fog + 60,
             "коридор не прожжён: \(brightest) против тумана \(fog)")

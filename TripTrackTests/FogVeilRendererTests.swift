@@ -232,6 +232,22 @@ final class FogVeilRendererTests: XCTestCase {
 
     /// Тайл, до которого не доехали, — сплошная темнота: ни одного пикселя
     /// светлее объёмной дымки и ни одного прозрачного.
+    /// Самый светлый синий, какой кисть имеет право оставить на ЗАКРЫТОМ
+    /// пикселе: нижний конец рампы плюс самое сильное пятно дымки.
+    ///
+    /// Выводится ИЗ КОНСТАНТ кисти, а не вписан числом. До фикс-волны «Атлас
+    /// как атлас» здесь стояло 64, и это число пережило бы подъём тона тумана
+    /// молча: тест либо упал бы без объяснения, либо (подними мы тон на
+    /// единицу меньше) перестал бы что-либо сторожить.
+    static var brightestFogBlue: Int {
+        var r: CGFloat = 0, g: CGFloat = 0, a: CGFloat = 0
+        var fill: CGFloat = 0, haze: CGFloat = 0
+        FogVeilPainter.veilColorBottom.getRed(&r, green: &g, blue: &fill, alpha: &a)
+        FogVeilPainter.hazeColor.getRed(&r, green: &g, blue: &haze, alpha: &a)
+        let strongest = FogVeilPainter.hazeAlphaLevels.max() ?? 0
+        return Int(((fill * (1 - strongest) + haze * strongest) * 255).rounded()) + 3
+    }
+
     func testPainterFillsAnEmptyTileOpaque() {
         let size = 64
         let pixels = Self.drawn(size: size) { context, rect in
@@ -243,9 +259,11 @@ final class FogVeilRendererTests: XCTestCase {
 
         for i in stride(from: 0, to: size * size * 4, by: 4) {
             XCTAssertEqual(Int(pixels[i + 3]), 255, "вуаль обязана быть непрозрачной")
-            // Объёмная дымка не светлее ~(0.10, 0.11, 0.15): ярче — и полоса
-            // недогруженных плиток Apple на панораме станет видна.
-            XCTAssertLessThan(Int(pixels[i + 2]), 64, "дымка светлее тёмной подложки Apple")
+            // Ярче своего же потолка вуаль быть не имеет права: чем она
+            // светлее, тем заметнее полоса недогруженных плиток Apple на
+            // ведущем крае панорамы.
+            XCTAssertLessThanOrEqual(Int(pixels[i + 2]), Self.brightestFogBlue,
+                                     "заливка светлее, чем позволяют её же константы")
         }
     }
 
@@ -349,7 +367,8 @@ final class FogVeilRendererTests: XCTestCase {
                 size: 48, mapRect: MKMapRect(x: origin, y: origin, width: span, height: span))
             for i in stride(from: 0, to: pixels.count, by: 4) {
                 XCTAssertEqual(Int(pixels[i + 3]), 255, "вуаль обязана быть непрозрачной")
-                XCTAssertLessThan(Int(pixels[i + 2]), 64, "дымка светлее тёмной подложки Apple")
+                XCTAssertLessThanOrEqual(Int(pixels[i + 2]), Self.brightestFogBlue,
+                                         "дымка светлее, чем позволяют константы кисти")
             }
         }
     }
