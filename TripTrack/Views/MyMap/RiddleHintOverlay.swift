@@ -184,12 +184,13 @@ enum RiddleHintSource {
 /// Когда бандл приедет, меняется ОДНА строка здесь, а не двенадцать мест
 /// показа: подсказка на тумане и карточка решённой печати зовут её обе.
 enum RiddleCopy {
-    // TODO(wave2-merge): AppStrings.riddleLine(lang, type: type) — строки по
-    // типам приезжают вместе с бандлом загадок.
+    /// Тип известен — строка по типу из бандла; неизвестен (старый ключ,
+    /// чужая версия бандла) — общая строка-заглушка, а не пустота.
     static func line(
         for type: RiddleType?, _ lang: LanguageManager.Language
     ) -> String {
-        AppStrings.mapRiddleHintLine(lang)
+        guard let type else { return AppStrings.mapRiddleHintLine(lang) }
+        return AppStrings.riddleLine(lang, type: type)
     }
 
     /// Тип загадки из ключа находки («bridge:u0h2w1q» → `.bridge`).

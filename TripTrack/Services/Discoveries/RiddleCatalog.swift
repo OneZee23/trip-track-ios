@@ -65,7 +65,7 @@ struct Riddle: Identifiable, Codable, Equatable {
     }
 
     init(id: String, type: RiddleType, coordinate: CLLocationCoordinate2D,
-         name: String, regionId: String?) {
+         name: String, regionId: String? = nil) {
         self.id = id
         self.type = type
         self.coordinate = coordinate
@@ -105,18 +105,8 @@ struct Riddle: Identifiable, Codable, Equatable {
     }
 }
 
-/// Круг на карте вместо булавки: точку загадки человеку не показывают.
-struct RiddleHint: Equatable {
-    let riddle: Riddle
-    let circleCenter: CLLocationCoordinate2D
-    let radiusMeters: Double
-
-    static func == (lhs: RiddleHint, rhs: RiddleHint) -> Bool {
-        lhs.riddle == rhs.riddle && lhs.radiusMeters == rhs.radiusMeters
-            && lhs.circleCenter.latitude == rhs.circleCenter.latitude
-            && lhs.circleCenter.longitude == rhs.circleCenter.longitude
-    }
-}
+// `RiddleHint` (круг на карте вместо булавки) живёт у экрана —
+// `Views/MyMap/RiddleHintOverlay.swift`: центр круга и радиус считает Атлас.
 
 /// Откуда берутся загадки. Сегодня — бандл; волна 3 добавит серверную
 /// реализацию за тем же протоколом, и ни один матчер об этом не узнает.

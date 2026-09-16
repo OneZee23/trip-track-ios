@@ -39,8 +39,9 @@ final class DiscoveryProcessor {
     }
 
     static let shared = DiscoveryProcessor(
-        // TODO(wave2-merge): BundleRiddleCatalog()/BundleSecretCatalog()
-        riddleCatalog: EmptyRiddleCatalog(), secretCatalog: EmptySecretCatalog()
+        // Бандл (`Riddles.json`/`Secrets.json`); волна 3 подставит серверные
+        // каталоги за теми же протоколами.
+        riddleCatalog: BundleRiddleCatalog(), secretCatalog: BundleSecretCatalog()
     )
 
     /// Ключ кэша истории в `UserDefaults`: регионы, страны и четыре крайние
