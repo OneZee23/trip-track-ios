@@ -299,6 +299,10 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// тот же кадр, что `addAnnotations`, и выставлять ей прозрачность
         /// сразу после добавления некому.
         private var pendingRevealSealId: UUID?
+        /// Подсказки, стоящие на карте, — чтобы `updateHintLOD` на каждом
+        /// кадре жеста не копировал `map.annotations` целиком (сотни печатей
+        /// у зрелого аккаунта) ради трёх кругов.
+        private var installedHints: [RiddleHintAnnotation] = []
         private var installedSealLanguage: LanguageManager.Language?
         private var installedHintLanguage: LanguageManager.Language?
 
@@ -529,14 +533,16 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             guard ids != installedHintIds || language != installedHintLanguage else { return }
             installedHintIds = ids
             installedHintLanguage = language
-            map.removeAnnotations(map.annotations.filter { $0 is RiddleHintAnnotation })
+            map.removeAnnotations(installedHints)
             // Ближайший к открытому — первым: при столкновении двух подсказок
             // с одинаковым приоритетом MapKit оставляет ту, что пришла раньше,
             // и порядок здесь это и есть ответ «кто важнее». Сам порядок
             // задаёт `RiddleHint.plan` (по расстоянию до открытого).
-            map.addAnnotations(hints.map {
+            let annotations = hints.map {
                 RiddleHintAnnotation(hint: $0, line: RiddleCopy.line(for: $0.type, language))
-            })
+            }
+            installedHints = annotations
+            map.addAnnotations(annotations)
             updateHintLOD(map)
         }
 
@@ -560,9 +566,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         func updateHintLOD(_ map: MKMapView) {
             let metresPerPoint = map.metersPerScreenPoint
             guard metresPerPoint > 0, metresPerPoint.isFinite else { return }
-            for annotation in map.annotations {
-                guard let hint = annotation as? RiddleHintAnnotation,
-                      let view = map.view(for: hint) as? RiddleHintView else { continue }
+            for hint in installedHints {
+                guard let view = map.view(for: hint) as? RiddleHintView else { continue }
                 let diameter = CGFloat(hint.radiusMetres * 2 / metresPerPoint)
                 // Присваиваем всегда: вью сама решает, что менять, и заодно
                 // возвращает на место то, что MapKit показал по-своему.
