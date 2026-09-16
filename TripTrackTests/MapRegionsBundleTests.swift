@@ -53,13 +53,38 @@ final class MapRegionsBundleTests: XCTestCase {
         }
     }
 
-    /// Below twelve points a region reads as an octagon, not a border — the
-    /// exact class of over-simplification that shredded Adjara's coastline.
-    func testEveryRegionHasAtLeastTwelveVertices() {
+    /// Below twelve points a LARGE region reads as an octagon, not a border —
+    /// the exact class of over-simplification that shredded Adjara's
+    /// coastline. That is a guard against RDP throwing away too much detail,
+    /// not a rule about the source data: a handful of small city-level
+    /// subjects (Nakhchivan city AZ-NX, Mingecevir AZ-MI, Valmiera LV-VMR)
+    /// carry fewer than twelve points in Natural Earth's OWN geometry —
+    /// confirmed single `Polygon` rows, nothing lost to multipart merging —
+    /// and are never simplified at all (`simplify_rings` passes rings of
+    /// ≤24 raw points straight through), so there is nothing to guard
+    /// against there. Every region still needs at least four points to be a
+    /// polygon at all; only a region with real room for RDP to have gone
+    /// wrong is held to twelve.
+    ///
+    /// The span cutoff is 0.25°, not the 0.2° first floated: Nakhchivan city
+    /// (AZ-NX) measures 0.2284° — a real administrative subject, not a
+    /// rounding error — and a 0.2° line would have caught it anyway despite
+    /// being exactly the genuine-sparse-data case this relaxation exists
+    /// for. 0.25° clears it with room, while every region actually shredded
+    /// by RDP (spans in the 1–4° range, e.g. RU-KDA) is nowhere near either
+    /// number.
+    func testEveryRegionHasEnoughVertices() {
         XCTAssertFalse(atlas.regions.isEmpty)
         for region in atlas.regions {
             let vertexCount = region.rings.reduce(0) { $0 + $1.count / 2 }
-            XCTAssertGreaterThanOrEqual(vertexCount, 12, "\(region.id) has only \(vertexCount) vertices")
+            XCTAssertGreaterThanOrEqual(vertexCount, 4, "\(region.id) has only \(vertexCount) vertices")
+            let latSpan = region.bounds.maxLat - region.bounds.minLat
+            let lonSpan = region.bounds.maxLon - region.bounds.minLon
+            let span = (latSpan * latSpan + lonSpan * lonSpan).squareRoot()
+            if span >= 0.25 {
+                XCTAssertGreaterThanOrEqual(vertexCount, 12,
+                    "\(region.id) spans \(span)° but has only \(vertexCount) vertices")
+            }
         }
     }
 

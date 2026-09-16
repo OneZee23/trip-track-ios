@@ -432,26 +432,28 @@ def main():
         if rid not in meta or points > meta[rid][3]:
             meta[rid] = (cc, ru, en, points)
 
-    tiny_regions = []
     for rid, raw_rings in grouped_geoms.items():
         cc, ru, en, _ = meta[rid]
         # 2 800, not 3 000: leaves headroom below MapRenderCostTests' budget
         # for the flat→round-trip and for the next region that edges close.
+        #
+        # No vertex-count floor here on purpose (0.7.0 fix-up): a handful of
+        # city-level subjects (Nakhchivan city AZ-NX, Mingecevir AZ-MI,
+        # Valmiera LV-VMR) genuinely carry fewer than twelve points in
+        # Natural Earth's OWN source data — confirmed single `Polygon`
+        # geometries, nothing lost in the multipart-merge above. A vertex
+        # floor is a guard against RDP throwing away too much detail; these
+        # rings are never simplified at all (≤24 raw points, passthrough in
+        # `simplify_rings`), so there is nothing to over-simplify and nothing
+        # to guard against. Dropping them because the SOURCE is sparse would
+        # fabricate a hole in the atlas where a real, driveable place is —
+        # worse than a nine-sided polygon. `MapRegionsBundleTests` enforces
+        # the quality floor only where it can mean something: regions large
+        # enough that RDP had real work to do.
         rings = simplify_rings(raw_rings, min_span=0.06, max_rings=24, max_points=2_800)
         if not rings:
             continue
         flat_rings = [flat(r) for r in rings]
-        vertex_count = sum(len(r) // 2 for r in flat_rings)
-        # A handful of city-level subjects (Nakhchivan's exclave, Valmiera,
-        # Mingecevir) carry fewer than twelve points in Natural Earth's
-        # source data itself — below the bundle's twelve-vertex floor even
-        # unsimplified. Inventing points to clear the bar would be exactly
-        # the kind of fabricated geometry this file exists to avoid, so
-        # these fall out of the atlas (their coordinates simply resolve to
-        # no region) rather than ship as a barely-there polygon.
-        if vertex_count < 12:
-            tiny_regions.append((rid, vertex_count))
-            continue
         regions.append({
             "id": rid,
             "cc": cc,
@@ -461,8 +463,6 @@ def main():
             "b": bbox_of(flat_rings),
             "r": flat_rings,
         })
-    if tiny_regions:
-        print(f"dropped {len(tiny_regions)} regions under the 12-vertex floor: {tiny_regions}")
 
     countries = build_countries()
 
