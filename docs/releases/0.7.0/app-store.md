@@ -42,8 +42,8 @@
 ```
 THE ATLAS
 
-The Map tab is now the Atlas, and the world on it starts closed. Solid fog, no
-preview of anywhere you have not been — and your own roads burned through it as
+The Map tab is now the Atlas, and the world on it starts closed. Solid fog with nothing
+on it but region borders — and your own roads burned through it as
 a living map: streets, names, the sea. Everything you have ever recorded is in
 there from the first launch; the app rebuilds it in the background. The sheet
 says how much you have opened, and "1,910 km opened" is the length of the
@@ -82,8 +82,8 @@ fog, the same corridors, your seals. What you have not found is not on it.
 ```
 АТЛАС
 
-Вкладка «Карта» стала «Атласом», и мир на ней закрыт. Непрозрачная мгла, ни
-намёка на то, где вы не были, — и ваши собственные дороги, прожжённые в ней
+Вкладка «Карта» стала «Атласом», и мир на ней закрыт. Непрозрачная мгла, по
+которой проведены одни границы регионов, — и ваши собственные дороги, прожжённые в ней
 живой картой: улицы, названия, море. Всё, что вы когда-либо записали, уже
 внутри с первого запуска: приложение разбирает библиотеку фоном. В листе видно,
 сколько открыто, и «1 910 км открыто» — это длина открытых коридоров, а не
@@ -120,7 +120,7 @@ fog, the same corridors, your seals. What you have not found is not on it.
 DER ATLAS
 
 Aus dem Tab „Karte“ wurde „Atlas“, und die Welt darauf ist zu. Undurchsichtiger
-Nebel, kein Blick auf das, wo Sie nie waren — und mittendrin Ihre eigenen
+Nebel, darüber nur die Grenzen der Regionen — und mittendrin Ihre eigenen
 Straßen, als lebendige Karte hineingebrannt: Straßennamen, Orte, das Meer.
 Alles, was Sie je aufgezeichnet haben, ist vom ersten Start an dabei; die App
 baut es im Hintergrund auf. Das Blatt zeigt, wie viel offen ist, und „1 910 km
@@ -162,7 +162,7 @@ ist darauf nicht zu sehen.
 EL ATLAS
 
 La pestaña «Mapa» ahora es el «Atlas», y el mundo empieza cerrado. Niebla
-opaca, ni un atisbo de donde no has estado, y dentro tus propias carreteras,
+opaca con solo las fronteras de las regiones encima, y dentro tus carreteras,
 quemadas en ella como un mapa vivo: calles, nombres, el mar. Todo lo que has
 grabado alguna vez está ahí desde el primer arranque; la app lo reconstruye en
 segundo plano. La hoja dice cuánto has abierto, y «1 910 km abiertos» es la
@@ -203,7 +203,7 @@ aparece.
 L'ATLAS
 
 L'onglet « Carte » devient « Atlas », et le monde y est fermé. Un brouillard
-opaque, aucun aperçu de là où vous n'êtes pas allé — et vos propres routes
+opaque, rien dessus que les frontières des régions — et vos propres routes
 brûlées dedans comme une carte vivante : les rues, les noms, la mer. Tout ce
 que vous avez enregistré un jour s'y trouve dès le premier lancement ; l'app le
 reconstruit en arrière-plan. La feuille dit ce que vous avez ouvert, et
@@ -245,7 +245,7 @@ n'avez pas trouvé n'y est pas.
 L'ATLANTE
 
 La scheda «Mappa» ora è «Atlante», e il mondo lì dentro parte chiuso. Nebbia
-opaca, nessuna anteprima di dove non sei stato — e le tue strade bruciate
+opaca, sopra solo i confini delle regioni — e le tue strade bruciate
 dentro come una mappa viva: vie, nomi, il mare. Tutto quello che hai registrato
 c'è già dal primo avvio; l'app lo ricostruisce in background. Il foglio dice
 quanto hai aperto, e «1 910 km aperti» è la lunghezza dei corridoi aperti, non
@@ -285,7 +285,7 @@ non c'è.
 ATLAS
 
 Zakładka „Mapa” to teraz „Atlas”, a świat na niej jest zamknięty.
-Nieprzezroczysta mgła, żadnego podglądu tego, gdzie cię nie było — i twoje
+Nieprzezroczysta mgła, a na niej same granice regionów — i twoje
 własne drogi wypalone w niej jak żywa mapa: ulice, nazwy, morze. Wszystko, co
 kiedykolwiek nagrałeś, jest tam od pierwszego uruchomienia; aplikacja składa to
 w tle. Arkusz mówi, ile odkryłeś, a „1 910 km odkrytych” to długość odkrytych
@@ -323,7 +323,7 @@ mgła, te same korytarze, twoje pieczęcie. Tego, czego nie znalazłeś, tam nie
 ATLAS
 
 Tab "Peta" kini menjadi "Atlas", dan dunianya dimulai dalam keadaan tertutup.
-Kabut pekat, tanpa bocoran tentang tempat yang belum Anda datangi — dan di
+Kabut pekat, hanya garis batas wilayah di atasnya — dan di
 dalamnya jalan-jalan Anda sendiri, terbakar menembus kabut sebagai peta hidup:
 nama jalan, nama tempat, laut. Semua yang pernah Anda rekam sudah ada sejak
 peluncuran pertama; aplikasi menyusunnya di latar belakang. Lembarnya
@@ -365,7 +365,7 @@ kabut yang sama, koridor yang sama, segel Anda. Yang belum ditemukan tidak ikut.
 ATLAS
 
 "Harita" sekmesi artık "Atlas" ve üzerindeki dünya kapalı başlıyor. Işık
-geçirmeyen bir sis, gitmediğiniz yerlerden tek bir iz bile yok — ve sisin
+geçirmeyen bir sis, üstünde yalnızca bölge sınırları — ve sisin
 içinde kendi yollarınız, canlı bir harita gibi yakılmış: sokaklar, adlar,
 deniz. Bugüne kadar kaydettiğiniz her şey ilk açılıştan itibaren orada;
 uygulama bunu arka planda toplar. Sayfa ne kadarını açtığınızı söyler ve
@@ -405,7 +405,7 @@ aynı sis, aynı koridorlar, sizin mühürleriniz. Bulmadığınız şey resimde
 ANG ATLAS
 
 Ang tab na "Mapa" ay "Atlas" na, at nakasara ang mundo roon sa simula.
-Makapal na hamog, walang silip sa mga lugar na hindi mo pa napupuntahan — at sa
+Makapal na hamog, mga hangganan lang ng rehiyon sa ibabaw — at sa
 loob nito ang sarili mong mga kalsada, nasunog papasok bilang buhay na mapa:
 mga kalye, mga pangalan, ang dagat. Nandoon na mula sa unang buksan ang lahat
 ng naitala mo kailanman; binubuo ito ng app sa likod. Sinasabi ng sheet kung
@@ -447,8 +447,8 @@ roon ang hindi mo pa natutuklasan.
 ```
 АТЛАС
 
-Вкладка «Карта» стала «Атласом», і світ на ній закритий. Непрозора мла, жодного
-натяку на те, де вас не було, — і ваші власні дороги, пропалені в ній живою
+Вкладка «Карта» стала «Атласом», і світ на ній закритий. Непрозора мла, по якій
+проведено самі лише кордони регіонів, — і ваші власні дороги, пропалені в ній живою
 картою: вулиці, назви, море. Усе, що ви коли-небудь записали, вже всередині з
 першого запуску: застосунок розбирає бібліотеку у фоні. У аркуші видно, скільки
 відкрито, і «1 910 км відкрито» — це довжина відкритих коридорів, а не сума
@@ -486,7 +486,7 @@ roon ang hindi mo pa natutuklasan.
 O ATLAS
 
 A aba “Mapa” agora é “Atlas”, e o mundo nela começa fechado. Névoa opaca,
-nenhuma prévia de onde você nunca esteve — e, dentro dela, as suas próprias
+com apenas as fronteiras das regiões por cima — e, dentro dela, as suas
 estradas queimadas como um mapa vivo: ruas, nomes, o mar. Tudo o que você já
 gravou está lá desde a primeira abertura; o app monta isso em segundo plano. A
 folha diz quanto você abriu, e “1.910 km abertos” é o comprimento dos
@@ -527,7 +527,7 @@ achou não está lá.
 АТЛАС
 
 «Карта» қойындысы «Атлас» болды, ондағы әлем жабық тұрады. Мөлдір емес тұман,
-сіз болмаған жерден ешқандай белгі жоқ, ал ішінде — тірі карта болып күйдіріле
+үстінде тек аймақ шекаралары, ал ішінде — тірі карта болып күйдіріле
 салынған өз жолдарыңыз. Бұрын жазғанның бәрі алғашқы іске қосудан бері сонда.
 
 ОЛЖАЛАР

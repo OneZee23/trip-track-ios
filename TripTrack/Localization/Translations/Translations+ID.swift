@@ -1316,6 +1316,7 @@ extension Translations {
         "riddleLine.tripoint": "Di suatu tempat di sini batas tiga negara bertemu",
         "riddleSolvedTitle": "Teka-teki terpecahkan",
         "osmAttribution": "Data: © kontributor OpenStreetMap · ODbL",
+        "naturalEarthAttribution": "Batas wilayah: Natural Earth · domain publik",
         "milestoneTitle.firstRegion": "Pertama kali di wilayah ini",
         "milestoneTitle.easternmost": "Jalan paling timur sejauh ini",
         "milestoneTitle.westernmost": "Jalan paling barat sejauh ini",

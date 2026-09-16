@@ -1316,6 +1316,7 @@ extension Translations {
         "riddleLine.tripoint": "Irgendwo hier treffen die Grenzen von drei Ländern aufeinander",
         "riddleSolvedTitle": "Rätsel gelöst",
         "osmAttribution": "Daten: © OpenStreetMap-Mitwirkende · ODbL",
+        "naturalEarthAttribution": "Grenzen: Natural Earth · gemeinfrei",
         "milestoneTitle.firstRegion": "Zum ersten Mal in dieser Region",
         "milestoneTitle.easternmost": "Die östlichste Straße bisher",
         "milestoneTitle.westernmost": "Die westlichste Straße bisher",

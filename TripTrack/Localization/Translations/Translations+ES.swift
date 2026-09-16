@@ -1316,6 +1316,7 @@ extension Translations {
         "riddleLine.tripoint": "En algún lugar de aquí se juntan las fronteras de tres países",
         "riddleSolvedTitle": "Enigma resuelto",
         "osmAttribution": "Datos: © colaboradores de OpenStreetMap · ODbL",
+        "naturalEarthAttribution": "Fronteras: Natural Earth · dominio público",
         "milestoneTitle.firstRegion": "Primera vez en esta región",
         "milestoneTitle.easternmost": "La carretera más al este hasta ahora",
         "milestoneTitle.westernmost": "La carretera más al oeste hasta ahora",

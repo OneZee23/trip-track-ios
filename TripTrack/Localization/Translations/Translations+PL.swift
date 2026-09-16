@@ -1316,6 +1316,7 @@ extension Translations {
         "riddleLine.tripoint": "Gdzieś tutaj spotykają się granice trzech państw",
         "riddleSolvedTitle": "Zagadka rozwiązana",
         "osmAttribution": "Dane: © współtwórcy OpenStreetMap · ODbL",
+        "naturalEarthAttribution": "Granice: Natural Earth · domena publiczna",
         "milestoneTitle.firstRegion": "Pierwszy raz w tym regionie",
         "milestoneTitle.easternmost": "Najdalej na wschód jak dotąd",
         "milestoneTitle.westernmost": "Najdalej na zachód jak dotąd",

@@ -1316,6 +1316,7 @@ extension Translations {
         "riddleLine.tripoint": "Осы маңда бір жерде үш елдің шекарасы түйіседі",
         "riddleSolvedTitle": "Жұмбақ шешілді",
         "osmAttribution": "Деректер: © OpenStreetMap қатысушылары · ODbL",
+        "naturalEarthAttribution": "Шекаралар: Natural Earth · қоғамдық игілік",
         "milestoneTitle.firstRegion": "Бұл өңірде алғаш рет",
         "milestoneTitle.easternmost": "Әзірге ең шығыстағы жол",
         "milestoneTitle.westernmost": "Әзірге ең батыстағы жол",

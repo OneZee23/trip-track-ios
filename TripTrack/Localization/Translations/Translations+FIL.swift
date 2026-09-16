@@ -1316,6 +1316,7 @@ extension Translations {
         "riddleLine.tripoint": "May lugar dito kung saan nagtatagpo ang hangganan ng tatlong bansa",
         "riddleSolvedTitle": "Nasagot ang palaisipan",
         "osmAttribution": "Datos: © mga kontribyutor ng OpenStreetMap · ODbL",
+        "naturalEarthAttribution": "Mga hangganan: Natural Earth · pampublikong domain",
         "milestoneTitle.firstRegion": "Unang beses sa rehiyong ito",
         "milestoneTitle.easternmost": "Ang pinakasilangang daan sa ngayon",
         "milestoneTitle.westernmost": "Ang pinakakanlurang daan sa ngayon",

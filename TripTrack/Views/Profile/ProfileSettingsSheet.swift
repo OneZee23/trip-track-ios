@@ -528,6 +528,16 @@ struct ProfileSettingsSheet: View {
                     .multilineTextAlignment(.center)
             }
             .buttonStyle(.plain)
+
+            // Natural Earth — второй источник карты: из него собраны границы
+            // регионов и стран на «Атласе». Он общественное достояние, то
+            // есть ни ссылки, ни текста лицензия не требует, — поэтому здесь
+            // не кнопка, а строка. Стоит рядом с OSM потому, что вопрос у
+            // человека один («откуда это»), а источника два.
+            Text(AppStrings.naturalEarthAttribution(l))
+                .font(.system(size: 11))
+                .foregroundStyle(c.textTertiary)
+                .multilineTextAlignment(.center)
             .accessibilityIdentifier("settings_osm_attribution")
         }
         .frame(maxWidth: .infinity)

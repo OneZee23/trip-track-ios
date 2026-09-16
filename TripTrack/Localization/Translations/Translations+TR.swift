@@ -1316,6 +1316,7 @@ extension Translations {
         "riddleLine.tripoint": "Buralarda bir yerde üç ülkenin sınırları birleşiyor",
         "riddleSolvedTitle": "Bilmece çözüldü",
         "osmAttribution": "Veriler: © OpenStreetMap katkıcıları · ODbL",
+        "naturalEarthAttribution": "Sınırlar: Natural Earth · kamu malı",
         "milestoneTitle.firstRegion": "Bu bölgede ilk kez",
         "milestoneTitle.easternmost": "Şimdiye kadarki en doğudaki yol",
         "milestoneTitle.westernmost": "Şimdiye kadarki en batıdaki yol",
