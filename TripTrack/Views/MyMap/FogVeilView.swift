@@ -263,6 +263,9 @@ final class FogVeilView: UIView {
         let fresh = MapPathIndex()
         index = fresh
         queue.async { [weak self] in
+            // Облака — синхронно и здесь же: очередь фоновая, а собранные
+            // после первого растра они стоили бы второго полного кадра.
+            CloudTexture.shared.prepare()
             fresh.prepare(
                 // Тождественное преобразование: система координат растра — это
                 // координаты `MKMapPoint`, ровно как у рендерера с мировым
@@ -1103,13 +1106,27 @@ enum FogVeilBitmap {
                     context: context,
                     tile: CGRect(x: tile.minX - half, y: tile.minY - half,
                                  width: tile.width + half * 2, height: tile.height + half * 2),
-                    depth: FogVeilRenderer.depth(for: tile, lod: lod, haze: chunks != nil)
+                    depth: FogVeilRenderer.depth(for: tile, lod: lod, haze: chunks != nil),
+                    // Облака кладутся ПО СВОЕМУ ТАЙЛУ, ровно как у плиточного
+                    // рендерера: узор привязан к миру, поэтому картинка от
+                    // разбиения не зависит, а тесный клип тайла оказался
+                    // ощутимо дешевле одного прохода на всю полосу (замер:
+                    // полный кадр улицы 75 мс против 87, кадр вращаемой карты
+                    // 151 против 179).
+                    clouds: chunks == nil ? nil : FogVeilRenderer.clouds(
+                        for: tile, rect: CGRect(x: tile.minX, y: tile.minY,
+                                                width: tile.width, height: tile.height),
+                        lod: lod)
                 )
             }
         }
+        let bandBox = CGRect(x: band.minX, y: band.minY,
+                             width: band.width, height: band.height)
+        let clouds = FogVeilRenderer.clouds(for: band, rect: bandBox, lod: lod)
         if layers == 1 {
-            FogVeilPainter.punch(context: context, corridors: paths,
-                                 corridorWidth: width, passes: passes)
+            FogVeilPainter.punch(
+                context: context, corridors: paths, corridorWidth: width, passes: passes,
+                clouds: clouds)
             context.endTransparencyLayer()
         }
 

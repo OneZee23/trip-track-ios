@@ -368,6 +368,32 @@ enum FogVeilPainter {
         let radius: CGFloat
     }
 
+    /// Облака на ЭТОМ куске мира.
+    ///
+    /// Пара «мировой прямоугольник + он же в координатах контекста» — это всё,
+    /// что нужно, чтобы положить текстуру на МИРОВУЮ сетку: узор считается от
+    /// мировых координат, а не от своих, и поэтому не плывёт при панораме и
+    /// стыкуется на швах тайлов и полос. Ровно тот же приём, что у дымки
+    /// (`Haze`), и период у них общий — `FogVeilRenderer.hazeCell(for:)`.
+    struct CloudLay {
+        var world: MKMapRect
+        var rect: CGRect
+        /// Период текстуры в мировых координатах.
+        var cell: Double
+        /// Непрозрачный серый 0.86…1.0 — множитель плотности заливки.
+        var density: CGImage
+        /// Чёрный с альфой 0.40…1.0 — рваный край перьевой ленты.
+        var mask: CGImage
+    }
+
+    /// Доля полуширины коридора, которую занимает перьевая лента, — 45 %.
+    ///
+    /// Именно она модулируется текстурой облаков, и только она: сердцевина
+    /// прочищается полностью на всех уровнях детали (последний проход пера
+    /// идёт с альфой 1 по построению `feather(passes:)`). Рваным обязан быть
+    /// КРАЙ открытого, а не само открытое.
+    static let featherBandShare: CGFloat = 0.45
+
     /// Заливка + перья. Всё в координатах контекста; про карту не знает ничего.
     ///
     /// Это композиция двух половин ниже, и единственная причина, по которой она
@@ -385,6 +411,7 @@ enum FogVeilPainter {
         passes: Int,
         tileRect: CGRect,
         depth: Depth,
+        clouds: CloudLay? = nil,
         reveal: Reveal? = nil
     ) {
         // Большинство тайлов не лежит рядом ни с одной своей дорогой: сплошная
@@ -393,7 +420,7 @@ enum FogVeilPainter {
         // тайлу за раз. Вуаль накрывает весь мир, так что этим путём идёт
         // большинство тайлов.
         guard !paths.isEmpty || reveal != nil else {
-            fillAndHaze(context: context, tile: tileRect, depth: depth)
+            fillAndHaze(context: context, tile: tileRect, depth: depth, clouds: clouds)
             return
         }
 
@@ -403,9 +430,9 @@ enum FogVeilPainter {
         // и есть дорогая часть, и платят за неё только тайлы, которым дыры
         // действительно нужны.
         context.beginTransparencyLayer(auxiliaryInfo: nil)
-        fillAndHaze(context: context, tile: tileRect, depth: depth)
+        fillAndHaze(context: context, tile: tileRect, depth: depth, clouds: clouds)
         punch(context: context, corridors: paths, corridorWidth: corridorWidth,
-              passes: passes, reveal: reveal)
+              passes: passes, clouds: clouds, reveal: reveal)
         context.endTransparencyLayer()
     }
 
@@ -416,8 +443,16 @@ enum FogVeilPainter {
     /// (`FogVeilRenderer.depth`), поэтому один прямоугольник на весь экран дал
     /// бы другую картинку, а не ту же быстрее. Слой прозрачности НЕ
     /// открывается: у заливки стирать нечего.
-    static func fillAndHaze(context: CGContext, tile: CGRect, depth: Depth) {
+    static func fillAndHaze(
+        context: CGContext, tile: CGRect, depth: Depth, clouds: CloudLay? = nil
+    ) {
         fill(context: context, rect: tile, depth: depth)
+        if let clouds {
+            // Умножением, а не подложкой поверх: облака — это НЕРОВНОСТИ
+            // плотности того же тумана, и заливка с альфой светила бы своим
+            // цветом сквозь рампу глубины.
+            lay(image: clouds.density, of: clouds, in: context, clip: tile, blend: .multiply)
+        }
     }
 
     /// Вторая половина: коридоры и прорезь у машины, прожжённые в то, что уже
@@ -433,25 +468,124 @@ enum FogVeilPainter {
         corridors: [CGPath],
         corridorWidth: CGFloat,
         passes: Int,
+        clouds: CloudLay? = nil,
         reveal: Reveal? = nil
     ) {
         guard !corridors.isEmpty || reveal != nil else { return }
         context.setLineCap(.round)
         context.setLineJoin(.round)
-        context.setBlendMode(.destinationOut)
         if !corridors.isEmpty {
-            for pass in FogVeilRenderer.feather(passes: passes) {
-                context.beginPath()
-                corridors.forEach(context.addPath)
-                context.setLineWidth(corridorWidth * pass.width)
-                context.setStrokeColor(UIColor(white: 0, alpha: pass.alpha).cgColor)
-                context.strokePath()
+            let steps = FogVeilRenderer.feather(passes: passes)
+            let edge = 1 - featherBandShare
+            let outer = steps.filter { $0.width > edge }
+            let core = steps.filter { $0.width <= edge }
+
+            if let clouds, !outer.isEmpty {
+                punchRaggedEdge(context: context, corridors: corridors,
+                                corridorWidth: corridorWidth, outer: outer, clouds: clouds)
+            } else {
+                context.setBlendMode(.destinationOut)
+                stroke(context: context, corridors: corridors,
+                       corridorWidth: corridorWidth, steps: outer)
             }
+            context.setBlendMode(.destinationOut)
+            stroke(context: context, corridors: corridors,
+                   corridorWidth: corridorWidth, steps: core)
         }
+        context.setBlendMode(.destinationOut)
         if let reveal, reveal.radius > 0 {
             punchReveal(context: context, reveal: reveal)
         }
         context.setBlendMode(.normal)
+    }
+
+    /// Перьевая лента, прожжённая ЧЕРЕЗ маску облаков: край выходит
+    /// клубящимся, а не геометрическим.
+    ///
+    /// Приём — слой прозрачности. `beginTransparencyLayer` запоминает режим
+    /// наложения, стоявший ДО него, и накладывает готовый слой им; внутри
+    /// режим начинается с обычного. Значит: внутри лента набирается обычными
+    /// штрихами (их накопленная альфа в точности равна тому, что набрали бы
+    /// те же проходы `.destinationOut` по отдельности), затем умножается на
+    /// альфу текстуры (`.destinationIn`), и только потом всё вместе стирает
+    /// туман. Клипать текстуру по ячейкам и стирать прямо в туман было бы
+    /// дешевле на один буфер, но штрих, пересёкший границу ячейки, стёрся бы
+    /// дважды — то есть швом.
+    private static func punchRaggedEdge(
+        context: CGContext, corridors: [CGPath], corridorWidth: CGFloat,
+        outer: [(width: CGFloat, alpha: CGFloat)], clouds: CloudLay
+    ) {
+        // Клип по коробке самих коридоров: маска рисуется НА ВЕСЬ клип, и на
+        // тайле в стороне от дорог это был бы полный проход текстуры ради
+        // пустоты.
+        var box = CGRect.null
+        for path in corridors { box = box.union(path.boundingBoxOfPath) }
+        guard !box.isNull else { return }
+        box = box.insetBy(dx: -corridorWidth, dy: -corridorWidth).intersection(clouds.rect)
+        guard !box.isNull, box.width > 0, box.height > 0 else { return }
+
+        context.saveGState()
+        context.setBlendMode(.destinationOut)
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        context.setBlendMode(.normal)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        stroke(context: context, corridors: corridors,
+               corridorWidth: corridorWidth, steps: outer)
+        lay(image: clouds.mask, of: clouds, in: context, clip: box, blend: .destinationIn)
+        context.endTransparencyLayer()
+        context.restoreGState()
+    }
+
+    private static func stroke(
+        context: CGContext, corridors: [CGPath], corridorWidth: CGFloat,
+        steps: [(width: CGFloat, alpha: CGFloat)]
+    ) {
+        for pass in steps {
+            context.beginPath()
+            corridors.forEach(context.addPath)
+            context.setLineWidth(corridorWidth * pass.width)
+            context.setStrokeColor(UIColor(white: 0, alpha: pass.alpha).cgColor)
+            context.strokePath()
+        }
+    }
+
+    /// Текстура, положенная на МИРОВУЮ сетку и размноженная по клипу.
+    ///
+    /// Якорь — ячейка мировой сетки, в которой лежит левый верхний угол куска,
+    /// поэтому два соседних куска кладут узор в одно и то же место земли;
+    /// `byTiling` довозит остальные ячейки одним вызовом, а не циклом по ним
+    /// (на масштабе города в один тайл попадает до трёх десятков ячеек, и
+    /// цикл стоил бы трёх десятков отрисовок картинки на тайл).
+    private static func lay(
+        image: CGImage, of clouds: CloudLay, in context: CGContext,
+        clip: CGRect, blend: CGBlendMode
+    ) {
+        let world = clouds.world
+        guard clouds.cell > 0, world.width > 0, clouds.rect.width > 0,
+              clip.width > 0, clip.height > 0 else { return }
+        let scale = clouds.rect.width / CGFloat(world.width)
+        guard scale.isFinite, scale > 0 else { return }
+        let side = CGFloat(clouds.cell) * scale
+        // Ячейка мельче пикселя — узора всё равно не видно, а цена полная.
+        guard side.isFinite, side > 1 else { return }
+
+        let col = (world.minX / clouds.cell).rounded(.down)
+        let row = (world.minY / clouds.cell).rounded(.down)
+        let anchor = CGRect(
+            x: clouds.rect.minX + CGFloat(col * clouds.cell - world.minX) * scale,
+            y: clouds.rect.minY + CGFloat(row * clouds.cell - world.minY) * scale,
+            width: side, height: side)
+
+        context.saveGState()
+        context.clip(to: clip)
+        context.setBlendMode(blend)
+        // Текстура растягивается в десятки раз; `.high` здесь платится
+        // миллисекундами на тайл ради разницы, которой на облаке нет.
+        context.interpolationQuality = .low
+        context.draw(image, in: anchor, byTiling: true)
+        context.setBlendMode(.normal)
+        context.restoreGState()
     }
 
     // MARK: Круг подсказки
@@ -761,6 +895,10 @@ final class FogVeilRenderer: MKOverlayRenderer {
         // сравнивает тайл над сетью с тайлом в 900 км от неё.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
+            // Облака — тут же и синхронно: очередь уже фоновая, а собранные
+            // ПОСЛЕ первого кадра они потребовали бы второй перерисовки всего
+            // экрана ради узора.
+            CloudTexture.shared.prepare()
             self.index.prepare(
                 source: { veil.layer.polylines(for: $0) },
                 transform: { self.point(for: $0) }
@@ -870,6 +1008,20 @@ final class FogVeilRenderer: MKOverlayRenderer {
     /// тысячу пятен на тайл. Каждое из трёх примерно с тайл СВОЕГО уровня,
     /// поэтому на экране всегда полтора десятка пятен — и при этом узор
     /// прибит к миру: панорама его не двигает, а перерисовка не мигает.
+    /// Облака на этом куске мира — или `nil`, пока текстура не собрана.
+    ///
+    /// Период у них тот же, что у дымки (`hazeCell`), и это не совпадение: обе
+    /// сеются по МИРОВОЙ сетке, и общий шаг держит их в одном масштабе — иначе
+    /// пятна дымки и клубы облаков спорили бы друг с другом на каждом зуме.
+    static func clouds(
+        for mapRect: MKMapRect, rect: CGRect, lod: RevealedLayer.LOD
+    ) -> FogVeilPainter.CloudLay? {
+        guard let images = CloudTexture.shared.ready else { return nil }
+        return FogVeilPainter.CloudLay(
+            world: mapRect, rect: rect, cell: hazeCell(for: lod),
+            density: images.density, mask: images.mask)
+    }
+
     static func hazeCell(for lod: RevealedLayer.LOD) -> Double {
         switch lod {
         case .fine: return MKMapSize.world.width / 8_192   // ≈ 4.9 км
@@ -918,6 +1070,7 @@ final class FogVeilRenderer: MKOverlayRenderer {
             passes: Self.passes(forScreenWidth: width * zoomScale, lod: level),
             tileRect: tile,
             depth: Self.depth(for: mapRect, lod: level),
+            clouds: Self.clouds(for: mapRect, rect: tile, lod: level),
             reveal: reveal(in: mapRect, zoomScale: zoomScale, metre: metre)
         )
         engraveHints(in: context, mapRect: mapRect, zoomScale: zoomScale)

@@ -102,6 +102,9 @@ enum AtlasSharePoster {
         in cg: CGContext, rect: MKMapRect, size: CGSize, scale: CGFloat, layer: RevealedLayer
     ) {
         guard !layer.isEmpty else { return }
+        // Облака — синхронно, как и индекс: постер собирается в фоне и один
+        // раз, а туман без них разошёлся бы с экраном.
+        CloudTexture.shared.prepare()
         let index = MapPathIndex()
         index.prepare(
             source: { layer.polylines(for: $0) },

@@ -279,6 +279,218 @@ final class FogVeilPainterTests: XCTestCase {
                        "постер не имеет права передавать круги подсказок — это ответ на загадку")
     }
 
+    // MARK: Ореол, облака и рваный край
+
+    /// Кадр вокруг ОДНОЙ прямой дороги: по нему меряется профиль коридора
+    /// поперёк, а вдоль — рваность его края.
+    ///
+    /// Синтетический, а не настоящий растр, и вот почему: `FogVeilBitmap`
+    /// рисует поверх коридора ещё и жилку сети, то есть возвращает альфу в
+    /// самую сердцевину. Вопрос «прочищена ли сердцевина» — про КИСТЬ, и
+    /// спрашивать его надо у кисти.
+    private func corridorRaster(
+        lod: RevealedLayer.LOD, metresPerPoint: Double, withClouds: Bool, side: Int = 400
+    ) -> (pixels: [UInt8], side: Int, halfWidthPixels: Double)? {
+        let centre = CLLocationCoordinate2D(latitude: 45, longitude: 38.95)
+        let metre = MKMapPointsPerMeterAtLatitude(centre.latitude)
+        let span = Double(side) * metresPerPoint * metre
+        let origin = MKMapPoint(centre)
+        let rect = MKMapRect(x: origin.x - span / 2, y: origin.y - span / 2,
+                             width: span, height: span)
+        let zoomScale = MKZoomScale(Double(side) / span)
+        XCTAssertEqual(FogVeilRenderer.lod(for: zoomScale), lod,
+                       "кадр обязан попасть в проверяемый уровень детали")
+        let width = FogVeilRenderer.corridorWidth(zoomScale: zoomScale, metre: metre)
+        let passes = FogVeilRenderer.passes(forScreenWidth: width * CGFloat(zoomScale), lod: lod)
+
+        let road = CGMutablePath()
+        road.move(to: CGPoint(x: rect.minX - rect.width, y: rect.midY))
+        road.addLine(to: CGPoint(x: rect.maxX + rect.width, y: rect.midY))
+
+        var data = [UInt8](repeating: 0, count: side * side * 4)
+        let ok: Bool = data.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(
+                data: bytes.baseAddress, width: side, height: side,
+                bitsPerComponent: 8, bytesPerRow: side * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                    | CGBitmapInfo.byteOrder32Little.rawValue
+            ) else { return false }
+            context.translateBy(x: 0, y: CGFloat(side))
+            context.scaleBy(x: 1, y: -1)
+            context.scaleBy(x: CGFloat(zoomScale), y: CGFloat(zoomScale))
+            context.translateBy(x: CGFloat(-rect.minX), y: CGFloat(-rect.minY))
+            let box = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
+            FogVeilPainter.paint(
+                context: context, paths: [road], corridorWidth: width, passes: passes,
+                tileRect: box, depth: FogVeilRenderer.depth(for: rect, lod: lod),
+                clouds: withClouds
+                    ? FogVeilRenderer.clouds(for: rect, rect: box, lod: lod)
+                    : nil)
+            return true
+        }
+        guard ok else { return nil }
+        return (data, side, Double(width) / 2 * Double(zoomScale))
+    }
+
+    /// Три точки шкалы: улица, город, страна.
+    private static let corridorScales: [(RevealedLayer.LOD, Double)] = [
+        (.fine, 2), (.mid, 200), (.far, 1_500),
+    ]
+
+    /// Сердцевина коридора прочищена ПОЛНОСТЬЮ на всех трёх уровнях детали.
+    ///
+    /// Это и есть граница правила «рваный край»: клубиться обязан КРАЙ
+    /// открытого, а не само открытое. Держит его не аккуратность, а
+    /// построение — последний проход пера идёт с альфой 1, — и проверять это
+    /// надо на всех трёх уровнях: число проходов у них разное (14/8 против 4),
+    /// и на четырёх ступенях ошибку разбиения было бы видно первой.
+    func testCorridorCoreIsFullyClearOnEveryLod() {
+        for (lod, metresPerPoint) in Self.corridorScales {
+            guard let shot = corridorRaster(
+                lod: lod, metresPerPoint: metresPerPoint, withClouds: true)
+            else { return XCTFail("растр обязан собраться (\(lod))") }
+            let mid = shot.side / 2
+            for x in stride(from: 4, to: shot.side - 4, by: 13) {
+                let alpha = shot.pixels[(mid * shot.side + x) * 4 + 3]
+                XCTAssertEqual(alpha, 0,
+                               "сердцевина коридора на \(lod) закрыта туманом в x = \(x)")
+            }
+        }
+    }
+
+    /// За полутора ореолами туман НЕ ТРОНУТ.
+    ///
+    /// Маска облаков умеет только оставлять туман там, где перо его снимало;
+    /// добавить открытого за пределами ореола она не имеет права — иначе
+    /// «открыто» перестало бы значить «я здесь был».
+    func testFogBeyondTheHaloIsUntouched() {
+        for (lod, metresPerPoint) in Self.corridorScales {
+            guard let shot = corridorRaster(
+                lod: lod, metresPerPoint: metresPerPoint, withClouds: true)
+            else { return XCTFail("растр обязан собраться (\(lod))") }
+            let mid = shot.side / 2
+            let reach = Int((shot.halfWidthPixels * 1.45).rounded(.up)) + 1
+            guard mid - reach > 2 else { return XCTFail("кадр мал для замера (\(lod))") }
+            for row in [mid - reach, mid + reach, 2, shot.side - 3] {
+                for x in stride(from: 4, to: shot.side - 4, by: 17) {
+                    let alpha = shot.pixels[(row * shot.side + x) * 4 + 3]
+                    XCTAssertEqual(alpha, 255,
+                                   "туман за ореолом тронут: \(lod), ряд \(row), x = \(x)")
+                }
+            }
+        }
+    }
+
+    /// Край коридора КЛУБИТСЯ: вдоль прямой дороги плотность перьевой ленты
+    /// гуляет, а без облаков она одинакова до уровня.
+    ///
+    /// Сравнение с «без облаков» тут обязательно. «Значения вдоль края
+    /// разные» само по себе доказывает только то, что мы взяли неровную
+    /// дорогу; доказательство даёт именно РАЗНИЦА между двумя кистями на
+    /// одной и той же прямой.
+    func testCorridorEdgeIsRaggedOnlyWithClouds() {
+        for (lod, metresPerPoint) in Self.corridorScales {
+            guard let ragged = corridorRaster(
+                    lod: lod, metresPerPoint: metresPerPoint, withClouds: true),
+                  let plain = corridorRaster(
+                    lod: lod, metresPerPoint: metresPerPoint, withClouds: false)
+            else { return XCTFail("оба растра обязаны собраться (\(lod))") }
+
+            // Размах берётся по всей перьевой ленте, а не на одной высоте:
+            // где именно модуляция сильнее всего, зависит от числа проходов
+            // пера (их 14, 8 или 4), и прибивать замер к одной строке значило
+            // бы мерить на трёх уровнях три разных места ленты.
+            func spread(_ shot: (pixels: [UInt8], side: Int, halfWidthPixels: Double)) -> Int {
+                var worst = 0
+                for share in stride(from: 0.55, through: 1.0, by: 0.05) {
+                    let row = shot.side / 2 + Int((shot.halfWidthPixels * share).rounded())
+                    guard row > 0, row < shot.side else { continue }
+                    var low = 255, high = 0
+                    for x in stride(from: 8, to: shot.side - 8, by: 3) {
+                        let alpha = Int(shot.pixels[(row * shot.side + x) * 4 + 3])
+                        low = min(low, alpha)
+                        high = max(high, alpha)
+                    }
+                    worst = max(worst, high - low)
+                }
+                return worst
+            }
+            let withClouds = spread(ragged)
+            let without = spread(plain)
+            print("[veil] край на \(lod): размах с облаками \(withClouds), без них \(without)")
+            XCTAssertLessThanOrEqual(without, 2,
+                                     "без облаков край прямой дороги обязан быть ровным (\(lod))")
+            XCTAssertGreaterThan(withClouds, 30,
+                                 "с облаками край обязан клубиться (\(lod))")
+        }
+    }
+
+    /// Облака ложатся на МИРОВУЮ сетку: два соседних куска, посчитавших узор
+    /// каждый от своих координат, обязаны нарисовать его в одном месте земли.
+    ///
+    /// Иначе он «плывёт» при панораме и рвётся на швах тайлов и полос — то
+    /// самое, из-за чего дымка в 0.7.0 сеется мировой сеялкой, а не тайлом.
+    func testCloudsAreAnchoredToTheWorldNotToThePiece() {
+        guard let images = CloudTexture.shared.prepare() else {
+            return XCTFail("текстура обязана собраться")
+        }
+        let centre = MKMapPoint(CLLocationCoordinate2D(latitude: 45, longitude: 38.95))
+        let cell = FogVeilRenderer.hazeCell(for: .fine)
+        let span = cell / 4
+        let world = MKMapRect(x: centre.x, y: centre.y, width: span, height: span)
+        let side = 200
+
+        func paint(offsetPieces: Int) -> [UInt8] {
+            // Кусок ТОГО ЖЕ куска мира, но нарисованный как часть большего:
+            // мировые координаты те же, координаты контекста — свои.
+            var data = [UInt8](repeating: 0, count: side * side * 4)
+            data.withUnsafeMutableBytes { bytes in
+                guard let context = CGContext(
+                    data: bytes.baseAddress, width: side, height: side,
+                    bitsPerComponent: 8, bytesPerRow: side * 4,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                        | CGBitmapInfo.byteOrder32Little.rawValue) else { return }
+                let scale = CGFloat(Double(side) / span)
+                context.translateBy(x: 0, y: CGFloat(side))
+                context.scaleBy(x: 1, y: -1)
+                context.scaleBy(x: scale, y: scale)
+                context.translateBy(x: CGFloat(-world.minX), y: CGFloat(-world.minY))
+                let box = CGRect(x: world.minX, y: world.minY,
+                                 width: world.width, height: world.height)
+                // Первый рисует кусок как самостоятельный, второй — как часть
+                // куска, начинающегося на `offsetPieces` шагов левее и выше.
+                let bigger = MKMapRect(
+                    x: world.minX - span * Double(offsetPieces),
+                    y: world.minY - span * Double(offsetPieces),
+                    width: span * Double(offsetPieces + 1),
+                    height: span * Double(offsetPieces + 1))
+                let biggerBox = CGRect(
+                    x: bigger.minX, y: bigger.minY, width: bigger.width, height: bigger.height)
+                context.setFillColor(UIColor.white.cgColor)
+                context.fill(box)
+                FogVeilPainter.fillAndHaze(
+                    context: context, tile: box,
+                    depth: FogVeilPainter.Depth(top: 0.5, bottom: 0.5, haze: nil),
+                    clouds: FogVeilPainter.CloudLay(
+                        world: bigger, rect: biggerBox, cell: cell,
+                        density: images.density, mask: images.mask))
+            }
+            return data
+        }
+
+        let alone = paint(offsetPieces: 0)
+        let inside = paint(offsetPieces: 3)
+        var worst = 0
+        for i in stride(from: 0, to: alone.count, by: 4) {
+            worst = max(worst, abs(Int(alone[i + 1]) - Int(inside[i + 1])))
+        }
+        print("[clouds] узор от разных кусков расходится на \(worst) уровня")
+        XCTAssertLessThanOrEqual(worst, 2,
+                                 "облака посчитаны от куска, а не от мира — узор поплывёт")
+    }
+
     // MARK: Внутри
 
     /// Тот же кадр настоящим `FogVeilRenderer`, тайл за тайлом, с клипом на
