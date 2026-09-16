@@ -2,6 +2,7 @@
 import Foundation
 import CoreData
 import CoreLocation
+import UIKit
 
 /// Fills an empty simulator store with a believable set of drives so «Моя
 /// карта» can actually be looked at — region fills, clusters, city dots, the
@@ -150,6 +151,7 @@ enum DebugMapSeed {
             if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
             if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
             if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
+            seedPhotos(persistence: persistence)
             return
         }
 
@@ -206,6 +208,95 @@ enum DebugMapSeed {
         if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
         if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
         if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
+        seedPhotos(persistence: persistence)
+    }
+
+    // MARK: - Снимки на маршруте (0.7.0)
+
+    /// Три снимка на одной демо-поездке — два в одной кучке, третий поодаль.
+    ///
+    /// Без них на карте нет НИ ОДНОЙ булавки снимка, а значит весь путь
+    /// «булавка → карточка предпросмотра → просмотрщик» на симуляторе
+    /// проверить нечем: он уже уехал на ревью непроверенным один раз. Кучка
+    /// из двух нужна отдельно — только на ней видно «2 из 3».
+    ///
+    /// Картинки рисуются на месте (`UIGraphicsImageRenderer`), а не лежат в
+    /// ресурсах: в бандл релиза они попасть не должны, а весь файл и так
+    /// `#if DEBUG`. Идемпотентно: хоть один снимок в базе — выходим.
+    private static func seedPhotos(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let existing: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()
+        existing.fetchLimit = 1
+        if let found = try? context.count(for: existing), found > 0 { return }
+
+        // Поездка — САМАЯ СВЕЖАЯ, а не самая длинная.
+        //
+        // Длинную выбирали ради того, чтобы третья булавка встала поодаль от
+        // стопки, — и снимки уехали на поездку, которую в «Истории» надо
+        // сначала найти. Открывают (и на скриншотах, и руками) верхнюю, то
+        // есть последнюю по времени; булавки разводит доля вдоль трека, а не
+        // длина поездки.
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
+        request.fetchLimit = 1
+        guard let trip = try? context.fetch(request).first,
+              let tripId = trip.id else { return }
+        let points = (trip.trackPoints?.array as? [TrackPointEntity]) ?? []
+        // Восемь, а не двадцать: свежая демо-поездка — городская петля в
+        // 4.9 км, а точки сеются шагом 400 м. Порог в двадцать молча отменял
+        // весь сид (ни одной булавки на карте, `NO_PHOTO_PIN` в UI-тесте) —
+        // ровно там, где его труднее всего заметить: сид ничего не сообщает.
+        guard points.count >= 8 else { return }
+
+        let near = points[points.count * 45 / 100]
+        let far = points[points.count * 75 / 100]
+        // Первые два — со своей координатой и в двух десятках метров друг от
+        // друга: `MapPhotoPreview.stackRadius` их и собирает в стопку.
+        let seeds: [(String, UIColor, TrackPointEntity, Double)] = [
+            ("Море", .systemTeal, near, 0),
+            ("Перевал", .systemOrange, near, 0.00018),
+            ("Заправка", .systemIndigo, far, 0)
+        ]
+        for (order, seed) in seeds.enumerated() {
+            let (caption, colour, point, offset) = seed
+            guard let image = photoImage(caption: caption, colour: colour),
+                  let filename = PhotoStorageService.savePhoto(image, for: tripId) else { continue }
+            let photo = TripPhotoEntity(context: context)
+            photo.id = UUID()
+            photo.filename = filename
+            photo.caption = caption
+            photo.timestamp = Date()
+            // Время съёмки — ВНУТРИ трека: по нему считается «сколько до
+            // сюда» на карточке, и без него она осталась бы без строки.
+            photo.capturedAt = point.timestamp
+            photo.exifLatitude = NSNumber(value: point.latitude + offset)
+            photo.exifLongitude = NSNumber(value: point.longitude + offset)
+            photo.lastModifiedAt = Date()
+            photo.sortOrder = Int16(order)
+            photo.trip = trip
+        }
+        persistence.save()
+    }
+
+    /// Кадр-заглушка: цветной прямоугольник с подписью. Мелкий нарочно —
+    /// его задача быть УЗНАВАЕМЫМ на булавке в 40 pt, а не красивым.
+    private static func photoImage(caption: String, colour: UIColor) -> UIImage? {
+        let size = CGSize(width: 1_200, height: 900)
+        return UIGraphicsImageRenderer(size: size).image { ctx in
+            colour.setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+            UIColor.white.withAlphaComponent(0.22).setFill()
+            ctx.fill(CGRect(x: 0, y: size.height * 0.62, width: size.width, height: size.height * 0.38))
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 120, weight: .heavy),
+                .foregroundColor: UIColor.white
+            ]
+            let bounds = (caption as NSString).size(withAttributes: attributes)
+            (caption as NSString).draw(
+                at: CGPoint(x: (size.width - bounds.width) / 2,
+                            y: (size.height - bounds.height) / 2),
+                withAttributes: attributes)
+        }
     }
 
     // MARK: - Находки (0.7.0)

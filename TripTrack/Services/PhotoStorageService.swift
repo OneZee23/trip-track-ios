@@ -126,7 +126,8 @@ enum PhotoStorageService {
     /// Размер — в ПИКСЕЛЯХ: вызывающий сам умножает точки экрана на его
     /// масштаб.
     static func loadDownsampled(filename: String, maxPixelSize: CGFloat) async -> UIImage? {
-        await Task.detached(priority: .userInitiated) { () -> UIImage? in
+        let scale = await UIScreen.main.scale
+        return await Task.detached(priority: .userInitiated) { () -> UIImage? in
             guard let url = safePhotoURL(for: filename),
                   localFileExists(filename: filename),
                   let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
@@ -137,7 +138,12 @@ enum PhotoStorageService {
             ]
             guard let cgImage = CGImageSourceCreateThumbnailAtIndex(
                 source, 0, options as CFDictionary) else { return nil }
-            return UIImage(cgImage: cgImage)
+            // Со шкалой экрана, а не `scale == 1`: размер заказан в ПИКСЕЛЯХ,
+            // и без неё `image.size` вернул бы пиксели как точки — втрое
+            // больше вида на 3× экране. `ZoomableImageView` считает от него
+            // пределы приближения, и они разъехались бы с прежним
+            // `loadPhotoAsync`.
+            return UIImage(cgImage: cgImage, scale: scale, orientation: .up)
         }.value
     }
 
@@ -174,9 +180,11 @@ enum PhotoStorageService {
         if let cached = thumbnailCache.object(forKey: key) {
             return .image(cached)
         }
+        rememberIssuedTier(filename, maxSize)
 
         let scale = UIScreen.main.scale
         return await Task.detached(priority: .userInitiated) { () -> ThumbnailOutcome in
+            repairLegacyThumbnailsIfNeeded()
             // L2: disk cache
             if let diskURL = thumbnailDiskURL(for: filename, maxSize: maxSize),
                let diskData = try? Data(contentsOf: diskURL),
@@ -228,10 +236,71 @@ enum PhotoStorageService {
     /// картинка первой ложится в просмотрщик, пока полный кадр считается.
     static let previewTier: CGFloat = 600
 
-    /// Ступени, которыми пользуется приложение. Нужны ровно одному —
-    /// удалению: файл с диска убирается перечислением каталога, а память
-    /// чистится по этому списку (ключей у `NSCache` не перечислить).
-    static let thumbnailTiers: [CGFloat] = [80, 120, 150, previewTier, 1_200]
+    /// Ступени, которыми приложение пользуется ЯВНО.
+    ///
+    /// Полным списком не является и быть не может: `MyMapSheet` просит
+    /// `size * 3`, то есть значение времени выполнения. Держится только ради
+    /// тестов и ради первого прогрева; чистку памяти ведёт `issuedTierKeys` —
+    /// настоящий список того, что было выдано.
+    static let thumbnailTiers: [CGFloat] = [64, 80, 120, 150, previewTier, 1_200]
+
+    /// Какие ступени этого файла реально лежат в памяти. `NSCache` ключи не
+    /// перечисляет, а удаление обязано забрать их все.
+    private static var issuedTierKeys: [String: Set<Int>] = [:]
+
+    private static func rememberIssuedTier(_ filename: String, _ maxSize: CGFloat) {
+        existenceLock.lock()
+        issuedTierKeys[filename, default: []].insert(Int(maxSize))
+        existenceLock.unlock()
+    }
+
+    /// Убрать из памяти ВСЕ ступени этого файла.
+    private static func forgetThumbnailsInMemory(_ filename: String) {
+        existenceLock.lock()
+        let issued = issuedTierKeys.removeValue(forKey: filename) ?? []
+        existenceLock.unlock()
+        for size in issued.union(Set(thumbnailTiers.map { Int($0) })) {
+            thumbnailCache.removeObject(forKey: thumbnailCacheKey(filename, CGFloat(size)))
+        }
+    }
+
+    /// Убрать с диска все миниатюры этого файла, какой бы ступени они ни были.
+    private static func removeAllThumbnailFiles(for filename: String) {
+        guard let anyTier = thumbnailDiskURL(for: filename, maxSize: 150) else { return }
+        let directory = anyTier.deletingLastPathComponent()
+        let photoFile = filename.split(separator: "/").last.map(String.init) ?? filename
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil)) ?? []
+        for url in contents {
+            let name = url.lastPathComponent
+            guard name == photoFile || name.hasPrefix(photoFile + "@") else { continue }
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    /// Разовая уборка миниатюр, написанных ДО суффиксов.
+    ///
+    /// Они не читаются никем (у всех ступеней теперь суффикс), но занимают
+    /// место и хранят кадр неизвестного размера. Проход один за установку,
+    /// латч — в `UserDefaults`; зовётся с фоновой очереди на первой же
+    /// просьбе о миниатюре, потому что до неё каталога может ещё не быть.
+    private static let legacySweepKey = "photos.thumbnailSuffixSweep.v1"
+
+    private static func repairLegacyThumbnailsIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: legacySweepKey) else { return }
+        let fm = FileManager.default
+        let tripDirs = (try? fm.contentsOfDirectory(
+            at: photosDirectory, includingPropertiesForKeys: nil)) ?? []
+        for tripDir in tripDirs {
+            let thumbs = tripDir.appendingPathComponent(".thumbnails", isDirectory: true)
+            let files = (try? fm.contentsOfDirectory(at: thumbs, includingPropertiesForKeys: nil)) ?? []
+            for url in files where !url.lastPathComponent.contains("@") {
+                try? fm.removeItem(at: url)
+            }
+        }
+        defaults.set(true, forKey: legacySweepKey)
+    }
 
     /// Ключ кэша — ИМЯ ПЛЮС РАЗМЕР.
     ///
@@ -244,13 +313,21 @@ enum PhotoStorageService {
         "\(filename)@\(Int(maxSize))" as NSString
     }
 
-    /// Disk path for cached thumbnail: Documents/TripPhotos/{tripId}/.thumbnails/{photoFile}
+    /// Disk path for cached thumbnail:
+    /// `Documents/TripPhotos/{tripId}/.thumbnails/{photoFile}@{size}`
     ///
-    /// У ступени 150 — прежнее имя без суффикса: кэш, накопленный прошлыми
-    /// версиями, обязан пережить обновление. Остальные ступени лежат рядом с
-    /// «@600» в имени.
+    /// Суффикс у ВСЕХ ступеней, включая 150. Прежнее имя (без суффикса)
+    /// пробовали оставить ей «чтобы кэш пережил обновление» — и это было
+    /// ошибкой: старый баг жил не только в ключе `NSCache`, но и в пути, и в
+    /// `.thumbnails/<file>` лежит та ступень, которая попросила ПЕРВОЙ — 64,
+    /// 80, 120 или 1200. Читать её как 150 значит навсегда раздавать ленте
+    /// мыло (или лишние мегабайты). Пережить обязан КОРРЕКТНЫЙ кэш, а его там
+    /// нет; цена правды — одна разовая перерисовка на снимок.
+    ///
+    /// Файлы без суффикса после этого не читает никто; убирает их разовая
+    /// чистка `repairLegacyThumbnailsIfNeeded`.
     static func thumbnailDiskURL(for filename: String, maxSize: CGFloat = 150) -> URL? {
-        let suffix = maxSize == 150 ? "" : "@\(Int(maxSize))"
+        let suffix = "@\(Int(maxSize))"
         let components = filename.split(separator: "/")
         let url: URL
         if components.count == 2 {
@@ -293,16 +370,17 @@ enum PhotoStorageService {
     static func deletePhoto(filename: String) {
         guard let url = safePhotoURL(for: filename) else { return }
         try? FileManager.default.removeItem(at: url)
-        // Clean up cached thumbnails (disk + memory) — ВСЕ ступени. Их
-        // имена отличаются суффиксом, поэтому диск чистится перечислением
-        // каталога, а память — по списку ступеней: ключи `NSCache` не
-        // перечисляются.
-        for tier in thumbnailTiers {
-            if let thumbURL = thumbnailDiskURL(for: filename, maxSize: tier) {
-                try? FileManager.default.removeItem(at: thumbURL)
-            }
-            thumbnailCache.removeObject(forKey: thumbnailCacheKey(filename, tier))
-        }
+        // Диск чистится ПЕРЕЧИСЛЕНИЕМ каталога, а не по списку ступеней.
+        //
+        // Ступеней больше, чем можно перечислить: `MyMapSheet` просит
+        // `size * 3` — значение времени выполнения. Список пропустил бы их, а
+        // ветка диска в `loadThumbnailOutcome` стоит РАНЬШЕ проверки
+        // существования файла, то есть удалённый снимок продолжал бы
+        // отдаваться булавкой на «Атласе» вечно.
+        removeAllThumbnailFiles(for: filename)
+        // Память перечислить нельзя (у `NSCache` нет ключей), поэтому здесь
+        // список — и он же причина, по которой выданные ключи запоминаются.
+        forgetThumbnailsInMemory(filename)
         rememberExistence(false, for: filename)
     }
 

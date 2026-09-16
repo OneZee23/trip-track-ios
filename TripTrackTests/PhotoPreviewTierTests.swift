@@ -49,10 +49,10 @@ final class PhotoPreviewTierTests: XCTestCase {
     /// объект из памяти, а на диске рядом с ним лежит свой файл.
     func testPreviewTierIsBuiltOnceAndReused() async throws {
         let filename = try XCTUnwrap(self.filename)
-        let first = try await XCTUnwrapAsync(
+        let first = try await unwrap(
             PhotoStorageService.loadThumbnail(
                 filename: filename, maxSize: PhotoStorageService.previewTier))
-        let second = try await XCTUnwrapAsync(
+        let second = try await unwrap(
             PhotoStorageService.loadThumbnail(
                 filename: filename, maxSize: PhotoStorageService.previewTier))
         XCTAssertTrue(first === second, "вторая разборка того же файла — это и есть лишняя работа")
@@ -79,9 +79,10 @@ final class PhotoPreviewTierTests: XCTestCase {
         let legacy = try XCTUnwrap(PhotoStorageService.thumbnailDiskURL(
             for: filename, maxSize: 150))
         XCTAssertNotEqual(preview, legacy)
-        // У ступени 150 — прежнее имя без суффикса: кэш прошлых версий обязан
-        // пережить обновление.
-        XCTAssertFalse(legacy.lastPathComponent.contains("@"))
+        // Суффикс у ВСЕХ ступеней, включая 150: в старом `.thumbnails/<file>`
+        // лежит та ступень, которая попросила ПЕРВОЙ (64, 80, 120 или 1200), и
+        // читать её как 150 значило бы навсегда раздавать ленте мыло.
+        XCTAssertTrue(legacy.lastPathComponent.hasSuffix("@150"))
         XCTAssertTrue(preview.lastPathComponent.hasSuffix("@600"))
     }
 
@@ -90,18 +91,45 @@ final class PhotoPreviewTierTests: XCTestCase {
     /// разобранный СРАЗУ в размер экрана — и он крупнее ступени.
     func testViewerLoadsThumbnailFirstThenASharperFullFrame() async throws {
         let filename = try XCTUnwrap(self.filename)
-        let preview = try await XCTUnwrapAsync(
+        let preview = try await unwrap(
             PhotoStorageService.loadThumbnail(
                 filename: filename, maxSize: PhotoStorageService.previewTier))
         // «Сразу», без ожидания: ровно этим просмотрщик и засевает страницу.
         XCTAssertNotNil(PhotoStorageService.cachedThumbnail(
             filename: filename, maxSize: PhotoStorageService.previewTier))
 
-        let full = try await XCTUnwrapAsync(
+        let full = try await unwrap(
             PhotoStorageService.loadDownsampled(filename: filename, maxPixelSize: 2_600))
-        XCTAssertGreaterThan(full.size.width, preview.size.width)
+        // Сравнение в ПИКСЕЛЯХ: у полного кадра шкала экрана (иначе
+        // `ZoomableImageView` посчитал бы пределы приближения втрое больше),
+        // а у ступени она так и осталась единицей.
+        let fullPixels = full.size.width * full.scale
+        let previewPixels = preview.size.width * preview.scale
+        XCTAssertGreaterThan(fullPixels, previewPixels)
+        XCTAssertEqual(full.scale, UIScreen.main.scale)
         // И всё же НЕ полный файл: разбор идёт сразу в заказанный размер.
-        XCTAssertLessThanOrEqual(max(full.size.width, full.size.height), 2_600)
+        XCTAssertLessThanOrEqual(max(fullPixels, full.size.height * full.scale), 2_600)
+    }
+
+    /// Удаление уносит и ступень, которой нет в списке.
+    ///
+    /// `MyMapSheet` просит `size * 3` — значение времени выполнения, никаким
+    /// списком не покрываемое. А ветка диска в `loadThumbnailOutcome` стоит
+    /// РАНЬШЕ проверки существования файла, поэтому пропущенная ступень
+    /// продолжала бы отдавать удалённый снимок булавкой на «Атласе» вечно.
+    func testDeletingAPhotoTakesAnUnlistedTierToo() async throws {
+        let filename = try unwrap(self.filename)
+        XCTAssertFalse(PhotoStorageService.thumbnailTiers.contains(213))
+        _ = await PhotoStorageService.loadThumbnail(filename: filename, maxSize: 213)
+        let url = try XCTUnwrap(PhotoStorageService.thumbnailDiskURL(for: filename, maxSize: 213))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+
+        PhotoStorageService.deletePhoto(filename: filename)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertNil(PhotoStorageService.cachedThumbnail(filename: filename, maxSize: 213))
+        let after = await PhotoStorageService.loadThumbnail(filename: filename, maxSize: 213)
+        XCTAssertNil(after, "удалённый снимок не имеет права жить в кэше ступени")
     }
 
     func testDeletingAPhotoTakesEveryTierWithIt() async throws {
@@ -122,8 +150,8 @@ final class PhotoPreviewTierTests: XCTestCase {
         }
     }
 
-    private func XCTUnwrapAsync<T>(_ value: T?, file: StaticString = #filePath,
-                                   line: UInt = #line) throws -> T {
+    private func unwrap<T>(_ value: T?, file: StaticString = #filePath,
+                           line: UInt = #line) throws -> T {
         try XCTUnwrap(value, file: file, line: line)
     }
 }
