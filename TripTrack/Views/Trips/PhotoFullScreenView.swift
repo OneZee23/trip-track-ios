@@ -461,6 +461,12 @@ private struct PhotoPage: View {
 
     @State private var image: UIImage?
     @State private var failed = false
+    /// Показанная картинка — уже полный кадр, разобранный в размер экрана.
+    ///
+    /// Без флага порядок двух загрузок решал бы случай: миниатюра,
+    /// приехавшая ВТОРОЙ (тёплый кэш полного кадра, холодный — ступени),
+    /// затёрла бы резкий кадр мылом.
+    @State private var isFullResolution = false
 
     /// Готовая копия — сразу, в том же кадре. Иначе на каждой странице
     /// сначала показывается заглушка, даже когда картинка давно разобрана и
@@ -484,8 +490,12 @@ private struct PhotoPage: View {
                 _image = State(initialValue: VehicleImageCache.cached(
                     VehicleImageCache.remoteKey(url, Self.fullScreenSize)))
             }
-        case .local:
-            break
+        case .local(let filename):
+            // Своя ступень 600 pt — из памяти и синхронно, если она там уже
+            // есть: карточка предпросмотра под булавкой её только что
+            // просила, и повторять ради неё пустой кадр с заглушкой незачем.
+            _image = State(initialValue: PhotoStorageService.cachedThumbnail(
+                filename: filename, maxSize: PhotoStorageService.previewTier))
         }
     }
 
@@ -546,13 +556,39 @@ private struct PhotoPage: View {
     // заглушки почти не было — картинка берётся из кэша сразу, а удалённая
     // качается один раз и дальше живёт на диске.
 
+    /// Во сколько пикселей разбирается полный кадр — экран целиком, с его
+    /// масштабом. Больше — это мегабайты, которые потом двигает палец.
+    @MainActor
+    private static var fullScreenPixels: CGFloat {
+        let bounds = UIScreen.main.bounds
+        return max(bounds.width, bounds.height) * UIScreen.main.scale
+    }
+
     private func load() async {
         switch source {
         case .local(let filename):
-            let loaded = await PhotoStorageService.loadPhotoAsync(filename: filename)
+            // Две ступени, и в этом порядке. Раньше здесь стоял один
+            // `loadPhotoAsync` — полный файл с камеры, развёрнутый как есть:
+            // на странице висела заглушка ровно столько, сколько ImageIO
+            // разбирал двенадцать мегапикселей. Сначала ступень 600 pt (она
+            // же лежит на карточке предпросмотра, то есть чаще всего уже
+            // готова), потом тот же файл, разобранный СРАЗУ в размер экрана.
+            if image == nil,
+               let preview = await PhotoStorageService.loadThumbnail(
+                    filename: filename, maxSize: PhotoStorageService.previewTier) {
+                if Task.isCancelled { return }
+                if !isFullResolution { image = preview }
+            }
+            let pixels = Self.fullScreenPixels
+            let loaded = await PhotoStorageService.loadDownsampled(
+                filename: filename, maxPixelSize: pixels)
             if Task.isCancelled { return }
-            image = loaded
-            failed = loaded == nil
+            if let loaded {
+                image = loaded
+                isFullResolution = true
+            } else if image == nil {
+                failed = true
+            }
         case .vehicle(let filename):
             // Через кэш и с уменьшением, а не `UIImage(contentsOfFile:)`.
             //

@@ -1,5 +1,6 @@
 import UIKit
 import CoreData
+import ImageIO
 
 enum PhotoStorageService {
     private static var photosDirectory: URL {
@@ -116,6 +117,30 @@ enum PhotoStorageService {
         }.value
     }
 
+    /// Полный кадр, разобранный СРАЗУ в размер экрана.
+    ///
+    /// `loadPhotoAsync` выше разворачивает файл как есть — двенадцать
+    /// мегапикселей с камеры на страницу просмотрщика, которые потом двигает
+    /// палец. ImageIO умеет разобрать тот же файл сразу в нужный размер, и
+    /// именно этим путём уже ходят снимки машины (`VehicleImageCache.sized`).
+    /// Размер — в ПИКСЕЛЯХ: вызывающий сам умножает точки экрана на его
+    /// масштаб.
+    static func loadDownsampled(filename: String, maxPixelSize: CGFloat) async -> UIImage? {
+        await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            guard let url = safePhotoURL(for: filename),
+                  localFileExists(filename: filename),
+                  let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+            let options: [CFString: Any] = [
+                kCGImageSourceThumbnailMaxPixelSize: max(1, maxPixelSize),
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true
+            ]
+            guard let cgImage = CGImageSourceCreateThumbnailAtIndex(
+                source, 0, options as CFDictionary) else { return nil }
+            return UIImage(cgImage: cgImage)
+        }.value
+    }
+
     /// Why a thumbnail did not come back. `nil` collapsed "the file is gone
     /// for good" into "not loaded", which is how a dead row got to render as
     /// the same grey loading tile forever.
@@ -143,7 +168,7 @@ enum PhotoStorageService {
     /// Same load, but says which of "no picture" it was.
     @MainActor
     static func loadThumbnailOutcome(filename: String, maxSize: CGFloat = 150) async -> ThumbnailOutcome {
-        let key = filename as NSString
+        let key = thumbnailCacheKey(filename, maxSize)
 
         // L1: in-memory cache
         if let cached = thumbnailCache.object(forKey: key) {
@@ -153,7 +178,7 @@ enum PhotoStorageService {
         let scale = UIScreen.main.scale
         return await Task.detached(priority: .userInitiated) { () -> ThumbnailOutcome in
             // L2: disk cache
-            if let diskURL = thumbnailDiskURL(for: filename),
+            if let diskURL = thumbnailDiskURL(for: filename, maxSize: maxSize),
                let diskData = try? Data(contentsOf: diskURL),
                let diskImage = UIImage(data: diskData) {
                 thumbnailCache.setObject(diskImage, forKey: key)
@@ -185,7 +210,7 @@ enum PhotoStorageService {
 
             // Write to disk cache for next launch
             if let jpegData = thumbnail.jpegData(compressionQuality: 0.7),
-               let diskURL = thumbnailDiskURL(for: filename) {
+               let diskURL = thumbnailDiskURL(for: filename, maxSize: maxSize) {
                 let dir = diskURL.deletingLastPathComponent()
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 try? jpegData.write(to: diskURL)
@@ -195,8 +220,37 @@ enum PhotoStorageService {
         }.value
     }
 
+    /// Ступень «средний размер»: 600 pt.
+    ///
+    /// Между булавкой на карте (80 pt) и полным кадром лежала пустота, и
+    /// карточка предпросмотра под булавкой платила бы за неё либо мылом
+    /// восьмидесяти точек, либо полным разбором файла с камеры. Та же
+    /// картинка первой ложится в просмотрщик, пока полный кадр считается.
+    static let previewTier: CGFloat = 600
+
+    /// Ступени, которыми пользуется приложение. Нужны ровно одному —
+    /// удалению: файл с диска убирается перечислением каталога, а память
+    /// чистится по этому списку (ключей у `NSCache` не перечислить).
+    static let thumbnailTiers: [CGFloat] = [80, 120, 150, previewTier, 1_200]
+
+    /// Ключ кэша — ИМЯ ПЛЮС РАЗМЕР.
+    ///
+    /// Раньше ключом было одно имя, и пять ступеней (80 на булавке, 120 на
+    /// отметке, 150 в ленте, 1200 на обложке) делили одну ячейку: кто первым
+    /// попросил, того размер и получали все остальные. С появлением ступени в
+    /// 600 pt это перестало быть незаметным — карточка предпросмотра получала
+    /// бы восьмидесятиточечную булавку.
+    static func thumbnailCacheKey(_ filename: String, _ maxSize: CGFloat) -> NSString {
+        "\(filename)@\(Int(maxSize))" as NSString
+    }
+
     /// Disk path for cached thumbnail: Documents/TripPhotos/{tripId}/.thumbnails/{photoFile}
-    private static func thumbnailDiskURL(for filename: String) -> URL? {
+    ///
+    /// У ступени 150 — прежнее имя без суффикса: кэш, накопленный прошлыми
+    /// версиями, обязан пережить обновление. Остальные ступени лежат рядом с
+    /// «@600» в имени.
+    static func thumbnailDiskURL(for filename: String, maxSize: CGFloat = 150) -> URL? {
+        let suffix = maxSize == 150 ? "" : "@\(Int(maxSize))"
         let components = filename.split(separator: "/")
         let url: URL
         if components.count == 2 {
@@ -205,13 +259,22 @@ enum PhotoStorageService {
             url = photosDirectory
                 .appendingPathComponent(tripDir, isDirectory: true)
                 .appendingPathComponent(".thumbnails", isDirectory: true)
-                .appendingPathComponent(photoFile)
+                .appendingPathComponent(photoFile + suffix)
         } else {
-            url = photosDirectory.appendingPathComponent(".thumbnails/\(filename)")
+            url = photosDirectory.appendingPathComponent(".thumbnails/\(filename)\(suffix)")
         }
         let resolved = url.standardizedFileURL
         guard resolved.path.hasPrefix(photosDirectory.standardizedFileURL.path) else { return nil }
         return resolved
+    }
+
+    /// Готовая миниатюра из памяти, синхронно. `nil` — её там нет.
+    ///
+    /// Нужна одному месту: странице просмотрщика, которая обязана показать
+    /// картинку в ТОМ ЖЕ кадре, в котором появилась. Асинхронный путь, даже
+    /// попадающий в кэш, стоит одного пустого кадра с заглушкой.
+    static func cachedThumbnail(filename: String, maxSize: CGFloat) -> UIImage? {
+        thumbnailCache.object(forKey: thumbnailCacheKey(filename, maxSize))
     }
 
     /// Clear thumbnail cache on memory warning.
@@ -230,11 +293,16 @@ enum PhotoStorageService {
     static func deletePhoto(filename: String) {
         guard let url = safePhotoURL(for: filename) else { return }
         try? FileManager.default.removeItem(at: url)
-        // Clean up cached thumbnail (disk + memory)
-        if let thumbURL = thumbnailDiskURL(for: filename) {
-            try? FileManager.default.removeItem(at: thumbURL)
+        // Clean up cached thumbnails (disk + memory) — ВСЕ ступени. Их
+        // имена отличаются суффиксом, поэтому диск чистится перечислением
+        // каталога, а память — по списку ступеней: ключи `NSCache` не
+        // перечисляются.
+        for tier in thumbnailTiers {
+            if let thumbURL = thumbnailDiskURL(for: filename, maxSize: tier) {
+                try? FileManager.default.removeItem(at: thumbURL)
+            }
+            thumbnailCache.removeObject(forKey: thumbnailCacheKey(filename, tier))
         }
-        thumbnailCache.removeObject(forKey: filename as NSString)
         rememberExistence(false, for: filename)
     }
 
