@@ -312,6 +312,11 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         private var regionLabels: [RegionLabelAnnotation] = []
         private var exploration = MapExploration()
         private var installedLanguage: LanguageManager.Language?
+        /// Единица у строки «N км» под именем региона: смена км → мили в
+        /// профиле перерисовывает экран, но не меняет ни поездок, ни регионов,
+        /// ни языка — без этой памяти подпись висела бы в старой единице до
+        /// первого постороннего повода.
+        private var installedUnit: DistanceUnit?
         /// Routes projected into map points once, for hit-testing. Converting
         /// every vertex of every trip through `MKMapView.convert` on each tap
         /// meant hundreds of thousands of view calls before a finger got an
@@ -420,8 +425,11 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             // City dots and region labels are derived data, and `updateUIView`
             // runs on every published change — a selection, a camera command.
             // Rebuilding these arrays each time was pure allocation.
-            if tripsChanged || regionsChanged || visitedChanged || language != installedLanguage {
+            let unit = DistanceUnit.current
+            if tripsChanged || regionsChanged || visitedChanged
+                || language != installedLanguage || unit != installedUnit {
                 installedLanguage = language
+                installedUnit = unit
                 installedVisitedRegionIds = visitedRegionIds
                 // Только внутри коридоров: город, до которого ты не доезжал,
                 // на карте тумана не существует. `MapExploration` уже отдаёт
@@ -445,7 +453,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 )
                 regionLabels = RegionLabelModel.regionLabels(
                     regions: RegionAtlas.shared.regions, revealed: revealed,
-                    visitedRegionIds: visitedRegionIds, unit: DistanceUnit.current, language: language
+                    visitedRegionIds: visitedRegionIds, unit: unit, language: language
                 ) + RegionLabelModel.countryLabels(
                     countries: RegionAtlas.shared.countries,
                     visitedCountryCodes: visitedCountryCodes, language: language
