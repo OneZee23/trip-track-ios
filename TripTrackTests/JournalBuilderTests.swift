@@ -72,7 +72,9 @@ final class JournalBuilderTests: XCTestCase {
             seals: [find("lighthouse:u0h", foundAt: now)],
             hints: [hint("pass:u0j", lat: 45, lon: 39, radius: 5_000)])
 
-        XCTAssertEqual(journal.openedKm, 1_910, "километры берутся у слоя, а не у поездок")
+        // Открытых километров у журнала НЕТ: их печатает лист прямо из
+        // `RevealedLayer.openedKm`, и второе поле с тем же числом было бы
+        // вторым источником.
         XCTAssertEqual(journal.regions.map(\.id), ["RU-KDA", "RU-ROS"])
         XCTAssertEqual(journal.regions.first?.firstVisited, now - 30 * day)
         XCTAssertEqual(journal.finds.count, 1)
@@ -96,7 +98,6 @@ final class JournalBuilderTests: XCTestCase {
         let journal = JournalBuilder.build(
             exploration: MapExploration(), revealed: .empty, seals: [], hints: [])
         XCTAssertTrue(journal.isEmpty)
-        XCTAssertEqual(journal.openedKm, 0)
     }
 
     // MARK: - Порядок находок

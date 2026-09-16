@@ -1580,7 +1580,9 @@ struct PublicProfileView: View {
                     columns: [GridItem(.adaptive(minimum: 60), spacing: 12)],
                     alignment: .leading, spacing: 14
                 ) {
-                    ForEach(finds, id: \.secretId) { find in
+                    // `id: \.self`, а не `\.secretId`: DTO уже `Hashable`, а
+                    // дубль ключа с сервера тихо схлопнул бы две печати в одну.
+                    ForEach(finds, id: \.self) { find in
                         findChip(find, c)
                     }
                 }
@@ -1616,7 +1618,7 @@ struct PublicProfileView: View {
                 }
             }
 
-            if let rarity = AppStrings.findRarityLabel(lang.language, raw: find.rarity) {
+            if let rarity = find.rarityLabel(lang.language) {
                 Text(rarity)
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
@@ -1633,7 +1635,7 @@ struct PublicProfileView: View {
     /// rarity string it doesn't recognise) still reads as a sentence.
     private func findAccessibilityLabel(_ find: SocialFind) -> String {
         var parts = [AppStrings.sealAccessibility(lang.language, kind: find.discoveryKind)]
-        if let rarity = AppStrings.findRarityLabel(lang.language, raw: find.rarity) {
+        if let rarity = find.rarityLabel(lang.language) {
             parts.append(rarity)
         }
         if find.first {

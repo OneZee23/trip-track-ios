@@ -355,6 +355,16 @@ enum AtlasSharePoster {
         }.value
     }
 
+    /// Снимок, который МОЖНО показать: `nil` — карты в нём нет.
+    ///
+    /// Одна дверь на два места показа: постер (`make` выше) и мини-карта
+    /// решённой загадки на карточке (`RiddleMiniMap`). Там и там ответ один —
+    /// пустая сетка с водяным знаком «Maps» хуже, чем честный тёмный фон.
+    static func usableSnapshot(_ image: UIImage?) -> UIImage? {
+        guard let image, !looksUnrendered(image) else { return nil }
+        return image
+    }
+
     /// Пришла ли вместо карты ПУСТАЯ сетка MapKit.
     ///
     /// `MKMapSnapshotter.start()` не отказывает, когда плиток нет: он отдаёт

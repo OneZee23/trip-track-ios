@@ -70,7 +70,8 @@ final class DiscoveryProcessorTests: XCTestCase {
         riddles: [Riddle] = [],
         secrets: [SecretRecord] = [],
         salt: String = "test-salt",
-        isRecording: Bool = false
+        isRecording: Bool = false,
+        reveal: @escaping @MainActor ([Discovery], UUID) async -> Void = { _, _ in }
     ) -> DiscoveryProcessor {
         DiscoveryProcessor(
             store: store,
@@ -82,7 +83,8 @@ final class DiscoveryProcessorTests: XCTestCase {
                 self?.unlocked.append(id)
                 return Badge.all.first(where: { $0.id == id })
             },
-            isRecording: { isRecording }
+            isRecording: { isRecording },
+            reveal: reveal
         )
     }
 
@@ -402,5 +404,47 @@ final class DiscoveryProcessorTests: XCTestCase {
             XCTAssertFalse(badge.checkUnlocked(BadgeManager.computeStats(from: [])),
                            "\(id) не имеет права выводиться из статистики поездок")
         }
+    }
+
+    // MARK: - Раскрытие не держит экран итогов
+
+    /// `process` отдаёт сводку, НЕ дожидаясь сетевого круга раскрытия.
+    ///
+    /// На флапающей сотовой три находки складывались бы в три таймаута
+    /// URLSession подряд, и блок «вы нашли» на экране итогов ждал бы их
+    /// минуты. Ответ дописывается в базу и доезжает до экрана сам, через
+    /// `.discoveriesChanged`.
+    func testProcessReturnsBeforeASlowRevealResolves() async throws {
+        seedHistory()
+        let id = trip(start: t0)
+        let started = expectation(description: "раскрытие началось")
+        let finished = expectation(description: "раскрытие закончилось")
+        let asked = Asked()
+
+        let result = await processor(
+            riddles: [bridgeOnTheTrack()],
+            reveal: { items, _ in
+                asked.keys = items.map(\.key)
+                started.fulfill()
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                asked.done = true
+                finished.fulfill()
+            }
+        ).process(tripId: id, delta: delta())
+
+        XCTAssertEqual(result.riddles.count, 1, "сводка не собралась")
+        XCTAssertFalse(asked.done, "сводка дождалась сетевого круга")
+
+        await fulfillment(of: [started, finished], timeout: 5)
+        XCTAssertEqual(asked.keys, ["bridge:demo"], "раскрытие спросили не про то")
+        XCTAssertTrue(asked.done)
+    }
+
+    /// Изменяемая коробка для наблюдения за фоновой задачей: `@MainActor`-тест
+    /// и `@MainActor`-замыкание трогают её по очереди, гонки здесь нет.
+    @MainActor
+    private final class Asked {
+        var keys: [String] = []
+        var done = false
     }
 }

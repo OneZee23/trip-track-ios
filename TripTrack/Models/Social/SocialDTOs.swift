@@ -480,11 +480,14 @@ struct SocialFind: Codable, Hashable {
     /// `"secret"` | `"riddle"` — вехи в профиль не попадают: у них нет
     /// счётчика нашедших на сервере (см. `Discovery.swift`).
     let kind: String
-    let symbol: String
+    /// Опционален не потому, что печать бывает без символа, а потому, что
+    /// ОТСУТСТВИЕ ключа не имеет права уронить чужой профиль целиком:
+    /// `sealSymbol` ниже рисует дженерик и на `nil`, и на незнакомой строке.
+    let symbol: String?
     /// `"few"` | `"tens"` | `"hundreds"` | `"many"` — редкость по числу
-    /// нашедших (спека §4). Незнакомое значение подпись просто не рисует,
-    /// см. `AppStrings.findRarityLabel`.
-    let rarity: String
+    /// нашедших (спека §4). Незнакомое значение и отсутствующий ключ дают одно
+    /// и то же: подписи нет, см. `AppStrings.findRarityLabel`.
+    let rarity: String?
     let foundAt: Date
     let first: Bool
 
@@ -493,7 +496,88 @@ struct SocialFind: Codable, Hashable {
     var discoveryKind: DiscoveryKind { DiscoveryKind(rawValue: kind) ?? .secret }
     /// Терпимый разбор символа: `SealPainter` рисует дженерик-печать вместо
     /// падения на будущем символе, которого этот билд ещё не знает.
-    var sealSymbol: SealSymbol { SealSymbol(rawValue: symbol) ?? .generic }
+    var sealSymbol: SealSymbol { symbol.flatMap(SealSymbol.init(rawValue:)) ?? .generic }
+    /// Подпись редкости, или её отсутствие. Одна дверь на оба места показа
+    /// (чип и метка доступности), чтобы «неизвестная редкость» решалась
+    /// одинаково.
+    func rarityLabel(_ lang: LanguageManager.Language) -> String? {
+        rarity.flatMap { AppStrings.findRarityLabel(lang, raw: $0) }
+    }
+
+    init(secretId: String, kind: String, symbol: String?, rarity: String?,
+         foundAt: Date, first: Bool) {
+        self.secretId = secretId
+        self.kind = kind
+        self.symbol = symbol
+        self.rarity = rarity
+        self.foundAt = foundAt
+        self.first = first
+    }
+
+    /// Терпимый разбор ОДНОЙ строки.
+    ///
+    /// Обязательны ровно три вещи, без которых печать не печать: ключ, вид и
+    /// дата. Всё остальное отсутствует молча — `first` читается как «не
+    /// первый», символ и редкость как «неизвестно». Строку без даты разбор
+    /// бросает, а `SocialProfile` её пропускает (см. `init(from:)` там): одна
+    /// кривая строка не имеет права стоить человеку всего чужого профиля.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        secretId = try c.decode(String.self, forKey: .secretId)
+        kind = try c.decode(String.self, forKey: .kind)
+        symbol = try? c.decodeIfPresent(String.self, forKey: .symbol)
+        rarity = try? c.decodeIfPresent(String.self, forKey: .rarity)
+        foundAt = try c.decode(Date.self, forKey: .foundAt)
+        first = (try? c.decodeIfPresent(Bool.self, forKey: .first)) ?? false
+    }
+}
+
+/// Строка находки, разбор которой не бросает: неудачу она несёт значением.
+///
+/// Нужна ровно затем, чтобы массив находок в профиле разбирался ПОСТРОЧНО.
+/// `[SocialFind]` синтезированным декодом — это «всё или ничего»: одна строка
+/// без `foundAt` уронила бы `SocialProfile`, то есть показала бы человеку
+/// ошибку вместо чужого профиля.
+private struct LossySocialFind: Decodable {
+    let value: SocialFind?
+
+    init(from decoder: Decoder) throws {
+        value = try? SocialFind(from: decoder)
+    }
+}
+
+extension SocialProfile {
+    /// Свой разбор — только ради `finds`: всё остальное читается ровно так же,
+    /// как читал синтезированный. Объявлен в РАСШИРЕНИИ, чтобы у типа остался
+    /// поэлементный `init` (его зовут `with(isFollowing:)` и debug-сэмпл), и
+    /// чтобы новое поле в структуре ломало компиляцию здесь, а не разбор на
+    /// телефоне.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(UUID.self, forKey: .id),
+            displayName: try c.decodeIfPresent(String.self, forKey: .displayName),
+            avatarEmoji: try c.decodeIfPresent(String.self, forKey: .avatarEmoji),
+            profileLevel: try c.decode(Int.self, forKey: .profileLevel),
+            profileBackground: try c.decodeIfPresent(String.self, forKey: .profileBackground),
+            currentStreak: try c.decode(Int.self, forKey: .currentStreak),
+            bestStreak: try c.decode(Int.self, forKey: .bestStreak),
+            stats: try c.decode(SocialProfileStats.self, forKey: .stats),
+            activeVehicle: try c.decodeIfPresent(SocialActiveVehicle.self, forKey: .activeVehicle),
+            recentBadges: try c.decode([String].self, forKey: .recentBadges),
+            recentTrips: try c.decode([SocialProfileRecentTrip].self, forKey: .recentTrips),
+            followerCount: try c.decode(Int.self, forKey: .followerCount),
+            followingCount: try c.decode(Int.self, forKey: .followingCount),
+            isFollowing: try c.decodeIfPresent(Bool.self, forKey: .isFollowing),
+            bio: try c.decodeIfPresent(String.self, forKey: .bio),
+            visibility: try c.decodeIfPresent(SocialProfileVisibility.self, forKey: .visibility),
+            // Ключа нет — `nil` («сервер про находки не знает»), пустой массив
+            // — пустой («находок нет»), кривая строка — её просто нет в
+            // списке. Три разных ответа, и ни один из них не ошибка экрана.
+            finds: try c.decodeIfPresent([LossySocialFind].self, forKey: .finds)?
+                .compactMap(\.value)
+        )
+    }
 }
 
 /// «Пусто/отсутствует → секции нет» — правило показа блока «Находки»

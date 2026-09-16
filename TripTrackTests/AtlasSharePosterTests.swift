@@ -335,6 +335,21 @@ final class AtlasSharePosterTests: XCTestCase {
         XCTAssertFalse(AtlasSharePoster.looksUnrendered(busy))
     }
 
+    /// Та же дверь, которой пользуется мини-карта решённой загадки
+    /// (`RiddleMiniMap` в `DiscoveryCardSheet`): «этот снимок можно показать?».
+    /// Три ответа — нет снимка, есть но пустой, есть настоящий.
+    func testUsableSnapshotRefusesNothingAndBlankGrid() {
+        XCTAssertNil(AtlasSharePoster.usableSnapshot(nil))
+        XCTAssertNil(AtlasSharePoster.usableSnapshot(
+            fakeSnapshot(size: CGSize(width: 120, height: 200))))
+
+        let dark = UIGraphicsImageRenderer(size: CGSize(width: 120, height: 200)).image { ctx in
+            UIColor(white: 0.12, alpha: 1).setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 120, height: 200))
+        }
+        XCTAssertNotNil(AtlasSharePoster.usableSnapshot(dark))
+    }
+
     // MARK: Кадр
 
     /// Кадр `w070_w4_poster.png` — настоящими плитками Apple, а не белым

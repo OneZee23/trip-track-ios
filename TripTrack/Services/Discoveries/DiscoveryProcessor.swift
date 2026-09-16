@@ -151,11 +151,6 @@ final class DiscoveryProcessor {
             return empty
         }
         guard !fresh.isEmpty else { return empty }
-        // Сервер спрашивается ТОЛЬКО про новое и ТОЛЬКО после того, как оно
-        // легло в базу: ответ дописывается в уже существующую строку, а не
-        // заводит её.
-        await reveal(fresh, tripId)
-
         let result = TripDiscoveries(
             tripId: tripId,
             newKm: delta.openedKm,
@@ -170,6 +165,17 @@ final class DiscoveryProcessor {
             \(result.riddles.count, privacy: .public) riddles, \
             \(result.milestones.count, privacy: .public) milestones
             """)
+        // Сервер спрашивается ТОЛЬКО про новое и ТОЛЬКО после того, как оно
+        // легло в базу: ответ дописывается в уже существующую строку, а не
+        // заводит её.
+        //
+        // И спрашивается РЯДОМ, а не в этой цепочке: `process` стоит между
+        // финишем и экраном итогов, а раскрытие это сетевой круг на КАЖДУЮ
+        // новую находку — на флапающей сотовой три находки складывались бы в
+        // три таймаута URLSession подряд, и блок «вы нашли» ждал бы их минуты.
+        // Ответ дописывается в базу и доезжает до экрана сам, через
+        // `.discoveriesChanged`; гейт приватности и очередь у `reveal` свои.
+        Task { [reveal] in await reveal(fresh, tripId) }
         return result
     }
 

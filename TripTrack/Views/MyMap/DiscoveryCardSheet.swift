@@ -293,6 +293,10 @@ struct DiscoveryCardSheet: View {
 /// «где-то здесь», и середина у него не ответ. Снимок тёмный и приглушённый:
 /// карточка стоит на нашей поверхности, а дневная карта под текстом требует
 /// такой пелены, что от карты ничего не остаётся.
+///
+/// Карты может не быть вовсе (холодные плитки, самолётный режим) — тогда
+/// остаётся тёмный фон с одним кругом, а не серая сетка MapKit: решает это
+/// `AtlasSharePoster.usableSnapshot`, тот же, что у постера.
 private struct RiddleMiniMap: View {
     let circle: DiscoveryCardModel.Circle
 
@@ -364,8 +368,15 @@ private struct RiddleMiniMap: View {
             longitude: circle.centre.longitude
                 + circle.radiusMetres / (111_320 * max(0.01, cos(circle.centre.latitude * .pi / 180)))
         )
-        snapshot = snap.image
+        // Радиус считает проекция снимка ВСЕГДА — даже когда сам кадр
+        // показывать нельзя: круг на тёмном фоне обязан остаться того же
+        // размера, что и на карте.
         radiusPoints = abs(snap.point(for: east).x - snap.point(for: circle.centre).x)
+        // Пустая сетка MapKit — не карта. Тот же вопрос и тот же ответ, что у
+        // постера: холодные/офлайновые плитки приходят светлой миллиметровкой
+        // с водяным знаком «Maps», и карточка загадки с ней выглядит сломанной.
+        // Фон `c.cardAlt` с одним пунктирным кругом читается честнее.
+        snapshot = AtlasSharePoster.usableSnapshot(snap.image)
     }
 }
 

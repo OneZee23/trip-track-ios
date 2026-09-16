@@ -67,6 +67,82 @@ final class SocialProfileFindsTests: XCTestCase {
         XCTAssertEqual(p.finds?.last?.first, false)
     }
 
+
+    // MARK: - Терпимый разбор строки
+
+    /// Кривая строка стоит СЕБЯ, а не всего чужого профиля. Без `foundAt`
+    /// печать не печать — её просто нет в списке, а профиль открывается.
+    func testRowWithoutFoundAtIsSkippedAndTheProfileSurvives() throws {
+        let findsJSON = """
+        [{"secretId":"s1","kind":"secret","symbol":"mountain.2","rarity":"few",\
+        "foundAt":"2026-09-12T00:00:00.000Z","first":true},\
+        {"secretId":"broken","kind":"secret","symbol":"mountain.2","rarity":"few",\
+        "first":false}]
+        """
+        let p = try decoder.decode(SocialProfile.self, from: profileJSON(finds: findsJSON))
+        XCTAssertEqual(p.finds?.count, 1)
+        XCTAssertEqual(p.finds?.first?.secretId, "s1")
+    }
+
+    /// Отсутствующие `rarity`/`symbol`/`first` — не ошибка, а «неизвестно»:
+    /// подписи нет, печать дженерик, звезды нет.
+    func testMissingOptionalFieldsDecodeAsUnknown() throws {
+        let findsJSON = """
+        [{"secretId":"s1","kind":"secret","foundAt":"2026-09-12T00:00:00.000Z"}]
+        """
+        let p = try decoder.decode(SocialProfile.self, from: profileJSON(finds: findsJSON))
+        let find = try XCTUnwrap(p.finds?.first)
+        XCTAssertNil(find.rarity)
+        XCTAssertNil(find.symbol)
+        XCTAssertFalse(find.first)
+        XCTAssertEqual(find.sealSymbol, .generic)
+        XCTAssertNil(find.rarityLabel(.en))
+        XCTAssertNil(find.rarityLabel(.ru))
+    }
+
+    /// Чужой ТИП у поля — тот же случай, что отсутствие: строка с числом
+    /// вместо строки в `rarity` не роняет ни профиль, ни саму печать.
+    func testWrongTypeInAnOptionalFieldDoesNotFailTheRow() throws {
+        let findsJSON = """
+        [{"secretId":"s1","kind":"secret","symbol":"mountain.2","rarity":7,\
+        "foundAt":"2026-09-12T00:00:00.000Z","first":"yes"}]
+        """
+        let p = try decoder.decode(SocialProfile.self, from: profileJSON(finds: findsJSON))
+        let find = try XCTUnwrap(p.finds?.first)
+        XCTAssertNil(find.rarity)
+        XCTAssertFalse(find.first)
+        XCTAssertEqual(find.sealSymbol, .pass)
+    }
+
+    /// Весь список кривой — пустой список, а не отказ экрана: секция просто не
+    /// покажется (`socialFindsAreVisible`).
+    func testAllRowsBrokenLeavesAnEmptyListNotAnError() throws {
+        let findsJSON = """
+        [{"secretId":"a","kind":"secret"},{"kind":"secret",\
+        "foundAt":"2026-09-12T00:00:00.000Z"}]
+        """
+        let p = try decoder.decode(SocialProfile.self, from: profileJSON(finds: findsJSON))
+        XCTAssertEqual(p.finds, [])
+        XCTAssertFalse(socialFindsAreVisible(p.finds))
+    }
+
+    /// Остальные поля профиля свой разбор не потеряли: `init(from:)` написан
+    /// руками, и забытое поле здесь — это тихо пропавшая половина экрана.
+    func testHandWrittenInitStillReadsTheRestOfTheProfile() throws {
+        let p = try decoder.decode(SocialProfile.self, from: profileJSON(finds: "[]"))
+        XCTAssertEqual(p.id, UUID(uuidString: "11111111-1111-4111-8111-111111111111"))
+        XCTAssertEqual(p.displayName, "A")
+        XCTAssertEqual(p.profileLevel, 1)
+        XCTAssertEqual(p.stats.totalKm, 100)
+        XCTAssertEqual(p.stats.tripCount, 5)
+        XCTAssertEqual(p.recentBadges, [])
+        XCTAssertEqual(p.recentTrips.count, 0)
+        XCTAssertEqual(p.followerCount, 0)
+        XCTAssertNil(p.isFollowing)
+        XCTAssertNil(p.bio)
+        XCTAssertNil(p.visibility)
+    }
+
     // MARK: - Unknown kind/symbol fallback
 
     /// A `kind`/`symbol` this build doesn't recognise (server learned a new
