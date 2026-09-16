@@ -96,6 +96,13 @@ final class DiscoveryStore: @unchecked Sendable {
             // остались бы зарегистрированные «призраки» стёртых строк.
             context.reset()
         }
+        // Кэш истории вех (`discoveries.extremes`) лежит рядом с находками и
+        // стирается вместе с ними: он выведен из поездок, и пережить их не
+        // имеет права — иначе после «удалить везде» вернувшиеся синком поездки
+        // не дали бы ни одного «первого региона». Стирается ОТСЮДА, а не из
+        // `LocalDataWipe`: имя `DiscoveryProcessor` за пределами этой папки
+        // запрещено сторожем `NoLiveSecretPromptsTests`.
+        UserDefaults.standard.removeObject(forKey: DiscoveryProcessor.historyKey)
         postChanged()
     }
 

@@ -80,6 +80,44 @@ final class RevealedLayerStore: @unchecked Sendable {
         case done(trips: Int, cells: Int)
     }
 
+    /// Что открыла ОДНА поездка — ответ финишу, а не состояние мира.
+    ///
+    /// Три числа, и каждое отвечает на свой вопрос экрана итогов: сколько
+    /// ячеек прибавилось к открытому, сколько это километров и какие регионы
+    /// человек увидел впервые.
+    ///
+    /// **Километры здесь считаются по ЯЧЕЙКАМ, а не по прогонам.** Ячейка —
+    /// 75 м (`RevealGrid.cellDegrees`), и `openedKm` это `openedCells` на её
+    /// сторону: столько новой дороги поездка застолбила. `RevealedLayer.openedKm`
+    /// считает другое и по-другому — длину НАРИСОВАННЫХ прогонов всего мира, а
+    /// второй проезд рядом с открытой улицей ячейки добавляет, а прогона не
+    /// рисует (`RevealBuilder.neighbourClaimed`). Это не второй счёт одного и
+    /// того же: у одного вопрос «сколько всего открыто», у другого — «что
+    /// прибавила эта поездка».
+    struct IngestDelta: Equatable {
+        /// Ячеек 75 м, которых в открытом мире не было.
+        let openedCells: Int
+        /// Те же ячейки в километрах.
+        let openedKm: Double
+        /// Регионы (ISO 3166-2), которых открытое ещё не касалось. Пусто, если
+        /// атлас не загружен: врать регионом нельзя, а ждать его на финише —
+        /// значит держать поездку.
+        let newRegionIds: [String]
+
+        static let none = IngestDelta(openedCells: 0, openedKm: 0, newRegionIds: [])
+    }
+
+    /// Сторона ячейки в километрах — ею меряется `IngestDelta.openedKm`.
+    /// Широта здесь и есть мера: по долготе ячейка тянется на косинус, но
+    /// площадь при этом сохраняется, а не расстояние вдоль дороги.
+    static let cellKm = RevealGrid.cellDegrees * 111.320
+
+    /// Регионы, которых открытое уже касалось. Ключ в `UserDefaults`, а не в
+    /// базе: это ПРОИЗВОДНОЕ от ячеек, и потерять его не страшнее, чем
+    /// пересчитать (см. `knownRegionIds` — при отсутствии ключа он сеется из
+    /// тайлов, чтобы человеку со стажем не объявили новыми все его края).
+    static let regionsKey = "reveal.regions.v1"
+
     private let persistence: PersistenceController
     private let defaults: UserDefaults
     private let context: NSManagedObjectContext
@@ -93,13 +131,22 @@ final class RevealedLayerStore: @unchecked Sendable {
     /// Тестовый шлагбаум перед каждым проходом. В продакшене `nil`: очередь
     /// сверки иначе проверялась бы скоростью машины, а не решением теста.
     private let beforePass: (@Sendable () async -> Void)?
+    /// Чем спрашивают регион точки. Атлас читается только после загрузки и
+    /// только на чтение, но подменяемость нужна тесту: бандла с геометрией у
+    /// него нет, а правило «новый регион считается по ВСТАВЛЕННЫМ ячейкам»
+    /// проверять надо.
+    private let regionId: (CLLocationCoordinate2D) -> String?
 
     init(persistence: PersistenceController = .shared,
          defaults: UserDefaults = .standard,
-         beforePass: (@Sendable () async -> Void)? = nil) {
+         beforePass: (@Sendable () async -> Void)? = nil,
+         regionId: @escaping (CLLocationCoordinate2D) -> String? = {
+             RegionAtlas.shared.region(containing: $0)?.id
+         }) {
         self.persistence = persistence
         self.defaults = defaults
         self.beforePass = beforePass
+        self.regionId = regionId
         context = persistence.container.newBackgroundContext()
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
@@ -148,11 +195,15 @@ final class RevealedLayerStore: @unchecked Sendable {
 
     // MARK: - Запись
 
-    /// Что открыла ОДНА поездка. Возвращает число новых ячеек — ноль значит
-    /// «проехал там, где уже был», и это нормальный ответ, а не поломка.
+    /// Что открыла ОДНА поездка. Пустая дельта значит «проехал там, где уже
+    /// был», и это нормальный ответ, а не поломка.
+    ///
+    /// Считается по ВСТАВЛЕННЫМ ячейкам, а не по треку: регион, до которого
+    /// доехали во второй раз, новым не объявляется, и километры повторного
+    /// круга по своему двору не прибавляются.
     @discardableResult
-    func ingest(tripId: UUID) async -> Int {
-        let added = await context.perform { () -> Int in
+    func ingest(tripId: UUID) async -> IngestDelta {
+        let delta = await context.perform { () -> IngestDelta in
             let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
             request.predicate = NSPredicate(
                 format: "id == %@ AND endDate != nil AND syncStatus != %d",
@@ -160,9 +211,13 @@ final class RevealedLayerStore: @unchecked Sendable {
             )
             request.fetchLimit = 1
             guard let entity = try? self.context.fetch(request).first,
-                  let polyline = entity.previewPolyline else { return 0 }
+                  let polyline = entity.previewPolyline else { return .none }
             let coords = Trip.decodePolyline(polyline)
-            guard coords.count > 1 else { return 0 }
+            guard coords.count > 1 else { return .none }
+
+            // Регионы «до» спрашиваются ДО слияния: после него новые ячейки
+            // уже лежат в базе и отличить их будет нечем.
+            let before = self.knownRegionIds()
 
             var cache: [String: Set<RevealGrid.Cell>] = [:]
             let patches = RevealBuilder.patches(for: coords) { key in
@@ -171,15 +226,23 @@ final class RevealedLayerStore: @unchecked Sendable {
                 cache[key] = cells
                 return cells
             }
-            let opened = self.mergeInContext(patches)
+            var inserted: [(tile: String, cell: RevealGrid.Cell)] = []
+            let opened = self.mergeInContext(patches, inserted: &inserted)
             guard self.saveContext() else {
                 self.context.rollback()
-                return 0
+                return .none
             }
-            return opened
+
+            let fresh = self.regionIds(of: inserted).subtracting(before)
+            if !fresh.isEmpty { self.rememberRegionIds(before.union(fresh)) }
+            return IngestDelta(
+                openedCells: opened,
+                openedKm: Double(opened) * Self.cellKm,
+                newRegionIds: fresh.sorted()
+            )
         }
-        if added > 0 { postChanged() }
-        return added
+        if delta.openedCells > 0 { postChanged() }
+        return delta
     }
 
     func merge(_ patches: [String: TilePatch]) async {
@@ -371,6 +434,10 @@ final class RevealedLayerStore: @unchecked Sendable {
             context.reset()
         }
         defaults.set(false, forKey: Self.rebuildFlagKey)
+        // Регионы — производное от ячеек: оставить их значило бы после
+        // «удалить везде» не показать ни одного нового края вернувшимся синком
+        // поездкам.
+        defaults.removeObject(forKey: Self.regionsKey)
         postChanged()
     }
 
@@ -422,6 +489,46 @@ final class RevealedLayerStore: @unchecked Sendable {
         return try? context.fetch(request).first
     }
 
+    // MARK: - Регионы открытого
+
+    /// Регионы, которых открытое уже касалось.
+    ///
+    /// Ключа нет — значит телефон обновился с версии, которая их не считала, и
+    /// объявлять новыми все края человека со стажем нельзя. Поэтому набор
+    /// СЕЕТСЯ из того, что уже лежит в базе: по одному вопросу атласу на тайл
+    /// (4.9 км), а не на ячейку, — тайлов тысячи, ячеек миллионы. Приближение
+    /// осознанное и однократное: тайл на границе двух краёв отвечает тем, чей
+    /// центр, и в худшем случае одна печать «новый регион» достанется соседу
+    /// на первом же финише после обновления.
+    private func knownRegionIds() -> Set<String> {
+        if let stored = defaults.stringArray(forKey: Self.regionsKey) { return Set(stored) }
+        let request: NSFetchRequest<NSDictionary> = NSFetchRequest(entityName: "RevealedCellEntity")
+        request.resultType = .dictionaryResultType
+        request.propertiesToFetch = ["key"]
+        let keys = ((try? context.fetch(request)) ?? []).compactMap { $0["key"] as? String }
+        var seeded = Set<String>()
+        for key in keys {
+            if let id = regionId(GeohashEncoder.centerCoordinate(of: key)) { seeded.insert(id) }
+        }
+        rememberRegionIds(seeded)
+        return seeded
+    }
+
+    private func rememberRegionIds(_ ids: Set<String>) {
+        defaults.set(ids.sorted(), forKey: Self.regionsKey)
+    }
+
+    /// Регионы вставленных ячеек — по центру каждой. Ячейки одного тайла
+    /// спрашиваются подряд, и атлас на соседних точках почти всегда отвечает
+    /// тем же регионом, поэтому дешевле, чем выглядит.
+    private func regionIds(of cells: [(tile: String, cell: RevealGrid.Cell)]) -> Set<String> {
+        var out = Set<String>()
+        for item in cells {
+            if let id = regionId(RevealGrid.center(of: item.cell, in: item.tile)) { out.insert(id) }
+        }
+        return out
+    }
+
     private func claimedInContext(_ key: String) -> Set<RevealGrid.Cell> {
         guard let entity = fetchEntity(key), let cells = entity.cells else { return [] }
         return Set(RevealGrid.decode(cells, in: key))
@@ -429,6 +536,19 @@ final class RevealedLayerStore: @unchecked Sendable {
 
     @discardableResult
     private func mergeInContext(_ patches: [String: TilePatch]) -> Int {
+        var ignored: [(tile: String, cell: RevealGrid.Cell)] = []
+        return mergeInContext(patches, inserted: &ignored)
+    }
+
+    /// То же слияние, но говорит и КАКИЕ ячейки легли впервые: по ним финиш
+    /// считает свою дельту (`IngestDelta`). Список собирается только тогда,
+    /// когда за ним пришли, — пересборка и сверка зовут версию выше и не
+    /// платят за него ни памятью, ни временем.
+    @discardableResult
+    private func mergeInContext(
+        _ patches: [String: TilePatch],
+        inserted: inout [(tile: String, cell: RevealGrid.Cell)]
+    ) -> Int {
         var added = 0
         let now = Date()
         for (key, patch) in patches {
@@ -440,7 +560,9 @@ final class RevealedLayerStore: @unchecked Sendable {
             }()
             var cells = Set(RevealGrid.decode(entity.cells ?? Data(), in: key))
             let before = cells.count
-            cells.formUnion(patch.cells)
+            for cell in patch.cells where cells.insert(cell).inserted {
+                inserted.append((tile: key, cell: cell))
+            }
             added += cells.count - before
 
             var runs = RevealedTile.decodeRuns(entity.geometry ?? Data())

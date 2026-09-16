@@ -202,6 +202,50 @@ extension Badge {
               icon: "globe", color: AppTheme.accent, category: .exploration,
               isHidden: true, rarity: .legendary,
               checkUnlocked: { $0.countriesCount >= 5 }),
+
+        // --- Находки (0.7.0) ---------------------------------------------
+        //
+        // Четыре значка, которые НЕ выводятся из статистики поездок: их
+        // открывает разбор записанного трека (`DiscoveryProcessor`) через
+        // `BadgeManager.unlock(id:)`, а `checkUnlocked` у них поэтому всегда
+        // `false`. Скрытые все четыре — находка перестаёт быть находкой, если
+        // её показать списком заранее.
+
+        Badge(id: "riddle_first", titleRu: "Первая загадка", titleEn: "First Riddle",
+              descriptionRu: "Первая разгаданная загадка", descriptionEn: "First riddle solved",
+              icon: "questionmark.circle.fill", color: AppTheme.blue, category: .exploration,
+              isHidden: true, rarity: .common,
+              checkUnlocked: { _ in false }),
+
+        Badge(id: "riddle_10", titleRu: "Десять загадок", titleEn: "Ten Riddles",
+              descriptionRu: "10 разгаданных загадок", descriptionEn: "10 riddles solved",
+              icon: "questionmark.diamond.fill", color: AppTheme.purple, category: .exploration,
+              isHidden: true, rarity: .rare,
+              checkUnlocked: { _ in false }),
+
+        Badge(id: "milestone_border", titleRu: "Граница", titleEn: "Border",
+              descriptionRu: "Граница страны на треке", descriptionEn: "A country border on your track",
+              icon: "flag.2.crossed.fill", color: AppTheme.green, category: .exploration,
+              isHidden: true, rarity: .rare,
+              checkUnlocked: { _ in false }),
+
+        Badge(id: "milestone_2000", titleRu: "Верхняя точка", titleEn: "High Point",
+              descriptionRu: "Веха карты: высота %@", descriptionEn: "Map milestone: altitude %@",
+              icon: "mountain.2.fill", color: AppTheme.teal, category: .exploration,
+              isHidden: true, rarity: .epic,
+              figures: [.elevation(2000, atLeast: true)],
+              checkUnlocked: { _ in false }),
+    ]
+
+    /// Значки, которые открывает НЕ статистика поездок.
+    ///
+    /// Их `checkUnlocked` всегда `false`, а записывает их `BadgeManager.unlock(id:)`
+    /// — поэтому `unlockedBadges(for:)` обязан добавлять их к выведенному, иначе
+    /// пересчёт статистики стирал бы их с полки. Список явный, а не «все с
+    /// `false`»: значок с недописанным правилом должен падать, а не тихо
+    /// попадать в эту компанию.
+    static let externallyUnlockedIds: Set<String> = [
+        "riddle_first", "riddle_10", "milestone_border", "milestone_2000"
     ]
 
     // MARK: - Special (Hidden)

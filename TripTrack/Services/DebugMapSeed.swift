@@ -35,6 +35,15 @@ enum DebugMapSeed {
     /// одной дороге дают трём проездам появиться там, где их посчитает
     /// штатная сверка `PlaceManager.reconcile()` на запуске.
     static let placesRichArgument = "-seed-places-rich"
+    /// Шестым аргументом кладёт на демо-поездку две находки — загадку у
+    /// Горячего Ключа и веху «первый регион» в Краснодарском крае.
+    ///
+    /// Кладёт ПРЯМО в базу, через `DiscoveryStore`, а не разбором трека
+    /// (`DiscoveryProcessor`): бандл загадок приезжает отдельной задачей волны,
+    /// и до слияния каталоги пусты — настоящий разбор нашёл бы ноль. Экранам
+    /// волны (печати на «Атласе», блок «Открыто», журнал) нужны СТРОКИ, а
+    /// откуда они взялись, им всё равно.
+    static let discoveriesArgument = "-seed-discoveries"
 
     static var isRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
@@ -54,6 +63,10 @@ enum DebugMapSeed {
 
     static var isSegmentRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(segmentArgument)
+    }
+
+    static var isDiscoveriesRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(discoveriesArgument)
     }
 
     private struct Route {
@@ -124,6 +137,7 @@ enum DebugMapSeed {
             if isPlacesRequested { seedPlaceDemo(persistence: persistence) }
             if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
             if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
+            if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
             return
         }
 
@@ -179,6 +193,48 @@ enum DebugMapSeed {
         if isPlacesRequested { seedPlaceDemo(persistence: persistence) }
         if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
         if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
+        if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
+    }
+
+    // MARK: - Находки (0.7.0)
+
+    /// Две находки на настоящей демо-поездке: загадка у Горячего Ключа и веха
+    /// «первый регион» в её начале.
+    ///
+    /// Поездка выбирается та, что через эти точки и проходит («Краснодар →
+    /// Горячий Ключ»), — печать обязана стоять НА треке, иначе экран поездки и
+    /// «Атлас» покажут её посреди поля. Идемпотентно по построению: `id`
+    /// находки выведен из вида и ключа, и повторный запуск кладёт ноль строк.
+    private static func seedDiscoveries(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "title == %@", "Краснодар → Горячий Ключ")
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
+        request.fetchLimit = 1
+        guard let entity = try? context.fetch(request).first,
+              let tripId = entity.id, let startDate = entity.startDate else { return }
+
+        let repository = CoreDataTripRepository(persistenceController: persistence)
+        guard let trip = repository.fetchTripDetail(id: tripId), trip.trackPoints.count > 4 else { return }
+        let points = trip.trackPoints
+        // Загадка — на самом треке, в его последней трети (мост через Псекупс
+        // по дороге на Горячий Ключ); веха — на старте, в Краснодаре.
+        let riddleAt = points[(points.count * 2) / 3].coordinate
+        let milestoneAt = points[0].coordinate
+
+        let store = DiscoveryStore(persistence: persistence)
+        let seeded = [
+            Discovery(
+                kind: .riddle, key: "bridge:demo-psekups", tripId: tripId,
+                coordinate: riddleAt, foundAt: startDate,
+                symbol: RiddleType.bridge.symbol, title: "Мост через Псекупс"),
+            Discovery(
+                kind: .milestone,
+                key: "\(Milestone.firstRegion.rawValue):RU-KDA", tripId: tripId,
+                coordinate: milestoneAt, foundAt: startDate,
+                symbol: Milestone.firstRegion.symbol)
+        ]
+        Task { try? await store.upsert(seeded) }
     }
 
     // MARK: - Богатый сид мест (0.6.8)

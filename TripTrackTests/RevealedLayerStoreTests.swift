@@ -70,7 +70,7 @@ final class RevealedLayerStoreTests: XCTestCase {
 
     func testIngestWritesTilesAndReturnsNewCells() async {
         let id = makeTrip(northMetres: 3_000)
-        let added = await store.ingest(tripId: id)
+        let added = await store.ingest(tripId: id).openedCells
 
         XCTAssertGreaterThan(added, 30, "три километра — это десятки ячеек по 75 м")
         let tiles = await store.tiles()
@@ -81,10 +81,10 @@ final class RevealedLayerStoreTests: XCTestCase {
 
     func testSecondIngestOfTheSameTripOpensNothing() async {
         let id = makeTrip(northMetres: 3_000)
-        let first = await store.ingest(tripId: id)
+        let first = await store.ingest(tripId: id).openedCells
         let tilesAfterFirst = storedTileCount()
 
-        let again = await store.ingest(tripId: id)
+        let again = await store.ingest(tripId: id).openedCells
         XCTAssertEqual(again, 0)
         XCTAssertEqual(storedTileCount(), tilesAfterFirst)
         let cells = await store.tiles().reduce(0) { $0 + $1.cellSet.count }
@@ -93,7 +93,7 @@ final class RevealedLayerStoreTests: XCTestCase {
 
     func testTripWithoutPreviewIsSkipped() async {
         let id = makeTrip(northMetres: 3_000, withPreview: false)
-        let added = await store.ingest(tripId: id)
+        let added = await store.ingest(tripId: id).openedCells
         XCTAssertEqual(added, 0)
         XCTAssertEqual(storedTileCount(), 0)
     }
@@ -104,14 +104,59 @@ final class RevealedLayerStoreTests: XCTestCase {
         let a = makeTrip(northMetres: 600, from: origin)
         let b = makeTrip(northMetres: 600, from: east)
 
-        let first = await store.ingest(tripId: a)
-        let second = await store.ingest(tripId: b)
+        let first = await store.ingest(tripId: a).openedCells
+        let second = await store.ingest(tripId: b).openedCells
         XCTAssertGreaterThan(second, 0, "соседняя улица — тоже открытие")
 
         let tiles = await store.tiles()
         XCTAssertEqual(tiles.count, 1, "две улицы одного квартала — один тайл")
         XCTAssertEqual(tiles[0].cellSet.count, first + second)
         XCTAssertGreaterThanOrEqual(tiles[0].runs.count, 2)
+    }
+
+    // MARK: - Дельта финиша
+
+    /// Километры дельты — это ВСТАВЛЕННЫЕ ячейки на сторону ячейки, и ничего
+    /// больше. Трёхкилометровая прямая по нетронутому месту даёт три километра
+    /// открытого; второй такой же финиш — ноль, а не ещё три.
+    func testDeltaCountsKilometresFromTheCellsItActuallyInserted() async {
+        let id = makeTrip(northMetres: 3_000)
+        let delta = await store.ingest(tripId: id)
+
+        XCTAssertGreaterThan(delta.openedCells, 30)
+        XCTAssertEqual(delta.openedKm,
+                       Double(delta.openedCells) * RevealedLayerStore.cellKm, accuracy: 0.0001)
+        XCTAssertEqual(delta.openedKm, 3.0, accuracy: 0.5)
+
+        let again = await store.ingest(tripId: id)
+        XCTAssertEqual(again, .none, "поездка по уже открытому не открывает ничего")
+    }
+
+    /// Регион считается новым по ячейкам, которые ЛЕГЛИ, а не по треку: второй
+    /// проезд по тому же краю новым его не объявляет.
+    func testNewRegionIsReportedOnceAndOnlyForFreshCells() async {
+        let counted = RevealedLayerStore(
+            persistence: pc, defaults: defaults, regionId: { _ in "RU-KDA" })
+        let first = await counted.ingest(tripId: makeTrip(northMetres: 3_000))
+        XCTAssertEqual(first.newRegionIds, ["RU-KDA"])
+
+        let second = await counted.ingest(tripId: makeTrip(
+            northMetres: 600,
+            from: CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9773)))
+        XCTAssertGreaterThan(second.openedCells, 0, "соседняя улица открылась")
+        XCTAssertTrue(second.newRegionIds.isEmpty, "а край уже был не новым")
+    }
+
+    /// Стирание аккаунта забирает и регионы: иначе вернувшиеся синком поездки
+    /// не дали бы ни одного нового края.
+    func testWipeForgetsTheRegionsToo() async {
+        let counted = RevealedLayerStore(
+            persistence: pc, defaults: defaults, regionId: { _ in "RU-KDA" })
+        _ = await counted.ingest(tripId: makeTrip(northMetres: 3_000))
+        XCTAssertNotNil(defaults.stringArray(forKey: RevealedLayerStore.regionsKey))
+
+        counted.wipe()
+        XCTAssertNil(defaults.stringArray(forKey: RevealedLayerStore.regionsKey))
     }
 
     // MARK: - Снимок

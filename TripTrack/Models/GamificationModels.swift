@@ -595,6 +595,14 @@ struct TripCompletionData {
     let repeatedBadgeCounts: [String: Int]
     let currentStreak: Int
     var roadCard: RoadCompletionInfo?
+    /// Что поездка открыла на карте (0.7.0): печати, новые километры тумана и
+    /// новые регионы.
+    ///
+    /// `var` и опциональна нарочно: разбор трека идёт ПОСЛЕ финиша, на
+    /// окончательном треке, и приезжает на экран итогов позже остальных чисел
+    /// — `nil` здесь значит «ещё считается», а не «ничего не нашлось»
+    /// (для «ничего» есть `TripDiscoveries.isEmpty`).
+    var discoveries: TripDiscoveries?
 
     var didLevelUp: Bool { newLevel > previousLevel }
     var didRankUp: Bool { newRank != previousRank }

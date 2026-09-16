@@ -888,7 +888,14 @@ final class MapViewModel: ObservableObject {
                 // Туман (0.7.0): что поездка открыла НОВОГО — на том же
                 // окончательном треке, из превью. Копится инкрементально,
                 // поэтому открытие «Атласа» ничего не пересчитывает.
-                await RevealedLayerStore.shared.ingest(tripId: trip.id)
+                let delta = await RevealedLayerStore.shared.ingest(tripId: trip.id)
+                // Находки (0.7.0) — ПОСЛЕДНИМИ в цепочке и только здесь: трек
+                // окончательный, места сверены, туман дорисован, а запись
+                // кончилась. Километры и регионы берутся из дельты тумана —
+                // второго счёта открытого в приложении нет.
+                let found = await DiscoveryProcessor.shared.process(
+                    tripId: trip.id, delta: delta)
+                self.attachDiscoveries(found)
             }
         }
 
@@ -1002,6 +1009,23 @@ final class MapViewModel: ObservableObject {
         lastCompletedTrip = trip
     }
     #endif
+
+    /// Доложить экрану итогов, что нашлось.
+    ///
+    /// Разбор трека кончается ПОЗЖЕ, чем собираются остальные числа финиша
+    /// (он ждёт `PostTripTrackProcessor`), поэтому сводка доезжает до уже
+    /// показанной карточки — или до той, что ждёт за празднованием значков.
+    /// Проверка по `id` обязательна: пока шёл разбор, человек мог закрыть
+    /// итоги и записать следующую поездку.
+    private func attachDiscoveries(_ found: TripDiscoveries) {
+        guard !found.isEmpty else { return }
+        if pendingCompletedTrip?.id == found.tripId {
+            pendingCompletionData?.discoveries = found
+        }
+        if lastCompletedTrip?.id == found.tripId {
+            lastCompletionData?.discoveries = found
+        }
+    }
 
     func showPendingSummary() {
         guard let trip = pendingCompletedTrip else { return }

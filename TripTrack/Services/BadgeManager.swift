@@ -182,7 +182,35 @@ enum BadgeManager {
     }
 
     static func unlockedBadges(for stats: BadgeStats) -> [Badge] {
-        Badge.all.filter { $0.checkUnlocked(stats) }
+        // Открытое находками (`Badge.externallyUnlockedIds`) статистикой
+        // поездок не выводится НИКАК: ни один порог не знает про печати на
+        // «Атласе». Поэтому к выведенному добавляется записанное — иначе
+        // значок, выданный за загадку, исчезал бы с полки на первом же
+        // пересчёте, а `checkNewBadges` ниже переписал бы им же ключ.
+        let external = storedUnlockedIds().intersection(Badge.externallyUnlockedIds)
+        return Badge.all.filter { $0.checkUnlocked(stats) || external.contains($0.id) }
+    }
+
+    // MARK: - Разблокировка снаружи статистики
+
+    static func storedUnlockedIds() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: unlockedKey) ?? [])
+    }
+
+    /// Открыть значок, которого не выводит статистика поездок: находки
+    /// (`DiscoveryProcessor`) — единственный такой источник в 0.7.0.
+    ///
+    /// Возвращает значок, ТОЛЬКО если он открылся сейчас: повторная находка
+    /// того же рода отвечает `nil`, и праздновать нечего. Незнакомый id — тоже
+    /// `nil`: у секрета именной значок бывает не всегда, и спрашивать за него
+    /// заранее вызывающему незачем.
+    @discardableResult
+    static func unlock(id: String) -> Badge? {
+        guard let badge = Badge.all.first(where: { $0.id == id }) else { return nil }
+        var unlocked = storedUnlockedIds()
+        guard unlocked.insert(id).inserted else { return nil }
+        UserDefaults.standard.set(Array(unlocked), forKey: unlockedKey)
+        return badge
     }
 
     static func checkNewBadges(stats: BadgeStats) -> [Badge] {
