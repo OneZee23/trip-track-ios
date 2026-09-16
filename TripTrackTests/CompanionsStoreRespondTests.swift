@@ -27,11 +27,20 @@ final class CompanionsStoreRespondTests: XCTestCase {
         TokenStore.shared.clear()
     }
 
+    /// XCTest держит экземпляр класса до конца прогона, поэтому поле, не
+    /// обнулённое здесь, живёт дольше своего теста: `URLSession` не отпускает
+    /// ни очередь, ни `MockURLProtocol`, а `PersistenceController` — свой
+    /// in-memory стор (см. «Ловушки» в CLAUDE.md).
     override func tearDown() {
         MockURLProtocol.reset()
         TokenStore.shared.clear()
         UserDefaults.standard.removeObject(forKey: "com.triptrack.companions.respondedTripIds")
         UserDefaults.standard.removeObject(forKey: "com.triptrack.companions.respondedInvitationIds")
+        session?.invalidateAndCancel()
+        session = nil
+        client = nil
+        repo = nil
+        pc = nil
         super.tearDown()
     }
 

@@ -27,8 +27,17 @@ final class CompanionsStoreCandidatesTests: XCTestCase {
         repo = CoreDataTripRepository(persistenceController: pc)
     }
 
+    /// XCTest держит экземпляр класса до конца прогона, поэтому поле, не
+    /// обнулённое здесь, живёт дольше своего теста: `URLSession` не отпускает
+    /// ни очередь, ни `MockURLProtocol`, а `PersistenceController` — свой
+    /// in-memory стор (см. «Ловушки» в CLAUDE.md).
     override func tearDown() {
         MockURLProtocol.reset()
+        session?.invalidateAndCancel()
+        session = nil
+        client = nil
+        repo = nil
+        pc = nil
         super.tearDown()
     }
 

@@ -26,6 +26,16 @@ final class CheckpointSyncFlagTests: XCTestCase {
         try? ctx.save()
     }
 
+    /// XCTest держит экземпляр класса до конца прогона: контроллер, не
+    /// обнулённый здесь, доживает до последнего теста набора вместе со своим
+    /// in-memory стором (см. «Ловушки» в CLAUDE.md).
+    override func tearDown() {
+        repo = nil
+        pc = nil
+        tripId = nil
+        super.tearDown()
+    }
+
     private var status: Int16? { repo.fetchEntity(id: tripId)?.syncStatus }
 
     private func checkpoint() -> TripCheckpoint {

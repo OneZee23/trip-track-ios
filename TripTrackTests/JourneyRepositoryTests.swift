@@ -14,6 +14,15 @@ final class JourneyRepositoryTests: XCTestCase {
         repo = CoreDataTripRepository(persistenceController: pc)
     }
 
+    /// XCTest держит экземпляр класса до конца прогона: контроллер, не
+    /// обнулённый здесь, доживает до последнего теста набора вместе со своим
+    /// in-memory стором (см. «Ловушки» в CLAUDE.md).
+    override func tearDown() {
+        repo = nil
+        pc = nil
+        super.tearDown()
+    }
+
     @discardableResult
     private func trip(daysFromT0 d: Double, km: Double = 100) -> UUID {
         let ctx = pc.container.viewContext

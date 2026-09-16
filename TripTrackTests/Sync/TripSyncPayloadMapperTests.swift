@@ -6,13 +6,29 @@ final class TripSyncPayloadMapperTests: XCTestCase {
     var container: NSPersistentContainer!
 
     override func setUp() async throws {
-        container = NSPersistentContainer(name: "TripTrack")
+        // Модель — ОБЩАЯ, `PersistenceController.managedObjectModel`, а не своя
+        // от `NSPersistentContainer(name:)`: своя завела бы второе описание
+        // `TripEntity`, и `+entity` перестал бы различать их («Multiple
+        // NSEntityDescriptions claim…»). Тогда объект, созданный ЧУЖИМ классом
+        // после этого, ложится в контекст с описанием не из его модели и не
+        // находится ни одной выборкой — так этот набор ронял `Vehicle*Tests` и
+        // `WithMeSectionTests`, отработав зелёным сам.
+        container = NSPersistentContainer(name: "TripTrack",
+                                          managedObjectModel: PersistenceController.managedObjectModel)
         let desc = NSPersistentStoreDescription()
         desc.type = NSInMemoryStoreType
         container.persistentStoreDescriptions = [desc]
         let exp = expectation(description: "load")
         container.loadPersistentStores { _, _ in exp.fulfill() }
         await fulfillment(of: [exp], timeout: 5)
+    }
+
+    /// XCTest держит экземпляр класса до конца прогона: контейнер, не
+    /// обнулённый здесь, живёт до последнего теста набора (см. «Ловушки» в
+    /// CLAUDE.md).
+    override func tearDown() {
+        container = nil
+        super.tearDown()
     }
 
     func testBasicTripMapping() throws {

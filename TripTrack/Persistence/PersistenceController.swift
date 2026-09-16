@@ -3,6 +3,9 @@ import OSLog
 
 private let persistenceLog = Logger(subsystem: "com.triptrack", category: "persistence")
 
+/// Якорь для `Bundle(for:)`: контроллер — структура, а бандл ищется по классу.
+private final class PersistenceBundleToken {}
+
 struct PersistenceController {
     static let shared = PersistenceController()
 
@@ -73,9 +76,41 @@ struct PersistenceController {
         return controller
     }()
 
+    /// Одна `NSManagedObjectModel` на весь процесс.
+    ///
+    /// `NSPersistentContainer(name:)` поднимает СВОЮ модель на каждый
+    /// экземпляр, и все они претендуют на одни и те же сущности — в логе это
+    /// «Multiple NSEntityDescriptions claim TripEntity», а на деле поездка,
+    /// сохранённая через один контроллер, читается описанием из другого. В
+    /// приложении контроллер один (`static let shared`), а вот в тестах их
+    /// десятки: каждый `PersistenceController(inMemory:)`, который класс
+    /// XCTest не обнулил в `tearDown`, живёт до конца прогона и роняет ЧУЖОЙ
+    /// тест (см. «Ловушки» в CLAUDE.md). Общая модель закрывает этот класс
+    /// поломок целиком: второе описание завести физически нечем.
+    ///
+    /// Грузится из `TripTrack.momd` — то есть с той же семантикой
+    /// `.xccurrentversion`, что и у контейнера по имени: `momd` внутри несёт
+    /// `VersionInfo.plist`, и `NSManagedObjectModel(contentsOf:)` отдаёт
+    /// ТЕКУЩУЮ версию, а лёгкая миграция с прежней остаётся как была.
+    static let managedObjectModel: NSManagedObjectModel = {
+        let candidates = [Bundle(for: PersistenceBundleToken.self), Bundle.main]
+            + Bundle.allBundles + Bundle.allFrameworks
+        for bundle in candidates {
+            if let url = bundle.url(forResource: "TripTrack", withExtension: "momd"),
+               let model = NSManagedObjectModel(contentsOf: url) {
+                return model
+            }
+        }
+        // Модели нет ни в одном бандле — значит сборка сломана, и молчаливая
+        // пустая модель дала бы «сущность не найдена» где-то далеко отсюда.
+        persistenceLog.fault("TripTrack.momd не найден ни в одном бандле")
+        return NSManagedObjectModel.mergedModel(from: nil) ?? NSManagedObjectModel()
+    }()
+
     init(inMemory: Bool = false, storeURL: URL? = nil) {
         requestedStoreURL = storeURL
-        container = NSPersistentContainer(name: "TripTrack")
+        container = NSPersistentContainer(name: "TripTrack",
+                                          managedObjectModel: Self.managedObjectModel)
         if inMemory {
             container.persistentStoreDescriptions.first?.url = URL(fileURLWithPath: "/dev/null")
         } else if let storeURL {
