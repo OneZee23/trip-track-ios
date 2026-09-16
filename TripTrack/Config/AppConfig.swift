@@ -43,4 +43,12 @@ enum AppConfig {
         let path = lang == .ru ? "/terms-ru.html" : "/terms.html"
         return URL(string: base + path)!
     }
+
+    /// Страница лицензии OpenStreetMap — обязательство ODbL.
+    ///
+    /// Имена объектов в загадках «Атласа» (`Riddles.json`) выведены из OSM, и
+    /// лицензия требует назвать источник там, где человек видит производное, и
+    /// дать ссылку на саму лицензию. Одна страница на все языки: своей
+    /// локализации у неё нет.
+    static let osmCopyrightURL = URL(string: "https://www.openstreetmap.org/copyright")!
 }

@@ -218,6 +218,18 @@ struct DiscoveryCardSheet: View {
             if model.showsOnMap {
                 onMapButton
             }
+            if discovery.kind == .riddle {
+                // Обязательство ODbL, а не подпись: имя объекта в загадке
+                // выведено из OpenStreetMap, и назвать источник надо там, где
+                // человек видит производное. Ссылка на лицензию живёт в
+                // настройках — карточка стоит поверх карты, и уводить с неё в
+                // браузер тапом по мелкому тексту нечего.
+                Text(AppStrings.osmAttribution(lang.language))
+                    .font(.inter(11))
+                    .foregroundStyle(c.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("mymap_discovery_osm")
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)

@@ -1310,6 +1310,7 @@ extension Translations {
         "riddleLine.centre": "Осы шеңбердің ішінде бір жерде географиялық орталық жатыр",
         "riddleLine.tripoint": "Осы маңда бір жерде үш елдің шекарасы түйіседі",
         "riddleSolvedTitle": "Жұмбақ шешілді",
+        "osmAttribution": "Деректер: © OpenStreetMap қатысушылары · ODbL",
         "milestoneTitle.firstRegion": "Бұл өңірде алғаш рет",
         "milestoneTitle.easternmost": "Әзірге ең шығыстағы жол",
         "milestoneTitle.westernmost": "Әзірге ең батыстағы жол",

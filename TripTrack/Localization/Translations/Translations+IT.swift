@@ -1310,6 +1310,7 @@ extension Translations {
         "riddleLine.centre": "Da qualche parte in questo cerchio c'è un centro geografico",
         "riddleLine.tripoint": "Da qualche parte qui si incontrano i confini di tre paesi",
         "riddleSolvedTitle": "Enigma risolto",
+        "osmAttribution": "Dati: © contributori di OpenStreetMap · ODbL",
         "milestoneTitle.firstRegion": "Prima volta in questa regione",
         "milestoneTitle.easternmost": "La strada più a est finora",
         "milestoneTitle.westernmost": "La strada più a ovest finora",

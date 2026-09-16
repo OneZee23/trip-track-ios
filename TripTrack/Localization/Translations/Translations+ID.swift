@@ -1310,6 +1310,7 @@ extension Translations {
         "riddleLine.centre": "Di suatu tempat dalam lingkaran ini terletak pusat geografis",
         "riddleLine.tripoint": "Di suatu tempat di sini batas tiga negara bertemu",
         "riddleSolvedTitle": "Teka-teki terpecahkan",
+        "osmAttribution": "Data: © kontributor OpenStreetMap · ODbL",
         "milestoneTitle.firstRegion": "Pertama kali di wilayah ini",
         "milestoneTitle.easternmost": "Jalan paling timur sejauh ini",
         "milestoneTitle.westernmost": "Jalan paling barat sejauh ini",

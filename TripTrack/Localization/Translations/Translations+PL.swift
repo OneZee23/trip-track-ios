@@ -1310,6 +1310,7 @@ extension Translations {
         "riddleLine.centre": "Gdzieś w tym okręgu leży środek geograficzny",
         "riddleLine.tripoint": "Gdzieś tutaj spotykają się granice trzech państw",
         "riddleSolvedTitle": "Zagadka rozwiązana",
+        "osmAttribution": "Dane: © współtwórcy OpenStreetMap · ODbL",
         "milestoneTitle.firstRegion": "Pierwszy raz w tym regionie",
         "milestoneTitle.easternmost": "Najdalej na wschód jak dotąd",
         "milestoneTitle.westernmost": "Najdalej na zachód jak dotąd",

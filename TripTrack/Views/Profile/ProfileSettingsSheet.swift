@@ -511,6 +511,24 @@ struct ProfileSettingsSheet: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            // Атрибуция OpenStreetMap. Обязательство ODbL: имена объектов в
+            // загадках «Атласа» выведены из OSM, и лицензия требует назвать
+            // источник и дать ссылку на неё. Тап ведёт на страницу лицензии —
+            // подвал карточки загадки ту же строку показывает, но никуда не
+            // уводит.
+            Button {
+                Haptics.tap()
+                UIApplication.shared.open(AppConfig.osmCopyrightURL)
+            } label: {
+                Text(AppStrings.osmAttribution(l))
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+                    .underline()
+                    .multilineTextAlignment(.center)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings_osm_attribution")
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 12)

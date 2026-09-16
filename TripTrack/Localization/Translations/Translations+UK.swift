@@ -1310,6 +1310,7 @@ extension Translations {
         "riddleLine.centre": "Десь у цьому колі — географічний центр",
         "riddleLine.tripoint": "Десь тут сходяться кордони трьох країн",
         "riddleSolvedTitle": "Загадку розгадано",
+        "osmAttribution": "Дані: © учасники OpenStreetMap · ODbL",
         "milestoneTitle.firstRegion": "Уперше в цьому регіоні",
         "milestoneTitle.easternmost": "Найсхідніша дорога досі",
         "milestoneTitle.westernmost": "Найзахідніша дорога досі",

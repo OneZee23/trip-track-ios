@@ -350,6 +350,22 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(AppStrings.pluralForm(21, .uk), .one)
     }
 
+    // MARK: - Атрибуция OpenStreetMap (0.7.0)
+
+    /// Обязательство лицензии, а не подпись: имена объектов в загадках выведены
+    /// из OSM, и ODbL требует назвать источник на КАЖДОМ языке. «OpenStreetMap»
+    /// и «ODbL» — имена, переводить их нельзя, и потерянное в переводе имя
+    /// источника ловится только здесь.
+    func testEveryLanguageNamesOpenStreetMapAndTheLicence() {
+        for lang in LanguageManager.Language.allCases {
+            let line = AppStrings.osmAttribution(lang)
+            XCTAssertTrue(line.contains("OpenStreetMap"),
+                          "\(lang.rawValue): в атрибуции потерян источник — \(line)")
+            XCTAssertTrue(line.contains("ODbL"),
+                          "\(lang.rawValue): в атрибуции потеряна лицензия — \(line)")
+        }
+    }
+
     // MARK: - Единица внутри строки (0.6.7)
 
     // Вторая половина работы `UnitsDisciplineTests`. Тот сторож читает КОД и

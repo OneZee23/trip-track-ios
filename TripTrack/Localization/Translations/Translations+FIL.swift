@@ -1310,6 +1310,7 @@ extension Translations {
         "riddleLine.centre": "May sentrong heograpiko sa loob ng bilog na ito",
         "riddleLine.tripoint": "May lugar dito kung saan nagtatagpo ang hangganan ng tatlong bansa",
         "riddleSolvedTitle": "Nasagot ang palaisipan",
+        "osmAttribution": "Datos: © mga kontribyutor ng OpenStreetMap · ODbL",
         "milestoneTitle.firstRegion": "Unang beses sa rehiyong ito",
         "milestoneTitle.easternmost": "Ang pinakasilangang daan sa ngayon",
         "milestoneTitle.westernmost": "Ang pinakakanlurang daan sa ngayon",

@@ -6922,6 +6922,19 @@ enum AppStrings {
         tr(lang, "riddleSolvedTitle", ru: "Загадка решена", en: "Riddle solved")
     }
 
+    /// Атрибуция OpenStreetMap — обязательство лицензии, а не подпись.
+    ///
+    /// Имена объектов в загадках (`Riddles.json`) выведены из OSM, и ODbL
+    /// требует назвать источник там, где человек видит производное. Строка
+    /// стоит подвалом карточки решённой загадки и ссылкой в настройках
+    /// (`https://www.openstreetmap.org/copyright`). «ODbL» и «OpenStreetMap»
+    /// не переводятся нигде: это имена, а не слова.
+    static func osmAttribution(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "osmAttribution",
+           ru: "Данные: © участники OpenStreetMap · ODbL",
+           en: "Data: © OpenStreetMap contributors · ODbL")
+    }
+
     /// Заголовок вехи на карточке печати и в подписи для VoiceOver.
     ///
     /// Имени в базе у вехи нет: оно зависит от языка телефона, а колонка — нет

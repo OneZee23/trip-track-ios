@@ -1310,6 +1310,7 @@ extension Translations {
         "riddleLine.centre": "Irgendwo in diesem Kreis liegt ein geografischer Mittelpunkt",
         "riddleLine.tripoint": "Irgendwo hier treffen die Grenzen von drei Ländern aufeinander",
         "riddleSolvedTitle": "Rätsel gelöst",
+        "osmAttribution": "Daten: © OpenStreetMap-Mitwirkende · ODbL",
         "milestoneTitle.firstRegion": "Zum ersten Mal in dieser Region",
         "milestoneTitle.easternmost": "Die östlichste Straße bisher",
         "milestoneTitle.westernmost": "Die westlichste Straße bisher",
