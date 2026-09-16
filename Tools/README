@@ -1,0 +1,56 @@
+Скрипты сборки бандла. Ничего из этой папки в приложение не копируется —
+здесь живут ИСХОДНИКИ данных и то, чем они превращаются в файлы ресурсов.
+
+build_map_regions.py   Natural Earth → TripTrack/Resources/MapRegions.json
+build_secrets.py       OSM/Wikidata  → Tools/riddles.json (загадки Атласа)
+build_secrets.py --authored
+                       authored.json → TripTrack/Resources/Secrets.json
+install_brand_assets.py, install_vehicle_sprites.py,
+normalize_vehicle.py, recolor_vehicle.py
+                       картинки машин и бренда в Assets.xcassets
+
+
+Авторские секреты (0.7.0)
+-------------------------
+
+`authored.json` — список авторских секретов: `id`, `symbol` (rawValue iOS
+`SealSymbol`), `reach` и либо `polygon` (имя файла GeoJSON рядом), либо
+`point: [lat, lon]`.
+
+    python3 Tools/build_secrets.py --authored Tools/authored.json
+
+В `TripTrack/Resources/Secrets.json` уезжают ТОЛЬКО усечённые хеши ячеек
+geohash-7 (`SHA-256(соль ‖ ячейка)`, первые четыре байта). Ни координат, ни
+названий, ни историй в бандле нет и быть не должно: иначе список секретов
+читался бы прямо из бандла. Контуры остаются здесь, в `Tools/`.
+
+Покрытие считается тем же правилом, что у бэкендового
+`tools/secret-cells.ts --polygon` (центр ячейки внутри полигона, без
+буфера), и списки ячеек ОБЯЗАНЫ совпадать до ячейки: сервер подтверждает
+трек по своим `cells`, телефон находит по хешам этих же. Правите контур —
+пересобирайте обе стороны.
+
+
+komsomolsky.geojson
+-------------------
+
+Микрорайон Комсомольский в Краснодаре, OSM `way/582275604`
+(`place=quarter`, `wikidata=Q48956008`), © OpenStreetMap contributors, ODbL.
+Выгружен 16 сен 2026 через Overpass API; своих правок в контуре нет, кроме
+округления координат до седьмого знака (≈1 см).
+
+Найти объект (в самом Краснодаре «Комсомольский» носят ещё десяток улиц и
+маршрутов — нужен именно `place=quarter` на востоке города, 45.034 / 39.101):
+
+    [out:json][timeout:90];
+    nwr["name"~"Комсомольск",i](44.95,38.80,45.25,39.30);
+    out tags center;
+
+Выгрузить геометрию:
+
+    curl -A "TripTrack (secret authoring)" \
+      --data-urlencode 'data=[out:json][timeout:60]; way(582275604); out geom tags;' \
+      https://overpass-api.de/api/interpreter
+
+Кольцо `geometry` (79 узлов, замкнутое) кладётся в `Feature`/`Polygon` в
+порядке GeoJSON — [долгота, широта]. Покрытие: 139 ячеек geohash-7.

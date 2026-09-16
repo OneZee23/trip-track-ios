@@ -1,0 +1,11 @@
+{
+  "salt": "tt-secrets-v1",
+  "secrets": [
+    {
+      "id": "komsomolsky",
+      "symbol": "seal.komsomolsky",
+      "reach": 0,
+      "polygon": "komsomolsky.geojson"
+    }
+  ]
+}

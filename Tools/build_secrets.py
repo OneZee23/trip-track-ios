@@ -68,6 +68,8 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "cache")
 ATLAS = os.path.join(HERE, "..", "TripTrack", "Resources", "MapRegions.json")
+SECRETS = os.path.join(HERE, "..", "TripTrack", "Resources", "Secrets.json")
+AUTHORED = os.path.join(HERE, "authored.json")
 
 USER_AGENT = "TripTrack-bundle-builder/0.7.0 (https://trip-track.app; open-data build script)"
 # The main instance first, the mirror as the fallback. Both are shared boxes
@@ -789,10 +791,209 @@ def note_empty_types(missing, produced):
     return out
 
 
+# ------------------------------------------------------- authored secrets
+
+
+# Сторона ячейки geohash-7 в градусах — ОДНА И ТА ЖЕ по обеим осям: 35 бит
+# делятся на 18 бит долготы (360 / 2**18) и 17 бит широты (180 / 2**17), и оба
+# выражения дают одно число. То же `CELL_DEG`, что у бэкендового
+# `tools/secret-cells.ts`; разошедшись, две копии дали бы разные покрытия
+# одного полигона, а заметить это можно было бы только на телефоне.
+CELL_DEG = 180 / 2 ** 17
+METERS_PER_DEG_LAT = 111320
+
+
+def geohash_center(cell):
+    """Центр ячейки. Обратная `geohash()`, тем же обходом битов."""
+    base32 = "0123456789bcdefghjkmnpqrstuvwxyz"
+    lat_range, lon_range = [-90.0, 90.0], [-180.0, 180.0]
+    is_lon = True
+    for char in cell:
+        value = base32.index(char)
+        for shift in range(4, -1, -1):
+            bit = (value >> shift) & 1
+            target = lon_range if is_lon else lat_range
+            mid = sum(target) / 2
+            if bit:
+                target[0] = mid
+            else:
+                target[1] = mid
+            is_lon = not is_lon
+    return sum(lat_range) / 2, sum(lon_range) / 2
+
+
+def polygon_rings(geojson):
+    """GeoJSON → список колец [[lon, lat], …]; первое кольцо каждого полигона
+    внешнее, остальные — дырки. Понимает Polygon/MultiPolygon/Feature/
+    FeatureCollection, как и бэкендовый `loadPolygonGeometry`."""
+    kind = geojson.get("type")
+    if kind == "FeatureCollection":
+        out = []
+        for feature in geojson.get("features", []):
+            out.extend(polygon_rings(feature))
+        return out
+    if kind == "Feature":
+        return polygon_rings(geojson.get("geometry") or {})
+    if kind == "Polygon":
+        return [geojson["coordinates"]]
+    if kind == "MultiPolygon":
+        return list(geojson["coordinates"])
+    raise SystemExit(f"authored: не GeoJSON с полигоном (type={kind!r})")
+
+
+def inside_ring(lon, lat, ring):
+    """Чётно-нечётное правило; кольцо в порядке GeoJSON — [долгота, широта]."""
+    inside = False
+    count = len(ring)
+    j = count - 1
+    for i in range(count):
+        xi, yi = ring[i][0], ring[i][1]
+        xj, yj = ring[j][0], ring[j][1]
+        if (yi > lat) != (yj > lat):
+            x_cross = (xj - xi) * (lat - yi) / (yj - yi) + xi
+            if lon < x_cross:
+                inside = not inside
+        j = i
+    return inside
+
+
+def inside_polygons(lon, lat, polygons):
+    for rings in polygons:
+        if not rings:
+            continue
+        if not inside_ring(lon, lat, rings[0]):
+            continue
+        if any(inside_ring(lon, lat, hole) for hole in rings[1:]):
+            continue
+        return True
+    return False
+
+
+def cells_covering_polygon(polygons):
+    """Ячейки geohash-7, ЦЕНТР которых лежит внутри полигона.
+
+    Ровно то же правило, что у бэкендового `cellsCoveringPolygon` без буфера:
+    сервер проверяет трек по своему списку ячеек, телефон — по хешам этого,
+    и списки обязаны совпадать до ячейки. Сетка кандидатов идёт шагом в
+    сторону ячейки с запасом в одну по краю — тогда соседние пробы попадают в
+    соседние ячейки без пропусков.
+    """
+    lats = [point[1] for rings in polygons for ring in rings for point in ring]
+    lons = [point[0] for rings in polygons for ring in rings for point in ring]
+    lat_from, lat_to = min(lats) - CELL_DEG, max(lats) + CELL_DEG
+    lon_from, lon_to = min(lons) - CELL_DEG, max(lons) + CELL_DEG
+
+    cells = set()
+    lat_steps = int(math.ceil((lat_to - lat_from) / CELL_DEG)) + 1
+    lon_steps = int(math.ceil((lon_to - lon_from) / CELL_DEG)) + 1
+    if lat_steps * lon_steps > 500_000:
+        raise SystemExit("authored: полигон слишком велик для покрытия ячейками")
+    for i in range(lat_steps + 1):
+        lat = min(lat_to, lat_from + i * CELL_DEG)
+        for j in range(lon_steps + 1):
+            lon = min(lon_to, lon_from + j * CELL_DEG)
+            cells.add(geohash(lat, lon, 7))
+
+    covered = set()
+    for cell in cells:
+        c_lat, c_lon = geohash_center(cell)
+        if inside_polygons(c_lon, c_lat, polygons):
+            covered.add(cell)
+    return sorted(covered)
+
+
+def cells_within_reach(lat, lon, reach_m):
+    """Ячейка точки плюс те, чей центр не дальше `reach_m` — точечный секрет.
+
+    Своя ячейка входит всегда, даже если её центр дальше: точка у самого края
+    не должна остаться без ячейки, в которой она физически стоит.
+    """
+    covered = {geohash(lat, lon, 7)}
+    if reach_m <= 0:
+        return sorted(covered)
+    lat_radius = reach_m / METERS_PER_DEG_LAT
+    lon_radius = reach_m / max(METERS_PER_DEG_LAT * math.cos(math.radians(lat)), 1e-6)
+    steps_lat = int(math.ceil(lat_radius / CELL_DEG)) + 1
+    steps_lon = int(math.ceil(lon_radius / CELL_DEG)) + 1
+    for i in range(-steps_lat, steps_lat + 1):
+        for j in range(-steps_lon, steps_lon + 1):
+            cell = geohash(lat + i * CELL_DEG, lon + j * CELL_DEG, 7)
+            c_lat, c_lon = geohash_center(cell)
+            if haversine_km(lat, lon, c_lat, c_lon) * 1000 <= reach_m:
+                covered.add(cell)
+    return sorted(covered)
+
+
+def secret_hash(salt, cell):
+    """Первые ЧЕТЫРЕ байта SHA-256(соль ‖ ячейка), big-endian.
+
+    Одна арифметика с iOS `SecretHash.truncated` и с серверным
+    `secret-hash.util.ts`. Разойдясь на байт, они дали бы секрет, который
+    физически нельзя найти, — и ни один тест на телефоне этого не увидел бы.
+    """
+    digest = hashlib.sha256((salt + cell).encode("utf-8")).digest()
+    value = 0
+    for byte in digest[:4]:
+        value = (value << 8) | byte
+    return value
+
+
+def build_authored(path):
+    """`authored.json` → `TripTrack/Resources/Secrets.json`.
+
+    В бандл уезжают ТОЛЬКО усечённые хеши: ни координаты, ни названия, ни
+    истории. Полигон-исходник остаётся здесь, в `Tools/` (см. `Tools/README`),
+    и в приложение не копируется — иначе список авторских секретов читался бы
+    прямо из бандла, а вся ветка «найди сам» превратилась бы в список
+    координат.
+    """
+    with open(path, encoding="utf-8") as fh:
+        authored = json.load(fh)
+    salt = authored["salt"]
+
+    records = []
+    for entry in authored["secrets"]:
+        if "polygon" in entry:
+            geo_path = os.path.join(os.path.dirname(os.path.abspath(path)), entry["polygon"])
+            with open(geo_path, encoding="utf-8") as fh:
+                cells = cells_covering_polygon(polygon_rings(json.load(fh)))
+            polygon = True
+        else:
+            lat, lon = entry["point"]
+            cells = cells_within_reach(lat, lon, float(entry.get("reach", 0)))
+            polygon = False
+        if not cells:
+            raise SystemExit(f"authored: секрет {entry['id']} не покрыл ни одной ячейки")
+        hashes = sorted({secret_hash(salt, cell) for cell in cells})
+        print(f"  {entry['id']:16} cells={len(cells):5} hashes={len(hashes):5} polygon={polygon}")
+        records.append({
+            "id": entry["id"],
+            "hashes": hashes,
+            "reach": float(entry.get("reach", 0)),
+            "symbol": entry["symbol"],
+            "polygon": polygon,
+        })
+
+    payload = {"v": 1, "salt": salt, "secrets": records}
+    out_path = os.path.normpath(SECRETS)
+    with open(out_path, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+        fh.write("\n")
+    print(f"{out_path}  {os.path.getsize(out_path) / 1024:.1f} KB")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--types", default="", help="comma-separated subset to build")
+    parser.add_argument("--authored", nargs="?", const=AUTHORED, default=None,
+                        help="build TripTrack/Resources/Secrets.json from authored.json "
+                             "(hashes only — no coordinates leave Tools/) and exit")
     args = parser.parse_args()
+
+    if args.authored:
+        build_authored(os.path.normpath(args.authored))
+        return
+
     wanted = set(filter(None, args.types.split(","))) or None
 
     atlas = Atlas(os.path.normpath(ATLAS))

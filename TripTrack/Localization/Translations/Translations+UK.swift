@@ -1086,6 +1086,8 @@ extension Translations {
         "badge.milestone_border.desc": "Державний кордон на треку",
         "badge.milestone_2000.title": "Верхня точка",
         "badge.milestone_2000.desc": "Віха карти: висота %@",
+        "badge.secret_komsomolsky.title": "Знак Комсомольського",
+        "badge.secret_komsomolsky.desc": "Проїхати через Комсомольський у Краснодарі",
         "badge.night_rider.title": "Нічний гонщик",
         "badge.night_rider.desc": "Поїздка вночі (22:00–05:00)",
         "badge.night_wolf.title": "Нічний вовк",

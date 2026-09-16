@@ -1086,6 +1086,8 @@ extension Translations {
         "badge.milestone_border.desc": "May hangganan ng bansa sa iyong ruta",
         "badge.milestone_2000.title": "Pinakamataas na punto",
         "badge.milestone_2000.desc": "Milestone ng mapa: taas %@",
+        "badge.secret_komsomolsky.title": "Ang Marka ng Komsomolsky",
+        "badge.secret_komsomolsky.desc": "Magmaneho sa Komsomolsky sa Krasnodar",
         "badge.night_rider.title": "Mangangabayo ng gabi",
         "badge.night_rider.desc": "Biyahe sa gabi (10 PM–5 AM)",
         "badge.night_wolf.title": "Lobo ng gabi",

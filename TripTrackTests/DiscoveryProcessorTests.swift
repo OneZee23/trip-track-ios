@@ -392,7 +392,7 @@ final class DiscoveryProcessorTests: XCTestCase {
             newBadges: [], repeatedBadgeCounts: [:], currentStreak: 0, roadCard: nil)
     }
 
-    /// Скрытые все четыре: находка перестаёт быть находкой, если показать её
+    /// Скрытые все пять: находка перестаёт быть находкой, если показать её
     /// списком заранее.
     func testDiscoveryBadgesAreHiddenExplorationBadges() {
         for id in Badge.externallyUnlockedIds {

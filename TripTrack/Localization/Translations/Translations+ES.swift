@@ -1086,6 +1086,8 @@ extension Translations {
         "badge.milestone_border.desc": "Una frontera de país en tu ruta",
         "badge.milestone_2000.title": "Punto más alto",
         "badge.milestone_2000.desc": "Hito del mapa: altitud %@",
+        "badge.secret_komsomolsky.title": "La marca de Komsomolski",
+        "badge.secret_komsomolsky.desc": "Conduce por Komsomolski en Krasnodar",
         "badge.night_rider.title": "Jinete nocturno",
         "badge.night_rider.desc": "Viaje de noche (22:00–5:00)",
         "badge.night_wolf.title": "Lobo nocturno",

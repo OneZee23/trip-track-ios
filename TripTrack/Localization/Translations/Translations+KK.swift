@@ -1086,6 +1086,8 @@ extension Translations {
         "badge.milestone_border.desc": "Тректе ел шекарасы",
         "badge.milestone_2000.title": "Жоғарғы нүкте",
         "badge.milestone_2000.desc": "Карта белесі: биіктік %@",
+        "badge.secret_komsomolsky.title": "Комсомольский белгісі",
+        "badge.secret_komsomolsky.desc": "Краснодардағы Комсомольский арқылы өту",
         "badge.night_rider.title": "Түнгі жүргізуші",
         "badge.night_rider.desc": "Түнгі сапар (22:00–05:00)",
         "badge.night_wolf.title": "Түнгі қасқыр",

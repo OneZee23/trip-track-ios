@@ -205,10 +205,10 @@ extension Badge {
 
         // --- Находки (0.7.0) ---------------------------------------------
         //
-        // Четыре значка, которые НЕ выводятся из статистики поездок: их
+        // Пять значков, которые НЕ выводятся из статистики поездок: их
         // открывает разбор записанного трека (`DiscoveryProcessor`) через
         // `BadgeManager.unlock(id:)`, а `checkUnlocked` у них поэтому всегда
-        // `false`. Скрытые все четыре — находка перестаёт быть находкой, если
+        // `false`. Скрытые все пять — находка перестаёт быть находкой, если
         // её показать списком заранее.
 
         Badge(id: "riddle_first", titleRu: "Первая загадка", titleEn: "First Riddle",
@@ -235,6 +235,20 @@ extension Badge {
               isHidden: true, rarity: .epic,
               figures: [.elevation(2000, atLeast: true)],
               checkUnlocked: { _ in false }),
+
+        // Именной значок авторского секрета: `DiscoveryProcessor.unlockBadges`
+        // зовёт `unlock("secret_" + ключ находки)`, поэтому id обязан быть
+        // `secret_` + `id` записи в `Secrets.json` и в серверной таблице
+        // `secret` — три написания одного ключа, и разойтись им нельзя.
+        // Описание называет район открыто: значок скрыт, и до находки его
+        // текста никто не видит, а после находки «проехал где-то» не
+        // отвечает человеку ни на что.
+        Badge(id: "secret_komsomolsky", titleRu: "Знак Комсомольского", titleEn: "The Komsomolsky Mark",
+              descriptionRu: "Проехать через Комсомольский в Краснодаре",
+              descriptionEn: "Drive through Komsomolsky in Krasnodar",
+              icon: "seal.fill", color: AppTheme.orange, category: .exploration,
+              isHidden: true, rarity: .epic,
+              checkUnlocked: { _ in false }),
     ]
 
     /// Значки, которые открывает НЕ статистика поездок.
@@ -245,7 +259,8 @@ extension Badge {
     /// `false`»: значок с недописанным правилом должен падать, а не тихо
     /// попадать в эту компанию.
     static let externallyUnlockedIds: Set<String> = [
-        "riddle_first", "riddle_10", "milestone_border", "milestone_2000"
+        "riddle_first", "riddle_10", "milestone_border", "milestone_2000",
+        "secret_komsomolsky"
     ]
 
     // MARK: - Special (Hidden)

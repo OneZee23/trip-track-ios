@@ -19,6 +19,29 @@ struct SecretRecord: Codable, Equatable {
     let polygon: Bool
 }
 
+extension SecretRecord {
+    /// Незнакомая печать — `.generic`, а не отказ разбора.
+    ///
+    /// `symbol` в `Secrets.json` и на сервере — СТРОКА, и печать заводится
+    /// первой там, где её рисуют. Значит бывает и обратный порядок: сборка
+    /// с новой гравюрой в бандле, но со старым `SealSymbol` в коде — или
+    /// секрет, приехавший каталогом с сервера, который уже знает печать из
+    /// следующей версии. Строгий разбор уронил бы ВЕСЬ файл на одной
+    /// незнакомой строке: `JSONDecoder` бросает на первой ошибке, и человек
+    /// остался бы без всех секретов сразу, включая давно найденные. Простая
+    /// печать вместо гравюры — та же потеря, что у сервера
+    /// (`riddle-symbol.util.ts`), и стоит она одну картинку, а не весь набор.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        hashes = try container.decode([UInt32].self, forKey: .hashes)
+        reach = try container.decodeIfPresent(Double.self, forKey: .reach) ?? 0
+        polygon = try container.decodeIfPresent(Bool.self, forKey: .polygon) ?? false
+        let raw = try container.decode(String.self, forKey: .symbol)
+        symbol = SealSymbol(rawValue: raw) ?? .generic
+    }
+}
+
 protocol SecretCatalog {
     /// Соль версии набора. Меняется вместе со всеми хешами и никогда — одна.
     var salt: String { get }

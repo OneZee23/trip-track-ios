@@ -1086,6 +1086,8 @@ extension Translations {
         "badge.milestone_border.desc": "Rotanda bir ülke sınırı",
         "badge.milestone_2000.title": "En yüksek nokta",
         "badge.milestone_2000.desc": "Harita kilometre taşı: yükseklik %@",
+        "badge.secret_komsomolsky.title": "Komsomolski Nişanı",
+        "badge.secret_komsomolsky.desc": "Krasnodar'da Komsomolski'den geç",
         "badge.night_rider.title": "Gece sürücüsü",
         "badge.night_rider.desc": "Gece gezisi (22.00–05.00)",
         "badge.night_wolf.title": "Gece kurdu",

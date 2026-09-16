@@ -1086,6 +1086,8 @@ extension Translations {
         "badge.milestone_border.desc": "Perbatasan negara di jalur kamu",
         "badge.milestone_2000.title": "Titik tertinggi",
         "badge.milestone_2000.desc": "Tonggak peta: ketinggian %@",
+        "badge.secret_komsomolsky.title": "Tanda Komsomolsky",
+        "badge.secret_komsomolsky.desc": "Berkendara melewati Komsomolsky di Krasnodar",
         "badge.night_rider.title": "Penunggang malam",
         "badge.night_rider.desc": "Perjalanan malam (22.00–05.00)",
         "badge.night_wolf.title": "Serigala malam",

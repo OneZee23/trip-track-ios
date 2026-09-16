@@ -134,6 +134,53 @@ final class SecretMatcherTests: XCTestCase {
         XCTAssertEqual(SecretMatcher.matches(track: track, catalog: [record(cells: cells)], salt: salt).count, 1)
     }
 
+    // MARK: - Комсомольский, настоящая запись из бандла
+
+    /// Центр bbox микрорайона Комсомольский (Краснодар). Единственная
+    /// координата района во ВСЁМ клиенте — и она живёт в тесте, а не в коде:
+    /// в бандле только хеши.
+    private let komsomolsky = CLLocationCoordinate2D(latitude: 45.034346, longitude: 39.101372)
+
+    private func bundledKomsomolsky() throws -> (record: SecretRecord, salt: String) {
+        let catalog = BundleSecretCatalog()
+        return (try XCTUnwrap(catalog.all().first { $0.id == "komsomolsky" }), catalog.salt)
+    }
+
+    /// Проезд через район — находка. Без `reach`: у площадного секрета
+    /// совпадение ячейки и есть ответ, и `record.reach` тут ноль.
+    func testDriveThroughKomsomolskyIsFound() throws {
+        let (record, salt) = try bundledKomsomolsky()
+        let track = DiscoveryTrackFixtures.line(
+            from: DiscoveryTrackFixtures.offset(komsomolsky, eastMetres: -400),
+            to: DiscoveryTrackFixtures.offset(komsomolsky, eastMetres: 400))
+
+        let matches = SecretMatcher.matches(track: track, catalog: [record], salt: salt)
+
+        XCTAssertEqual(matches.count, 1)
+        XCTAssertEqual(matches.first?.secretId, "komsomolsky")
+
+        // Координата — центр СОВПАВШЕЙ ячейки, и это не обязательно ячейка
+        // центра района: `firstHit` идёт по отсортированным хешам, а
+        // восьмисотметровый трек задевает их полдюжины. Проверять можно
+        // только «в районе», а не «в той самой ячейке».
+        let found = try XCTUnwrap(matches.first?.coordinate)
+        let metres = CLLocation(latitude: found.latitude, longitude: found.longitude)
+            .distance(from: CLLocation(latitude: komsomolsky.latitude, longitude: komsomolsky.longitude))
+        XCTAssertLessThan(metres, 1000)
+    }
+
+    /// Два километра севернее — уже за границей района, и ободка из соседних
+    /// ячеек у площадного секрета нет нарочно.
+    func testDriveTwoKilometresAwayFindsNothing() throws {
+        let (record, salt) = try bundledKomsomolsky()
+        let far = DiscoveryTrackFixtures.offset(komsomolsky, northMetres: 2000)
+        let track = DiscoveryTrackFixtures.line(
+            from: DiscoveryTrackFixtures.offset(far, eastMetres: -400),
+            to: DiscoveryTrackFixtures.offset(far, eastMetres: 400))
+
+        XCTAssertTrue(SecretMatcher.matches(track: track, catalog: [record], salt: salt).isEmpty)
+    }
+
     // MARK: - Ячейки трека
 
     func testTrackCellsPrecision() {
