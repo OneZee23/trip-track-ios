@@ -338,6 +338,36 @@ final class DiscoveryProcessorTests: XCTestCase {
         XCTAssertNil(defaults.data(forKey: DiscoveryProcessor.historyKey))
     }
 
+    /// Ключ без версии (`discoveries.extremes`, до волны «Атлас как атлас»)
+    /// держал `regionIds`, собранные ДО фикса анклавов. Бамп до `.v2` обязан
+    /// не читать это значение — иначе фикстура под Краснодаром (уже
+    /// «известная» по старому кэшу) не дала бы веху «первый регион», хотя
+    /// геометрия региона под ней изменилась.
+    func testStaleUnversionedHistoryKeyIsIgnored() async {
+        var stale = DiscoveryProcessor.HistoryCache()
+        stale.regionIds = ["RU-KDA"]
+        stale.countryCodes = ["RU"]
+        guard let data = try? JSONEncoder().encode(stale) else { return XCTFail("кэш не собрался") }
+        defaults.set(data, forKey: "discoveries.extremes")
+
+        let sut = processor()
+        let first = await sut.process(tripId: trip(start: t0), delta: .none)
+        let region = first.milestones.first { $0.key.hasPrefix(Milestone.firstRegion.rawValue) }
+        XCTAssertNotNil(region, "устаревший ключ подмешался — «первый регион» не случился")
+
+        // Пересев случился один раз: второй финиш по тому же краю веху не
+        // повторяет.
+        let second = await sut.process(
+            tripId: trip(start: t0.addingTimeInterval(3_600)), delta: .none)
+        XCTAssertTrue(
+            second.milestones.allSatisfy { !$0.key.hasPrefix(Milestone.firstRegion.rawValue) },
+            "край уже пересеян под новым ключом")
+
+        // Устаревший ключ остаётся нетронутым — используется только версия `.v2`.
+        XCTAssertNotNil(defaults.data(forKey: "discoveries.extremes"))
+        XCTAssertNotNil(defaults.data(forKey: DiscoveryProcessor.historyKey))
+    }
+
     // MARK: - Пока идёт запись — ничего
 
     func testNothingIsComputedWhileRecording() async {

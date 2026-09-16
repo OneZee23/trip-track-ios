@@ -227,6 +227,38 @@ final class RevealedLayerStoreTests: XCTestCase {
         XCTAssertNil(defaults.stringArray(forKey: RevealedLayerStore.regionsKey))
     }
 
+    /// Ключ `v1` держал регионы, посчитанные ДО фикса анклавов («Атлас как
+    /// атлас», 16 сен 2026): та же ячейка отвечала `RU-KDA` вместо `RU-AD`.
+    /// Бамп до `v2` обязан не читать это значение и пересеять набор заново —
+    /// иначе первый финиш после обновления выдал бы ложный «новый регион» за
+    /// край, езженный годами.
+    func testStaleV1RegionsKeyIsIgnored() async {
+        // Симулируем устаревший ключ — как если бы телефон уже прошёл
+        // pre-batch сборку 0.7.0 и запомнил СТАРЫЙ ответ под старым именем.
+        defaults.set(["RU-KDA"], forKey: "reveal.regions.v1")
+
+        let counted = RevealedLayerStore(
+            persistence: pc, defaults: defaults, regionId: { _ in "RU-AD" })
+
+        // Новая геометрия отвечает RU-AD на той же территории. Старый ключ
+        // не читается — регион обязан прийти НОВЫМ, а не потеряться в
+        // устаревшем наборе.
+        let first = await counted.ingest(tripId: makeTrip(northMetres: 3_000))
+        XCTAssertEqual(first.newRegionIds, ["RU-AD"], "стар v1 не должен подмешаться")
+
+        // Пересев случился один раз: второй проезд того же края новым его
+        // уже не считает.
+        let second = await counted.ingest(tripId: makeTrip(
+            northMetres: 600,
+            from: CLLocationCoordinate2D(latitude: 45.0355, longitude: 38.9773)))
+        XCTAssertGreaterThan(second.openedCells, 0, "соседняя улица открылась")
+        XCTAssertTrue(second.newRegionIds.isEmpty, "край уже пересеян и не новый")
+
+        // Устаревший ключ остаётся нетронутым — используется только новый.
+        XCTAssertEqual(defaults.stringArray(forKey: "reveal.regions.v1"), ["RU-KDA"])
+        XCTAssertEqual(defaults.stringArray(forKey: RevealedLayerStore.regionsKey), ["RU-AD"])
+    }
+
     // MARK: - Снимок
 
     func testLayerReadsWhatIngestWrote() async {
