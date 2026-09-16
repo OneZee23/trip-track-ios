@@ -167,6 +167,7 @@ final class FogVeilView: UIView {
     private var index = MapPathIndex()
     private var indexReady = false
     private var revealed = RevealedLayer.empty
+    private var visitedRegions: Set<String> = []
     /// Круги нерешённых загадок, уже переведённые в точки карты. Гравируются
     /// В РАСТР (`FogVeilPainter.engrave`), а не рисуются слоем аннотации:
     /// слой живёт в точках ЭКРАНА и во время щипка не пересчитывался — круг
@@ -214,8 +215,13 @@ final class FogVeilView: UIView {
 
     // MARK: Жизнь
 
-    init(margin: Double = FogVeilView.defaultMargin) {
+    /// Рисует ли эта вуаль границы регионов и стран. Правда только у
+    /// «Атласа»: на карте поездки и на записи они шум.
+    let showsRegions: Bool
+
+    init(margin: Double = FogVeilView.defaultMargin, showsRegions: Bool = false) {
         self.margin = margin
+        self.showsRegions = showsRegions
         super.init(frame: .zero)
         // Хит-тест обязан проходить насквозь: под вуалью лежит сама карта, и
         // тап по дороге, пину и кластеру должен доходить до неё.
@@ -256,6 +262,9 @@ final class FogVeilView: UIView {
         hasLayer = true
         layerSignature = signature
         revealed = incoming
+        // Посещённые — прямо из слоя: он и есть то, что передаёт вью-модель,
+        // а второй источник этого списка однажды разошёлся бы с первым.
+        visitedRegions = Set(incoming.regionKm.filter { $0.value > 0 }.map(\.key))
         indexReady = false
         gate.invalidate()
         // Свой индекс на каждый слой: `prepare` складывает наборы, а не
@@ -266,6 +275,7 @@ final class FogVeilView: UIView {
             // Облака — синхронно и здесь же: очередь фоновая, а собранные
             // после первого растра они стоили бы второго полного кадра.
             CloudTexture.shared.prepare()
+            if self?.showsRegions == true { RegionPathIndex.shared.prepareIfNeeded() }
             fresh.prepare(
                 // Тождественное преобразование: система координат растра — это
                 // координаты `MKMapPoint`, ровно как у рендерера с мировым
@@ -817,6 +827,8 @@ final class FogVeilView: UIView {
         let indexRef = index
         let circles = hints
         let whole = bands.count == 1
+        let wantsRegions: RegionPathIndex? = showsRegions ? .shared : nil
+        let visited = visitedRegions
 
         for band in bands {
             if let ready = reusable?.band(for: band, scale: scale, sizePoints: sizePoints) {
@@ -829,7 +841,8 @@ final class FogVeilView: UIView {
                 let started = CACurrentMediaTime()
                 let made = FogVeilBitmap.render(
                     whole: rect, band: band, sizePoints: sizePoints, scale: scale,
-                    grid: grid, index: indexRef, selected: route, hints: circles)
+                    grid: grid, index: indexRef, selected: route, hints: circles,
+                    regions: wantsRegions, visited: visited)
                 // Меряем только ЦЕЛЫЙ кадр: по трети растра о цене полного
                 // судить нельзя, а первый кадр вуали всегда целый.
                 if whole { Self.recordFullFrameCost(CACurrentMediaTime() - started) }
@@ -1031,11 +1044,12 @@ enum FogVeilBitmap {
     static func render(
         rect: MKMapRect, sizePoints: CGSize, scale: CGFloat,
         index: MapPathIndex, selected: [MKMapPoint],
-        hints: [FogVeilPainter.EngravedHint] = []
+        hints: [FogVeilPainter.EngravedHint] = [],
+        regions: RegionPathIndex? = nil, visited: Set<String> = []
     ) -> Band? {
         render(whole: rect, band: rect, sizePoints: sizePoints, scale: scale,
                grid: grid(sizePoints: sizePoints), index: index, selected: selected,
-               hints: hints)
+               hints: hints, regions: regions, visited: visited)
     }
 
     /// Одна полоса растра. `whole` задаёт систему координат и сетку тайлов,
@@ -1043,7 +1057,8 @@ enum FogVeilBitmap {
     static func render(
         whole: MKMapRect, band: MKMapRect, sizePoints: CGSize, scale: CGFloat,
         grid: Grid, index: MapPathIndex, selected: [MKMapPoint],
-        hints: [FogVeilPainter.EngravedHint] = []
+        hints: [FogVeilPainter.EngravedHint] = [],
+        regions: RegionPathIndex? = nil, visited: Set<String> = []
     ) -> Band? {
         guard whole.width > 0, whole.height > 0, band.width > 0, band.height > 0,
               sizePoints.width > 0, sizePoints.height > 0 else { return nil }
@@ -1123,6 +1138,14 @@ enum FogVeilBitmap {
         let bandBox = CGRect(x: band.minX, y: band.minY,
                              width: band.width, height: band.height)
         let clouds = FogVeilRenderer.clouds(for: band, rect: bandBox, lod: lod)
+        // Границы — ОДИН раз на полосу (не на тайл): контуры приходят целыми
+        // и клипа по тайлу не терпят, а внутри открытого их всё равно
+        // прожигает то же перо, что и туман.
+        if let paths = regions?.paths(in: band, lod: lod, visited: visited) {
+            FogVeilPainter.paintRegions(
+                context: context,
+                regions: FogVeilPainter.RegionPaint(paths: paths, zoomScale: zoomScale))
+        }
         if layers == 1 {
             FogVeilPainter.punch(
                 context: context, corridors: paths, corridorWidth: width, passes: passes,

@@ -117,6 +117,73 @@ final class AtlasSharePosterTests: XCTestCase {
         return count
     }
 
+    // MARK: Заливка посещённого региона
+
+    /// Плечо Краснодар → Сочи: достаточно длинное, чтобы окно постера ушло на
+    /// уровень, где границы регионов рисуются.
+    private func longLayer(atlas: RegionAtlas?) -> RevealedLayer {
+        let run = (0..<400).map { i -> CLLocationCoordinate2D in
+            let t = Double(i) / 399
+            return CLLocationCoordinate2D(
+                latitude: 45.04 + (43.60 - 45.04) * t,
+                longitude: 38.98 + (39.73 - 38.98) * t)
+        }
+        return RevealedLayer.build(runs: [run], cellCount: run.count, atlas: atlas)
+    }
+
+    /// Насколько картинка «теплее» — красного больше синего. Заливка
+    /// посещённого это терракота #C2452B на синеватой вуали, и ярче от неё
+    /// постер почти не становится; разность каналов её и ловит.
+    private func warmth(_ raster: Raster) -> Double {
+        var sum = 0.0
+        var count = 0
+        let bottom = raster.height - Int(AtlasSharePoster.captionHeight * 2)
+        for y in stride(from: 4, to: max(8, bottom), by: 5) {
+            for x in stride(from: 4, to: raster.width - 4, by: 5) {
+                let p = raster.pixel(x: x, y: y)
+                sum += Double(p.r) - Double(p.b)
+                count += 1
+            }
+        }
+        return count > 0 ? sum / Double(count) : 0
+    }
+
+    /// Посещённый регион на постере ЗАЛИТ — тем же тоном и той же кистью, что
+    /// на экране.
+    ///
+    /// Сравниваются два постера на ОДНОМ окне: у первого слой знает свои
+    /// регионы (`RevealedLayer.regionKm`), у второго — нет. Разница между ними
+    /// и есть заливка: больше в постере ничем эти два слоя не отличаются.
+    func testVisitedRegionIsTintedOnThePoster() async {
+        await RegionAtlas.shared.loadIfNeeded()
+        let tinted = longLayer(atlas: RegionAtlas.shared)
+        let plain = longLayer(atlas: nil)
+        XCTAssertFalse(tinted.regionKm.isEmpty, "слой обязан знать свои регионы")
+        XCTAssertTrue(plain.regionKm.isEmpty)
+
+        guard let rect = AtlasSharePoster.frame(for: tinted) else {
+            return XCTFail("окно обязано посчитаться")
+        }
+        let region = AtlasSharePoster.region(for: rect)
+        let zoom = MKZoomScale(AtlasSharePoster.renderPointSize.width / CGFloat(rect.width))
+        XCTAssertEqual(FogVeilRenderer.lod(for: zoom), .mid,
+                       "окно постера обязано попасть туда, где границы рисуются")
+
+        func poster(_ layer: RevealedLayer) -> Raster? {
+            raster(of: AtlasSharePoster.render(
+                snapshot: fakeSnapshot(), region: region, layer: layer, seals: [],
+                caption: "Атлас", scale: 1))
+        }
+        guard let withFill = poster(tinted), let without = poster(plain) else {
+            return XCTFail("оба постера обязаны собраться")
+        }
+        let warm = warmth(withFill)
+        let cold = warmth(without)
+        print(String(format: "[poster] теплота: с заливкой %.2f, без неё %.2f", warm, cold))
+        XCTAssertGreaterThan(warm, cold + 1,
+                             "посещённый регион на постере не залит — постер разошёлся с экраном")
+    }
+
     // MARK: Проекция
 
     /// Окно и мировой прямоугольник обязаны переводиться друг в друга без

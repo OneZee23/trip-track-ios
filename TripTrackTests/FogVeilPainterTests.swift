@@ -491,6 +491,127 @@ final class FogVeilPainterTests: XCTestCase {
                                  "облака посчитаны от куска, а не от мира — узор поплывёт")
     }
 
+    // MARK: Границы и заливка регионов
+
+    /// Два соседа по 0.95° долготы каждый: западный посещён, восточный — нет.
+    private func twoRegions() -> RegionPathIndex {
+        func box(_ minLon: Double, _ maxLon: Double) -> [Double] {
+            [44, minLon, 44, maxLon, 46, maxLon, 46, minLon]
+        }
+        let index = RegionPathIndex()
+        index.prepare(outlines: [
+            RegionOutline(id: "W", isCountry: false, rings: [box(38.0, 38.95)]),
+            RegionOutline(id: "E", isCountry: false, rings: [box(38.95, 39.9)]),
+        ])
+        return index
+    }
+
+    /// Кадр вокруг границы этих двух регионов, на заданных метрах на точку.
+    private func regionFrame(metresPerPoint: Double, side: CGFloat = 400)
+    -> (rect: MKMapRect, sizePoints: CGSize) {
+        let centre = CLLocationCoordinate2D(latitude: 45, longitude: 38.95)
+        let metre = MKMapPointsPerMeterAtLatitude(centre.latitude)
+        let span = Double(side) * metresPerPoint * metre
+        let origin = MKMapPoint(centre)
+        return (MKMapRect(x: origin.x - span / 2, y: origin.y - span / 2,
+                          width: span, height: span),
+                CGSize(width: side, height: side))
+    }
+
+    /// Средняя «теплота» куска картинки: насколько красного больше синего.
+    ///
+    /// Именно разность каналов, а не яркость: вуаль синеватая
+    /// (`veilColorTop` #0c0d12), заливка посещённого — терракота #C2452B, и
+    /// светлее от неё картинка почти не становится.
+    private func warmth(
+        _ pixels: [UInt8], width: Int, height: Int, column: ClosedRange<Double>
+    ) -> Double {
+        var sum = 0.0
+        var count = 0
+        for y in stride(from: height / 8, to: height / 3, by: 3) {
+            let from = Int(Double(width) * column.lowerBound)
+            let to = Int(Double(width) * column.upperBound)
+            for x in stride(from: from, to: to, by: 3) {
+                let i = (y * width + x) * 4
+                sum += Double(pixels[i + 2]) - Double(pixels[i])
+                count += 1
+            }
+        }
+        return count > 0 ? sum / Double(count) : 0
+    }
+
+    /// Посещённый регион ТЕПЛЕЕ непосещённого — и это единственное, чем они на
+    /// карте отличаются: контур есть у обоих.
+    func testVisitedRegionIsWarmerThanTheUnvisitedOne() {
+        let (rect, sizePoints) = regionFrame(metresPerPoint: 200)
+        let index = MapPathIndex()
+        index.prepare(source: { _ in [] }, transform: { CGPoint(x: $0.x, y: $0.y) })
+        guard let band = FogVeilBitmap.render(
+            rect: rect, sizePoints: sizePoints, scale: 1, index: index, selected: [],
+            regions: twoRegions(), visited: ["W"])
+        else { return XCTFail("растр обязан собраться") }
+        let width = band.image.width, height = band.image.height
+        guard let pixels = pixels(of: band.image, width: width, height: height)
+        else { return XCTFail("пиксели обязаны прочитаться") }
+
+        let visited = warmth(pixels, width: width, height: height, column: 0.15...0.40)
+        let plain = warmth(pixels, width: width, height: height, column: 0.60...0.85)
+        print(String(format: "[regions] теплота: посещённый %.2f, непосещённый %.2f",
+                     visited, plain))
+        XCTAssertGreaterThan(visited, plain + 3,
+                             "заливку посещённого региона не отличить от тумана")
+    }
+
+    /// На улице границ НЕТ ни одной: их показывает сама карта Apple, и наши
+    /// легли бы вторым контуром рядом с её.
+    func testFineZoomDrawsNoBorders() {
+        let (rect, sizePoints) = regionFrame(metresPerPoint: 2)
+        let index = MapPathIndex()
+        index.prepare(source: { _ in [] }, transform: { CGPoint(x: $0.x, y: $0.y) })
+        guard let bare = FogVeilBitmap.render(
+                rect: rect, sizePoints: sizePoints, scale: 1, index: index, selected: []),
+              let asked = FogVeilBitmap.render(
+                rect: rect, sizePoints: sizePoints, scale: 1, index: index, selected: [],
+                regions: twoRegions(), visited: ["W"])
+        else { return XCTFail("оба растра обязаны собраться") }
+        XCTAssertEqual(FogVeilRenderer.lod(
+            for: MKZoomScale(sizePoints.width / CGFloat(rect.width))), .fine)
+
+        let width = asked.image.width, height = asked.image.height
+        guard let without = pixels(of: bare.image, width: width, height: height),
+              let with = pixels(of: asked.image, width: width, height: height)
+        else { return XCTFail("пиксели обязаны прочитаться") }
+        XCTAssertEqual(without, with, "на масштабе улицы наших границ быть не должно")
+    }
+
+    /// И заливка, и граница живут ПОД коридорами: перо прожигает их вместе с
+    /// туманом, поэтому внутри открытого человек видит границы Apple, а
+    /// снаружи — наши. Двойных линий не остаётся.
+    func testCorridorsBurnThroughTheRegionFillToo() {
+        let revealed = layer()
+        let (rect, sizePoints) = frame()
+        let prepared = index(for: revealed)
+        // Регион, накрывающий весь кадр, и он посещён.
+        let regions = RegionPathIndex()
+        regions.prepare(outlines: [RegionOutline(
+            id: "W", isCountry: false, rings: [[44, 38, 44, 40, 46, 40, 46, 38]])])
+        guard let band = FogVeilBitmap.render(
+            rect: rect, sizePoints: sizePoints, scale: 1, index: prepared, selected: [],
+            regions: regions, visited: ["W"])
+        else { return XCTFail("растр обязан собраться") }
+
+        let width = band.image.width, height = band.image.height
+        guard let data = pixels(of: band.image, width: width, height: height)
+        else { return XCTFail("пиксели обязаны прочитаться") }
+        var clear = 0
+        for i in stride(from: 0, to: (height - 1) * width * 4, by: 4) where data[i + 3] == 0 {
+            clear += 1
+        }
+        print("[regions] полностью прожжённых пикселей под заливкой: \(clear)")
+        XCTAssertGreaterThan(clear, 500,
+                             "заливка региона легла ПОВЕРХ коридоров и закрыла открытое")
+    }
+
     // MARK: Внутри
 
     /// Тот же кадр настоящим `FogVeilRenderer`, тайл за тайлом, с клипом на

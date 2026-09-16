@@ -105,13 +105,20 @@ enum AtlasSharePoster {
         // Облака — синхронно, как и индекс: постер собирается в фоне и один
         // раз, а туман без них разошёлся бы с экраном.
         CloudTexture.shared.prepare()
+        // И границы: постер — это «Атлас», и заливка посещённых регионов на
+        // нём обязана быть та же, что на экране.
+        if !RegionPathIndex.shared.isReady, RegionAtlas.shared.isLoaded {
+            RegionPathIndex.shared.prepare(outlines: RegionOutline.all(from: .shared))
+        }
         let index = MapPathIndex()
         index.prepare(
             source: { layer.polylines(for: $0) },
             transform: { CGPoint(x: $0.x, y: $0.y) }
         )
         guard let band = FogVeilBitmap.render(
-            rect: rect, sizePoints: size, scale: scale, index: index, selected: []
+            rect: rect, sizePoints: size, scale: scale, index: index, selected: [],
+            regions: .shared,
+            visited: Set(layer.regionKm.filter { $0.value > 0 }.map(\.key))
         ) else { return }
 
         // Растр приходит с припуском снизу (`drawnRect`), поэтому кладётся по

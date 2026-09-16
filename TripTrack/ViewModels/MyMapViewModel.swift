@@ -253,6 +253,9 @@ final class MyMapViewModel: ObservableObject {
         if exploration.isEmpty { isLoading = true }
 
         await RegionAtlas.shared.loadIfNeeded()
+        // Границы — один раз и в фоне, сразу после атласа: сорок тысяч вершин
+        // в `CGPath` не собираются ни в `draw`, ни на главном потоке.
+        RegionPathIndex.shared.prepareIfNeeded()
 
         // Main-actor: CoreData fetch. Everything after it is pure value work.
         let trips = tripManager.fetchTripsForMap()
@@ -339,7 +342,7 @@ final class MyMapViewModel: ObservableObject {
         // Вуаль есть ВСЕГДА, даже над пустым слоем: угол без неё читался бы
         // как открытый, а «мир тёмный, пока ты не поехал» — это и есть весь
         // замысел.
-        fogVeil = FogVeilOverlay(layer: layer)
+        fogVeil = FogVeilOverlay(layer: layer, showsRegions: true)
         routeVein = layer.isEmpty ? nil : RouteVeinOverlay(layer: layer)
         // Drop a selection whose subject no longer exists (trip deleted on
         // another device, region emptied by a rebuild).

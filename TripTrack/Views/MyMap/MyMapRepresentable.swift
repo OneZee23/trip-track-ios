@@ -35,7 +35,8 @@ final class MapHostController: UIViewController {
     ///
     /// Место — ПОД контейнером аннотаций: жилку сети и выбранный маршрут
     /// «Атлас» уводит в растр, и оверлеев под вуалью не остаётся.
-    let veilSeat = VeilSeat(margin: FogVeilView.atlasMargin, seat: .belowAnnotations)
+    let veilSeat = VeilSeat(margin: FogVeilView.atlasMargin, seat: .belowAnnotations,
+                            showsRegions: true)
     var screenVeil: FogVeilView { veilSeat.veil }
     /// Встала ли вуаль в дерево. `false` — иерархия `MKMapView` незнакомая,
     /// и туман рисует плиточный `FogVeilRenderer`, как до 0.7.0.

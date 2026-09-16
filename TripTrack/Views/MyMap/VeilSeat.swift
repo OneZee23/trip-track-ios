@@ -38,8 +38,10 @@ final class VeilSeat {
 
     private(set) var isAttached = false
 
-    init(margin: Double, seat: FogVeilView.Seat) {
-        self.veil = FogVeilView(margin: margin)
+    /// `showsRegions` — про «Атлас» и только про него: границы регионов и
+    /// стран на карте одной поездки и на записи это шум.
+    init(margin: Double, seat: FogVeilView.Seat, showsRegions: Bool = false) {
+        self.veil = FogVeilView(margin: margin, showsRegions: showsRegions)
         self.placement = seat
         veil.onLostFromHierarchy = { [weak self] in self?.standDown() }
     }
