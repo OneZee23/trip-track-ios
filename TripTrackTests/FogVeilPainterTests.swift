@@ -612,15 +612,89 @@ final class FogVeilPainterTests: XCTestCase {
                              "заливка региона легла ПОВЕРХ коридоров и закрыла открытое")
     }
 
+    /// Тот же золотой тест, но на СРЕДНЕМ уровне и С ГРАНИЦАМИ: в кадре
+    /// посещённый регион, его непосещённый сосед и кольцо страны.
+    ///
+    /// Нужен отдельным тестом, потому что уличный кадр этого не проверяет
+    /// вовсе: на `.fine` границы не рисуются ни одной стороной. А проверять
+    /// их обязательно именно ЗДЕСЬ — у плиточного отката геометрия регионов
+    /// приезжает из ОБЩЕГО индекса в сырых `MKMapPoint` и переводится в его
+    /// систему координат аффинной матрицей, собранной руками в
+    /// `FogVeilRenderer.init` (`regionTransform`). У коридоров такой матрицы
+    /// нет — им `MapPathChunks` зовёт настоящий `point(for:)` на каждой
+    /// вершине, — поэтому ошибка в ней сдвинула бы или потеряла границы
+    /// ровно в том пути, который включается, когда экранная вуаль не села.
+    func testTiledFallbackDrawsTheSameRegionsAsTheRaster() {
+        let revealed = layer()
+        var withRegions = revealed
+        withRegions.regionKm["W"] = 12
+        let borders = twoRegionsAndACountry()
+        let (rect, sizePoints) = regionFrame(metresPerPoint: 200, side: 320)
+        XCTAssertEqual(FogVeilRenderer.lod(
+            for: MKZoomScale(sizePoints.width / CGFloat(rect.width))), .mid,
+            "кадр обязан попасть на уровень, где границы рисуются")
+
+        let prepared = index(for: withRegions)
+        guard let band = FogVeilBitmap.render(
+            rect: rect, sizePoints: sizePoints, scale: 1, index: prepared, selected: [],
+            regions: borders, visited: ["W"])
+        else { return XCTFail("растр обязан собраться") }
+
+        let width = band.image.width, height = band.image.height
+        guard let mine = pixels(of: band.image, width: width, height: height),
+              let theirs = tiledReference(rect: rect, sizePoints: sizePoints,
+                                          revealed: withRegions, width: width, height: height,
+                                          regions: borders)
+        else { return XCTFail("обе картинки обязаны собраться") }
+
+        var worse = 0
+        var total = 0.0
+        let compared = (height - 1) * width * 4
+        for i in stride(from: 0, to: compared, by: 4) {
+            for channel in 0..<3 {
+                let delta = abs(Int(mine[i + channel]) - Int(theirs[i + channel]))
+                total += Double(delta)
+                if delta > 8 { worse += 1; break }
+            }
+        }
+        let count = compared / 4
+        let share = Double(worse) / Double(count)
+        let mean = total / Double(count * 3)
+        print(String(format: "[veil] .mid с границами: расходятся %.3f %% пикселей, "
+                     + "средняя разница %.3f уровня", share * 100, mean))
+        XCTAssertLessThan(share, 0.02,
+                          "плиточный откат рисует границы не там, где растр")
+        XCTAssertLessThan(mean, 1.5)
+    }
+
+    /// Посещённый регион, его непосещённый сосед и кольцо страны — всё в
+    /// одном кадре.
+    private func twoRegionsAndACountry() -> RegionPathIndex {
+        func box(_ minLon: Double, _ maxLon: Double, _ minLat: Double = 44,
+                 _ maxLat: Double = 46) -> [Double] {
+            [minLat, minLon, minLat, maxLon, maxLat, maxLon, maxLat, minLon]
+        }
+        let index = RegionPathIndex()
+        index.prepare(outlines: [
+            RegionOutline(id: "W", isCountry: false, rings: [box(38.0, 38.95)]),
+            RegionOutline(id: "E", isCountry: false, rings: [box(38.95, 39.9)]),
+            RegionOutline(id: "XX", isCountry: true, rings: [box(37.0, 41.0, 43, 47)]),
+        ])
+        return index
+    }
+
     // MARK: Внутри
 
     /// Тот же кадр настоящим `FogVeilRenderer`, тайл за тайлом, с клипом на
     /// каждый тайл — ровно так его зовёт MapKit.
     private func tiledReference(
         rect: MKMapRect, sizePoints: CGSize, revealed: RevealedLayer,
-        width: Int, height: Int
+        width: Int, height: Int,
+        regions: RegionPathIndex? = nil
     ) -> [UInt8]? {
-        let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: revealed))
+        let renderer = FogVeilRenderer(veil: FogVeilOverlay(
+            layer: revealed, showsRegions: regions != nil,
+            regionIndex: regions ?? RegionPathIndex()))
         guard FogVeilRendererTests.waitForIndex(renderer) else { return nil }
         // Жилку растр рисует сам (оверлеем она лежала бы ПОД вуалью), поэтому
         // в откате её тоже надо нарисовать — на экране это те же два оверлея

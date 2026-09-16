@@ -550,6 +550,96 @@ final class FogVeilRendererTests: XCTestCase {
     /// Ждёт фоновую сборку индекса, крутя главный цикл: сборка идёт на
     /// `DispatchQueue.global`, и просто `sleep` здесь тоже сработал бы — но
     /// цикл не мешает остальным тестам.
+    // MARK: - Границы у ПЛИТОЧНОГО рендерера
+
+    /// Плиточный рендерер рисует границы и заливку там же, где растр.
+    ///
+    /// Это единственный тест, который проходит через `FogVeilRenderer` с
+    /// `showsRegions: true`, то есть через `regionTransform` — аффинную
+    /// матрицу, собранную руками из `rect(for: .world)`. У коридоров такой
+    /// матрицы нет (им `MapPathChunks` зовёт настоящий `point(for:)` на
+    /// каждой вершине), у границ она единственный мост между общим индексом в
+    /// сырых `MKMapPoint` и системой координат рендерера. Ошибись она — и
+    /// границы уехали бы или пропали ровно в откате, то есть на экране, где
+    /// экранная вуаль не села, и заметить это было бы нечем.
+    func testTiledRendererDrawsBordersAndFillsTheVisitedSide() {
+        // Кадр вокруг границы двух регионов: слева посещённый, справа нет.
+        let centre = CLLocationCoordinate2D(latitude: 45, longitude: 38.95)
+        let metre = MKMapPointsPerMeterAtLatitude(centre.latitude)
+        let side = 320
+        let span = Double(side) * 200 * metre        // 200 м на точку — это `.mid`
+        let origin = MKMapPoint(centre)
+        let mapRect = MKMapRect(x: origin.x - span / 2, y: origin.y - span / 2,
+                                width: span, height: span)
+        let zoomScale = MKZoomScale(Double(side) / span)
+        XCTAssertEqual(FogVeilRenderer.lod(for: zoomScale), .mid)
+
+        func boxRing(_ minLon: Double, _ maxLon: Double) -> [Double] {
+            [44, minLon, 44, maxLon, 46, maxLon, 46, minLon]
+        }
+        let borders = RegionPathIndex()
+        borders.prepare(outlines: [
+            RegionOutline(id: "W", isCountry: false, rings: [boxRing(38.0, 38.95)]),
+            RegionOutline(id: "E", isCountry: false, rings: [boxRing(38.95, 39.9)]),
+        ])
+        var revealed = RevealedLayer.empty
+        revealed.regionKm["W"] = 12
+
+        let renderer = FogVeilRenderer(veil: FogVeilOverlay(
+            layer: revealed, showsRegions: true, regionIndex: borders))
+        let plain = FogVeilRenderer(veil: FogVeilOverlay(layer: revealed))
+
+        func tile(_ renderer: FogVeilRenderer) -> [UInt8] {
+            Self.drawn(size: side) { context, _ in
+                let local = renderer.rect(for: mapRect)
+                context.saveGState()
+                context.scaleBy(x: CGFloat(zoomScale), y: CGFloat(zoomScale))
+                context.translateBy(x: -local.origin.x, y: -local.origin.y)
+                renderer.draw(mapRect, zoomScale: zoomScale, in: context)
+                context.restoreGState()
+            }
+        }
+        let withBorders = tile(renderer)
+        let without = tile(plain)
+
+        // Заливка: посещённая половина ТЕПЛЕЕ непосещённой (разность каналов —
+        // терракота на синеватой вуали ярче почти не делает).
+        func warmth(_ pixels: [UInt8], columns: Range<Int>) -> Double {
+            var sum = 0.0
+            var count = 0
+            for y in stride(from: 40, to: side - 40, by: 3) {
+                for x in stride(from: columns.lowerBound, to: columns.upperBound, by: 3) {
+                    let i = (y * side + x) * 4
+                    sum += Double(pixels[i]) - Double(pixels[i + 2])
+                    count += 1
+                }
+            }
+            return count > 0 ? sum / Double(count) : 0
+        }
+        let visited = warmth(withBorders, columns: 20..<(side / 2 - 20))
+        let untouched = warmth(withBorders, columns: (side / 2 + 20)..<(side - 20))
+        print(String(format: "[regions] тайл рендерера: посещённый %.2f, непосещённый %.2f",
+                     visited, untouched))
+        XCTAssertGreaterThan(visited, untouched + 3,
+                             "плиточный откат не залил посещённый регион")
+
+        // Граница: без неё тайл и тайл без регионов совпадают по средней
+        // колонке, с ней — расходятся, и расходятся ИМЕННО там, где граница.
+        func differences(column: Int) -> Int {
+            var count = 0
+            for y in stride(from: 20, to: side - 20, by: 1) {
+                let i = (y * side + column) * 4
+                if (0..<3).contains(where: { abs(Int(withBorders[i + $0])
+                                                - Int(without[i + $0])) > 10 }) { count += 1 }
+            }
+            return count
+        }
+        let onBorder = (side / 2 - 2...side / 2 + 2).map(differences).max() ?? 0
+        print("[regions] пикселей границы в средней колонке: \(onBorder)")
+        XCTAssertGreaterThan(onBorder, 100,
+                             "контур региона у плиточного отката не нарисован")
+    }
+
     static func waitForIndex(
         _ renderer: FogVeilRenderer, expected: Int = 4, timeout: TimeInterval = 5
     ) -> Bool {
