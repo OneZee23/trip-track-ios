@@ -209,30 +209,62 @@ final class RiddleHintAnnotation: NSObject, MKAnnotation {
     }
 }
 
-/// Пунктирный круг и «?».
+/// Что от подсказки видно на этом масштабе.
 ///
-/// Круг рисуется СЛОЕМ АННОТАЦИИ, а не `MKOverlay` с рендерером: экранная
-/// вуаль сидит под контейнером аннотаций и поверх контейнера оверлеев, поэтому
-/// оверлейный круг лежал бы под непрозрачным туманом и не был бы виден вовсе.
-/// По той же причине его не отдают в растр вуали: круг меняет радиус на каждом
-/// зуме, а растр — восемь мегабайт на кадр.
+/// Владелец на устройстве 16 сен: на дальнем зуме три «?» со своими строками
+/// съезжаются в одну кучу поверх подписи «КРАСНОДАРСКИЙ КРАЙ». Причина
+/// простая: круг задан в метрах, а значок — в точках экрана, и на стране три
+/// круга по тридцать километров помещаются в один палец.
 ///
-/// Рамка вью маленькая (сам «?»), а круг выходит далеко за неё и не
-/// обрезается: `masksToBounds` выключен. Так хит-тест «Атласа» видит крошечную
-/// цель вместо чашки в полэкрана — впрочем, тапа у подсказки в этой волне нет
-/// вовсе (волна 4).
+/// Решение — уровни, и порог у каждого свой вопрос:
+/// - меньше `badgeDiameterPt` — круга на экране почти нет, и значок стоял бы
+///   не «в круге», а посреди карты. Не показываем ничего: в тумане остаётся
+///   выгравированное кольцо (чтобы было видно, что тут что-то есть), а счёт
+///   несёт строка листа «N загадок рядом»;
+/// - от `badgeDiameterPt` до `fullDiameterPt` — один «?»: круг уже читается
+///   как круг, но строка в 190 pt в него не вписана и легла бы на соседей;
+/// - от `fullDiameterPt` — «?» и строка: круг занимает треть ширины телефона,
+///   и подпись под значком остаётся внутри него.
+enum HintBadgeLOD {
+    enum Level { case none, badge, full }
+
+    /// Строка шириной 190 pt читается «внутри круга» начиная с этого диаметра.
+    static let fullDiameterPt: CGFloat = 160
+    /// Меньше этого круг на экране — точка, и значку не к чему привязаться.
+    static let badgeDiameterPt: CGFloat = 60
+
+    static func level(diameterPt: CGFloat) -> Level {
+        if diameterPt >= fullDiameterPt { return .full }
+        if diameterPt >= badgeDiameterPt { return .badge }
+        return .none
+    }
+}
+
+/// «?» и одна строка. КРУГА ЗДЕСЬ БОЛЬШЕ НЕТ.
+///
+/// До 16 сен круг рисовал `CAShapeLayer` этой вью, в ТОЧКАХ ЭКРАНА, и радиус
+/// пересчитывался только на `regionDidChangeAnimated` — то есть когда камера
+/// уже встала. Во время щипка круг оставался прежним кружком и потому рос и
+/// сжимался относительно карты под ним: владелец увидел это на устройстве
+/// («круг становится больше вместе с отдалением — криво и страшно в тумане»).
+/// Теперь круг гравируется В РАСТР ТУМАНА (`FogVeilPainter.engrave`), то есть
+/// живёт в метрах на земле и едет за картой тем же аффинным преобразованием,
+/// что и весь туман: расти ему нечем по построению.
+///
+/// Аннотацией остаётся только то, что обязано быть ПОВЕРХ тумана и постоянного
+/// размера, — значок и подпись.
 final class RiddleHintView: MKAnnotationView {
     static let reuseID = "RiddleHint"
 
-    private let circle = CAShapeLayer()
     private let chip = UILabel()
     private let caption = UILabel()
 
-    /// Радиус круга В ТОЧКАХ ЭКРАНА — считает карта по зуму и ставит сюда.
-    var radiusPoints: CGFloat = 0 {
+    /// Что показывать на текущем масштабе. Считает карта (диаметр круга в
+    /// точках экрана) и ставит сюда — на каждом кадре жеста, три аннотации.
+    var lod: HintBadgeLOD.Level = .full {
         didSet {
-            guard radiusPoints != oldValue else { return }
-            layoutCircle()
+            guard lod != oldValue else { return }
+            applyLOD()
         }
     }
 
@@ -243,18 +275,18 @@ final class RiddleHintView: MKAnnotationView {
         // Не контрол: у подсказки в этой волне нет действия, а перехваченный
         // ею тап не дошёл бы до дороги под кругом.
         isEnabled = false
+        // Выше подписи региона (`.defaultLow` у `RegionLabelView`): при
+        // столкновении MapKit прячет ПРОИГРАВШЕГО, и уступить обязана подпись,
+        // а не подсказка — иначе они рисуются друг на друге, как это и было
+        // видно на стране. Ниже печати находки (`.required`): найденное
+        // сильнее ненайденного.
         displayPriority = .defaultHigh
+        // Круглая цель столкновения: у значка круглая форма, и прямоугольник
+        // резервировал бы под ним пустые углы.
         collisionMode = .circle
         isAccessibilityElement = true
         layer.masksToBounds = false
         clipsToBounds = false
-
-        circle.fillColor = nil
-        circle.strokeColor = SealPainter.ring(for: .riddle).withAlphaComponent(0.8).cgColor
-        circle.lineWidth = 1.5
-        circle.lineDashPattern = [6, 6]
-        circle.actions = ["path": NSNull(), "position": NSNull(), "bounds": NSNull()]
-        layer.addSublayer(circle)
 
         chip.frame = bounds
         chip.textAlignment = .center
@@ -292,17 +324,13 @@ final class RiddleHintView: MKAnnotationView {
         let height = caption.sizeThatFits(CGSize(width: width, height: 60)).height
         caption.frame = CGRect(x: bounds.midX - width / 2, y: bounds.maxY + 6,
                                width: width, height: height)
-        layoutCircle()
+        applyLOD()
     }
 
-    private func layoutCircle() {
-        guard radiusPoints > 1 else {
-            circle.path = nil
-            return
-        }
-        let box = CGRect(x: bounds.midX - radiusPoints, y: bounds.midY - radiusPoints,
-                         width: radiusPoints * 2, height: radiusPoints * 2)
-        circle.path = UIBezierPath(ovalIn: box).cgPath
+    private func applyLOD() {
+        isHidden = lod == .none
+        chip.isHidden = lod == .none
+        caption.isHidden = lod != .full
     }
 
     @available(*, unavailable)

@@ -40,6 +40,17 @@ final class FogVeilView: UIView {
     /// ровный туман, поэтому запас — это не «чтобы не было дыр», а «сколько
     /// щипка переживём без ровного края».
     static let defaultMargin: Double = 1.5
+    /// Запас «Атласа». Два, а не полтора, и это ответ на «по краям видны
+    /// подгружаемые квадратики» (владелец, устройство, 16 сен).
+    ///
+    /// Растр 1.5× переживает щипок ровно до полутора экранов; дальше край
+    /// растра выезжает на экран, за ним начинается ровный туман — и там, где
+    /// туман ровный, коридоров нет вовсе, то есть граница читается прямым
+    /// швом по картинке. Два оставляет вдвое больше площади и переносит эту
+    /// границу за пределы экрана на всём обычном щипке. Цена — память:
+    /// 440×956 pt видимого при 2.0 и `renderScale` 1.5 это ≈ 16 МБ на растр
+    /// (против 9 МБ при 1.5×), и растров живёт не больше двух.
+    static let atlasMargin: Double = 2.0
     /// Запас для карты, которую можно ПОВЕРНУТЬ (экран записи в режиме «по
     /// курсу», полноэкранная карта поездки под двумя пальцами).
     ///
@@ -62,11 +73,27 @@ final class FogVeilView: UIView {
     static let renderScale: CGFloat = 1.5
     /// Потолок растра в пикселях — страховка на больших экранах.
     static let maxPixels: Int = 6_000_000
-    /// На сколько полос режется растр. Три: полоса довозится отдельно и
-    /// ложится на экран сразу, поэтому после жеста туман дорезается тремя
-    /// короткими шагами вместо одного длинного.
+    /// На сколько полос режется растр НА МЕДЛЕННОМ устройстве и только в
+    /// покое. Три: полоса довозится отдельно и ложится на экран сразу, поэтому
+    /// туман дорезается тремя короткими шагами вместо одного длинного.
+    ///
+    /// Полосы — лекарство от ДОЛГОГО кадра, а не правило. Пока кадр дешевле
+    /// `bandThreshold`, они только вредят: три картинки приезжают в разные
+    /// кадры, и на большом зуме это и есть те самые «подгружаемые квадратики»,
+    /// которые владелец увидел по краям. Поэтому по умолчанию растр ОДИН, а
+    /// три полосы включаются, только если замер первого полного кадра на ЭТОМ
+    /// устройстве вышел дороже порога.
     static let bands = 3
-    /// Кроссфейд полосы при подмене растра.
+    /// Дороже этого — режем на полосы. 120 мс: при `throttle` 0.2 с кадр,
+    /// перевалив за половину окна расписания, начинает обгонять сам себя, и
+    /// лучше показать треть картинки вовремя, чем всю с опозданием.
+    static let bandThreshold: TimeInterval = 0.12
+    /// Кроссфейд полосы при подмене растра — ТОЛЬКО в покое.
+    ///
+    /// Во время жеста подмена мгновенная: кроссфейд на движущейся карте — это
+    /// полторы десятых секунды, в которые на экране лежат ДВА растра разного
+    /// масштаба сразу, то есть «пьяная» анимация зума, о которой и написал
+    /// владелец.
     static let crossfade: TimeInterval = 0.15
     /// Сколько ещё тянуть привязку после того, как камера встала: MapKit
     /// доводит инерцию и сам, уже без колбэков о начале движения.
@@ -89,6 +116,9 @@ final class FogVeilView: UIView {
         var bands: [(rect: MKMapRect, drawn: MKMapRect, image: CGImage)] = []
         var bytes = 0
         var expected: Int
+        /// Играла ли хоть одна полоса кроссфейд: по нему решается, ждать ли
+        /// его конца, прежде чем снять прежний растр.
+        var faded = false
         /// Где растр лежит НА ЭКРАНЕ прямо сейчас — четыре его угла по часовой
         /// стрелке. Считается той же матрицей, что и привязка слоя, поэтому
         /// верен и при повороте карты; пустой, пока привязки не было.
@@ -137,6 +167,11 @@ final class FogVeilView: UIView {
     private var index = MapPathIndex()
     private var indexReady = false
     private var revealed = RevealedLayer.empty
+    /// Круги нерешённых загадок, уже переведённые в точки карты. Гравируются
+    /// В РАСТР (`FogVeilPainter.engrave`), а не рисуются слоем аннотации:
+    /// слой живёт в точках ЭКРАНА и во время щипка не пересчитывался — круг
+    /// рос и сжимался относительно карты под ним.
+    private var hints: [FogVeilPainter.EngravedHint] = []
     /// Чем узнаётся уже установленный слой: полилинии пересоздаются только
     /// вместе с ним.
     private var layerSignature: [ObjectIdentifier] = []
@@ -242,6 +277,28 @@ final class FogVeilView: UIView {
             }
         }
     }
+
+    /// Круги подсказок — в метрах на земле, переводятся в точки карты один раз
+    /// здесь, а не на каждый растр.
+    ///
+    /// Радиус считается по широте ЦЕНТРА круга: в Меркаторе точка карты — это
+    /// разное число метров на разной широте, и круг, посчитанный по широте
+    /// растра, на юге страны разошёлся бы с кругом на севере.
+    func setHints(_ incoming: [RiddleHint]) {
+        let converted = incoming.map { hint -> FogVeilPainter.EngravedHint in
+            let metre = MKMapPointsPerMeterAtLatitude(hint.centre.latitude)
+            let centre = MKMapPoint(hint.centre)
+            return FogVeilPainter.EngravedHint(
+                centre: CGPoint(x: centre.x, y: centre.y),
+                radius: CGFloat(hint.radiusMetres * metre))
+        }
+        guard converted != hints else { return }
+        hints = converted
+        invalidate()
+    }
+
+    /// Сколько кругов подсказок гравируется — для теста.
+    var engravedHintCount: Int { hints.count }
 
     /// Выбранная поездка рисуется В РАСТР: оверлеем она лежала бы под вуалью и
     /// исчезла бы совсем.
@@ -589,6 +646,36 @@ final class FogVeilView: UIView {
         return path
     }
 
+    #if DEBUG
+    /// Насколько привязка растра отстала от карты — в точках экрана.
+    ///
+    /// Сравнивается ПОКАЗАННАЯ (`presentation()`) позиция слоя с той, которую
+    /// матрица даёт для ТЕКУЩЕГО `visibleMapRect` на этом же кадре. Ноль —
+    /// туман едет с картой пиксель в пиксель; больше нуля — коридор на кадр
+    /// отстаёт от дороги под ним, и это видно глазами как «пьяная» анимация.
+    ///
+    /// Только в Debug и только для замера: в релизе у него нет читателя, а
+    /// два лишних `convert` на кадр движения — цена, которую платить не за
+    /// что.
+    func syncLag(map: MKMapView) -> CGFloat? {
+        guard let raster = rasters.last, raster.isComplete else { return nil }
+        let r = raster.rect
+        guard let frame = VeilFrame(
+            p00: map.convert(MKMapPoint(x: r.minX, y: r.minY).coordinate, toPointTo: self),
+            p10: map.convert(MKMapPoint(x: r.maxX, y: r.minY).coordinate, toPointTo: self),
+            p01: map.convert(MKMapPoint(x: r.minX, y: r.maxY).coordinate, toPointTo: self),
+            size: raster.sizePoints
+        ) else { return nil }
+        // `presentation()` в тестовом процессе без сцены пуст — тогда берём
+        // модель слоя: вопрос «отстала ли привязка от камеры» она отвечает
+        // так же, потому что действия слоя выключены и модель равна
+        // показанному с точностью до кадра.
+        let position = (raster.container.presentation() ?? raster.container).position
+        let want = frame.centre
+        return hypot(position.x - want.x, position.y - want.y)
+    }
+    #endif
+
     /// Что сейчас накрыто растром — для теста и для `layoutLetterbox`.
     var coveredQuadPoints: [CGPoint] {
         Self.coveredQuad(rasters: rasters.map { ($0.quad, $0.isComplete) })
@@ -637,10 +724,43 @@ final class FogVeilView: UIView {
         let needed = Self.renderRect(visible: map.visibleMapRect, margin: 1)
         guard gate.allows(now: CACurrentMediaTime(), needed: needed,
                           settled: settled, margin: margin) else { return }
-        render(map: map, gated: true)
+        render(map: map, gated: true, settled: settled)
     }
 
-    private func render(map: MKMapView, gated: Bool = false) {
+    /// На сколько полос резать ЭТОТ кадр.
+    ///
+    /// Во время жеста — всегда одна: гейт пускает сюда только исчерпание
+    /// растра (видимое вылезло за край), и три картинки, приезжающие в разные
+    /// кадры движущейся карты, читаются ровно как «подгружаемые квадратики».
+    /// В покое — одна, пока замер первого полного кадра на этом устройстве
+    /// уложился в `bandThreshold`.
+    static func bandCount(settled: Bool, fullFrameCost: TimeInterval?) -> Int {
+        guard settled else { return 1 }
+        guard let cost = fullFrameCost, cost > bandThreshold else { return 1 }
+        return bands
+    }
+
+    /// Сколько стоил полный кадр на этом устройстве. Меряется ОДИН раз — на
+    /// первом же односполосном растре — и живёт до перезапуска: устройство
+    /// между кадрами не меняется, а мерить каждый кадр значило бы менять
+    /// расписание от того, был ли процессор занят чужой работой.
+    private static let costLock = NSLock()
+    private static var storedFullFrameCost: TimeInterval?
+    static var fullFrameCost: TimeInterval? {
+        costLock.lock(); defer { costLock.unlock() }
+        return storedFullFrameCost
+    }
+    static func recordFullFrameCost(_ cost: TimeInterval) {
+        costLock.lock()
+        if storedFullFrameCost == nil { storedFullFrameCost = cost }
+        costLock.unlock()
+    }
+    /// Только для теста: забыть замер устройства.
+    static func forgetFullFrameCost() {
+        costLock.lock(); storedFullFrameCost = nil; costLock.unlock()
+    }
+
+    private func render(map: MKMapView, gated: Bool = false, settled: Bool = true) {
         guard indexReady, bounds.width > 1, bounds.height > 1 else { return }
         if !gated {
             guard gate.allows(now: CACurrentMediaTime(),
@@ -666,8 +786,13 @@ final class FogVeilView: UIView {
         sizePoints = CGSize(width: sizePoints.width.rounded(), height: sizePoints.height.rounded())
 
         let grid = FogVeilBitmap.grid(sizePoints: sizePoints)
-        let bands = FogVeilBitmap.bandRects(rect: rect, grid: grid, bands: Self.bands)
+        let bands = FogVeilBitmap.bandRects(
+            rect: rect, grid: grid,
+            bands: Self.bandCount(settled: settled, fullFrameCost: Self.fullFrameCost))
         guard !bands.isEmpty else { return }
+        // Кроссфейд — только в покое: на движущейся карте он держит на экране
+        // ДВА растра разного масштаба сразу, и зум от этого «пьяный».
+        let fades = settled
 
         generation += 1
         let token = generation
@@ -687,6 +812,8 @@ final class FogVeilView: UIView {
         let reusable = rasters.count > 1 ? rasters[rasters.count - 2] : nil
         let route = selectedPoints
         let indexRef = index
+        let circles = hints
+        let whole = bands.count == 1
 
         for band in bands {
             if let ready = reusable?.band(for: band, scale: scale, sizePoints: sizePoints) {
@@ -696,13 +823,17 @@ final class FogVeilView: UIView {
             }
             queue.async { [weak self] in
                 guard let self, self.isLive(token) else { return }
+                let started = CACurrentMediaTime()
                 let made = FogVeilBitmap.render(
                     whole: rect, band: band, sizePoints: sizePoints, scale: scale,
-                    grid: grid, index: indexRef, selected: route)
+                    grid: grid, index: indexRef, selected: route, hints: circles)
+                // Меряем только ЦЕЛЫЙ кадр: по трети растра о цене полного
+                // судить нельзя, а первый кадр вуали всегда целый.
+                if whole { Self.recordFullFrameCost(CACurrentMediaTime() - started) }
                 DispatchQueue.main.async {
                     guard let made else { self.finish(token: token) ; return }
                     self.install(image: made.image, band: band, drawn: made.drawnRect,
-                                 token: token, faded: true, bytes: made.bytes)
+                                 token: token, faded: fades, bytes: made.bytes)
                 }
             }
         }
@@ -740,6 +871,7 @@ final class FogVeilView: UIView {
         raster.bytes += bytes
 
         if faded {
+            raster.faded = true
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = 0
             fade.toValue = 1
@@ -766,6 +898,15 @@ final class FogVeilView: UIView {
         // полупрозрачной полосой на мгновение показалась бы карта Apple.
         guard rasters.count > 1 else { layoutLetterbox(); return }
         let stale = rasters.removeFirst()
+        // Мгновенная подмена (жест) — прежний растр уходит сразу: держать его
+        // лишние полторы десятых секунды значит держать на экране две
+        // картинки разного масштаба.
+        let faded = rasters.last?.faded == true
+        guard faded else {
+            stale.container.removeFromSuperlayer()
+            layoutLetterbox()
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.crossfade) { [weak self] in
             stale.container.removeFromSuperlayer()
             self?.layoutLetterbox()
@@ -878,19 +1019,27 @@ enum FogVeilBitmap {
     }
 
     /// Весь растр одной картинкой — постер, снапшот, тест стоимости.
+    ///
+    /// Кругов подсказок здесь НЕТ по умолчанию, и это не забывчивость:
+    /// постером делятся, а нарисовать подсказку значит выдать то, ради чего
+    /// загадка и существует (`AtlasSharePoster` — «на постер попадает только
+    /// найденное»).
     static func render(
         rect: MKMapRect, sizePoints: CGSize, scale: CGFloat,
-        index: MapPathIndex, selected: [MKMapPoint]
+        index: MapPathIndex, selected: [MKMapPoint],
+        hints: [FogVeilPainter.EngravedHint] = []
     ) -> Band? {
         render(whole: rect, band: rect, sizePoints: sizePoints, scale: scale,
-               grid: grid(sizePoints: sizePoints), index: index, selected: selected)
+               grid: grid(sizePoints: sizePoints), index: index, selected: selected,
+               hints: hints)
     }
 
     /// Одна полоса растра. `whole` задаёт систему координат и сетку тайлов,
     /// `band` — то, что на самом деле рисуется.
     static func render(
         whole: MKMapRect, band: MKMapRect, sizePoints: CGSize, scale: CGFloat,
-        grid: Grid, index: MapPathIndex, selected: [MKMapPoint]
+        grid: Grid, index: MapPathIndex, selected: [MKMapPoint],
+        hints: [FogVeilPainter.EngravedHint] = []
     ) -> Band? {
         guard whole.width > 0, whole.height > 0, band.width > 0, band.height > 0,
               sizePoints.width > 0, sizePoints.height > 0 else { return nil }
@@ -961,6 +1110,21 @@ enum FogVeilBitmap {
             FogVeilPainter.punch(context: context, corridors: paths,
                                  corridorWidth: width, passes: passes)
             context.endTransparencyLayer()
+        }
+
+        // Круги подсказок — ПОСЛЕ коридоров и вне слоя прозрачности: они
+        // рисуются нормальным режимом и стирать им нечего. Отбираются по
+        // своей полосе: у подсказки радиус до тридцати километров, у полосы
+        // на улице — двести метров.
+        if !hints.isEmpty {
+            let near = hints.filter { hint in
+                let reach = Double(hint.radius)
+                    + Double(FogVeilPainter.hintRimWidthPoints) / Double(zoomScale)
+                return MKMapRect(x: Double(hint.centre.x) - reach,
+                                 y: Double(hint.centre.y) - reach,
+                                 width: reach * 2, height: reach * 2).intersects(band)
+            }
+            FogVeilPainter.engrave(context: context, hints: near, zoomScale: zoomScale)
         }
 
         // Жилка сети — тем же индексом и теми же правилами, что у

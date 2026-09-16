@@ -93,6 +93,72 @@ final class RiddleHintTests: XCTestCase {
         XCTAssertEqual(RiddleHint.hash("lighthouse:u0h2w1q"), 782_801_610_538_195_241)
     }
 
+    // MARK: - Что видно от значка на этом масштабе
+
+    /// Три порога, и каждый отвечает на свой вопрос.
+    ///
+    /// Владелец на устройстве 16 сен: на стране три «?» со строками съезжаются
+    /// в кучу поверх подписи «КРАСНОДАРСКИЙ КРАЙ». Круг задан в метрах, значок
+    /// — в точках экрана, и на дальнем зуме три круга по тридцать километров
+    /// помещаются в один палец.
+    func testBadgeAppearsOnlyWhenItsCircleIsBigEnoughToHoldIt() {
+        // Страна: круг 30 км на экране в полпальца — не показываем ничего,
+        // счёт несёт строка листа «N загадок рядом».
+        XCTAssertEqual(HintBadgeLOD.level(diameterPt: 20), .none)
+        XCTAssertEqual(HintBadgeLOD.level(diameterPt: 59.9), .none)
+        // Круг уже читается как круг — но строка в 190 pt в него не влезает.
+        XCTAssertEqual(HintBadgeLOD.level(diameterPt: 60), .badge)
+        XCTAssertEqual(HintBadgeLOD.level(diameterPt: 159), .badge)
+        // Треть ширины телефона и больше — подпись остаётся внутри круга.
+        XCTAssertEqual(HintBadgeLOD.level(diameterPt: 160), .full)
+        XCTAssertEqual(HintBadgeLOD.level(diameterPt: 900), .full)
+    }
+
+    /// Значок уступает печати находки и ПОБЕЖДАЕТ подпись региона.
+    ///
+    /// MapKit при столкновении прячет проигравшего — то есть выбор приоритета
+    /// здесь это выбор «кто из двоих исчезнет». Уступить обязана подпись: она
+    /// повторяется на каждом шагу, а нерешённых загадок на карте три.
+    func testHintBadgeYieldsToSealsAndBeatsRegionLabels() {
+        let hint = RiddleHintView(
+            annotation: RiddleHintAnnotation(
+                hint: RiddleHint(id: "a", type: .lighthouse,
+                                 centre: CLLocationCoordinate2D(latitude: 45, longitude: 39),
+                                 radiusMetres: 10_000),
+                line: "линия"),
+            reuseIdentifier: RiddleHintView.reuseID)
+
+        XCTAssertEqual(hint.displayPriority, .defaultHigh)
+        XCTAssertEqual(hint.collisionMode, .circle)
+        XCTAssertLessThan(hint.displayPriority.rawValue, MKFeatureDisplayPriority.required.rawValue,
+                          "найденная печать сильнее ненайденной загадки")
+        XCTAssertGreaterThan(hint.displayPriority.rawValue,
+                             MKFeatureDisplayPriority.defaultLow.rawValue,
+                             "подпись региона (.defaultLow) обязана уступать, а не наоборот")
+
+        // Уровень прячет значок целиком, а не делает его прозрачным: скрытая
+        // аннотация не участвует ни в столкновениях, ни в хит-тесте.
+        hint.lod = .none
+        XCTAssertTrue(hint.isHidden)
+        hint.lod = .badge
+        XCTAssertFalse(hint.isHidden)
+    }
+
+    /// Порядок в плане — ответ на «кто из двух совпавших кругов важнее»:
+    /// ближайший к открытому идёт первым, и именно в этом порядке подсказки
+    /// уезжают на карту.
+    func testPlanIsOrderedNearestToTheOpenWorldFirst() {
+        let home = [CLLocationCoordinate2D(latitude: 45.0, longitude: 39.0)]
+        let hints = RiddleHint.plan(
+            riddles: [
+                riddle("far", lat: 45.5, lon: 39.0),
+                riddle("near", lat: 45.05, lon: 39.0),
+                riddle("mid", lat: 45.2, lon: 39.0),
+            ],
+            solvedRiddleIds: [], centroids: home, layer: emptyLayer)
+        XCTAssertEqual(hints.map(\.id), ["near", "mid", "far"])
+    }
+
     // MARK: - Три ближайшие
 
     func testOnlyThreeNearestUnsolvedRiddlesAreShown() {

@@ -35,7 +35,7 @@ final class MapHostController: UIViewController {
     ///
     /// Место — ПОД контейнером аннотаций: жилку сети и выбранный маршрут
     /// «Атлас» уводит в растр, и оверлеев под вуалью не остаётся.
-    let veilSeat = VeilSeat(margin: FogVeilView.defaultMargin, seat: .belowAnnotations)
+    let veilSeat = VeilSeat(margin: FogVeilView.atlasMargin, seat: .belowAnnotations)
     var screenVeil: FogVeilView { veilSeat.veil }
     /// Встала ли вуаль в дерево. `false` — иерархия `MKMapView` незнакомая,
     /// и туман рисует плиточный `FogVeilRenderer`, как до 0.7.0.
@@ -285,6 +285,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// уже стоит: пересозданная аннотация мигает и теряет свою анимацию.
         private var installedSealIds: Set<UUID> = []
         private var installedHintIds: Set<String> = []
+        /// Последние круги подсказок: вуаль встаёт в дерево карты позже первой
+        /// синхронизации и забирает их у координатора — как и слой открытого.
+        private var lastHints: [RiddleHint] = []
         /// Первая синхронизация печатей уже прошла. До неё «новых» печатей не
         /// бывает: открытие вкладки с двадцатью находками не должно давать
         /// двадцать прорезей подряд.
@@ -333,6 +336,10 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 map.removeOverlays(map.overlays.compactMap { $0 as? FogVeilOverlay })
                 if let veil, !screenVeil { map.addOverlay(veil, level: .aboveLabels) }
                 installedVeil = veil
+                // Круги подсказок переезжают на новый оверлей вместе с ним:
+                // плиточный рендерер — откат, и картинку он обязан рисовать
+                // ту же самую.
+                veil?.hints = veilHints(lastHints)
                 if screenVeil { host?.screenVeil.setLayer(revealed) }
             }
 
@@ -501,26 +508,63 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// Подсказки — тем же диффом. Круг и строка меняются только вместе с
         /// набором загадок или языком.
         func syncHints(_ map: MKMapView, hints: [RiddleHint], language: LanguageManager.Language) {
+            // Круги — в туман, и не по диффу имён: их геометрия меняется
+            // вместе со списком, а вуаль сама решит, перерисовываться ли.
+            lastHints = hints
+            if let host, host.screenVeilAttached {
+                host.screenVeil.setHints(hints)
+            }
+            if let veil = installedVeil {
+                let circles = veilHints(hints)
+                if veil.hints != circles {
+                    veil.hints = circles
+                    // Плиточный откат сам о смене данных не узнаёт: у оверлея
+                    // не поменялась ни одна из тех вещей, на которые MapKit
+                    // смотрит.
+                    map.renderer(for: veil)?.setNeedsDisplay()
+                }
+            }
+
             let ids = Set(hints.map(\.id))
             guard ids != installedHintIds || language != installedHintLanguage else { return }
             installedHintIds = ids
             installedHintLanguage = language
             map.removeAnnotations(map.annotations.filter { $0 is RiddleHintAnnotation })
+            // Ближайший к открытому — первым: при столкновении двух подсказок
+            // с одинаковым приоритетом MapKit оставляет ту, что пришла раньше,
+            // и порядок здесь это и есть ответ «кто важнее». Сам порядок
+            // задаёт `RiddleHint.plan` (по расстоянию до открытого).
             map.addAnnotations(hints.map {
                 RiddleHintAnnotation(hint: $0, line: RiddleCopy.line(for: $0.type, language))
             })
-            updateHintRadii(map)
+            updateHintLOD(map)
         }
 
-        /// Радиус круга живёт в МЕТРАХ на земле, а рисуется в точках экрана —
-        /// значит пересчитывается на каждый зум.
-        func updateHintRadii(_ map: MKMapView) {
+        /// Круги для плиточного ОТКАТА — в точках карты, как их ждёт кисть.
+        private func veilHints(_ hints: [RiddleHint]) -> [FogVeilPainter.EngravedHint] {
+            hints.map { hint in
+                let metre = MKMapPointsPerMeterAtLatitude(hint.centre.latitude)
+                let centre = MKMapPoint(hint.centre)
+                return FogVeilPainter.EngravedHint(
+                    centre: CGPoint(x: centre.x, y: centre.y),
+                    radius: CGFloat(hint.radiusMetres * metre))
+            }
+        }
+
+        /// Что видно у подсказки на этом масштабе — значок со строкой, один
+        /// значок или ничего (`HintBadgeLOD`).
+        ///
+        /// Зовётся и когда камера встала, и на каждом кадре жеста: круг живёт
+        /// в метрах, значок — в точках экрана, и «что от него видно» меняется
+        /// прямо под пальцем. Цена — три аннотации и одно деление.
+        func updateHintLOD(_ map: MKMapView) {
             let metresPerPoint = map.metersPerScreenPoint
             guard metresPerPoint > 0, metresPerPoint.isFinite else { return }
             for annotation in map.annotations {
                 guard let hint = annotation as? RiddleHintAnnotation,
                       let view = map.view(for: hint) as? RiddleHintView else { continue }
-                view.radiusPoints = CGFloat(hint.radiusMetres / metresPerPoint)
+                let diameter = CGFloat(hint.radiusMetres * 2 / metresPerPoint)
+                view.lod = HintBadgeLOD.level(diameterPt: diameter)
             }
         }
 
@@ -717,7 +761,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                     withIdentifier: RiddleHintView.reuseID, for: hint) as? RiddleHintView
                 let metresPerPoint = mapView.metersPerScreenPoint
                 if metresPerPoint > 0, metresPerPoint.isFinite {
-                    view?.radiusPoints = CGFloat(hint.radiusMetres / metresPerPoint)
+                    view?.lod = HintBadgeLOD.level(
+                        diameterPt: CGFloat(hint.radiusMetres * 2 / metresPerPoint))
                 }
                 return view
             case let pin as TripPinAnnotation:
@@ -755,6 +800,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 $0 is FogVeilOverlay || ($0 as? RouteVeinOverlay)?.style == .network
             })
             host.screenVeil.setLayer(lastRevealed)
+            host.screenVeil.setHints(lastHints)
             if let route = installedRoute, let line = route.polylines(for: .fine).first {
                 map.removeOverlays(map.overlays.compactMap {
                     ($0 as? RouteVeinOverlay)?.style == .selected ? $0 : nil
@@ -789,6 +835,11 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            // Значок подсказки живёт в точках экрана, а круг под ним — в
+            // метрах: «что от значка видно» меняется прямо под пальцем, и
+            // ждать `regionDidChange` нельзя — именно так три «?» и съезжались
+            // в кучу посреди щипка.
+            updateHintLOD(mapView)
             guard let host, host.screenVeilAttached else { return }
             // Ловит движения, начавшиеся без `regionWillChange` (программный
             // полёт камеры): `startTracking` заводит `CADisplayLink`, если его
@@ -805,9 +856,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 host.screenVeil.sync(map: mapView)
                 host.screenVeil.maybeRender(map: mapView, settled: true)
             }
-            // Круг подсказки нарисован в ТОЧКАХ ЭКРАНА, а живёт в метрах на
-            // земле: без пересчёта он остался бы прежним кружком на любом зуме.
-            updateHintRadii(mapView)
+            updateHintLOD(mapView)
             let newLevel = MapZoomLevel.of(mapView.region.span.latitudeDelta)
             guard newLevel != level else { return }
             level = newLevel

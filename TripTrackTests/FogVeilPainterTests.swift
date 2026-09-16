@@ -179,6 +179,106 @@ final class FogVeilPainterTests: XCTestCase {
         XCTAssertLessThan(mean, 1.5, "средняя разница по каналу — меньше полутора уровней")
     }
 
+    // MARK: Круг подсказки
+
+    /// Кадр ЗАВЕДОМО мимо сети: коридоров нет, поэтому любое отличие от
+    /// пустого тумана — это и есть кольцо подсказки.
+    private func emptyFrame() -> (rect: MKMapRect, sizePoints: CGSize) {
+        let rect = MKMapRect(
+            origin: MKMapPoint(CLLocationCoordinate2D(latitude: 53, longitude: 45)),
+            size: MKMapSize(width: 60_000, height: 60_000))
+        return (rect, CGSize(width: 600, height: 600))
+    }
+
+    /// Кольцо стоит на СВОЁМ радиусе, и за ним туман не тронут.
+    ///
+    /// Это и есть проверка «круг не растёт вместе с отдалением»: радиус задан
+    /// в точках карты, то есть в земле, и на любом масштабе кольцо ложится на
+    /// одну и ту же окружность. До 0.7.0 круг рисовал слой аннотации в точках
+    /// ЭКРАНА, и во время щипка он оставался прежним кружком.
+    func testEngravedRingLandsOnItsRadiusAndLeavesTheFogBeyondAlone() {
+        let revealed = layer()
+        let (rect, sizePoints) = emptyFrame()
+        let prepared = index(for: revealed)
+        let ppmp = Double(sizePoints.width) / rect.width
+        let radiusPixels = 180.0
+        let hint = FogVeilPainter.EngravedHint(
+            centre: CGPoint(x: rect.midX, y: rect.midY),
+            radius: CGFloat(radiusPixels / ppmp))
+
+        guard let plain = FogVeilBitmap.render(
+            rect: rect, sizePoints: sizePoints, scale: 1,
+            index: prepared, selected: []),
+            let ringed = FogVeilBitmap.render(
+                rect: rect, sizePoints: sizePoints, scale: 1,
+                index: prepared, selected: [], hints: [hint])
+        else { return XCTFail("оба растра обязаны собраться") }
+
+        let width = ringed.image.width, height = ringed.image.height
+        guard let base = pixels(of: plain.image, width: width, height: height),
+              let drawn = pixels(of: ringed.image, width: width, height: height)
+        else { return XCTFail("пиксели обязаны прочитаться") }
+
+        func differences(atRadius radius: Double) -> Int {
+            var count = 0
+            for step in 0..<720 {
+                let angle = Double(step) / 720 * 2 * .pi
+                let x = Int((Double(width) / 2 + cos(angle) * radius).rounded())
+                let y = Int((Double(height) / 2 + sin(angle) * radius).rounded())
+                guard x >= 0, x < width, y >= 0, y < height else { continue }
+                let i = (y * width + x) * 4
+                if (0..<3).contains(where: { abs(Int(base[i + $0]) - Int(drawn[i + $0])) > 3 }) {
+                    count += 1
+                }
+            }
+            return count
+        }
+
+        let onRing = differences(atRadius: radiusPixels)
+        let beyond = differences(atRadius: radiusPixels * 1.3)
+        print("[veil] кольцо подсказки: на радиусе \(onRing) точек из 720, за ним \(beyond)")
+        XCTAssertGreaterThan(onRing, 100, "кольцо обязано лечь на свой радиус")
+        XCTAssertEqual(beyond, 0, "за кольцом туман обязан остаться нетронутым")
+    }
+
+    /// Кольцо — след, а не элемент управления: непрозрачность под потолком.
+    ///
+    /// Владелец на устройстве: «синий круг сильно выделяется — криво и страшно
+    /// в тумане». Полная бирюза загадки (`SealPainter.ring(for: .riddle)`) на
+    /// почти чёрной вуали — самое яркое пятно экрана.
+    func testHintRingStaysFaint() {
+        XCTAssertLessThanOrEqual(FogVeilPainter.hintRingAlpha, 0.45,
+                                 "кольцо подсказки не имеет права спорить с печатью находки")
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var hue: CGFloat = 0, alpha: CGFloat = 0
+        FogVeilPainter.hintRingColor.getHue(&hue, saturation: &saturation,
+                                            brightness: &brightness, alpha: &alpha)
+        var riddleSaturation: CGFloat = 0
+        SealPainter.ring(for: .riddle).getHue(&hue, saturation: &riddleSaturation,
+                                              brightness: &brightness, alpha: &alpha)
+        XCTAssertLessThan(saturation, riddleSaturation,
+                          "цвет кольца обязан быть ОБЕСЦВЕЧЕННОЙ бирюзой, а не бирюзой")
+    }
+
+    /// Постер «Поделиться» подсказок не получает — ни одной строкой.
+    ///
+    /// Правило волны 4 записано словами («на постер попадает только
+    /// найденное»), а держится оно ровно тем, что у `FogVeilBitmap.render`
+    /// круги — параметр по умолчанию пустой, и постер его не заполняет.
+    /// Поведенческого теста у этого нет: нарисовать подсказку постер может
+    /// только новой строкой кода, и ловить её надо в диффе.
+    func testPosterNeverAsksForHints() {
+        let poster = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("TripTrack/Views/MyMap/AtlasSharePoster.swift")
+        guard let source = try? String(contentsOf: poster, encoding: .utf8) else {
+            return XCTFail("исходник постера обязан читаться")
+        }
+        XCTAssertFalse(source.contains("hints:"),
+                       "постер не имеет права передавать круги подсказок — это ответ на загадку")
+    }
+
     // MARK: Внутри
 
     /// Тот же кадр настоящим `FogVeilRenderer`, тайл за тайлом, с клипом на
