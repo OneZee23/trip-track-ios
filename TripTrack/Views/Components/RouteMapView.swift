@@ -319,6 +319,7 @@ struct RouteMapView: UIViewRepresentable {
         // и второй разрез маршрута по скорости здесь не нужен никому.
         if let host, host.mapView != nil {
             let existing = host.map(orMake: { MKMapView() })
+            host.retain()
             context.coordinator.adoptMap(existing)
             applyInteractivity(to: existing)
             applyLayoutMargins(to: existing, coordinator: context.coordinator)
@@ -332,6 +333,8 @@ struct RouteMapView: UIViewRepresentable {
         let mapView: MKMapView
         if let host {
             mapView = host.map(orMake: make)
+            host.retain()
+            context.coordinator.host = host
         } else {
             mapView = make()
         }
@@ -353,8 +356,13 @@ struct RouteMapView: UIViewRepresentable {
             )
             mapView.overrideUserInterfaceStyle = .dark
         } else {
+            // `preferredConfiguration` ставится ОДИН раз (MapKit падает при
+            // смене у живой карты), а карту с хостом строит герой, который
+            // пальцев не принимает. Полный экран у неё впереди по
+            // определению — значит и рельеф берётся сразу его, как и
+            // поворотный запас растра у вуали.
             mapView.preferredConfiguration = MKStandardMapConfiguration(
-                elevationStyle: isInteractive ? .realistic : .flat
+                elevationStyle: (isInteractive || host != nil) ? .realistic : .flat
             )
         }
         // Apple requires the Maps attribution to stay visible, and it is laid
@@ -589,7 +597,11 @@ struct RouteMapView: UIViewRepresentable {
             // определению, поэтому запас берётся сразу поворотный.
             Coordinator(showsFog: showsFog, rotatable: isInteractive || host != nil)
         }
-        if let host { return host.coordinator(orMake: make) }
+        if let host {
+            let coordinator = host.coordinator(orMake: make)
+            coordinator.host = host
+            return coordinator
+        }
         return make()
     }
 
@@ -600,7 +612,13 @@ struct RouteMapView: UIViewRepresentable {
     /// полноэкранной раскладкой: снимать там нечего, и снимает по-настоящему
     /// `TripMapHost.tearDown`.
     static func dismantleUIView(_ mapView: MKMapView, coordinator: Coordinator) {
-        guard !coordinator.isHosted else { return }
+        guard !coordinator.isHosted else {
+            // Одно представление ушло — это либо переезд между слотом героя и
+            // полноэкранным слоем, либо уход самого экрана. Различает их
+            // СЧЁТЧИК в хосте, а не догадка здесь.
+            coordinator.host?.release()
+            return
+        }
         coordinator.veilSeat?.detach()
     }
 
@@ -863,6 +881,10 @@ struct RouteMapView: UIViewRepresentable {
         /// ухода карты из окна. Снимает вуаль в этом режиме только
         /// `TripMapHost.tearDown`.
         var isHosted = false
+
+        /// Кто владеет картой. Нужен одному месту — `dismantleUIView`, куда
+        /// приходит только координатор. Слабая: хост держит координатора.
+        weak var host: TripMapHost?
 
         /// Поля карты, какими их поставил MapKit. См. `applyLayoutMargins`.
         var defaultLayoutMargins: UIEdgeInsets?

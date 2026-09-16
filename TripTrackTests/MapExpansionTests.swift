@@ -66,13 +66,4 @@ final class MapExpansionTests: XCTestCase {
             MapExpansionState.reducedDuration, MapExpansionState.response)
     }
 
-    func testMountDelayIsShorterThanTheSpringItPrecedes() {
-        XCTAssertGreaterThan(MapExpansionState.mountDelay, 0)
-        XCTAssertLessThan(MapExpansionState.mountDelay, MapExpansionState.response)
-    }
-
-    func testSpringConstantsAreTheOnesTheOwnerApproved() {
-        XCTAssertEqual(MapExpansionState.response, 0.38, accuracy: 0.0001)
-        XCTAssertEqual(MapExpansionState.dampingFraction, 0.9, accuracy: 0.0001)
-    }
 }

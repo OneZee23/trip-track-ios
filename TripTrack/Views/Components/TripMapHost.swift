@@ -17,10 +17,11 @@ import MapKit
 /// `VeilSeat.verifySeating` на каждом `updateUIView`, и переезд карты из
 /// одного контейнера в другой она переживает сама.
 ///
-/// Владелец хоста — экран поездки (`@StateObject`). Уходя, он обязан позвать
-/// `tearDown()`: `dismantleUIView` у карты с хостом ничего не снимает (иначе
-/// переезд между героем и полным экраном каждый раз ронял бы вуаль), и без
-/// этого вызова за кадром остались бы два растра и `CADisplayLink`.
+/// Владелец хоста — экран поездки (`@StateObject`). Уходит он не по
+/// `.onDisappear` (тот приходит и на ПУШ чужого экрана поверх), а по счётчику
+/// смонтированных представлений: `retain()` из `makeUIView`, `release()` из
+/// `dismantleUIView`. Ноль представлений — экрана больше нет, и вуаль с карты
+/// снимается здесь и только здесь.
 @MainActor
 final class TripMapHost: ObservableObject {
     /// Сама карта. `nil` — ещё не создавалась.
@@ -35,6 +36,21 @@ final class TripMapHost: ObservableObject {
     /// `TripMapHostTests`.
     private(set) var creationCount = 0
 
+    /// Сколько представлений сейчас держат эту карту.
+    ///
+    /// `.onDisappear` экрана единственной дверью быть не мог: в
+    /// `NavigationStack` он приходит и тогда, когда экран поездки просто
+    /// НАКРЫЛИ сверху — паспортом машины, чужим профилем, путешествием,
+    /// экраном места. Карту при этом рвать нельзя: возврат застал бы
+    /// `host.mapView == nil` при живом представлении героя, и следующее
+    /// раскрытие построило бы ВТОРУЮ `MKMapView` со второй вуалью и вторым
+    /// `CADisplayLink` — ровно та поломка, ради которой хост и написан.
+    ///
+    /// Считаем то, что считается честно: `makeUIView` берёт, `dismantleUIView`
+    /// отдаёт. Пуш не трогает ни того, ни другого.
+    private(set) var mounted = 0
+    private var teardownTask: Task<Void, Never>?
+
     /// Последний кадр карты, снятый перед тем, как она уехала на полный
     /// экран. Слот героя показывает его, пока карты в нём нет: пустой
     /// прямоугольник на месте карты — это моргание, которое видно.
@@ -46,6 +62,29 @@ final class TripMapHost: ObservableObject {
     /// SwiftUI кладёт результат `makeUIView` в СВОЙ контейнер, и карта,
     /// оставшаяся подпиской в прежнем, приехала бы туда вместе со старым
     /// расположением.
+    /// Представление смонтировано. Зовёт `RouteMapView.makeUIView`.
+    func retain() {
+        mounted += 1
+        teardownTask?.cancel()
+        teardownTask = nil
+    }
+
+    /// Представление снято. Зовёт `RouteMapView.dismantleUIView`.
+    ///
+    /// Разрыв откладывается на следующий виток главного актёра НАРОЧНО:
+    /// переезд карты между слотом героя и полноэкранным слоем — это всегда
+    /// «сняли одно, поставили другое», и порядок этих двух вызовов SwiftUI не
+    /// обещает. Ноль, доживший до следующего витка, — настоящий.
+    func release() {
+        mounted = max(0, mounted - 1)
+        guard mounted == 0 else { return }
+        teardownTask?.cancel()
+        teardownTask = Task { @MainActor [weak self] in
+            guard let self, self.mounted == 0, !Task.isCancelled else { return }
+            self.tearDown()
+        }
+    }
+
     func map(orMake make: () -> MKMapView) -> MKMapView {
         if let mapView {
             mapView.removeFromSuperview()
@@ -87,6 +126,9 @@ final class TripMapHost: ObservableObject {
 
     /// Экран уходит. Здесь, и только здесь, вуаль снимается с карты.
     func tearDown() {
+        teardownTask?.cancel()
+        teardownTask = nil
+        mounted = 0
         coordinator?.isHosted = false
         coordinator?.veilSeat?.detach()
         mapView?.removeFromSuperview()

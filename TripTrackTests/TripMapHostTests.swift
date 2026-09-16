@@ -81,6 +81,71 @@ final class TripMapHostTests: XCTestCase {
         XCTAssertEqual(host.creationCount, 2)
     }
 
+    // MARK: - Кто держит карту
+
+    /// Пуш чужого экрана поверх поездки НЕ разбирает карту.
+    ///
+    /// `.onDisappear` в `NavigationStack` приходит и на накрытый экран —
+    /// паспорт машины, чужой профиль, путешествие, экран места. Рвать карту
+    /// на нём значило бы построить при возврате ВТОРУЮ `MKMapView` со второй
+    /// вуалью: `makeUIView` полноэкранного слоя увидел бы пустой хост.
+    func testPushAndPopKeepsOneMapCreation() async {
+        var built = 0
+        let make = { () -> MKMapView in built += 1; return MKMapView() }
+        // Экран поездки смонтирован: одно представление — герой.
+        let hero = host.map(orMake: make)
+        host.retain()
+        XCTAssertEqual(host.mounted, 1)
+
+        // Пуш паспорта машины. Представление героя живо, снимать нечего.
+        await settle()
+        XCTAssertNotNil(host.mapView, "пуш не имеет права разбирать карту")
+
+        // Возврат и раскрытие на полный экран: та же карта, тот же счёт.
+        let fullscreen = host.map(orMake: make)
+        host.retain()
+        host.release()          // слот героя отдал карту слою
+        await settle()
+        XCTAssertTrue(hero === fullscreen)
+        XCTAssertEqual(built, 1, "вторая MKMapView и есть вся поломка")
+        XCTAssertEqual(host.creationCount, 1)
+        XCTAssertNotNil(host.mapView)
+    }
+
+    /// Переезд между слотом героя и полноэкранным слоем — это «сняли одно,
+    /// поставили другое», и порядок этих двух вызовов SwiftUI не обещает.
+    /// Разрыв отложен на следующий виток, поэтому ноль между ними не считается.
+    func testReparentDoesNotTearDown() async {
+        _ = host.map(orMake: { MKMapView() })
+        host.retain()
+        host.release()          // герой снят ПЕРВЫМ
+        host.retain()           // слой встал следом
+        await settle()
+        XCTAssertEqual(host.mounted, 1)
+        XCTAssertNotNil(host.mapView, "переезд не имеет права снимать вуаль")
+    }
+
+    /// А вот уход экрана — настоящий: последнее представление снято, и на
+    /// следующем витке карта отдаётся вместе с вуалью.
+    func testLastReleaseTearsDown() async {
+        _ = host.map(orMake: { MKMapView() })
+        let coordinator = host.coordinator(orMake: {
+            RouteMapView.Coordinator(showsFog: false, rotatable: false)
+        })
+        host.retain()
+        host.release()
+        await settle()
+        XCTAssertEqual(host.mounted, 0)
+        XCTAssertNil(host.mapView)
+        XCTAssertNil(host.coordinator)
+        XCTAssertFalse(coordinator.isHosted)
+    }
+
+    /// Дать отложенному разрыву дойти до главного актёра.
+    private func settle() async {
+        for _ in 0..<4 { await Task.yield() }
+    }
+
     /// Снимок — для слота героя на время переезда. У карты без границ его
     /// нет вовсе: пустая картинка хуже честной подложки.
     func testSnapshotIsSkippedForAZeroSizedMap() {
