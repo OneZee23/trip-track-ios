@@ -155,6 +155,77 @@ final class RegionPathIndexTests: XCTestCase {
         XCTAssertTrue(index.isReady)
     }
 
+    /// Контуры стран доезжают из атласа до индекса — и у России их много.
+    ///
+    /// Тринадцать колец — нижняя граница, а не точное число: у России материк,
+    /// Калининград, Сахалин, Курилы и десяток островов, и любое «одно кольцо»
+    /// значило бы, что сборка бандла склеила их в один контур через полмира.
+    /// Само число сторожит бандл (`MapRegionsBundleTests`); здесь проверяется
+    /// ДОРОГА от атласа до кисти — до фикс-волны 2 она была оборвана заглушкой
+    /// `countries(from:) { [] }`, и границ стран не рисовалось вовсе.
+    func testCountryOutlinesReachTheIndex() async {
+        let atlas = RegionAtlas.shared
+        await atlas.loadIfNeeded()
+        let countries = RegionOutline.countries(from: atlas)
+        XCTAssertFalse(countries.isEmpty, "страны обязаны доезжать из атласа")
+        XCTAssertTrue(countries.allSatisfy { $0.isCountry })
+        guard let russia = countries.first(where: { $0.id == "RU" }) else {
+            return XCTFail("контур России обязан быть в индексе")
+        }
+        print("[regions] колец у RU: \(russia.rings.count), стран всего \(countries.count)")
+        XCTAssertGreaterThanOrEqual(russia.rings.count, 13,
+                                    "материк, Калининград, Сахалин, Курилы — это не одно кольцо")
+
+        let index = RegionPathIndex()
+        index.prepare(outlines: countries)
+        guard let far = index.paths(in: .world, lod: .far, visited: []) else {
+            return XCTFail("на дальнем уровне страны обязаны рисоваться")
+        }
+        XCTAssertFalse(far.countryBorders.isEmpty)
+        XCTAssertTrue(far.regionBorders.isEmpty, "регионов на дальнем уровне нет")
+    }
+
+    /// Демо-сид кладёт границу регионов В КАДР — иначе на симуляторе контуры
+    /// проверять не на чем.
+    ///
+    /// Всё остальное открытое сида лежит глубоко внутри одного региона, и на
+    /// любом масштабе, вмещающем его, ближайшая граница остаётся за краем
+    /// экрана: кадр «Атласа» показывал туман с коридорами и ни одной границы,
+    /// хотя рисовались они правильно. Короткий выезд из Краснодара за Кубань
+    /// это чинит: контур Адыгеи проходит по самому городу.
+    ///
+    /// Проверяется именно «вершина контура внутри кадра», а НЕ «концы выезда
+    /// в разных регионах»: в бандле кольцо Краснодарского края не прорезано
+    /// вокруг Адыгеи, поэтому `region(containing:)` отвечает `RU-KDA` по обе
+    /// стороны границы. Рисованию это не мешает — контур Адыгеи рисуется
+    /// своим кольцом, — а вот заливку «посещённого» получает край, не
+    /// республика. Геометрия бандла не моя (Задача 1), и тест говорит ровно
+    /// то, что ему видно.
+    func testDemoSeedPutsARegionBorderInFrame() async {
+        let atlas = RegionAtlas.shared
+        await atlas.loadIfNeeded()
+        let points = DebugMapSeed.borderCrossingWaypoints
+        let minLat = points.map(\.0).min()! - 0.05, maxLat = points.map(\.0).max()! + 0.05
+        let minLon = points.map(\.1).min()! - 0.05, maxLon = points.map(\.1).max()! + 0.05
+
+        var inFrame: [String: Int] = [:]
+        for region in atlas.regions {
+            for ring in region.rings {
+                for i in 0..<(ring.count / 2) {
+                    let la = ring[2 * i], lo = ring[2 * i + 1]
+                    guard la > minLat, la < maxLat, lo > minLon, lo < maxLon else { continue }
+                    inFrame[region.id, default: 0] += 1
+                }
+            }
+        }
+        print("[regions] контуров в кадре выезда: \(inFrame)")
+        XCTAssertNotNil(inFrame["RU-AD"],
+                        "контур Адыгеи обязан проходить через кадр выезда — иначе границ на "
+                            + "кадрах «Атласа» не увидеть")
+        XCTAssertGreaterThanOrEqual(inFrame["RU-AD"] ?? 0, 3,
+                                    "одной вершины мало: в кадре должен быть ОТРЕЗОК границы")
+    }
+
     /// Читать можно во время сборки: пишет фоновый поток, читают потоки
     /// отрисовки MapKit — по тайлу на поток.
     ///

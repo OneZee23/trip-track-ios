@@ -173,9 +173,21 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         let map = controller.map
         let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
         map.preferredConfiguration = config
-        // The memory map is ALWAYS night — Figma draws it dark regardless of
-        // app theme — как и карта записи, и карта поездки с 0.7.0.
-        map.overrideUserInterfaceStyle = .dark
+        // «Атлас» — ЕДИНСТВЕННАЯ карта в приложении, которая живёт ДНЁМ, и это
+        // не про тему экрана (она тёмная): это про полярность тумана.
+        //
+        // Туман с фикс-волны «Атлас как атлас» — тёмно-синий сланец (#262B36 →
+        // #353B4A, яркость 43…58), а ночная карта Apple под ним темнее (около
+        // 21). То есть ОТКРЫТОЕ выходило темнее закрытого: прожжённый коридор
+        // читался как дыра в никуда, а не как «здесь я был». На дневной карте
+        // полярность встаёт на место — сквозь тёмные облака видно светлую
+        // карту, и открытое СВЕТИТСЯ.
+        //
+        // Карта поездки и карта записи остаются ночными: туман на них тоже
+        // есть, но главное на них — сама поездка поверх карты, а не то, что
+        // открыто, и дневная карта под ночным интерфейсом читалась бы как два
+        // разных приложения (ровно это записано в `MapViewRepresentable`).
+        map.overrideUserInterfaceStyle = .light
         map.pointOfInterestFilter = .excludingAll
         map.showsCompass = false
         map.showsScale = false

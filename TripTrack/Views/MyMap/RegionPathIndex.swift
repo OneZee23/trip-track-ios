@@ -26,15 +26,20 @@ extension RegionOutline {
         atlas.regions.map { RegionOutline(id: $0.id, isCountry: false, rings: $0.rings) }
     }
 
-    /// Контуры стран.
+    /// Контуры стран — у ВСЕХ стран мира, а не только у двадцати проезжаемых:
+    /// на дальнем уровне мир делят именно они.
     ///
-    /// Пусто ДО слияния Задачи 1, которая заводит `RegionAtlas.countries`, — и
-    /// это законное состояние, а не заглушка: страны рисуются только на
-    /// дальнем уровне, их отсутствие видно как «границ стран нет», и ни одна
-    /// другая половина картинки от этого не меняется. После слияния тело
-    /// становится `atlas.countries.map { … isCountry: true … }`, и больше здесь
-    /// править нечего.
-    static func countries(from atlas: RegionAtlas) -> [RegionOutline] { [] }
+    /// Страна без колец (микрогосударство, чьё кольцо не прошло порог сборки
+    /// бандла) отбрасывается здесь, а не в индексе: у неё есть центр и рамка
+    /// ради подписи, но обводить нечего, и пустая запись стоила бы прохода по
+    /// ней на каждом тайле.
+    static func countries(from atlas: RegionAtlas) -> [RegionOutline] {
+        atlas.countries.compactMap { country in
+            country.rings.isEmpty
+                ? nil
+                : RegionOutline(id: country.id, isCountry: true, rings: country.rings)
+        }
+    }
 
     static func all(from atlas: RegionAtlas) -> [RegionOutline] {
         regions(from: atlas) + countries(from: atlas)

@@ -44,10 +44,16 @@ final class AtlasLookShotTests: XCTestCase {
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
         summary.tap()
         usleep(1_200_000)
-        let row = app.otherElements["mymap_region_list"].buttons
-            .matching(NSPredicate(format: "identifier != 'mymap_close'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 6))
-        row.tap()
+        let rows = app.otherElements["mymap_region_list"].buttons
+            .matching(NSPredicate(format: "identifier != 'mymap_close'"))
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 6))
+        // Краснодарский край, а не первый попавшийся: граница с Адыгеей
+        // проходит по самому городу, и только там в кадр попадает КОНТУР
+        // региона. В остальных регионах сида открытое лежит глубоко внутри
+        // одного контура, и кадр выходит без единой границы.
+        let krasnodar = rows.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Krasnodar")).firstMatch
+        (krasnodar.exists ? krasnodar : rows.firstMatch).tap()
         usleep(2_000_000)
         let close = app.buttons.matching(identifier: "mymap_close").firstMatch
         if close.exists { close.tap() }

@@ -58,8 +58,14 @@ final class FogVeilRendererTests: XCTestCase {
     func testPassCountFollowsScreenWidth() {
         XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 20, lod: .fine), 8)
         XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 60, lod: .fine), 8)
-        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 61, lod: .fine), 14)
-        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 400, lod: .fine), 14)
+        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 61, lod: .fine),
+                       FogVeilRenderer.widePasses)
+        XCTAssertEqual(FogVeilRenderer.passes(forScreenWidth: 400, lod: .fine),
+                       FogVeilRenderer.widePasses)
+        // Число ступеней — уже не литерал: под ДНЕВНОЙ картой «Атласа» их
+        // высота стала видна, и его придётся выбирать заново вместе с
+        // бюджетом кадра. Само значение сторожит `MapRenderCostTests`.
+        XCTAssertGreaterThanOrEqual(FogVeilRenderer.widePasses, 14)
     }
 
     /// На среднем и дальнем уровне перьев вчетверо меньше, и ширина на это не

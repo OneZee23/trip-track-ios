@@ -93,10 +93,26 @@ enum DebugMapSeed {
         var repeats: Int = 1
     }
 
+    /// Короткий выезд из Краснодара на юго-запад, за Кубань, — то есть ЧЕРЕЗ
+    /// границу Краснодарского края и Адыгеи (`RU-KDA` → `RU-AD`), первое
+    /// плечо дороги на Майкоп.
+    ///
+    /// Отдельной константой и с именем, потому что это не «ещё одна дорога», а
+    /// единственное в сиде место, где граница регионов попадает В КАДР. Всё
+    /// остальное открытое лежит глубоко внутри одного региона, и проверить на
+    /// симуляторе, что контуры границ вообще рисуются, было нечем: на любом
+    /// масштабе, вмещающем открытое, ближайшая граница оставалась за краем
+    /// экрана. Держит `RegionPathIndexTests.testDemoSeedCrossesARegionBorder`.
+    static let borderCrossingWaypoints: [(Double, Double)] = [
+        (45.030, 38.960), (45.010, 38.915), (44.985, 38.875), (44.960, 38.845),
+    ]
+
     /// Real roads around Krasnodar Krai, plus one in Rostov Oblast and one in
     /// Georgia, so the map has more than a single blob to show: several
     /// regions, a border crossing, and trips far enough apart to cluster.
     private static let routes: [Route] = [
+        Route(title: "Краснодар → Майкоп", region: "Krasnodar Krai", daysAgo: 9,
+              waypoints: borderCrossingWaypoints, repeats: 3),
         Route(title: "Краснодар → Геленджик", region: "Krasnodar Krai", daysAgo: 86,
               waypoints: [(45.035, 38.975), (44.900, 38.780), (44.780, 38.500),
                           (44.640, 38.230), (44.561, 38.077)]),
