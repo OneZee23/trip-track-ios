@@ -106,7 +106,10 @@ enum AtlasSharePoster {
         // раз, а туман без них разошёлся бы с экраном.
         CloudTexture.shared.prepare()
         // И границы: постер — это «Атлас», и заливка посещённых регионов на
-        // нём обязана быть та же, что на экране.
+        // нём обязана быть та же, что на экране. Предусловие — атлас уже
+        // загружен (сегодня постер достижим только из «Атласа», а значит он
+        // всегда загружен); не загружен — постер молча рисуется без границ и
+        // без заливки, а не ждёт и не падает.
         if !RegionPathIndex.shared.isReady, RegionAtlas.shared.isLoaded {
             RegionPathIndex.shared.prepare(outlines: RegionOutline.all(from: .shared))
         }

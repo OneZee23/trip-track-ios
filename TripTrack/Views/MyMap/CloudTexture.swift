@@ -111,7 +111,10 @@ final class CloudTexture {
 
         lock.lock()
         // Гонка двух фоновых сборок безвредна: шум детерминирован, и обе
-        // положили бы одинаковые картинки.
+        // положили бы одинаковые картинки. Двойная цена (~100 мс fBm ещё раз)
+        // принята сознательно: сериализовать два фоновых потока одним замком
+        // значило бы держать одного из них в очереди на самом кадре, которого
+        // ждёт человек, — дороже, чем посчитать дважды.
         if images == nil { images = built }
         let out = images
         lock.unlock()
@@ -251,7 +254,11 @@ final class CloudTexture {
 
     /// Шум с диска. Кладётся в `Caches/`, а не в `Documents/`: система вправе
     /// его стереть, и это ничего не ломает — следующий запуск пересчитает.
-    private static func cachedNoise() -> [UInt8]? {
+    ///
+    /// Не `private`: `CloudTextureTests` зовёт её вместе с `writeCache`
+    /// напрямую, чтобы проверить круглый путь через PNG байт в байт — гамма
+    /// или цветовой профиль на нём сдвинули бы серое значение молча.
+    static func cachedNoise() -> [UInt8]? {
         guard let url = cacheURL, let data = try? Data(contentsOf: url),
               let source = UIImage(data: data)?.cgImage,
               source.width == size, source.height == size else { return nil }
@@ -267,7 +274,7 @@ final class CloudTexture {
         return ok ? bytes : nil
     }
 
-    private static func writeCache(_ noise: [UInt8]) {
+    static func writeCache(_ noise: [UInt8]) {
         guard let url = cacheURL, let image = grayImage(from: noise, range: 0...1),
               let data = UIImage(cgImage: image).pngData() else { return }
         do {

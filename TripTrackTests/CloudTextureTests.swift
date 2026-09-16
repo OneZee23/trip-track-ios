@@ -137,4 +137,18 @@ final class CloudTextureTests: XCTestCase {
         XCTAssertTrue(first.density === second.density)
         XCTAssertTrue(first.mask === second.mask)
     }
+
+    // MARK: - Диск
+
+    /// Круглый путь через дисковый кэш (запись → PNG → чтение) обязан вернуть
+    /// шум байт в байт. Кэш — 8-битный серый PNG, и гамма или цветовой профиль
+    /// на нём молча сдвинули бы значение: второй запуск (кэш тёплый) нарисовал
+    /// бы чуть другие облака, чем первый (кэша ещё нет), — а постер обещает
+    /// «тот же туман, что экран» именно на такой паре запусков.
+    func testDiskCacheRoundTripIsByteEqual() throws {
+        let noise = CloudTexture.noise()
+        CloudTexture.writeCache(noise)
+        let cached = try XCTUnwrap(CloudTexture.cachedNoise(), "кэш не прочитался с диска")
+        XCTAssertEqual(cached, noise, "круглый путь через PNG обязан вернуть тот же шум")
+    }
 }

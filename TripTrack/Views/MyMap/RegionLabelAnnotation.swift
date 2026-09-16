@@ -163,6 +163,12 @@ final class RegionLabelView: MKAnnotationView {
         // `.required`, подпись уступает им при столкновении.
         displayPriority = .defaultLow
         collisionMode = .rectangle
+        // Составную строку (`configure()` ниже) читает VoiceOver ОДНИМ
+        // элементом — тот же приём, что у `SealAnnotation`/`RiddleHintView`.
+        // Без этого `nameLabel`/`kmLabel` остаются accessibility-элементами
+        // каждый сам по себе, и ротор зачитывает имя и километры отдельно —
+        // а `accessibilityLabel` ниже просто не читается никогда.
+        isAccessibilityElement = true
 
         nameLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         nameLabel.textAlignment = .center

@@ -528,6 +528,7 @@ struct ProfileSettingsSheet: View {
                     .multilineTextAlignment(.center)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("settings_osm_attribution")
 
             // Natural Earth — второй источник карты: из него собраны границы
             // регионов и стран на «Атласе». Он общественное достояние, то
@@ -538,7 +539,7 @@ struct ProfileSettingsSheet: View {
                 .font(.system(size: 11))
                 .foregroundStyle(c.textTertiary)
                 .multilineTextAlignment(.center)
-            .accessibilityIdentifier("settings_osm_attribution")
+                .accessibilityIdentifier("settings_ne_attribution")
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 12)

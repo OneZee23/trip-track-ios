@@ -159,8 +159,10 @@ enum MapBottomInset {
 /// what you can see is decided by how close you are, not by a segment.
 struct MyMapRepresentable: UIViewControllerRepresentable {
     var exploration: MapExploration
-    /// Открытый мир — из него же собраны оверлеи. Нужен ещё и здесь: подпись
-    /// региона встаёт в середину его ОТКРЫТОЙ части.
+    /// Открытый мир — из него же собраны оверлеи. Нужен ещё и здесь: строка
+    /// километров под подписью региона (`RegionLabelModel.regionLabels`)
+    /// берётся из него — сама подпись стоит в географическом центре региона
+    /// (`RegionAtlas.Region.center`), а не в середине открытой части.
     var revealed: RevealedLayer
     /// Непрозрачный туман поверх всего мира.
     var veil: FogVeilOverlay?
@@ -952,10 +954,11 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // Route endpoints are labels on the trip already open. Letting
                 // them win the hit test would swallow taps meant for the road.
                 guard !(annotation is RouteEndpointAnnotation) else { continue }
-                // Подпись региона стоит ровно в СЕРЕДИНЕ открытого, то есть
-                // поверх дорог, и «попал в подпись» там значит «попал в свою
-                // дорогу». Выбывает из хит-теста по той же причине, что и
-                // концы маршрута: тап обязан дойти до дороги под ней.
+                // Подпись региона — капитель на карте, не контрол (правило
+                // «не притворяемся», см. `RegionLabelView`): нажатия она не
+                // ждёт и открывать ей нечего. Выбывает из хит-теста по той же
+                // причине, что и концы маршрута — тап обязан дойти до того,
+                // что под ней, будь то дорога или пустой туман.
                 guard !(annotation is RegionLabelAnnotation) else { continue }
                 // Круг подсказки в этой волне не нажимается: своего экрана у
                 // нерешённой загадки нет (волна 4), а «?» размером в полэкрана
