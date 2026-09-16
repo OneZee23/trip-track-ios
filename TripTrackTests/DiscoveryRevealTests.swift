@@ -256,4 +256,111 @@ final class DiscoveryRevealTests: XCTestCase {
 
         XCTAssertTrue(transport.sent.isEmpty)
     }
+
+    // MARK: - Сервер отказал навсегда
+
+    /// `SECRET_NOT_FOUND` — ответ, который не изменится ни через минуту, ни
+    /// через сутки. Повтор вернул бы то же самое пять раз подряд, после чего
+    /// строка навсегда краснеет в «Синхронизации», и снять её человек не может
+    /// ничем. Поэтому такой отказ роняется, а не встаёт в очередь.
+    func testPermanentRejectionIsDroppedInsteadOfQueued() async throws {
+        let item = find(kind: .secret, key: "komsomolsky")
+        _ = try await store.upsert([item])
+        transport.answer = { _ in
+            throw APIError.unknownServer(code: "SECRET_NOT_FOUND", message: "no such secret")
+        }
+
+        await reveal(allowed: true).reveal([item], tripId: tripId)
+
+        XCTAssertEqual(queue.pendingCount, 0, "постоянный отказ припарковался в очереди")
+        XCTAssertEqual(transport.sent.count, 1)
+    }
+
+    /// Четыре сотни — тот же класс: наш запрос не годится, и повтор его не
+    /// вылечит. Разделение 4xx/5xx здесь то же, что у `APIClient`.
+    func testClientSideHTTPStatusIsAlsoDropped() async throws {
+        let item = find(kind: .secret, key: "komsomolsky")
+        _ = try await store.upsert([item])
+        transport.answer = { _ in throw APIError.invalidHTTPStatus(404) }
+
+        await reveal(allowed: true).reveal([item], tripId: tripId)
+
+        XCTAssertEqual(queue.pendingCount, 0)
+    }
+
+    /// А пять сотен — икота сервера: её повторяют, и находка обязана лечь в
+    /// очередь ровно как при обрыве сети.
+    func testServerHiccupStillQueues() async throws {
+        let item = find(kind: .secret, key: "komsomolsky")
+        _ = try await store.upsert([item])
+        transport.answer = { _ in throw APIError.invalidHTTPStatus(503) }
+
+        await reveal(allowed: true).reveal([item], tripId: tripId)
+
+        XCTAssertEqual(queue.pending.count, 1)
+        XCTAssertEqual(queue.pending.first?.entityType, .discovery)
+    }
+
+    /// Троттлинг и таймаут — из четырёхсотых, но про «попробуй позже»: они
+    /// остаются в очереди.
+    func testThrottlingAndTimeoutStayInTheQueue() async throws {
+        for status in [408, 429] {
+            let store = DiscoveryStore(persistence: pc)
+            let queue = SyncQueue()
+            let item = find(kind: .secret, key: "komsomolsky")
+            _ = try await store.upsert([item])
+            let service = DiscoveryReveal(
+                transport: transport, store: store, isAllowed: { true },
+                enqueue: { queue.enqueue($0) })
+            transport.answer = { _ in throw APIError.invalidHTTPStatus(status) }
+
+            await service.reveal([item], tripId: tripId)
+
+            XCTAssertEqual(queue.pendingCount, 1, "статус \(status) выкинули из очереди")
+        }
+    }
+
+    /// Повтор из очереди на постоянном отказе НЕ бросает: `SyncQueue` снимает
+    /// операцию, вернувшуюся из `execute` молча, — иначе она вечно висела бы в
+    /// красных.
+    func testRetryDoesNotThrowOnAPermanentRejection() async throws {
+        let item = find(kind: .secret, key: "komsomolsky")
+        _ = try await store.upsert([item])
+        transport.answer = { _ in
+            throw APIError.unknownServer(code: "SECRET_NOT_FOUND", message: "no such secret")
+        }
+
+        try await reveal(allowed: true).retry(id: item.id)
+
+        XCTAssertEqual(transport.sent.count, 1)
+        let rows = await store.all()
+        let stored = try XCTUnwrap(rows.first)
+        XCTAssertNil(stored.story, "отказ не имеет права ничего дописать")
+    }
+
+    /// Чистая функция решения — отдельно от сети: её читает и `reveal`, и
+    /// `retry`, и разойтись этим двум ответам нельзя.
+    func testPermanenceDecision() {
+        XCTAssertTrue(DiscoveryReveal.isPermanent(
+            APIError.unknownServer(code: "SECRET_NOT_FOUND", message: "")))
+        XCTAssertTrue(DiscoveryReveal.isPermanent(APIError.validationFailed("bad id")))
+        XCTAssertTrue(DiscoveryReveal.isPermanent(APIError.invalidHTTPStatus(400)))
+        XCTAssertFalse(DiscoveryReveal.isPermanent(APIError.invalidHTTPStatus(500)))
+        XCTAssertFalse(DiscoveryReveal.isPermanent(APIError.tooManyRequests))
+        XCTAssertFalse(DiscoveryReveal.isPermanent(APIError.network(URLError(.timedOut))))
+        XCTAssertFalse(DiscoveryReveal.isPermanent(URLError(.notConnectedToInternet)))
+        // Незнакомый код сервера — НЕ постоянный: список кодов закрытый
+        // нарочно, иначе новая ошибка бэкенда молча съедала бы находки.
+        XCTAssertFalse(DiscoveryReveal.isPermanent(
+            APIError.unknownServer(code: "SOMETHING_NEW", message: "")))
+    }
+
+    /// В лог уезжает КОД, а не `localizedDescription`: в нём едет сообщение
+    /// СЕРВЕРА — тот же класс данных, который чистит `PIIScrubber`.
+    func testReasonCarriesTheCodeAndNotTheServerText() {
+        let reason = DiscoveryReveal.reason(
+            APIError.unknownServer(code: "SECRET_NOT_FOUND", message: "account 42 at 45.03,38.97"))
+        XCTAssertEqual(reason, "server SECRET_NOT_FOUND")
+        XCTAssertFalse(reason.contains("45.03"))
+    }
 }
