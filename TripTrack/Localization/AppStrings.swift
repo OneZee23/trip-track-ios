@@ -1017,6 +1017,58 @@ enum AppStrings {
         let r = "\(groupedNumber(regions, lang)) \(nounRegions(lang, regions))"
         return "\(distance) \(opened) · \(r)"
     }
+
+    // MARK: - Печати и загадки на «Атласе» (0.7.0)
+
+    /// «4 знака» — хвост подписи под «Атласом».
+    ///
+    /// Своей строки в таблицах у него нет нарочно: число и счётное слово
+    /// собираются тем же способом, что «4 региона» строкой выше, — иначе
+    /// одиннадцать таблиц пришлось бы учить склонять число.
+    static func mapSealsCount(_ lang: LanguageManager.Language, count: Int) -> String {
+        "\(groupedNumber(count, lang)) \(nounSeals(lang, count))"
+    }
+
+    /// «2 загадки рядом» — вторая половина того же хвоста.
+    ///
+    /// «Рядом» — отдельной строкой с токеном `{count}`, а не приклеенным
+    /// словом: место наречия в предложении у каждого языка своё, а число со
+    /// счётным словом уже собрано.
+    static func mapRiddlesNear(_ lang: LanguageManager.Language, count: Int) -> String {
+        let counted = "\(groupedNumber(count, lang)) \(nounRiddles(lang, count))"
+        return tr(lang, "mapRiddlesNear", ru: "{count} рядом", en: "{count} nearby")
+            .replacingOccurrences(of: "{count}", with: counted)
+    }
+
+    /// Строка под «?» на тумане, пока бандла загадок нет.
+    ///
+    /// Настоящая строка у каждой загадки СВОЯ и приезжает по её типу
+    /// («Где-то в этом круге дорога упирается в море»); эта — общий ответ на
+    /// тот же вопрос, и её место займёт `riddleLine(type:)` вместе с бандлом.
+    static func mapRiddleHintLine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "mapRiddleHintLine",
+           ru: "Где-то в этом круге спрятана загадка",
+           en: "Somewhere in this circle a riddle is hiding")
+    }
+
+    /// Вид находки словом: им подписана карточка печати и её же слышит
+    /// VoiceOver.
+    static func sealKind(_ lang: LanguageManager.Language, kind: DiscoveryKind) -> String {
+        switch kind {
+        case .secret:    return tr(lang, "sealKindSecret", ru: "секрет", en: "secret")
+        case .riddle:    return tr(lang, "sealKindRiddle", ru: "загадка", en: "riddle")
+        case .milestone: return tr(lang, "sealKindMilestone", ru: "веха", en: "milestone")
+        }
+    }
+
+    /// «Печать: загадка» — то, что VoiceOver читает с медальона на карте.
+    ///
+    /// Вид подставляется токеном: одиннадцать таблиц получают ГОТОВУЮ строку,
+    /// и интерполяция внутри `tr` до них не доедет.
+    static func sealAccessibility(_ lang: LanguageManager.Language, kind: DiscoveryKind) -> String {
+        tr(lang, "sealAccessibility", ru: "Печать: {kind}", en: "Seal: {kind}")
+            .replacingOccurrences(of: "{kind}", with: sealKind(lang, kind: kind))
+    }
     /// Подпись региона в списке открытого: «с мая 2026».
     ///
     /// Месяц — РОДИТЕЛЬНЫЙ падеж (`StatsPeriodFormat.monthYearGenitive`), а не

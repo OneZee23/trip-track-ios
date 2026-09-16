@@ -1271,6 +1271,12 @@ extension Translations {
         "adminSectionTitle": "Адмін",
         "adminNotifyNewUsers": "Нові користувачі",
         "adminHintNewUsers": "Пуш, коли в TripTrack реєструється нова людина",
+        "mapRiddlesNear": "{count} поруч",
+        "mapRiddleHintLine": "Десь у цьому колі схована загадка",
+        "sealKindSecret": "секрет",
+        "sealKindRiddle": "загадка",
+        "sealKindMilestone": "віха",
+        "sealAccessibility": "Печатка: {kind}",
     ]
 
 }

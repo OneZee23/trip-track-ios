@@ -1271,6 +1271,12 @@ extension Translations {
         "adminSectionTitle": "Yönetici",
         "adminNotifyNewUsers": "Yeni kullanıcılar",
         "adminHintNewUsers": "TripTrack'e yeni biri kaydolduğunda bildirim",
+        "mapRiddlesNear": "{count} yakında",
+        "mapRiddleHintLine": "Bu çemberin bir yerinde bir bilmece saklı",
+        "sealKindSecret": "sır",
+        "sealKindRiddle": "bilmece",
+        "sealKindMilestone": "dönüm noktası",
+        "sealAccessibility": "Mühür: {kind}",
     ]
 
 }

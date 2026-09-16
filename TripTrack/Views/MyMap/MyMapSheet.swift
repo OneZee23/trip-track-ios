@@ -305,6 +305,8 @@ struct MyMapSheet: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if let trip = vm.selectedTrip {
                         tripCard(trip, c)
+                    } else if let discovery = vm.selectedDiscovery {
+                        DiscoveryPeekSheet(discovery: discovery)
                     } else if let road = vm.selectedRoad {
                         roadCard(road, c)
                     } else if let region = vm.selectedRegion {
@@ -347,12 +349,17 @@ struct MyMapSheet: View {
     /// Lets the UI tour assert which card is up without reading its copy.
     private var panelIdentifier: String {
         if vm.selectedTrip != nil { return "mymap_trip_card" }
+        if vm.selectedDiscovery != nil { return "mymap_discovery_card" }
         if vm.selectedRoad != nil { return "mymap_road_card" }
         return "mymap_region_card"
     }
 
     private var baseHeight: CGFloat {
         if vm.selectedTrip != nil { return 176 }
+        // Печать: медальон, вид, дата и строка загадки — и ни кнопки больше.
+        // «На карте» здесь не нужна, мы уже на карте; полная карточка находки
+        // — волна 4.
+        if vm.selectedDiscovery != nil { return 180 }
         // Header plus three rows — enough to read as a list worth pulling up.
         if vm.selectedRoad != nil { return 260 }
         return 214
@@ -688,6 +695,64 @@ struct MyMapSheet: View {
         let a = Measure.speed(ms: trip.avgSpeedMS, unit: distanceUnit, lang: lang.language)
         let m = Measure.speed(ms: trip.maxSpeedMS, unit: distanceUnit, lang: lang.language)
         return "\(avg) \(a) · \(max) \(m)"
+    }
+}
+
+/// Карточка печати: что это было, когда и — у загадки — про что она.
+///
+/// Заглядывание, а не экран: у находки будет своя карточка с историей и
+/// журналом (волна 4), а здесь ответ на один вопрос — «что это за кружок». И
+/// ни одной кнопки: «На карте» вела бы туда, где человек уже стоит.
+struct DiscoveryPeekSheet: View {
+    let discovery: Discovery
+
+    @EnvironmentObject private var lang: LanguageManager
+    @Environment(\.colorScheme) private var scheme
+
+    /// Формат живёт в `static let`, а не собирается в `body`: `DateFormatter`
+    /// дорог, а карточка перерисовывается на каждое движение листа.
+    private static let dayMonthYear = LocalizedDateFormatter.templates("dMMMyyyy")
+
+    var body: some View {
+        let c = AppTheme.colors(for: scheme)
+        HStack(alignment: .top, spacing: 14) {
+            // Картинка кэширована по (вид, символ, масштаб) — `SealPainter`
+            // рисует её один раз на всё приложение.
+            Image(uiImage: SealPainter.image(
+                kind: discovery.kind, symbol: discovery.symbol, size: 56, scale: 3))
+                .frame(width: 56, height: 56)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(AppStrings.sealKind(lang.language, kind: discovery.kind))
+                    .font(.inter(11, weight: .heavy))
+                    .textCase(.uppercase)
+                    .foregroundStyle(Color(SealPainter.ring(for: discovery.kind)))
+
+                if let name = discovery.title, !name.isEmpty {
+                    Text(name)
+                        .font(.inter(17, weight: .heavy))
+                        .foregroundStyle(c.text)
+                        .lineLimit(2)
+                }
+
+                Text(Self.dayMonthYear[lang.language]?.string(from: discovery.foundAt) ?? "")
+                    .font(.inter(12))
+                    .foregroundStyle(c.textTertiary)
+
+                if discovery.kind == .riddle {
+                    Text(RiddleCopy.line(
+                        for: RiddleCopy.type(ofRiddleKey: discovery.key), lang.language))
+                        .font(.inter(12))
+                        .foregroundStyle(c.textTertiary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 40)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("mymap_discovery_peek")
     }
 }
 

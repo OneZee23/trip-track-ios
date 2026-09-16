@@ -1271,6 +1271,12 @@ extension Translations {
         "adminSectionTitle": "Әкімші",
         "adminNotifyNewUsers": "Жаңа қолданушылар",
         "adminHintNewUsers": "TripTrack-те жаңа адам тіркелгенде хабарлама",
+        "mapRiddlesNear": "{count} жақын жерде",
+        "mapRiddleHintLine": "Осы шеңбердің бір жерінде жұмбақ жасырылған",
+        "sealKindSecret": "құпия",
+        "sealKindRiddle": "жұмбақ",
+        "sealKindMilestone": "белес",
+        "sealAccessibility": "Мөр: {kind}",
     ]
 
 }

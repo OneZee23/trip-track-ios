@@ -57,7 +57,10 @@ final class DiscoveryProcessor {
 
     private let store: DiscoveryStore
     private let repository: TripRepository
-    private let riddleCatalog: RiddleCatalog
+    /// Не `private`: тот же каталог читает «Атлас», когда решает, какие три
+    /// нерешённые загадки показать подсказками (`RiddleHintSource`). Читает —
+    /// и только: разбор трека по-прежнему живёт здесь.
+    let riddleCatalog: RiddleCatalog
     private let secretCatalog: SecretCatalog
     private let atlas: RegionAtlas
     private let defaults: UserDefaults

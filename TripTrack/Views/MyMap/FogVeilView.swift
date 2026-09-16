@@ -130,7 +130,7 @@ final class FogVeilView: UIView {
     /// Прорезь у машины на живой записи. Маска на СВОЁМ слое: она обязана
     /// резать и растр, и ровный туман вокруг него.
     private let revealMask = VeilRevealMask()
-    private var liveReveal: (coordinate: CLLocationCoordinate2D, progress: Double)?
+    private var liveReveal: (coordinate: CLLocationCoordinate2D, progress: Double, metres: Double)?
     /// Самое большее два: тот, что на экране, и тот, что въезжает поверх него.
     private var rasters: [Raster] = []
 
@@ -272,13 +272,29 @@ final class FogVeilView: UIView {
     /// (`RevealedLayerStore`), новый растр приходит с ним, и маска снимается
     /// тем же `nil`, которым её завёл `MapViewModel.rebuildFog`.
     func setLiveReveal(coordinate: CLLocationCoordinate2D?, progress: Double) {
+        setReveal(coordinate: coordinate, progress: progress,
+                  metres: FogVeilRenderer.revealMetres)
+    }
+
+    /// Та же прорезь с другим радиусом — «печать проступает» на «Атласе»
+    /// (`SealRevealAnimation`, 120 м за 0.6 с).
+    ///
+    /// Радиус параметром, а не константой внутри: у машины на записи он свой
+    /// (150 м, `FogVeilRenderer.revealMetres`), и сведённые в одно число они
+    /// разъехались бы при первой правке любого из двух. Маска при этом ОДНА —
+    /// двух прорезей одновременно не бывает: запись и Атлас это разные экраны.
+    func setReveal(
+        coordinate: CLLocationCoordinate2D?,
+        progress: Double,
+        metres: Double = FogVeilRenderer.revealMetres
+    ) {
         guard let coordinate, progress > 0 else {
             guard liveReveal != nil else { return }
             liveReveal = nil
             layer.mask = nil
             return
         }
-        liveReveal = (coordinate, progress)
+        liveReveal = (coordinate, progress, metres)
         if layer.mask !== revealMask.layer { layer.mask = revealMask.layer }
         guard let map else { return }
         CATransaction.begin()
@@ -301,7 +317,7 @@ final class FogVeilView: UIView {
         let centre = map.convert(live.coordinate, toPointTo: self)
         let metresPerPoint = map.metersPerScreenPoint
         guard metresPerPoint > 0, metresPerPoint.isFinite else { return }
-        let radius = CGFloat(FogVeilRenderer.revealMetres * live.progress / metresPerPoint)
+        let radius = CGFloat(live.metres * live.progress / metresPerPoint)
         revealMask.update(bounds: bounds, centre: centre, radius: max(radius, 1))
     }
 

@@ -1271,6 +1271,12 @@ extension Translations {
         "adminSectionTitle": "Admin",
         "adminNotifyNewUsers": "Mga bagong user",
         "adminHintNewUsers": "Abiso kapag may bagong nag-sign up sa TripTrack",
+        "mapRiddlesNear": "{count} malapit",
+        "mapRiddleHintLine": "May palaisipang nakatago sa loob ng bilog na ito",
+        "sealKindSecret": "lihim",
+        "sealKindRiddle": "palaisipan",
+        "sealKindMilestone": "palatandaan",
+        "sealAccessibility": "Selyo: {kind}",
     ]
 
 }

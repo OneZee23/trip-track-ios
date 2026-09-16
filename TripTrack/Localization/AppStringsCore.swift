@@ -402,6 +402,47 @@ extension AppStrings {
         }
     }
 
+    /// «знак» — печать находки на «Атласе» (0.7.0).
+    ///
+    /// Слово одно на все три вида: на карте они и правда одно — тёмный
+    /// медальон, — а чем именно он оказался, человек узнаёт, нажав.
+    static func nounSeals(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "знак", few: "знака", many: "знаков")
+        case .en: return plural(lang, n, one: "seal", many: "seals")
+        case .de: return plural(lang, n, one: "Siegel", many: "Siegel")
+        case .es: return plural(lang, n, one: "sello", many: "sellos")
+        case .fr: return plural(lang, n, one: "sceau", many: "sceaux")
+        case .it: return plural(lang, n, one: "sigillo", many: "sigilli")
+        case .pl: return plural(lang, n, one: "pieczęć", few: "pieczęcie", many: "pieczęci")
+        case .id: return "segel"
+        case .tr: return "mühür"
+        case .fil: return "selyo"
+        case .uk: return plural(lang, n, one: "знак", few: "знаки", many: "знаків")
+        case .kk: return "мөр"
+        case .pt: return plural(lang, n, one: "selo", many: "selos")
+        }
+    }
+
+    /// «загадка» — нерешённая подсказка на тумане (0.7.0).
+    static func nounRiddles(_ lang: LanguageManager.Language, _ n: Int) -> String {
+        switch lang {
+        case .ru: return plural(lang, n, one: "загадка", few: "загадки", many: "загадок")
+        case .en: return plural(lang, n, one: "riddle", many: "riddles")
+        case .de: return plural(lang, n, one: "Rätsel", many: "Rätsel")
+        case .es: return plural(lang, n, one: "enigma", many: "enigmas")
+        case .fr: return plural(lang, n, one: "énigme", many: "énigmes")
+        case .it: return plural(lang, n, one: "enigma", many: "enigmi")
+        case .pl: return plural(lang, n, one: "zagadka", few: "zagadki", many: "zagadek")
+        case .id: return "teka-teki"
+        case .tr: return "bilmece"
+        case .fil: return "palaisipan"
+        case .uk: return plural(lang, n, one: "загадка", few: "загадки", many: "загадок")
+        case .kk: return "жұмбақ"
+        case .pt: return plural(lang, n, one: "enigma", many: "enigmas")
+        }
+    }
+
     /// «проезд» — how many times a trip has gone past a place (0.6.8).
     static func nounPasses(_ lang: LanguageManager.Language, _ n: Int) -> String {
         switch lang {

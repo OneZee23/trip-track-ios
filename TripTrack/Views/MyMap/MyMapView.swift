@@ -41,6 +41,8 @@ struct MyMapView: View {
                 vein: vm.routeVein,
                 selectedRoute: vm.selectedRoute,
                 selection: vm.selection,
+                seals: vm.seals,
+                riddleHints: vm.riddleHints,
                 language: lang.language,
                 // Логотип Apple и «Legal» встают над свёрнутым листом: под
                 // непрозрачным туманом он накрыл бы их насовсем.
@@ -48,6 +50,8 @@ struct MyMapView: View {
                 onZoomLevelChange: { zoomLevel = $0 },
                 onSelectTrip: { vm.select(.trip($0)) },
                 onSelectRoad: { vm.selectRoad($0) },
+                // Камера не двигается: палец уже стоит на печати.
+                onSelectDiscovery: { vm.select(.discovery($0), zoom: false) },
                 // Auto-zoom to the region only from the country view, where
                 // that IS the gesture. Down at street level a tap that misses
                 // the road is a miss, and answering it by flinging the camera
@@ -143,12 +147,24 @@ struct MyMapView: View {
     /// ничего, и подпись под «Атласом» обязана считать то же, что видно
     /// глазами на карте.
     private var openedSummary: String {
-        AppStrings.mapOpenedSummary(
-            lang.language,
-            distance: Measure.distance(
-                km: vm.revealed.openedKm, unit: distanceUnit, lang: lang.language),
-            regions: vm.exploration.regionCount
-        )
+        var parts = [
+            AppStrings.mapOpenedSummary(
+                lang.language,
+                distance: Measure.distance(
+                    km: vm.revealed.openedKm, unit: distanceUnit, lang: lang.language),
+                regions: vm.exploration.regionCount
+            )
+        ]
+        // Ноль не печатается вовсе. «0 знаков» под «Атласом» — это обещание
+        // механики тому, у кого её ещё нет: печать появится сама, и объявлять
+        // её отсутствие незачем.
+        if !vm.seals.isEmpty {
+            parts.append(AppStrings.mapSealsCount(lang.language, count: vm.seals.count))
+        }
+        if !vm.riddleHints.isEmpty {
+            parts.append(AppStrings.mapRiddlesNear(lang.language, count: vm.riddleHints.count))
+        }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Empty state

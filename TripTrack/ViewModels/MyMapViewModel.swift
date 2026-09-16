@@ -29,6 +29,10 @@ final class MyMapViewModel: ObservableObject {
     enum Selection: Equatable {
         case region(String)         // atlas region id, opened
         case trip(UUID)
+        /// Печать находки (0.7.0). Несёт `Discovery.id`, а не саму находку:
+        /// список печатей перечитывается на каждое `.discoveriesChanged`, и
+        /// выбор, державший копию, показывал бы вчерашнюю дату.
+        case discovery(UUID)
         /// Every trip that used the road under your finger, newest first.
         /// A street you drive daily belongs to a dozen trips, and handing back
         /// only the nearest one made the other eleven unreachable.
@@ -53,6 +57,13 @@ final class MyMapViewModel: ObservableObject {
     /// Градиент скорости остался там, где он отвечает на вопрос, — на экране
     /// поездки.
     @Published private(set) var selectedRoute: RouteVeinOverlay?
+    /// Найденное — печати на карте. Читается из базы готовым, как и туман:
+    /// разбирать треки «Атлас» не имеет права (это делает финиш поездки).
+    @Published private(set) var seals: [Discovery] = []
+    /// Не больше трёх нерешённых загадок, ближайших к открытому
+    /// (`RiddleHint.plan`). Пусто, пока в каталоге ничего нет, — и это не
+    /// поломка, а первый запуск до бандла.
+    @Published private(set) var riddleHints: [RiddleHint] = []
     /// Set through `select` / `selectRoad` only — the drawn route is kept in
     /// step from there, and a direct write would leave the two disagreeing.
     @Published private(set) var selection: Selection?
@@ -64,6 +75,15 @@ final class MyMapViewModel: ObservableObject {
     private var loaded = false
     private var stale = false
     private var loadGeneration = 0
+    /// Сколько раз пересобиралась вуаль. Читает тест: печати обязаны
+    /// перечитываться БЕЗ пересборки тумана — иначе каждая находка стоила бы
+    /// полного прохода по библиотеке и вспышки «всё закрыто» на экране.
+    private(set) var fogRebuilds = 0
+    /// Хранилище находок и каталог загадок — инъекцией, чтобы тест мог дать
+    /// свои, не трогая базу телефона и бандл.
+    private let discoveryStore: DiscoveryStore
+    private let riddleCatalog: RiddleCatalog
+    private var discoveryGeneration = 0
     /// Три уведомления финиша — одна пересборка. Почему это не «три лишних
     /// выборки», а видимая вспышка «всё закрыто», — см. `ReloadCoalescer`.
     private lazy var coalescer = ReloadCoalescer { [weak self] in
@@ -86,6 +106,8 @@ final class MyMapViewModel: ObservableObject {
     /// заехавший в него, стёр бы её.
     init(source: TripSource) {
         self.remoteSource = source
+        self.discoveryStore = .shared
+        self.riddleCatalog = RiddleHintSource.catalog
     }
 
     /// Строит чужую карту из публичных поездок аккаунта.
@@ -154,8 +176,18 @@ final class MyMapViewModel: ObservableObject {
             runs: runs, cellCount: claimed.values.reduce(0) { $0 + $1.count }, atlas: atlas)
     }
 
-    init() {
+    /// Каталог загадок приходит через `RiddleHintSource`, а не напрямую: имя
+    /// `DiscoveryProcessor` за пределами `Services/Discoveries/` и
+    /// `Views/MyMap/` запрещено сторожем `NoLiveSecretPromptsTests`, а этот
+    /// файл лежит в `ViewModels/`.
+    ///
+    /// Каталог `nil` — «взять обычный»: значением по умолчанию его не написать,
+    /// умолчания считаются на СТОРОНЕ ВЫЗОВА, то есть вне главного актёра.
+    init(discoveryStore: DiscoveryStore = .shared,
+         riddleCatalog: RiddleCatalog? = nil) {
         self.remoteSource = nil
+        self.discoveryStore = discoveryStore
+        self.riddleCatalog = riddleCatalog ?? RiddleHintSource.catalog
         // Data changes invalidate the map. When the tab is off-screen the
         // reload happens here directly (the view can't); loadIfNeeded also
         // rechecks `stale` on the next appearance as a belt-and-braces.
@@ -177,6 +209,18 @@ final class MyMapViewModel: ObservableObject {
                     // три, и каждое стоит полной пересборки индекса путей.
                     self.coalescer.schedule()
                 }
+            }
+        }
+        // Находки — ОТДЕЛЬНОЙ подпиской, мимо коалесера: печать, легшая на
+        // финише, стоит одной выборки строк, а пересборка тумана — прохода по
+        // всей библиотеке превью и вспышки «всё закрыто» на экране. Держит
+        // `MyMapViewModelSealsTests`.
+        NotificationCenter.default.addObserver(
+            forName: .discoveriesChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                Task { await self.reloadDiscoveries() }
             }
         }
     }
@@ -226,12 +270,52 @@ final class MyMapViewModel: ObservableObject {
 
         apply(exploration: built.0, layer: built.1)
         isLoading = false
+        await reloadDiscoveries()
+    }
+
+    // MARK: - Находки
+
+    /// Печати и подсказки — из базы и каталога, без единого трека.
+    ///
+    /// Разбор поездок сюда не заходит и не может: находки считает финиш
+    /// (`DiscoveryProcessor`), а «Атлас» читает уже готовое — как туман.
+    ///
+    /// Поколение, а не флаг: `.discoveriesChanged` приходит пачкой (финиш
+    /// поездки находит секрет, загадку и веху), и обогнанная выборка не имеет
+    /// права накрыть свежую.
+    /// - Parameter layer: открытый слой, по которому считается плотность и
+    ///   близость. По умолчанию — свой, только что собранный `reload`;
+    ///   параметром он ради теста подсказок, которому иначе пришлось бы поднять
+    ///   CoreData, атлас и тайлы тумана ради двух центроидов.
+    func reloadDiscoveries(layer: RevealedLayer? = nil) async {
+        // Чужая карта своих печатей не показывает и чужих не знает: находки
+        // живут только на телефоне владельца.
+        guard remoteSource == nil else { return }
+        discoveryGeneration += 1
+        let generation = discoveryGeneration
+        let found = await discoveryStore.all()
+        guard generation == discoveryGeneration else { return }
+
+        let solved = Set(found.filter { $0.kind == .riddle }.map(\.key))
+        let layer = layer ?? revealed
+        let centroids = Array(layer.regionCentroids.values)
+        let catalog = riddleCatalog
+        let hints = RiddleHint.plan(
+            riddles: catalog.all(), solvedRiddleIds: solved,
+            centroids: centroids, layer: layer)
+
+        seals = found
+        riddleHints = hints
+        // Печать, которой больше нет (стёрли аккаунт, пересчитали базу), не
+        // имеет права оставаться выбранной — карточка показывала бы призрак.
+        if let current = selection, resolve(current) == nil { selection = nil }
     }
 
     /// Единственное место, где меняются модель экрана и оверлеи — вместе.
     private func apply(exploration: MapExploration, layer: RevealedLayer) {
         self.exploration = exploration
         revealed = layer
+        fogRebuilds += 1
         // Вуаль есть ВСЕГДА, даже над пустым слоем: угол без неё читался бы
         // как открытый, а «мир тёмный, пока ты не поехал» — это и есть весь
         // замысел.
@@ -306,6 +390,10 @@ final class MyMapViewModel: ObservableObject {
         // road you asked about, and `selectRoad` passes zoom: false anyway.
         case .road:
             break
+        // Печать — тем более: палец уже стоит на ней, и полёт камеры увёз бы
+        // человека с того места, про которое он спросил.
+        case .discovery:
+            break
         case .trip(let id):
             if let pin = exploration.trip(id: id), let bounds = GeoBounds(covering: pin.route) {
                 cameraCommand = .fit(bounds, padding: .trip)
@@ -319,6 +407,7 @@ final class MyMapViewModel: ObservableObject {
         case .region(let id):       return exploration.region(id: id)
         case .trip(let id):         return exploration.trip(id: id)
         case .road(let ids):        return selectedRoadTrips(ids).isEmpty ? nil : ids
+        case .discovery(let id):    return seals.first { $0.id == id }
         }
     }
 
@@ -340,6 +429,11 @@ final class MyMapViewModel: ObservableObject {
     var selectedTrip: MapTripPin? {
         guard case .trip(let id) = selection else { return nil }
         return exploration.trip(id: id)
+    }
+
+    var selectedDiscovery: Discovery? {
+        guard case .discovery(let id) = selection else { return nil }
+        return seals.first { $0.id == id }
     }
 }
 

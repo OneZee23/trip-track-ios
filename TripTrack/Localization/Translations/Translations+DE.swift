@@ -1271,6 +1271,12 @@ extension Translations {
         "adminSectionTitle": "Admin",
         "adminNotifyNewUsers": "Neue Nutzer",
         "adminHintNewUsers": "Eine Mitteilung, wenn sich jemand neu bei TripTrack registriert",
+        "mapRiddlesNear": "{count} in der Nähe",
+        "mapRiddleHintLine": "Irgendwo in diesem Kreis versteckt sich ein Rätsel",
+        "sealKindSecret": "Geheimnis",
+        "sealKindRiddle": "Rätsel",
+        "sealKindMilestone": "Meilenstein",
+        "sealAccessibility": "Siegel: {kind}",
     ]
 
 }

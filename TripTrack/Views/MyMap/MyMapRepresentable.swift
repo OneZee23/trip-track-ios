@@ -147,6 +147,10 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     /// Выбранная поездка — та же жилка, шире.
     var selectedRoute: RouteVeinOverlay?
     var selection: MyMapViewModel.Selection?
+    /// Печати находок — над туманом, постоянного размера.
+    var seals: [Discovery] = []
+    /// Не больше трёх нерешённых загадок: круг и «?» без точки.
+    var riddleHints: [RiddleHint] = []
     /// Подписи регионов следуют языку приложения, который живёт в
     /// EnvironmentObject — координатору до него не дотянуться.
     var language: LanguageManager.Language
@@ -157,6 +161,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     var onSelectTrip: (UUID) -> Void
     /// Every trip whose route runs under the tapped point.
     var onSelectRoad: ([UUID]) -> Void
+    /// Тап по печати — `Discovery.id`.
+    var onSelectDiscovery: (UUID) -> Void = { _ in }
     var onTapMap: (CLLocationCoordinate2D) -> Void
     /// One-shot camera command; the binding is cleared once applied.
     @Binding var cameraCommand: MapCameraCommand?
@@ -182,6 +188,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         map.register(CityDotView.self, forAnnotationViewWithReuseIdentifier: CityDotView.reuseID)
         map.register(RegionLabelView.self, forAnnotationViewWithReuseIdentifier: RegionLabelView.reuseID)
         map.register(RouteEndpointView.self, forAnnotationViewWithReuseIdentifier: RouteEndpointView.reuseID)
+        map.register(SealView.self, forAnnotationViewWithReuseIdentifier: SealView.reuseID)
+        map.register(SealClusterView.self, forAnnotationViewWithReuseIdentifier: SealClusterView.reuseID)
+        map.register(RiddleHintView.self, forAnnotationViewWithReuseIdentifier: RiddleHintView.reuseID)
 
         let tap = UITapGestureRecognizer(
             target: context.coordinator,
@@ -214,10 +223,13 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         coordinator.onZoomLevelChange = onZoomLevelChange
         coordinator.onSelectTrip = onSelectTrip
         coordinator.onSelectRoad = onSelectRoad
+        coordinator.onSelectDiscovery = onSelectDiscovery
         coordinator.onTapMap = onTapMap
 
         coordinator.syncData(map, exploration: exploration, revealed: revealed,
                              language: language, veil: veil, vein: vein)
+        coordinator.syncSeals(map, seals: seals, language: language)
+        coordinator.syncHints(map, hints: riddleHints, language: language)
         coordinator.syncSelectedRoute(map, route: selectedRoute, language: language)
         coordinator.syncSelection(map, selection: selection)
         coordinator.applyInitialCameraIfNeeded(map, exploration: exploration)
@@ -237,6 +249,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         var onZoomLevelChange: ((MapZoomLevel) -> Void)?
         var onSelectTrip: ((UUID) -> Void)?
         var onSelectRoad: (([UUID]) -> Void)?
+        var onSelectDiscovery: ((UUID) -> Void)?
         var onTapMap: ((CLLocationCoordinate2D) -> Void)?
 
         private weak var mapView: MKMapView?
@@ -268,6 +281,23 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// Последний открытый слой: экранная вуаль встаёт в дерево карты
         /// позже первой синхронизации данных и забирает его у координатора.
         private var lastRevealed = RevealedLayer.empty
+        /// Печати и подсказки на карте — по id, чтобы дифф не трогал то, что
+        /// уже стоит: пересозданная аннотация мигает и теряет свою анимацию.
+        private var installedSealIds: Set<UUID> = []
+        private var installedHintIds: Set<String> = []
+        /// Первая синхронизация печатей уже прошла. До неё «новых» печатей не
+        /// бывает: открытие вкладки с двадцатью находками не должно давать
+        /// двадцать прорезей подряд.
+        private var sealsSynced = false
+        private var revealLink: CADisplayLink?
+        private var revealStartedAt: Date?
+        private var revealCoordinate: CLLocationCoordinate2D?
+        /// Печать, которая ещё не проступила: вью аннотации MapKit создаёт не в
+        /// тот же кадр, что `addAnnotations`, и выставлять ей прозрачность
+        /// сразу после добавления некому.
+        private var pendingRevealSealId: UUID?
+        private var installedSealLanguage: LanguageManager.Language?
+        private var installedHintLanguage: LanguageManager.Language?
 
         // MARK: Data
 
@@ -431,6 +461,126 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             }
         }
 
+        // MARK: Печати и подсказки
+
+        /// Печати — дифф по id, а не «снять всё и поставить заново».
+        ///
+        /// Пересозданная аннотация мигает, теряет своё место в кластере и
+        /// начинает анимацию появления заново — то есть каждое
+        /// `.discoveriesChanged` выглядело бы как двадцать новых находок.
+        func syncSeals(_ map: MKMapView, seals: [Discovery], language: LanguageManager.Language) {
+            let ids = Set(seals.map(\.id))
+            // Смена языка переписывает подпись для VoiceOver — она лежит в
+            // самой аннотации, и обновить её можно только новой.
+            let languageChanged = language != installedSealLanguage
+            guard ids != installedSealIds || languageChanged else { return }
+
+            let existing = map.annotations.compactMap { $0 as? SealAnnotation }
+            let gone = existing.filter { languageChanged || !ids.contains($0.id) }
+            map.removeAnnotations(gone)
+            let kept = Set(existing.filter { !gone.contains($0) }.map(\.id))
+            let added = seals
+                .filter { !kept.contains($0.id) }
+                .map {
+                    SealAnnotation(
+                        discovery: $0,
+                        accessibilityText: AppStrings.sealAccessibility(language, kind: $0.kind))
+                }
+            map.addAnnotations(added)
+
+            // ПЕРВАЯ синхронизация ничего не «проявляет»: открытие вкладки с
+            // двадцатью находками дало бы двадцать прорезей подряд.
+            let isFresh = sealsSynced && !languageChanged
+            installedSealIds = ids
+            installedSealLanguage = language
+            sealsSynced = true
+            guard isFresh, let fresh = added.first else { return }
+            beginReveal(of: fresh, on: map)
+        }
+
+        /// Подсказки — тем же диффом. Круг и строка меняются только вместе с
+        /// набором загадок или языком.
+        func syncHints(_ map: MKMapView, hints: [RiddleHint], language: LanguageManager.Language) {
+            let ids = Set(hints.map(\.id))
+            guard ids != installedHintIds || language != installedHintLanguage else { return }
+            installedHintIds = ids
+            installedHintLanguage = language
+            map.removeAnnotations(map.annotations.filter { $0 is RiddleHintAnnotation })
+            map.addAnnotations(hints.map {
+                RiddleHintAnnotation(hint: $0, line: RiddleCopy.line(for: $0.type, language))
+            })
+            updateHintRadii(map)
+        }
+
+        /// Радиус круга живёт в МЕТРАХ на земле, а рисуется в точках экрана —
+        /// значит пересчитывается на каждый зум.
+        func updateHintRadii(_ map: MKMapView) {
+            let metresPerPoint = map.metersPerScreenPoint
+            guard metresPerPoint > 0, metresPerPoint.isFinite else { return }
+            for annotation in map.annotations {
+                guard let hint = annotation as? RiddleHintAnnotation,
+                      let view = map.view(for: hint) as? RiddleHintView else { continue }
+                view.radiusPoints = CGFloat(hint.radiusMetres / metresPerPoint)
+            }
+        }
+
+        // MARK: «Печать проступает»
+
+        /// Новая печать на открытом «Атласе»: прорезь в тумане 0 → 120 м за
+        /// 0.6 с и медальон из прозрачности.
+        ///
+        /// Прорезь режет ВУАЛЬ МАСКОЙ (`VeilRevealMask`), а не перерисовывает
+        /// растр: перерисовка — это восемь мегабайт за кадр, то есть
+        /// полсекунды стоящей карты вместо анимации. Reduce Motion получает
+        /// готовый результат сразу.
+        private func beginReveal(of seal: SealAnnotation, on map: MKMapView) {
+            let reduceMotion = UIAccessibility.isReduceMotionEnabled
+            pendingRevealSealId = reduceMotion ? nil : seal.id
+            if !reduceMotion, let view = map.view(for: seal) {
+                pendingRevealSealId = nil
+                fadeIn(view)
+            }
+            guard !reduceMotion, let host, host.screenVeilAttached else { return }
+            revealCoordinate = seal.coordinate
+            revealStartedAt = Date()
+            revealLink?.invalidate()
+            let link = CADisplayLink(target: self, selector: #selector(stepReveal))
+            link.add(to: .main, forMode: .common)
+            revealLink = link
+        }
+
+        /// Медальон проступает вместе с прорезью — тем же временем.
+        func fadeIn(_ view: MKAnnotationView) {
+            view.alpha = 0
+            UIView.animate(withDuration: SealRevealAnimation.duration) { view.alpha = 1 }
+        }
+
+        @objc private func stepReveal() {
+            guard let host, host.screenVeilAttached,
+                  let started = revealStartedAt, let coordinate = revealCoordinate else {
+                endReveal()
+                return
+            }
+            let elapsed = Date().timeIntervalSince(started)
+            host.screenVeil.setReveal(
+                coordinate: coordinate,
+                progress: SealRevealAnimation.progress(elapsed: elapsed, reduceMotion: false),
+                metres: SealRevealAnimation.radiusMetres
+            )
+            if SealRevealAnimation.isDone(elapsed: elapsed, reduceMotion: false) { endReveal() }
+        }
+
+        /// Прорезь снимается ВСЕГДА, даже когда анимацию прервали уходом с
+        /// экрана: оставленная маска — это дыра в тумане, которую ничто больше
+        /// не закроет.
+        private func endReveal() {
+            revealLink?.invalidate()
+            revealLink = nil
+            revealStartedAt = nil
+            revealCoordinate = nil
+            host?.screenVeil.setReveal(coordinate: nil, progress: 0)
+        }
+
         // MARK: Zoom level
 
         private func applyLevel(_ map: MKMapView, animated: Bool) {
@@ -536,6 +686,12 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             case is MKUserLocation:
                 return nil
             case let cluster as MKClusterAnnotation:
+                // Горсть печатей и горсть поездок — разные кластеры: у первой
+                // тёмный медальон с цветом вида, у второй белый пин.
+                if cluster.memberAnnotations.contains(where: { $0 is SealAnnotation }) {
+                    return mapView.dequeueReusableAnnotationView(
+                        withIdentifier: SealClusterView.reuseID, for: cluster)
+                }
                 let view = mapView.dequeueReusableAnnotationView(
                     withIdentifier: TripClusterView.reuseID, for: cluster)
                 return view
@@ -548,6 +704,22 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             case let endpoint as RouteEndpointAnnotation:
                 return mapView.dequeueReusableAnnotationView(
                     withIdentifier: RouteEndpointView.reuseID, for: endpoint)
+            case let seal as SealAnnotation:
+                let view = mapView.dequeueReusableAnnotationView(
+                    withIdentifier: SealView.reuseID, for: seal)
+                if pendingRevealSealId == seal.id {
+                    pendingRevealSealId = nil
+                    fadeIn(view)
+                }
+                return view
+            case let hint as RiddleHintAnnotation:
+                let view = mapView.dequeueReusableAnnotationView(
+                    withIdentifier: RiddleHintView.reuseID, for: hint) as? RiddleHintView
+                let metresPerPoint = mapView.metersPerScreenPoint
+                if metresPerPoint > 0, metresPerPoint.isFinite {
+                    view?.radiusPoints = CGFloat(hint.radiusMetres / metresPerPoint)
+                }
+                return view
             case let pin as TripPinAnnotation:
                 let view = mapView.dequeueReusableAnnotationView(
                     withIdentifier: TripPinView.reuseID, for: pin) as? TripPinView
@@ -633,6 +805,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 host.screenVeil.sync(map: mapView)
                 host.screenVeil.maybeRender(map: mapView, settled: true)
             }
+            // Круг подсказки нарисован в ТОЧКАХ ЭКРАНА, а живёт в метрах на
+            // земле: без пересчёта он остался бы прежним кружком на любом зуме.
+            updateHintRadii(mapView)
             let newLevel = MapZoomLevel.of(mapView.region.span.latitudeDelta)
             guard newLevel != level else { return }
             level = newLevel
@@ -668,6 +843,10 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // дорогу». Выбывает из хит-теста по той же причине, что и
                 // концы маршрута: тап обязан дойти до дороги под ней.
                 guard !(annotation is RegionLabelAnnotation) else { continue }
+                // Круг подсказки в этой волне не нажимается: своего экрана у
+                // нерешённой загадки нет (волна 4), а «?» размером в полэкрана
+                // съел бы тапы по дорогам под ним.
+                guard !(annotation is RiddleHintAnnotation) else { continue }
                 guard let view = map.view(for: annotation), !view.isHidden else { continue }
                 let target = view.frame.insetBy(dx: -6, dy: -6)
                 guard target.contains(point) else { continue }
@@ -683,6 +862,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 } else if let pin = hit as? TripPinAnnotation {
                     Haptics.tap()
                     onSelectTrip?(pin.tripId)
+                } else if let seal = hit as? SealAnnotation {
+                    Haptics.tap()
+                    onSelectDiscovery?(seal.id)
                 }
                 // Точка города — подпись, а не контрол: тап по ней не делает
                 // ничего (так было и до 0.7.0).
