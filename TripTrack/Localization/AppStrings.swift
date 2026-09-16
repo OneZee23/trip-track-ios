@@ -55,8 +55,36 @@ enum AppStrings {
     static func placeUsually(_ lang: LanguageManager.Language, time: String) -> String {
         String(format: tr(lang, "placeUsually", ru: "обычно %@ от старта", en: "usually %@ from the start"), time)
     }
+    /// Заголовок карточки. Уточнение «от старта поездки» с 0.7.0 ушло из него
+    /// вниз отдельной подписью: одной строкой через точку-разделитель оно
+    /// читалось как часть заголовка и заставляло перечитывать.
     static func placeUsuallyTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "placeUsuallyTitle", ru: "Обычно занимает · от старта поездки", en: "Usually takes · from the trip start")
+        tr(lang, "placeUsuallyTitle", ru: "Обычно занимает", en: "Usually takes")
+    }
+    /// Подпись под заголовком: от чего отсчитаны минуты.
+    static func placeUsuallyCaption(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeUsuallyCaption", ru: "от старта поездки", en: "from the trip start")
+    }
+    /// «от 1 ч 10 мин до 1 ч 30 мин» — разброс проездов одного направления.
+    /// Показывается только когда края разошлись (`PlaceUsuallyLine`).
+    static func placeUsuallyRange(_ lang: LanguageManager.Language, min: String, max: String) -> String {
+        tr(lang, "placeUsuallyRange", ru: "от {min} до {max}", en: "from {min} to {max}")
+            .replacingOccurrences(of: "{min}", with: min)
+            .replacingOccurrences(of: "{max}", with: max)
+    }
+    /// «в сторону Джубги» — направление словами, а не голым именем города:
+    /// одно имя рядом с временем читается как «это время до города», а оно
+    /// от старта поездки.
+    static func placeTowards(_ lang: LanguageManager.Language, name: String) -> String {
+        tr(lang, "placeTowards", ru: "в сторону {name}", en: "towards {name}")
+            .replacingOccurrences(of: "{name}", with: name)
+    }
+    /// «от старта» внутри строки, со строчной. Своим ключом, а не
+    /// `checkpointFromStart(l).lowercased(l)`: у немецкого «Ab Start» строчная
+    /// съела бы заглавную у существительного, а это ошибка орфографии, а не
+    /// стиля.
+    static func placeFromStartInline(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeFromStartInline", ru: "от старта", en: "from start")
     }
     /// Подписи, не награды: опыта и значков места не дают.
     static func placeChipFrequent(_ lang: LanguageManager.Language) -> String {

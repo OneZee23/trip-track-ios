@@ -18,8 +18,14 @@ struct PlaceDetailView: View {
     @State private var renaming = false
 
     private static let dayMonthWeekday = LocalizedDateFormatter.templates("dMMMEEE")
+    /// Время проезда — своим шаблоном, чтобы 12/24 часа решала локаль, а не мы.
+    private static let clockTime = LocalizedDateFormatter.templates("jmm")
     private static let dayMonth = LocalizedDateFormatter.templates("dMMM")
     private static let monthYear = LocalizedDateFormatter.templates("MMMyyyy")
+    /// Внутренний отступ обеих плашек. Колонка текста начинается от него плюс
+    /// `PassCourseGlyph.diameter` плюс `PassCourseGlyph.spacing` — одинаково в
+    /// «Обычно занимает» и в каждой строке проезда.
+    private static let cardInset: CGFloat = 14
 
     init(placeId: UUID, onOpenTrip: @escaping (UUID, TripFocus) -> Void) {
         self.placeId = placeId
@@ -209,74 +215,88 @@ struct PlaceDetailView: View {
     @ViewBuilder
     private func usualCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         if !model.stats.directions.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(AppStrings.placeUsuallyTitle(l))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.text)
+            usualShell(c: c, l: l) {
                 VStack(spacing: 12) {
                     ForEach(Array(model.stats.directions.enumerated()), id: \.offset) { _, direction in
                         directionRow(direction, c: c, l: l)
                     }
                 }
             }
-            .padding(14)
-            .surfaceCard(cornerRadius: 16)
         } else if let median = model.stats.medianElapsed {
             // Проезды есть, но ни один не нёс курса — сгруппировать по
             // направлению нечем, а факт «обычно занимает» всё равно есть.
-            VStack(alignment: .leading, spacing: 12) {
-                Text(AppStrings.placeUsuallyTitle(l))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(c.text)
-                HStack {
-                    Text(AppStrings.placeNoDirection(l))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(c.textSecondary)
-                    Spacer(minLength: 8)
-                    Text(CheckpointReading.clock(median, lang: l))
-                        .font(.system(size: 13, weight: .heavy))
-                        .foregroundStyle(c.text)
-                }
+            usualShell(c: c, l: l) {
+                usualRow(course: PlacePass.unknownCourse,
+                         median: median,
+                         second: PlaceUsuallyLine.compose(count: model.stats.passCount,
+                                                          best: median, worst: median, lang: l),
+                         // Не «в сторону …», а «Без направления»: точка вместо
+                         // стрелки иначе выглядела бы недорисованной.
+                         towards: AppStrings.placeNoDirection(l), c: c)
             }
-            .padding(14)
-            .surfaceCard(cornerRadius: 16)
         }
+    }
+
+    /// Шапка карточки: заголовок и ПОД ним подпись, от чего отсчитаны минуты.
+    /// Одной строкой через точку-разделитель («Обычно занимает · от старта
+    /// поездки») она читалась как продолжение заголовка и заставляла
+    /// перечитывать — замечание владельца 16 сентября.
+    private func usualShell<Content: View>(
+        c: AppTheme.Colors, l: LanguageManager.Language,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(AppStrings.placeUsuallyTitle(l))
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(c.text)
+                Text(AppStrings.placeUsuallyCaption(l))
+                    .font(.system(size: 11))
+                    .foregroundStyle(c.textTertiary)
+            }
+            content()
+        }
+        .padding(.horizontal, Self.cardInset)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surfaceCard(cornerRadius: 16)
     }
 
     private func directionRow(_ direction: PlaceStats.Direction, c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle().fill(AppTheme.accentBg).frame(width: 32, height: 32)
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(AppTheme.accent)
-                    .rotationEffect(.degrees(direction.course))
-            }
+        usualRow(
+            course: direction.course,
+            median: direction.median,
+            second: PlaceUsuallyLine.compose(count: direction.count, best: direction.best,
+                                             worst: direction.worst, lang: l),
+            towards: model.directionLabels[direction.latestTripId].map { AppStrings.placeTowards(l, name: $0) },
+            c: c)
+    }
+
+    /// Ровно та же геометрия, что у строки проезда: `PassCourseGlyph` (40 pt),
+    /// зазор `PassCourseGlyph.spacing`, две строки текста. Иначе колонки двух
+    /// плашек стоят на разном отступе, и одно и то же «1 ч 19 мин» в них не
+    /// совпадает — ровно это и было видно на экране до фикса.
+    private func usualRow(course: Double, median: TimeInterval, second: String,
+                          towards: String?, c: AppTheme.Colors) -> some View {
+        HStack(spacing: PassCourseGlyph.spacing) {
+            PassCourseGlyph(course: course)
             VStack(alignment: .leading, spacing: 2) {
-                Text(directionPrimaryLine(direction, l))
-                    .font(.system(size: 13, weight: .semibold))
+                Text(CheckpointReading.clock(median, lang: lang.language))
+                    .font(.system(size: 17, weight: .heavy))
                     .foregroundStyle(c.text)
-                Text(directionSecondaryLine(direction, l))
+                Text(second)
                     .font(.system(size: 12))
                     .foregroundStyle(c.textSecondary)
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
+            if let towards {
+                Text(towards)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(c.textSecondary)
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(2)
+            }
         }
-    }
-
-    /// «1:30 · к морю» — без подписи направления (кэш геокодера промолчал)
-    /// остаётся только время.
-    private func directionPrimaryLine(_ direction: PlaceStats.Direction, _ l: LanguageManager.Language) -> String {
-        let time = CheckpointReading.clock(direction.median, lang: l)
-        guard let label = model.directionLabels[direction.latestTripId] else { return time }
-        return "\(time) · \(label)"
-    }
-
-    private func directionSecondaryLine(_ direction: PlaceStats.Direction, _ l: LanguageManager.Language) -> String {
-        let best = CheckpointReading.clock(direction.best, lang: l)
-        let worst = CheckpointReading.clock(direction.worst, lang: l)
-        let count = "\(AppStrings.formattedCount(direction.count, lang: l)) \(AppStrings.nounPasses(l, direction.count))"
-        return "\(best) · \(worst) · \(count)"
     }
 
     // MARK: - Проезды
@@ -304,23 +324,11 @@ struct PlaceDetailView: View {
             Haptics.tap()
             onOpenTrip(pass.tripId, model.focus(forPassOf: pass.tripId))
         } label: {
-            HStack(spacing: 12) {
-                Group {
-                    if pass.hasCourse {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(AppTheme.accent)
-                            .rotationEffect(.degrees(pass.course))
-                    } else {
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(c.textTertiary)
-                    }
-                }
-                .frame(width: 20)
+            HStack(spacing: PassCourseGlyph.spacing) {
+                PassCourseGlyph(course: pass.course)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(passTitle(pass, l))
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 15, weight: .heavy))
                         .foregroundStyle(c.text)
                     Text(passSubtitle(pass, l))
                         .font(.system(size: 12))
@@ -331,7 +339,8 @@ struct PlaceDetailView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(c.textTertiary)
             }
-            .padding(.horizontal, 14).padding(.vertical, 12)
+            .padding(.horizontal, Self.cardInset)
+            .padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
@@ -339,17 +348,23 @@ struct PlaceDetailView: View {
         .accessibilityIdentifier("place_pass_row")
     }
 
+    /// «Вс, 6 сент. · 12:40» — дата и час проезда одной строкой. Час нужен
+    /// потому, что «туда и обратно» в один день дают две строки с одной датой,
+    /// и различить их по ней нельзя.
     private func passTitle(_ pass: PlacePass, _ l: LanguageManager.Language) -> String {
-        Self.dayMonthWeekday[l]?.string(from: pass.timestamp) ?? ""
+        let date = Self.dayMonthWeekday[l]?.string(from: pass.timestamp) ?? ""
+        guard let time = Self.clockTime[l]?.string(from: pass.timestamp), !time.isEmpty else { return date }
+        return date.isEmpty ? time : "\(date) · \(time)"
     }
 
-    /// «1:30 · 128 км · От старта» — то же чтение, что у «Моментов»
+    /// «1 ч 30 мин · 128 км · от старта» — то же чтение, что у «Моментов»
     /// (`TripMomentsTimeline`), только подпись идёт ПОСЛЕ числа: список
     /// проездов — не лента одной поездки, и без слов «от старта» здесь не
-    /// сразу ясно, что означают эти два числа.
+    /// сразу ясно, что означают эти два числа. Со строчной и своим ключом —
+    /// это хвост фразы, а не её начало.
     private func passSubtitle(_ pass: PlacePass, _ l: LanguageManager.Language) -> String {
         let reading = CheckpointReading.text(elapsed: pass.elapsedFromStart, metres: pass.distanceFromStart,
                                               unit: distanceUnit, lang: l)
-        return "\(reading) · \(AppStrings.checkpointFromStart(l))"
+        return "\(reading) · \(AppStrings.placeFromStartInline(l))"
     }
 }
