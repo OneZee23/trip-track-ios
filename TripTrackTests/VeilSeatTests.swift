@@ -102,7 +102,8 @@ final class VeilSeatTests: XCTestCase {
     func testEachMapAsksForItsOwnSeatAndMargin() {
         let atlas = MapHostController().veilSeat
         XCTAssertEqual(atlas.placement, .belowAnnotations)
-        XCTAssertEqual(atlas.veil.margin, FogVeilView.defaultMargin, accuracy: 0.0001)
+        XCTAssertEqual(atlas.veil.margin, FogVeilView.atlasMargin, accuracy: 0.0001,
+                       "у «Атласа» свой запас: его щипают шире всех и не вращают")
 
         let recording = MapViewRepresentable(
             userTrackingMode: .constant(.none), zoomDelta: .constant(0)
@@ -323,6 +324,72 @@ final class VeilSeatTests: XCTestCase {
                                "\(name): полоса залезла в прорезь")
             }
         }
+    }
+
+    // MARK: Отставание привязки
+
+    /// Едет ли туман с картой пиксель в пиксель, когда камера ЛЕТИТ сама.
+    ///
+    /// Вопрос не теоретический: привязка живёт в `CADisplayLink`, а MapKit
+    /// двигает свой контент своим расписанием, и кадр разницы читается как
+    /// «пьяная» анимация зума — туман догоняет карту. Числа печатаются:
+    /// закрывать вопрос словами здесь нечем.
+    func testVeilKeepsUpWithAnAnimatedCameraFlight() throws {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let map = VeilHostMapView(frame: window.bounds)
+        window.addSubview(map)
+        window.makeKeyAndVisible()
+        map.setRegion(MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 45.03, longitude: 38.99),
+            latitudinalMeters: 4_000, longitudinalMeters: 4_000), animated: false)
+
+        let veil = FogVeilView(margin: FogVeilView.atlasMargin)
+        guard veil.attach(inside: map, map: map, seat: .belowAnnotations) else {
+            throw XCTSkip("дерево MKMapView на этом SDK незнакомое — мерить нечего")
+        }
+        veil.setLayer(revealedLayer())
+        let ready = expectation(description: "индекс и первый растр")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { ready.fulfill() }
+        wait(for: [ready], timeout: 5)
+        veil.maybeRender(map: map, settled: true)
+        let drawn = expectation(description: "растр лёг на экран")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { drawn.fulfill() }
+        wait(for: [drawn], timeout: 5)
+
+        // Полёт камеры: MapKit анимирует его сам, без единого колбэка о начале
+        // жеста — именно тот случай, ради которого вуаль и держит свой
+        // `CADisplayLink`.
+        veil.startTracking(tail: 2.5)
+        map.setRegion(MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 45.06, longitude: 39.05),
+            latitudinalMeters: 30_000, longitudinalMeters: 30_000), animated: true)
+
+        var samples: [CGFloat] = []
+        var cameraMoved = 0.0
+        var previous = map.visibleMapRect
+        let deadline = Date().addingTimeInterval(1.5)
+        while Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(1.0 / 60))
+            let now = map.visibleMapRect
+            cameraMoved += abs(now.midX - previous.midX) + abs(now.width - previous.width)
+            previous = now
+            if let lag = veil.syncLag(map: map) { samples.append(lag) }
+        }
+        XCTAssertGreaterThan(cameraMoved, 0,
+                             "камера обязана двигаться — иначе мерить нечего")
+        veil.detach()
+        window.isHidden = true
+
+        guard !samples.isEmpty else {
+            throw XCTSkip("слой ни разу не показался — presentation() пуст, мерить нечего")
+        }
+        let worst = samples.max() ?? 0
+        let mean = samples.reduce(0, +) / CGFloat(samples.count)
+        print(String(format: "[veil] отставание привязки: замеров %d, среднее %.3f pt, "
+                     + "максимум %.3f pt, камера прошла %.0f точек карты",
+                     samples.count, mean, worst, cameraMoved))
+        XCTAssertLessThan(mean, 1.0,
+                          "в среднем туман отстаёт от карты на \(mean) pt — это видно глазами")
     }
 
     // MARK: Поворот карты

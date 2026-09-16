@@ -170,6 +170,56 @@ final class FogVeilViewTests: XCTestCase {
         XCTAssertEqual(FogVeilBitmap.bandRects(rect: rect, grid: grid, bands: 3).count, 1)
     }
 
+    // MARK: Полосы и подмена растра
+
+    /// ВО ВРЕМЯ ЖЕСТА растр всегда один, сколько бы он ни стоил.
+    ///
+    /// Гейт и так пускает сюда только исчерпание растра (видимое вылезло за
+    /// край), но приезжать эта картинка обязана ЦЕЛИКОМ: три полосы ложатся на
+    /// экран в разные кадры движущейся карты, и это ровно те «подгружаемые
+    /// квадратики по краям», которые владелец увидел 16 сен.
+    func testAGestureNeverSplitsTheRasterIntoBands() {
+        XCTAssertEqual(FogVeilView.bandCount(settled: false, fullFrameCost: nil), 1)
+        XCTAssertEqual(FogVeilView.bandCount(settled: false, fullFrameCost: 0.4), 1,
+                       "даже на медленном устройстве жест получает один растр")
+    }
+
+    /// В покое полосы включает ЗАМЕР, а не вера.
+    ///
+    /// Пока полный кадр дешевле `bandThreshold`, три картинки в разные кадры
+    /// только вредят; дороже — лучше показать треть вовремя, чем всё с
+    /// опозданием.
+    func testBandsAtRestOnlyOnASlowDevice() {
+        XCTAssertEqual(FogVeilView.bandCount(settled: true, fullFrameCost: nil), 1,
+                       "до замера устройство считается быстрым")
+        XCTAssertEqual(FogVeilView.bandCount(settled: true, fullFrameCost: 0.05), 1)
+        XCTAssertEqual(FogVeilView.bandCount(settled: true, fullFrameCost: 0.2),
+                       FogVeilView.bands)
+        XCTAssertEqual(FogVeilView.bandCount(settled: true,
+                                             fullFrameCost: FogVeilView.bandThreshold), 1,
+                       "ровно на пороге ещё быстро")
+    }
+
+    /// Запас «Атласа» — два, и это не то же число, что у карты-героя.
+    ///
+    /// Полтора переживали щипок ровно до полутора экранов, а дальше край
+    /// растра выезжал на экран прямым швом между туманом с коридорами и ровным
+    /// туманом без них. Карта записи и полноэкранная карта поездки при этом
+    /// остаются на 2.2: их ещё и вращают.
+    func testAtlasAsksForAWiderRasterThanTheHeroMap() {
+        XCTAssertEqual(FogVeilView.atlasMargin, 2.0, accuracy: 0.0001)
+        XCTAssertGreaterThan(FogVeilView.atlasMargin, FogVeilView.defaultMargin)
+        XCTAssertEqual(FogVeilView.rotatingMargin, 2.2, accuracy: 0.0001,
+                       "запас вращаемой карты правится только прототипом")
+
+        // Цена запаса — площадь, и она растёт квадратом: 2.0² / 1.5² = 1.78.
+        let visible = MKMapRect(x: 1_000_000, y: 2_000_000, width: 100_000, height: 200_000)
+        let atlas = FogVeilView.renderRect(visible: visible, margin: FogVeilView.atlasMargin)
+        let hero = FogVeilView.renderRect(visible: visible, margin: FogVeilView.defaultMargin)
+        let growth = (atlas.width * atlas.height) / (hero.width * hero.height)
+        XCTAssertEqual(growth, 1.78, accuracy: 0.01)
+    }
+
     // MARK: Гейт перерисовки
 
     /// Жест даёт шестьдесят колбэков в секунду. Кадров тумана за ту же секунду
