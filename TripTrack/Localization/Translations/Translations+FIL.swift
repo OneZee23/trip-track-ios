@@ -1297,6 +1297,16 @@ extension Translations {
         "riddleLine.centre": "May sentrong heograpiko sa loob ng bilog na ito",
         "riddleLine.tripoint": "May lugar dito kung saan nagtatagpo ang hangganan ng tatlong bansa",
         "riddleSolvedTitle": "Nasagot ang palaisipan",
+        "milestoneTitle.firstRegion": "Unang beses sa rehiyong ito",
+        "milestoneTitle.easternmost": "Ang pinakasilangang daan sa ngayon",
+        "milestoneTitle.westernmost": "Ang pinakakanlurang daan sa ngayon",
+        "milestoneTitle.northernmost": "Ang pinakahilagang daan sa ngayon",
+        "milestoneTitle.southernmost": "Ang pinakatimog na daan sa ngayon",
+        "milestoneTitle.above2000": "Mataas sa kabundukan",
+        "milestoneTitle.belowSea": "Mas mababa sa lebel ng dagat",
+        "milestoneTitle.threeRegionsDay": "Tatlong rehiyon sa isang biyahe",
+        "milestoneTitle.countryBorder": "Natawid ang hangganan",
+        "milestoneTitle.nightPass": "Isang daanan sa bundok sa gabi",
     ]
 
 }

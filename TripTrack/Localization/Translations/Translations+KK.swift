@@ -1297,6 +1297,16 @@ extension Translations {
         "riddleLine.centre": "Осы шеңбердің ішінде бір жерде географиялық орталық жатыр",
         "riddleLine.tripoint": "Осы маңда бір жерде үш елдің шекарасы түйіседі",
         "riddleSolvedTitle": "Жұмбақ шешілді",
+        "milestoneTitle.firstRegion": "Бұл өңірде алғаш рет",
+        "milestoneTitle.easternmost": "Әзірге ең шығыстағы жол",
+        "milestoneTitle.westernmost": "Әзірге ең батыстағы жол",
+        "milestoneTitle.northernmost": "Әзірге ең солтүстіктегі жол",
+        "milestoneTitle.southernmost": "Әзірге ең оңтүстіктегі жол",
+        "milestoneTitle.above2000": "Таулардың биігінде",
+        "milestoneTitle.belowSea": "Теңіз деңгейінен төмен",
+        "milestoneTitle.threeRegionsDay": "Бір сапарда үш өңір",
+        "milestoneTitle.countryBorder": "Шекара кесіп өтілді",
+        "milestoneTitle.nightPass": "Түнгі асу",
     ]
 
 }

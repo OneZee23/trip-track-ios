@@ -1297,6 +1297,16 @@ extension Translations {
         "riddleLine.centre": "Di suatu tempat dalam lingkaran ini terletak pusat geografis",
         "riddleLine.tripoint": "Di suatu tempat di sini batas tiga negara bertemu",
         "riddleSolvedTitle": "Teka-teki terpecahkan",
+        "milestoneTitle.firstRegion": "Pertama kali di wilayah ini",
+        "milestoneTitle.easternmost": "Jalan paling timur sejauh ini",
+        "milestoneTitle.westernmost": "Jalan paling barat sejauh ini",
+        "milestoneTitle.northernmost": "Jalan paling utara sejauh ini",
+        "milestoneTitle.southernmost": "Jalan paling selatan sejauh ini",
+        "milestoneTitle.above2000": "Tinggi di pegunungan",
+        "milestoneTitle.belowSea": "Di bawah permukaan laut",
+        "milestoneTitle.threeRegionsDay": "Tiga wilayah dalam satu perjalanan",
+        "milestoneTitle.countryBorder": "Perbatasan dilintasi",
+        "milestoneTitle.nightPass": "Jalur pegunungan di malam hari",
     ]
 
 }

@@ -6788,7 +6788,58 @@ enum AppStrings {
     }
 
     /// Заголовок карточки решённой загадки.
+    ///
+    /// Ставится только у БЕЗЫМЯННОЙ загадки: у той, что пришла из бандла с
+    /// именем объекта, заголовок — само имя. Настоящее время строки типа
+    /// («Где-то в этом круге стоит маяк») под ним законно: круг остался на
+    /// карте, а найден — маяк.
     static func riddleSolvedTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "riddleSolvedTitle", ru: "Загадка решена", en: "Riddle solved")
+    }
+
+    /// Заголовок вехи на карточке печати и в подписи для VoiceOver.
+    ///
+    /// Имени в базе у вехи нет: оно зависит от языка телефона, а колонка — нет
+    /// (то же решение, что у «Отметки 2» в `TripMoments`). Собирается при
+    /// показе из ключа находки — см. `MilestoneCopy`.
+    ///
+    /// **Ни одного числа в тексте.** Порог высоты — две тысячи метров, и
+    /// вписать их сюда значило бы либо соврать на мильном телефоне («2000 м» у
+    /// человека, который меряет в футах), либо завести исключение в
+    /// `LocalizationTests` ради подписи, которой число не нужно вовсе:
+    /// «высоко в горах» отвечает на вопрос «что это за кружок» целиком.
+    static func milestoneTitle(_ lang: LanguageManager.Language, _ milestone: Milestone) -> String {
+        switch milestone {
+        case .firstRegion:
+            return tr(lang, "milestoneTitle.firstRegion",
+                      ru: "Первый раз в регионе", en: "First time in this region")
+        case .easternmost:
+            return tr(lang, "milestoneTitle.easternmost",
+                      ru: "Самая восточная дорога", en: "Farthest east so far")
+        case .westernmost:
+            return tr(lang, "milestoneTitle.westernmost",
+                      ru: "Самая западная дорога", en: "Farthest west so far")
+        case .northernmost:
+            return tr(lang, "milestoneTitle.northernmost",
+                      ru: "Самая северная дорога", en: "Farthest north so far")
+        case .southernmost:
+            return tr(lang, "milestoneTitle.southernmost",
+                      ru: "Самая южная дорога", en: "Farthest south so far")
+        case .above2000:
+            return tr(lang, "milestoneTitle.above2000",
+                      ru: "Высоко в горах", en: "High in the mountains")
+        case .belowSea:
+            return tr(lang, "milestoneTitle.belowSea",
+                      ru: "Ниже уровня моря", en: "Below sea level")
+        case .threeRegionsDay:
+            return tr(lang, "milestoneTitle.threeRegionsDay",
+                      ru: "Три региона за поездку", en: "Three regions in one trip")
+        case .countryBorder:
+            return tr(lang, "milestoneTitle.countryBorder",
+                      ru: "Граница пересечена", en: "Border crossed")
+        case .nightPass:
+            return tr(lang, "milestoneTitle.nightPass",
+                      ru: "Ночной перевал", en: "A pass at night")
+        }
     }
 }

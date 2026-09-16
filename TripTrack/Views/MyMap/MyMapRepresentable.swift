@@ -484,7 +484,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 .map {
                     SealAnnotation(
                         discovery: $0,
-                        accessibilityText: AppStrings.sealAccessibility(language, kind: $0.kind))
+                        accessibilityText: DiscoveryCopy.accessibility(for: $0, language))
                 }
             map.addAnnotations(added)
 

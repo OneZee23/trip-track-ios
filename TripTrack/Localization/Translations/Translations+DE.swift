@@ -1297,6 +1297,16 @@ extension Translations {
         "riddleLine.centre": "Irgendwo in diesem Kreis liegt ein geografischer Mittelpunkt",
         "riddleLine.tripoint": "Irgendwo hier treffen die Grenzen von drei Ländern aufeinander",
         "riddleSolvedTitle": "Rätsel gelöst",
+        "milestoneTitle.firstRegion": "Zum ersten Mal in dieser Region",
+        "milestoneTitle.easternmost": "Die östlichste Straße bisher",
+        "milestoneTitle.westernmost": "Die westlichste Straße bisher",
+        "milestoneTitle.northernmost": "Die nördlichste Straße bisher",
+        "milestoneTitle.southernmost": "Die südlichste Straße bisher",
+        "milestoneTitle.above2000": "Hoch in den Bergen",
+        "milestoneTitle.belowSea": "Unter dem Meeresspiegel",
+        "milestoneTitle.threeRegionsDay": "Drei Regionen in einer Fahrt",
+        "milestoneTitle.countryBorder": "Grenze überquert",
+        "milestoneTitle.nightPass": "Ein Pass bei Nacht",
     ]
 
 }

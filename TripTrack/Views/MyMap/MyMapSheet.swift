@@ -728,8 +728,8 @@ struct DiscoveryPeekSheet: View {
                     .textCase(.uppercase)
                     .foregroundStyle(Color(SealPainter.ring(for: discovery.kind)))
 
-                if let name = discovery.title, !name.isEmpty {
-                    Text(name)
+                if let headline {
+                    Text(headline)
                         .font(.inter(17, weight: .heavy))
                         .foregroundStyle(c.text)
                         .lineLimit(2)
@@ -739,9 +739,8 @@ struct DiscoveryPeekSheet: View {
                     .font(.inter(12))
                     .foregroundStyle(c.textTertiary)
 
-                if discovery.kind == .riddle {
-                    Text(RiddleCopy.line(
-                        for: RiddleCopy.type(ofRiddleKey: discovery.key), lang.language))
+                if let detail {
+                    Text(detail)
                         .font(.inter(12))
                         .foregroundStyle(c.textTertiary)
                         .lineLimit(2)
@@ -753,6 +752,35 @@ struct DiscoveryPeekSheet: View {
         .padding(.top, 14)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mymap_discovery_peek")
+    }
+
+    /// Имя объекта, если оно есть; иначе — слова, собранные из ключа.
+    ///
+    /// У вехи имени в базе нет вовсе (оно зависит от языка телефона), у
+    /// безымянной загадки бандла — тоже: без этих двух веток карточка
+    /// показывала бы одно слово «ВЕХА» и дату, то есть не отвечала бы на тот
+    /// единственный вопрос, ради которого написана.
+    private var headline: String? {
+        if let name = discovery.title, !name.isEmpty { return name }
+        switch discovery.kind {
+        case .milestone: return MilestoneCopy.title(forKey: discovery.key, lang.language)
+        case .riddle:    return AppStrings.riddleSolvedTitle(lang.language)
+        case .secret:    return nil
+        }
+    }
+
+    /// Строка под датой: у загадки — про что она была, у вехи — где это
+    /// случилось (регион, пара стран). У секрета — ничего: в бандле лежит
+    /// только хеш, и сказать о нём нечего до волны 3.
+    private var detail: String? {
+        switch discovery.kind {
+        case .riddle:
+            return RiddleCopy.line(for: RiddleCopy.type(ofRiddleKey: discovery.key), lang.language)
+        case .milestone:
+            return MilestoneCopy.place(forKey: discovery.key, lang.language)
+        case .secret:
+            return nil
+        }
     }
 }
 

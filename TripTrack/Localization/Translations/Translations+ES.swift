@@ -1297,6 +1297,16 @@ extension Translations {
         "riddleLine.centre": "En algún lugar de este círculo está un centro geográfico",
         "riddleLine.tripoint": "En algún lugar de aquí se juntan las fronteras de tres países",
         "riddleSolvedTitle": "Enigma resuelto",
+        "milestoneTitle.firstRegion": "Primera vez en esta región",
+        "milestoneTitle.easternmost": "La carretera más al este hasta ahora",
+        "milestoneTitle.westernmost": "La carretera más al oeste hasta ahora",
+        "milestoneTitle.northernmost": "La carretera más al norte hasta ahora",
+        "milestoneTitle.southernmost": "La carretera más al sur hasta ahora",
+        "milestoneTitle.above2000": "Alto en las montañas",
+        "milestoneTitle.belowSea": "Bajo el nivel del mar",
+        "milestoneTitle.threeRegionsDay": "Tres regiones en un viaje",
+        "milestoneTitle.countryBorder": "Frontera cruzada",
+        "milestoneTitle.nightPass": "Un puerto de montaña de noche",
     ]
 
 }

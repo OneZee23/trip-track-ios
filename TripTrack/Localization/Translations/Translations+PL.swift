@@ -1297,6 +1297,16 @@ extension Translations {
         "riddleLine.centre": "Gdzieś w tym okręgu leży środek geograficzny",
         "riddleLine.tripoint": "Gdzieś tutaj spotykają się granice trzech państw",
         "riddleSolvedTitle": "Zagadka rozwiązana",
+        "milestoneTitle.firstRegion": "Pierwszy raz w tym regionie",
+        "milestoneTitle.easternmost": "Najdalej na wschód jak dotąd",
+        "milestoneTitle.westernmost": "Najdalej na zachód jak dotąd",
+        "milestoneTitle.northernmost": "Najdalej na północ jak dotąd",
+        "milestoneTitle.southernmost": "Najdalej na południe jak dotąd",
+        "milestoneTitle.above2000": "Wysoko w górach",
+        "milestoneTitle.belowSea": "Poniżej poziomu morza",
+        "milestoneTitle.threeRegionsDay": "Trzy regiony w jednej trasie",
+        "milestoneTitle.countryBorder": "Granica przekroczona",
+        "milestoneTitle.nightPass": "Przełęcz nocą",
     ]
 
 }

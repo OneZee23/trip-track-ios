@@ -238,8 +238,7 @@ struct TripRevealedBlock: View {
             ForEach(found.prefix(Self.sealsShown)) { discovery in
                 Image(uiImage: SealPainter.image(
                     kind: discovery.kind, symbol: discovery.symbol, size: 28, scale: 3))
-                    .accessibilityLabel(
-                        AppStrings.sealAccessibility(lang.language, kind: discovery.kind))
+                    .accessibilityLabel(DiscoveryCopy.accessibility(for: discovery, lang.language))
             }
             if found.count > Self.sealsShown {
                 Text("+\(found.count - Self.sealsShown)")

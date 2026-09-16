@@ -1297,6 +1297,16 @@ extension Translations {
         "riddleLine.centre": "Bu dairenin içinde bir yerde coğrafi bir merkez var",
         "riddleLine.tripoint": "Buralarda bir yerde üç ülkenin sınırları birleşiyor",
         "riddleSolvedTitle": "Bilmece çözüldü",
+        "milestoneTitle.firstRegion": "Bu bölgede ilk kez",
+        "milestoneTitle.easternmost": "Şimdiye kadarki en doğudaki yol",
+        "milestoneTitle.westernmost": "Şimdiye kadarki en batıdaki yol",
+        "milestoneTitle.northernmost": "Şimdiye kadarki en kuzeydeki yol",
+        "milestoneTitle.southernmost": "Şimdiye kadarki en güneydeki yol",
+        "milestoneTitle.above2000": "Dağlarda yükseklerde",
+        "milestoneTitle.belowSea": "Deniz seviyesinin altında",
+        "milestoneTitle.threeRegionsDay": "Tek yolculukta üç bölge",
+        "milestoneTitle.countryBorder": "Sınır geçildi",
+        "milestoneTitle.nightPass": "Gece bir geçit",
     ]
 
 }

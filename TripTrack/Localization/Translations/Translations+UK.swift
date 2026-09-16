@@ -1297,6 +1297,16 @@ extension Translations {
         "riddleLine.centre": "Десь у цьому колі — географічний центр",
         "riddleLine.tripoint": "Десь тут сходяться кордони трьох країн",
         "riddleSolvedTitle": "Загадку розгадано",
+        "milestoneTitle.firstRegion": "Уперше в цьому регіоні",
+        "milestoneTitle.easternmost": "Найсхідніша дорога досі",
+        "milestoneTitle.westernmost": "Найзахідніша дорога досі",
+        "milestoneTitle.northernmost": "Найпівнічніша дорога досі",
+        "milestoneTitle.southernmost": "Найпівденніша дорога досі",
+        "milestoneTitle.above2000": "Високо в горах",
+        "milestoneTitle.belowSea": "Нижче рівня моря",
+        "milestoneTitle.threeRegionsDay": "Три регіони за одну поїздку",
+        "milestoneTitle.countryBorder": "Кордон перетнуто",
+        "milestoneTitle.nightPass": "Нічний перевал",
     ]
 
 }
