@@ -64,6 +64,12 @@ final class MyMapViewModel: ObservableObject {
     /// (`RiddleHint.plan`). Пусто, пока в каталоге ничего нет, — и это не
     /// поломка, а первый запуск до бандла.
     @Published private(set) var riddleHints: [RiddleHint] = []
+    /// «Журнал первооткрывателя» — всё, что печатает развёрнутый лист.
+    ///
+    /// Считается ЗДЕСЬ (`JournalBuilder.build`), а не в `body`: лист
+    /// перерисовывается на каждый кадр перетаскивания ручки, а в журнале и
+    /// сортировка печатей, и расстояние от открытого до каждого круга.
+    @Published private(set) var journal = Journal.empty
     /// Set through `select` / `selectRoad` only — the drawn route is kept in
     /// step from there, and a direct write would leave the two disagreeing.
     @Published private(set) var selection: Selection?
@@ -310,6 +316,7 @@ final class MyMapViewModel: ObservableObject {
 
         seals = found
         riddleHints = hints
+        rebuildJournal()
         // Печать, которую попросили показать, пока её ещё не было в списке.
         // Ожидание живёт РОВНО ОДНУ выборку: не нашлась — забыли. Иначе id,
         // которого в базе нет вовсе (удалили находку, гонка пула, чужая
@@ -338,6 +345,18 @@ final class MyMapViewModel: ObservableObject {
         // another device, region emptied by a rebuild).
         if let current = selection, resolve(current) == nil { selection = nil }
         refreshSelectedRoute()
+        rebuildJournal()
+    }
+
+    /// Журнал пересобирается ровно там, где меняется хоть одна его половина:
+    /// регионы и километры — в `apply`, печати и круги — в
+    /// `reloadDiscoveries`. Обе двери, а не одна: чужая карта до находок не
+    /// доходит вовсе (`reloadDiscoveries` выходит на первой строке), а
+    /// `.discoveriesChanged` приходит мимо `apply`.
+    private func rebuildJournal() {
+        journal = JournalBuilder.build(
+            exploration: exploration, revealed: revealed,
+            seals: seals, hints: riddleHints)
     }
 
     // MARK: - Selected route

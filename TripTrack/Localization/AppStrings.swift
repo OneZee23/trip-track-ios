@@ -1070,6 +1070,51 @@ enum AppStrings {
             .replacingOccurrences(of: "{kind}", with: sealKind(lang, kind: kind))
     }
 
+    // MARK: - Журнал первооткрывателя (0.7.0)
+
+    /// Первая группа развёрнутого листа: что открыто.
+    ///
+    /// То же слово, что у блока на экране итогов, но своим ключом: там это
+    /// заголовок карточки одной поездки, здесь — шапка группы В ВЕРХНЕМ
+    /// РЕГИСТРЕ, и одна строка на два места однажды разъехалась бы по форме.
+    static func journalOpenedSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journalOpenedSection", ru: "ОТКРЫТО", en: "OPENED")
+    }
+
+    /// «НАХОДКИ · 7» — вторая группа.
+    ///
+    /// Число приклеивается тем же способом, что у «ПОЕЗДКИ ЗДЕСЬ · 60»:
+    /// счётного слова рядом нет, и склонять таблицам нечего.
+    static func journalFindsSection(_ lang: LanguageManager.Language, count: Int) -> String {
+        let head = tr(lang, "journalFindsSectionHead", ru: "НАХОДКИ", en: "FINDS")
+        return count > 0 ? "\(head) · \(groupedNumber(count, lang))" : head
+    }
+
+    /// Пустая группа находок: печатей ещё нет, но они бывают.
+    static func journalNoFindsYet(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journalNoFindsYet",
+           ru: "Пока ничего не найдено — находки приходят с дорогой",
+           en: "Nothing found yet — finds come with the road")
+    }
+
+    /// Третья группа: круги подсказок, те же, что на карте.
+    static func journalRiddlesSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "journalRiddlesSection", ru: "ЗАГАДКИ РЯДОМ", en: "RIDDLES NEARBY")
+    }
+
+    /// «120 км до круга» — от открытой территории до КРАЯ круга.
+    ///
+    /// Расстояние приходит УЖЕ НАПЕЧАТАННЫМ (`Measure`), токеном `{distance}`:
+    /// единицу выбирает человек, а одиннадцать таблиц получают готовую строку —
+    /// живая интерполяция внутри `ru:`/`en:` до них не доедет.
+    static func journalRiddleDistance(
+        _ lang: LanguageManager.Language, distance: String
+    ) -> String {
+        tr(lang, "journalRiddleDistance",
+           ru: "{distance} до круга", en: "{distance} to the circle")
+            .replacingOccurrences(of: "{distance}", with: distance)
+    }
+
     /// Заголовок блока на экране итогов: что эта поездка открыла на карте.
     static func revealedTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "revealedTitle", ru: "Открыто", en: "Revealed")
@@ -1158,17 +1203,18 @@ enum AppStrings {
     static func decimalSeparator(_ lang: LanguageManager.Language) -> String {
         UnitNumber.decimalSeparator(code: lang.rawValue)
     }
+    /// Подсказка под карточкой региона.
+    ///
+    /// Города из неё ушли вместе со списком городов и кольцами покрытия
+    /// (0.7.0, спека §5): строка, обещающая то, чего за жестом больше нет, —
+    /// это не мелочь копирайтинга, а неверный экран.
     static func mapPullHint(_ lang: LanguageManager.Language) -> String {
         tr(lang, "mapPullHint",
-           ru: "Потяни вверх — города и поездки",
-           en: "Pull up — cities and trips")
+           ru: "Потяни вверх — поездки",
+           en: "Pull up — trips")
     }
-    static func mapCitiesSection(
-        _ lang: LanguageManager.Language, opened: Int, total: Int
-    ) -> String {
-        let head = tr(lang, "mapCitiesSectionHead", ru: "ГОРОДА", en: "CITIES")
-        return "\(head) · \(mapCitiesOfTotal(lang, opened: opened, total: total))"
-    }
+    // mapCitiesSection удалена в 0.7.0 вместе со списком городов на карточке
+    // региона: колец покрытия и процентов на «Атласе» больше нет.
     static func mapTripsSection(_ lang: LanguageManager.Language, count: Int) -> String {
         "\(tr(lang, "mapTripsSectionHead", ru: "ПОЕЗДКИ ЗДЕСЬ", en: "TRIPS HERE")) · \(count)"
     }

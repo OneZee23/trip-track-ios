@@ -77,6 +77,10 @@ struct MyMapView: View {
                 vm: vm,
                 isSummaryExpanded: $isSummaryExpanded,
                 onOpenTrip: { openedTrip = OpenedTrip(id: $0) },
+                // Камера ДВИГАЕТСЯ — в отличие от тапа по печати на карте: из
+                // списка человек не знает, в какой угол мира смотрит карта, и
+                // карточка над пустым местом не отвечает «где это было».
+                onOpenDiscovery: { vm.focusDiscovery($0) },
                 onShare: shareSummary
             )
         }

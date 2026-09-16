@@ -13,6 +13,10 @@ struct MyMapSheet: View {
     /// Owned by the screen so it can hide the tab bar under the open panel.
     @Binding var isSummaryExpanded: Bool
     var onOpenTrip: (UUID) -> Void
+    /// Тап по печати в журнале. Замыканием, а не `vm.select` прямо здесь:
+    /// в волне 4 у находки появится своя карточка, и меняться должен один
+    /// вызов на экране, а не строка внутри списка.
+    var onOpenDiscovery: (UUID) -> Void
     var onShare: () -> Void
 
     @EnvironmentObject private var lang: LanguageManager
@@ -42,10 +46,30 @@ struct MyMapSheet: View {
         collapsedHeight(bottomInset: UIApplication.tt_safeAreaInsets?.bottom ?? 0)
     }
 
-    /// Grabber + title + one row per region + the bottom padding.
-    static func regionListHeight(count: Int) -> CGFloat {
-        50 + CGFloat(max(count, 1)) * 56 + 24
+    /// Высота журнала под его содержимое: ручка с шапкой, затем три группы —
+    /// строки регионов, ряды печатей по пять в ряду, строки загадок.
+    ///
+    /// Считается по числу строк, а не берётся константой: лист на 520 при трёх
+    /// регионах был наполовину пустым, и это уже чинили однажды. Пустая группа
+    /// не занимает ничего — кроме «Находок», у которых есть своя пустая
+    /// строка.
+    static func journalHeight(regions: Int, finds: Int, riddles: Int) -> CGFloat {
+        let head: CGFloat = 50
+        let opened = group(rows: max(regions, 1), rowHeight: 56)
+        let sealRows = max(1, Int(ceil(Double(finds) / Double(sealsPerRow))))
+        let found = group(rows: sealRows, rowHeight: 60)
+        let near = riddles == 0 ? 0 : group(rows: riddles, rowHeight: 52)
+        return head + opened + found + near + 24
     }
+
+    /// Заголовок группы (22 сверху, 4 снизу, 15 строка) плюс её строки.
+    private static func group(rows: Int, rowHeight: CGFloat) -> CGFloat {
+        41 + CGFloat(rows) * rowHeight
+    }
+
+    /// Печатей в ряду. Пять по 44 pt с зазорами укладываются даже на самом
+    /// узком экране (SE: 375 − 32 поля = 343).
+    static let sealsPerRow = 5
 
     @State private var isExpanded = false
     @State private var showAllTrips = false
@@ -57,7 +81,7 @@ struct MyMapSheet: View {
                 Spacer(minLength: 0)
                 if vm.selection == nil {
                     if isSummaryExpanded {
-                        regionListPanel(maxHeight: geo.size.height, safeBottom: geo.safeAreaInsets.bottom)
+                        journalPanel(maxHeight: geo.size.height, safeBottom: geo.safeAreaInsets.bottom)
                             .transition(.move(edge: .bottom))
                     } else {
                         summaryCard
@@ -86,11 +110,22 @@ struct MyMapSheet: View {
 
     // MARK: - Summary, pulled up
 
+    /// «Журнал первооткрывателя» (спека §5): три группы — что открыто, что
+    /// найдено, какие загадки рядом.
+    ///
     /// The collapsed summary carries a grabber in the canon frame, and a
-    /// grabber that does nothing is a lie. Pulling it up lists every region
-    /// you have opened — the same «полная детализация» rule the object cards
-    /// follow, applied to the summary's own subject.
-    private func regionListPanel(maxHeight: CGFloat, safeBottom: CGFloat) -> some View {
+    /// grabber that does nothing is a lie. Pulling it up opens the journal —
+    /// the same «полная детализация» rule the object cards follow, applied to
+    /// the summary's own subject.
+    ///
+    /// Процентов, колец покрытия и «закрытых» регионов здесь больше нет:
+    /// журнал отвечает на вопрос «что я открыл и нашёл», а не «сколько
+    /// процентов края мне осталось закрасить» — карта территорий, из-за
+    /// которой экран читался как Risk, ушла вместе с ними.
+    ///
+    /// Всё, что печатают эти строки, посчитано вне `body` — в
+    /// `MyMapViewModel.journal`.
+    private func journalPanel(maxHeight: CGFloat, safeBottom: CGFloat) -> some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(spacing: 0) {
             grabber(c)
@@ -120,16 +155,10 @@ struct MyMapSheet: View {
             .padding(.bottom, 6)
 
             ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(vm.exploration.regions) { region in
-                        Button {
-                            Haptics.tap()
-                            vm.select(.region(region.id))
-                        } label: {
-                            regionRow(region, c)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                VStack(alignment: .leading, spacing: 0) {
+                    openedGroup(c)
+                    findsGroup(c)
+                    riddlesGroup(c)
                 }
                 .padding(.bottom, 20 + safeBottom)
             }
@@ -137,8 +166,10 @@ struct MyMapSheet: View {
         .frame(maxWidth: .infinity)
         // Sized to what is in it. A fixed 520 meant three regions floated at
         // the top of a panel that was mostly empty white.
-        .frame(height: max(180, min(Self.regionListHeight(count: vm.exploration.regionCount) + safeBottom,
-                                    min(520, maxHeight * 0.7) + safeBottom) - drag))
+        .frame(height: max(180, min(Self.journalHeight(regions: vm.journal.regions.count,
+                                                       finds: vm.journal.finds.count,
+                                                       riddles: vm.journal.riddles.count) + safeBottom,
+                                    min(560, maxHeight * 0.74) + safeBottom) - drag))
         .background(c.bg, in: UnevenRoundedRectangle(
             topLeadingRadius: 22, bottomLeadingRadius: 0,
             bottomTrailingRadius: 0, topTrailingRadius: 22, style: .continuous
@@ -157,7 +188,117 @@ struct MyMapSheet: View {
         }
         .shadow(color: .black.opacity(0.25), radius: 18, y: -4)
         .accessibilityElement(children: .contain)
+        // Имя осталось прежним нарочно: по нему панель находит обход
+        // `MyMapTourTests`, а первая его кнопка — по-прежнему строка региона.
         .accessibilityIdentifier("mymap_region_list")
+    }
+
+    // MARK: - Журнал · Открыто
+
+    /// Первая группа: сколько открыто и где. Итог печатает шапка панели —
+    /// второй раз число не повторяется.
+    @ViewBuilder
+    private func openedGroup(_ c: AppTheme.Colors) -> some View {
+        sectionTitle(AppStrings.journalOpenedSection(lang.language), c)
+        ForEach(vm.journal.regions) { region in
+            Button {
+                Haptics.tap()
+                vm.select(.region(region.id))
+            } label: {
+                regionRow(region, c)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Журнал · Находки
+
+    /// Вторая группа: печати сеткой, свежая первая.
+    ///
+    /// Группа показывается ВСЕГДА, и пустая тоже: находки — половина замысла
+    /// версии, и человек, у которого их ещё нет, обязан узнать, что они
+    /// бывают. Загадки ниже так себя не ведут — «рядом» без единого круга это
+    /// не обещание, а пустое место.
+    @ViewBuilder
+    private func findsGroup(_ c: AppTheme.Colors) -> some View {
+        sectionTitle(
+            AppStrings.journalFindsSection(lang.language, count: vm.journal.finds.count), c)
+
+        if vm.journal.finds.isEmpty {
+            Text(AppStrings.journalNoFindsYet(lang.language))
+                .font(.inter(13))
+                .foregroundStyle(c.textTertiary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+        } else {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 10),
+                               count: Self.sealsPerRow),
+                spacing: 10
+            ) {
+                ForEach(vm.journal.finds) { find in
+                    Button {
+                        Haptics.tap()
+                        onOpenDiscovery(find.id)
+                    } label: {
+                        // Картинка кэширована по (вид, символ, масштаб) —
+                        // `SealPainter` рисует её один раз на всё приложение.
+                        Image(uiImage: SealPainter.image(
+                            kind: find.kind, symbol: find.symbol, size: 44, scale: 3))
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(PressableCardStyle())
+                    .accessibilityLabel(DiscoveryCopy.accessibility(for: find, lang.language))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+        }
+    }
+
+    // MARK: - Журнал · Загадки рядом
+
+    /// Третья группа: те же три круга, что стоят на карте, — строкой про то,
+    /// что ищется, и расстоянием до края круга.
+    @ViewBuilder
+    private func riddlesGroup(_ c: AppTheme.Colors) -> some View {
+        if !vm.journal.riddles.isEmpty {
+            sectionTitle(AppStrings.journalRiddlesSection(lang.language), c)
+            ForEach(vm.journal.riddles) { riddle in
+                riddleRow(riddle, c)
+            }
+        }
+    }
+
+    private func riddleRow(_ riddle: Journal.NearbyRiddle, _ c: AppTheme.Colors) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text("?")
+                .font(.inter(15, weight: .heavy))
+                .foregroundStyle(Color(SealPainter.ring(for: .riddle)))
+                .frame(width: 22, height: 22)
+                .background(Color(SealPainter.ring(for: .riddle)).opacity(0.14), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(RiddleCopy.line(for: riddle.type, lang.language))
+                    .font(.inter(14, weight: .semibold))
+                    .foregroundStyle(c.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Внутри круга расстояния нет: «0 км до круга» — это не ответ,
+                // а след формулы.
+                if riddle.metresToEdge > 0 {
+                    Text(AppStrings.journalRiddleDistance(
+                        lang.language,
+                        distance: Measure.distance(
+                            metres: riddle.metresToEdge, unit: distanceUnit,
+                            lang: lang.language)))
+                        .font(.inter(12))
+                        .foregroundStyle(c.textTertiary)
+                }
+            }
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 
     private func regionRow(_ region: MapRegionStat, _ c: AppTheme.Colors) -> some View {
@@ -277,20 +418,18 @@ struct MyMapSheet: View {
         .accessibilityIdentifier("mymap_summary")
     }
 
-    /// Nothing to list when you have not driven anywhere yet — the empty
+    /// Nothing to open when you have not driven anywhere yet — the empty
     /// state already says so on the map itself.
     ///
-    /// With a single region the list was a one-row copy of the line you just
-    /// tapped, under half a screen of nothing. Go straight to that region's
-    /// card, which is what you were reaching for anyway.
+    /// Прежнего обхода «один регион — сразу его карточка» здесь больше нет:
+    /// он был верен, пока лист был СПИСКОМ РЕГИОНОВ и при одном регионе
+    /// повторял строку, по которой только что нажали. Журнал при одном
+    /// регионе несёт ещё находки и загадки, и увести человека мимо них было
+    /// бы потерей, а не сокращением.
     private func expandSummary() {
-        guard !vm.exploration.regions.isEmpty else { return }
+        guard !vm.journal.isEmpty else { return }
         Haptics.selection()
-        if vm.exploration.regions.count == 1, let only = vm.exploration.regions.first {
-            vm.select(.region(only.id))
-        } else {
-            isSummaryExpanded = true
-        }
+        isSummaryExpanded = true
     }
 
     // MARK: - Selected object
@@ -426,7 +565,6 @@ struct MyMapSheet: View {
         .padding(.top, 16)
 
         if isExpanded {
-            citiesSection(region, c)
             tripsSection(region, c)
         } else {
             Text(AppStrings.mapPullHint(lang.language))
@@ -473,39 +611,12 @@ struct MyMapSheet: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// «<1%» rather than «0%»: you HAVE been there, and the card saying zero
-    /// after a real trip reads as a bug.
-    private func percentText(_ value: Double) -> String {
-        let percent = value * 100
-        if percent > 0 && percent < 1 { return "<1%" }
-        return "\(Int(percent.rounded()))%"
-    }
-
     // MARK: - Region · expanded
 
-    @ViewBuilder
-    private func citiesSection(_ region: MapRegionStat, _ c: AppTheme.Colors) -> some View {
-        sectionTitle(AppStrings.mapCitiesSection(
-            lang.language, opened: region.visitedCityCount, total: region.totalCities), c)
-
-        ForEach(region.cities) { city in
-            HStack(spacing: 12) {
-                Text(city.localizedName(lang.language))
-                    .font(.inter(15, weight: .semibold))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                CoverageRing(value: city.coverage)
-                    .frame(width: 22, height: 22)
-                Text(percentText(city.coverage))
-                    .font(.inter(12, weight: .semibold))
-                    .foregroundStyle(c.textSecondary)
-                    .frame(width: 38, alignment: .trailing)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
-        }
-    }
+    // Списка городов с кольцами покрытия здесь больше нет (0.7.0, спека §5).
+    // Кольцо отвечало на вопрос «сколько процентов города закрашено», то есть
+    // предлагало закрашивать; туман спрашивает другое — где ты был. Вместе с
+    // ним ушли `percentText` и `CoverageRing`.
 
     @ViewBuilder
     private func tripsSection(_ region: MapRegionStat, _ c: AppTheme.Colors) -> some View {
@@ -785,23 +896,6 @@ struct DiscoveryPeekSheet: View {
 }
 
 // MARK: - Pieces
-
-/// Canon `city-row` ring: a dashed track with the covered arc drawn over it.
-struct CoverageRing: View {
-    let value: Double
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(AppTheme.accent.opacity(0.25),
-                        style: StrokeStyle(lineWidth: 2, dash: [2.5, 2.5]))
-            Circle()
-                .trim(from: 0, to: max(0.02, min(1, value)))
-                .stroke(AppTheme.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-        }
-    }
-}
 
 /// Trip thumbnail: the photo if there is one, otherwise the route drawn from
 /// the trip's own preview polyline — never a generic icon, since the shape of
