@@ -34,10 +34,12 @@ final class BadgeDefinitionsTests: XCTestCase {
                       "без этого пересчёт статистики стирал бы значок с полки")
     }
 
-    /// `secret_` + id секрета из бандла. Ключ собирается СТРОКОЙ в
+    /// `secret_` + id секрета из каталога. Ключ собирается СТРОКОЙ в
     /// `DiscoveryProcessor.unlockBadges`, и компилятор здесь не помогает.
-    func testBadgeIdMatchesTheBundledSecretId() throws {
-        let ids = BundleSecretCatalog().all().map(\.id)
+    /// Каталог берётся фикстурой: в бандле 0.7.0 секретов нет, запись
+    /// приезжает с сервера — а ключ обязан совпадать с тем, что в ней.
+    func testBadgeIdMatchesTheSecretIdInTheCatalogue() throws {
+        let ids = try SecretFixtures.komsomolskyCatalog().all().map(\.id)
         XCTAssertTrue(ids.contains("komsomolsky"))
         XCTAssertEqual("secret_" + "komsomolsky", try komsomolsky().id)
     }

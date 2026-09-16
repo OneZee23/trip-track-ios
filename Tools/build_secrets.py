@@ -938,14 +938,20 @@ def secret_hash(salt, cell):
     return value
 
 
-def build_authored(path):
-    """`authored.json` → `TripTrack/Resources/Secrets.json`.
+def build_authored(path, out=None):
+    """`authored.json` → файл каталога секретов (`--out`).
 
-    В бандл уезжают ТОЛЬКО усечённые хеши: ни координаты, ни названия, ни
-    истории. Полигон-исходник остаётся здесь, в `Tools/` (см. `Tools/README`),
-    и в приложение не копируется — иначе список авторских секретов читался бы
-    прямо из бандла, а вся ветка «найди сам» превратилась бы в список
+    Уезжают ТОЛЬКО усечённые хеши: ни координаты, ни названия, ни истории.
+    Полигон-исходник остаётся здесь, в `Tools/` (см. `Tools/README`), и в
+    приложение не копируется — иначе список авторских секретов читался бы
+    прямо из файла, а вся ветка «найди сам» превратилась бы в список
     координат.
+
+    Куда писать — решает вызывающий, и в 0.7.0 это НЕ бандл приложения:
+    `TripTrack/Resources/Secrets.json` уезжает пустым, а настоящие хеши
+    живут тестовой фикстурой `TripTrackTests/Fixtures/Secrets-komsomolsky.json`
+    и строкой на сервере (`docs/secrets/*.sql`). Секрет становится находимым
+    после активации строки, без обновления приложения.
     """
     with open(path, encoding="utf-8") as fh:
         authored = json.load(fh)
@@ -975,7 +981,7 @@ def build_authored(path):
         })
 
     payload = {"v": 1, "salt": salt, "secrets": records}
-    out_path = os.path.normpath(SECRETS)
+    out_path = os.path.normpath(out or SECRETS)
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
         fh.write("\n")
@@ -986,12 +992,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--types", default="", help="comma-separated subset to build")
     parser.add_argument("--authored", nargs="?", const=AUTHORED, default=None,
-                        help="build TripTrack/Resources/Secrets.json from authored.json "
+                        help="build a secret catalogue from authored.json "
                              "(hashes only — no coordinates leave Tools/) and exit")
+    parser.add_argument("--out", default=None,
+                        help="where --authored writes (default: "
+                             "TripTrack/Resources/Secrets.json, which in 0.7.0 ships "
+                             "EMPTY — the real hashes go to the test fixture "
+                             "TripTrackTests/Fixtures/Secrets-komsomolsky.json)")
     args = parser.parse_args()
 
     if args.authored:
-        build_authored(os.path.normpath(args.authored))
+        build_authored(os.path.normpath(args.authored), out=args.out)
         return
 
     wanted = set(filter(None, args.types.split(","))) or None

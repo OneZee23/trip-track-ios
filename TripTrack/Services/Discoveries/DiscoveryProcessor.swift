@@ -40,9 +40,9 @@ final class DiscoveryProcessor {
 
     static let shared = DiscoveryProcessor(
         // Загадки — бандловые (`Riddles.json`, открытые данные), секреты — с
-        // сервера через кэш (`CachedSecretCatalog`), у которого за спиной тот же
-        // бандловый `Secrets.json`: без сети и на первом запуске каталог всё
-        // равно есть.
+        // сервера через кэш (`CachedSecretCatalog`), у которого за спиной
+        // бандловый `Secrets.json` — в 0.7.0 пустой: до первого ответа сервера
+        // секретов нет, и это честнее безымянной печати.
         riddleCatalog: BundleRiddleCatalog(), secretCatalog: CachedSecretCatalog.shared
     )
 

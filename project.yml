@@ -231,6 +231,11 @@ targets:
       # проверяет НАСТОЯЩИЙ файл, а без этой строки он проверял бы пустоту.
       - path: TripTrack/Resources/Riddles.json
         buildPhase: resources
+      # Бандловый `Secrets.json` в 0.7.0 ПУСТ (авторские секреты приезжают
+      # каталогом с сервера), и тест проверяет именно это. Настоящие хеши
+      # Комсомольского лежат фикстурой в `TripTrackTests/Fixtures/` — она
+      # попадает в ресурсы тестового бандла вместе со всей папкой
+      # `TripTrackTests` выше, отдельной строки ей не нужно.
       - path: TripTrack/Resources/Secrets.json
         buildPhase: resources
     dependencies:

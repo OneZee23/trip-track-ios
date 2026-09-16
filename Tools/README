@@ -3,8 +3,8 @@
 
 build_map_regions.py   Natural Earth → TripTrack/Resources/MapRegions.json
 build_secrets.py       OSM/Wikidata  → Tools/riddles.json (загадки Атласа)
-build_secrets.py --authored
-                       authored.json → TripTrack/Resources/Secrets.json
+build_secrets.py --authored --out ФАЙЛ
+                       authored.json → файл каталога секретов
 install_brand_assets.py, install_vehicle_sprites.py,
 normalize_vehicle.py, recolor_vehicle.py
                        картинки машин и бренда в Assets.xcassets
@@ -17,12 +17,21 @@ normalize_vehicle.py, recolor_vehicle.py
 `SealSymbol`), `reach` и либо `polygon` (имя файла GeoJSON рядом), либо
 `point: [lat, lon]`.
 
-    python3 Tools/build_secrets.py --authored Tools/authored.json
+    python3 Tools/build_secrets.py --authored Tools/authored.json \
+        --out TripTrackTests/Fixtures/Secrets-komsomolsky.json
 
-В `TripTrack/Resources/Secrets.json` уезжают ТОЛЬКО усечённые хеши ячеек
-geohash-7 (`SHA-256(соль ‖ ячейка)`, первые четыре байта). Ни координат, ни
-названий, ни историй в бандле нет и быть не должно: иначе список секретов
-читался бы прямо из бандла. Контуры остаются здесь, в `Tools/`.
+В 0.7.0 бандл приложения (`TripTrack/Resources/Secrets.json`) уезжает ПУСТЫМ:
+авторский секрет приходит каталогом с сервера (`/secrets/catalog`, опрос раз
+в сутки) и становится находимым после активации строки вместе с её историей —
+без обновления приложения. Поэтому `--out` и появился: настоящие хеши нужны
+тестам (`TripTrackTests/Fixtures/Secrets-komsomolsky.json`), а не бандлу. Без
+`--out` скрипт по-прежнему пишет в бандл — так собирают набор для будущей
+версии, где секреты поедут с приложением.
+
+В файл каталога уезжают ТОЛЬКО усечённые хеши ячеек geohash-7
+(`SHA-256(соль ‖ ячейка)`, первые четыре байта). Ни координат, ни названий, ни
+историй в нём нет и быть не должно: иначе список секретов читался бы прямо из
+файла. Контуры остаются здесь, в `Tools/`.
 
 Покрытие считается тем же правилом, что у бэкендового
 `tools/secret-cells.ts --polygon` (центр ячейки внутри полигона, без

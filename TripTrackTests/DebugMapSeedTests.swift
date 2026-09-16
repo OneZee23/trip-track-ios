@@ -59,12 +59,13 @@ final class DebugMapSeedTests: XCTestCase {
     }
 
     /// Координата секрета — внутри Комсомольского, а не «где-то в Краснодаре»:
-    /// печать обязана стоять в районе, ячейки которого лежат в `Secrets.json`.
+    /// печать обязана стоять в районе, ячейки которого несёт настоящая запись
+    /// секрета (в бандле её нет — она приезжает с сервера, а здесь фикстура).
     func testSecretSitsInsideTheDistrict() throws {
         let centre = DebugMapSeed.komsomolskyCentre
-        let catalog = BundleSecretCatalog.shared
+        let catalog = try SecretFixtures.komsomolskyCatalog()
         let record = try XCTUnwrap(catalog.all().first { $0.id == "komsomolsky" },
-                                   "секрет лежит в бандле")
+                                   "в фикстуре есть запись секрета")
         let cell = GeohashEncoder.encode(
             latitude: centre.latitude, longitude: centre.longitude, precision: 7)
         let hash = SecretHash.truncated(salt: catalog.salt, geohash7: cell)

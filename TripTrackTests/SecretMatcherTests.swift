@@ -134,16 +134,17 @@ final class SecretMatcherTests: XCTestCase {
         XCTAssertEqual(SecretMatcher.matches(track: track, catalog: [record(cells: cells)], salt: salt).count, 1)
     }
 
-    // MARK: - Комсомольский, настоящая запись из бандла
+    // MARK: - Комсомольский, настоящая запись каталога
 
     /// Центр bbox микрорайона Комсомольский (Краснодар). Единственная
     /// координата района во ВСЁМ клиенте — и она живёт в тесте, а не в коде:
-    /// в бандле только хеши.
+    /// в каталоге только хеши, а в бандле 0.7.0 нет и их.
     private let komsomolsky = CLLocationCoordinate2D(latitude: 45.034346, longitude: 39.101372)
 
+    /// Запись из фикстуры — тот же файл, что печатает
+    /// `build_secrets.py --authored` и что отдаст сервер после активации.
     private func bundledKomsomolsky() throws -> (record: SecretRecord, salt: String) {
-        let catalog = BundleSecretCatalog()
-        return (try XCTUnwrap(catalog.all().first { $0.id == "komsomolsky" }), catalog.salt)
+        try SecretFixtures.komsomolsky()
     }
 
     /// Проезд через район — находка. Без `reach`: у площадного секрета
