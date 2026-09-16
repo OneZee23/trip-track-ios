@@ -710,6 +710,7 @@ extension Translations {
         "followDepthNote": "La lista llega como máximo a 3 niveles de conexiones",
         "moreActions": "Más",
         "openRouteMapA11y": "Abrir el mapa de la ruta",
+        "openPhotoAction": "Abrir foto",
         "editTitleA11y": "Edita el título del viaje",
         "blockedListLoadFailed": "No se pudo cargar la lista",
         "edit": "Editar",

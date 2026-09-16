@@ -186,7 +186,20 @@ struct TripDetailView: View {
     @State private var unpublishMessageText = ""
     @State private var reactionEntries: [SocialReactionEntry] = []
     @State private var selectedReactorAuthor: SocialAuthor?
-    @State private var isMapFullscreen = false
+    /// Карта поездки — ОДНА на экран. Герой и полноэкранная раскладка это
+    /// два её представления, а не две карты: см. `TripMapHost`.
+    @StateObject private var mapHost = TripMapHost()
+    @State private var mapExpansion: MapExpansionState = .collapsed
+    /// Рамка карты-героя в координатах окна, снятая в момент раскрытия.
+    /// Считается с самой `MKMapView`, а не через `preference`: та
+    /// пересчитывалась бы на каждый кадр прокрутки ради числа, нужного раз.
+    @State private var heroMapFrame: CGRect = .zero
+    /// Хром полноэкранной карты. Отдельно от состояния: он проявляется
+    /// ПОСЛЕ движения (`MapExpansionState.chromeDelay`).
+    @State private var mapChromeVisible = false
+    /// Меняется — карта вписывает маршрут в свои нынешние границы. Бумается
+    /// ровно дважды на раскрытие: когда кадр приехал и когда вернулся.
+    @State private var mapFitTick = 0
     /// Drives the «Прожить заново» CTA on the poster. Owned via
     /// `@StateObject` so the timer survives view re-renders and is
     /// stopped cleanly on `.onDisappear`. Since the fullscreen replay
@@ -717,6 +730,11 @@ struct TripDetailView: View {
         .sheet(item: $selectedCheckpoint) { checkpointPresentation($0) }
         .sheet(item: $selectedSegment) { segmentPresentation($0) }
         .sheet(isPresented: $showJourneyComposer) { journeyPresentation() }
+        // Полноэкранная карта — НЕ презентация системы, а слой этого экрана,
+        // в корне и поверх всего. Отсюда и бесшовность: карта в нём та же,
+        // что в герое, и переезд ей стоит переноса вида, а не сборки второй
+        // `MKMapView` за едущей шторкой.
+        .overlay { fullscreenMapLayer() }
     }
 
     /// Лист отметки — отдельным методом по той же причине, что и остальные:
@@ -900,40 +918,10 @@ struct TripDetailView: View {
             enabled: pushPath == nil
         ))
         .hideAppTabBar()
-        .fullScreenCover(isPresented: $isMapFullscreen) {
-            // Replay lives HERE now, not on a screen of its own: you open
-            // the map, press play, and watch the drive on the map you were
-            // already looking at. Timestamps decide whether it can — a
-            // preview route without per-point times gets the plain map.
-            // The route is drawn at full resolution; the REPLAY walks the
-            // downsampled series (`replayInput`, ≤300 points). The trail
-            // overlay is rebuilt every time the playhead passes a waypoint,
-            // so handing it a raw ten-hour track would mean tens of thousands
-            // of rebuilds of an ever-growing polyline — the exact reason this
-            // cap was written in the first place.
-            FullscreenMapSheet(
-                coordinates: cachedCoordinates,
-                speeds: cachedSpeeds,
-                timestamps: replayInput.timestamps,
-                replayCoordinates: replayInput.coords,
-                replaySpeeds: replayInput.speeds,
-                distanceMeters: trip?.distance ?? 0,
-                isOwnTrip: isOwn,
-                fogCutoffDate: trip?.endDate,
-                checkpointMarkers: checkpointMarkers,
-                photoPins: photoPins,
-                onPhotoTap: { openPhoto(id: $0) },
-                // Отмечать можно только СВОЮ поездку и только когда есть трек:
-                // «сколько до сюда» считается по нему, а у чужой поездки его нет.
-                trackPoints: isOwn ? (trip?.trackPoints ?? []) : [],
-                tripStartDate: trip?.startDate,
-                onAddCheckpoint: checkpointAdder,
-                showsFog: isOwn,
-                treatAsPreview: isPreviewRoute,
-                language: lang.language,
-                carColorName: tripCarColorName
-            )
-        }
+        // Экран ушёл — карта уходит с ним. Единственное место, где с общей
+        // карты снимается вуаль: `dismantleUIView` у неё молчит, иначе
+        // каждое раскрытие роняло бы посадку (см. `TripMapHost`).
+        .onDisappear { mapHost.tearDown() }
         .appConfirm(
             isPresented: $showDeleteConfirm,
             title: AppStrings.deleteTrip(lang.language),
@@ -1046,12 +1034,17 @@ struct TripDetailView: View {
             reloadPlaceChips()
             reloadSegmentHistory()
         }
-        .fullScreenCover(isPresented: Binding(
-            get: { selectedPhotoIndex != nil },
-            set: { if !$0 { selectedPhotoIndex = nil } }
-        )) {
+        // Просмотрщик — тоже слой, а не `fullScreenCover`.
+        //
+        // Двух системных презентаций подряд UIKit не даёт вовсе, и раньше
+        // это стоило 450 мс ожидания между картой и снимком. Слой снимает
+        // и запрет, и ожидание, и заодно шторку: снимок проявляется
+        // кроссфейдом за 0.2 с, а не выезжает снизу поверх карты, с которой
+        // его открыли.
+        .overlay {
             if let index = selectedPhotoIndex {
                 photoViewer(index: index)
+                    .transition(.opacity)
             }
         }
         .overlay {
@@ -1675,9 +1668,17 @@ isOwn
         var pins: [PhotoPin] = []
         for item in placed {
             let image = await PhotoStorageService.loadThumbnail(filename: item.filename, maxSize: 80)
+            // «Сколько до сюда» готовит экран: у него трек, единица и язык.
+            // Карточка предпросмотра под булавкой только печатает готовое.
+            let reading = placement(ofPhoto: item.id).map {
+                CheckpointReading.text(
+                    elapsed: $0.elapsedFromStart, metres: $0.distanceFromStart,
+                    unit: distanceUnit, lang: lang.language)
+            }
             pins.append(PhotoPin(
                 id: item.id, latitude: item.latitude, longitude: item.longitude, image: image,
-                accessibilityLabel: AppStrings.nounPhotos(lang.language, 1)))
+                accessibilityLabel: AppStrings.nounPhotos(lang.language, 1),
+                reading: reading, filename: item.filename))
         }
         guard !Task.isCancelled else { return }
         photoPins = pins
@@ -1742,21 +1743,16 @@ isOwn
         })
     }
 
-    /// Открыть снимок, нажатый на карте.
+    /// Открыть снимок, нажатый на карте или в ленте.
+    ///
+    /// Раньше здесь стояла задержка в 450 мс: просмотрщик был ВТОРЫМ
+    /// `fullScreenCover`, а поверх открытой карты UIKit второй такой молча
+    /// отклоняет («already presenting»), — приходилось опускать карту, ждать,
+    /// пока она доиграет, и только потом поднимать снимок. Карта больше не
+    /// системная презентация, а слой внутри экрана, поэтому ждать нечего.
     private func openPhoto(id: UUID) {
         guard let index = ownPhotoItems.firstIndex(where: { $0.id == id }) else { return }
-        // Просмотрщик — второй fullScreenCover; поверх открытой карты UIKit его
-        // молча отклонит («already presenting»). Сначала опускаем карту и даём
-        // ей доиграть, потом поднимаем снимок.
-        guard isMapFullscreen else {
-            selectedPhotoIndex = index
-            return
-        }
-        isMapFullscreen = false
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(450))
-            selectedPhotoIndex = index
-        }
+        withAnimation(.easeInOut(duration: 0.2)) { selectedPhotoIndex = index }
     }
 
     /// Что делать, когда человек подтвердил место на карте.
@@ -1814,7 +1810,7 @@ isOwn
             onDelete: deletePhotoHandler,
             onMarkPlace: markPlaceHandler,
             canMarkPlace: canMarkPlaceHandler,
-            onDismiss: { selectedPhotoIndex = nil }
+            onDismiss: { withAnimation(.easeInOut(duration: 0.2)) { selectedPhotoIndex = nil } }
         )
     }
 
@@ -1927,7 +1923,12 @@ isOwn
         let c = AppTheme.colors(for: scheme)
         ZStack(alignment: .bottomTrailing) {
             Group {
-                if cachedCoordinates.count > 1 {
+                if cachedCoordinates.count > 1, mapExpansion.heroShowsSnapshot {
+                    // Карта сейчас в полноэкранном слое. Слот показывает её
+                    // последний кадр: пустой прямоугольник на её месте —
+                    // это моргание, которое видно глазом.
+                    heroSnapshot(c)
+                } else if cachedCoordinates.count > 1 {
                     RouteMapView(
                         coordinates: cachedCoordinates,
                         speeds: cachedSpeeds,
@@ -1954,6 +1955,8 @@ isOwn
                         fogCutoffDate: trip.endDate,
                         showsFog: isOwn,
                         treatAsPreview: isPreviewRoute,
+                        host: mapHost,
+                        fitTick: mapFitTick
                     )
                 } else {
                     c.cardAlt
@@ -1976,13 +1979,157 @@ isOwn
                     accessibilityLabelText: AppStrings.openRouteMapA11y(lang.language)
                 ) {
                     Haptics.tap()
-                    isMapFullscreen = true
+                    expandMap()
                 }
                 .accessibilityIdentifier("detail_map_expand")
                 .padding(.trailing, 8)
                 .padding(.bottom, 8)
             }
         }
+    }
+
+    // MARK: - Полноэкранная карта — ТА ЖЕ карта
+
+    /// Последний кадр карты в слоте героя, пока сама карта наверху.
+    @ViewBuilder
+    private func heroSnapshot(_ c: AppTheme.Colors) -> some View {
+        if let snapshot = mapHost.snapshot {
+            Image(uiImage: snapshot)
+                .resizable()
+                .scaledToFill()
+                .clipped()
+                .allowsHitTesting(false)
+        } else {
+            c.cardAlt
+        }
+    }
+
+    /// Раскрыть карту: она не пересоздаётся и не открывается шторкой, а
+    /// переезжает из слота героя в слой поверх экрана и растёт до его
+    /// размера одной пружиной.
+    private func expandMap() {
+        guard mapExpansion == .collapsed else { return }
+        heroMapFrame = heroMapFrameInWindow() ?? .zero
+        mapHost.captureSnapshot()
+        mapChromeVisible = false
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        guard !reduceMotion else {
+            // Reduce Motion: движения нет вовсе — кроссфейд на месте.
+            withAnimation(MapExpansionState.animation(reduceMotion: true)) {
+                mapExpansion = .expanded
+            }
+            mapChromeVisible = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(MapExpansionState.settleDelay(reduceMotion: true)))
+                guard mapExpansion == .expanded else { return }
+                mapFitTick += 1
+            }
+            return
+        }
+        mapExpansion = .expanding
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(MapExpansionState.mountDelay))
+            guard mapExpansion == .expanding else { return }
+            withAnimation(MapExpansionState.animation(reduceMotion: false)) {
+                mapExpansion = .expanded
+            }
+            try? await Task.sleep(for: .seconds(MapExpansionState.chromeDelay(reduceMotion: false)))
+            guard mapExpansion == .expanded else { return }
+            mapChromeVisible = true
+            try? await Task.sleep(
+                for: .seconds(MapExpansionState.settleDelay(reduceMotion: false)
+                    - MapExpansionState.chromeDelay(reduceMotion: false)))
+            guard mapExpansion == .expanded else { return }
+            // Подгонка камеры — только на приехавшем кадре: MapKit вписывает
+            // маршрут в ТЕКУЩИЕ границы вида.
+            mapFitTick += 1
+        }
+    }
+
+    /// Закрыть: хром гаснет первым, карта возвращается в рамку героя, и
+    /// только приехав перестаёт быть полноэкранной.
+    private func collapseMap() {
+        guard mapExpansion == .expanded else { return }
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        mapChromeVisible = false
+        withAnimation(MapExpansionState.animation(reduceMotion: reduceMotion)) {
+            mapExpansion = .collapsing
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(MapExpansionState.settleDelay(reduceMotion: reduceMotion)))
+            guard mapExpansion == .collapsing else { return }
+            mapExpansion = .collapsed
+            mapFitTick += 1
+            mapHost.clearSnapshot()
+        }
+    }
+
+    /// Рамка карты-героя в координатах окна — спрашивается у самой карты.
+    private func heroMapFrameInWindow() -> CGRect? {
+        guard let map = mapHost.mapView, let window = map.window else { return nil }
+        return map.convert(map.bounds, to: window)
+    }
+
+    /// Слой полноэкранной карты. Живёт в корне экрана (`body`), а не в
+    /// прокрутке: накладка растягивается по виду, который меняет, и
+    /// повешенная на секцию она получила бы рамку этой секции.
+    @ViewBuilder
+    private func fullscreenMapLayer() -> some View {
+        if mapExpansion.isPresented {
+            GeometryReader { geo in
+                let here = geo.frame(in: .global)
+                let full = CGRect(origin: .zero, size: geo.size)
+                let hero = heroMapFrame == .zero
+                    ? full
+                    : heroMapFrame.offsetBy(dx: -here.minX, dy: -here.minY)
+                let target = mapExpansion.fillsScreen ? full : hero
+                fullscreenMapSheet()
+                    .frame(width: max(1, target.width), height: max(1, target.height))
+                    .clipped()
+                    .position(x: target.midX, y: target.midY)
+            }
+            .ignoresSafeArea()
+        }
+    }
+
+    /// Та же раскладка, что открывалась шторкой, — только теперь она слой
+    /// внутри экрана поездки, а карта в ней общая с героем (`mapHost`).
+    ///
+    /// Replay lives HERE, not on a screen of its own: you open the map, press
+    /// play, and watch the drive on the map you were already looking at.
+    /// Timestamps decide whether it can — a preview route without per-point
+    /// times gets the plain map. The route is drawn at full resolution; the
+    /// REPLAY walks the downsampled series (`replayInput`, ≤300 points).
+    private func fullscreenMapSheet() -> some View {
+        FullscreenMapSheet(
+            coordinates: cachedCoordinates,
+            speeds: cachedSpeeds,
+            timestamps: replayInput.timestamps,
+            replayCoordinates: replayInput.coords,
+            replaySpeeds: replayInput.speeds,
+            distanceMeters: trip?.distance ?? 0,
+            isOwnTrip: isOwn,
+            fogCutoffDate: trip?.endDate,
+            checkpointMarkers: checkpointMarkers,
+            photoPins: photoPins,
+            onPhotoTap: { openPhoto(id: $0) },
+            // Отмечать можно только СВОЮ поездку и только когда есть трек:
+            // «сколько до сюда» считается по нему, а у чужой поездки его нет.
+            trackPoints: isOwn ? (trip?.trackPoints ?? []) : [],
+            tripStartDate: trip?.startDate,
+            onAddCheckpoint: checkpointAdder,
+            showsFog: isOwn,
+            treatAsPreview: isPreviewRoute,
+            language: lang.language,
+            carColorName: tripCarColorName,
+            host: mapHost,
+            fitTick: mapFitTick,
+            mapIsInteractive: mapExpansion.isInteractive,
+            chromeVisible: mapChromeVisible,
+            onClose: { collapseMap() },
+            onOpenPhoto: { openPhoto(id: $0) },
+            addsSafeAreaInsets: true
+        )
     }
 
     /// Date-region line + title, on the theme background below the map.
@@ -3278,7 +3425,11 @@ isOwn
                                     .frame(width: 74, height: 74)
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
                                     .contentShape(Rectangle())
-                                    .onTapGesture { selectedPhotoIndex = index }
+                                    .onTapGesture {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            selectedPhotoIndex = index
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -3389,7 +3540,9 @@ isOwn
                                 // header («Фото · 5») is where the count
                                 // belongs.
                                 .onTapGesture {
-                                    selectedPhotoIndex = index
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        selectedPhotoIndex = index
+                                    }
                                 }
                                 // Delete on a long press, not on a badge over
                                 // every thumbnail. The canon strip is bare

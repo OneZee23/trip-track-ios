@@ -710,6 +710,7 @@ extension Translations {
         "followDepthNote": "La liste s'arrête à 3 niveaux de relations",
         "moreActions": "Plus",
         "openRouteMapA11y": "Ouvrir la carte de l'itinéraire",
+        "openPhotoAction": "Ouvrir la photo",
         "editTitleA11y": "Modifie le titre du trajet",
         "blockedListLoadFailed": "Impossible de charger la liste",
         "edit": "Modifier",

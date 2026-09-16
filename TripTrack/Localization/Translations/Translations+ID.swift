@@ -710,6 +710,7 @@ extension Translations {
         "followDepthNote": "Kedalaman daftar dibatasi 3 tingkat koneksi",
         "moreActions": "Lainnya",
         "openRouteMapA11y": "Buka peta rute",
+        "openPhotoAction": "Buka foto",
         "editTitleA11y": "Mengubah nama perjalanan",
         "blockedListLoadFailed": "Daftar gagal dimuat",
         "edit": "Ubah",

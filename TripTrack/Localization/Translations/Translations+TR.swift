@@ -710,6 +710,7 @@ extension Translations {
         "followDepthNote": "Liste en fazla 3 bağlantı seviyesine kadar iner",
         "moreActions": "Daha fazla",
         "openRouteMapA11y": "Rota haritasını aç",
+        "openPhotoAction": "Fotoğrafı aç",
         "editTitleA11y": "Gezinin adını değiştirir",
         "blockedListLoadFailed": "Liste yüklenemedi",
         "edit": "Düzenle",

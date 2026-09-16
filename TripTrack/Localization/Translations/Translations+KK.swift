@@ -710,6 +710,7 @@ extension Translations {
         "followDepthNote": "Тізім тереңдігі 3 байланыс деңгейімен шектелген",
         "moreActions": "Тағы",
         "openRouteMapA11y": "Бағыт картасын ашу",
+        "openPhotoAction": "Суретті ашу",
         "editTitleA11y": "Сапардың атауын өзгертеді",
         "blockedListLoadFailed": "Тізімді жүктеу мүмкін болмады",
         "edit": "Өңдеу",

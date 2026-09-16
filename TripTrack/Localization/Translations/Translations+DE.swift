@@ -710,6 +710,7 @@ extension Translations {
         "followDepthNote": "Die Liste reicht maximal 3 Verbindungsebenen tief",
         "moreActions": "Mehr",
         "openRouteMapA11y": "Streckenkarte öffnen",
+        "openPhotoAction": "Foto öffnen",
         "editTitleA11y": "Bearbeitet den Titel der Fahrt",
         "blockedListLoadFailed": "Liste konnte nicht geladen werden",
         "edit": "Bearbeiten",

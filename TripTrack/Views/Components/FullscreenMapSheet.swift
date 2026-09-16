@@ -85,6 +85,34 @@ struct FullscreenMapSheet: View {
     /// Цвет машины этой поездки — им красится машинка реплея. `nil` у чужой
     /// поездки и у поездки без транспорта: маркер возьмёт умолчание гаража.
     var carColorName: String? = nil
+    /// Карта, пережившая своё представление (`TripMapHost`). Непустой хост
+    /// означает: эта раскладка НЕ строит вторую `MKMapView`, а забирает ту,
+    /// что уже стоит в герое экрана поездки.
+    var host: TripMapHost? = nil
+    /// Меняется — карта вписывает маршрут в свои нынешние границы. Бумает его
+    /// экран, когда кадр приехал на полный размер.
+    var fitTick: Int = 0
+    /// Принимает ли карта пальцы. На едущем кадре — нет: жест спорил бы с
+    /// пружиной раскрытия.
+    var mapIsInteractive: Bool = true
+    /// Виден ли хром. Он появляется ПОСЛЕ движения (`MapExpansionState
+    /// .chromeFraction`): кнопка, приехавшая вместе с картой, заставляет
+    /// глаз следить за ней, а не за тем, что открылось.
+    var chromeVisible: Bool = true
+    /// Как закрыться. Пусто — обычный `dismiss()` (путешествие открывает эту
+    /// раскладку системным `fullScreenCover`); у экрана поездки это выход из
+    /// собственного слоя, который системе не принадлежит вовсе.
+    var onClose: (() -> Void)? = nil
+    /// Нажали на карточку предпросмотра снимка — открыть просмотрщик.
+    /// Пусто — карточка остаётся карточкой.
+    var onOpenPhoto: ((UUID) -> Void)? = nil
+    /// Добавить хрому безопасные отступы самому.
+    ///
+    /// Шторка (`fullScreenCover`) получала их от системы, и хром вставал под
+    /// статус-бар сам. Накладка ВНУТРИ экрана поездки живёт под родителем,
+    /// который безопасную зону игнорирует, и без этого «×» садится прямо на
+    /// часы. Решает вызывающий, потому что ответ у двух презентаций разный.
+    var addsSafeAreaInsets: Bool = false
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -138,18 +166,19 @@ struct FullscreenMapSheet: View {
             RouteMapView(
                 coordinates: coordinates,
                 speeds: speeds,
-                isInteractive: true,
+                isInteractive: mapIsInteractive,
                 checkpointMarkers: checkpointMarkers,
                 checkpointMarkerStyle: .labelled,
                 photoPins: photoPins,
-                onPhotoTap: onPhotoTap,
+                onPhotoTap: { tapPhotoPin($0) },
                 onCheckpointTap: { id in
                     Haptics.selection()
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                        photoPreview = nil
                         selectedMarkerId = selectedMarkerId == id ? nil : id
                     }
                 },
-                focusCoordinate: selectedMarker?.coordinate,
+                focusCoordinate: previewCoordinate ?? selectedMarker?.coordinate,
                 checkpointCandidates: checkpointCandidates,
                 onRouteTap: onAddCheckpoint == nil ? nil : { handleTap($0, metersPerPoint: $1) },
                 fogCutoffDate: fogCutoffDate,
@@ -163,7 +192,9 @@ struct FullscreenMapSheet: View {
                 playbackTrailIndex: canReplay ? engine.trailIndex : crawl.currentTrailIndex,
                 playbackCoords: (canReplay || canCrawl) ? playbackSeries : nil,
                 playbackFollow: followsCar,
-                fitInsets: (canReplay || canCrawl) ? replayFitInsets : nil
+                fitInsets: (canReplay || canCrawl) ? replayFitInsets : nil,
+                host: host,
+                fitTick: fitTick
             )
             .ignoresSafeArea()
             // На самой карте, а не на всём экране: хром рисуется следующими
@@ -203,7 +234,7 @@ struct FullscreenMapSheet: View {
                         label: AppStrings.closeSheet(language),
                         identifier: "fullscreen_map_close"
                     ) {
-                        dismiss()
+                        if let onClose { onClose() } else { dismiss() }
                     }
                     Spacer(minLength: 0)
                     // Riding with the car has nothing to do with WHICH kind of
@@ -238,6 +269,10 @@ struct FullscreenMapSheet: View {
                     checkpointConfirmBar
                         .padding(.top, 12)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else if let preview = photoPreview {
+                    photoPreviewCard(preview)
+                        .padding(.top, 12)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else if let marker = shownMarker {
                     checkpointCard(marker)
                         .padding(.top, 12)
@@ -249,21 +284,28 @@ struct FullscreenMapSheet: View {
                 }
 
             }
+            .opacity(chromeVisible ? 1 : 0)
+            .allowsHitTesting(chromeVisible)
+            .animation(.easeOut(duration: 0.2), value: chromeVisible)
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, 8 + chromeTopInset)
             .animation(.spring(response: 0.32, dampingFraction: 0.86), value: shownMarker?.id)
             .animation(.spring(response: 0.32, dampingFraction: 0.86), value: tappedPasses.count)
+            .animation(.spring(response: 0.32, dampingFraction: 0.86), value: photoPreview)
             // Clears the «Apple Maps · Legal» strip along the bottom edge,
             // which Apple requires to stay visible and which the speed key was
             // sitting directly on top of.
-            .padding(.bottom, 36)
+            .padding(.bottom, 36 + chromeBottomInset)
 
             // Подсказка «нажмите на маршрут» — под верхней полосой.
             VStack {
                 checkpointHint
-                    .padding(.top, 64)
+                    .padding(.top, 64 + chromeTopInset)
                 Spacer()
             }
+            .opacity(chromeVisible ? 1 : 0)
+            .allowsHitTesting(chromeVisible)
+            .animation(.easeOut(duration: 0.2), value: chromeVisible)
             .animation(.spring(response: 0.32, dampingFraction: 0.86), value: hintDismissed)
         }
         .task {
@@ -319,6 +361,10 @@ struct FullscreenMapSheet: View {
     /// The insets go to a UIKit map that ignores the safe area, so the numbers
     /// have to be looked up rather than laid out (see `tt_safeAreaInsets`).
     private var safeAreaTop: CGFloat { UIApplication.tt_safeAreaInsets?.top ?? 47 }
+
+    /// Сколько хром добавляет себе сам — см. `addsSafeAreaInsets`.
+    private var chromeTopInset: CGFloat { addsSafeAreaInsets ? safeAreaTop : 0 }
+    private var chromeBottomInset: CGFloat { addsSafeAreaInsets ? safeAreaBottom : 0 }
 
     private var safeAreaBottom: CGFloat { UIApplication.tt_safeAreaInsets?.bottom ?? 34 }
 
@@ -831,6 +877,119 @@ struct FullscreenMapSheet: View {
             metres: fix.distanceFromStart,
             unit: distanceUnit,
             lang: language)
+    }
+
+    // MARK: - Предпросмотр снимка
+
+    /// Снимок, нажатый на карте, — карточкой внизу, а не просмотрщиком.
+    ///
+    /// До этого тап по булавке открывал полный экран сразу: сначала выезжала
+    /// карта, потом поверх неё разворачивалась картинка — два тяжёлых захода
+    /// подряд на один вопрос «что это за кадр». Карточка отвечает на него
+    /// сразу и в том же слоте, что карточка отметки; полный экран остаётся в
+    /// одном тапе от неё.
+    @State private var photoPreview: MapPhotoPreview?
+    /// Ступень 600 pt для карточки. Та же картинка первой ложится в
+    /// просмотрщик — он берёт её из памяти синхронно.
+    @State private var previewImage: UIImage?
+    @State private var previewTask: Task<Void, Never>?
+
+    private var previewCoordinate: CLLocationCoordinate2D? {
+        guard let id = photoPreview?.photoId else { return nil }
+        return photoPins.first { $0.id == id }?.coordinate
+    }
+
+    /// Нажали булавку. Второй тап по ТОЙ ЖЕ булавке — это уже «покажи
+    /// целиком»: карточка на экране, и повторять её незачем.
+    private func tapPhotoPin(_ id: UUID) {
+        if photoPreview?.photoId == id {
+            openPreviewedPhoto(id)
+            return
+        }
+        guard let preview = MapPhotoPreview.build(photoId: id, pins: photoPins) else {
+            onPhotoTap?(id)
+            return
+        }
+        Haptics.selection()
+        previewImage = nil
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            selectedMarkerId = nil
+            photoPreview = preview
+        }
+        previewTask?.cancel()
+        guard let filename = preview.filename else { return }
+        previewTask = Task { @MainActor in
+            let image = await PhotoStorageService.loadThumbnail(
+                filename: filename, maxSize: PhotoStorageService.previewTier)
+            guard !Task.isCancelled, photoPreview?.photoId == id else { return }
+            previewImage = image
+        }
+    }
+
+    private func openPreviewedPhoto(_ id: UUID) {
+        Haptics.tap()
+        if let onOpenPhoto { onOpenPhoto(id) } else { onPhotoTap?(id) }
+    }
+
+    /// Карточка снимка: миниатюра 96 pt, «сколько до сюда», номер в стопке.
+    private func photoPreviewCard(_ preview: MapPhotoPreview) -> some View {
+        let c = AppTheme.colors(for: scheme)
+        return HStack(spacing: 12) {
+            ZStack {
+                if let previewImage {
+                    Image(uiImage: previewImage)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    c.cardAlt
+                }
+            }
+            .frame(width: 96, height: 96)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            VStack(alignment: .leading, spacing: 4) {
+                if let counter = preview.counterText(language) {
+                    Text(counter)
+                        .font(.system(size: 13, weight: .heavy))
+                        .monospacedDigit()
+                        .foregroundStyle(c.textSecondary)
+                }
+                if let reading = preview.reading {
+                    Text(reading)
+                        .font(.system(size: 15, weight: .heavy))
+                        .monospacedDigit()
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                }
+                Text(AppStrings.openPhotoAction(language))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+        }
+        .padding(12)
+        .background(c.card, in: RoundedRectangle(cornerRadius: 18))
+        .shadow(color: .black.opacity(0.22), radius: 14, y: 4)
+        .overlay(alignment: .topTrailing) {
+            Button {
+                Haptics.tap()
+                previewTask?.cancel()
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { photoPreview = nil }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(c.textSecondary)
+                    .frame(width: 32, height: 32)
+                    .background(c.cardAlt, in: Circle())
+            }
+            .buttonStyle(PressableCardStyle())
+            .padding(10)
+            .accessibilityLabel(AppStrings.closeSheet(language))
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 18))
+        .onTapGesture { openPreviewedPhoto(preview.photoId) }
+        .accessibilityIdentifier("map_photo_preview")
     }
 
     // MARK: - Выбранная отметка

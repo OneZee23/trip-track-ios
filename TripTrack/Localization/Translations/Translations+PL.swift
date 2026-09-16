@@ -710,6 +710,7 @@ extension Translations {
         "followDepthNote": "Lista sięga najwyżej 3 poziomów powiązań",
         "moreActions": "Więcej",
         "openRouteMapA11y": "Otwórz mapę przejazdu",
+        "openPhotoAction": "Otwórz zdjęcie",
         "editTitleA11y": "Zmienia nazwę trasy",
         "blockedListLoadFailed": "Nie udało się wczytać listy",
         "edit": "Edytuj",

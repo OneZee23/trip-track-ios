@@ -710,6 +710,7 @@ extension Translations {
         "followDepthNote": "Hanggang 3 antas lang ng koneksyon ang lalim ng listahan",
         "moreActions": "Iba pa",
         "openRouteMapA11y": "Buksan ang mapa ng ruta",
+        "openPhotoAction": "Buksan ang larawan",
         "editTitleA11y": "Binabago ang pangalan ng biyahe",
         "blockedListLoadFailed": "Hindi na-load ang listahan",
         "edit": "I-edit",

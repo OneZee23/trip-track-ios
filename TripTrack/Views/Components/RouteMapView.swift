@@ -185,6 +185,13 @@ struct PhotoPin: Equatable {
     let image: UIImage?
     /// Что скажет VoiceOver — экран готовит на своём языке.
     var accessibilityLabel: String = ""
+    /// «1 ч 19 мин · 106 км» — сколько до этого кадра от старта. Готовит
+    /// экран (у него трек и язык), карточка предпросмотра только печатает.
+    /// `nil` — кадр не встал на трек, и сказать нечего.
+    var reading: String? = nil
+    /// Имя файла в `Documents/TripPhotos` — по нему карточка предпросмотра
+    /// берёт ступень 600 pt, а не тянет ту же булавку в 80 pt крупнее.
+    var filename: String? = nil
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -266,6 +273,13 @@ struct RouteMapView: UIViewRepresentable {
     /// Padding used when framing the whole route. The replay needs a wider
     /// bottom margin than the previews do — its transport controls sit there.
     var fitInsets: UIEdgeInsets?
+    /// Карта, пережившая своё представление. Непустой хост означает: не
+    /// создавать `MKMapView` заново, а забрать готовую — см. `TripMapHost`.
+    var host: TripMapHost? = nil
+    /// Меняется — карта заново вписывает весь маршрут в свои НЫНЕШНИЕ
+    /// границы. Важен только факт изменения: раскрытие на полный экран
+    /// бумает его один раз, когда кадр уже приехал.
+    var fitTick: Int = 0
 
     /// На каком уровне лежит сама линия маршрута.
     ///
@@ -300,22 +314,31 @@ struct RouteMapView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> MKMapView {
+        // Карта с хостом строится ОДИН раз за жизнь экрана поездки: герой и
+        // полноэкранная раскладка — два представления одной и той же карты,
+        // и второй разрез маршрута по скорости здесь не нужен никому.
+        if let host, host.mapView != nil {
+            let existing = host.map(orMake: { MKMapView() })
+            context.coordinator.adoptMap(existing)
+            applyInteractivity(to: existing)
+            applyLayoutMargins(to: existing, coordinator: context.coordinator)
+            return existing
+        }
         // Своя карта только под туманом: ей нужен сигнал об уходе экрана, а у
         // `UIViewRepresentable` вью-контроллера нет. Чужой поездке и
         // путешествию (`showsFog == false`) вуали не достаётся вовсе — там и
         // подменять нечего.
-        let mapView = context.coordinator.veilSeat == nil ? MKMapView() : VeilHostMapView()
+        let make = { context.coordinator.veilSeat == nil ? MKMapView() : VeilHostMapView() }
+        let mapView: MKMapView
+        if let host {
+            mapView = host.map(orMake: make)
+        } else {
+            mapView = make()
+        }
         mapView.delegate = context.coordinator
         context.coordinator.showsFog = showsFog
         mapView.showsUserLocation = false
-        mapView.isScrollEnabled = isInteractive
-        mapView.isZoomEnabled = isInteractive
-        mapView.isRotateEnabled = isInteractive
-        // Наклон под экранной вуалью запрещён: перспективу аффинной матрицей
-        // не выразить, и коридор уехал бы от дороги под ним
-        // (`VeilFrame.residual`). Поворот при этом остаётся — он выражается
-        // точно.
-        mapView.isPitchEnabled = isInteractive && !showsFog
+        applyInteractivity(to: mapView)
         mapView.showsCompass = false
         mapView.showsScale = false
         // Карта СВОЕЙ поездки (та, над которой лежит туман) — всегда ночная и
@@ -337,12 +360,7 @@ struct RouteMapView: UIViewRepresentable {
         // Apple requires the Maps attribution to stay visible, and it is laid
         // out against these margins. Without this the replay's transport row
         // sits right on top of it.
-        if let fitInsets {
-            mapView.layoutMargins = UIEdgeInsets(
-                top: 0, left: fitInsets.left,
-                bottom: max(0, fitInsets.bottom - 24), right: fitInsets.right
-            )
-        }
+        applyLayoutMargins(to: mapView, coordinator: context.coordinator)
 
         // Вуаль садится, когда карта попадает в окно, и уходит вместе с ним:
         // `dismantleUIView` приходит не всегда (SwiftUI вправе придержать
@@ -353,6 +371,13 @@ struct RouteMapView: UIViewRepresentable {
             host.onWindowChange = { [weak coordinator, weak host] window in
                 guard let coordinator, let host else { return }
                 if window == nil {
+                    // Карта с хостом переезжает между слотом героя и
+                    // полноэкранной раскладкой, и на этом переезде окно на
+                    // мгновение становится пустым. Снимать вуаль здесь
+                    // значило бы пересаживать её на каждое раскрытие —
+                    // ровно то, чего переезд и должен избежать. Настоящий
+                    // уход экрана снимает её `TripMapHost.tearDown`.
+                    guard !coordinator.isHosted else { return }
                     coordinator.veilSeat?.detach()
                 } else {
                     coordinator.adoptMap(host)
@@ -461,6 +486,11 @@ struct RouteMapView: UIViewRepresentable {
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.adoptMap(mapView)
+        // Одна и та же карта живёт и в слоте героя (пальцев не принимает), и
+        // на полном экране (принимает все). Эти четыре свойства ставились
+        // один раз при сборке — с общей картой их приходится держать здесь.
+        applyInteractivity(to: mapView)
+        applyLayoutMargins(to: mapView, coordinator: context.coordinator)
         context.coordinator.onRouteTap = onRouteTap
         context.coordinator.installTapRecognizerIfNeeded(on: mapView, wanted: onRouteTap != nil)
         context.coordinator.syncCheckpoints(checkpointMarkers, style: checkpointMarkerStyle, on: mapView)
@@ -471,6 +501,7 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.syncFocus(focusCoordinate, on: mapView)
         context.coordinator.syncPhotoPins(photoPins, on: mapView)
         context.coordinator.applyZoom(tick: zoomTick, mapView: mapView)
+        context.coordinator.applyFit(tick: fitTick, insets: fitInsets, mapView: mapView)
         context.coordinator.applyCarColor(carColorName, on: mapView)
         context.coordinator.applyPlayback(
             carCoord: playbackCarCoord,
@@ -510,13 +541,66 @@ struct RouteMapView: UIViewRepresentable {
         if fogCutoffDate == nil { coordinator.watchRevealedLayer(on: mapView) }
     }
 
+    /// Пальцы карты. Вынесено: с общей картой (см. `host`) эти свойства
+    /// меняются при каждом раскрытии, а не ставятся раз при сборке.
+    private func applyInteractivity(to mapView: MKMapView) {
+        if mapView.isScrollEnabled != isInteractive { mapView.isScrollEnabled = isInteractive }
+        if mapView.isZoomEnabled != isInteractive { mapView.isZoomEnabled = isInteractive }
+        if mapView.isRotateEnabled != isInteractive { mapView.isRotateEnabled = isInteractive }
+        // Наклон под экранной вуалью запрещён: перспективу аффинной матрицей
+        // не выразить, и коридор уехал бы от дороги под ним
+        // (`VeilFrame.residual`). Поворот при этом остаётся — он выражается
+        // точно.
+        let pitch = isInteractive && !showsFog
+        if mapView.isPitchEnabled != pitch { mapView.isPitchEnabled = pitch }
+    }
+
+    /// Apple requires the Maps attribution to stay visible, and it is laid
+    /// out against these margins. Without this the replay's transport row
+    /// sits right on top of it.
+    private func applyLayoutMargins(to mapView: MKMapView, coordinator: Coordinator) {
+        // Исходные поля запоминаются при первой встрече: без `fitInsets`
+        // карта их не трогала НИКОГДА, и «поставить ноль» сдвинуло бы
+        // логотип Apple у каждой карты-героя. Возврат с полного экрана
+        // обязан вернуть именно их, а не ноль.
+        if coordinator.defaultLayoutMargins == nil {
+            coordinator.defaultLayoutMargins = mapView.layoutMargins
+        }
+        let wanted: UIEdgeInsets
+        if let fitInsets {
+            wanted = UIEdgeInsets(
+                top: 0, left: fitInsets.left,
+                bottom: max(0, fitInsets.bottom - 24), right: fitInsets.right
+            )
+        } else {
+            wanted = coordinator.defaultLayoutMargins ?? mapView.layoutMargins
+        }
+        guard mapView.layoutMargins != wanted else { return }
+        mapView.layoutMargins = wanted
+    }
+
     func makeCoordinator() -> Coordinator {
-        Coordinator(showsFog: showsFog, rotatable: isInteractive)
+        // Общая карта — общий координатор: он делегат карты и держит её
+        // память (оверлеи, отметки, посадку вуали). Второй координатор на ту
+        // же карту означал бы вторую вуаль.
+        let make = {
+            // `rotatable` решает запас растра вуали, и решается он на всю
+            // жизнь карты. У карты с хостом полный экран впереди по
+            // определению, поэтому запас берётся сразу поворотный.
+            Coordinator(showsFog: showsFog, rotatable: isInteractive || host != nil)
+        }
+        if let host { return host.coordinator(orMake: make) }
+        return make()
     }
 
     /// Экран закрылся — вуаль уходит с ним: два растра и `CADisplayLink` за
     /// кадром не живут.
+    ///
+    /// У карты с хостом это НЕ конец экрана, а переезд между слотом героя и
+    /// полноэкранной раскладкой: снимать там нечего, и снимает по-настоящему
+    /// `TripMapHost.tearDown`.
     static func dismantleUIView(_ mapView: MKMapView, coordinator: Coordinator) {
+        guard !coordinator.isHosted else { return }
         coordinator.veilSeat?.detach()
     }
 
@@ -772,6 +856,17 @@ struct RouteMapView: UIViewRepresentable {
         /// Ставится в `makeUIView`, до первой отрисовки.
         var showsFog = false
 
+        /// Картой владеет `TripMapHost`, а не представление.
+        ///
+        /// Меняет ровно два ответа: `dismantleUIView` перестаёт снимать
+        /// вуаль (это переезд, а не уход экрана) и то же делает обработчик
+        /// ухода карты из окна. Снимает вуаль в этом режиме только
+        /// `TripMapHost.tearDown`.
+        var isHosted = false
+
+        /// Поля карты, какими их поставил MapKit. См. `applyLayoutMargins`.
+        var defaultLayoutMargins: UIEdgeInsets?
+
         /// Маршрут рисуется по-разному на двух картах, и разница не
         /// косметическая: на светлой карте чужой поездки линия в 4 pt — это
         /// сама поездка, а в прочищенном коридоре своей она перекрывает ту
@@ -806,6 +901,24 @@ struct RouteMapView: UIViewRepresentable {
                 longitudeDelta: min(max(region.span.longitudeDelta * factor, 0.0005), 120)
             )
             mapView.setRegion(region, animated: true)
+        }
+
+        private var lastFitTick: Int = 0
+
+        /// Вписать весь маршрут в НЫНЕШНИЕ границы карты.
+        ///
+        /// Заказывается, когда карта уже приехала в новый размер: MapKit
+        /// считает подгонку по текущим границам вида, и та же подгонка,
+        /// заказанная посреди пружины, вписала бы маршрут в промежуточный
+        /// кадр — и на полном экране он остался бы в четверть экрана.
+        func applyFit(tick: Int, insets: UIEdgeInsets?, mapView: MKMapView) {
+            guard tick != lastFitTick else { return }
+            lastFitTick = tick
+            guard !overviewRect.isNull else { return }
+            let use = insets ?? UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
+            overviewInsets = use
+            mapView.setVisibleMapRect(
+                RouteMapView.floored(overviewRect), edgePadding: use, animated: true)
         }
 
         /// The whole-route rect the map opened on, so «обзор» can return to it.
@@ -1155,13 +1268,34 @@ struct RouteMapView: UIViewRepresentable {
             guard abs(fraction - litFraction) > 0.0005 || fraction >= 1 || fraction <= 0 else { return }
             let wasLit = litFraction
             litFraction = fraction
+            var touched: [MKOverlayRenderer] = []
             for poly in speedRun {
                 let passedNow = poly.endFraction <= fraction
                 let passedBefore = wasLit >= 0 && poly.endFraction <= wasLit
                 guard passedNow != passedBefore || wasLit < 0 else { continue }
                 guard let r = mapView.renderer(for: poly) else { continue }
                 r.alpha = passedNow ? 1 : Self.dimmedAhead
+                touched.append(r)
             }
+            // Возврат яркости после «×» надо ТРЕБОВАТЬ, а не ждать.
+            //
+            // Смена `alpha` у рендерера помечает его тайлы устаревшими, но
+            // перерисовывает их MapKit лениво — когда сам решит. На стоящей
+            // карте решал он через две-пять секунд: реплей уже закрыт, а
+            // маршрут ещё приглушён впереди машинки, которой нет
+            // (находка владельца на устройстве). Голый `setNeedsDisplay()`
+            // не помогает — он помечает ВЕСЬ мир и попадает в ту же
+            // ленивую очередь; адресный вызов на видимый прямоугольник с
+            // нынешним масштабом перерисовывает его в ближайшем кадре.
+            //
+            // Только на возврате к полной яркости: во время игры доля
+            // меняется столько раз, сколько в маршруте отрезков скорости, и
+            // требовать перерисовку на каждом было бы дороже самой игры.
+            guard fraction >= 1, !touched.isEmpty else { return }
+            let rect = mapView.visibleMapRect
+            guard rect.size.width > 0, mapView.bounds.width > 0 else { return }
+            let zoom = MKZoomScale(Double(mapView.bounds.width) / rect.size.width)
+            for renderer in touched { renderer.setNeedsDisplay(rect, zoomScale: zoom) }
         }
 
         /// Насколько гаснет непройденное.
@@ -1507,6 +1641,7 @@ struct RouteMapView: UIViewRepresentable {
                 // их, а не карточку с «1 ч 19 мин».
                 view.isAccessibilityElement = true
                 view.accessibilityLabel = photo.voiceLabel
+                view.accessibilityIdentifier = "map_photo_pin"
                 view.accessibilityTraits = .image
                 view.displayPriority = .defaultLow
                 view.collisionMode = .circle

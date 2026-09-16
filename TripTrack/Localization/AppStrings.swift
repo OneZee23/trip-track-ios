@@ -4637,6 +4637,11 @@ enum AppStrings {
     static func openRouteMapA11y(_ lang: LanguageManager.Language) -> String {
         tr(lang, "openRouteMapA11y", ru: "Открыть карту маршрута", en: "Open route map")
     }
+    /// Строка-действие на карточке предпросмотра снимка под булавкой карты:
+    /// карточка отвечает «что это за кадр», а эта строка — «а целиком?».
+    static func openPhotoAction(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "openPhotoAction", ru: "Открыть снимок", en: "Open photo")
+    }
     /// VoiceOver HINT (verb phrase) for the poster title button.
     static func editTitleA11y(_ lang: LanguageManager.Language) -> String {
         tr(lang, "editTitleA11y", ru: "Изменяет название поездки", en: "Edits the trip title")

@@ -710,6 +710,7 @@ extension Translations {
         "followDepthNote": "Глибина списку обмежена 3 рівнями зв'язків",
         "moreActions": "Ще",
         "openRouteMapA11y": "Відкрити карту маршруту",
+        "openPhotoAction": "Відкрити знімок",
         "editTitleA11y": "Змінює назву поїздки",
         "blockedListLoadFailed": "Не вдалося завантажити список",
         "edit": "Редагувати",
