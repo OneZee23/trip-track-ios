@@ -268,8 +268,9 @@ struct FullscreenMapSheet: View {
         }
         .task {
             // Seeded, not started: the sheet opens as a map — the drive plays
-            // when you ask for it. Seeding still parks the car on the start
-            // dot, which is what advertises that there is a drive to watch.
+            // when you ask for it. Засев не рисует ничего: ни машинки на
+            // старте, ни «×». Экран, на который только зашли, обязан
+            // выглядеть как карта (`ReplayBarState.idle`).
             guard canReplay else { return }
             engine.configure(
                 coords: playbackSeries,
@@ -465,9 +466,13 @@ struct FullscreenMapSheet: View {
 
     /// The playback has been begun and left something on the map — a car, a
     /// trail, a camera that followed. Only then is there anything to clear.
+    ///
+    /// Спрашивается СОСТОЯНИЕ реплея, а не три его поля: засеянный нулевой
+    /// кадр оставлял `headCoord` не пустым до всякого нажатия, и «×» горел на
+    /// экране, где нечего было убирать (`ReplayBarState`).
     private var hasStarted: Bool {
         canReplay
-            ? (engine.isPlaying || engine.progress > 0 || engine.headCoord != nil)
+            ? engine.phase.showsStop
             : (crawl.isPlaying || crawl.progress > 0)
     }
 
@@ -934,7 +939,13 @@ struct FullscreenMapSheet: View {
 final class TripReplayEngine: NSObject, ObservableObject {
     /// Playback position 0…1 over the track's time span.
     @Published private(set) var progress: Double = 0
-    @Published private(set) var isPlaying = false
+    /// Состояние плашки — ОДНО и явное. Всё, что она рисует («×», иконка
+    /// кнопки, машинка на карте), выводится отсюда и больше ниоткуда:
+    /// прежнее `isPlaying || progress > 0 || headCoord != nil` считало
+    /// засеянный нулевой кадр за начатое воспроизведение (см.
+    /// `ReplayBarState`).
+    @Published private(set) var phase: ReplayBarState = .idle
+    var isPlaying: Bool { phase == .playing }
     /// Interpolated car position for the current frame.
     @Published private(set) var headCoord: CLLocationCoordinate2D?
     /// Last passed original coordinate — feeds the map's trail.
@@ -1002,7 +1013,13 @@ final class TripReplayEngine: NSObject, ObservableObject {
         holdingIndex = nil
     }
 
-    /// Seeds the series and renders frame 0 (car at the start dot).
+    /// Seeds the series and nothing else — no car, no frame.
+    ///
+    /// Раньше здесь рисовался нулевой кадр («машинка на стартовой точке
+    /// рекламирует, что есть что посмотреть»), и он же зажигал «×» на экране,
+    /// куда только зашли. Реклама стоила мёртвой кнопки; машинка появляется
+    /// по нажатию «играть», как и обещает кнопка.
+    ///
     /// No-ops on malformed input (fewer than 2 points or misaligned
     /// timestamps) — the map simply shows the route and no car.
     func configure(
@@ -1026,10 +1043,13 @@ final class TripReplayEngine: NSObject, ObservableObject {
         let span = timestamps[timestamps.count - 1].timeIntervalSince(timestamps[0])
         baseDuration = max(1, span)
         rate = 1
+        phase = .idle
         progress = 0
         distanceFraction = 0
+        currentSpeedMS = 0
+        headCoord = nil
+        trailIndex = -1
         cursor = 0
-        applyFrame()
     }
 
     func play() {
@@ -1038,9 +1058,11 @@ final class TripReplayEngine: NSObject, ObservableObject {
         if progress >= 1 {
             progress = 0
             cursor = 0
-            applyFrame()
         }
-        isPlaying = true
+        phase = .playing
+        // Кадр СРАЗУ: машинка обязана появиться в момент нажатия, а не через
+        // первый тик — из `idle` её на карте нет вовсе.
+        applyFrame()
         lastTick = CACurrentMediaTime()
         let link = CADisplayLink(target: self, selector: #selector(tick(_:)))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
@@ -1049,23 +1071,38 @@ final class TripReplayEngine: NSObject, ObservableObject {
     }
 
     func pause() {
+        stopClock(.tapPlayPause)
+    }
+
+    /// Гасит часы и проводит состояние через тот же редьюсер, что и кнопки.
+    ///
+    /// Только из `playing`: «пауза» — не переключатель (её зовут и жест
+    /// подмотки, и тап по маршруту), и из `idle` она не имеет права
+    /// ЗАПУСТИТЬ воспроизведение, которого не было.
+    private func stopClock(_ event: ReplayBarState.Event) {
         displayLink?.invalidate()
         displayLink = nil
-        isPlaying = false
+        if phase == .playing { phase = ReplayBarState.reduce(phase, event) }
         holdingIndex = nil
     }
 
     func togglePlay() {
-        isPlaying ? pause() : play()
+        ReplayBarState.reduce(phase, .tapPlayPause) == .playing ? play() : pause()
     }
 
+    /// «×»: карта возвращается такой, какой её открыли — ни машинки, ни
+    /// погашенного маршрута, ни бегунка посреди шкалы. Отметки на шкале
+    /// остаются: они позиции, а не прогресс.
     func stop() {
         pause()
+        phase = ReplayBarState.reduce(phase, .tapStop)
         headCoord = nil
         trailIndex = -1
         progress = 0
         distanceFraction = 0
+        currentSpeedMS = 0
         cursor = 0
+        holdingIndex = nil
     }
 
     /// Walks the ladder and wraps. Rate multiplies the per-tick advance, so
@@ -1076,9 +1113,11 @@ final class TripReplayEngine: NSObject, ObservableObject {
         rate = ladder[next]
     }
 
-    /// Scrub seek — works both paused and playing.
+    /// Scrub seek — works from any state: подмотка из `idle` и есть начало
+    /// просмотра, просто стоящего на выбранном кадре.
     func seek(to p: Double) {
         guard coords.count >= 2 else { return }
+        phase = ReplayBarState.reduce(phase, .scrub)
         progress = min(max(p, 0), 1)
         cursor = 0
         holdingIndex = nil
@@ -1108,12 +1147,13 @@ final class TripReplayEngine: NSObject, ObservableObject {
         applyFrame()
         if progress >= 1 {
             // Hold the final frame — the play button restarts from zero.
-            pause()
+            stopClock(.reachedEnd)
         }
     }
 
     private func applyFrame() {
-        guard coords.count >= 2 else { return }
+        // В `idle` машинки не существует — ни на карте, ни в полях движка.
+        guard coords.count >= 2, phase != .idle else { return }
         let t0 = timestamps[0]
         let span = timestamps[timestamps.count - 1].timeIntervalSince(t0)
         guard span > 0 else {
