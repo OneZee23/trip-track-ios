@@ -148,6 +148,60 @@ final class AtlasSharePosterTests: XCTestCase {
         return count > 0 ? sum / Double(count) : 0
     }
 
+    /// И на масштабе СТРАНЫ постер тоже красит посещённое.
+    ///
+    /// Отдельным тестом, потому что уровни детали у заливки разные: контуры
+    /// регионов живут только на `.mid`, а заливка — и на `.far`, где у карты
+    /// вопрос «где я вообще был». Библиотека на полстраны — самый обычный
+    /// случай для постера, и именно на нём заливки не было до фикс-волны 5.
+    func testVisitedRegionIsTintedOnThePosterAtCountryZoom() async {
+        await RegionAtlas.shared.loadIfNeeded()
+        // Краснодар → Москва: окно постера уходит на дальний уровень.
+        // Слой строится ТЕМ ЖЕ путём, что в приложении: сырые точки через
+        // `RevealBuilder`, а не напрямую. Прямые прогоны дают километры по
+        // регионам нулями — открытого в них нет, потому что ячейки считает
+        // именно построитель.
+        func longRoute(atlas: RegionAtlas?) -> RevealedLayer {
+            let coords = (0..<600).map { i -> CLLocationCoordinate2D in
+                let t = Double(i) / 599
+                return CLLocationCoordinate2D(latitude: 45.04 + (55.75 - 45.04) * t,
+                                              longitude: 38.98 + (37.62 - 38.98) * t)
+            }
+            var claimed: [String: Set<RevealGrid.Cell>] = [:]
+            var runs: [[CLLocationCoordinate2D]] = []
+            for (key, patch) in RevealBuilder.patches(for: coords, claimed: { claimed[$0] ?? [] }) {
+                claimed[key, default: []].formUnion(patch.cells)
+                runs.append(contentsOf: patch.runs)
+            }
+            return RevealedLayer.build(
+                runs: runs, cellCount: claimed.values.reduce(0) { $0 + $1.count }, atlas: atlas)
+        }
+        let tinted = longRoute(atlas: RegionAtlas.shared)
+        let plain = longRoute(atlas: nil)
+        guard let rect = AtlasSharePoster.frame(for: tinted) else {
+            return XCTFail("окно обязано посчитаться")
+        }
+        let region = AtlasSharePoster.region(for: rect)
+        XCTAssertEqual(FogVeilRenderer.lod(
+            for: MKZoomScale(AtlasSharePoster.renderPointSize.width / CGFloat(rect.width))),
+            .far, "окно обязано уйти на масштаб страны")
+
+        func poster(_ layer: RevealedLayer) -> Raster? {
+            raster(of: AtlasSharePoster.render(
+                snapshot: fakeSnapshot(), region: region, layer: layer, seals: [],
+                caption: "Атлас", scale: 1))
+        }
+        guard let withFill = poster(tinted), let without = poster(plain) else {
+            return XCTFail("оба постера обязаны собраться")
+        }
+        XCTAssertFalse(tinted.regionKm.filter { $0.value > 0 }.isEmpty,
+                       "слой обязан знать свои регионы")
+        let warm = warmth(withFill), cold = warmth(without)
+        print(String(format: "[poster] `.far` теплота: с заливкой %.2f, без неё %.2f", warm, cold))
+        XCTAssertGreaterThan(warm, cold + 1,
+                             "на масштабе страны постер не красит посещённое")
+    }
+
     /// Посещённый регион на постере ЗАЛИТ — тем же тоном и той же кистью, что
     /// на экране.
     ///

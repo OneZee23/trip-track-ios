@@ -20,10 +20,21 @@ final class RegionLabelLODTests: XCTestCase {
         XCTAssertTrue(RegionLabelLOD.level(bboxMinSidePt: 500, lod: .fine, isCountry: false))
     }
 
-    // MARK: - `.far` прячет регионы
+    // MARK: - `.far` регионы НЕ прячет (фикс-волна 5)
 
-    func testFarHidesRegionsRegardlessOfSize() {
-        XCTAssertFalse(RegionLabelLOD.level(bboxMinSidePt: 10_000, lod: .far, isCountry: false))
+    /// Подпись региона существует только у ПОСЕЩЁННОГО, а посещённый на
+    /// дальнем уровне залит охрой: залитое пятно без имени — вопрос без
+    /// ответа. Раньше ярус гасил её здесь, и увидеть заливку с именем можно
+    /// было только в узкой полосе `.mid`, которую камера проходит насквозь за
+    /// один двойной тап.
+    func testFarShowsAVisitedRegionThatIsLargeEnough() {
+        XCTAssertTrue(RegionLabelLOD.level(bboxMinSidePt: 10_000, lod: .far, isCountry: false))
+    }
+
+    /// Но мелкий край на мировом зуме по-прежнему молчит — его отсекает bbox,
+    /// а не ярус.
+    func testFarStillHidesARegionSqueezedToNothing() {
+        XCTAssertFalse(RegionLabelLOD.level(bboxMinSidePt: 40, lod: .far, isCountry: false))
     }
 
     // MARK: - Страна: порог 90 pt, только на `.far`

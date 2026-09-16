@@ -463,24 +463,44 @@ enum FogVeilPainter {
 
         let fills = regions.paths.fills
         if !fills.isEmpty {
-            context.beginPath()
-            fills.forEach(context.addPath)
-            context.setFillColor(visitedFillColor.withAlphaComponent(visitedFillAlpha).cgColor)
-            // Чётное-нечётное: кольца-бублики (область вокруг своей столицы)
-            // приезжают из атласа разрезанными, и по ним верен именно XOR.
-            context.fillPath(using: .evenOdd)
-
+            // Каждый регион — СВОЙ путь, и заливаются они по одному.
+            //
+            // Одним общим путём с правилом чётное-нечётное нельзя: Адыгея
+            // лежит ЦЕЛИКОМ внутри Краснодарского края, и XOR превратил бы
+            // посещённую республику в дырку посреди залитого края — то есть
+            // «здесь я был» читалось бы как «здесь меня не было». Внутри
+            // ОДНОГО региона XOR по-прежнему верен: кольца-бублики приезжают
+            // из атласа разрезанными.
+            //
+            // Альфа — на слое прозрачности, а не на цвете: у вложенных
+            // регионов заливки перекрываются, и на цвете они складывались бы
+            // в пятно вдвое плотнее соседнего.
+            context.saveGState()
+            context.setAlpha(visitedFillAlpha)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            context.setFillColor(visitedFillColor.cgColor)
+            for path in fills {
+                context.beginPath()
+                context.addPath(path)
+                context.fillPath(using: .evenOdd)
+            }
             // Край внутрь: тот же контур, обведённый вдвое шире и обрезанный
             // по самому себе, — наружу не выходит ни точки.
-            context.saveGState()
-            context.beginPath()
-            fills.forEach(context.addPath)
-            context.clip(using: .evenOdd)
-            context.beginPath()
-            fills.forEach(context.addPath)
+            context.setStrokeColor(
+                visitedFillColor.withAlphaComponent(visitedEdgeAlpha / visitedFillAlpha).cgColor)
             context.setLineWidth(visitedEdgeWidthPoints * 2 / scale)
-            context.setStrokeColor(visitedFillColor.withAlphaComponent(visitedEdgeAlpha).cgColor)
-            context.strokePath()
+            for path in fills {
+                context.saveGState()
+                context.beginPath()
+                context.addPath(path)
+                context.clip(using: .evenOdd)
+                context.beginPath()
+                context.addPath(path)
+                context.strokePath()
+                context.restoreGState()
+            }
+            context.endTransparencyLayer()
+            context.setAlpha(1)
             context.restoreGState()
         }
 
@@ -631,6 +651,27 @@ enum FogVeilPainter {
         }
         context.setBlendMode(.normal)
     }
+
+    /// Мягкий край ОДНИМ проходом ПРОБОВАЛИ — не годится, и вот почему.
+    ///
+    /// Замысел был хорош: ступени пера видны на дневной карте, а у размытия
+    /// ступеней нет — штрихуем сердцевину один раз непрозрачным, спад отдаём
+    /// тени CoreGraphics (`setShadow`, нулевое смещение). Сломались два
+    /// правила сразу, оба замером:
+    ///
+    /// 1. **Туман за ореолом перестал быть нетронутым.** Гауссиан не знает
+    ///    границы: за полутора полуширинами альфа падала до 240–241 вместо
+    ///    255, то есть «открыто» расползалось шире, чем человек проехал. Это
+    ///    не косметика — ореол и ЕСТЬ определение открытого.
+    /// 2. **Край перестал клубиться.** Размах плотности вдоль прямой дороги
+    ///    падал с 38/61/53 (три уровня детали) до 6/0/0: маска облаков
+    ///    умножает гладкий градиент и теряется в нём, а рваность — обещание
+    ///    спеки, не украшение.
+    ///
+    /// Плюс сердцевину пришлось бы прочищать ОТДЕЛЬНЫМ проходом мимо маски
+    /// (внутри слоя текстура глушила её до альфы 136 вместо нуля) — то есть
+    /// «один проход» им и не был. Оставлено четырнадцать ступеней; лечить
+    /// лестницу надо не размытием, а числом проходов против бюджета кадра.
 
     /// Перьевая лента, прожжённая ЧЕРЕЗ маску облаков: край выходит
     /// клубящимся, а не геометрическим.

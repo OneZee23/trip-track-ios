@@ -40,13 +40,22 @@ final class CityDotView: MKAnnotationView {
 
         dot.layer.borderWidth = 1.6
         dot.layer.borderColor = UIColor.white.cgColor
+        // И тёмное кольцо СНАРУЖИ белого: на светлой земле белая обводка
+        // сливалась с ней, и от точки оставалась одна оранжевая серединка.
+        dot.layer.shadowColor = RegionLabelView.haloColor.cgColor
+        dot.layer.shadowOpacity = 0.9
+        dot.layer.shadowRadius = 1.5
+        dot.layer.shadowOffset = .zero
         dot.backgroundColor = MyMapPalette.accent
         addSubview(dot)
 
         label.font = .systemFont(ofSize: 11, weight: .semibold)
         label.textColor = UIColor.white.withAlphaComponent(0.92)
-        label.layer.shadowColor = UIColor.black.cgColor
-        label.layer.shadowOpacity = 0.75
+        // Тот же тёмный ореол, что у подписи региона: точка города стоит и на
+        // тумане, и на светлой карте внутри коридора — «внутри коридоров» это
+        // её определение, там она только и бывает.
+        label.layer.shadowColor = RegionLabelView.haloColor.cgColor
+        label.layer.shadowOpacity = 0.9
         label.layer.shadowRadius = 2
         label.layer.shadowOffset = .zero
         addSubview(label)

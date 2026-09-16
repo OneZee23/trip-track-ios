@@ -86,16 +86,29 @@ final class RegionPathIndexTests: XCTestCase {
         XCTAssertEqual(index.vertexCount(for: .far), 4)
     }
 
-    /// Регионы на дальний уровень не попадают вовсе — ни одной вершиной.
-    func testFarLevelCarriesCountriesOnly() {
+    /// На дальнем уровне у региона есть ЗАЛИВКА, но нет КОНТУРА.
+    ///
+    /// Возражение против регионов на `.far` — «шестьсот контуров превращаются
+    /// в сетку»; к заливке оно не относится: посещённых единицы, линий они не
+    /// добавляют, а отвечают ровно на тот вопрос, ради которого карту открыли
+    /// с высоты. До фикс-волны 5 заливки здесь не было, и увидеть её можно
+    /// было только в полосе `.mid`, которую камера проходит за один тап.
+    func testFarLevelFillsVisitedRegionsButTracesOnlyCountries() {
         let index = RegionPathIndex()
         index.prepare(outlines: outlines())
         guard let far = index.paths(in: .world, lod: .far, visited: ["XX-01"]) else {
             return XCTFail("страны обязаны быть на дальнем уровне")
         }
-        XCTAssertTrue(far.regionBorders.isEmpty)
-        XCTAssertTrue(far.fills.isEmpty, "заливка региона на дальнем уровне не рисуется")
+        XCTAssertTrue(far.regionBorders.isEmpty, "контуров регионов на `.far` быть не должно")
+        XCTAssertEqual(far.fills.count, 1, "посещённый регион обязан быть залит и здесь")
         XCTAssertEqual(far.countryBorders.count, 1)
+
+        // Непосещённый на `.far` не даёт вообще ничего — ни линии, ни пятна.
+        guard let bare = index.paths(in: .world, lod: .far, visited: []) else {
+            return XCTFail("страны обязаны остаться")
+        }
+        XCTAssertTrue(bare.fills.isEmpty)
+        XCTAssertTrue(bare.regionBorders.isEmpty)
     }
 
     /// Заливку получает ТОЛЬКО посещённый регион, контур — каждый.

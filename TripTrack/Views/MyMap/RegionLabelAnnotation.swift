@@ -134,6 +134,16 @@ final class RegionLabelView: MKAnnotationView {
     private static let brightAlpha: CGFloat = 0.85
     private static let dimAlpha: CGFloat = 0.4
 
+    /// Тёмный ореол вокруг букв. Подпись лежит и на тумане, и на СВЕТЛОЙ
+    /// карте Apple внутри коридора (с фикс-волны 2 «Атлас» дневной), а
+    /// светлые буквы на светлой земле не читаются никак. Обводка решает это
+    /// на обоих грунтах сразу, чего одна тень не делает.
+    ///
+    /// `strokeWidth` ОТРИЦАТЕЛЬНЫЙ: положительный в TextKit означает «только
+    /// контур, без заливки», то есть подпись стала бы полой.
+    static let haloColor = UIColor(red: 0x1E/255, green: 0x22/255, blue: 0x30/255, alpha: 0.8)
+    static let haloWidth: CGFloat = -2.0
+
     private let nameLabel = UILabel()
     private let kmLabel = UILabel()
     private let stack = UIStackView()
@@ -160,9 +170,9 @@ final class RegionLabelView: MKAnnotationView {
         kmLabel.textAlignment = .center
 
         for label in [nameLabel, kmLabel] {
-            label.layer.shadowColor = UIColor.black.cgColor
+            label.layer.shadowColor = Self.haloColor.cgColor
             label.layer.shadowOpacity = 0.85
-            label.layer.shadowRadius = 1
+            label.layer.shadowRadius = 2
             label.layer.shadowOffset = .zero
         }
 
@@ -188,14 +198,16 @@ final class RegionLabelView: MKAnnotationView {
         // `region.name` (языка у аннотации нет).
         nameLabel.attributedText = NSAttributedString(
             string: region.name,
-            attributes: [.kern: nameLabel.font.pointSize * 0.08, .foregroundColor: color]
+            attributes: [.kern: nameLabel.font.pointSize * 0.08, .foregroundColor: color,
+                         .strokeColor: Self.haloColor, .strokeWidth: Self.haloWidth]
         )
         nameLabel.sizeToFit()
 
         if let kmLine = region.kmLine {
             kmLabel.attributedText = NSAttributedString(
                 string: kmLine,
-                attributes: [.kern: kmLabel.font.pointSize * 0.08, .foregroundColor: color]
+                attributes: [.kern: kmLabel.font.pointSize * 0.08, .foregroundColor: color,
+                             .strokeColor: Self.haloColor, .strokeWidth: Self.haloWidth]
             )
             kmLabel.isHidden = false
             kmLabel.sizeToFit()

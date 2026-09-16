@@ -78,7 +78,21 @@ final class RegionPathIndex {
     /// мир) — только страны: шестьсот региональных контуров на таком масштабе
     /// превращаются в сетку, сквозь которую не видно ни тумана, ни открытого.
     static func draws(countries lod: RevealedLayer.LOD) -> Bool { lod != .fine }
+    /// КОНТУРЫ регионов — только на `.mid`.
     static func draws(regions lod: RevealedLayer.LOD) -> Bool { lod == .mid }
+    /// А вот ЗАЛИВКА посещённого рисуется и на `.far`, и это не то же самое.
+    ///
+    /// Возражение против регионов на дальнем уровне — «шестьсот контуров
+    /// превращаются в сетку»; к заливке оно не относится вовсе: посещённых у
+    /// человека единицы, линий они не добавляют ни одной, а отвечают ровно на
+    /// тот вопрос, ради которого карту открыли с высоты. Замер на симуляторе
+    /// (кадр `.mid` со ВСЕМИ регионами в посещённых) — 68 мс при потолке 160,
+    /// и на `.far` геометрия ещё и прорежена.
+    ///
+    /// Без этого заливку не видно почти никогда: полоса `.mid` — это
+    /// 1.5e-4…1.5e-3 зума, и камера проходит её насквозь за один двойной тап
+    /// (замер по логу: 1.29e-4 → 3.82e-4 → 4.31e-3).
+    static func fills(regions lod: RevealedLayer.LOD) -> Bool { lod != .fine }
 
     /// Через сколько вершин брать по одной. На дальнем уровне контур страны
     /// шириной в полтора экранных пикселя не стоит своих тысяч вершин; на
@@ -150,7 +164,9 @@ final class RegionPathIndex {
         for lod in RevealedLayer.LOD.allCases {
             guard Self.draws(countries: lod) else { continue }
             let step = Self.stride(for: lod)
-            let wantsRegions = Self.draws(regions: lod)
+            // Регионы кладутся и на `.far` — там они нужны под заливку
+            // посещённого, хотя контуром не рисуются.
+            let wantsRegions = Self.draws(regions: lod) || Self.fills(regions: lod)
             var entries: [Entry] = []
             for outline in outlines where outline.isCountry || wantsRegions {
                 if let entry = Self.entry(for: outline, step: step, transform: transform) {
@@ -177,12 +193,13 @@ final class RegionPathIndex {
         lock.unlock()
         guard let entries, !entries.isEmpty else { return nil }
 
+        let tracesRegions = Self.draws(regions: lod)
         var out = RegionPaths()
         for entry in entries where entry.box.intersects(rect) {
             if entry.isCountry {
                 out.countryBorders.append(entry.path)
             } else {
-                out.regionBorders.append(entry.path)
+                if tracesRegions { out.regionBorders.append(entry.path) }
                 if visited.contains(entry.id) { out.fills.append(entry.path) }
             }
         }

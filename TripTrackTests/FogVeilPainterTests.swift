@@ -683,6 +683,76 @@ final class FogVeilPainterTests: XCTestCase {
         return index
     }
 
+    /// Вложенный посещённый регион ЗАЛИТ, а не вырезан дыркой.
+    ///
+    /// Адыгея лежит целиком внутри Краснодарского края (Natural Earth отдаёт
+    /// край сплошным кольцом, без дырки под республикой). Одним общим путём с
+    /// правилом чётное-нечётное XOR превратил бы посещённую республику в
+    /// дырку посреди залитого края — «здесь я был» читалось бы как «здесь
+    /// меня не было».
+    func testANestedVisitedRegionIsFilledNotPunchedOut() {
+        func box(_ minLat: Double, _ minLon: Double,
+                 _ maxLat: Double, _ maxLon: Double) -> [Double] {
+            [minLat, minLon, minLat, maxLon, maxLat, maxLon, maxLat, minLon]
+        }
+        let index = RegionPathIndex()
+        index.prepare(outlines: [
+            RegionOutline(id: "KDA", isCountry: false, rings: [box(44, 38, 46, 40)]),
+            RegionOutline(id: "AD", isCountry: false, rings: [box(44.7, 38.7, 45.3, 39.3)]),
+        ])
+        let (rect, sizePoints) = regionFrame(metresPerPoint: 200, side: 360)
+        let paths = MapPathIndex()
+        paths.prepare(source: { _ in [] }, transform: { CGPoint(x: $0.x, y: $0.y) })
+        guard let band = FogVeilBitmap.render(
+            rect: rect, sizePoints: sizePoints, scale: 1, index: paths, selected: [],
+            regions: index, visited: ["KDA", "AD"])
+        else { return XCTFail("растр обязан собраться") }
+        let width = band.image.width, height = band.image.height
+        guard let pixels = pixels(of: band.image, width: width, height: height)
+        else { return XCTFail("пиксели обязаны прочитаться") }
+
+        // Середина кадра — центр вложенной «Адыгеи» (кадр центрирован на
+        // 45.0 / 38.95, а она накрывает 44.7…45.3 / 38.7…39.3).
+        let inner = warmth(pixels, width: width, height: height, column: 0.45...0.55)
+        print(String(format: "[regions] вложенный посещённый: теплота %.2f", inner))
+        XCTAssertGreaterThan(inner, 5,
+                             "вложенный регион вырезан дыркой вместо заливки")
+    }
+
+    /// Заливка посещённого рисуется и на ДАЛЬНЕМ уровне — там, где у карты
+    /// вопрос «где я вообще был», а контуров регионов уже нет.
+    func testVisitedRegionIsTintedAtCountryZoomToo() {
+        let (rect, sizePoints) = regionFrame(metresPerPoint: 1_500, side: 360)
+        XCTAssertEqual(FogVeilRenderer.lod(
+            for: MKZoomScale(sizePoints.width / CGFloat(rect.width))), .far)
+        let paths = MapPathIndex()
+        paths.prepare(source: { _ in [] }, transform: { CGPoint(x: $0.x, y: $0.y) })
+        // Регионы РАЗМЕРОМ С КАДР: на 1 500 м/pt кадр — это полтысячи
+        // километров, и пара двухсоткилометровых квадратов легла бы мимо
+        // обеих проверяемых колонок.
+        func big(_ minLon: Double, _ maxLon: Double) -> [Double] {
+            [40, minLon, 40, maxLon, 50, maxLon, 50, minLon]
+        }
+        let wide = RegionPathIndex()
+        wide.prepare(outlines: [
+            RegionOutline(id: "W", isCountry: false, rings: [big(30, 38.95)]),
+            RegionOutline(id: "E", isCountry: false, rings: [big(38.95, 48)]),
+        ])
+        guard let band = FogVeilBitmap.render(
+            rect: rect, sizePoints: sizePoints, scale: 1, index: paths, selected: [],
+            regions: wide, visited: ["W"])
+        else { return XCTFail("растр обязан собраться") }
+        let width = band.image.width, height = band.image.height
+        guard let pixels = pixels(of: band.image, width: width, height: height)
+        else { return XCTFail("пиксели обязаны прочитаться") }
+        let visited = warmth(pixels, width: width, height: height, column: 0.15...0.40)
+        let plain = warmth(pixels, width: width, height: height, column: 0.60...0.85)
+        print(String(format: "[regions] `.far`: посещённый %.2f, непосещённый %.2f",
+                     visited, plain))
+        XCTAssertGreaterThan(visited, plain + 3,
+                             "на масштабе страны заливки посещённого нет — а она там и нужна")
+    }
+
     // MARK: Внутри
 
     /// Тот же кадр настоящим `FogVeilRenderer`, тайл за тайлом, с клипом на
