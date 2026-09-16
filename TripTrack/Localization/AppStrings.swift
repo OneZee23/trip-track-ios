@@ -1159,6 +1159,8 @@ enum AppStrings {
         tr(lang, "cardStoryPending",
            ru: "История появится с обновлением",
            en: "The story arrives with an update")
+    }
+
     // MARK: - Постер «Поделиться» (0.7.0)
 
     /// Подпись на постере «Атласа»: «Атлас · 1 910 км открыто · 4 знака».
