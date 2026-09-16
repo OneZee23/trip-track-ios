@@ -4,7 +4,135 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.6.8 — places, public journeys, segments (current submission)
+## v0.7.0 — the Atlas: real fog and finds (current submission)
+
+### Короткая версия — вставить в App Store Connect
+
+```
+TripTrack 0.7.0 turns the Map tab into an "Atlas": the world starts covered by
+opaque fog, and only the roads the user has actually driven are open in it.
+
+THE FOG. Everything drawn on the Atlas comes from trips recorded on this phone.
+On first launch the app rebuilds the opened layer from the existing library in
+the background; nothing is downloaded or uploaded to draw it. The same fog is drawn on a trip's own screen (the world as it looked on
+that date) and on the recording screen (a hole that grows around the car).
+
+FINDS. When a trip ENDS, the app reads the recorded track and reports what the
+route passed: authored "secrets", "riddles" derived from open map data (a
+lighthouse, a mountain pass, a ferry, a dam, a border post), and
+milestones of the user's own geography (a first region, an easternmost point,
+high in the mountains, below sea level, three regions in one day, a border, a
+pass at night). Each one puts a seal on the Atlas and opens as a card.
+
+DRIVING SAFETY — please read this part. Nothing about finds is computed or
+shown while the user is driving. During recording there is no banner, no sound,
+no vibration and no "a secret is near you" prompt of any kind: the whole feature
+runs after the trip has ended, on the finished track. This is not a side effect
+of the design, it is a rule the code is tested against — an automated test fails
+the build if any of the discovery code is referenced from the recording path, or
+if that code gains access to the location manager, the notification centre or
+audio playback. Nothing is awarded for speed, and no text in the app asks the
+user to drive faster, to reach a point, or to stop at the roadside. An unsolved
+riddle is never shown as a point to drive to: it appears as a 5-30 km circle
+with one line of text, at most three at a time, on a screen that is read after
+the drive. There is no manual "I am here" entry and no tap-on-the-map entry — a
+find counts only from a recorded track.
+
+THE JOURNAL. Pulling the Atlas sheet up shows how much the user has opened,
+their regions, all their seals and nearby riddles. Finds also appear in the user's public profile under the achievements,
+behind the same visibility switch, and "Share the Atlas" produces an image of
+the user's own map.
+
+HOW TO TEST
+1. Open the fourth tab, "Atlas". On a fresh install it is solid fog, and that is
+   correct: nothing has been driven yet.
+2. Record a trip. In the Simulator use Features > Location > Freeway Drive (not
+   City Run: anything that never exceeds 15 km/h is discarded as a walking
+   misfire). While recording, watch the map — a hole opens around the car, and
+   nothing else happens: no prompts, no sounds.
+3. End the trip. On the summary screen an "Opened" block appears between the
+   stats and the awards ("42 km of new road ..."), and the fog burns off that
+   trip's map along the route just driven. If the drive passed nothing of
+   interest there is no block at all, which is also correct.
+4. Open the Atlas again: the corridor of that drive is now open, with seals on
+   it if anything was found. Pull the sheet up for the journal; tap a seal for
+   its card.
+5. Sharing: with the sheet collapsed, tap Share. The app renders a picture of
+   the map and offers it together with one line of text.
+
+SIGN-IN. Authentication is Sign in with Apple only, and no special account is
+needed: the reviewer's own Apple ID works. The Atlas and finds work fully signed
+out and with Cloud Sync off (the default) — only the story text of an authored
+secret and the "found by N people" counter come from our server.
+
+MODERATION. Authored secrets are written by us, not by users: this feature has
+no user-generated content. Riddles come from open map data and name only public
+objects, never private property or homes.
+
+No new permissions are requested. Location usage is unchanged from 0.6.8.
+```
+
+### Если спросят про приватность и данные
+
+Это ответ на ОТДЕЛЬНЫЙ вопрос ревьюера, не продолжение вставки выше — вместе
+два блока уходят за 4000 знаков лимита Notes.
+
+```
+This release adds no new data type, no new SDK and no new permission. The App
+Privacy answers are unchanged from 0.6.7.
+
+The opened layer — the fog — is computed on the phone from the user's own
+recorded trips and stays on the phone. It is not uploaded, it is not part of any
+sync payload, and it does not travel to the user's second phone.
+
+The catalogue of authored secrets is downloaded from our server and carries
+nothing personal: per secret, 32-bit truncations of SHA-256(salt + cell
+geohash) plus a symbol. No coordinates, no names, no user data, and the request
+itself carries no location. The catalogue is public by design; the matching
+happens entirely on the phone, against a track the phone already holds. Offline,
+the app falls back to the cached catalogue and then to one shipped in the
+bundle.
+
+A find leaves the phone only when the user has signed in AND turned Cloud Sync
+on — both off by default. Then the id of the find and the trip that produced it
+are sent, so the server can return the story text, confirm the find against the
+track it already stores, and report how many people have found it. "Erase my
+data from the server" issues an explicit call that deletes these records, and
+deleting the account deletes them as well.
+
+Riddles are derived from public OpenStreetMap data and ship inside the app;
+evaluating them involves no network request at all. Milestones are computed from
+the user's own trips and never leave the phone except as the user's own find,
+under the same Cloud Sync condition.
+```
+
+### Длинная версия — для нас
+
+Схема CoreData v18: `RevealedCellEntity` (слой открытого, v16), `DiscoveryEntity`
+(находки, v17) и история раскрытия у находки (`finders`, `firstFinderName`,
+`firstFinderAt`, `rarity`, v18). Слой открытого в синк-пейлоад не попадает
+вовсе; находки едут секцией `discoveries` в `/sync/pull` и строкой
+`(.discovery, …)` в очереди синка — и только при `cloudSyncEnabled && isSignedIn`.
+
+На бэкенде — `GET /secrets/catalog` (только усечённые хеши и символы),
+`POST /secrets/reveal` (текст после совпадения; координата секрета уходит
+клиенту ровно в одном случае — по своей ПОДТВЕРЖДЁННОЙ находке),
+`POST /secrets/forget-all` для кнопки «стереть мои данные с сервера» и поле
+`finds` в публичном профиле.
+
+Правило «ничего на ходу» держит сторож `NoLiveSecretPromptsTests`: он падает,
+если код находок упомянут вне своей папки и разрешённых дверей, или если внутри
+папки появился `LocationManager`, `CLLocationManager`, `UNUserNotificationCenter`
+или `AVAudioPlayer`. Про это стоит сказать ревьюеру прямо — §2.4 спеки написана
+ровно для того, чтобы функция не читалась как «игра за рулём».
+
+Демо-аккаунт по-прежнему не нужен и не заводится: вход — Sign in with Apple
+собственным Apple ID ревьюера. §«Demo account (if reviewer asks)» внизу файла —
+запасной план на случай отказа ревью, а не текущая практика.
+
+---
+
+## v0.6.8 — places, public journeys, segments (previous submission)
 
 ### Короткая версия — вставить в App Store Connect
 
