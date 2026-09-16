@@ -37,8 +37,8 @@ enum LocalDataWipe {
             // Места и проезды — без связей — каскад не заберёт.
             "PlacePassEntity", "PlaceEntity",
             "VisitedGeohashEntity", "RoadEntity",
-            // Открытое на карте (0.7.0) — тоже без связей.
-            "RevealedCellEntity",
+            // Открытое на карте и найденное на нём (0.7.0) — тоже без связей.
+            "RevealedCellEntity", "DiscoveryEntity",
             "GeocodeCacheEntity",
         ]
         for name in entities {
@@ -96,6 +96,10 @@ enum LocalDataWipe {
         // без тумана навсегда — флаг говорит «сборка прошла». `wipe()` снимает
         // флаг и сообщает «Атласу», что снимок мира устарел.
         RevealedLayerStore.shared.wipe()
+        // Найденное стёрто тем же пакетом мимо контекстов, и у стора остались
+        // бы «призраки» стёртых строк в его собственном фоновом контексте:
+        // `wipe()` сбрасывает контекст и сообщает «Атласу», что печатей нет.
+        DiscoveryStore.shared.wipe()
 
         wipeLog.notice("[data.wipe] local user data erased")
     }

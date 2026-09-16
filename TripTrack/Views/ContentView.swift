@@ -29,6 +29,9 @@ extension Notification.Name {
     /// Открытое на карте изменилось (0.7.0): финиш поездки, фоновая сборка
     /// после обновления, стирание данных. Слушает «Атлас».
     static let revealedLayerChanged = Notification.Name("revealedLayerChanged")
+    /// Найденное изменилось (0.7.0): финиш поездки поставил печати, стирание
+    /// данных их снесло. Слушает «Атлас».
+    static let discoveriesChanged = Notification.Name("discoveriesChanged")
     /// Места или проезды изменились (0.6.8): вкладка «Места» и чип у отметки
     /// перечитывают историю.
     static let placesChanged = Notification.Name("placesChanged")
