@@ -38,6 +38,27 @@ final class RegionAtlas {
         }
     }
 
+    /// Country outline — geometry only, no lookups. `RegionPathIndex`
+    /// (0.7.0, `RegionAtlas.countries`) uses these rings to draw a border
+    /// for every country on earth at world zoom; `regions` above still
+    /// carries the point-in-polygon detail for the 20 driveable countries.
+    struct MapCountry {
+        let id: String
+        let nameRu: String
+        let nameEn: String
+        let center: CLLocationCoordinate2D
+        let bounds: GeoBounds
+        /// Outer rings, flat [lat, lon, lat, lon, …]. Empty for a country
+        /// whose ring fell under the build script's span floor (micro-
+        /// states) — it still has a `center`/`bounds` for a label anchor
+        /// and LOD sizing, just nothing to trace.
+        let rings: [[Double]]
+
+        func localizedName(_ language: LanguageManager.Language) -> String {
+            language == .ru ? nameRu : nameEn
+        }
+    }
+
     struct City {
         let name: String
         let nameEn: String
@@ -64,6 +85,12 @@ final class RegionAtlas {
     private(set) var regions: [Region] = []
     private(set) var citiesByRegion: [String: [City]] = [:]
     private(set) var countryNames: [String: (ru: String, en: String)] = [:]
+    /// Every country on earth with usable admin-0 geometry (0.7.0) — for
+    /// drawing, not for lookups. `country(containing:)` does not exist:
+    /// nothing needs it, `region(containing:)` already answers "which
+    /// country" via `Region.countryCode` for the 20 driveable ones, and
+    /// the other ~220 only ever get drawn, never matched against a track.
+    private(set) var countries: [MapCountry] = []
     private(set) var isLoaded = false
 
     /// Region indices bucketed by whole-degree cell, so a lookup tests two or
@@ -102,6 +129,7 @@ final class RegionAtlas {
         regions = parsed.regions
         citiesByRegion = parsed.citiesByRegion
         countryNames = parsed.countryNames
+        countries = parsed.countries
         grid = parsed.grid
         regionIndexById = parsed.regionIndexById
         isLoaded = true
@@ -170,17 +198,26 @@ final class RegionAtlas {
     static func contains(lat: Double, lon: Double, rings: [[Double]]) -> Bool {
         var inside = false
         for ring in rings {
-            let count = ring.count / 2
-            guard count > 2 else { continue }
-            var j = count - 1
-            for i in 0..<count {
-                let yi = ring[2 * i], xi = ring[2 * i + 1]
-                let yj = ring[2 * j], xj = ring[2 * j + 1]
-                if (yi > lat) != (yj > lat) {
-                    let crossing = (xj - xi) * (lat - yi) / (yj - yi) + xi
-                    if lon < crossing { inside.toggle() }
+            // `withUnsafeBufferPointer` — the 0.7.0 atlas tolerance roughly
+            // doubles the average ring's vertex count (§3.3), and this loop
+            // runs per sampled track point; bounds-checked `[Double]`
+            // subscripting was measurably the difference between a finish
+            // screen that waits and one that doesn't
+            // (`DiscoveryProcessorTests.testHistoryOverAThousandTripsIsWalkedOnceAndCheaply`).
+            // Same ray-casting math, just without the per-access check.
+            ring.withUnsafeBufferPointer { buffer in
+                let count = buffer.count / 2
+                guard count > 2 else { return }
+                var j = count - 1
+                for i in 0..<count {
+                    let yi = buffer[2 * i], xi = buffer[2 * i + 1]
+                    let yj = buffer[2 * j], xj = buffer[2 * j + 1]
+                    if (yi > lat) != (yj > lat) {
+                        let crossing = (xj - xi) * (lat - yi) / (yj - yi) + xi
+                        if lon < crossing { inside.toggle() }
+                    }
+                    j = i
                 }
-                j = i
             }
         }
         return inside
@@ -200,6 +237,7 @@ final class RegionAtlas {
         let regions: [Region]
         let citiesByRegion: [String: [City]]
         let countryNames: [String: (ru: String, en: String)]
+        let countries: [MapCountry]
         let grid: [Int: [Int]]
         let regionIndexById: [String: Int]
     }
@@ -220,6 +258,15 @@ final class RegionAtlas {
             let id: String
             let ru: String
             let en: String
+            let c: [Double]
+            let b: [Double]
+            /// Optional (0.7.0): a country whose ring fell under the build
+            /// script's span floor ships without `r` at all. `JSONDecoder`
+            /// fails an entire array on one bad element, so this being
+            /// non-optional would let ONE tiny-country row take every
+            /// country — and every region and city alongside it, since
+            /// they all decode as one `Payload` — down with it.
+            let r: [[Double]]?
         }
         struct RawCity: Decodable {
             let n: String
@@ -319,12 +366,26 @@ final class RegionAtlas {
         }
 
         var countryNames: [String: (ru: String, en: String)] = [:]
-        for raw in payload.countries { countryNames[raw.id] = (raw.ru, raw.en) }
+        var countries: [MapCountry] = []
+        countries.reserveCapacity(payload.countries.count)
+        for raw in payload.countries {
+            countryNames[raw.id] = (raw.ru, raw.en)
+            guard raw.c.count == 2, raw.b.count == 4 else { continue }
+            countries.append(MapCountry(
+                id: raw.id,
+                nameRu: raw.ru,
+                nameEn: raw.en,
+                center: CLLocationCoordinate2D(latitude: raw.c[0], longitude: raw.c[1]),
+                bounds: GeoBounds(minLat: raw.b[0], maxLat: raw.b[2], minLon: raw.b[1], maxLon: raw.b[3]),
+                rings: raw.r ?? []
+            ))
+        }
 
         return Parsed(
             regions: regions,
             citiesByRegion: citiesByRegion,
             countryNames: countryNames,
+            countries: countries,
             grid: grid,
             regionIndexById: indexById
         )

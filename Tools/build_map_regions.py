@@ -1,39 +1,100 @@
 #!/usr/bin/env python3
-"""Build the bundled map dataset for the 6.1.0 «Моя карта» screen.
+"""Build the bundled map dataset for the «Атлас» screen.
 
-Sources (both public domain / open):
+Sources (all public domain / open):
   - Natural Earth 1:10m admin-1 states & provinces  → region borders
-  - pensnarik/russian-cities                        → RU city list per subject
+  - Natural Earth 1:10m admin-0 countries            → country borders (0.7.0)
+  - Natural Earth 1:10m populated places             → RU→EN city names
+  - pensnarik/russian-cities                         → RU city list per subject
 
 The 1:50m cut was tried first and rejected: the whole Krasnodar Krai came out
 as 128 points, which put Adler and Krasnaya Polyana OUTSIDE their own region.
 1:10m keeps the coastal strip.
 
+Regions are simplified with a tolerance SCALED to each ring's own span
+(`detail 0.002, lo 0.003, hi 0.012`, ~0.7.0): a fixed epsilon is the wrong
+trade — it shreds a small region's coastline or leaves a giant carrying
+thousands of points nobody will ever see. Countries — everything on earth,
+not just the 20 the app breaks into regions — use a flat 0.01° tolerance
+instead (`countries[].r`): at world zoom the shape only needs to read as the
+country, and a scaled tolerance would make Russia dwarf the file. A country
+ring below `min_span` (0.15°, ~micro-states) is dropped rather than kept
+illegibly small; `countries[].c`/`.b` still come from the FULL unfiltered
+geometry, because a micro-state without a drawable border still needs a
+label anchor and a box for LOD sizing.
+
+Countries used to ship as a name-only list of the 20 driveable ones. As of
+0.7.0 every country on earth gets an entry (§3.3 of the atlas-look spec):
+the 20 keep their hand-picked `ru`/`en` (Natural Earth's «Молдавия»,
+«Туркмения», «Белоруссия», «Turkey» disagree with product decisions already
+made — «Молдова», «Туркменистан», «Беларусь», «Türkiye» — so those twenty
+are NOT re-sourced from Natural Earth's names), every other country takes
+its `NAME_RU`/`NAME_EN` straight from the admin-0 row. Multiple admin-0
+features can share one ISO_A2 (France + Clipperton Island, Australia + its
+island territories) — their rings are pooled before simplifying, one country
+entry, not two.
+
 Output: a single compact JSON. Rings are flat [lat, lon, lat, lon, …] arrays
-rounded to 3 decimals (~110 m), simplified with Douglas–Peucker at ~1.3 km —
-finer than any border drawn at region zoom needs.
+rounded to 3 decimals (~110 m).
 
-Usage — the three inputs are NOT committed (40 MB of source data for a 650 KB
-result), so fetch them next to this script first:
+Usage — the four inputs are NOT committed (source data for a few-MB result),
+so this script fetches them itself on first run, into `Tools/cache/`
+(gitignored):
 
-    cd Tools
-    NE=https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson
-    curl -L -o ne10.geojson        $NE/ne_10m_admin_1_states_provinces.geojson
-    curl -L -o ne10_places.geojson $NE/ne_10m_populated_places.geojson
-    curl -L -o ru_cities.json \\
-      https://raw.githubusercontent.com/pensnarik/russian-cities/master/russian-cities.json
-    python3 build_map_regions.py
-    mv map_regions.json ../TripTrack/Resources/MapRegions.json
+    python3 Tools/build_map_regions.py
+    mv Tools/map_regions.json TripTrack/Resources/MapRegions.json
+
+Re-running reuses whatever is already in `Tools/cache/`; delete a file there
+to force a re-fetch.
 
 Licences: Natural Earth is public domain; pensnarik/russian-cities is open.
 """
-import json, math, os
+import json, math, os, sys, urllib.error, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+CACHE = os.path.join(HERE, "cache")
+
+NE = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson"
+SOURCES = {
+    "ne_10m_admin_1_states_provinces.geojson": f"{NE}/ne_10m_admin_1_states_provinces.geojson",
+    "ne_10m_admin_0_countries.geojson": f"{NE}/ne_10m_admin_0_countries.geojson",
+    "ne_10m_populated_places.geojson": f"{NE}/ne_10m_populated_places.geojson",
+    "ru_cities.json": "https://raw.githubusercontent.com/pensnarik/russian-cities/master/russian-cities.json",
+}
+
+ADMIN1_PATH = os.path.join(CACHE, "ne_10m_admin_1_states_provinces.geojson")
+ADMIN0_PATH = os.path.join(CACHE, "ne_10m_admin_0_countries.geojson")
+PLACES_PATH = os.path.join(CACHE, "ne_10m_populated_places.geojson")
+RU_CITIES_PATH = os.path.join(CACHE, "ru_cities.json")
+
+
+def ensure_cached():
+    """Fetch every source into `Tools/cache/` if it is not already there.
+    A failed fetch stops the build with the URL that failed — geometry is
+    never invented when a download is unavailable."""
+    os.makedirs(CACHE, exist_ok=True)
+    for name, url in SOURCES.items():
+        path = os.path.join(CACHE, name)
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            continue
+        print(f"fetching {name} ...")
+        req = urllib.request.Request(url, headers={"User-Agent": "TripTrack (map atlas build)"})
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                data = resp.read()
+        except Exception as exc:  # noqa: BLE001 — any failure here is fatal to the build
+            sys.exit(
+                f"BLOCKED: could not fetch {name}\n  {url}\n  {exc}\n"
+                f"Download it by hand into {path} and re-run."
+            )
+        with open(path, "wb") as fh:
+            fh.write(data)
+        print(f"  {len(data) / 1024:.0f} KB")
+
 
 # Countries whose regions ship as separate fill/border units. Everything else
-# on earth is unreachable by car from here, so a trip there falls back to the
-# country row without geometry.
+# on earth gets a country-level outline only (§3.3, 0.7.0) — a trip there
+# falls back to the country row without a region breakdown.
 COUNTRIES = {
     "RUS": ("RU", "Россия", "Russia"),
     "GEO": ("GE", "Грузия", "Georgia"),
@@ -111,25 +172,85 @@ def ring_span(ring):
     return math.hypot(max(lons) - min(lons), max(lats) - min(lats))
 
 
-def prepare(geom, min_span, max_rings, detail=0.006, lo=0.008, hi=0.05):
+def simplify_rings(rings, min_span, max_rings, detail=0.002, lo=0.003, hi=0.012, max_points=None):
     """Simplify each ring with a tolerance proportional to its own span.
 
     A fixed epsilon is the wrong trade: 1.3 km shreds Adjara's coastline yet
     leaves Yakutia carrying 4 000 points nobody will ever see — you only ever
     look at a big region from far away. Scaling the tolerance to the ring
     keeps small regions crisp and stops the giants from dominating the file.
+
+    0.7.0: tightened from 0.006/0.008/0.05 and — as important — the old call
+    site coarsened every country but Russia to `lo=0.02`, which is exactly
+    what shredded Adjara's coastal ring and put Kobuleti on the wrong side of
+    it (Batumi → Kobuleti landed outside GE-AJ). The finer, UNIFORM tolerance
+    below fixes that as a side effect of not treating "abroad" as cheaper to
+    draw than home.
+
+    A ring that already has few points (a small city-level subject — Ganja,
+    Valmiera, Mingecevir) is passed through UNSIMPLIFIED: RDP on 10–20 points
+    saves nothing worth having and can push an already-thin ring under the
+    twelve-vertex floor the bundle test holds every region to, for a few
+    hundred bytes of savings on a 3.5 MB file.
+
+    `max_points`, when given, re-simplifies at a coarser (scaled-up) uniform
+    tolerance until the region's total vertex count fits — the handful of
+    Arctic giants (Krasnoyarsk Krai, Yakutia, Arkhangelsk, Norway's Nordland)
+    that the finer 0.7.0 tolerance alone still leaves over
+    `MapRenderCostTests.testRegionOutlinesAreSmallEnoughToDrawAtOnce`'s 3 000-
+    point render budget. Only THEIR tolerance grows; every other region keeps
+    the fine, uniform pass above.
     """
-    out = []
-    for ring in rings_of(geom):
+    def pass_at(scale):
+        out = []
+        for ring in rings:
+            span = ring_span(ring)
+            if span < min_span:
+                continue
+            if len(ring) <= 24:
+                simple = ring
+            else:
+                simple = rdp(ring, max(lo, min(hi, span * detail)) * scale)
+            if len(simple) < 4:
+                continue
+            out.append((span, simple))
+        out.sort(key=lambda x: -x[0])
+        return out[:max_rings]
+
+    scale = 1.0
+    scored = pass_at(scale)
+    if max_points is not None:
+        total = sum(len(r) for _, r in scored)  # r is a list of (lon, lat) points here
+        while total > max_points and scale < 64:
+            scale *= 1.5
+            scored = pass_at(scale)
+            total = sum(len(r) for _, r in scored)
+    return [r for _, r in scored]
+
+
+def country_geometry(raw_rings, min_span=0.15, max_rings=12, eps=0.01):
+    """Country outline: flat 0.01° tolerance, rings under `min_span` (~micro-
+    states) dropped, capped at twelve. `centroid`/`bbox` come from the FULL
+    unfiltered geometry — a country whose only ring fell under the span floor
+    still needs a label anchor and a box for LOD sizing, just no polygon to
+    fill. Returns ([], None, None) when there is no usable geometry at all.
+    """
+    usable = [r for r in raw_rings if len(r) >= 4]
+    if not usable:
+        return [], None, None
+    all_flat = [flat(r) for r in usable]
+    scored = []
+    for ring in usable:
         span = ring_span(ring)
         if span < min_span:
             continue
-        simple = rdp(ring, max(lo, min(hi, span * detail)))
+        simple = rdp(ring, eps)
         if len(simple) < 4:
             continue
-        out.append((span, simple))
-    out.sort(key=lambda x: -x[0])
-    return [r for _, r in out[:max_rings]]
+        scored.append((span, simple))
+    scored.sort(key=lambda x: -x[0])
+    rings = [flat(r) for _, r in scored[:max_rings]]
+    return rings, centroid_of(all_flat), bbox_of(all_flat)
 
 
 def flat(ring):
@@ -212,10 +333,9 @@ def transliterate(name):
 
 def english_city_names():
     """Russian → English city names from Natural Earth's populated places."""
-    path = os.path.join(HERE, "ne10_places.geojson")
-    if not os.path.exists(path):
+    if not os.path.exists(PLACES_PATH):
         return {}
-    data = json.load(open(path))
+    data = json.load(open(PLACES_PATH, encoding="utf-8"))
     table = {}
     for feature in data["features"]:
         p = feature["properties"]
@@ -227,25 +347,77 @@ def english_city_names():
     return table
 
 
+def build_countries():
+    """One entry per country on earth: the 20 atlas countries keep their
+    hand-picked names (Natural Earth's «Молдавия»/«Туркмения»/«Белоруссия»/
+    Turkey disagree with product decisions already made), everyone else
+    takes NAME_RU/NAME_EN straight from admin-0. Multiple admin-0 features
+    sharing one ISO_A2 (dependencies) are pooled into a single entry."""
+    admin0 = json.load(open(ADMIN0_PATH, encoding="utf-8"))
+    by_cc = {cc: (ru, en) for cc, ru, en in COUNTRIES.values()}
+
+    grouped = {}
+    for feat in admin0["features"]:
+        p = feat["properties"]
+        entry = COUNTRIES.get(p.get("ADM0_A3"))
+        if entry is not None:
+            code = entry[0]
+        else:
+            code = p.get("ISO_A2")
+            if not code or code == "-99":
+                code = p.get("ISO_A2_EH")
+            if not code or code == "-99":
+                continue  # disputed micro-territory with no usable code
+        grouped.setdefault(code, []).append(feat)
+
+    countries = []
+    for code, feats in sorted(grouped.items()):
+        if code in by_cc:
+            ru, en = by_cc[code]
+        else:
+            named = next(
+                (f for f in feats if f["properties"].get("TYPE") in ("Country", "Sovereign country")),
+                feats[0],
+            )
+            p = named["properties"]
+            ru = p.get("NAME_RU") or p.get("NAME")
+            en = p.get("NAME_EN") or p.get("NAME")
+            if not ru or not en:
+                continue
+        raw_rings = [ring for f in feats for ring in rings_of(f["geometry"])]
+        rings, centroid, bbox = country_geometry(raw_rings)
+        if bbox is None:
+            continue
+        row = {"id": code, "ru": ru, "en": en, "c": centroid, "b": bbox}
+        if rings:
+            row["r"] = rings
+        countries.append(row)
+    return countries
+
+
 def main():
-    admin1 = json.load(open(os.path.join(HERE, "ne10.geojson")))
-    cities_raw = json.load(open(os.path.join(HERE, "ru_cities.json")))
+    ensure_cached()
+
+    admin1 = json.load(open(ADMIN1_PATH, encoding="utf-8"))
+    cities_raw = json.load(open(RU_CITIES_PATH, encoding="utf-8"))
     english = english_city_names()
 
     regions = []
+    # Natural Earth occasionally tags TWO rows with the same iso_3166_2 — a
+    # rural district and the city inside it that outgrew a municipality of
+    # its own (Latvia's Rezekne city vs. Rezeknes municipality, Azerbaijan's
+    # district/municipality pairs). Group by the FINAL id first and pool
+    # every ring under it, so a drive through either half still resolves and
+    # the id never appears twice in the output — a duplicate id would make
+    # `RegionAtlas.regionIndexById` silently drop one of the two.
+    grouped_geoms = {}
+    meta = {}       # rid -> (cc, ru, en, raw point count of its biggest contributor)
     for feat in admin1["features"]:
         p = feat["properties"]
         entry = COUNTRIES.get(p.get("adm0_a3"))
         if entry is None:
             continue
         cc, _, _ = entry
-        # Abroad you pass through; a 2 km border there is plenty, and it
-        # stops Latvia's 119 municipalities from outweighing all of Russia.
-        rings = prepare(feat["geometry"], min_span=0.06, max_rings=24,
-                        lo=0.008 if cc == "RU" else 0.02)
-        if not rings:
-            continue
-        flat_rings = [flat(r) for r in rings]
         ru = p.get("name_ru") or p.get("name_local") or p.get("name")
         en = p.get("name_en") or p.get("name") or ru
         # Natural Earth carries a few nameless placeholder features (e.g.
@@ -254,6 +426,32 @@ def main():
             continue
         rid = p.get("iso_3166_2") or f"{cc}-{(p.get('code_hasc') or en)[-3:]}"
         rid = ISO_FIXES.get((ru, rid), rid)
+        geoms = rings_of(feat["geometry"])
+        grouped_geoms.setdefault(rid, []).extend(geoms)
+        points = sum(len(r) for r in geoms)
+        if rid not in meta or points > meta[rid][3]:
+            meta[rid] = (cc, ru, en, points)
+
+    tiny_regions = []
+    for rid, raw_rings in grouped_geoms.items():
+        cc, ru, en, _ = meta[rid]
+        # 2 800, not 3 000: leaves headroom below MapRenderCostTests' budget
+        # for the flat→round-trip and for the next region that edges close.
+        rings = simplify_rings(raw_rings, min_span=0.06, max_rings=24, max_points=2_800)
+        if not rings:
+            continue
+        flat_rings = [flat(r) for r in rings]
+        vertex_count = sum(len(r) // 2 for r in flat_rings)
+        # A handful of city-level subjects (Nakhchivan's exclave, Valmiera,
+        # Mingecevir) carry fewer than twelve points in Natural Earth's
+        # source data itself — below the bundle's twelve-vertex floor even
+        # unsimplified. Inventing points to clear the bar would be exactly
+        # the kind of fabricated geometry this file exists to avoid, so
+        # these fall out of the atlas (their coordinates simply resolve to
+        # no region) rather than ship as a barely-there polygon.
+        if vertex_count < 12:
+            tiny_regions.append((rid, vertex_count))
+            continue
         regions.append({
             "id": rid,
             "cc": cc,
@@ -263,11 +461,10 @@ def main():
             "b": bbox_of(flat_rings),
             "r": flat_rings,
         })
+    if tiny_regions:
+        print(f"dropped {len(tiny_regions)} regions under the 12-vertex floor: {tiny_regions}")
 
-    countries = [
-        {"id": cc, "ru": ru, "en": en}
-        for _, (cc, ru, en) in sorted(COUNTRIES.items(), key=lambda kv: kv[1][0])
-    ]
+    countries = build_countries()
 
     # --- Cities, assigned to a region by point-in-polygon ------------------
     ru_regions = [r for r in regions if r["cc"] == "RU"]
@@ -295,15 +492,18 @@ def main():
                        "r": home, "c": [round(lat, 3), round(lon, 3)],
                        "p": int(c.get("population") or 0)})
 
-    payload = {"v": 1, "regions": regions, "countries": countries, "cities": cities}
+    payload = {"v": 2, "regions": regions, "countries": countries, "cities": cities}
     out_path = os.path.join(HERE, "map_regions.json")
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
 
     pts = sum(len(r) // 2 for x in regions for r in x["r"])
-    print(f"regions={len(regions)} pts={pts}  countries={len(countries)}")
+    country_pts = sum(len(r) // 2 for c in countries for r in c.get("r", []))
+    with_rings = sum(1 for c in countries if c.get("r"))
+    print(f"regions={len(regions)} pts={pts}  countries={len(countries)} "
+          f"(with rings: {with_rings}, pts={country_pts})")
     print(f"cities={len(cities)} (nearest-centroid fallback: {fallback})")
-    print(f"{out_path}  {os.path.getsize(out_path)/1024:.0f} KB")
+    print(f"{out_path}  {os.path.getsize(out_path) / 1024:.0f} KB")
 
     by_id = {r["id"]: r for r in regions}
     from collections import Counter

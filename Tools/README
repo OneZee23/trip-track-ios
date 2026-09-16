@@ -2,6 +2,8 @@
 здесь живут ИСХОДНИКИ данных и то, чем они превращаются в файлы ресурсов.
 
 build_map_regions.py   Natural Earth → TripTrack/Resources/MapRegions.json
+                       (source GeoJSON self-fetches into Tools/cache/, see
+                       the script's own docstring for URLs and licences)
 build_secrets.py       OSM/Wikidata  → Tools/riddles.json (загадки Атласа)
 build_secrets.py --authored --out ФАЙЛ
                        authored.json → файл каталога секретов
