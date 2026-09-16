@@ -61,7 +61,12 @@ final class DiscoveryStore: @unchecked Sendable {
                 entity.foundAt = item.foundAt
                 entity.symbol = item.symbol.rawValue
                 entity.title = item.title
+                entity.story = item.story
                 entity.verified = item.verified
+                entity.finders = item.finders.map(NSNumber.init(value:))
+                entity.firstFinderName = item.firstFinderName
+                entity.firstFinderAt = item.firstFinderAt
+                entity.rarity = item.rarity
                 added.append(item)
             }
             guard self.context.hasChanges else { return [] }
@@ -106,7 +111,141 @@ final class DiscoveryStore: @unchecked Sendable {
         postChanged()
     }
 
+    /// Дописать к находке то, чего телефон знать не мог: историю, счётчик
+    /// нашедших, первооткрывателя, редкость.
+    ///
+    /// **Дописать, а не переписать.** `foundAt` не трогается никогда — печать
+    /// стоит в дате, когда человек там был, и серверная дата (заявка могла
+    /// уехать позже, со второго телефона, из другого часового пояса) не имеет
+    /// права её сдвинуть. `verified` ходит только false → true: подтверждение
+    /// добывается треком на сервере, и ответ, пришедший без трека (Cloud Sync
+    /// выключили между находкой и раскрытием), не имеет права снять уже
+    /// полученное. `title` и `story` пустой строкой не затираются — пустое
+    /// поле сервера это «текста ещё нет», а не «текста больше нет».
+    ///
+    /// Находки, которой ответ адресован, может не быть вовсе — ответ на чужой
+    /// или уже стёртый id просто игнорируется (`false`).
+    @discardableResult
+    func apply(reveal: SecretRevealResponse) async -> Bool {
+        guard let id = reveal.discoveryId else { return false }
+        let changed = await context.perform { () -> Bool in
+            let request: NSFetchRequest<DiscoveryEntity> = DiscoveryEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+            request.fetchLimit = 1
+            guard let entity = (try? self.context.fetch(request))?.first else { return false }
+            if let title = reveal.title, !title.isEmpty { entity.title = title }
+            if let story = reveal.story, !story.isEmpty { entity.story = story }
+            if let finders = reveal.finders { entity.finders = NSNumber(value: finders) }
+            if let first = reveal.first {
+                entity.firstFinderName = first.displayName
+                entity.firstFinderAt = first.foundAt
+            }
+            if let rarity = reveal.rarity, !rarity.isEmpty { entity.rarity = rarity }
+            if reveal.verified { entity.verified = true }
+            guard self.context.hasChanges else { return false }
+            do {
+                try self.context.save()
+            } catch {
+                self.context.rollback()
+                discoveryLog.error("reveal apply failed: \(error.localizedDescription, privacy: .public)")
+                return false
+            }
+            return true
+        }
+        if changed { postChanged() }
+        return changed
+    }
+
+    /// Находка, приехавшая пулом. Отдельный тип, а не `Discovery`, ровно из-за
+    /// одного поля: **координата необязательна**. Контракт волны 3 её не везёт
+    /// (сервер хранит заявку, а не место), и у `Discovery` пустого значения
+    /// координаты нет — нули в ней это точка в океане, а не «неизвестно».
+    /// Поэтому «где» решает тот, кто разбирает пул, а «что с этим делать» —
+    /// `applyRemote` ниже.
+    struct Remote {
+        let id: UUID
+        let kind: DiscoveryKind
+        let key: String
+        let tripId: UUID
+        let coordinate: CLLocationCoordinate2D?
+        let foundAt: Date
+        let symbol: SealSymbol
+        let title: String?
+        let story: String?
+        let verified: Bool
+    }
+
+    /// Находки, приехавшие пулом со второго телефона.
+    ///
+    /// Не `upsert`: там «первая находка побеждает» означает «молча пропустить
+    /// уже лежащее», а здесь у лежащего надо ещё и дописать текст, который
+    /// сервер знает, а этот телефон — нет. Новую строку кладём как обычно;
+    /// `foundAt` у уже лежащей не трогаем по тому же правилу.
+    ///
+    /// **Новую строку заводим только там, где знаем МЕСТО.** Уже лежащей
+    /// находке место не нужно — оно у неё своё; а новая без координаты встала
+    /// бы печатью в Гвинейском заливе. Поэтому `coordinate == nil` дописывает,
+    /// но не заводит.
+    ///
+    /// Синхронный (`performAndWait`), как `wipe()`: зовёт его `PullApplier` —
+    /// синхронная точка на главном актёре, — а работы здесь на десяток строк.
+    /// Возвращает, изменилось ли что-нибудь: по этому ответу пул решает, будить
+    /// ли «Атлас».
+    @discardableResult
+    func applyRemote(_ items: [Remote]) -> Bool {
+        guard !items.isEmpty else { return false }
+        var changed = false
+        context.performAndWait {
+            let known = existingRows(among: items.map(\.id))
+            for item in items {
+                if let entity = known[item.id] {
+                    if let title = item.title, !title.isEmpty, entity.title != title {
+                        entity.title = title
+                    }
+                    if let story = item.story, !story.isEmpty, entity.story != story {
+                        entity.story = story
+                    }
+                    if item.verified && !entity.verified { entity.verified = true }
+                } else if let coordinate = item.coordinate {
+                    let entity = DiscoveryEntity(context: context)
+                    entity.id = item.id
+                    entity.kind = item.kind.rawValue
+                    entity.key = item.key
+                    entity.tripId = item.tripId
+                    entity.latitude = coordinate.latitude
+                    entity.longitude = coordinate.longitude
+                    entity.foundAt = item.foundAt
+                    entity.symbol = item.symbol.rawValue
+                    entity.title = item.title
+                    entity.story = item.story
+                    entity.verified = item.verified
+                }
+            }
+            guard context.hasChanges else { return }
+            do {
+                try context.save()
+                changed = true
+            } catch {
+                context.rollback()
+                discoveryLog.error("remote apply failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        if changed { postChanged() }
+        return changed
+    }
+
     // MARK: - Чтение
+
+    /// Одна находка по её выведенному id. Нужна повторной попытке раскрытия:
+    /// в очереди синка лежит `id`, а серверу нужны вид, ключ и поездка.
+    func discovery(id: UUID) async -> Discovery? {
+        await context.perform {
+            let request: NSFetchRequest<DiscoveryEntity> = DiscoveryEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+            request.fetchLimit = 1
+            return ((try? self.context.fetch(request))?.first).flatMap(Self.discovery(from:))
+        }
+    }
 
     /// Всё найденное, свежее сверху.
     func all() async -> [Discovery] {
@@ -129,6 +268,16 @@ final class DiscoveryStore: @unchecked Sendable {
         request.sortDescriptors = [NSSortDescriptor(key: "foundAt", ascending: false)]
         request.fetchBatchSize = 200
         return ((try? context.fetch(request)) ?? []).compactMap(Self.discovery(from:))
+    }
+
+    /// Строки по id — одной выборкой на пакет, как `existingIds`, но с самими
+    /// объектами: пулу мало знать, что строка есть, ему её ещё дописывать.
+    private func existingRows(among ids: [UUID]) -> [UUID: DiscoveryEntity] {
+        let request: NSFetchRequest<DiscoveryEntity> = DiscoveryEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id IN %@", Set(ids) as NSSet)
+        let rows = (try? context.fetch(request)) ?? []
+        return Dictionary(rows.compactMap { row in row.id.map { ($0, row) } },
+                          uniquingKeysWith: { first, _ in first })
     }
 
     private func existingIds(among ids: [UUID]) -> Set<UUID> {
@@ -155,7 +304,12 @@ final class DiscoveryStore: @unchecked Sendable {
             foundAt: foundAt,
             symbol: symbol,
             title: entity.title,
-            verified: entity.verified
+            story: entity.story,
+            verified: entity.verified,
+            finders: entity.finders?.intValue,
+            firstFinderName: entity.firstFinderName,
+            firstFinderAt: entity.firstFinderAt,
+            rarity: entity.rarity
         )
     }
 

@@ -39,9 +39,11 @@ final class DiscoveryProcessor {
     }
 
     static let shared = DiscoveryProcessor(
-        // Бандл (`Riddles.json`/`Secrets.json`); волна 3 подставит серверные
-        // каталоги за теми же протоколами.
-        riddleCatalog: BundleRiddleCatalog(), secretCatalog: BundleSecretCatalog()
+        // Загадки — бандловые (`Riddles.json`, открытые данные), секреты — с
+        // сервера через кэш (`CachedSecretCatalog`), у которого за спиной тот же
+        // бандловый `Secrets.json`: без сети и на первом запуске каталог всё
+        // равно есть.
+        riddleCatalog: BundleRiddleCatalog(), secretCatalog: CachedSecretCatalog.shared
     )
 
     /// Ключ кэша истории в `UserDefaults`: регионы, страны и четыре крайние
@@ -69,6 +71,10 @@ final class DiscoveryProcessor {
     /// Последний рубеж «поездка кончилась». Замыканием, а не чтением флага
     /// напрямую, — чтобы тест мог задать оба ответа, не заводя запись.
     private let isRecording: () -> Bool
+    /// Раскрытие новых находок на сервере. Замыканием — чтобы разбор трека
+    /// проверялся без сети и без аккаунта; сам гейт приватности живёт в
+    /// `DiscoveryReveal` и без Cloud Sync не пускает ни одного запроса.
+    private let reveal: @MainActor ([Discovery], UUID) async -> Void
 
     init(store: DiscoveryStore = .shared,
          repository: TripRepository = CoreDataTripRepository(),
@@ -77,7 +83,10 @@ final class DiscoveryProcessor {
          atlas: RegionAtlas = .shared,
          defaults: UserDefaults = .standard,
          unlockBadge: @escaping (String) -> Badge? = { BadgeManager.unlock(id: $0) },
-         isRecording: @escaping () -> Bool = { TripManager.isAnyRecording }) {
+         isRecording: @escaping () -> Bool = { TripManager.isAnyRecording },
+         reveal: @escaping @MainActor ([Discovery], UUID) async -> Void = {
+             await DiscoveryReveal.shared.reveal($0, tripId: $1)
+         }) {
         self.store = store
         self.repository = repository
         self.riddleCatalog = riddleCatalog
@@ -86,6 +95,7 @@ final class DiscoveryProcessor {
         self.defaults = defaults
         self.unlockBadge = unlockBadge
         self.isRecording = isRecording
+        self.reveal = reveal
     }
 
     // MARK: - Разбор
@@ -141,6 +151,10 @@ final class DiscoveryProcessor {
             return empty
         }
         guard !fresh.isEmpty else { return empty }
+        // Сервер спрашивается ТОЛЬКО про новое и ТОЛЬКО после того, как оно
+        // легло в базу: ответ дописывается в уже существующую строку, а не
+        // заводит её.
+        await reveal(fresh, tripId)
 
         let result = TripDiscoveries(
             tripId: tripId,

@@ -81,10 +81,28 @@ struct Discovery: Identifiable, Equatable, Codable {
     let foundAt: Date
     let symbol: SealSymbol
     /// Загадка — имя объекта из бандла; веха — `nil` (печатается по ключу);
-    /// секрет — `nil` до волны 3 (в бандле лежат только хэши, без названий).
+    /// секрет — `nil` до раскрытия (в каталоге лежат только хэши, без названий).
     let title: String?
-    /// Волна 3. Здесь всегда `false`: подтверждать находку пока нечем.
+    /// История секрета. Приходит ТОЛЬКО с `/secrets/reveal` — в каталоге её
+    /// нет нарочно: текст, лежащий на телефоне до находки, и есть вскрытый
+    /// секрет.
+    let story: String?
+    /// Подтверждена ли находка сервером: трек поездки лежит на сервере и
+    /// проходит через `reach`. Без Cloud Sync остаётся `false` навсегда — и
+    /// это не поломка, а отсутствие того, чем подтверждать.
     let verified: Bool
+    /// Сколько человек нашли это же. `nil` — «не спрашивали»: без Cloud Sync
+    /// счётчика не существует, и показывать вместо него ноль нельзя.
+    let finders: Int?
+    /// Имя первооткрывателя — только если его профиль публичный; иначе `nil`
+    /// при непустом `firstFinderAt`.
+    let firstFinderName: String?
+    let firstFinderAt: Date?
+    /// `few | tens | hundreds | many` — СТРОКОЙ, а не enum: редкость считает
+    /// сервер, и незнакомое слово обязано доехать до базы целым, а не
+    /// обнулиться при разборе. Показывающий экран сам решает, что делать с
+    /// неизвестным ему значением.
+    let rarity: String?
 
     init(
         kind: DiscoveryKind,
@@ -94,7 +112,12 @@ struct Discovery: Identifiable, Equatable, Codable {
         foundAt: Date,
         symbol: SealSymbol,
         title: String? = nil,
-        verified: Bool = false
+        story: String? = nil,
+        verified: Bool = false,
+        finders: Int? = nil,
+        firstFinderName: String? = nil,
+        firstFinderAt: Date? = nil,
+        rarity: String? = nil
     ) {
         self.id = Discovery.id(kind: kind, key: key)
         self.kind = kind
@@ -104,7 +127,12 @@ struct Discovery: Identifiable, Equatable, Codable {
         self.foundAt = foundAt
         self.symbol = symbol
         self.title = title
+        self.story = story
         self.verified = verified
+        self.finders = finders
+        self.firstFinderName = firstFinderName
+        self.firstFinderAt = firstFinderAt
+        self.rarity = rarity
     }
 
     /// Пространство имён находок TripTrack. НАВСЕГДА: от него зависят id на
@@ -142,7 +170,12 @@ struct Discovery: Identifiable, Equatable, Codable {
             && lhs.foundAt == rhs.foundAt
             && lhs.symbol == rhs.symbol
             && lhs.title == rhs.title
+            && lhs.story == rhs.story
             && lhs.verified == rhs.verified
+            && lhs.finders == rhs.finders
+            && lhs.firstFinderName == rhs.firstFinderName
+            && lhs.firstFinderAt == rhs.firstFinderAt
+            && lhs.rarity == rhs.rarity
     }
 
     // MARK: - Codable
@@ -155,6 +188,7 @@ struct Discovery: Identifiable, Equatable, Codable {
     /// выведенный сходится на любом телефоне по определению.
     private enum CodingKeys: String, CodingKey {
         case id, kind, key, tripId, latitude, longitude, foundAt, symbol, title, verified
+        case story, finders, firstFinderName, firstFinderAt, rarity
     }
 
     init(from decoder: Decoder) throws {
@@ -170,7 +204,12 @@ struct Discovery: Identifiable, Equatable, Codable {
             foundAt: try c.decode(Date.self, forKey: .foundAt),
             symbol: try c.decode(SealSymbol.self, forKey: .symbol),
             title: try c.decodeIfPresent(String.self, forKey: .title),
-            verified: try c.decodeIfPresent(Bool.self, forKey: .verified) ?? false
+            story: try c.decodeIfPresent(String.self, forKey: .story),
+            verified: try c.decodeIfPresent(Bool.self, forKey: .verified) ?? false,
+            finders: try c.decodeIfPresent(Int.self, forKey: .finders),
+            firstFinderName: try c.decodeIfPresent(String.self, forKey: .firstFinderName),
+            firstFinderAt: try c.decodeIfPresent(Date.self, forKey: .firstFinderAt),
+            rarity: try c.decodeIfPresent(String.self, forKey: .rarity)
         )
     }
 
@@ -185,6 +224,11 @@ struct Discovery: Identifiable, Equatable, Codable {
         try c.encode(foundAt, forKey: .foundAt)
         try c.encode(symbol, forKey: .symbol)
         try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(story, forKey: .story)
         try c.encode(verified, forKey: .verified)
+        try c.encodeIfPresent(finders, forKey: .finders)
+        try c.encodeIfPresent(firstFinderName, forKey: .firstFinderName)
+        try c.encodeIfPresent(firstFinderAt, forKey: .firstFinderAt)
+        try c.encodeIfPresent(rarity, forKey: .rarity)
     }
 }

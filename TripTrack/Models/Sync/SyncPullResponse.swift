@@ -17,6 +17,16 @@ struct SyncPullResponse: Codable {
         let upserted: [JourneySyncPayload]
         let deleted: [UUID]
     }
+    /// Находки (0.7.0) — то, что нашёл ВТОРОЙ телефон этого же человека.
+    ///
+    /// `deleted` в контракте есть и разбирается, но пустой всегда: находку не
+    /// снимают поштучно. Поле остаётся, потому что форма секции общая для всех
+    /// типов, и сервер, который однажды начнёт его наполнять, не должен ронять
+    /// разбор пула.
+    struct DiscoveriesSection: Codable {
+        let upserted: [DiscoverySyncPayload]
+        let deleted: [UUID]?
+    }
 
     /// Count of non-deleted entities the server currently holds for this
     /// account. Client compares against local `synced` count to detect
@@ -40,6 +50,26 @@ struct SyncPullResponse: Codable {
     let ownedCounts: OwnedCounts?
     /// Optional: сервер до 0.6.6 секции не знает.
     let journeys: JourneysSection?
+    /// Optional: сервер до 0.7.0 секции не знает, и отсутствие ключа — это
+    /// «старый сервер», а не «находок нет». Та же дисциплина ключа, что у
+    /// `checkpoints`/`segments` внутри поездки.
+    let discoveries: DiscoveriesSection?
+}
+
+/// Находка на проводе. Координаты в ней НЕТ — и это контракт волны 3, а не
+/// упущение разбора: сервер хранит заявку `secret_find(secretId, accountId,
+/// tripId, foundAt, verified)`, а где именно человек проехал, знает только сам
+/// телефон. Что с этим делает клиент — см. `PullApplier.applyDiscoveries`.
+struct DiscoverySyncPayload: Codable {
+    /// Ключ находки: id секрета из каталога или `"<type>:<geohash7>"` загадки.
+    let secretId: String
+    let kind: String
+    let symbol: String?
+    let foundAt: Date
+    let verified: Bool?
+    let tripId: UUID?
+    let title: String?
+    let story: String?
 }
 
 /// Full list of entity UUIDs the server currently owns. Fetched only when

@@ -109,6 +109,16 @@ final class APISyncTransport: SyncTransport {
             try await uploadSettings()
         case (.settings, .delete), (.settings, .unpublish):
             break
+        case (.discovery, .upload), (.discovery, .update):
+            // Повтор раскрытия находки (0.7.0). Сюда операция попадает только
+            // после упавшего запроса на финише; `retry` сам проверяет гейт
+            // приватности и молчит, если находки уже нет, — бросает он ровно на
+            // сетевой ошибке, чтобы очередь повторила своим откатом.
+            try await DiscoveryReveal.shared.retry(id: operation.entityId)
+        case (.discovery, .delete), (.discovery, .unpublish):
+            // Находку не «снимают» с сервера: заявка — это факт, что человек
+            // там был, и удаляется она вместе с аккаунтом, а не поштучно.
+            break
         }
     }
 

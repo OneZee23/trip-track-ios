@@ -411,6 +411,7 @@ struct SyncStatusSheetView: View {
         case .vehiclePhoto: return "car.circle.fill"
         case .settings: return "gearshape.fill"
         case .journey: return "map.fill"
+        case .discovery: return "seal.fill"
         }
     }
 

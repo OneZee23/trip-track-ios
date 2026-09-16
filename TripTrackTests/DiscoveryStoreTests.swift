@@ -172,6 +172,121 @@ final class DiscoveryStoreTests: XCTestCase {
         XCTAssertEqual(again.first?.id, Discovery.id(kind: .riddle, key: "lighthouse-anapa"))
     }
 
+    // MARK: - Ответ сервера
+
+    /// Ответ строится из JSON — `SecretRevealResponse` только `Decodable`, и
+    /// проверять надо то, что приедет с провода, а не удобную заглушку.
+    private func reveal(
+        id: String, kind: String = "riddle", verified: Bool = true,
+        title: String? = nil, story: String? = "История", finders: Int? = 42,
+        first: Bool = true, rarity: String? = "tens"
+    ) throws -> SecretRevealResponse {
+        let json = """
+            {"id":"\(id)","kind":"\(kind)",
+             "title":\(title.map { "\"\($0)\"" } ?? "null"),
+             "story":\(story.map { "\"\($0)\"" } ?? "null"),
+             "symbol":"compass","verified":\(verified),
+             "foundAt":"2026-09-16T12:00:00.000Z",
+             "finders":\(finders.map(String.init) ?? "null"),
+             "first":\(first ? "{\"displayName\":\"Илья\",\"foundAt\":\"2025-01-02T10:00:00.000Z\"}" : "null"),
+             "rarity":\(rarity.map { "\"\($0)\"" } ?? "null")}
+            """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { d in
+            let c = try d.singleValueContainer()
+            let s = try c.decode(String.self)
+            guard let date = ISODate.parse(s) else { throw APIError.decoding(s) }
+            return date
+        }
+        return try decoder.decode(SecretRevealResponse.self, from: Data(json.utf8))
+    }
+
+    /// Ответ дописывается к своей строке, и дата находки остаётся своей.
+    func testApplyRevealAppendsWithoutMovingTheFind() async throws {
+        let mine = make(foundAt: Date(timeIntervalSince1970: 1_700_000_000))
+        _ = try await store.upsert([mine])
+
+        let applied = await store.apply(reveal: try reveal(id: mine.key))
+        XCTAssertTrue(applied)
+
+        let rows = await store.all()
+        let stored = try XCTUnwrap(rows.first)
+        XCTAssertEqual(stored.story, "История")
+        XCTAssertEqual(stored.finders, 42)
+        XCTAssertEqual(stored.firstFinderName, "Илья")
+        XCTAssertEqual(stored.rarity, "tens")
+        XCTAssertTrue(stored.verified)
+        XCTAssertEqual(stored.foundAt, mine.foundAt)
+        XCTAssertEqual(stored.tripId, mine.tripId)
+    }
+
+    /// Ответ на находку, которой здесь нет, — не повод завести строку: место
+    /// брать неоткуда, а печать без места это точка в океане.
+    func testApplyRevealOfAnUnknownFindCreatesNothing() async throws {
+        let applied = await store.apply(reveal: try reveal(id: "never-found"))
+        XCTAssertFalse(applied)
+        XCTAssertEqual(storedCount(), 0)
+    }
+
+    /// `verified` только false → true. Ответ без подтверждения (трек ещё не
+    /// уехал на сервер) не снимает уже полученное.
+    func testApplyRevealNeverUnverifies() async throws {
+        let mine = make()
+        _ = try await store.upsert([mine])
+        _ = await store.apply(reveal: try reveal(id: mine.key, verified: true))
+
+        _ = await store.apply(reveal: try reveal(id: mine.key, verified: false))
+
+        let rows = await store.all()
+        let stored = try XCTUnwrap(rows.first)
+        XCTAssertTrue(stored.verified)
+    }
+
+    /// Пустой ответ ничего не затирает: «текста ещё нет» и «текста больше нет»
+    /// — разные вещи, а сервер говорит только первое.
+    func testApplyRevealDoesNotWipeWhatItDoesNotCarry() async throws {
+        let mine = make(title: "Анапский маяк")
+        _ = try await store.upsert([mine])
+        _ = await store.apply(reveal: try reveal(id: mine.key))
+
+        _ = await store.apply(reveal: try reveal(
+            id: mine.key, verified: false, title: nil, story: nil, finders: nil,
+            first: false, rarity: nil))
+
+        let rows = await store.all()
+        let stored = try XCTUnwrap(rows.first)
+        XCTAssertEqual(stored.title, "Анапский маяк")
+        XCTAssertEqual(stored.story, "История")
+        XCTAssertEqual(stored.finders, 42)
+        XCTAssertEqual(stored.rarity, "tens")
+    }
+
+    /// Незнакомый вид в ответе — ответ не применяется вовсе: без вида не
+    /// вывести id находки, а угадывать его нельзя.
+    func testApplyRevealOfAnUnknownKindIsIgnored() async throws {
+        let mine = make()
+        _ = try await store.upsert([mine])
+
+        let applied = await store.apply(reveal: try reveal(id: mine.key, kind: "constellation"))
+
+        XCTAssertFalse(applied)
+        let rows = await store.all()
+        let stored = try XCTUnwrap(rows.first)
+        XCTAssertNil(stored.story)
+    }
+
+    /// Одна находка по id — этим повтор из очереди синка и находит, что
+    /// спрашивать у сервера.
+    func testDiscoveryById() async throws {
+        let mine = make()
+        _ = try await store.upsert([mine])
+
+        let found = await store.discovery(id: mine.id)
+        XCTAssertEqual(found?.key, mine.key)
+        let missing = await store.discovery(id: UUID())
+        XCTAssertNil(missing)
+    }
+
     // MARK: - Уведомление
 
     func testNewFindPostsDiscoveriesChanged() async throws {

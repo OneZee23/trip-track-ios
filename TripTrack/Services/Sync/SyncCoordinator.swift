@@ -200,7 +200,8 @@ final class SyncCoordinator {
         // back without a single one of them. Add an entity type to sync and
         // you add it here, or heal quietly eats it.
         let req = SyncPullRequest(
-            lastSyncedAt: nil, entityTypes: ["trip", "vehicle", "photo", "journey"])
+            lastSyncedAt: nil,
+            entityTypes: ["trip", "vehicle", "photo", "journey", "discovery"])
         do {
             let res: SyncPullResponse = try await client.post(APIEndpoint.syncPull, body: req)
             let appliedTripIds = pullApplier.apply(res)

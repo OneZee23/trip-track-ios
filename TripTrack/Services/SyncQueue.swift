@@ -26,6 +26,11 @@ struct SyncOperation: Identifiable, Equatable {
         /// без включённого облака не уезжает. Опубликованное — уезжает, как
         /// поездка (0.6.8): гейт синка пускает его тем же приёмом.
         case journey
+        /// Находка (0.7.0). В очередь попадает ОДНА операция и только одна —
+        /// `.upload`, то есть «повторить раскрытие»: сама находка живёт на
+        /// телефоне, на сервер уезжает заявка «я нашёл это». Личные данные, как
+        /// машина: без Cloud Sync не уезжает никогда.
+        case discovery
     }
 
     enum Action: String {
@@ -114,7 +119,7 @@ final class SyncQueue: ObservableObject {
 
     /// Priority order: metadata first, then photos (heavier).
     private let entityPriority: [SyncOperation.EntityType] = [
-        .settings, .vehicle, .journey, .trip, .photo
+        .settings, .vehicle, .journey, .trip, .photo, .discovery
     ]
 
     init() {

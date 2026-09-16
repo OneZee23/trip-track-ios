@@ -498,12 +498,34 @@ final class AuthService: ObservableObject {
             try? ctx.save()
         }
 
+        await forgetServerDiscoveries()
+
         // Гараж тоже. Раньше «стереть мои данные с сервера» удаляло только
         // поездки, и у человека, который этой кнопкой воспользовался, на
         // сервере оставался ПУБЛИЧНЫЙ гараж: машины, их марки, пробеги и
         // фотографии продолжали показываться незнакомым людям. Кнопка обещала
         // обратное.
         await wipeServerVehicles(ctx)
+    }
+
+    /// Заявки о находках (0.7.0) — ОДНИМ запросом, а не циклом: у сервера нет
+    /// удаления находки по одной, а у человека их бывают сотни.
+    ///
+    /// Печати на телефоне при этом никуда не деваются — стирали серверную
+    /// копию, а не свою карту; заявки уедут заново, когда человек снова включит
+    /// облако и что-нибудь найдёт. Ошибка не прерывает вайп: остальные
+    /// сущности удаляются так же, по одной и независимо.
+    ///
+    /// Клиент параметром — единственный способ проверить этот шаг: `APIClient`
+    /// в `wipeServerData` берётся из `shared` и подменить его нечем.
+    func forgetServerDiscoveries(client: APIClient? = nil) async {
+        let api = client ?? APIClient.shared
+        do {
+            let _: EmptyResponse = try await api.post(
+                APIEndpoint.secretsForgetAll, body: EmptyRequest())
+        } catch {
+            authLog.error("wipeServerData failed for discoveries: \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// Удаляет машины (а вместе с ними, каскадом на сервере, и их снимки).

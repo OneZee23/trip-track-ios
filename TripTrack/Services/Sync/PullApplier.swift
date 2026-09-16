@@ -1,5 +1,6 @@
 import Foundation
 import CoreData
+import CoreLocation
 
 /// Что пул кладёт в `userInfo` своего `.syncPullCompleted`.
 ///
@@ -22,6 +23,11 @@ enum SyncPullNotification {
 @MainActor
 final class PullApplier {
     private let repo: TripRepository = CoreDataTripRepository()
+    private let discoveries: DiscoveryStore
+
+    init(discoveries: DiscoveryStore = .shared) {
+        self.discoveries = discoveries
+    }
 
     /// Возвращает id применённых поездок — их несёт `.syncPullCompleted`.
     @discardableResult
@@ -60,6 +66,9 @@ final class PullApplier {
             for p in journeys.upserted { repo.applyRemoteJourney(p) }
             for id in journeys.deleted { repo.deleteJourneyHard(id: id) }
         }
+        if let section = response.discoveries {
+            applyDiscoveries(section)
+        }
         // One save for the whole batch instead of N saves (one per row).
         // CoreData performance scales linearly with save count, so a
         // pull of 50 trips drops from 50× saveContext() to 1×.
@@ -76,6 +85,54 @@ final class PullApplier {
             SettingsManager.shared.reloadFromCoreData()
         }
         return response.trips.upserted.map(\.id)
+    }
+
+    /// Находки со второго телефона.
+    ///
+    /// Своя база остаётся источником правды: у находки, которая на этом
+    /// телефоне уже есть, пул дописывает только текст и `verified` — ни даты,
+    /// ни поездки он не двигает (правило «первая находка побеждает» то же, что
+    /// у `upsert`).
+    ///
+    /// Координаты в контракте нет: сервер её не хранит. У загадки место
+    /// выводится из собственного ключа (`"<type>:<geohash7>"`, центр ячейки —
+    /// ±75 м, то есть тот же объект), у секрета вывести неоткуда — в каталоге
+    /// лежат одни усечённые хеши. Что делать с находкой без места, решает
+    /// `DiscoveryStore.applyRemote`: дописать можно, завести — нет.
+    private func applyDiscoveries(_ section: SyncPullResponse.DiscoveriesSection) {
+        let rows = section.upserted.compactMap(Self.remote(from:))
+        guard !rows.isEmpty else { return }
+        discoveries.applyRemote(rows)
+    }
+
+    /// Чистое превращение строки пула в находку. `nil` — строку не применить
+    /// вовсе: незнакомый вид или нет поездки, по которой её открывать.
+    static func remote(from payload: DiscoverySyncPayload) -> DiscoveryStore.Remote? {
+        guard let kind = DiscoveryKind(rawValue: payload.kind),
+              let tripId = payload.tripId
+        else { return nil }
+        return DiscoveryStore.Remote(
+            id: Discovery.id(kind: kind, key: payload.secretId),
+            kind: kind,
+            key: payload.secretId,
+            tripId: tripId,
+            coordinate: coordinate(forKind: kind, key: payload.secretId),
+            foundAt: payload.foundAt,
+            symbol: payload.symbol.flatMap(SealSymbol.init(rawValue:)) ?? .generic,
+            title: payload.title,
+            story: payload.story,
+            verified: payload.verified ?? false)
+    }
+
+    /// Место находки по её ключу. Умеет ровно один вид — загадку, у которой
+    /// geohash-7 ячейки стоит во второй половине ключа.
+    private static func coordinate(
+        forKind kind: DiscoveryKind, key: String
+    ) -> CLLocationCoordinate2D? {
+        guard kind == .riddle else { return nil }
+        let parts = key.split(separator: ":")
+        guard parts.count == 2, parts[1].count >= 5 else { return nil }
+        return GeohashEncoder.centerCoordinate(of: String(parts[1]))
     }
 
     /// То же, что называет руками `SettingsManager.deleteVehicle`, — но для

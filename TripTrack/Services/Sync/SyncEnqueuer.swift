@@ -99,6 +99,11 @@ enum SyncEnqueuer {
             return entity.isPrivate == false
         case .vehicle, .vehiclePhoto, .settings:
             return false
+        case .discovery:
+            // Заявка «я нашёл это» говорит, где человек был и когда. Без
+            // облака она не уезжает ни при каких действиях — публичной
+            // находки, как публичной поездки, не существует.
+            return false
         }
     }
 

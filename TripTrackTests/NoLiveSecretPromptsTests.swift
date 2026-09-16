@@ -23,7 +23,11 @@ final class NoLiveSecretPromptsTests: XCTestCase {
 
     /// Имена, которые за пределами разрешённых мест не должны встречаться.
     private static let matcherTokens = [
-        "SecretMatcher", "RiddleMatcher", "MilestoneDetector", "DiscoveryProcessor"
+        "SecretMatcher", "RiddleMatcher", "MilestoneDetector", "DiscoveryProcessor",
+        // Раскрытие (0.7.0) — не матчер, но дверь та же: оно говорит серверу,
+        // ГДЕ человек был, и звать его на ходу нельзя ровно по той же причине,
+        // по которой нельзя считать находки на ходу.
+        "DiscoveryReveal"
     ]
 
     /// Места, где имя разбора — это норма, а не нарушение: сама папка находок
@@ -54,6 +58,12 @@ final class NoLiveSecretPromptsTests: XCTestCase {
          "Цепочка финиша: зовётся только после `stopRecording`, последним за "
          + "`PostTripTrackProcessor`, `PlaceManager.process` и `RevealedLayerStore.ingest`. "
          + "Единственная дверь в разбор во всём приложении."),
+        ("TripTrack/Services/Sync/APISyncTransport.swift",
+         "Повтор упавшего раскрытия из очереди синка: `(.discovery, .upload)` → "
+         + "`DiscoveryReveal.shared.retry(id:)`. Операция попадает в очередь только "
+         + "ПОСЛЕ финиша (её кладёт сам `DiscoveryReveal`, поймав сетевую ошибку), а "
+         + "очередь — общий транспорт всех сущностей, и своей двери у находки быть не "
+         + "может. Гейт приватности и проверка «это не веха» стоят внутри `retry`."),
         ("TripTrack/ViewModels/MyMapViewModel.swift",
          "«Атлас» ЧИТАЕТ каталог загадок (`DiscoveryProcessor.shared.riddleCatalog`), "
          + "чтобы вычесть из него решённое и показать три круга подсказок. Ни одного "
@@ -197,6 +207,7 @@ final class NoLiveSecretPromptsTests: XCTestCase {
                     let solved = RiddleMatcher.solved(track: live, candidates: near)
                     let vehi = MilestoneDetector.detect(trip: t, track: live, history: h, atlas: a)
                     Task { await DiscoveryProcessor.shared.process(tripId: id, delta: d) }
+                    Task { await DiscoveryReveal.shared.reveal(hits, tripId: id) }
                     UNUserNotificationCenter.current().add(request)
                     AVAudioPlayer.chime()
                 }
@@ -213,6 +224,7 @@ final class NoLiveSecretPromptsTests: XCTestCase {
         XCTAssertTrue(caught.contains("RiddleMatcher"), "не увидел матчер загадок")
         XCTAssertTrue(caught.contains("MilestoneDetector"), "не увидел детектор вех")
         XCTAssertTrue(caught.contains("DiscoveryProcessor"), "не увидел процессор")
+        XCTAssertTrue(caught.contains("DiscoveryReveal"), "не увидел раскрытие")
         XCTAssertTrue(caught.contains("UNUserNotificationCenter"), "не увидел уведомление")
         XCTAssertTrue(caught.contains("AVAudioPlayer"), "не увидел звук")
         // А комментарий про секрет нарушением НЕ является: объяснение словами
