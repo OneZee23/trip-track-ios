@@ -711,9 +711,23 @@ final class APIClient {
                     apiAuthLog.notice("refresh: recovery standing down — already recovered elsewhere")
                     return
                 }
-                guard self.tokenStore.refreshToken != nil else {
+                // Тот же трёхзначный вопрос, что и в `refreshIfNeeded`: пока
+                // здесь стоял `refreshToken != nil`, петля СХЛОПЫВАЛА
+                // «keychain не читается» в «сессии нет» и вставала насмерть
+                // ровно в том случае, ради которого её и завели, — фоновый
+                // запуск на телефоне, который перезагрузили и не
+                // разблокировали (первый тик через 5 с, keychain ещё заперт).
+                // Никто ничего при этом не стирал, и строка «session gone» в
+                // логе была просто неправдой.
+                switch self.tokenStore.refreshTokenRead {
+                case .missing:
                     apiAuthLog.notice("refresh: recovery standing down — session gone")
                     return
+                case .unavailable(let status):
+                    apiAuthLog.notice("refresh: keychain unavailable status=\(status) — recovery waits for the next tick")
+                    continue
+                case .value:
+                    break
                 }
                 do {
                     try await self.refreshIfNeeded()

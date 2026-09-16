@@ -153,6 +153,17 @@ final class AuthSessionExpiryTests: XCTestCase {
         XCTAssertEqual(TokenStore.shared.refreshToken, "dead-refresh")
     }
 
+    /// `.transferred` — та же мягкая ветка. Случай новый (в 0.6.8 его не было
+    /// вовсе), и стоит он одной строки проверки.
+    func testTransferredAppleCredentialIsSoftToo() {
+        AuthService.shared.applyCredentialState(.transferred)
+
+        XCTAssertTrue(AuthService.shared.needsReauth)
+        XCTAssertFalse(AuthService.shared.isSignedIn)
+        XCTAssertEqual(KeychainHelper.loadString(key: kUserIdentifier), "apple-user-1")
+        XCTAssertEqual(TokenStore.shared.refreshToken, "dead-refresh")
+    }
+
     func testNotFoundAppleCredentialIsSoftEvenWithoutTokens() {
         TokenStore.shared.clear()
 

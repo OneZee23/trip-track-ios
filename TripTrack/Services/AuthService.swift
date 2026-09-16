@@ -1051,7 +1051,12 @@ final class AuthService: ObservableObject {
         // Once already expired (or mid-signout) there is nothing to do —
         // repeated triggers arrive in bursts when several in-flight calls
         // fail together (the incident log shows three within one second).
-        guard isSignedIn || TokenStore.shared.accessToken != nil, !signOutInProgress else {
+        // Трёхзначно: `.unavailable` — это «неизвестно», и мягкую смерть по
+        // нему объявлять нельзя (поведение то же, что было, но теперь это
+        // написано, а не следует из схлопывания `nil`).
+        let haveAccess: Bool
+        if case .value = TokenStore.shared.accessTokenRead { haveAccess = true } else { haveAccess = false }
+        guard isSignedIn || haveAccess, !signOutInProgress else {
             authLog.notice("[auth.session_expired.skip] reason=already_expired_or_signing_out")
             return
         }
@@ -1083,9 +1088,11 @@ final class AuthService: ObservableObject {
     /// после НАСТОЯЩЕГО выхода refresh-токена нет, и воскресить нечего.
     func sessionRecovered() {
         guard needsReauth || !isSignedIn else { return }
+        // Только `.value`: поднимать сессию по догадке нельзя, а
+        // «keychain не читается» — это догадка, а не пара токенов.
         guard userIdentifier != nil,
-              TokenStore.shared.accessToken != nil,
-              TokenStore.shared.refreshToken != nil else { return }
+              case .value = TokenStore.shared.accessTokenRead,
+              case .value = TokenStore.shared.refreshTokenRead else { return }
         authLog.notice("[auth.session_recovered] refresh succeeded — session back without a prompt")
         try? KeychainHelper.saveString("true", for: Keys.isSignedIn)
         KeychainHelper.delete(key: Keys.sessionExpired)
@@ -1128,9 +1135,14 @@ final class AuthService: ObservableObject {
             // landed while this async callback was in flight (marker gone,
             // needsReauth up), resurrecting isSignedIn here would hide the
             // re-login card and re-open the sync gate with no tokens.
-            let sessionStillLive = needsReauth != true
-                && KeychainHelper.loadString(key: Keys.isSignedIn) != nil
-                && TokenStore.shared.accessToken != nil
+            // Подтверждаем сессию только по ПРОЧИТАННЫМ значениям:
+            // нечитаемый keychain — «неизвестно», и тогда подтверждение
+            // откладывается до следующего авторизованного вызова.
+            let markerRead = KeychainHelper.read(key: Keys.isSignedIn)
+            let accessRead = TokenStore.shared.accessTokenRead
+            var haveMarkerAndToken = false
+            if case .value = markerRead, case .value = accessRead { haveMarkerAndToken = true }
+            let sessionStillLive = needsReauth != true && haveMarkerAndToken
             if sessionStillLive, !isSignedIn { isSignedIn = true }
             if sessionStillLive, let accountId = TokenStore.shared.accountId {
                 SentryService.setAccount(id: accountId.uuidString)
