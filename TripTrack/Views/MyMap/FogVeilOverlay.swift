@@ -710,7 +710,7 @@ final class FogVeilRenderer: MKOverlayRenderer {
     /// не зависящий от того, успела ли фоновая очередь (см. `MapPathIndex`).
     var indexBuiltOnMainThread: Bool { index.builtOnMainThread }
 
-    /// Полуширина коридора на улице, в метрах.
+    /// Полуширина коридора на улице, в метрах, — ПОЛ ореола.
     ///
     /// Измерено прототипом 15 сентября на настоящей сетке улиц, а не на глаз:
     /// при ±75 м между двумя проеханными улицами в 195 м остаётся перемычка
@@ -722,15 +722,17 @@ final class FogVeilRenderer: MKOverlayRenderer {
     /// туман выглядел так, будто его нет».
     static let streetHalfWidthMetres: Double = 50
 
-    /// Пол ширины коридора в ЭКРАННЫХ точках — он же правило масштабирования:
-    /// на улице побеждают метры, с региона и дальше пол.
+    /// Полуширина ореола в ЭКРАННЫХ точках — то, во что превращается коридор,
+    /// как только метры перестают быть видны.
     ///
-    /// Прототип: на восьми точках (так было до 0.7.0) от прочищенной полосы
-    /// после пера остаётся около 3 точек на сторону от жилки, и под
-    /// непрозрачной вуалью это читается как линия, нарисованная по чёрному, а
-    /// не как дыра в темноте. Двенадцать — жилка 2 pt плюс по ~5 pt
-    /// прочищенного с каждой стороны; ниже падать нельзя.
-    static let minVeinPoints: CGFloat = 12
+    /// Владелец на устройстве 16 сентября: «всё скудно… просто тупо тёмная
+    /// зона, на которой тоненькие оранжевые полоски». Пол в двенадцать точек,
+    /// стоявший здесь до этого, отвечал на вопрос «видно ли дорогу», а вопрос
+    /// у «Атласа» другой — «видно ли, ГДЕ я был». Восемнадцать точек на
+    /// сторону: город выходит пятном (±1.1–2.2 км при 60–120 м/pt), трасса на
+    /// стране — полосой (±11–22 км при 600–1 200 м/pt), а на улице пол в
+    /// метрах по-прежнему побеждает и между своими улицами остаётся темнота.
+    static let haloHalfWidthPoints: Double = 18
 
     /// Радиус прорези у машины при `progress == 1`.
     static let revealMetres: Double = 150
@@ -781,9 +783,23 @@ final class FogVeilRenderer: MKOverlayRenderer {
         return .far
     }
 
-    /// Ширина коридора в координатах рендерера.
+    /// Полуширина ореола в МЕТРАХ — единственное место, где решается, что
+    /// такое «открыто» на этом масштабе.
+    ///
+    /// Чистая функция от метров на экранную точку, потому что проверять её
+    /// можно только таблицей: на устройстве разница между «±50 м» и «±1.8 км»
+    /// видна, а между двумя формулами, дающими то и другое, — нет.
+    static func haloHalfWidth(metresPerPoint: Double) -> Double {
+        max(streetHalfWidthMetres, haloHalfWidthPoints * metresPerPoint)
+    }
+
+    /// Ширина коридора в координатах рендерера — ровно два ореола.
     static func corridorWidth(zoomScale: MKZoomScale, metre: Double) -> CGFloat {
-        max(CGFloat(streetHalfWidthMetres * 2 * metre), minVeinPoints / zoomScale)
+        guard zoomScale > 0, metre > 0 else { return 0 }
+        // `metre` — точек карты в метре, `zoomScale` — точек экрана в точке
+        // карты; их произведение и есть точек экрана в метре.
+        let metresPerPoint = 1 / (Double(zoomScale) * metre)
+        return CGFloat(haloHalfWidth(metresPerPoint: metresPerPoint) * 2 * metre)
     }
 
     /// Сколько ступеней пера класть на коридор.
@@ -932,9 +948,11 @@ final class FogVeilRenderer: MKOverlayRenderer {
     ) -> FogVeilPainter.Reveal? {
         guard let point = veil.revealAround, point.progress > 0 else { return nil }
         let centre = MKMapPoint(point.coordinate)
+        // Пол прорези — та же полуширина ореола, что у коридора: дыра, из
+        // которой потом вырастет коридор, не имеет права быть уже него.
         let radius = max(
             CGFloat(Self.revealMetres * point.progress * metre),
-            Self.minVeinPoints / zoomScale
+            Self.corridorWidth(zoomScale: zoomScale, metre: metre) / 2
         )
         let box = MKMapRect(
             x: centre.x - Double(radius), y: centre.y - Double(radius),

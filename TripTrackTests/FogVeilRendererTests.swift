@@ -85,22 +85,24 @@ final class FogVeilRendererTests: XCTestCase {
         XCTAssertEqual(FogVeilRenderer.lod(for: 3e-5), .far, "страна")
     }
 
-    /// Ширина коридора: метры побеждают на улице, экранный пол — на стране.
-    /// Обе половины формулы обязаны работать, иначе туман либо съедает город,
-    /// либо теряет дорогу на масштабе страны.
+    /// Ширина коридора: метры побеждают на улице, ореол в экранных точках —
+    /// на стране. Обе половины формулы обязаны работать, иначе туман либо
+    /// съедает город, либо теряет дорогу на масштабе страны.
+    ///
+    /// Таблица метров на точку живёт в `HaloWidthTests`; здесь — та же
+    /// формула, но в координатах рендерера, то есть в том виде, в каком её
+    /// зовут `draw` и `FogVeilBitmap`.
     func testCorridorWidthTakesMetresUpCloseAndScreenPointsFarAway() {
         let latitude = 45.035
         let metre = MKMapPointsPerMeterAtLatitude(latitude)
 
         let street = FogVeilRenderer.corridorWidth(zoomScale: 0.06, metre: metre)
         XCTAssertEqual(street, CGFloat(FogVeilRenderer.streetHalfWidthMetres * 2 * metre), accuracy: 0.001,
-                       "на улице коридор обязан быть ±50 м, а не экранным полом")
+                       "на улице коридор обязан быть ±50 м, а не ореолом в экранных точках")
 
         let country = FogVeilRenderer.corridorWidth(zoomScale: 3e-5, metre: metre)
-        XCTAssertEqual(country, FogVeilRenderer.minVeinPoints / 3e-5, accuracy: 0.001,
-                       "на стране побеждает пол в экранных точках")
-        XCTAssertEqual(country * 3e-5, FogVeilRenderer.minVeinPoints, accuracy: 0.001,
-                       "на экране это ровно 12 точек, ниже которых коридор читается линией по чёрному")
+        XCTAssertEqual(Double(country) * 3e-5, FogVeilRenderer.haloHalfWidthPoints * 2, accuracy: 0.001,
+                       "на стране коридор обязан встать на 36 экранных точек — ореол по 18 на сторону")
     }
 
     // MARK: - Индекс путей
@@ -397,11 +399,11 @@ final class FogVeilRendererTests: XCTestCase {
     }
 
     /// Конкретные числа, а не «что-то меньше чего-то»: коридор на среднем и
-    /// дальнем уровне стоит на своём экранном полу (12 pt), ×1.2 — это 14.4,
-    /// и оба ореола обязаны быть под ним с запасом.
+    /// дальнем уровне стоит на ореоле в 18 pt на сторону, то есть 36 pt,
+    /// ×1.2 — это 43.2, и оба ореола жилки обязаны быть под ним с запасом.
     func testHaloCeilingInScreenPoints() {
-        let ceiling = Double(FogVeilRenderer.minVeinPoints) * 1.2
-        XCTAssertEqual(ceiling, 14.4, accuracy: 0.001)
+        let ceiling = FogVeilRenderer.haloHalfWidthPoints * 2 * 1.2
+        XCTAssertEqual(ceiling, 43.2, accuracy: 0.001)
         XCTAssertEqual(Double(RouteVeinRenderer.halo(for: .mid)?.width ?? 0), 8)
         XCTAssertEqual(Double(RouteVeinRenderer.halo(for: .far)?.width ?? 0), 10)
         XCTAssertLessThan(Double(RouteVeinRenderer.halo(for: .far)?.width ?? 0), ceiling)
