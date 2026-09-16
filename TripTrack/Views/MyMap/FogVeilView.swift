@@ -155,6 +155,8 @@ final class FogVeilView: UIView {
     private weak var attachedRoot: UIView?
     private weak var seatContainer: UIView?
     private var seat: Seat = .belowAnnotations
+    /// Пересадка идёт прямо сейчас — см. `verifySeating`.
+    private var reseating = false
     /// Вуаль потеряла своё место и вернуться не смогла: зовущий обязан
     /// вернуть на карту `FogVeilOverlay`.
     var onLostFromHierarchy: (() -> Void)?
@@ -166,14 +168,14 @@ final class FogVeilView: UIView {
     private var generation = 0
     private let queue = DispatchQueue(label: "com.onezee.TripTrack.fogveil", qos: .userInitiated)
 
-    /// Числа для теста и отладки.
-    private(set) var renderCount = 0
     /// Сколько раз гейт ПРОПУСТИЛ заказ растра. Им проверяется главное
     /// обещание прорези: она растёт, ничего не заказывая.
     var renderOrders: Int { gate.renders }
-    private(set) var lastDriftCentre: CGFloat = 0
-    private(set) var lastDriftCorner: CGFloat = 0
-    var rasterBytes: Int { rasters.reduce(0) { $0 + $1.bytes } }
+    /// Сколько раз слой ВООБЩЕ доходил до вуали. Читает тест «карта записи не
+    /// дёргает `setLayer` шестьдесят раз в секунду»: сама вуаль на том же слое
+    /// выходит рано, но подпись считает ДО выхода, и цена этого видна только
+    /// счётом.
+    private(set) var layerHandoffs = 0
 
     // MARK: Жизнь
 
@@ -209,6 +211,7 @@ final class FogVeilView: UIView {
     /// Открытый мир. Индекс путей собирается ОДИН раз и вне главного потока —
     /// по той же причине, что у `FogVeilRenderer`.
     func setLayer(_ incoming: RevealedLayer) {
+        layerHandoffs += 1
         // Тот же слой — тот же индекс. `screenVeilTookOver` зовёт это на
         // КАЖДОМ появлении «Атласа», а сборка индекса стоит 10–13 мс на
         // главном потоке ожидания и вспышку «всё закрыто» на экране: до
@@ -405,8 +408,12 @@ final class FogVeilView: UIView {
         }
         frame = parent.bounds
         autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        parent.insertSubview(self, belowSubview: container)
+        // Место запоминается ДО вставки: `insertSubview` немедленно зовёт
+        // `didMoveToWindow`, тот — `verifySeating`, а та по незаполненному
+        // `seatContainer` решила бы, что сидим не там, и пересаживала бы себя
+        // внутри собственной посадки.
         seatContainer = container
+        parent.insertSubview(self, belowSubview: container)
         return true
     }
 
@@ -426,13 +433,17 @@ final class FogVeilView: UIView {
     /// будущая iOS), оставит «Атлас» БЕЗ тумана вовсе — хуже, чем было до
     /// 0.7.0. Сама проверка — два `firstIndex` по пяти сабвью.
     func verifySeating() {
-        guard let root = attachedRoot else { return }
+        guard let root = attachedRoot, !reseating else { return }
         if let parent = superview, let container = seatContainer,
            container.superview === parent,
            let mine = parent.subviews.firstIndex(of: self),
            let theirs = parent.subviews.firstIndex(of: container),
            mine < theirs { return }
 
+        // Пересадка трогает дерево, а дерево зовёт `didMoveToWindow` — то есть
+        // эту же проверку изнутри неё самой.
+        reseating = true
+        defer { reseating = false }
         removeFromSuperview()
         guard attach(inside: root, map: map, seat: seat) else {
             attachedRoot = nil
@@ -448,6 +459,10 @@ final class FogVeilView: UIView {
         stopTracking()
         rendering = false
         dropRasters(keepingNewest: false)
+        // Прорезь уходит вместе с растрами: вуаль, снятая и посаженная обратно
+        // (уход и возврат экрана записи), иначе показала бы дыру в том месте
+        // ЭКРАНА, где машина была до ухода, — до первого `sync`.
+        setLiveReveal(coordinate: nil, progress: 0)
         map = nil
         // Корень забывается ПЕРЕД выходом из дерева: иначе ближайшая проверка
         // места вернула бы вуаль обратно на экран, с которого её только что
@@ -517,21 +532,11 @@ final class FogVeilView: UIView {
             veil.point(atX: 1, y: 1), veil.point(atX: 0, y: 1),
         ]
 
-        // Невязка: четвёртый угол и центр считаем и матрицей, и картой. Если
-        // карта наклонена, они разъедутся — и это единственный способ увидеть
-        // уход коридора от дороги числом, а не «кажется, поехало».
-        //
-        // Только в отладке: это два ЛИШНИХ `convert` на каждый растр и на
-        // каждый кадр движения, а читает их отладка и `-spike-sweep`. Само
-        // правило держит `VeilFrameTests` чистой функцией, а не этот счёт.
-        #if DEBUG
-        lastDriftCorner = veil.residual(
-            measured: map.convert(MKMapPoint(x: r.maxX, y: r.maxY).coordinate, toPointTo: self),
-            atX: 1, y: 1)
-        lastDriftCentre = veil.residual(
-            measured: map.convert(MKMapPoint(x: r.midX, y: r.midY).coordinate, toPointTo: self),
-            atX: 0.5, y: 0.5)
-        #endif
+        // Невязки здесь больше нет НАРОЧНО: она стоила двух лишних `convert`
+        // на каждый растр и на каждый кадр движения, а читателя у неё не было
+        // ни одного. Правило «без наклона матрица точна» держат чистые
+        // `VeilFrame.residual` в тестах — на настоящей проекции `MKMapView`
+        // (`VeilSeatTests.testHeadingLeavesNoResidualWhilePitchDoes`).
     }
 
     /// Четырёхугольник, который НА САМОМ ДЕЛЕ непрозрачен прямо сейчас.
@@ -577,6 +582,16 @@ final class FogVeilView: UIView {
         letterbox.frame = bounds
         letterboxMask.frame = bounds
         letterboxMask.path = Self.letterboxPath(bounds: bounds, quad: coveredQuadPoints)
+    }
+
+    /// Вуаль вышла из окна — либо её сняли мы сами (`detach` уже забыл корень
+    /// и сюда не дойдёт), либо MapKit пересобрал сабвью при НЕПОДВИЖНОЙ карте.
+    /// Второй случай `sync` не ловит: `CADisplayLink` в покое погашен, а
+    /// плиточные оверлеи уже сняты — экран остался бы без тумана до первого
+    /// жеста.
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        verifySeating()
     }
 
     override func layoutSubviews() {
@@ -721,7 +736,6 @@ final class FogVeilView: UIView {
     private func finish(token: Int) {
         guard token == generation else { return }
         rendering = false
-        renderCount += 1
         // Последний кадр жеста мог заказать отрисовку длиннее хвоста
         // `CADisplayLink` — тогда чёткий кадр под новый масштаб не заказал бы
         // никто, и туман остался бы растянутым до следующего жеста. Один

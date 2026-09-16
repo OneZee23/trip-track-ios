@@ -287,6 +287,53 @@ final class MapRenderCostTests: XCTestCase {
     /// потолок, ниже которого кадр остаётся незаметным на фоновой очереди при
     /// пяти заказах в секунду (`VeilRenderGate.throttle`). Вернётся слой на
     /// тайл — тест упадёт втрое.
+    /// Тот же кадр при запасе ВРАЩАЕМОЙ карты — 2.2× вместо 1.5×.
+    ///
+    /// Пикселей в 2.15 раза больше, и потолок обязан быть свой: экран записи и
+    /// полноэкранная карта поездки платят именно эту цену, а сторожа у неё до
+    /// фикс-волны 1b не было вовсе. Порог 200 мс — половина окна расписания
+    /// (`VeilRenderGate.throttle` 0.2 с): кадр, который не успевает в СВОЁ
+    /// окно, начинает обгонять сам себя на фоновой очереди, а именно так
+    /// спайк 15 сен получал отдельные кадры по 460 мс. Замер на симуляторе —
+    /// в печати теста.
+    func testFullVeilFrameAtTheRotatingMarginFitsItsOwnBudget() {
+        let revealed = layer()
+        let index = MapPathIndex()
+        index.prepare(
+            source: { revealed.polylines(for: $0) },
+            transform: { CGPoint(x: $0.x, y: $0.y) }
+        )
+
+        let centre = CLLocationCoordinate2D(latitude: 45.03, longitude: 38.99)
+        let metre = MKMapPointsPerMeterAtLatitude(centre.latitude)
+        let visibleWidth = 500 * metre
+        let origin = MKMapPoint(centre)
+        let visible = MKMapRect(
+            x: origin.x - visibleWidth / 2, y: origin.y - visibleWidth * 956 / 440 / 2,
+            width: visibleWidth, height: visibleWidth * 956 / 440)
+        let rect = FogVeilView.renderRect(visible: visible, margin: FogVeilView.rotatingMargin)
+        let ppmp = 440 / visible.width
+        let sizePoints = CGSize(width: CGFloat(rect.width * ppmp),
+                                height: CGFloat(rect.height * ppmp))
+
+        var times: [TimeInterval] = []
+        for _ in 0..<5 {
+            let started = Date()
+            let band = FogVeilBitmap.render(
+                rect: rect, sizePoints: sizePoints, scale: FogVeilView.renderScale,
+                index: index, selected: [])
+            times.append(Date().timeIntervalSince(started))
+            XCTAssertNotNil(band, "растр обязан собраться")
+            XCTAssertEqual(band?.layers, 1, "слой прозрачности обязан быть один на растр")
+        }
+        let median = times.sorted()[times.count / 2]
+        print(String(format: "[veil] полный кадр .fine @2.2× %.0f×%.0f pt: медиана %.1f мс, "
+                     + "минимум %.1f мс", sizePoints.width, sizePoints.height,
+                     median * 1000, times.min()! * 1000))
+        XCTAssertLessThan(median, 0.2,
+                          "кадр вуали при запасе 2.2× занял \(median * 1000) мс")
+    }
+
     func testFullVeilFrameAtStreetZoomFitsTheBudget() {
         let revealed = layer()
         let index = MapPathIndex()

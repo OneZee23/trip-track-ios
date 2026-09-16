@@ -701,11 +701,6 @@ struct RouteMapView: UIViewRepresentable {
             map.insertOverlay(veil, at: 0, level: .aboveLabels)
         }
 
-        /// Куда ложится готовый слой: в экранную вуаль или плиточным оверлеем.
-        ///
-        /// Развилка одна на все поводы (первая загрузка, перечитывание по
-        /// `.revealedLayerChanged`, опоздавшая посадка вуали) — второй ответ на
-        /// этот вопрос означал бы туман в два слоя.
         /// Карта готова — запоминаем её и сажаем вуаль. Идемпотентно: зовётся и
         /// из `makeUIView`, и из `updateUIView` (тот приходит на каждый кадр
         /// реплея), а контейнеры MapKit появляются в дереве не к первому кадру.
@@ -714,17 +709,30 @@ struct RouteMapView: UIViewRepresentable {
             veilSeat?.attach(to: mapView)
         }
 
+        /// Куда ложится готовый слой: в экранную вуаль или плиточным оверлеем.
+        ///
+        /// Развилка одна на все поводы (первая загрузка, перечитывание по
+        /// `.revealedLayerChanged`, опоздавшая посадка вуали) — второй ответ на
+        /// этот вопрос означал бы туман в два слоя.
+        ///
+        /// Плиточный оверлей собирается ВСЕГДА, даже когда рисует вуаль, — он и
+        /// есть откат, и `screenVeilStoodDown` кладёт на карту именно его. Без
+        /// этого потеря места в дереве (`verifySeating` → `standDown`) или
+        /// незнакомая иерархия будущей iOS оставила бы экран поездки с
+        /// маршрутом поверх ГОЛОЙ карты Apple — молча, потому что туман просто
+        /// не появился бы. Обычный порядок на этом экране — вуаль садится
+        /// РАНЬШЕ, чем досчитается срез, поэтому «присвоим потом» значило бы
+        /// «никогда».
         func installFogLayer(_ layer: RevealedLayer, on mapView: MKMapView) {
             loadedLayer = layer
+            if let old = installedVeil { mapView.removeOverlay(old) }
+            let overlay = FogVeilOverlay(layer: layer)
+            installedVeil = overlay
             if let seat = veilSeat, seat.isAttached {
-                if let old = installedVeil { mapView.removeOverlay(old) }
                 seat.veil.setLayer(layer)
                 return
             }
-            if let old = installedVeil { mapView.removeOverlay(old) }
-            let veil = FogVeilOverlay(layer: layer)
-            installedVeil = veil
-            mapView.insertOverlay(veil, at: 0, level: .aboveLabels)
+            mapView.insertOverlay(overlay, at: 0, level: .aboveLabels)
         }
 
         /// Забрать слой и подменить вуаль. Старую снимаем сами: две вуали,

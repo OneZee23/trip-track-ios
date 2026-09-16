@@ -158,6 +158,101 @@ final class VeilSeatTests: XCTestCase {
         XCTAssertTrue(seated.veilSeat?.veil.hasInstalledLayer ?? false)
     }
 
+    /// Вуаль потеряла место в дереве — плиточный туман обязан ВЕРНУТЬСЯ на
+    /// карту, и с тем же слоем.
+    ///
+    /// Без этого экран поездки остаётся с маршрутом поверх ГОЛОЙ карты Apple:
+    /// вуали нет, оверлея нет, и заметить это нечем. Обычный порядок здесь —
+    /// вуаль садится РАНЬШЕ, чем досчитается срез, поэтому оверлей обязан
+    /// собираться и в той ветке, где рисует вуаль.
+    func testLostSeatOnTheTripMapBringsTheTiledFogBack() throws {
+        let layer = revealedLayer()
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let coordinator = RouteMapView(coordinates: [], showsFog: true).makeCoordinator()
+        coordinator.adoptMap(map)
+        try XCTSkipUnless(coordinator.veilSeat?.isAttached == true,
+                          "MapKit не собрал дерево у карты без окна — проверять нечего")
+
+        coordinator.installFogLayer(layer, on: map)
+        XCTAssertTrue(map.overlays.compactMap { $0 as? FogVeilOverlay }.isEmpty,
+                      "пока вуаль на месте, оверлея на карте быть не должно")
+
+        // Место потеряно по-настоящему: контейнера, под которым вуаль сидела,
+        // в дереве больше нет — вернуться ей некуда, и `verifySeating` уходит
+        // в `onLostFromHierarchy` → `standDown`.
+        let container = try XCTUnwrap(FogVeilView.annotationContainer(in: map))
+        container.removeFromSuperview()
+        coordinator.veilSeat?.veil.superview?.subviews
+            .filter { FogVeilView.overlayContainer(among: [$0]) != nil }
+            .forEach { $0.removeFromSuperview() }
+        coordinator.veilSeat?.veil.verifySeating()
+        XCTAssertEqual(coordinator.veilSeat?.isAttached, false, "вуаль обязана сдаться")
+
+        let restored = map.overlays.compactMap { $0 as? FogVeilOverlay }
+        XCTAssertEqual(restored.count, 1, "туман обязан вернуться плиточным оверлеем")
+        XCTAssertTrue(
+            restored.first?.layer.polylines(for: .fine).first
+                === layer.polylines(for: .fine).first,
+            "и с тем же слоем, а не с пустым")
+    }
+
+    /// Карта записи переиздаёт оверлеи до шестидесяти раз в секунду
+    /// (светящаяся голова), а плиточного тумана на ней нет вовсе — сравнивать
+    /// диффу не с чем. Слой обязан доходить до вуали РОВНО ОДИН раз на оверлей.
+    func testRecordingHandsTheSameLayerToTheVeilOnlyOnce() {
+        let coordinator = MapViewRepresentable(
+            userTrackingMode: .constant(.none), zoomDelta: .constant(0)
+        ).makeCoordinator()
+        let fog = FogVeilOverlay(layer: revealedLayer())
+
+        for _ in 0..<60 { coordinator.handOverFog(fog) }
+        XCTAssertEqual(coordinator.veilSeat.veil.layerHandoffs, 1,
+                       "слой ушёл в вуаль \(coordinator.veilSeat.veil.layerHandoffs) раз")
+        XCTAssertEqual(coordinator.veilSeat.veil.renderOrders, 0,
+                       "и ни одного кадра тумана это заказать не могло")
+
+        // Новый слой (финиш поездки, пул) — новый оверлей и новая передача.
+        coordinator.handOverFog(FogVeilOverlay(layer: revealedLayer()))
+        XCTAssertEqual(coordinator.veilSeat.veil.layerHandoffs, 2)
+    }
+
+    /// Карта стоит, а вуаль из дерева выбило. `sync` этого не ловит —
+    /// `CADisplayLink` в покое погашен, — поэтому ловят два других пути: выход
+    /// из окна и следующая посадка (`updateUIView`, появление экрана).
+    func testStaticMapStillNoticesALostSeat() {
+        let tree = mapTree()
+        let window = UIWindow(frame: tree.root.bounds)
+        window.addSubview(tree.root)
+        let veil = FogVeilView()
+        XCTAssertTrue(veil.attach(inside: tree.root, seat: .aboveBaseMap))
+        XCTAssertNotNil(veil.window, "вуаль обязана оказаться в окне")
+
+        // Выбило из дерева: карта при этом не двигалась ни разу.
+        veil.removeFromSuperview()
+        XCTAssertTrue(tree.content.subviews.contains(veil),
+                      "выход из окна обязан вернуть вуаль на место")
+
+        // Второй путь — перестановка внутри того же родителя: окно не
+        // меняется, значит ловит её только ближайшая посадка, а её зовёт
+        // каждый `updateUIView`.
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let seat = VeilSeat(margin: FogVeilView.defaultMargin, seat: .aboveBaseMap)
+        seat.attach(to: map)
+        guard seat.isAttached, let parent = seat.veil.superview,
+              let container = FogVeilView.overlayContainer(among: parent.subviews)
+        else { return }
+
+        parent.bringSubviewToFront(seat.veil)
+        XCTAssertGreaterThan(parent.subviews.firstIndex(of: seat.veil)!,
+                             parent.subviews.firstIndex(of: container)!,
+                             "подстроили промах: вуаль поверх оверлеев")
+
+        seat.attach(to: map)
+        XCTAssertLessThan(parent.subviews.firstIndex(of: seat.veil)!,
+                          parent.subviews.firstIndex(of: container)!,
+                          "посадка обязана вернуть вуаль под оверлеи")
+    }
+
     // MARK: Прорезь у машины
 
     /// Главное обещание прорези: она растёт шестьдесят раз в секунду и НЕ

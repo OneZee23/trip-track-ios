@@ -218,7 +218,7 @@ struct MapViewRepresentable: UIViewRepresentable {
                 // кладём вовсе: рисовали бы одно и то же дважды, причём нижнее
                 // всё равно не видно. Слой при этом отдаём ей — он тот же.
                 if context.coordinator.veilSeat.isAttached {
-                    context.coordinator.veilSeat.veil.setLayer(fog.layer)
+                    context.coordinator.handOverFog(fog)
                     continue
                 }
                 // Непрозрачная вуаль обязана лежать ВЫШЕ подписей Apple
@@ -278,13 +278,31 @@ struct MapViewRepresentable: UIViewRepresentable {
             veilSeat.attach(to: mapView)
         }
 
+        /// Какой оверлей тумана уже отдан вуали.
+        ///
+        /// Без этой памяти `setLayer` зовётся на КАЖДОМ `updateUIView`, а
+        /// светящаяся голова переиздаёт оверлеи с новой идентичностью до
+        /// шестидесяти раз в секунду: плиточного оверлея на карте нет (его и не
+        /// кладут), поэтому диффу оверлеев сравнивать не с чем. `setLayer` на
+        /// том же слое выходит рано, но подпись слоя он считает ДО выхода —
+        /// массив по всем тонким полилиниям открытого мира, шестьдесят раз в
+        /// секунду на главном потоке.
+        private weak var handedFog: FogVeilOverlay?
+
+        /// Отдать вуали слой этого оверлея — ровно один раз на оверлей.
+        func handOverFog(_ fog: FogVeilOverlay) {
+            guard handedFog !== fog else { return }
+            handedFog = fog
+            veilSeat.veil.setLayer(fog.layer)
+        }
+
         /// Вуаль встала: снимаем плиточный оверлей и отдаём ей тот же слой.
         private func screenVeilTookOver() {
             if let map = mapRef {
                 map.removeOverlays(map.overlays.filter { $0 is FogVeilOverlay })
             }
             if let fog = parent.overlays.compactMap({ $0 as? FogVeilOverlay }).first {
-                veilSeat.veil.setLayer(fog.layer)
+                handOverFog(fog)
             }
             veilSeat.startTracking(tail: 1.5)
             parent.onScreenVeilChanged?(veilSeat.veil)
@@ -293,6 +311,9 @@ struct MapViewRepresentable: UIViewRepresentable {
         /// Вуаль ушла: туман возвращается плиточному рендереру, иначе карта
         /// осталась бы голой.
         private func screenVeilStoodDown() {
+            // Вуаль ушла — отданное ей забыто: сядет заново, слой надо отдать
+            // снова.
+            handedFog = nil
             parent.onScreenVeilChanged?(nil)
             guard let map = mapRef,
                   !map.overlays.contains(where: { $0 is FogVeilOverlay }),

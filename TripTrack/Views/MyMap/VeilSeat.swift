@@ -51,7 +51,14 @@ final class VeilSeat {
             self.map = map
             tries = 0
         }
-        guard !isAttached, tries < Self.maxTries else { return }
+        guard !isAttached else {
+            // Уже сидим — но, может быть, уже НЕ там: MapKit вправе пересобрать
+            // сабвью при неподвижной карте, а привязка проверяет место только
+            // под `CADisplayLink`, то есть в покое не проверяет никто.
+            veil.verifySeating()
+            return
+        }
+        guard tries < Self.maxTries else { return }
         tryAttach()
     }
 
