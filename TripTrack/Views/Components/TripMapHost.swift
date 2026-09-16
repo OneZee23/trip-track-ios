@@ -105,6 +105,21 @@ final class TripMapHost: ObservableObject {
         return created
     }
 
+    /// Последний рубеж.
+    ///
+    /// Обычный выход — счётчик (`release()`), запасной — карта, не вернувшаяся
+    /// в окно (`VeilHostMapView.onWindowChange`). Но `dismantleUIView` SwiftUI
+    /// вправе придержать, а окно у придержанной карты может и не обнулиться;
+    /// хост в этот момент уже никому не нужен и освобождается. Вуаль с её
+    /// `CADisplayLink` и двумя растрами за кадром не живёт.
+    ///
+    /// `deinit` не изолирован, поэтому снятие уезжает на главный актёр
+    /// задачей; `self` в неё НЕ попадает — только сама посадка.
+    deinit {
+        guard let seat = coordinator?.veilSeat else { return }
+        Task { @MainActor in seat.detach() }
+    }
+
     /// Снять кадр карты — для слота героя на время переезда.
     ///
     /// `drawHierarchy`, а не `layer.render(in:)`: содержимое `MKMapView`

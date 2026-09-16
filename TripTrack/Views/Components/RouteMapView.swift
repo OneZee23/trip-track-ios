@@ -381,11 +381,22 @@ struct RouteMapView: UIViewRepresentable {
                 if window == nil {
                     // Карта с хостом переезжает между слотом героя и
                     // полноэкранной раскладкой, и на этом переезде окно на
-                    // мгновение становится пустым. Снимать вуаль здесь
+                    // мгновение становится пустым. Снимать вуаль сразу
                     // значило бы пересаживать её на каждое раскрытие —
-                    // ровно то, чего переезд и должен избежать. Настоящий
-                    // уход экрана снимает её `TripMapHost.tearDown`.
-                    guard !coordinator.isHosted else { return }
+                    // ровно то, чего переезд и должен избежать.
+                    //
+                    // Но и просто выйти нельзя: `dismantleUIView` SwiftUI
+                    // вправе придержать, и тогда у вуали не осталось бы ни
+                    // одной двери. Переспрашиваем на следующем витке: карта,
+                    // которая к нему так и не вернулась в окно, ушла
+                    // по-настоящему.
+                    guard !coordinator.isHosted else {
+                        Task { @MainActor [weak coordinator, weak host] in
+                            guard let coordinator, let host, host.window == nil else { return }
+                            coordinator.host?.release()
+                        }
+                        return
+                    }
                     coordinator.veilSeat?.detach()
                 } else {
                     coordinator.adoptMap(host)

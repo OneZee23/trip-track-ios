@@ -53,17 +53,6 @@ struct PhotoFullScreenView: View {
     var onMarkPlace: ((UUID) -> Void)? = nil
     /// Кнопка есть только у снимков, у которых известно, где они сняты.
     var canMarkPlace: ((UUID) -> Bool)? = nil
-    /// Добавить хрому безопасные отступы самому.
-    ///
-    /// Просмотрщик перестал быть `fullScreenCover` (двух системных
-    /// презентаций подряд UIKit не даёт, и обход стоил 450 мс сна между
-    /// картой и снимком). Слой внутри экрана поездки живёт под
-    /// `.ignoresSafeArea(.container)`, то есть вставок безопасной зоны в его
-    /// поддереве НЕТ вовсе — и «×» садится на часы. Ровно то же решение, что
-    /// у хрома полноэкранной карты (`FullscreenMapSheet.addsSafeAreaInsets`);
-    /// флаг, а не всегда, потому что у презентации вставки настоящие и
-    /// добавка увела бы кнопки на второй статус-бар вниз.
-    var addsSafeAreaInsets: Bool = false
     let onDismiss: () -> Void
 
     /// Which page the pager has actually LANDED on. Driving the pager by
@@ -105,7 +94,6 @@ struct PhotoFullScreenView: View {
         isMain: ((UUID) -> Bool)? = nil,
         onMarkPlace: ((UUID) -> Void)? = nil,
         canMarkPlace: ((UUID) -> Bool)? = nil,
-        addsSafeAreaInsets: Bool = false,
         onDismiss: @escaping () -> Void
     ) {
         self.pages = pages
@@ -118,7 +106,6 @@ struct PhotoFullScreenView: View {
         self.isMain = isMain
         self.onMarkPlace = onMarkPlace
         self.canMarkPlace = canMarkPlace
-        self.addsSafeAreaInsets = addsSafeAreaInsets
         self.onDismiss = onDismiss
         let start = pages.indices.contains(initialIndex) ? initialIndex : 0
         _livePages = State(initialValue: pages)
@@ -329,15 +316,6 @@ struct PhotoFullScreenView: View {
     /// The counter moves down next to the caption — where the eye already
     /// goes for "where am I in this set" — and gets a readable size instead
     /// of the 13pt it had.
-    /// Сколько хром добавляет себе сам — см. `addsSafeAreaInsets`.
-    private var chromeTopInset: CGFloat {
-        addsSafeAreaInsets ? (UIApplication.tt_safeAreaInsets?.top ?? 47) : 0
-    }
-
-    private var chromeBottomInset: CGFloat {
-        addsSafeAreaInsets ? (UIApplication.tt_safeAreaInsets?.bottom ?? 34) : 0
-    }
-
     private var chrome: some View {
         VStack(spacing: 0) {
             topRow
@@ -346,7 +324,13 @@ struct PhotoFullScreenView: View {
                 // adding the window's top inset here pushed the buttons a
                 // second status bar down the screen, level with the middle
                 // of the picture.
-                .padding(.top, 6 + chromeTopInset)
+                // Безопасную зону просмотрщик НЕ добирает — она у него
+                // настоящая, и слоем внутри экрана поездки тоже (в отличие от
+                // карты, чей слой её игнорирует ради полноэкранной рамки).
+                // Добавка уводила кнопки на 44 pt вниз, оставляя над ними
+                // пустую полосу, — измерено на `w070_fsmap_photo_viewer.png`
+                // первой съёмки.
+                .padding(.top, 6)
                 .padding(.bottom, 8)
                 .frame(maxWidth: .infinity)
                 .background { band.ignoresSafeArea(edges: .top) }
@@ -356,7 +340,7 @@ struct PhotoFullScreenView: View {
             bottomBlock
                 .padding(.horizontal, 20)
                 .padding(.top, 10)
-                .padding(.bottom, 12 + chromeBottomInset)
+                .padding(.bottom, 12)
                 .frame(maxWidth: .infinity)
                 .background { band.ignoresSafeArea(edges: .bottom) }
                 .allowsHitTesting(false)

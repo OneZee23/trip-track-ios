@@ -194,6 +194,13 @@ struct TripDetailView: View {
     /// Считается с самой `MKMapView`, а не через `preference`: та
     /// пересчитывалась бы на каждый кадр прокрутки ради числа, нужного раз.
     @State private var heroMapFrame: CGRect = .zero
+    /// Безопасная зона окна, снятая в момент раскрытия.
+    ///
+    /// Спрашивать её у ключевого окна на каждом проходе `body` нельзя: на
+    /// кадре с карточкой снимка ответ пришёл нулевой, весь хром уехал на
+    /// 44 pt вверх и подсказка легла на кнопку закрытия. Окно карты в этот
+    /// момент известно точно и больше не меняется.
+    @State private var mapWindowSafeArea: UIEdgeInsets = .zero
     /// Меняется — карта вписывает маршрут в свои нынешние границы. Бумается
     /// ровно дважды на раскрытие: когда кадр приехал и когда вернулся.
     @State private var mapFitTick = 0
@@ -1814,9 +1821,6 @@ isOwn
             onDelete: deletePhotoHandler,
             onMarkPlace: markPlaceHandler,
             canMarkPlace: canMarkPlaceHandler,
-            // Просмотрщик здесь — СЛОЙ, а не презентация: вставок безопасной
-            // зоны в его поддереве нет, и «×» сел бы на часы.
-            addsSafeAreaInsets: true,
             onDismiss: { withAnimation(.easeInOut(duration: 0.2)) { selectedPhotoIndex = nil } }
         )
     }
@@ -2024,6 +2028,7 @@ isOwn
     private func expandMap() {
         guard mapExpansion == .collapsed else { return }
         heroMapFrame = heroMapFrameInWindow() ?? .zero
+        mapWindowSafeArea = mapHost.mapView?.window?.safeAreaInsets ?? mapWindowSafeArea
         mapHost.captureSnapshot()
         // ВНЕ анимации: этот переход меняет ветку `if` в слоте героя (живая
         // карта → снимок) и монтирует слой. Анимированная смена ветки держала
@@ -2097,6 +2102,17 @@ isOwn
                     .onAppear { mapLayerDidMount() }
             }
             .ignoresSafeArea()
+            // Свайп от левого края не уводит с экрана, пока карта раскрыта:
+            // слой живёт ровно столько, сколько раскрытие, и его уход
+            // возвращает жест обратно.
+            .background(MapPopGestureGate())
+            // Глифы статус-бара над ночной картой у человека со СВЕТЛОЙ темой
+            // оставались тёмными: перекрасить их можно только
+            // `.preferredColorScheme`, а тот уходит до контроллера ВСЕГО
+            // экрана и красит страницу под картой (с видимой вспышкой на
+            // сворачивании). Прячем вместо того, чтобы красить, — тем же
+            // способом, каким это давно делает просмотрщик снимков.
+            .statusBarHidden(true)
             // Тёмная схема — только у СВОЕЙ ветки.
             //
             // Раньше лист звал `.preferredColorScheme(.dark)`, и это было
@@ -2147,7 +2163,7 @@ isOwn
             chromeVisible: mapExpansion.showsChrome,
             onClose: { collapseMap() },
             onOpenPhoto: { openPhoto(id: $0) },
-            addsSafeAreaInsets: true,
+            windowSafeArea: mapWindowSafeArea,
             chromeDelay: MapExpansionState.chromeDelay(reduceMotion: reduceMotion),
             scopesColorScheme: false
         )

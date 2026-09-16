@@ -106,13 +106,24 @@ struct FullscreenMapSheet: View {
     /// Нажали на карточку предпросмотра снимка — открыть просмотрщик.
     /// Пусто — карточка остаётся карточкой.
     var onOpenPhoto: ((UUID) -> Void)? = nil
-    /// Добавить хрому безопасные отступы самому.
+    /// Безопасная зона, СНЯТАЯ С ОКНА один раз.
     ///
-    /// Шторка (`fullScreenCover`) получала их от системы, и хром вставал под
-    /// статус-бар сам. Накладка ВНУТРИ экрана поездки живёт под родителем,
-    /// который безопасную зону игнорирует, и без этого «×» садится прямо на
-    /// часы. Решает вызывающий, потому что ответ у двух презентаций разный.
-    var addsSafeAreaInsets: Bool = false
+    /// Шторка (`fullScreenCover`) получала зону от системы, и хром вставал
+    /// под статус-бар сам. Накладка внутри экрана поездки живёт под
+    /// `.ignoresSafeArea()`, и вставок в её поддереве нет вовсе — без добавки
+    /// «×» садится на часы.
+    ///
+    /// Добавку приносит ВЫЗЫВАЮЩИЙ готовым числом, а не считает здесь.
+    /// Считали — через `UIApplication.tt_safeAreaInsets`, то есть у КЛЮЧЕВОГО
+    /// окна на каждом проходе `body`, — и это разъезжалось: на кадре с
+    /// карточкой снимка ответ пришёл нулевой, весь хром уехал на 44 pt вверх
+    /// и подсказка «нажмите на маршрут» легла на кнопку закрытия (видно на
+    /// `w070_fsmap_photo_preview.png` первой съёмки). Окно карты известно в
+    /// момент раскрытия и после этого не меняется — снимать зону надо там.
+    ///
+    /// `nil` — презентация: у неё зона настоящая, и добавка увела бы кнопки
+    /// на второй статус-бар вниз.
+    var windowSafeArea: UIEdgeInsets? = nil
     /// Через сколько после начала движения проявляется хром. Гаснет он
     /// всегда без задержки: уходящая карта не должна уносить кнопки с собой.
     var chromeDelay: Double = 0
@@ -358,6 +369,24 @@ struct FullscreenMapSheet: View {
     /// speed key stacked along the bottom, that same fit would tuck the last
     /// kilometres of the route under the chrome, so a replay asks for a bottom
     /// margin the size of what actually sits there.
+    /// Сколько внизу занимает карточка, когда она есть.
+    ///
+    /// Логотип Apple и «Legal» обязаны быть видны (CLAUDE.md), а ставит их
+    /// MapKit по `layoutMargins`, то есть по нижней границе рамки. Карточка
+    /// встаёт НАД плашкой реплея и добирает высоту, которой в рамке не
+    /// заложено, — и накрывает строку атрибуции собой. Измерено на
+    /// `w070_fsmap_photo_preview.png`: карточка от 594 pt, строка на 622.
+    ///
+    /// Числа — высота карточки со своими полями плюс её верхний отступ;
+    /// карточка предпросмотра выше карточки отметки, потому что миниатюра у
+    /// неё 96 pt против 56.
+    private var bottomCardHeight: CGFloat {
+        if !tappedPasses.isEmpty { return 152 }
+        if photoPreview != nil { return 132 }
+        if shownMarker != nil { return 92 }
+        return 0
+    }
+
     private var replayFitInsets: UIEdgeInsets {
         UIEdgeInsets(
             // 190, not 160: the chrome stack (transport plaque + speed key +
@@ -366,7 +395,7 @@ struct FullscreenMapSheet: View {
             // strip landed INSIDE the blurred plaque and was unreadable —
             // which is not a thing we are allowed to do to it.
             top: safeAreaTop + 56, left: 28,
-            bottom: safeAreaBottom + 190, right: 28
+            bottom: safeAreaBottom + 190 + bottomCardHeight, right: 28
         )
     }
 
@@ -379,19 +408,25 @@ struct FullscreenMapSheet: View {
     private var plainFitInsets: UIEdgeInsets {
         UIEdgeInsets(
             top: safeAreaTop + 56, left: 28,
-            bottom: safeAreaBottom + 56, right: 28
+            bottom: safeAreaBottom + 56 + bottomCardHeight, right: 28
         )
     }
 
     /// The insets go to a UIKit map that ignores the safe area, so the numbers
     /// have to be looked up rather than laid out (see `tt_safeAreaInsets`).
-    private var safeAreaTop: CGFloat { UIApplication.tt_safeAreaInsets?.top ?? 47 }
+    /// У слоя ответ приходит снаружи и не зависит от того, какое окно сейчас
+    /// ключевое, — см. `windowSafeArea`.
+    private var safeAreaTop: CGFloat {
+        windowSafeArea?.top ?? UIApplication.tt_safeAreaInsets?.top ?? 47
+    }
 
-    /// Сколько хром добавляет себе сам — см. `addsSafeAreaInsets`.
-    private var chromeTopInset: CGFloat { addsSafeAreaInsets ? safeAreaTop : 0 }
-    private var chromeBottomInset: CGFloat { addsSafeAreaInsets ? safeAreaBottom : 0 }
+    private var safeAreaBottom: CGFloat {
+        windowSafeArea?.bottom ?? UIApplication.tt_safeAreaInsets?.bottom ?? 34
+    }
 
-    private var safeAreaBottom: CGFloat { UIApplication.tt_safeAreaInsets?.bottom ?? 34 }
+    /// Сколько хром добавляет себе сам — см. `windowSafeArea`.
+    private var chromeTopInset: CGFloat { windowSafeArea?.top ?? 0 }
+    private var chromeBottomInset: CGFloat { windowSafeArea?.bottom ?? 0 }
 
     /// A button says what it will DO, not what is already true.
     ///

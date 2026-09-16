@@ -57,14 +57,27 @@ final class TripDetailLayerOrderTests: XCTestCase {
                       "обе накладки обязаны жить в `body`, а не в теле экрана")
     }
 
-    /// Просмотрщик как СЛОЙ обязан сам добрать безопасную зону.
+    /// Безопасную зону добирает ТОЛЬКО слой карты, и только из окна.
     ///
-    /// Под `.ignoresSafeArea(.container)` экрана поездки вставок в поддереве
-    /// нет вовсе, и «×» садится на часы — та же поломка, что уже чинили хрому
-    /// полноэкранной карты.
-    func testViewerAsALayerAsksForItsSafeArea() {
-        XCTAssertTrue(source.contains("addsSafeAreaInsets: true"),
-                      "слой обязан добрать безопасную зону сам")
+    /// Две поломки разом, обе измерены на снимках первой съёмки: у карты зона
+    /// считалась у КЛЮЧЕВОГО окна на каждом проходе `body` и на одном кадре
+    /// пришла нулевой (подсказка легла на кнопку закрытия), а просмотрщику
+    /// добавку дали сверх настоящей — и его кнопки уехали на 44 pt вниз.
+    func testOnlyTheMapLayerAddsItsSafeAreaAndOnlyFromTheWindow() {
+        XCTAssertTrue(source.contains("windowSafeArea: mapWindowSafeArea"),
+                      "карта обязана получать зону готовым числом")
+        XCTAssertTrue(source.contains("mapHost.mapView?.window?.safeAreaInsets"),
+                      "зона снимается с окна карты, а не у ключевого окна")
+        XCTAssertFalse(source.contains("addsSafeAreaInsets"),
+                       "у просмотрщика зона настоящая, добавка её удваивает")
+    }
+
+    /// Пока карта раскрыта, свайп от левого края не уводит с экрана, а
+    /// статус-бар прячется (перекрасить его глифы, не перекрашивая всю
+    /// страницу, SwiftUI не даёт).
+    func testExpandedLayerGatesThePopGestureAndHidesTheStatusBar() {
+        XCTAssertTrue(source.contains(".background(MapPopGestureGate())"))
+        XCTAssertTrue(source.contains(".statusBarHidden(true)"))
     }
 
     /// `.onDisappear` не имеет права разбирать карту: в `NavigationStack` он
