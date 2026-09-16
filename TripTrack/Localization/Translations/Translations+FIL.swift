@@ -1307,6 +1307,12 @@ extension Translations {
         "milestoneTitle.threeRegionsDay": "Tatlong rehiyon sa isang biyahe",
         "milestoneTitle.countryBorder": "Natawid ang hangganan",
         "milestoneTitle.nightPass": "Isang daanan sa bundok sa gabi",
+        "profileFindsTitle": "Natuklasan",
+        "findRarityFew": "iilan",
+        "findRarityTens": "dose-dosena",
+        "findRarityHundreds": "daan-daan",
+        "findRarityMany": "marami",
+        "findFirstLabel": "Unang nakahanap",
     ]
 
 }

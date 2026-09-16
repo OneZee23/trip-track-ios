@@ -458,6 +458,50 @@ struct SocialProfile: Codable, Hashable {
     /// не шлёт, и старый сервер обязан декодироваться, а не ронять весь экран.
     /// Отсутствие читается как «всё открыто» — см. `SocialProfileVisibility.open`.
     let visibility: SocialProfileVisibility?
+    /// Найденные секреты и решённые загадки (0.7.0, спека §4).
+    ///
+    /// Опционально по той же причине, что `bio`/`visibility`: сервер без этой
+    /// фичи ключа не шлёт, и профиль обязан открыться без блока «Находки», а
+    /// не упасть. Ненайденное сюда не попадает никогда — сервер отдаёт только
+    /// `verified` строки, и клиент этот фильтр не повторяет.
+    let finds: [SocialFind]?
+}
+
+/// Одна печать в блоке «Находки» публичного профиля (спека §4).
+///
+/// Лёгкий DTO, а не `Discovery`: та живёт только на телефоне (0.7.0, «Находки»
+/// в CLAUDE.md) и несёт координату с id поездки, которых у чужого профиля нет
+/// и не будет. `kind`/`symbol` приходят строками — те же значения, что
+/// `DiscoveryKind.rawValue`/`SealSymbol.rawValue`, но парсятся терпимо:
+/// незнакомая строка (будущий вид, будущий символ) не роняет декод всего
+/// профиля, она просто рисуется дженериком.
+struct SocialFind: Codable, Hashable {
+    let secretId: String
+    /// `"secret"` | `"riddle"` — вехи в профиль не попадают: у них нет
+    /// счётчика нашедших на сервере (см. `Discovery.swift`).
+    let kind: String
+    let symbol: String
+    /// `"few"` | `"tens"` | `"hundreds"` | `"many"` — редкость по числу
+    /// нашедших (спека §4). Незнакомое значение подпись просто не рисует,
+    /// см. `AppStrings.findRarityLabel`.
+    let rarity: String
+    let foundAt: Date
+    let first: Bool
+
+    /// Терпимый разбор: неизвестный вид читается как секрет — печать красит
+    /// кольцо так же, как у самого частого случая, а не молчит вовсе.
+    var discoveryKind: DiscoveryKind { DiscoveryKind(rawValue: kind) ?? .secret }
+    /// Терпимый разбор символа: `SealPainter` рисует дженерик-печать вместо
+    /// падения на будущем символе, которого этот билд ещё не знает.
+    var sealSymbol: SealSymbol { SealSymbol(rawValue: symbol) ?? .generic }
+}
+
+/// «Пусто/отсутствует → секции нет» — правило показа блока «Находки»
+/// (`PublicProfileView.findsSection`), вынесенное чистой функцией, чтобы его
+/// проверял тест DTO, а не снимок экрана.
+func socialFindsAreVisible(_ finds: [SocialFind]?) -> Bool {
+    guard let finds else { return false }
+    return !finds.isEmpty
 }
 
 /// Пер-блочная видимость публичного профиля (0.6.3).

@@ -1307,6 +1307,12 @@ extension Translations {
         "milestoneTitle.threeRegionsDay": "Tek yolculukta üç bölge",
         "milestoneTitle.countryBorder": "Sınır geçildi",
         "milestoneTitle.nightPass": "Gece bir geçit",
+        "profileFindsTitle": "Bulgular",
+        "findRarityFew": "birkaç kişi",
+        "findRarityTens": "onlarca kişi",
+        "findRarityHundreds": "yüzlerce kişi",
+        "findRarityMany": "birçok kişi",
+        "findFirstLabel": "İlk bulan",
     ]
 
 }

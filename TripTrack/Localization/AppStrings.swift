@@ -6842,4 +6842,36 @@ enum AppStrings {
                       ru: "Ночной перевал", en: "A pass at night")
         }
     }
+
+    /// Заголовок блока «Находки» на публичном профиле (спека §4) — печати
+    /// найденных секретов и решённых загадок, у своего и у чужого экрана.
+    static func profileFindsTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileFindsTitle", ru: "Находки", en: "Finds")
+    }
+
+    /// Подпись редкости под печатью в «Находках» — по числу нашедших
+    /// (спека §4: «единицы» < 10, «десятки», «сотни», «многие»). `raw` —
+    /// значение с сервера (`SocialFind.rarity`); незнакомое (будущий сервер)
+    /// возвращает `nil`, и печать остаётся без подписи вместо неверной.
+    static func findRarityLabel(_ lang: LanguageManager.Language, raw: String) -> String? {
+        switch raw {
+        case "few":
+            return tr(lang, "findRarityFew", ru: "единицы", en: "a few")
+        case "tens":
+            return tr(lang, "findRarityTens", ru: "десятки", en: "tens")
+        case "hundreds":
+            return tr(lang, "findRarityHundreds", ru: "сотни", en: "hundreds")
+        case "many":
+            return tr(lang, "findRarityMany", ru: "многие", en: "many")
+        default:
+            return nil
+        }
+    }
+
+    /// Подпись для VoiceOver у звезды первооткрывателя на печати в
+    /// «Находках» — сама звёздочка `.accessibilityHidden`, эта строка стоит
+    /// в общей подписи печати вместо неё.
+    static func findFirstLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "findFirstLabel", ru: "Нашли первым", en: "First to find it")
+    }
 }

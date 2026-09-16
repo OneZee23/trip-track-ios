@@ -117,6 +117,17 @@ struct PublicProfileView: View {
         let url: String?
     }
 
+    #if DEBUG
+    /// `-debug-profile-finds` skips the network fetch entirely and renders
+    /// `SocialProfile.debugFindsSample` instead — the «Находки» section
+    /// (task 4, 0.7.0) needs `finds` populated with every rarity and a
+    /// first-finder star, which no seed in this repo can produce: it comes
+    /// from a server-side counter over `secret_find` rows this device has
+    /// never talked to. Compiles only in debug, same guard as `-debug-admin`
+    /// (`NotificationSwitches`).
+    static var debugFindsSample = ProcessInfo.processInfo.arguments.contains("-debug-profile-finds")
+    #endif
+
     /// True when this view is rendering the signed-in user's own profile
     /// (e.g. "preview as others see you"). Hides Follow/Block/Report actions.
     private var isOwnProfile: Bool {
@@ -397,6 +408,16 @@ struct PublicProfileView: View {
 
                             if visibility.achievements {
                                 achievementsSection(c)
+                                    .padding(.horizontal, 16)
+                            }
+
+                            // «Находки» (0.7.0, спека §4) — та же видимость,
+                            // что у достижений: обе карточки говорят о том,
+                            // что человек ЗАРАБОТАЛ, а не о его дороге.
+                            // Сама секция прячется, когда список пуст или
+                            // сервер его вовсе не прислал — см. `findsSection`.
+                            if visibility.achievements {
+                                findsSection(c)
                                     .padding(.horizontal, 16)
                             }
 
@@ -1536,6 +1557,91 @@ struct PublicProfileView: View {
         .frame(width: 30, height: 30)
     }
 
+    // MARK: - Находки (0.7.0)
+
+    /// «Находки» card (спека §4): найденные секреты и решённые загадки, той
+    /// же печатью, что на «Атласе» (`SealPainter`). Вехи в списке не бывает —
+    /// сервер их не считает (`SocialFind.kind` только `"secret"`/`"riddle"`).
+    ///
+    /// Целиком исчезает при пустом/отсутствующем списке — тот же приём, что
+    /// у карточки достижений без разблокировок ниже, только без заглушки:
+    /// «нет находок» на чужом профиле ничего не обещает и не отвечает.
+    @ViewBuilder
+    private func findsSection(_ c: AppTheme.Colors) -> some View {
+        if let finds = profile?.finds, socialFindsAreVisible(finds) {
+            VStack(spacing: 12) {
+                ProfileSectionLabel(text: AppStrings.profileFindsTitle(lang.language))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                // `.adaptive` — сетка сама переносит строки под ширину
+                // экрана вместо ряда, уезжающего за край на большом списке
+                // находок. Тапа нет в этой волне (см. бриф задачи 4).
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 60), spacing: 12)],
+                    alignment: .leading, spacing: 14
+                ) {
+                    ForEach(finds, id: \.secretId) { find in
+                        findChip(find, c)
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .surfaceCard(cornerRadius: 16)
+            .accessibilityIdentifier("profile_finds")
+        }
+    }
+
+    /// One seal + its rarity caption + a first-finder star. Same medallion
+    /// code as the Atlas (`SealPainter`) and the trip-summary reveal block —
+    /// a chip drawn its own way here would drift from what the seal looks
+    /// like everywhere else it's shown.
+    private func findChip(_ find: SocialFind, _ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 4) {
+            ZStack(alignment: .topTrailing) {
+                Image(uiImage: SealPainter.image(
+                    kind: find.discoveryKind, symbol: find.sealSymbol, size: 36, scale: 3))
+                    .frame(width: 36, height: 36)
+
+                if find.first {
+                    // Звезда-корона первооткрывателя. Скрыта от VoiceOver —
+                    // её смысл читает общая подпись чипа ниже.
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AppTheme.accent)
+                        .padding(3)
+                        .background(Circle().fill(c.card))
+                        .offset(x: 5, y: -5)
+                        .accessibilityHidden(true)
+                }
+            }
+
+            if let rarity = AppStrings.findRarityLabel(lang.language, raw: find.rarity) {
+                Text(rarity)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(width: 60)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(findAccessibilityLabel(find))
+    }
+
+    /// «Печать: секрет. Сотни. Нашли первым.» — rarity and first-finder are
+    /// appended only when known, so a stripped-down server response (missing
+    /// rarity string it doesn't recognise) still reads as a sentence.
+    private func findAccessibilityLabel(_ find: SocialFind) -> String {
+        var parts = [AppStrings.sealAccessibility(lang.language, kind: find.discoveryKind)]
+        if let rarity = AppStrings.findRarityLabel(lang.language, raw: find.rarity) {
+            parts.append(rarity)
+        }
+        if find.first {
+            parts.append(AppStrings.findFirstLabel(lang.language))
+        }
+        return parts.joined(separator: ". ")
+    }
+
     /// Canon page header (580:490) — the 11pt uppercase tertiary label every
     /// other social screen already uses. Note the achievements CARD titles
     /// itself differently, in 16 heavy inside its own surface (1667:208).
@@ -1927,6 +2033,12 @@ struct PublicProfileView: View {
     }
 
     private func loadProfile() async {
+        #if DEBUG
+        if Self.debugFindsSample {
+            profile = .debugFindsSample(accountId: accountId)
+            return
+        }
+        #endif
         isLoading = true
         defer { isLoading = false }
         loadError = nil
@@ -2106,7 +2218,53 @@ private extension SocialProfile {
             stats: stats, activeVehicle: activeVehicle, recentBadges: recentBadges,
             recentTrips: recentTrips,
             followerCount: followerCount, followingCount: followingCount,
-            isFollowing: isFollowing, bio: bio, visibility: visibility
+            isFollowing: isFollowing, bio: bio, visibility: visibility,
+            finds: finds
         )
     }
 }
+
+#if DEBUG
+extension SocialProfile {
+    /// `-debug-profile-finds` sample: a full profile DTO whose `finds` covers
+    /// every rarity, a first-finder star, AND one unrecognised kind/symbol/
+    /// rarity — the fallback path `findChip`/`findAccessibilityLabel` take
+    /// when a future server sends something this build doesn't know. Nothing
+    /// else on the page is trying to be realistic; this flag exists for one
+    /// section (task 4, 0.7.0 wave 4).
+    static func debugFindsSample(accountId: UUID) -> SocialProfile {
+        SocialProfile(
+            id: accountId,
+            displayName: "Отладка находок",
+            avatarEmoji: "🚗",
+            profileLevel: 12,
+            profileBackground: nil,
+            currentStreak: 3,
+            bestStreak: 9,
+            stats: SocialProfileStats(
+                totalKm: 4820, tripCount: 61, regionsCount: 7, publicTripCount: 40),
+            activeVehicle: nil,
+            recentBadges: ["first_trip", "road_regular", "road_warrior"],
+            recentTrips: [],
+            followerCount: 12, followingCount: 8,
+            isFollowing: nil,
+            bio: nil,
+            visibility: .open,
+            finds: [
+                SocialFind(secretId: "s1", kind: "secret", symbol: "mountain.2",
+                           rarity: "few", foundAt: Date(), first: true),
+                SocialFind(secretId: "s2", kind: "riddle", symbol: "light.beacon.max",
+                           rarity: "tens", foundAt: Date(), first: false),
+                SocialFind(secretId: "s3", kind: "secret", symbol: "flag.2.crossed",
+                           rarity: "hundreds", foundAt: Date(), first: false),
+                SocialFind(secretId: "s4", kind: "riddle", symbol: "water.waves",
+                           rarity: "many", foundAt: Date(), first: false),
+                // Незнакомые вид/символ/редкость — тот же fallback, что у
+                // сервера, который научился новому типу раньше этого билда.
+                SocialFind(secretId: "s5", kind: "future_kind", symbol: "future.symbol",
+                           rarity: "future_rarity", foundAt: Date(), first: false),
+            ]
+        )
+    }
+}
+#endif

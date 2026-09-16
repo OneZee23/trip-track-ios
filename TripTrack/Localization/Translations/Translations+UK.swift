@@ -1307,6 +1307,12 @@ extension Translations {
         "milestoneTitle.threeRegionsDay": "Три регіони за одну поїздку",
         "milestoneTitle.countryBorder": "Кордон перетнуто",
         "milestoneTitle.nightPass": "Нічний перевал",
+        "profileFindsTitle": "Знахідки",
+        "findRarityFew": "одиниці",
+        "findRarityTens": "десятки",
+        "findRarityHundreds": "сотні",
+        "findRarityMany": "багато",
+        "findFirstLabel": "Знайшли першим",
     ]
 
 }

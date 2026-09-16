@@ -1307,6 +1307,12 @@ extension Translations {
         "milestoneTitle.threeRegionsDay": "Бір сапарда үш өңір",
         "milestoneTitle.countryBorder": "Шекара кесіп өтілді",
         "milestoneTitle.nightPass": "Түнгі асу",
+        "profileFindsTitle": "Олжалар",
+        "findRarityFew": "бірлі-жарым",
+        "findRarityTens": "ондаған",
+        "findRarityHundreds": "жүздеген",
+        "findRarityMany": "көптеген",
+        "findFirstLabel": "Бірінші тапты",
     ]
 
 }

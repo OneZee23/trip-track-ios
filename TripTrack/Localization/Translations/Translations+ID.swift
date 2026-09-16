@@ -1307,6 +1307,12 @@ extension Translations {
         "milestoneTitle.threeRegionsDay": "Tiga wilayah dalam satu perjalanan",
         "milestoneTitle.countryBorder": "Perbatasan dilintasi",
         "milestoneTitle.nightPass": "Jalur pegunungan di malam hari",
+        "profileFindsTitle": "Temuan",
+        "findRarityFew": "sedikit",
+        "findRarityTens": "puluhan",
+        "findRarityHundreds": "ratusan",
+        "findRarityMany": "banyak",
+        "findFirstLabel": "Yang pertama menemukan",
     ]
 
 }

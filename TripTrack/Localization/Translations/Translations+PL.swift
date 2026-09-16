@@ -1307,6 +1307,12 @@ extension Translations {
         "milestoneTitle.threeRegionsDay": "Trzy regiony w jednej trasie",
         "milestoneTitle.countryBorder": "Granica przekroczona",
         "milestoneTitle.nightPass": "Przełęcz nocą",
+        "profileFindsTitle": "Znaleziska",
+        "findRarityFew": "nieliczni",
+        "findRarityTens": "dziesiątki",
+        "findRarityHundreds": "setki",
+        "findRarityMany": "wielu",
+        "findFirstLabel": "Znalazł jako pierwszy",
     ]
 
 }
