@@ -38,6 +38,10 @@ final class MapHostController: UIViewController {
     let veilSeat = VeilSeat(margin: FogVeilView.atlasMargin, seat: .belowAnnotations,
                             showsRegions: true)
     var screenVeil: FogVeilView { veilSeat.veil }
+
+    /// Светлая подложка под логотипом Apple и «Legal». Нужна ровно потому, что
+    /// карта здесь дневная, а туман над ней тёмный (см. `AttributionPlate`).
+    let attributionPlate = AttributionPlate()
     /// Встала ли вуаль в дерево. `false` — иерархия `MKMapView` незнакомая,
     /// и туман рисует плиточный `FogVeilRenderer`, как до 0.7.0.
     var screenVeilAttached: Bool { veilSeat.isAttached }
@@ -64,12 +68,26 @@ final class MapHostController: UIViewController {
         map.frame = view.bounds
         map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(map)
+        // Атрибуции не нашлось — карта возвращается в ночную: нечитаемый
+        // «Legal» это возврат из ревью, а тёмный «Атлас» — всего лишь то, как
+        // он выглядел до фикс-волны 2.
+        attributionPlate.onAttributionNotFound = { [weak self] in
+            self?.map.overrideUserInterfaceStyle = .dark
+        }
         applyBottomInset()
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         veilSeat.attach(to: map)
+        attributionPlate.attach(to: map)
+    }
+
+    /// Подложка ездит вместе с атрибуцией, а та — вместе с нижним инсетом и
+    /// разметкой карты. Оба повода приходят сюда, поэтому и место одно.
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        attributionPlate.attach(to: map)
     }
 
     /// Экран ушёл — вуаль уходит с ним, а туман возвращается плиточному
@@ -77,6 +95,7 @@ final class MapHostController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         veilSeat.detach()
+        attributionPlate.detach()
     }
 
     /// Поворот устройства меняет не камеру, а сам кадр: привязка растра
@@ -103,6 +122,8 @@ final class MapHostController: UIViewController {
         // Инсет двигает центр видимой области, то есть запас растра
         // перестаёт лежать вокруг того, что человек видит.
         veilSeat.invalidate()
+        // И поднимает саму атрибуцию — подложка обязана уехать с ней.
+        attributionPlate.layout()
     }
 }
 
