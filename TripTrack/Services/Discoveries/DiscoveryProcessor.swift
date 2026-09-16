@@ -58,9 +58,9 @@ final class DiscoveryProcessor {
 
     private let store: DiscoveryStore
     private let repository: TripRepository
-    /// Не `private`: тот же каталог читает «Атлас», когда решает, какие три
-    /// нерешённые загадки показать подсказками (`RiddleHintSource`). Читает —
-    /// и только: разбор трека по-прежнему живёт здесь.
+    /// Не `private`: тот же каталог читает «Атлас» (`MyMapViewModel`), когда
+    /// решает, какие три нерешённые загадки показать подсказками. Читает — и
+    /// только: разбор трека по-прежнему живёт здесь.
     let riddleCatalog: RiddleCatalog
     private let secretCatalog: SecretCatalog
     private let atlas: RegionAtlas
@@ -124,7 +124,7 @@ final class DiscoveryProcessor {
 
         // 3. Вехи: история — ПРЕДЫДУЩИЕ поездки, поэтому кэш читается ДО того,
         //    как в него сложат эту.
-        let history = loadHistory(excluding: tripId)
+        let history = await loadHistory(excluding: tripId)
         let milestones = MilestoneDetector.detect(
             trip: trip, track: track, history: history, atlas: atlas)
 
@@ -226,7 +226,11 @@ final class DiscoveryProcessor {
     /// каждой точке. Складывается монотонно (объединение множеств и максимумы),
     /// поэтому повторное сложение той же поездки ничего не меняет — и
     /// бухгалтерии «какие поездки уже учтены» не нужно.
-    private struct HistoryCache: Codable {
+    ///
+    /// `foldedTripIds` нужен НЕ ради идемпотентности, а ради дешёвой досдачи:
+    /// по нему видно, каких поездок в кэше ещё нет, и приехавшая пулом чужая
+    /// поездка складывается одна, а не переписывает историю заново.
+    struct HistoryCache: Codable {
         struct Point: Codable {
             let latitude: Double
             let longitude: Double
@@ -245,14 +249,32 @@ final class DiscoveryProcessor {
         var south: Point?
         var east: Point?
         var west: Point?
+        /// Поездки, уже сложенные в эту историю. Поле ОБЯЗАТЕЛЬНОЕ нарочно:
+        /// кэш прежнего формата на нём не разберётся, `try?` вернёт `nil` — и
+        /// история соберётся заново один раз, вместо того чтобы молча считать
+        /// всю библиотеку неучтённой.
+        var foldedTripIds: [String] = []
     }
 
     /// Через сколько точек трека спрашивается атлас при складывании истории.
     /// Точки лежат в пяти метрах, регион — сотни километров: чаще незачем.
-    private static let regionSampleStride = 50
+    ///
+    /// Шаг ОДИН и для трека, и для превью. Превью упрощено эпсилоном ≈ 3 м
+    /// (`PostTripTrackProcessor`), то есть длинная поездка держит в нём тысячи
+    /// точек, а библиотека в тысячу поездок — сотни тысяч: спрашивать атлас у
+    /// каждой значило бы миллион лучей по кольцам admin-1 в ту секунду, когда
+    /// человек смотрит на экран итогов.
+    static let regionSampleStride = 50
 
-    private func loadHistory(excluding tripId: UUID) -> MilestoneDetector.History {
-        history(from: cache(excluding: tripId))
+    /// Сколько раз ради истории поднимались превью библиотеки.
+    ///
+    /// Не «для статистики»: это то самое, чего здесь быть не должно дважды.
+    /// Читает `DiscoveryProcessorTests` — второй финиш обязан взять готовый
+    /// кэш, а не перечитать превью всех поездок.
+    private(set) var historyWalks = 0
+
+    private func loadHistory(excluding tripId: UUID) async -> MilestoneDetector.History {
+        history(from: await upToDateCache(excluding: tripId))
     }
 
     private func history(from cache: HistoryCache) -> MilestoneDetector.History {
@@ -268,23 +290,50 @@ final class DiscoveryProcessor {
             extremes: empty ? nil : extremes)
     }
 
-    /// Кэш из `UserDefaults`, а если его там нет — собранный по превью всех
-    /// ПРОШЛЫХ поездок. Превью, а не точки: крайняя точка карты и регион
-    /// упрощение на десяток метров переживают, а подъём миллиона точек на
-    /// финише — нет.
-    private func cache(excluding tripId: UUID) -> HistoryCache {
-        if let data = defaults.data(forKey: Self.historyKey),
-           let stored = try? JSONDecoder().decode(HistoryCache.self, from: data) {
-            return stored
+    /// Кэш из `UserDefaults`, досданный поездками, которых в нём ещё нет.
+    ///
+    /// Сторож дешёвый — ЧИСЛО завершённых поездок против числа сложенных
+    /// (`fetchTripCount` это `count(for:)`, а не выборка). Сошлось — кэш
+    /// отдаётся как есть, и финиш не поднимает ни одного превью. Не сошлось
+    /// (поездка приехала пулом со второго телефона, восстановление на новом
+    /// устройстве, первый запуск после обновления) — поднимаются превью, и
+    /// складываются ТОЛЬКО незнакомые.
+    ///
+    /// Превью, а не точки: крайняя точка карты и регион упрощение на десяток
+    /// метров переживают, а подъём миллиона точек на финише — нет. И сам
+    /// проход идёт ВНЕ главного актёра: он стоит сотни миллисекунд, а главный
+    /// актёр в этот момент рисует экран итогов.
+    private func upToDateCache(excluding tripId: UUID?) async -> HistoryCache {
+        let stored = defaults.data(forKey: Self.historyKey)
+            .flatMap { try? JSONDecoder().decode(HistoryCache.self, from: $0) }
+        var cache = stored ?? HistoryCache()
+        let folded = Set(cache.foldedTripIds)
+        // Разбираемая сейчас поездка в библиотеке уже лежит, а в истории её
+        // быть не должно: «первый регион» сравнивается с набором, в который
+        // сам же и кладётся.
+        let pending = tripId.map { folded.contains($0.uuidString) ? 0 : 1 } ?? 0
+        if stored != nil, repository.fetchTripCount() == folded.count + pending {
+            return cache
         }
-        var built = HistoryCache()
-        for ref in repository.tripPreviews(needingPlaceMatch: false) where ref.id != tripId {
-            let coordinates = ref.previewCoordinates
-            guard !coordinates.isEmpty else { continue }
-            absorb(coordinates, into: &built, regionStride: 1)
+
+        // Счётчик растёт ЗДЕСЬ, а не после фильтра: дорого само поднятие
+        // превью библиотеки, а не складывание.
+        historyWalks += 1
+        let previews = repository.tripPreviews(needingPlaceMatch: false)
+            .filter { $0.id != tripId && !folded.contains($0.id.uuidString) }
+        guard !previews.isEmpty else {
+            // Складывать нечего (лишние поездки в кэше — удалённые), но кэш
+            // записать надо: без него следующий финиш поднял бы превью снова.
+            save(cache)
+            return cache
         }
-        save(built)
-        return built
+        let atlas = self.atlas
+        let base = cache
+        cache = await Task.detached(priority: .userInitiated) {
+            DiscoveryProcessor.absorb(previews: previews, into: base, atlas: atlas)
+        }.value
+        save(cache)
+        return cache
     }
 
     /// Сложить эту поездку в историю — уже ПОСЛЕ того, как по ней посчитаны
@@ -297,17 +346,51 @@ final class DiscoveryProcessor {
             north: history.extremes?.north.map(HistoryCache.Point.init),
             south: history.extremes?.south.map(HistoryCache.Point.init),
             east: history.extremes?.east.map(HistoryCache.Point.init),
-            west: history.extremes?.west.map(HistoryCache.Point.init)
+            west: history.extremes?.west.map(HistoryCache.Point.init),
+            foldedTripIds: foldedIds(adding: trip.id)
         )
-        absorb(track.map(\.coordinate), into: &cache, regionStride: Self.regionSampleStride)
+        Self.absorb(track.map(\.coordinate), into: &cache, atlas: atlas)
         save(cache)
     }
 
-    private func absorb(
-        _ coordinates: [CLLocationCoordinate2D], into cache: inout HistoryCache, regionStride: Int
+    /// Список сложенных поездок из кэша плюс эта. Читается заново, а не из
+    /// `history`: у `MilestoneDetector.History` такого поля нет и не нужно —
+    /// матчеру всё равно, из скольких поездок собрана история.
+    private func foldedIds(adding tripId: UUID) -> [String] {
+        let stored = defaults.data(forKey: Self.historyKey)
+            .flatMap { try? JSONDecoder().decode(HistoryCache.self, from: $0) }
+        var ids = Set(stored?.foldedTripIds ?? [])
+        ids.insert(tripId.uuidString)
+        return ids.sorted()
+    }
+
+    /// Чистый проход по превью — ВНЕ главного актёра.
+    ///
+    /// `nonisolated static`, а не метод: у главного актёра здесь нет ни одного
+    /// дела, а всё, что нужно проходу, приезжает параметрами.
+    nonisolated static func absorb(
+        previews: [TripPreviewRef], into base: HistoryCache, atlas: RegionAtlas
+    ) -> HistoryCache {
+        var cache = base
+        var folded = Set(cache.foldedTripIds)
+        for ref in previews {
+            // Поездка без превью в историю не приносит ничего, но сложенной
+            // считается: иначе сторож по числу расходился бы вечно.
+            folded.insert(ref.id.uuidString)
+            let coordinates = ref.previewCoordinates
+            guard !coordinates.isEmpty else { continue }
+            absorb(coordinates, into: &cache, atlas: atlas)
+        }
+        cache.foldedTripIds = folded.sorted()
+        return cache
+    }
+
+    nonisolated static func absorb(
+        _ coordinates: [CLLocationCoordinate2D], into cache: inout HistoryCache, atlas: RegionAtlas
     ) {
         var regions = Set(cache.regionIds)
         var countries = Set(cache.countryCodes)
+        let stride = max(1, regionSampleStride)
         for (index, coordinate) in coordinates.enumerated() {
             if cache.north.map({ coordinate.latitude > $0.latitude }) ?? true {
                 cache.north = HistoryCache.Point(coordinate)
@@ -321,7 +404,7 @@ final class DiscoveryProcessor {
             if cache.west.map({ coordinate.longitude < $0.longitude }) ?? true {
                 cache.west = HistoryCache.Point(coordinate)
             }
-            guard index % max(1, regionStride) == 0 || index == coordinates.count - 1 else { continue }
+            guard index % stride == 0 || index == coordinates.count - 1 else { continue }
             guard let region = atlas.region(containing: coordinate) else { continue }
             regions.insert(region.id)
             countries.insert(region.countryCode)

@@ -19,8 +19,15 @@ final class DiscoveryProcessorTests: XCTestCase {
     /// с какой пишется настоящий трек с 0.6.5.
     private let lat0 = 45.0355, lon0 = 38.9753, stepLat = 0.000045
 
-    override func setUp() {
-        super.setUp()
+    /// Атлас грузится ЯВНО, а не «как повезёт с порядком классов».
+    ///
+    /// `RegionAtlas.shared` — синглтон на весь прогон: соседний класс, который
+    /// его поднял, менял здесь результат разбора (пустой атлас не отдаёт ни
+    /// одного региона, то есть «первый регион» не случается). Тест, зелёный по
+    /// такой причине, зелёный случайно.
+    override func setUp() async throws {
+        try await super.setUp()
+        await RegionAtlas.shared.loadIfNeeded()
         pc = PersistenceController(inMemory: true)
         repo = CoreDataTripRepository(persistenceController: pc)
         store = DiscoveryStore(persistence: pc)
@@ -121,6 +128,24 @@ final class DiscoveryProcessorTests: XCTestCase {
             openedCells: Int(km * 13), openedKm: km, newRegionIds: regions)
     }
 
+    /// Поездка по ЗНАКОМЫМ местам: регион уже открыт, все четыре края карты
+    /// лежат дальше трека.
+    ///
+    /// Без этого любая фикстура под Краснодаром даёт «первый регион», и тест
+    /// про одну загадку считает две находки. Кэш кладётся прямо в
+    /// `UserDefaults` — ровно так же, как его положил бы прошлый финиш.
+    private func seedHistory() {
+        var cache = DiscoveryProcessor.HistoryCache()
+        cache.regionIds = ["RU-KDA"]
+        cache.countryCodes = ["RU"]
+        cache.north = .init(CLLocationCoordinate2D(latitude: 60, longitude: lon0))
+        cache.south = .init(CLLocationCoordinate2D(latitude: 40, longitude: lon0))
+        cache.east = .init(CLLocationCoordinate2D(latitude: lat0, longitude: 60))
+        cache.west = .init(CLLocationCoordinate2D(latitude: lat0, longitude: 20))
+        guard let data = try? JSONEncoder().encode(cache) else { return XCTFail("кэш не собрался") }
+        defaults.set(data, forKey: DiscoveryProcessor.historyKey)
+    }
+
     private func storedCount() -> Int {
         let request: NSFetchRequest<DiscoveryEntity> = DiscoveryEntity.fetchRequest()
         return (try? pc.container.viewContext.count(for: request)) ?? 0
@@ -129,6 +154,7 @@ final class DiscoveryProcessorTests: XCTestCase {
     // MARK: - Загадка
 
     func testTripThroughARiddleStoresItAndUnlocksTheFirstRiddleBadge() async {
+        seedHistory()
         let id = trip(start: t0)
         let changed = expectation(forNotification: .discoveriesChanged, object: nil)
 
@@ -153,6 +179,7 @@ final class DiscoveryProcessorTests: XCTestCase {
     }
 
     func testSecondRunOfTheSameTripFindsNothing() async {
+        seedHistory()
         let id = trip(start: t0)
         let sut = processor(riddles: [bridgeOnTheTrack()])
         _ = await sut.process(tripId: id, delta: delta(km: 12.5))
@@ -166,6 +193,7 @@ final class DiscoveryProcessorTests: XCTestCase {
     }
 
     func testTripWithNothingAroundIsEmpty() async {
+        seedHistory()
         let id = trip(start: t0)
         let found = await processor().process(tripId: id, delta: .none)
 
@@ -178,6 +206,7 @@ final class DiscoveryProcessorTests: XCTestCase {
     /// Километры и регионы — из дельты тумана, даже когда ни одной печати не
     /// нашлось: «открыл 12 км» это самостоятельный ответ экрана итогов.
     func testKilometresComeFromTheFogDeltaEvenWithoutFinds() async {
+        seedHistory()
         let id = trip(start: t0)
         let found = await processor().process(tripId: id, delta: delta(km: 12.5, regions: ["RU-ROS"]))
 
@@ -202,6 +231,84 @@ final class DiscoveryProcessorTests: XCTestCase {
         XCTAssertNotNil(altitude, "веха высоты не нашлась: \(found.milestones.map(\.key))")
         XCTAssertEqual(altitude?.symbol, .altitude)
         XCTAssertTrue(unlocked.contains(DiscoveryProcessor.altitudeBadgeId))
+    }
+
+    // MARK: - История собственной карты
+
+    /// Тысяча превью по двести точек — библиотека зрелого пользователя.
+    ///
+    /// Точки идут с шагом 5 м, как в настоящем превью после
+    /// `PostTripTrackProcessor`; трек уводится на юг, чтобы синтетика не легла
+    /// поверх той поездки, по которой считаются вехи.
+    private func seedPreviews(count: Int, points: Int = 200) {
+        let ctx = pc.container.viewContext
+        for n in 0..<count {
+            let entity = TripEntity(context: ctx)
+            entity.id = UUID()
+            entity.startDate = t0.addingTimeInterval(-Double(n + 1) * 86_400)
+            entity.endDate = entity.startDate?.addingTimeInterval(600)
+            entity.distance = Double(points) * 5
+            entity.isPrivate = true
+            let base = lat0 - Double(n) * 0.0005
+            entity.previewPolyline = Trip.encodePolyline((0..<points).map {
+                CLLocationCoordinate2D(latitude: base + Double($0) * stepLat, longitude: lon0)
+            })
+        }
+        try? ctx.save()
+    }
+
+    /// Финиш не имеет права перебирать библиотеку на главном актёре.
+    ///
+    /// Раньше история собиралась по превью ВСЕХ поездок, со `stride` в одну
+    /// точку, синхронно — то есть миллион лучей `RegionAtlas.region(containing:)`
+    /// ровно в ту секунду, когда человек смотрит на экран итогов. Здесь
+    /// проверяются оба конца правки: проход стоит меньше двухсот миллисекунд, и
+    /// он ОДИН — следующая поездка складывается в готовый кэш.
+    func testHistoryOverAThousandTripsIsWalkedOnceAndCheaply() async {
+        seedPreviews(count: 1_000)
+        let sut = processor()
+
+        let first = trip(start: t0)
+        let started = Date()
+        _ = await sut.process(tripId: first, delta: .none)
+        let elapsed = Date().timeIntervalSince(started)
+
+        XCTAssertEqual(sut.historyWalks, 1, "история собрана ровно один раз")
+        XCTAssertLessThan(elapsed, 0.2, """
+            разбор финиша с историей по 1000 поездкам занял \(Int(elapsed * 1000)) мс —             это экран итогов, который стоит и ждёт
+            """)
+
+        let second = trip(start: t0.addingTimeInterval(3_600))
+        _ = await sut.process(tripId: second, delta: .none)
+        XCTAssertEqual(sut.historyWalks, 1,
+                       "второй финиш обязан взять кэш, а не перечитать библиотеку")
+    }
+
+    /// Поездка, приехавшая пулом со второго телефона, в кэше не учтена — и
+    /// сторож по числу поездок это видит, не спрашивая никаких уведомлений.
+    func testATripThatArrivedAfterTheCacheIsFoldedIn() async {
+        let sut = processor()
+        _ = await sut.process(tripId: trip(start: t0), delta: .none)
+        XCTAssertEqual(sut.historyWalks, 1)
+
+        // Пул: поездка легла в базу мимо финиша.
+        seedPreviews(count: 1)
+        _ = await sut.process(tripId: trip(start: t0.addingTimeInterval(7_200)), delta: .none)
+        XCTAssertEqual(sut.historyWalks, 2, "приехавшую пулом поездку надо досдать в историю")
+
+        // А третий финиш — снова без прохода: досдавать больше нечего.
+        _ = await sut.process(tripId: trip(start: t0.addingTimeInterval(10_800)), delta: .none)
+        XCTAssertEqual(sut.historyWalks, 2)
+    }
+
+    /// Стирание аккаунта забирает и кэш: он выведен из поездок и пережить их
+    /// не имеет права.
+    func testForgettingTheHistoryDropsTheCache() async {
+        let sut = processor()
+        _ = await sut.process(tripId: trip(start: t0), delta: .none)
+        XCTAssertNotNil(defaults.data(forKey: DiscoveryProcessor.historyKey))
+        sut.forgetHistory()
+        XCTAssertNil(defaults.data(forKey: DiscoveryProcessor.historyKey))
     }
 
     // MARK: - Пока идёт запись — ничего
