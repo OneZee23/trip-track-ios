@@ -2,11 +2,16 @@ import UIKit
 
 /// Медальон печати — картинкой, чистой функцией.
 ///
-/// Печать рисуется КОДОМ, а не лежит ассетом: видов три, символов семнадцать,
-/// и в волне 5 символы меняются на гравюры — то есть рисование переписывается,
-/// а имена (`SealSymbol.rawValue`) остаются. Ассетами это была бы пятьдесят
-/// одна картинка в трёх масштабах, из которых половина никогда не встретится
-/// одному человеку.
+/// Сам медальон рисуется КОДОМ, а ассетом лежит только гравюра символа: видов
+/// три, символов восемнадцать, и держать их произведением — пятьдесят четыре
+/// картинки, из которых половина никогда не встретится одному человеку. Диск,
+/// тень и кольцо одинаковы у всех, различается серединка.
+///
+/// Гравюра — SVG-шаблон из `Assets.xcassets` по образцу `reaction_*`:
+/// одинарная линия на 24×24, `template-rendering-intent`, вектор сохранён.
+/// Ассета нет — рисуется прежний SF-символ по `rawValue`: у шестнадцати из
+/// восемнадцати это имя системного символа, и запасной вариант стоит ровно
+/// на случай, когда каталог не собрался.
 ///
 /// Функция ЧИСТАЯ (ни карты, ни языка, ни базы) по той же причине, по которой
 /// чисты `AutoTripPolicy` и `JourneyEditSheet.startBounds`: цвет кольца — это
@@ -89,10 +94,7 @@ enum SealPainter {
             SealPainter.ring(for: kind).setStroke()
             ring.stroke()
 
-            let glyphSize = size * 0.44
-            let configuration = UIImage.SymbolConfiguration(pointSize: glyphSize, weight: .medium)
-            if let glyph = UIImage(systemName: symbol.rawValue, withConfiguration: configuration)?
-                .withTintColor(UIColor.white.withAlphaComponent(0.7), renderingMode: .alwaysOriginal) {
+            if let glyph = SealPainter.glyph(for: symbol, size: size, scale: scale) {
                 let box = CGRect(
                     x: (size - glyph.size.width) / 2,
                     y: (size - glyph.size.height) / 2,
@@ -104,5 +106,41 @@ enum SealPainter {
         }
         cache.setObject(image, forKey: key)
         return image
+    }
+
+    /// Доля медальона под гравюру. Взята от прежнего SF-символа: он просился
+    /// `pointSize: size * 0.44`, а приходил картинкой примерно в четверть шире
+    /// — вот эта ширина и осталась, чтобы гравюры сели в те же метрики и
+    /// пиксельные тесты кольца и диска не поехали.
+    static let glyphFraction: CGFloat = 0.56
+
+    /// Гравюра символа, уже окрашенная в белый 70 %.
+    ///
+    /// `named` — шов для теста, а не настройка: запасной SF-вариант иначе
+    /// проверить нечем (гравюры в бандле есть у всех восемнадцати). В `image`
+    /// он не пробрасывается нарочно — подменённая гравюра осела бы в кэше под
+    /// ключом настоящей.
+    static func glyph(
+        for symbol: SealSymbol,
+        size: CGFloat = SealPainter.size,
+        scale: CGFloat,
+        named lookup: (String) -> UIImage? = { UIImage(named: $0) }
+    ) -> UIImage? {
+        let ink = UIColor.white.withAlphaComponent(0.7)
+        let side = size * glyphFraction
+        if let engraving = lookup(symbol.assetName) {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = scale
+            format.opaque = false
+            let box = CGRect(x: 0, y: 0, width: side, height: side)
+            return UIGraphicsImageRenderer(bounds: box, format: format).image { _ in
+                engraving.withRenderingMode(.alwaysTemplate)
+                    .withTintColor(ink, renderingMode: .alwaysOriginal)
+                    .draw(in: box)
+            }
+        }
+        let configuration = UIImage.SymbolConfiguration(pointSize: size * 0.44, weight: .medium)
+        return UIImage(systemName: symbol.rawValue, withConfiguration: configuration)?
+            .withTintColor(ink, renderingMode: .alwaysOriginal)
     }
 }

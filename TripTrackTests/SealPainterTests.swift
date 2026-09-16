@@ -119,6 +119,69 @@ final class SealPainterTests: XCTestCase {
         XCTAssertFalse(riddle === milestone)
     }
 
+    // MARK: - Гравюры
+
+    /// Есть ли в картинке хоть один непрозрачный пиксель. Пустая гравюра —
+    /// это разобравшийся SVG без единого пути, и по размеру она неотличима
+    /// от нарисованной.
+    private func hasInk(_ image: UIImage?) -> Bool {
+        guard let cg = image?.cgImage else { return false }
+        let width = cg.width, height = cg.height
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &data, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return false }
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return stride(from: 3, to: data.count, by: 4).contains { data[$0] > 40 }
+    }
+
+    /// У каждого символа гравюра, а не SF-символ: гравюра приходит КВАДРАТОМ
+    /// в метриках медальона (`size * glyphFraction`, округлённых рендерером
+    /// до целых пикселей), а у системного символа пропорции свои.
+    func testEverySymbolDrawsItsEngraving() {
+        let side = 26 * SealPainter.glyphFraction
+        for symbol in SealSymbol.allCases {
+            guard let glyph = SealPainter.glyph(for: symbol, size: 26, scale: 1) else {
+                return XCTFail("у \(symbol) не нашлось ни гравюры, ни запасного символа")
+            }
+            XCTAssertEqual(glyph.size.width, glyph.size.height,
+                           "\(symbol.assetName): гравюра не квадратная — это не ассет")
+            XCTAssertEqual(glyph.size.width, side, accuracy: 1,
+                           "\(symbol.assetName): гравюра не в метриках медальона")
+        }
+    }
+
+    /// «Знак Комсомольского» — первый символ, у которого системного близнеца
+    /// НЕТ: без гравюры печать первого авторского секрета была бы пустым
+    /// диском, и ни сборка, ни поведенческий тест этого не заметили бы.
+    func testKomsomolskyRendersWithoutASystemSymbol() {
+        XCTAssertNil(UIImage(systemName: SealSymbol.komsomolsky.rawValue),
+                     "если такой SF-символ завели, тест потерял смысл")
+        XCTAssertNotNil(SealPainter.glyph(for: .komsomolsky, size: 26, scale: 1))
+
+        XCTAssertTrue(hasInk(SealPainter.glyph(for: .komsomolsky, size: 44, scale: 3)),
+                      "гравюра «К» пуста — на диске ничего не выгравировано")
+    }
+
+    /// Ассета нет — рисуется прежний SF-символ. Запасной путь тем и ценен,
+    /// что незаметен: проверить его можно только подменив поиск.
+    func testFallsBackToTheSystemSymbolWhenTheEngravingIsMissing() {
+        let fallback = SealPainter.glyph(for: .pass, size: 26, scale: 1, named: { _ in nil })
+        guard let fallback else { return XCTFail("запасного SF-символа не осталось") }
+        XCTAssertNotEqual(fallback.size.width, fallback.size.height,
+                          "«mountain.2» шире, чем выше — это не гравюра")
+    }
+
+    /// Разные символы — разные картинки: гравюра действительно попадает на
+    /// диск, а не теряется по дороге.
+    func testDifferentSymbolIsADifferentPicture() {
+        let night = SealPainter.image(kind: .riddle, symbol: .night, size: 26, scale: 3)
+        let bridge = SealPainter.image(kind: .riddle, symbol: .bridge, size: 26, scale: 3)
+        XCTAssertNotEqual(night.pngData(), bridge.pngData())
+    }
+
     // MARK: - Кластер
 
     /// Горсть печатей носит цвет БОЛЬШИНСТВА, а ничью забирает самое редкое.

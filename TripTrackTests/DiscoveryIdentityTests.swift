@@ -97,7 +97,10 @@ final class DiscoveryIdentityTests: XCTestCase {
         XCTAssertEqual(DiscoveryKind.riddle.rawValue, "riddle")
         XCTAssertEqual(DiscoveryKind.milestone.rawValue, "milestone")
         XCTAssertEqual(SealSymbol.generic.rawValue, "seal")
-        XCTAssertEqual(SealSymbol.allCases.count, 17)
+        // Восемнадцатый — «Знак Комсомольского» 0.7.0: кейс аддитивен,
+        // прежние семнадцать строк не тронуты.
+        XCTAssertEqual(SealSymbol.allCases.count, 18)
+        XCTAssertEqual(SealSymbol.komsomolsky.rawValue, "seal.komsomolsky")
         XCTAssertEqual(Milestone.allCases.count, 10)
         XCTAssertEqual(Milestone.above2000.rawValue, "above2000")
         XCTAssertEqual(Set(SealSymbol.allCases.map(\.rawValue)).count, SealSymbol.allCases.count)

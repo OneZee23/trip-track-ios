@@ -20,10 +20,17 @@ enum DiscoveryKind: String, Codable {
 
 /// Символ на медальоне печати.
 ///
-/// `rawValue` — имя SF Symbol И колонка в базе (`DiscoveryEntity.symbol`):
-/// менять нельзя, у уже найденного символ лежит строкой. В 0.7.0 рисуется
-/// системным символом; гравюры — волна 5, и тогда меняется РИСОВАНИЕ, а не
-/// эти строки.
+/// `rawValue` — колонка в базе (`DiscoveryEntity.symbol`) и поле на проводе:
+/// менять нельзя, у уже найденного символ лежит строкой. Шестнадцать первых
+/// значений — ещё и имена SF-символов: ими печать рисовалась до волны 5, и
+/// сегодня они остались ЗАПАСНЫМ вариантом, если гравюры не оказалось в
+/// бандле. `komsomolsky` добавлен в 0.7.0 аддитивно (`"seal.komsomolsky"` —
+/// имени SF с такой строкой не существует, и это нормально: у него есть
+/// гравюра).
+///
+/// Рисует символ `SealPainter` по `assetName`, а не по `rawValue`: имя набора
+/// гравюр обязано быть стабильным именем кейса, а не строкой контракта с
+/// сервером, в которой стоят точки.
 enum SealSymbol: String, Codable, CaseIterable {
     case pass = "mountain.2"
     case lighthouse = "light.beacon.max"
@@ -42,6 +49,38 @@ enum SealSymbol: String, Codable, CaseIterable {
     case night = "moon.stars"
     case country = "globe"
     case generic = "seal"
+    /// Первый авторский секрет — «Знак Комсомольского» (спека §6). Гравюра
+    /// своя; `rawValue` аддитивен и с сервером согласован.
+    case komsomolsky = "seal.komsomolsky"
+
+    /// Имя набора гравюр в `Assets.xcassets`.
+    var assetName: String { "seal_" + caseName }
+
+    /// Имя кейса — руками, а не рефлексией: `switch` исчерпывающий нарочно,
+    /// поэтому восемнадцатый символ не соберётся, пока ему не нарисовали
+    /// гравюру и не назвали её.
+    private var caseName: String {
+        switch self {
+        case .pass:        return "pass"
+        case .lighthouse:  return "lighthouse"
+        case .border:      return "border"
+        case .ferry:       return "ferry"
+        case .dam:         return "dam"
+        case .bridge:      return "bridge"
+        case .viewpoint:   return "viewpoint"
+        case .observatory: return "observatory"
+        case .seaRoad:     return "seaRoad"
+        case .extreme:     return "extreme"
+        case .centre:      return "centre"
+        case .tripoint:    return "tripoint"
+        case .region:      return "region"
+        case .altitude:    return "altitude"
+        case .night:       return "night"
+        case .country:     return "country"
+        case .generic:     return "generic"
+        case .komsomolsky: return "komsomolsky"
+        }
+    }
 }
 
 /// Веха собственной географии.
