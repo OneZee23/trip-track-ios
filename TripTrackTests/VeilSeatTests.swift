@@ -359,14 +359,18 @@ final class VeilSeatTests: XCTestCase {
         // Полёт камеры: MapKit анимирует его сам, без единого колбэка о начале
         // жеста — именно тот случай, ради которого вуаль и держит свой
         // `CADisplayLink`.
+        // Опора берётся ДО полёта: в headless-прогоне MapKit вправе применить
+        // «анимированный» регион мгновенно (так и вышло на iPhone 16 в полном
+        // наборе), и опора после вызова читала бы ноль движения у камеры,
+        // которая уже приехала.
+        var samples: [CGFloat] = []
+        var cameraMoved = 0.0
+        var previous = map.visibleMapRect
         veil.startTracking(tail: 2.5)
         map.setRegion(MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 45.06, longitude: 39.05),
             latitudinalMeters: 30_000, longitudinalMeters: 30_000), animated: true)
 
-        var samples: [CGFloat] = []
-        var cameraMoved = 0.0
-        var previous = map.visibleMapRect
         let deadline = Date().addingTimeInterval(1.5)
         while Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(1.0 / 60))
