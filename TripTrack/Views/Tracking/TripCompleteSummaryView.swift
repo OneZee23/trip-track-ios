@@ -55,6 +55,10 @@ struct TripCompleteSummaryView: View {
     @State private var notesDraft: String = ""
     @State private var showNotesEditor = false
     @State private var selectedBadge: Badge?
+    /// Выгорание тумана на герое (0.7.0). Живёт у экрана, а не у блока
+    /// «Открыто»: играет его ГЕРОЙ, а блок только рассказывает словами.
+    @StateObject private var heroSweep = RevealSweep()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         // The finish screen is light-themed by design (Figma 147:1190) —
@@ -82,22 +86,7 @@ struct TripCompleteSummaryView: View {
             // empty slot — this used to require two points, so a two-minute
             // wait produced a blank card with a dot in it.
             if !trip.trackPoints.isEmpty {
-                RouteMapView(
-                    coordinates: trip.trackPoints.map(\.coordinate),
-                    speeds: trip.trackPoints.map(\.speed),
-                    // Карточка итогов — это и есть момент раскрытия: срез без
-                    // даты («мир, как он есть сейчас»), а поездка ложится в
-                    // него секундой позже, на финишном `ingest`. Карта его
-                    // дождётся сама — у среза без даты она переспрашивает слой
-                    // по `.revealedLayerChanged` (`RouteMapView.installFog`), и
-                    // коридор сегодняшней дороги проступает прямо на глазах.
-                    fogCutoffDate: nil,
-                    showsFog: true
-                )
-                .frame(height: 139)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 20)
-                .padding(.top, 14)
+                heroMap
             }
 
             // Stats grid
@@ -455,6 +444,51 @@ struct TripCompleteSummaryView: View {
         .shadow(color: .black.opacity(0.03), radius: 2, y: 1)
     }
 
+    // MARK: - Герой и момент открытия (0.7.0)
+
+    /// Маршрут поездки на карте с личным туманом — и он же играет выгорание,
+    /// когда разбор трека доложит, что поездка что-то открыла.
+    ///
+    /// Второй карты для этого на экране НЕТ: одинаковый маршрут в одинаковом
+    /// стиле двумя карточками ниже читался не как «мир изменился», а как
+    /// «почему-то две карты». Вуаль ложится поверх `RouteMapView` в `ZStack` и
+    /// живёт ровно столько, сколько непустая сводка: ничего не открыли — герой
+    /// остаётся таким, каким был всегда.
+    private var heroMap: some View {
+        ZStack {
+            RouteMapView(
+                coordinates: trip.trackPoints.map(\.coordinate),
+                speeds: trip.trackPoints.map(\.speed),
+                // Карточка итогов — это и есть момент раскрытия: срез без
+                // даты («мир, как он есть сейчас»), а поездка ложится в
+                // него секундой позже, на финишном `ingest`. Карта его
+                // дождётся сама — у среза без даты она переспрашивает слой
+                // по `.revealedLayerChanged` (`RouteMapView.installFog`), и
+                // коридор сегодняшней дороги проступает прямо на глазах.
+                fogCutoffDate: nil,
+                showsFog: true
+            )
+            if hasNewGround {
+                RevealSweepVeil(
+                    coordinates: trip.trackPoints.map(\.coordinate),
+                    sweep: heroSweep,
+                    reduceMotion: reduceMotion
+                )
+            }
+        }
+        .frame(height: 139)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+    }
+
+    /// Поездка и правда что-то открыла. Тот же сигнал, что поднимает блок
+    /// «Открыто», — иначе выгорание и карточка разъехались бы во времени.
+    private var hasNewGround: Bool {
+        guard let found = completionData?.discoveries else { return false }
+        return !found.isEmpty
+    }
+
     // MARK: - «Открыто» (0.7.0)
 
     /// Блок находок — отдельным свойством, а не веткой в `body`: тело этого
@@ -472,7 +506,6 @@ struct TripCompleteSummaryView: View {
         Group {
             if let found, !found.isEmpty {
                 TripRevealedBlock(
-                    trip: trip,
                     discoveries: found,
                     onOpen: { id in
                         // Тем же путём, что «Готово»: правки человека

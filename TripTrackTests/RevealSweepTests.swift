@@ -105,12 +105,12 @@ final class RevealSweepTests: XCTestCase {
     // MARK: Кромка
 
     func testVeilCoversEverythingAtZeroAndNothingAtOne() {
-        let atZero = TripRevealedBlock.sweepStops(veil: .black, progress: 0)
+        let atZero = RevealSweep.stops(veil: .black, progress: 0)
         XCTAssertEqual(atZero.first?.location, 0)
         // Второй стоп на нуле — значит прозрачного на карте нет ни полоски.
         XCTAssertEqual(atZero[1].location, 0, accuracy: 0.001)
 
-        let atOne = TripRevealedBlock.sweepStops(veil: .black, progress: 1)
+        let atOne = RevealSweep.stops(veil: .black, progress: 1)
         XCTAssertEqual(atOne[1].location, 1, accuracy: 0.001,
                        "на последнем кадре тумана не остаётся даже в дальнем углу")
     }
@@ -119,7 +119,7 @@ final class RevealSweepTests: XCTestCase {
     /// оказывается раньше стопа открытого.
     func testEdgeNeverInverts() {
         for step in 0...20 {
-            let stops = TripRevealedBlock.sweepStops(veil: .black, progress: Double(step) / 20)
+            let stops = RevealSweep.stops(veil: .black, progress: Double(step) / 20)
             XCTAssertLessThanOrEqual(stops[1].location, stops[2].location, "шаг \(step)")
             XCTAssertLessThanOrEqual(stops[2].location, stops[3].location, "шаг \(step)")
         }

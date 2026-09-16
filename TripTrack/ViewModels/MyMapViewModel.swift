@@ -309,9 +309,13 @@ final class MyMapViewModel: ObservableObject {
         seals = found
         riddleHints = hints
         // Печать, которую попросили показать, пока её ещё не было в списке.
-        if let awaited = pendingDiscovery, found.contains(where: { $0.id == awaited }) {
+        // Ожидание живёт РОВНО ОДНУ выборку: не нашлась — забыли. Иначе id,
+        // которого в базе нет вовсе (удалили находку, гонка пула, чужая
+        // ссылка), лежал бы вечно и однажды увёл бы камеру посреди чужого
+        // жеста — на первой же выборке, где он случайно совпал.
+        if let awaited = pendingDiscovery {
             pendingDiscovery = nil
-            focusDiscovery(awaited)
+            if found.contains(where: { $0.id == awaited }) { focusDiscovery(awaited) }
         }
         // Печать, которой больше нет (стёрли аккаунт, пересчитали базу), не
         // имеет права оставаться выбранной — карточка показывала бы призрак.

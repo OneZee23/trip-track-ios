@@ -47,13 +47,13 @@ enum TripRevealedLine {
 
 // MARK: - Выгорание тумана
 
-/// Прогресс выгорания тумана на мини-карте блока: 0 → 1 за 0.7 с.
+/// Прогресс выгорания тумана на ГЕРОЕ экрана итогов: 0 → 1 за 0.7 с.
 ///
 /// Прерываемо и монотонно. Монотонность здесь не украшение: `CADisplayLink`
 /// присылает время системных часов, и первый кадр после возврата из фона
 /// приходит с прыжком назад — туман, поехавший обратно, читался бы как
 /// поломка. Поэтому прогресс только растёт, а второй `start` на уже
-/// доигравшем блоке не начинает всё заново.
+/// доигравшем экране не начинает всё заново.
 ///
 /// `advance(to:)` — отдельный метод, а не тело `@objc` шага, чтобы тест мог
 /// прогнать анимацию своим временем: `CADisplayLink` в юнит-тесте не тикает.
@@ -106,8 +106,8 @@ final class RevealSweep: ObservableObject {
         return true
     }
 
-    /// Снимает `CADisplayLink` — на исчезновении блока и на последнем кадре.
-    /// Прогресс при этом остаётся там, где стоял: блок, к которому вернулись,
+    /// Снимает `CADisplayLink` — на исчезновении вуали и на последнем кадре.
+    /// Прогресс при этом остаётся там, где стоял: экран, к которому вернулись,
     /// не имеет права играть анимацию во второй раз.
     func cancel() {
         link?.invalidate()
@@ -134,7 +134,7 @@ final class RevealSweep: ObservableObject {
     /// координатах (север сверху, восток справа).
     ///
     /// Чистая функция от координат, а не проекция настоящей карты: точную
-    /// геометрию `MKMapView` мини-снимку не отдаёт, а направление дороги на
+    /// геометрию `MKMapView` вуали не отдаёт, а направление дороги на
     /// экране — отдаёт бесплатно, и его достаточно, чтобы туман снимался
     /// ВДОЛЬ пути, а не поперёк. Долгота сжимается по широте, иначе на
     /// шестидесятой параллели дорога на восток «наклонялась» бы вдвое.
@@ -165,14 +165,12 @@ final class RevealSweep: ObservableObject {
 /// непустой сводки — `nil` в `TripCompletionData.discoveries` значит «ещё
 /// считается», и блока в этот момент нет вовсе, а не пустой каркас.
 ///
-/// Мини-карта — тот же `RouteMapView` с туманом, что и герой выше, но
-/// неинтерактивный и на 120 pt; выгорание рисуется НАД ним градиентом
-/// (`RevealSweep`). Почему градиент, а не второй слой тумана «как было»: два
-/// `MKMapView` на одном экране ради 120 pt стоили бы второй загрузки тайлов и
-/// второй сборки растра вуали, а разницу между настоящим растром и ровной
-/// темнотой на такой высоте не видно.
+/// **Своей карты у блока НЕТ.** Выгорание тумана играет ГЕРОЙ экрана — тот
+/// самый `RouteMapView`, который и так показывает только что проеханный
+/// маршрут (`RevealSweepVeil` над ним). Вторая карта здесь была: одинаковый
+/// маршрут в одинаковом стиле двумя карточками ниже, и человек видел не «мир
+/// изменился», а «почему-то две карты».
 struct TripRevealedBlock: View {
-    let trip: Trip
     let discoveries: TripDiscoveries
     /// Нажатие на печать. `nil` — блок не нажимается (открывать нечего:
     /// поездка открыла километры, но ни одной печати не поставила).
@@ -180,28 +178,21 @@ struct TripRevealedBlock: View {
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.distanceUnit) private var distanceUnit
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @StateObject private var sweep = RevealSweep()
 
     /// Сколько печатей влезает в ряд до «+N». Шесть — ширина карточки на
     /// самом узком телефоне.
     private static let sealsShown = 6
-    private static let mapHeight: CGFloat = 120
 
     private var found: [Discovery] { discoveries.all }
 
     var body: some View {
         let c = AppTheme.colors(for: .light)
-        Group {
-            if let onOpen, let first = found.first {
-                Button { onOpen(first.id) } label: { card(c) }
-                    .buttonStyle(PressableCardStyle())
-            } else {
-                card(c)
-            }
+        if let onOpen, let first = found.first {
+            Button { onOpen(first.id) } label: { card(c) }
+                .buttonStyle(PressableCardStyle())
+        } else {
+            card(c)
         }
-        .onAppear { sweep.start(reduceMotion: reduceMotion) }
-        .onDisappear { sweep.cancel() }
     }
 
     // MARK: Карточка
@@ -209,7 +200,6 @@ struct TripRevealedBlock: View {
     private func card(_ c: AppTheme.Colors) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             header(c)
-            map
             Text(line)
                 .font(.inter(13, weight: .semibold))
                 .foregroundStyle(c.textSecondary)
@@ -240,50 +230,6 @@ struct TripRevealedBlock: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(c.textTertiary)
             }
-        }
-    }
-
-    private var map: some View {
-        ZStack {
-            if trip.trackPoints.isEmpty {
-                Rectangle().fill(Color(FogVeilPainter.veilColorBottom))
-            } else {
-                RouteMapView(
-                    coordinates: trip.trackPoints.map(\.coordinate),
-                    speeds: trip.trackPoints.map(\.speed),
-                    isInteractive: false,
-                    // Срез без даты — мир, как он открыт СЕЙЧАС, вместе с
-                    // только что уехавшей в слой поездкой: выгорать туману
-                    // поверх уже открытого коридора, а не наоборот.
-                    fogCutoffDate: nil,
-                    showsFog: true
-                )
-                veil
-            }
-        }
-        .frame(height: Self.mapHeight)
-        .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .allowsHitTesting(false)
-    }
-
-    /// Туман, который снимается: вдоль пути — градиентом, при
-    /// `isReduceMotionEnabled` — кроссфейдом.
-    @ViewBuilder
-    private var veil: some View {
-        let axis = RevealSweep.axis(from: trip.trackPoints.map(\.coordinate))
-        let veilColor = Color(FogVeilPainter.veilColorTop)
-        if reduceMotion {
-            Rectangle()
-                .fill(veilColor)
-                .opacity(1 - sweep.progress)
-                .animation(.easeOut(duration: RevealSweep.crossfade), value: sweep.progress)
-        } else {
-            LinearGradient(
-                stops: Self.sweepStops(veil: veilColor, progress: sweep.progress),
-                startPoint: axis.start,
-                endPoint: axis.end
-            )
         }
     }
 
@@ -326,19 +272,66 @@ struct TripRevealedBlock: View {
     }
 }
 
+// MARK: - Вуаль выгорания
+
+/// Туман, который снимается с ГЕРОЯ экрана итогов: вдоль пути — градиентом,
+/// при `isReduceMotionEnabled` — кроссфейдом.
+///
+/// Кладётся поверх `RouteMapView` в `ZStack`, а не внутрь него: `MKMapView`
+/// со своей вуалью перерисовывать шестьдесят раз в секунду нельзя (растр
+/// вуали — мегабайты на фоновой очереди), а четыре стопа градиента стоят
+/// ничего. Поэтому же вуаль своя, а не `FogVeilView`: тот отвечает на вопрос
+/// «что открыто», эта — на вопрос «что открылось ПРЯМО СЕЙЧАС».
+struct RevealSweepVeil: View {
+    /// Точки маршрута — только ради направления выгорания.
+    let coordinates: [CLLocationCoordinate2D]
+    @ObservedObject var sweep: RevealSweep
+    let reduceMotion: Bool
+
+    var body: some View {
+        let axis = RevealSweep.axis(from: coordinates)
+        let veilColor = Color(FogVeilPainter.veilColorTop)
+        Group {
+            if reduceMotion {
+                Rectangle()
+                    .fill(veilColor)
+                    .opacity(1 - sweep.progress)
+                    .animation(.easeOut(duration: RevealSweep.crossfade), value: sweep.progress)
+            } else {
+                LinearGradient(
+                    stops: RevealSweep.stops(veil: veilColor, progress: sweep.progress),
+                    startPoint: axis.start,
+                    endPoint: axis.end
+                )
+            }
+        }
+        .allowsHitTesting(false)
+        // Кадром позже, а не в `onAppear`: при уменьшенном движении прогресс
+        // встаёт в единицу СРАЗУ, и запуск в том же проходе обновления съел бы
+        // весь кроссфейд — вуаль появилась бы уже прозрачной. Один кадр
+        // непрозрачной вуали и есть то, из чего он потом растворяется.
+        // `.task` снимается сам, когда вуаль уходит с экрана.
+        .task {
+            try? await Task.sleep(nanoseconds: 16_000_000)
+            sweep.start(reduceMotion: reduceMotion)
+        }
+        .onDisappear { sweep.cancel() }
+    }
+}
+
 // MARK: - Градиент выгорания
 
-extension TripRevealedBlock {
+extension RevealSweep {
 
     /// Кромка выгорания: открытое перед ней, туман за ней, мягкий переход
     /// между. Отдельной функцией, а не выражением в `body`:
     /// `TripCompleteSummaryView` уже упиралась в предел вывода типов SwiftUI,
-    /// и блок, который в неё вставляют, не имеет права подталкивать её туда
+    /// и вуаль, которую в неё вставляют, не имеет права подталкивать её туда
     /// снова.
     ///
     /// Голова уезжает ЗА край (×1.15): иначе на последнем кадре у дальнего
     /// угла оставался бы тёмный клин шириной с саму кромку.
-    static func sweepStops(veil: Color, progress: Double) -> [Gradient.Stop] {
+    static func stops(veil: Color, progress: Double) -> [Gradient.Stop] {
         let soft = 0.15
         let head = min(1 + soft, max(0, progress) * (1 + soft))
         let clearAt = min(1, max(0, head - soft))
