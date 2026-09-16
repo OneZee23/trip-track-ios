@@ -48,6 +48,21 @@ final class AuthService: ObservableObject {
     /// tokens and creating a cross-account contamination window.
     private var postSignInSyncTask: Task<Void, Never>?
 
+    /// Читается ли сейчас keychain. Seam: в тесте `UIApplication.shared`
+    /// отвечает «да» всегда, а проверять надо именно ветку «нет».
+    var isProtectedDataAvailableOverride: (() -> Bool)?
+    private func protectedDataAvailable() -> Bool {
+        isProtectedDataAvailableOverride?() ?? UIApplication.shared.isProtectedDataAvailable
+    }
+    /// Гидратация отложена: keychain на запуске не читался. Снимается
+    /// перечитыванием по `protectedDataDidBecomeAvailableNotification`.
+    private(set) var hydrationDeferred = false
+
+    private func stringValue(_ read: KeychainRead) -> String? {
+        guard case .value(let data) = read else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     private enum Keys {
         static let userIdentifier = "com.triptrack.auth.userIdentifier"
         static let userName = "com.triptrack.auth.userName"
@@ -79,6 +94,23 @@ final class AuthService: ObservableObject {
         // endpoint returns `USER_BANNED`. We sign out to drop tokens and
         // stop sync attempts — local CoreData is preserved so the user can
         // still view their own trips read-only.
+        // Телефон разблокировали — перечитать то, что на запуске прочитать
+        // было нельзя. Без этого отложенная гидратация висела бы до
+        // следующего холодного старта, а человек видел бы гостевой экран при
+        // живой сессии.
+        // Две двери, а не одна: уведомление приходит на ПЕРЕХОД «заблокирован
+        // → доступен», а отложиться гидратация может и там, где перехода уже
+        // не будет. Активация — страховка, и обе идемпотентны.
+        for name in [UIApplication.protectedDataDidBecomeAvailableNotification,
+                     UIApplication.didBecomeActiveNotification] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.hydrationDeferred else { return }
+                    authLog.notice("protected data available — re-reading keychain")
+                    self.loadFromKeychain()
+                }
+            }
+        }
         NotificationCenter.default.addObserver(
             forName: .userBanned, object: nil, queue: .main,
         ) { [weak self] _ in
@@ -98,13 +130,13 @@ final class AuthService: ObservableObject {
         let userId = credential.user
         authLog.debug("credential.user=\(userId) tokenSize=\(credential.identityToken?.count ?? -1)")
 
-        // A DIFFERENT Apple ID than the one whose state this device
-        // preserved (soft expiry keeps queue/consent/identity) must not
-        // inherit any of it — purge BEFORE adopting the new identity.
-        prepareForIdentity(userId)
-
-        try? KeychainHelper.saveString(userId, for: Keys.userIdentifier)
-        userIdentifier = userId
+        // Ни identity, ни имя, ни ПУРЖ чужого состояния не трогаются, пока
+        // `/auth/login` не ответил успехом. Проба состояния Apple-креденшала
+        // и оборванный вход не имеют права переписать аккаунт на телефоне:
+        // покупка «другой Apple ID» доказывается только удачным входом,
+        // а `purgeAccountScopedState` необратим (очередь синка, consent, имя).
+        var credentialName: String?
+        let credentialEmail: String? = credential.email
 
         // Name resolution order — first non-empty wins:
         //   1. Apple Sign In `fullName` — only delivered on the *very first*
@@ -126,21 +158,7 @@ final class AuthService: ObservableObject {
                 [fullName.givenName, fullName.familyName]
                     .compactMap { $0 }
                     .joined(separator: " "))
-            if !name.isEmpty {
-                try? KeychainHelper.saveString(name, for: Keys.userName)
-                userName = name
-            }
-        }
-        if userName == nil {
-            userName = KeychainHelper.loadString(key: Keys.userName)
-        }
-
-        if let email = credential.email {
-            try? KeychainHelper.saveString(email, for: Keys.userEmail)
-            userEmail = email
-        }
-        if userEmail == nil {
-            userEmail = KeychainHelper.loadString(key: Keys.userEmail)
+            if !name.isEmpty { credentialName = name }
         }
 
         guard let tokenData = credential.identityToken else {
@@ -166,6 +184,23 @@ final class AuthService: ObservableObject {
             // call, leaving a half-registered keychain state on transient
             // login failure (marker=true, tokens=nil) that confused the
             // hydrate path on next launch.
+            // Вход состоялся — только теперь можно тронуть identity. ДРУГОЙ
+            // Apple ID не имеет права унаследовать состояние, сохранённое
+            // мягкой смертью сессии (очередь, consent, имя), и purge идёт
+            // ПЕРЕД записью нового identity.
+            prepareForIdentity(userId)
+            try? KeychainHelper.saveString(userId, for: Keys.userIdentifier)
+            userIdentifier = userId
+            if let credentialName {
+                try? KeychainHelper.saveString(credentialName, for: Keys.userName)
+                userName = credentialName
+            }
+            if userName == nil { userName = KeychainHelper.loadString(key: Keys.userName) }
+            if let credentialEmail {
+                try? KeychainHelper.saveString(credentialEmail, for: Keys.userEmail)
+                userEmail = credentialEmail
+            }
+            if userEmail == nil { userEmail = KeychainHelper.loadString(key: Keys.userEmail) }
             try? KeychainHelper.save(tokenData, for: Keys.identityToken)
             try? KeychainHelper.saveString("true", for: Keys.isSignedIn)
             // New session begins — kill any in-flight refresh / recovery
@@ -1029,12 +1064,33 @@ final class AuthService: ObservableObject {
         // stale result can't resurrect or re-expire a future session.
         APIClient.shared.sessionBoundaryCrossed()
 
-        TokenStore.shared.clear()
+        // Refresh-токен НЕ стирается. Сервер держит осиротевший токен к
+        // повтору тридцать суток (`ORPHAN_ROTATION_MAX_MS`), и удачный рефреш
+        // после восстановления связи поднимает сессию молча, без единого
+        // нажатия (`sessionRecovered`). Стирание — только по кнопке человека,
+        // удалению аккаунта и бану.
+        TokenStore.shared.clearAccessToken()
         KeychainHelper.delete(key: Keys.isSignedIn)
         try? KeychainHelper.saveString("true", for: Keys.sessionExpired)
 
         isSignedIn = false
         needsReauth = true
+    }
+
+    /// Обратная сторона `sessionExpired()`: рефреш всё-таки прошёл. Зовёт
+    /// `APIClient` после удачной ротации — карточка «войдите снова» уходит
+    /// сама, и человек ничего не нажимал. Работает только когда всё на месте:
+    /// после НАСТОЯЩЕГО выхода refresh-токена нет, и воскресить нечего.
+    func sessionRecovered() {
+        guard needsReauth || !isSignedIn else { return }
+        guard userIdentifier != nil,
+              TokenStore.shared.accessToken != nil,
+              TokenStore.shared.refreshToken != nil else { return }
+        authLog.notice("[auth.session_recovered] refresh succeeded — session back without a prompt")
+        try? KeychainHelper.saveString("true", for: Keys.isSignedIn)
+        KeychainHelper.delete(key: Keys.sessionExpired)
+        isSignedIn = true
+        needsReauth = false
     }
 
     // MARK: - Auth Status Check (called on app launch)
@@ -1048,60 +1104,86 @@ final class AuthService: ObservableObject {
         let provider = ASAuthorizationAppleIDProvider()
         provider.getCredentialState(forUserID: userId) { [weak self] state, _ in
             Task { @MainActor [weak self] in
-                switch state {
-                case .authorized:
-                    authLog.notice("[auth.credential_state] state=authorized")
-                    // CONFIRM a session, never create one: the SIWA
-                    // credential being fine says nothing about the server
-                    // session. If a soft expiry landed while this async
-                    // callback was in flight (marker gone, tokens cleared,
-                    // needsReauth up), resurrecting isSignedIn here would
-                    // hide the re-login card and re-open the sync gate with
-                    // no tokens to sync with.
-                    let sessionStillLive = self?.needsReauth != true
-                        && KeychainHelper.loadString(key: Keys.isSignedIn) != nil
-                        && TokenStore.shared.accessToken != nil
-                    if sessionStillLive, self?.isSignedIn != true { self?.isSignedIn = true }
-                    if sessionStillLive, let accountId = TokenStore.shared.accountId {
-                        SentryService.setAccount(id: accountId.uuidString)
-                    }
-                case .revoked:
-                    authLog.notice("[auth.signout_trigger] reason=apple_credential_revoked")
-                    await self?.signOut()
-                case .notFound:
-                    // .notFound is NOT a reliable revocation signal — it can
-                    // surface transiently (Apple ID server unreachable, or right
-                    // after install before the credential propagates). Only sign
-                    // out if we also lack valid tokens; otherwise keep the
-                    // session. Cleanup of a genuinely dead-but-token-present
-                    // session is best-effort and deferred: the next authed
-                    // request that hits a confirmed USER_NOT_AUTH after refresh
-                    // force-signs-out (APIClient). On the common launch path the
-                    // feed's authed load triggers this; in the rare corner where
-                    // no authed call is made (lands on a non-feed tab, no sync,
-                    // notifications off) it simply waits for the next one. This
-                    // removes a spurious cold-launch logout vector while keeping
-                    // .revoked as the authoritative immediate-signout signal.
-                    let hasTokens = TokenStore.shared.accessToken != nil
-                        && TokenStore.shared.refreshToken != nil
-                    if hasTokens {
-                        authLog.notice("[auth.credential_state] state=notFound but tokens present — keeping session")
-                    } else {
-                        authLog.notice("[auth.signout_trigger] reason=apple_credential_not_found_no_tokens")
-                        await self?.signOut()
-                    }
-                default:
-                    authLog.notice("[auth.credential_state] state=undef_\(state.rawValue, privacy: .public)")
-                    break
-                }
+                self?.applyCredentialState(state)
             }
+        }
+    }
+
+    /// Что делать с ответом Apple про креденшал. Вынесено из колбэка, потому
+    /// что проверить это можно только вызовом: `ASAuthorizationAppleIDProvider`
+    /// в тесте не подменить.
+    ///
+    /// Жёсткого выхода тут НЕТ НИ В ОДНОЙ ветке. Проба состояния — не решение
+    /// человека: `.revoked` приходит и после «Прекратить использовать Apple ID»,
+    /// и на сбое связи с Apple, а `.notFound` dev-сборка законно видит для
+    /// аккаунта, заведённого продовой (bundle id разные, креденшал у них
+    /// свой). Цена ошибки несимметрична: мягкая смерть стоит одного нажатия
+    /// «Войти», жёсткая — сноса очереди синка, consent и имени.
+    func applyCredentialState(_ state: ASAuthorizationAppleIDProvider.CredentialState) {
+        switch state {
+        case .authorized:
+            authLog.notice("[auth.credential_state] state=authorized")
+            // CONFIRM a session, never create one: the SIWA credential being
+            // fine says nothing about the server session. If a soft expiry
+            // landed while this async callback was in flight (marker gone,
+            // needsReauth up), resurrecting isSignedIn here would hide the
+            // re-login card and re-open the sync gate with no tokens.
+            let sessionStillLive = needsReauth != true
+                && KeychainHelper.loadString(key: Keys.isSignedIn) != nil
+                && TokenStore.shared.accessToken != nil
+            if sessionStillLive, !isSignedIn { isSignedIn = true }
+            if sessionStillLive, let accountId = TokenStore.shared.accountId {
+                SentryService.setAccount(id: accountId.uuidString)
+            }
+        case .revoked:
+            authLog.notice("[auth.credential_state] state=revoked — soft expiry, re-auth card")
+            sessionExpired()
+        case .notFound:
+            authLog.notice("[auth.credential_state] state=notFound — soft expiry, re-auth card")
+            sessionExpired()
+        case .transferred:
+            authLog.notice("[auth.credential_state] state=transferred — soft expiry, re-auth card")
+            sessionExpired()
+        default:
+            authLog.notice("[auth.credential_state] state=undef_\(state.rawValue, privacy: .public)")
         }
     }
 
     // MARK: - Private
 
-    private func loadFromKeychain() {
-        userIdentifier = KeychainHelper.loadString(key: Keys.userIdentifier)
+    func loadFromKeychain() {
+        // Keychain читается ТРЁХЗНАЧНО, и «прочитать нельзя» — не «сессии
+        // нет». Все записи лежат под `AfterFirstUnlockThisDeviceOnly`, а
+        // приложение просыпается в фоне по локации: запуск на телефоне,
+        // который перезагрузили и не разблокировали, штатный сценарий. Раньше
+        // он читался как «токенов нет» и молча превращался в «войдите снова»
+        // — разлогин, которого нет ни в одной строке серверного лога.
+        let markerRead = KeychainHelper.read(key: Keys.isSignedIn)
+        let identityRead = KeychainHelper.read(key: Keys.userIdentifier)
+        let accessRead = TokenStore.shared.accessTokenRead
+        let refreshRead = TokenStore.shared.refreshTokenRead
+        let anyUnavailable = [markerRead, identityRead, accessRead, refreshRead].contains {
+            if case .unavailable = $0 { return true } else { return false }
+        }
+        // Решает СТАТУС чтения, а `isProtectedDataAvailable` только страхует
+        // пустоту. На холодном старте (`AuthService.shared` поднимается из
+        // `TripTrackApp.init`, до конца запуска) флаг успевает ответить «нет»
+        // на разблокированном телефоне — и гейт по нему одному отложил бы
+        // гидратацию НАВСЕГДА: уведомление о доступности приходит на переход,
+        // которого уже не будет. Поэтому пустой keychain при «нет» — «пока
+        // неизвестно», а прочитанные значения принимаются как есть.
+        let allMissing = markerRead == .missing && identityRead == .missing
+            && accessRead == .missing && refreshRead == .missing
+        guard !anyUnavailable, !(allMissing && !protectedDataAvailable()) else {
+            // Ничего не решаем и НИЧЕГО не трогаем: то, что уже в памяти,
+            // остаётся как есть, а перечитать придёт
+            // `protectedDataDidBecomeAvailableNotification` или активация.
+            hydrationDeferred = true
+            authLog.notice("hydrate deferred: keychain unavailable — in-memory session kept as is")
+            return
+        }
+        hydrationDeferred = false
+        userIdentifier = stringValue(identityRead)
         userName = KeychainHelper.loadString(key: Keys.userName)
         userEmail = KeychainHelper.loadString(key: Keys.userEmail)
         // Tie isSignedIn to actual token presence, not just the marker key.
@@ -1109,9 +1191,9 @@ final class AuthService: ObservableObject {
         // crash/wipe of the token entries → `tokenStore.accessToken == nil`
         // on every request → backend returns USER_NOT_AUTH forever, but the
         // app keeps thinking the user is logged in and never offers re-auth.
-        let hasMarker = KeychainHelper.loadString(key: Keys.isSignedIn) != nil
+        let hasMarker = markerRead != .missing
         let hasUserId = userIdentifier != nil
-        let hasTokens = TokenStore.shared.accessToken != nil && TokenStore.shared.refreshToken != nil
+        let hasTokens = accessRead != .missing && refreshRead != .missing
         isSignedIn = hasMarker && hasUserId && hasTokens
         // Restore a soft session expiry across relaunches: the flag is set by
         // sessionExpired() and cleared by the next sign-in or sign-out.

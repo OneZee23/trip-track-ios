@@ -24,6 +24,12 @@ final class APIClient {
     /// that wiped the queue and stranded never-uploaded trips.
     var sessionDeathHandler: @MainActor () -> Void = { AuthService.shared.sessionExpired() }
 
+    /// Обратная сторона `sessionDeathHandler`: рефреш прошёл. Мягкая смерть
+    /// сессии оставляет refresh-токен в keychain (сервер держит осиротевший
+    /// токен к повтору 30 суток), и первый же удачный рефреш обязан снять
+    /// «войдите снова» молча. Инъекция — ради наблюдения в тестах.
+    var sessionRecoveryHandler: @MainActor () -> Void = { AuthService.shared.sessionRecovered() }
+
     /// Backoff schedule for the background refresh recovery armed after a
     /// TRANSIENT refresh failure (timeout / connection loss). Internal so
     /// tests can shrink the delays. See `scheduleRefreshRecovery`.
@@ -551,10 +557,27 @@ final class APIClient {
             // death, recovery arming) ONLY while the session it started for
             // is still the current one.
             let generation = self.sessionGeneration
-            guard let refresh = self.tokenStore.refreshToken else {
+            // «Нет записи» и «keychain не читается» — РАЗНЫЕ ответы, и раньше
+            // они оба означали «сессия мертва». Второй случай — обычный
+            // фоновый запуск по локации на телефоне, который перезагрузили и
+            // не разблокировали: сессия жива, просто спросить нечем.
+            let refresh: String
+            switch self.tokenStore.refreshTokenRead {
+            case .value(let data):
+                guard let token = String(data: data, encoding: .utf8) else {
+                    apiAuthLog.error("refresh: refresh token unreadable as utf8 — session dead")
+                    self.sessionDeathHandler()
+                    throw APIError.invalidRefreshToken
+                }
+                refresh = token
+            case .missing:
                 apiAuthLog.error("refresh: no refresh token in keychain — session dead")
                 self.sessionDeathHandler()
                 throw APIError.invalidRefreshToken
+            case .unavailable(let status):
+                apiAuthLog.notice("refresh: keychain unavailable status=\(status) — session unknown, keeping it and arming recovery")
+                if self.sessionGeneration == generation { self.scheduleRefreshRecovery() }
+                throw APIError.transport("keychain unavailable (\(status))")
             }
             apiAuthLog.notice("refresh: posting /auth/refresh")
             // Each POST is singleAttempt so it can't loop 3×30s and stall every
@@ -595,6 +618,10 @@ final class APIClient {
                 self.tokenStore.set(accessToken: res.accessToken, refreshToken: res.refreshToken)
                 self.refreshSuccessEpoch += 1
                 apiAuthLog.notice("refresh: succeeded, new tokens stored")
+                // Мягкая смерть refresh-токен не стирает, поэтому удачный
+                // рефреш ПОСЛЕ неё — законное восстановление: карточка
+                // «войдите снова» уходит сама, человек ничего не нажимал.
+                self.sessionRecoveryHandler()
             } catch APIError.network(let urlErr) {
                 // Transient network failure — keep session AND arm a
                 // background recovery retry. Waiting for "the next authed
