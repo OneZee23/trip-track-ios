@@ -373,6 +373,54 @@ final class MapRenderCostTests: XCTestCase {
                           "полный кадр вуали занял \(median * 1000) мс")
     }
 
+    /// Постер «Поделиться» собирается, пока человек СМОТРИТ на спиннер, и
+    /// весь его бюджет — пара секунд вместе с выборкой плиток карты из сети.
+    ///
+    /// Сеть в этом бюджете — половина непредсказуемая, поэтому мерить имеет
+    /// смысл только вторую: композицию поверх уже готового снимка. Она
+    /// дороже полного кадра экранной вуали (потолок 90 мс выше) по двум
+    /// причинам сразу — площадь 1080×1920 против кадра телефона и слой
+    /// открытого, индекс путей которого собирается прямо здесь, с нуля, а не
+    /// один раз на жизнь карты.
+    ///
+    /// Замер на 16e: 40 мс, то есть композиция в бюджете «двух секунд» не
+    /// значит ничего, и весь он принадлежит сети. Потолок 0.25 с — шесть
+    /// запасов к замеру, и ставится он не «по факту», а по смыслу: пока
+    /// сборка на порядок дешевле выборки плиток, спиннер ждёт СЕТЬ. Упёрлось
+    /// в потолок — значит постер стал второй половиной ожидания, и это
+    /// решение, а не мелочь.
+    func testPosterCompositionFitsItsShareBudget() {
+        let layer = AtlasSharePosterTests.demoLayer()
+        guard let rect = AtlasSharePoster.frame(for: layer) else {
+            return XCTFail("окно обязано посчитаться")
+        }
+        let region = AtlasSharePoster.region(for: rect)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = AtlasSharePoster.renderScale
+        format.opaque = true
+        let snapshot = UIGraphicsImageRenderer(
+            size: AtlasSharePoster.renderPointSize, format: format
+        ).image { context in
+            UIColor.darkGray.setFill()
+            context.fill(CGRect(origin: .zero, size: AtlasSharePoster.renderPointSize))
+        }
+
+        let seals = AtlasSharePosterTests.demoSeals()
+        // Три прогона, берётся лучший: на симуляторе первый платит за прогрев
+        // шрифта и кэша печатей, а мерить надо саму сборку.
+        var best = Double.infinity
+        for _ in 0..<3 {
+            let started = Date()
+            _ = AtlasSharePoster.render(
+                snapshot: snapshot, region: region, layer: layer, seals: seals,
+                caption: "Атлас · 1 910 км открыто · 3 знака",
+                scale: AtlasSharePoster.renderScale)
+            best = min(best, Date().timeIntervalSince(started))
+        }
+        print(String(format: "[poster] композиция 1080×1920: %.0f мс", best * 1000))
+        XCTAssertLessThan(best, 0.25, "сборка постера заняла \(best * 1000) мс")
+    }
+
     /// Region outlines are drawn from the bundled atlas, and a heavy one would
     /// show up as the border crawling in behind the camera.
     func testRegionOutlinesAreSmallEnoughToDrawAtOnce() async {

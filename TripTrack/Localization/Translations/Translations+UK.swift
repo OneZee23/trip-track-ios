@@ -225,6 +225,8 @@ extension Translations {
         "cardSolvedOn": "розв'язана проїздом {date}",
         "cardOnMap": "На карті",
         "cardStoryPending": "Історія з'явиться з оновленням",
+        "posterCaption": "{distance} відкрито",
+        "shareRendering": "Готуємо знімок…",
         "mapTripsSectionHead": "ПОЇЗДКИ ТУТ",
         "mapOpenTrip": "Відкрити поїздку",
         "mapRoadPullHint": "Потягни вгору — усі поїздки",

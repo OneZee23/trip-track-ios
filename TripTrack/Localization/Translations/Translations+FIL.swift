@@ -225,6 +225,8 @@ extension Translations {
         "cardSolvedOn": "nalutas sa isang biyahe noong {date}",
         "cardOnMap": "Ipakita sa mapa",
         "cardStoryPending": "Darating ang kuwento sa isang update",
+        "posterCaption": "{distance} ang nabuksan",
+        "shareRendering": "Inihahanda ang larawan…",
         "mapTripsSectionHead": "MGA BIYAHE RITO",
         "mapOpenTrip": "Buksan ang biyahe",
         "mapRoadPullHint": "Hilahin pataas — lahat",

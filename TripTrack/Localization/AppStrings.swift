@@ -1159,6 +1159,37 @@ enum AppStrings {
         tr(lang, "cardStoryPending",
            ru: "История появится с обновлением",
            en: "The story arrives with an update")
+    // MARK: - Постер «Поделиться» (0.7.0)
+
+    /// Подпись на постере «Атласа»: «Атлас · 1 910 км открыто · 4 знака».
+    ///
+    /// Название экрана берётся из `myMapTitle` — той же строки, что стоит в
+    /// шапке: два написания одного слова читались бы как два разных места.
+    /// Расстояние приходит УЖЕ НАПЕЧАТАННЫМ (`Measure`), токеном
+    /// `{distance}`, — единицу выбирает человек, и вписать её в текст значило
+    /// бы соврать на мильном телефоне.
+    ///
+    /// Ноль знаков НЕ печатается: «0 знаков» на картинке, которой делятся, —
+    /// это объявление отсутствия механики тому, у кого её ещё нет. То же
+    /// правило, что у подписи под «Атласом» (`MyMapView.openedSummary`).
+    static func posterCaption(
+        _ lang: LanguageManager.Language, distance: String, seals: Int
+    ) -> String {
+        let opened = tr(lang, "posterCaption",
+                        ru: "{distance} открыто", en: "{distance} opened")
+            .replacingOccurrences(of: "{distance}", with: distance)
+        var line = "\(myMapTitle(lang)) · \(opened)"
+        if seals > 0 { line += " · " + mapSealsCount(lang, count: seals) }
+        return line
+    }
+
+    /// Пока снимается карта и собирается постер.
+    ///
+    /// Секунда-две ожидания — это плитки карты, которые качаются из сети.
+    /// Молчащая кнопка за это время читается как сломанная («Отклик в момент
+    /// КАСАНИЯ», раздел «Нажатие обязано отвечать»).
+    static func shareRendering(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "shareRendering", ru: "Готовим снимок…", en: "Preparing the picture…")
     }
 
     /// Заголовок блока на экране итогов: что эта поездка открыла на карте.

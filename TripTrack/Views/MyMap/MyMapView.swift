@@ -22,6 +22,9 @@ struct MyMapView: View {
     /// Lives here, not in the sheet, so the tab bar can hide under the
     /// pulled-up region list too.
     @State private var isSummaryExpanded = false
+    /// Постер собирается (снимок карты качается из сети). Живёт здесь, потому
+    /// что здесь же и заказ — см. `posterProgress`.
+    @State private var isRenderingPoster = false
 
     /// «Есть туман или нет» is not a question a screenshot can settle by eye —
     /// a night map is dark either way. `-no-fog-veil` draws the same map
@@ -83,7 +86,10 @@ struct MyMapView: View {
                 onOpenDiscovery: { vm.focusDiscovery($0) },
                 onShare: shareSummary
             )
+
+            posterProgress
         }
+        .animation(.easeOut(duration: 0.2), value: isRenderingPoster)
         // Canon frames 2–5 have no tab bar: a selected card owns the bottom
         // of the screen, and the bar sitting on top of it clipped the
         // progress row clean off.
@@ -197,17 +203,64 @@ struct MyMapView: View {
 
     // MARK: - Share
 
-    /// Canon puts a share button on the collapsed summary. It passes on the
-    /// one line the summary already states — the numbers, not a rendered
-    /// poster of the map (that lives on the trip share screen).
+    /// Кнопка на свёрнутом листе отдаёт КАРТИНКУ — снимок карты с тем же
+    /// туманом и теми же печатями, что на экране (`AtlasSharePoster`), — и
+    /// ту же строку итога следом.
+    ///
+    /// До 0.7.0 уезжал один текст, и это был честный ответ, пока карты под
+    /// ним не было: показывать было нечего. Туман показывать есть что, а
+    /// текст остаётся рядом с картинкой — им делятся туда, где картинка не
+    /// разворачивается.
+    ///
+    /// Снимок не пришёл (нет сети — плитки карты качаются из неё) — уходит
+    /// один текст, как раньше. Отказывать в шеринге из-за картинки нельзя.
     private func shareSummary() {
+        guard !isRenderingPoster else { return }
+        isRenderingPoster = true
         let text = openedSummary
-        let activity = UIActivityViewController(activityItems: [text], applicationActivities: nil)
-        var controller = UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
-            .first
-        while let presented = controller?.presentedViewController { controller = presented }
-        controller?.present(activity, animated: true)
+        let title = AppStrings.myMapTitle(lang.language)
+        let caption = AppStrings.posterCaption(
+            lang.language,
+            distance: Measure.distance(
+                km: vm.revealed.openedKm, unit: distanceUnit, lang: lang.language),
+            seals: vm.seals.count
+        )
+        Task {
+            let poster = await AtlasSharePoster.make(vm: vm, caption: caption)
+            isRenderingPoster = false
+            await AtlasSharePoster.present(image: poster, text: text, title: title)
+        }
+    }
+
+    /// «Готовим снимок…» поверх карты, пока собирается постер.
+    ///
+    /// Пилюля, а не спиннер В САМОЙ кнопке: кнопка живёт в `MyMapSheet`, и
+    /// заводить ради двух секунд ожидания ещё одно состояние в чужом файле —
+    /// это вторая правда о том, идёт ли сборка. Пилюля стоит над свёрнутым
+    /// листом, то есть там же, куда смотрит палец, и не закрывает ни лист,
+    /// ни таб-бар. Модалки нет нарочно: ждать нечего — нажатие уже отвечено.
+    @ViewBuilder
+    private var posterProgress: some View {
+        if isRenderingPoster {
+            VStack {
+                Spacer()
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white)
+                    Text(AppStrings.shareRendering(lang.language))
+                        .font(.inter(13, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.55), in: Capsule())
+                .padding(.bottom, MyMapSheet.collapsedHeight + 8)
+            }
+            .allowsHitTesting(false)
+            .transition(.opacity)
+            .accessibilityIdentifier("mymap_share_progress")
+        }
     }
 }
 

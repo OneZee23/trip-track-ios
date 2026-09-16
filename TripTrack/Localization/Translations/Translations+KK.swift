@@ -225,6 +225,8 @@ extension Translations {
         "cardSolvedOn": "{date} жолда шешілді",
         "cardOnMap": "Картадан көрсету",
         "cardStoryPending": "Тарих жаңартумен бірге келеді",
+        "posterCaption": "{distance} ашылды",
+        "shareRendering": "Сурет дайындалуда…",
         "mapTripsSectionHead": "МҰНДАҒЫ САПАРЛАР",
         "mapOpenTrip": "Сапарды ашу",
         "mapRoadPullHint": "Жоғары тартыңыз — барлығы",

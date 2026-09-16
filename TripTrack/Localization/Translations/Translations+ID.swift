@@ -225,6 +225,8 @@ extension Translations {
         "cardSolvedOn": "terpecahkan saat berkendara {date}",
         "cardOnMap": "Lihat di peta",
         "cardStoryPending": "Ceritanya akan hadir dengan pembaruan",
+        "posterCaption": "{distance} terbuka",
+        "shareRendering": "Menyiapkan gambar…",
         "mapTripsSectionHead": "PERJALANAN DI SINI",
         "mapOpenTrip": "Buka perjalanan",
         "mapRoadPullHint": "Tarik ke atas — semuanya",

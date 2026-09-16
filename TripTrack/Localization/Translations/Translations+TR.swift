@@ -225,6 +225,8 @@ extension Translations {
         "cardSolvedOn": "{date} tarihli sürüşte çözüldü",
         "cardOnMap": "Haritada göster",
         "cardStoryPending": "Hikâye bir güncellemeyle gelecek",
+        "posterCaption": "{distance} keşfedildi",
+        "shareRendering": "Görsel hazırlanıyor…",
         "mapTripsSectionHead": "BURADAKİ GEZİLER",
         "mapOpenTrip": "Geziyi aç",
         "mapRoadPullHint": "Yukarı çek — hepsi",

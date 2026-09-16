@@ -225,6 +225,8 @@ extension Translations {
         "cardSolvedOn": "résolu lors d'un trajet le {date}",
         "cardOnMap": "Voir sur la carte",
         "cardStoryPending": "L'histoire arrivera avec une mise à jour",
+        "posterCaption": "{distance} explorés",
+        "shareRendering": "Préparation de l’image…",
         "mapTripsSectionHead": "TRAJETS ICI",
         "mapOpenTrip": "Ouvrir le trajet",
         "mapRoadPullHint": "Tirez vers le haut — tous les trajets",
