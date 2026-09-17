@@ -141,7 +141,15 @@ final class RegionLabelView: MKAnnotationView {
     ///
     /// `strokeWidth` ОТРИЦАТЕЛЬНЫЙ: положительный в TextKit означает «только
     /// контур, без заливки», то есть подпись стала бы полой.
-    static let haloColor = UIColor(red: 0x1E/255, green: 0x22/255, blue: 0x30/255, alpha: 0.8)
+    static let darkText = UIColor(red: 0x1E/255, green: 0x22/255, blue: 0x30/255, alpha: 1)
+    static let darkHalo = UIColor(red: 0x1E/255, green: 0x22/255, blue: 0x30/255, alpha: 0.8)
+    static let lightHalo = UIColor(white: 1, alpha: 0.85)
+    /// Обводка идёт ПРОТИВ мглы: под тёмной она тёмная, под светлой светлая.
+    /// Подпись лежит и на мгле, и на настоящей карте внутри коридора, и
+    /// читаться обязана на обеих.
+    static var haloColor: UIColor {
+        FogVeilPainter.palette.isDark ? darkHalo : lightHalo
+    }
     static let haloWidth: CGFloat = -2.0
 
     private let nameLabel = UILabel()
@@ -197,7 +205,10 @@ final class RegionLabelView: MKAnnotationView {
 
     private func configure() {
         guard let region = annotation as? RegionLabelAnnotation else { return }
-        let color = Self.warmColor.withAlphaComponent(region.isVisited ? Self.brightAlpha : Self.dimAlpha)
+        // Под светлой дымкой тёплый светлый текст исчезает — там подпись
+        // тёмная (#1E2230), а обводка, наоборот, светлая.
+        let base = FogVeilPainter.palette.isDark ? Self.warmColor : Self.darkText
+        let color = base.withAlphaComponent(region.isVisited ? Self.brightAlpha : Self.dimAlpha)
 
         // Разрядка 0.08 em: капитель без нее читается сплошным пятном,
         // разряженная — гравюрой. Заглавные буквы приходят готовыми в

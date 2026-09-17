@@ -329,6 +329,9 @@ final class MapRenderCostTests: XCTestCase {
         // Облака — ДО часов: кисть рисует их всегда, и кадр без них меряет
         // не то, что видит человек. `prepare()` идемпотентна.
         _ = CloudTexture.shared.prepare()
+        // Облака — ДО часов: кисть рисует их всегда, и кадр без них меряет
+        // не то, что видит человек. `prepare()` идемпотентна.
+        _ = CloudTexture.shared.prepare()
         var times: [TimeInterval] = []
         for _ in 0..<5 {
             let started = Date()
@@ -378,6 +381,9 @@ final class MapRenderCostTests: XCTestCase {
         // Облака — ДО часов: кисть рисует их всегда, и кадр без них меряет
         // не то, что видит человек. `prepare()` идемпотентна.
         _ = CloudTexture.shared.prepare()
+        // Облака — ДО часов: кисть рисует их всегда, и кадр без них меряет
+        // не то, что видит человек. `prepare()` идемпотентна.
+        _ = CloudTexture.shared.prepare()
         var times: [TimeInterval] = []
         for _ in 0..<5 {
             let started = Date()
@@ -416,6 +422,9 @@ final class MapRenderCostTests: XCTestCase {
         let sizePoints = CGSize(width: CGFloat(rect.width * ppmp),
                                 height: CGFloat(rect.height * ppmp))
 
+        // Облака — ДО часов: кисть рисует их всегда, и кадр без них меряет
+        // не то, что видит человек. `prepare()` идемпотентна.
+        _ = CloudTexture.shared.prepare()
         // Облака — ДО часов: кисть рисует их всегда, и кадр без них меряет
         // не то, что видит человек. `prepare()` идемпотентна.
         _ = CloudTexture.shared.prepare()
@@ -470,6 +479,7 @@ final class MapRenderCostTests: XCTestCase {
         }
 
         let seals = AtlasSharePosterTests.demoSeals()
+        _ = CloudTexture.shared.prepare()
         // Три прогона, берётся лучший: на симуляторе первый платит за прогрев
         // шрифта и кэша печатей, а мерить надо саму сборку.
         var best = Double.infinity
@@ -525,6 +535,9 @@ final class MapRenderCostTests: XCTestCase {
         // Худший случай заливки: посещено ВСЁ, что попало в кадр.
         let visited = Set(atlas.regions.map(\.id))
 
+        // Облака — ДО часов: кисть рисует их всегда, и кадр без них меряет
+        // не то, что видит человек. `prepare()` идемпотентна.
+        _ = CloudTexture.shared.prepare()
         // Облака — ДО часов: кисть рисует их всегда, и кадр без них меряет
         // не то, что видит человек. `prepare()` идемпотентна.
         _ = CloudTexture.shared.prepare()

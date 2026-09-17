@@ -534,6 +534,48 @@ final class FogVeilPainterTests: XCTestCase {
                                  "облака посчитаны от куска, а не от мира — узор поплывёт")
     }
 
+    // MARK: Светлая палитра
+
+    /// Обе палитры — ОДНА кисть и одни правила, отличаются только числами.
+    ///
+    /// Проверяется это НЕ отрисовкой, и вот почему. Палитра статична (её
+    /// читают и кисть, и облака, и подписи), а текстура облаков тонируется
+    /// ею же и живёт в синглтоне. Тест, который на время переключает и то и
+    /// другое, ломает СОСЕДЕЙ: у меня он уронил и «швы», и «рваный край», и
+    /// бюджет постера — ровно та ловушка, про которую CLAUDE.md пишет «тест,
+    /// не отпустивший фикстуру, роняет чужой класс». Пиксельное равенство
+    /// растра и отката держит ночная палитра (`testWholeRasterMatchesTheTiledFallback`);
+    /// глазами светлую дымку проверяют кадры на устройстве, где под мглой
+    /// есть настоящая карта, а на симуляторе её нет вовсе.
+    func testBothPalettesAreTheSameRulesWithDifferentNumbers() {
+        let night = FogVeilPainter.Palette.night
+        let mist = FogVeilPainter.Palette.mist
+        XCTAssertTrue(night.isDark)
+        XCTAssertFalse(mist.isDark)
+
+        func luminance(_ colour: UIColor) -> CGFloat {
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            colour.getRed(&r, green: &g, blue: &b, alpha: &a)
+            return 0.299 * r + 0.587 * g + 0.114 * b
+        }
+        // Светлая дымка светлее ночной мглы, а её граница — наоборот темнее:
+        // и то и другое обязано читаться на своём фоне.
+        XCTAssertGreaterThan(luminance(mist.bottom), luminance(night.bottom) + 0.4)
+        XCTAssertLessThan(luminance(mist.border), luminance(night.border) - 0.4)
+        // Сквозь обе видна карта: непрозрачность в одном и том же коридоре.
+        for palette in [night, mist] {
+            XCTAssertGreaterThan(palette.alpha, 0.55)
+            XCTAssertLessThan(palette.alpha, 0.85)
+            XCTAssertLessThan(palette.opacityRange.upperBound, 0.85)
+            XCTAssertGreaterThan(palette.opacityRange.lowerBound, 0.55)
+            XCTAssertEqual(palette.opacityRange.lowerBound
+                + (1 - palette.opacityRange.lowerBound)
+                * ((palette.opacityRange.upperBound - palette.opacityRange.lowerBound)
+                   / (1 - palette.opacityRange.lowerBound)),
+                palette.opacityRange.upperBound, accuracy: 1e-9)
+        }
+    }
+
     // MARK: Внутри
 
     /// Тот же кадр настоящим `FogVeilRenderer`, тайл за тайлом, с клипом на
