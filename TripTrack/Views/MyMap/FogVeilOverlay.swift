@@ -736,42 +736,21 @@ enum FogVeilPainter {
         context.clip(to: clip)
         context.setBlendMode(blend)
         // `.low`, а не `.default`: это по-прежнему сглаживание (тексели не
-        // видны прямоугольниками), но в шесть раз дешевле — постер на
-        // `.default` вырос с 64 мс до 428 при потолке 250. Зерно лечится не
-        // качеством фильтра, а периодом узора и низкими октавами.
+        // видны прямоугольниками), но дешевле. Оговорка: приписанные ему
+        // когда-то «428 мс постера на `.default`» — ложный след, там мерили
+        // пересборку текстуры; на замере разницы в миллисекундах он не дал.
+        // Зерно лечится не качеством фильтра, а низкими октавами.
         context.interpolationQuality = .low
-        // `byTiling` заставляет CoreGraphics растеризовать ВЕСЬ узорный тайл,
-        // даже когда от него нужен кусок с ладонь. После того как период
-        // облаков вырос восьмикратно, это стало главной ценой постера (409 мс
-        // при потолке 250). Когда ячейка и так накрывает клип — рисуем её
-        // одним обычным `draw`, и CG отсекает лишнее сам.
-        if anchor.contains(clip) {
-            // Ячейка накрывает клип целиком — значит от текстуры нужен КУСОК,
-            // и растягивать её всю незачем. После восьмикратного периода
-            // «всю» — это картинка в десять тысяч точек стороной на окно в
-            // тысячу (постер: 403 мс при потолке 250); вырезанный кусок стоит
-            // ровно столько, сколько занимает на экране.
-            let texelsX = CGFloat(image.width) / anchor.width
-            let texelsY = CGFloat(image.height) / anchor.height
-            let crop = CGRect(
-                x: ((clip.minX - anchor.minX) * texelsX).rounded(.down) - 1,
-                y: ((clip.minY - anchor.minY) * texelsY).rounded(.down) - 1,
-                width: (clip.width * texelsX).rounded(.up) + 2,
-                height: (clip.height * texelsY).rounded(.up) + 2
-            ).intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
-            if crop.width >= 1, crop.height >= 1, let piece = image.cropping(to: crop) {
-                let box = CGRect(
-                    x: anchor.minX + crop.minX / texelsX,
-                    y: anchor.minY + crop.minY / texelsY,
-                    width: crop.width / texelsX,
-                    height: crop.height / texelsY)
-                context.draw(piece, in: box)
-            } else {
-                context.draw(image, in: anchor)
-            }
-        } else {
-            context.draw(image, in: anchor, byTiling: true)
-        }
+        // `byTiling` — и только он. Вырезание куска текстуры по клипу здесь
+        // стояло как попытка удешевить постер и НЕ удешевила его ни на
+        // миллисекунду (403 мс до, 402 после): вся цена была в том, что
+        // `CloudTexture.prepare()` пересобирал текстуру на каждый вызов. Зато
+        // она стоила шва: ветка выбиралась по `anchor.contains(clip)`, то есть
+        // два соседних тайла на границе ячейки уходили в РАЗНЫЕ ветки и
+        // пересэмплировали узор по-разному — перепад на стыке 1.94 против 0.46
+        // внутри (`FogVeilPainterTests.testRasterHasNoSeamsBetweenTiles`).
+        // Одна ветка на всех — одно правило сэмплирования на всех.
+        context.draw(image, in: anchor, byTiling: true)
         context.setBlendMode(.normal)
         context.restoreGState()
     }
