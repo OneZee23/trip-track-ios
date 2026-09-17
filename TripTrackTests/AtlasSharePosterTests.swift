@@ -16,6 +16,32 @@ import MapKit
 /// на нём максимальна и не зависит ни от плиток Apple, ни от сети.
 final class AtlasSharePosterTests: XCTestCase {
 
+    /// Палитра мглы ПРИШПИЛИВАЕТСЯ к ночной на время прогона.
+    ///
+    /// С «мглы по теме» её выбирает `MyMapRepresentable` по трейту своей вью,
+    /// то есть по ВНЕШНЕМУ ВИДУ СИМУЛЯТОРА, на котором поднялось хост-
+    /// приложение. А оба пиксельных утверждения здесь написаны про ТЁМНУЮ
+    /// мглу: белая подпись читается только на тёмной плашке, а коридор
+    /// светлее тумана только пока туман тёмный. На светлом симуляторе плашка
+    /// `.mist` сама светлее порога 200 (0xDC…0xEA), и «подписи нет» падало
+    /// там, где подпись есть.
+    ///
+    /// Возвращается она в `tearDown` — глобалка, оставленная тестом, роняет
+    /// СОСЕДЕЙ, а не его самого.
+    private var paletteBeforeTest: FogVeilPainter.Palette?
+
+    override func setUp() {
+        super.setUp()
+        paletteBeforeTest = FogVeilPainter.palette
+        FogVeilPainter.palette = .night
+    }
+
+    override func tearDown() {
+        if let paletteBeforeTest { FogVeilPainter.palette = paletteBeforeTest }
+        paletteBeforeTest = nil
+        super.tearDown()
+    }
+
     // MARK: Данные
 
     /// Одна прямая дорога вдоль параллели — в картинке это горизонтальная
