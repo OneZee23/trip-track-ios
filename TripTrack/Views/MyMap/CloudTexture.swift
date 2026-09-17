@@ -51,7 +51,7 @@ final class CloudTexture {
     /// настоящесть реальной карты ушла, это игровая доска», — поэтому нижняя
     /// граница тут высокая: даже в самом густом месте под мглой видно дороги
     /// и берег.
-    static let opacityRange: ClosedRange<Double> = 0.62...0.78
+    static var opacityRange: ClosedRange<Double> { FogVeilPainter.palette.opacityRange }
 
     /// Сколько непрозрачности облако ДОБАВЛЯЕТ поверх нижней границы.
     ///
@@ -87,11 +87,24 @@ final class CloudTexture {
         /// Тон тумана с переменной альфой: ложится ПОВЕРХ залитой мглы и
         /// догущает её до `opacityRange.upperBound`.
         let density: CGImage
+        /// То же, но из ДВУХ НИЖНИХ ОКТАВ: крупные пятна без мелкой ряби.
+        /// Ею кроются `.fine` и `.mid`, где мелочь читается зерном.
+        let soft: CGImage
         let mask: CGImage
     }
 
     private let lock = NSLock()
     private var images: Images?
+    /// Для какой палитры собраны картинки: тон у них ЗАПЕЧЁН (они догущают
+    /// мглу её же цветом), и на смене темы их надо пересобрать. Сам шум при
+    /// этом не считается заново — он лежит в кэше.
+    private var builtDark: Bool?
+    /// Сырой шум и его низкооктавный близнец. Держатся в памяти, потому что
+    /// смена темы — это ПЕРЕКРАСКА тех же картинок: пересчитывать ради неё
+    /// fBm (два прохода по 262 144 точки) и заново читать PNG из кэша значит
+    /// платить сотнями миллисекунд за смену цвета.
+    private var rawNoise: [UInt8]?
+    private var rawSoft: [UInt8]?
 
     private init() {}
 
@@ -111,16 +124,21 @@ final class CloudTexture {
     /// облаков даже там, где ждать было некому.
     @discardableResult
     func prepare() -> Images? {
+        let wantsDark = FogVeilPainter.palette.isDark
         lock.lock()
-        if let images { lock.unlock(); return images }
+        if let images, builtDark == wantsDark { lock.unlock(); return images }
         lock.unlock()
 
-        let noise = Self.cachedNoise() ?? {
+        lock.lock()
+        let keptNoise = rawNoise, keptSoft = rawSoft
+        lock.unlock()
+        let noise = keptNoise ?? Self.cachedNoise() ?? {
             let fresh = Self.noise()
             Self.writeCache(fresh)
             return fresh
         }()
-        guard let built = Self.images(from: noise) else { return nil }
+        let soft = keptSoft ?? Self.softNoise()
+        guard let built = Self.images(from: noise, soft: soft) else { return nil }
 
         lock.lock()
         // Гонка двух фоновых сборок безвредна: шум детерминирован, и обе
@@ -136,7 +154,9 @@ final class CloudTexture {
 
     /// Только для теста: забыть собранное.
     func forget() {
-        lock.lock(); images = nil; lock.unlock()
+        // Сырой шум НЕ забывается: он не зависит от темы, а стоит сотни
+        // миллисекунд. Забываются только перекрашенные картинки.
+        lock.lock(); images = nil; builtDark = nil; lock.unlock()
     }
 
     // MARK: - Шум
@@ -164,6 +184,33 @@ final class CloudTexture {
     static func sample(x: Int, y: Int) -> UInt8 {
         let v = value(u: Double(x) / Double(size), v: Double(y) / Double(size))
         return UInt8(max(0, min(255, (v * 255).rounded())))
+    }
+
+    /// Тайл из ДВУХ НИЖНИХ ОКТАВ — крупные пятна без мелкой ряби.
+    ///
+    /// Мелкие октавы и есть то «зерно», которое владелец увидел на улице:
+    /// четвёртая октава сидит на решётке 64×64, то есть комок в восемь
+    /// текселей. На дальнем зуме она полезна (тайл сам сотни километров), на
+    /// ближнем — только шум.
+    static func softNoise() -> [UInt8] {
+        var out = [UInt8](repeating: 0, count: size * size)
+        let amplitudes = Array(octaveAmplitudes.prefix(2))
+        let total = amplitudes.reduce(0, +)
+        for y in 0..<size {
+            let v = Double(y) / Double(size)
+            for x in 0..<size {
+                var sum = 0.0
+                var lattice = baseLattice
+                for (index, amplitude) in amplitudes.enumerated() {
+                    sum += amplitude * octave(u: Double(x) / Double(size), v: v,
+                                              lattice: lattice, index: index)
+                    lattice *= 2
+                }
+                let n = total > 0 ? sum / total : 0
+                out[y * size + x] = UInt8(max(0, min(255, (n * 255).rounded())))
+            }
+        }
+        return out
     }
 
     /// Весь тайл одним проходом.
@@ -217,12 +264,15 @@ final class CloudTexture {
     // MARK: - Картинки
 
     /// Обе картинки из одних байтов шума.
-    static func images(from noise: [UInt8]) -> Images? {
+    static func images(from noise: [UInt8], soft: [UInt8]? = nil) -> Images? {
         guard noise.count == size * size else { return nil }
+        let low = soft ?? softNoise()
         guard let density = tintedImage(from: noise, tint: FogVeilPainter.veilColorBottom,
                                         maxAlpha: cloudTopUp),
+              let softImage = tintedImage(from: low, tint: FogVeilPainter.veilColorBottom,
+                                          maxAlpha: cloudTopUp),
               let mask = alphaImage(from: noise, range: edgeKeepRange) else { return nil }
-        return Images(density: density, mask: mask)
+        return Images(density: density, soft: softImage, mask: mask)
     }
 
     /// Тон тумана с альфой по шуму: рисуется поверх залитой мглы обычным

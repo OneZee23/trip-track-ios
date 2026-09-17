@@ -212,8 +212,49 @@ enum FogVeilPainter {
     /// значит это не цена нашей отрисовки, а лаг конвейера MapKit, и
     /// рендерером он не чинится). Чем ярче вуаль, тем заметнее эта полоса, —
     /// поэтому светлее сюда идти нельзя без нового замера на устройстве.
-    static let veilColorTop = UIColor(red: 0x26/255, green: 0x2B/255, blue: 0x36/255, alpha: 1)
-    static let veilColorBottom = UIColor(red: 0x35/255, green: 0x3B/255, blue: 0x4A/255, alpha: 1)
+    /// Палитра мглы. Их ДВЕ, и это одно правило, а не две картинки.
+    ///
+    /// Экран тёмный — мгла тёмно-синяя, экран светлый — бледная дымка. Лист,
+    /// таб-бар и карточки и так идут за темой; мгла, оставшаяся ночной на
+    /// светлом экране, разрывала его на два мира (владелец на устройстве,
+    /// 17 сентября). Карта Apple под мглой в ОБОИХ случаях дневная — от неё
+    /// зависит полярность, а не тема.
+    struct Palette {
+        var top: UIColor
+        var bottom: UIColor
+        var haze: UIColor
+        var border: UIColor
+        var alpha: CGFloat
+        var opacityRange: ClosedRange<Double>
+        /// Тёмная ли мгла — по нему подписи выбирают себе цвет и обводку.
+        var isDark: Bool
+
+        static let night = Palette(
+            top: UIColor(red: 0x26/255, green: 0x2B/255, blue: 0x36/255, alpha: 1),
+            bottom: UIColor(red: 0x35/255, green: 0x3B/255, blue: 0x4A/255, alpha: 1),
+            haze: UIColor(red: 0x58/255, green: 0x64/255, blue: 0x87/255, alpha: 1),
+            border: UIColor(red: 0xE4/255, green: 0xDC/255, blue: 0xCF/255, alpha: 1),
+            alpha: 0.70, opacityRange: 0.62...0.78, isDark: true)
+
+        /// Бледная дымка светлой темы: тот же приём, вывернутый по светлоте.
+        static let mist = Palette(
+            top: UIColor(red: 0xE9/255, green: 0xEC/255, blue: 0xF2/255, alpha: 1),
+            bottom: UIColor(red: 0xDC/255, green: 0xE1/255, blue: 0xEA/255, alpha: 1),
+            haze: UIColor(red: 0xFA/255, green: 0xFB/255, blue: 0xFF/255, alpha: 1),
+            border: UIColor(red: 0x4A/255, green: 0x50/255, blue: 0x60/255, alpha: 1),
+            alpha: 0.72, opacityRange: 0.64...0.80, isDark: false)
+    }
+
+    /// Какая палитра сейчас. Пишет её экран (`ThemeManager`), читают кисть и
+    /// подписи; по умолчанию ночная — ею жил весь 0.7.0.
+    ///
+    /// Статикой, а не параметром через двадцать вызовов: кисть зовут и
+    /// рендерер MapKit, и растр, и постер, а тема на всех одна. Тесты
+    /// пришпиливают её на время прогона и возвращают обратно.
+    nonisolated(unsafe) static var palette: Palette = .night
+
+    static var veilColorTop: UIColor { palette.top }
+    static var veilColorBottom: UIColor { palette.bottom }
     /// Непрозрачность мглы — 0.70, и это «НОЧНАЯ КАРТА» (решение владельца
     /// 17 сентября).
     ///
@@ -230,12 +271,12 @@ enum FogVeilPainter {
     /// Выше 0.85 карта под мглой снова пропадает (см.
     /// `CloudTextureTests.testCloudTopUpLandsOnTheUpperBound`), ниже 0.55
     /// пропадает сама мгла.
-    static let veilAlpha: CGFloat = 0.70
+    static var veilAlpha: CGFloat { palette.alpha }
     /// Пятно дымки — чуть светлее и чуть синее заливки. Поднято вместе с
     /// рампой и в той же пропорции: на своей альфе (6–10 %) оно даёт те же
     /// несколько уровней над заливкой, что и раньше. Оставь его на месте — и
     /// дымка стала бы ТЕМНЕЕ поднятого тумана, то есть пятнами наоборот.
-    static let hazeColor = UIColor(red: 0x58/255, green: 0x64/255, blue: 0x87/255, alpha: 1)
+    static var hazeColor: UIColor { palette.haze }
 
     /// Как ложится объём на этот кусок мира.
     ///
@@ -416,7 +457,7 @@ enum FogVeilPainter {
 
     /// Тёплый светлый серый границы. Не белый: белая линия на мгле — самое
     /// яркое пятно экрана, и её видно раньше, чем то, ради чего карту открыли.
-    static let borderColor = UIColor(red: 0xE4/255, green: 0xDC/255, blue: 0xCF/255, alpha: 1)
+    static var borderColor: UIColor { palette.border }
     /// Только СТРАНЫ и только на дальнем уровне.
     ///
     /// Заливка посещённых регионов и контуры их границ были и ушли
@@ -694,10 +735,43 @@ enum FogVeilPainter {
         context.saveGState()
         context.clip(to: clip)
         context.setBlendMode(blend)
-        // Текстура растягивается в десятки раз; `.high` здесь платится
-        // миллисекундами на тайл ради разницы, которой на облаке нет.
+        // `.low`, а не `.default`: это по-прежнему сглаживание (тексели не
+        // видны прямоугольниками), но в шесть раз дешевле — постер на
+        // `.default` вырос с 64 мс до 428 при потолке 250. Зерно лечится не
+        // качеством фильтра, а периодом узора и низкими октавами.
         context.interpolationQuality = .low
-        context.draw(image, in: anchor, byTiling: true)
+        // `byTiling` заставляет CoreGraphics растеризовать ВЕСЬ узорный тайл,
+        // даже когда от него нужен кусок с ладонь. После того как период
+        // облаков вырос восьмикратно, это стало главной ценой постера (409 мс
+        // при потолке 250). Когда ячейка и так накрывает клип — рисуем её
+        // одним обычным `draw`, и CG отсекает лишнее сам.
+        if anchor.contains(clip) {
+            // Ячейка накрывает клип целиком — значит от текстуры нужен КУСОК,
+            // и растягивать её всю незачем. После восьмикратного периода
+            // «всю» — это картинка в десять тысяч точек стороной на окно в
+            // тысячу (постер: 403 мс при потолке 250); вырезанный кусок стоит
+            // ровно столько, сколько занимает на экране.
+            let texelsX = CGFloat(image.width) / anchor.width
+            let texelsY = CGFloat(image.height) / anchor.height
+            let crop = CGRect(
+                x: ((clip.minX - anchor.minX) * texelsX).rounded(.down) - 1,
+                y: ((clip.minY - anchor.minY) * texelsY).rounded(.down) - 1,
+                width: (clip.width * texelsX).rounded(.up) + 2,
+                height: (clip.height * texelsY).rounded(.up) + 2
+            ).intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            if crop.width >= 1, crop.height >= 1, let piece = image.cropping(to: crop) {
+                let box = CGRect(
+                    x: anchor.minX + crop.minX / texelsX,
+                    y: anchor.minY + crop.minY / texelsY,
+                    width: crop.width / texelsX,
+                    height: crop.height / texelsY)
+                context.draw(piece, in: box)
+            } else {
+                context.draw(image, in: anchor)
+            }
+        } else {
+            context.draw(image, in: anchor, byTiling: true)
+        }
         context.setBlendMode(.normal)
         context.restoreGState()
     }
@@ -866,7 +940,7 @@ enum FogVeilPainter {
         return UIColor(
             red: r0 + (r1 - r0) * k, green: g0 + (g1 - g0) * k,
             blue: b0 + (b1 - b0) * k,
-            alpha: CloudTexture.opacityRange.lowerBound
+            alpha: palette.opacityRange.lowerBound
                 + Double(veilAlphaSpread) * Double(k - 0.5) * 2
         )
     }
@@ -1191,9 +1265,24 @@ final class FogVeilRenderer: MKOverlayRenderer {
     ) -> FogVeilPainter.CloudLay? {
         guard let images = CloudTexture.shared.ready else { return nil }
         return FogVeilPainter.CloudLay(
-            world: mapRect, rect: rect, cell: hazeCell(for: lod),
-            density: images.density, mask: images.mask)
+            world: mapRect, rect: rect, cell: cloudCell(for: lod),
+            density: lod == .far ? images.density : images.soft,
+            mask: images.mask)
     }
+
+    /// Период облаков — ТОТ ЖЕ, что у дымки, и зерно лечится не им.
+    ///
+    /// Владелец на устройстве: мгла на улице и в городе читается мелким
+    /// ЗЕРНОМ, а не облаками. Первым делом период растянули восьмикратно — и
+    /// это оказалось и лишним, и дорогим: текстуру пришлось бы растягивать в
+    /// картинку в десять тысяч точек стороной, и постер вырос с 64 мс до 402
+    /// при потолке 250.
+    ///
+    /// Лечат зерно НИЗКИЕ ОКТАВЫ (`CloudTexture.softNoise`): две нижние сидят
+    /// на решётках 8 и 16, то есть их комок — это 32 текселя, около двухсот
+    /// экранных точек на масштабе улицы. Это уже облако, и период для него не
+    /// нужен вовсе.
+    static func cloudCell(for lod: RevealedLayer.LOD) -> Double { hazeCell(for: lod) }
 
     static func hazeCell(for lod: RevealedLayer.LOD) -> Double {
         switch lod {
