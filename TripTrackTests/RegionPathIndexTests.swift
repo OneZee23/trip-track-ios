@@ -15,10 +15,13 @@ final class RegionPathIndexTests: XCTestCase {
     /// гладкого квадрата их четыре и прореживать нечего. Бандл здесь не
     /// годится ещё и потому, что страны приезжают в него Задачей 1, а правило
     /// «дальний уровень прорежен» обязано держаться и до её слияния.
+    /// Синтетические контуры — только СТРАНЫ: регионов индекс больше не
+    /// носит вовсе (их заливка ушла с «ночной картой», а подписи берут
+    /// центроид и рамку прямо из атласа).
     private func outlines(teeth: Int = 600) -> [RegionOutline] {
         [
             RegionOutline(id: "XX", isCountry: true, rings: [boxRing()]),
-            RegionOutline(id: "XX-01", isCountry: false, rings: [sawRing(teeth: teeth)]),
+            RegionOutline(id: "YY", isCountry: true, rings: [sawRing(teeth: teeth)]),
         ]
     }
 
@@ -39,110 +42,24 @@ final class RegionPathIndexTests: XCTestCase {
         return saw
     }
 
-    // MARK: Уровни детали
-
-    /// На улице границ нет вовсе (их показывает карта Apple), на среднем —
-    /// регионы и страны, на дальнем — только страны.
-    func testWhatIsDrawnAtEachLevel() {
-        XCTAssertFalse(RegionPathIndex.draws(countries: .fine))
-        XCTAssertFalse(RegionPathIndex.draws(regions: .fine))
-        XCTAssertTrue(RegionPathIndex.draws(regions: .mid))
-        XCTAssertTrue(RegionPathIndex.draws(countries: .mid))
-        XCTAssertFalse(RegionPathIndex.draws(regions: .far))
-        XCTAssertTrue(RegionPathIndex.draws(countries: .far))
-    }
-
-    /// На `.fine` индекс не отдаёт ничего, даже собранный.
-    func testFineLevelHasNoBorders() {
+    /// Контуры живут ТОЛЬКО на дальнем уровне: ближе границы показывает сама
+    /// карта Apple, а с «ночной картой» она видна сквозь мглу — вторая линия
+    /// рядом с её собственной была бы просто вторым контуром.
+    func testOnlyFarCarriesOutlines() {
         let index = RegionPathIndex()
         index.prepare(outlines: outlines())
-        XCTAssertNil(index.paths(in: .world, lod: .fine, visited: []))
-        XCTAssertEqual(index.vertexCount(for: .fine), 0)
+        XCTAssertNil(index.paths(in: .world, lod: .fine))
+        XCTAssertNil(index.paths(in: .world, lod: .mid))
+        XCTAssertEqual(index.paths(in: .world, lod: .far)?.countryBorders.count, 2)
     }
 
-    /// Дальний уровень ПРОРЕЖЕН: на нём контур страны шириной в полтора
-    /// экранных пикселя не стоит своих тысяч вершин.
-    func testFarLevelIsDecimated() {
-        // Одна страна с частой пилой по краю — иначе сравнивались бы не
-        // уровни, а состав: регионов на дальнем нет вовсе.
-        let index = RegionPathIndex()
-        index.prepare(outlines: [
-            RegionOutline(id: "YY", isCountry: true, rings: [sawRing(teeth: 600)]),
-        ])
-        let mid = index.vertexCount(for: .mid)
-        let far = index.vertexCount(for: .far)
-        print("[regions] вершин у одной страны: .mid \(mid), .far \(far)")
-        XCTAssertGreaterThan(far, 0)
-        XCTAssertLessThan(far, mid / 2, "дальний уровень обязан быть легче среднего")
-    }
-
-    /// Но прореживание НЕ СЪЕДАЕТ маленький контур: у страны-прямоугольника
-    /// четыре вершины, и шаг в три оставил бы от неё отрезок.
-    func testDecimationKeepsTinyOutlinesWhole() {
-        let index = RegionPathIndex()
-        index.prepare(outlines: [
-            RegionOutline(id: "XX", isCountry: true, rings: [boxRing()]),
-        ])
-        XCTAssertEqual(index.vertexCount(for: .far), 4)
-    }
-
-    /// На дальнем уровне у региона есть ЗАЛИВКА, но нет КОНТУРА.
-    ///
-    /// Возражение против регионов на `.far` — «шестьсот контуров превращаются
-    /// в сетку»; к заливке оно не относится: посещённых единицы, линий они не
-    /// добавляют, а отвечают ровно на тот вопрос, ради которого карту открыли
-    /// с высоты. До фикс-волны 5 заливки здесь не было, и увидеть её можно
-    /// было только в полосе `.mid`, которую камера проходит за один тап.
-    func testFarLevelFillsVisitedRegionsButTracesOnlyCountries() {
-        let index = RegionPathIndex()
-        index.prepare(outlines: outlines())
-        guard let far = index.paths(in: .world, lod: .far, visited: ["XX-01"]) else {
-            return XCTFail("страны обязаны быть на дальнем уровне")
-        }
-        XCTAssertTrue(far.regionBorders.isEmpty, "контуров регионов на `.far` быть не должно")
-        XCTAssertEqual(far.fills.count, 1, "посещённый регион обязан быть залит и здесь")
-        XCTAssertEqual(far.countryBorders.count, 1)
-
-        // Непосещённый на `.far` не даёт вообще ничего — ни линии, ни пятна.
-        guard let bare = index.paths(in: .world, lod: .far, visited: []) else {
-            return XCTFail("страны обязаны остаться")
-        }
-        XCTAssertTrue(bare.fills.isEmpty)
-        XCTAssertTrue(bare.regionBorders.isEmpty)
-    }
-
-    /// Заливку получает ТОЛЬКО посещённый регион, контур — каждый.
-    func testOnlyVisitedRegionsAreFilled() {
-        let index = RegionPathIndex()
-        index.prepare(outlines: outlines())
-        guard let empty = index.paths(in: .world, lod: .mid, visited: []),
-              let visited = index.paths(in: .world, lod: .mid, visited: ["XX-01"])
-        else { return XCTFail("средний уровень обязан отдать контуры") }
-        XCTAssertTrue(empty.fills.isEmpty)
-        XCTAssertEqual(empty.regionBorders.count, 1, "контур есть и у непосещённого")
-        XCTAssertEqual(visited.fills.count, 1)
-    }
-
-    /// Кусок в стороне от всех контуров не получает ничего: `nil`, а не пустой
-    /// набор путей, — кисти это разные вещи только по цене, но платится она на
-    /// каждом тайле.
     func testPieceFarFromEveryOutlineGetsNothing() {
         let index = RegionPathIndex()
         index.prepare(outlines: outlines())
         let pacific = MKMapRect(
             origin: MKMapPoint(CLLocationCoordinate2D(latitude: -30, longitude: -150)),
             size: MKMapSize(width: 10_000, height: 10_000))
-        XCTAssertNil(index.paths(in: pacific, lod: .mid, visited: []))
-    }
-
-    /// Кольцо через антимеридиан не рисуется: в плоском Меркаторе его точки
-    /// разъезжаются на полмира, и контур лёг бы полосой через глобус.
-    func testRingAcrossTheAntimeridianIsDropped() {
-        let index = RegionPathIndex()
-        index.prepare(outlines: [RegionOutline(
-            id: "RU-CHU", isCountry: false,
-            rings: [[66, 179, 66, -179, 68, -179, 68, 179]])])
-        XCTAssertEqual(index.vertexCount(for: .mid), 0)
+        XCTAssertNil(index.paths(in: pacific, lod: .far))
     }
 
     // MARK: Бюджет и потоки
@@ -191,52 +108,10 @@ final class RegionPathIndexTests: XCTestCase {
 
         let index = RegionPathIndex()
         index.prepare(outlines: countries)
-        guard let far = index.paths(in: .world, lod: .far, visited: []) else {
+        guard let far = index.paths(in: .world, lod: .far) else {
             return XCTFail("на дальнем уровне страны обязаны рисоваться")
         }
         XCTAssertFalse(far.countryBorders.isEmpty)
-        XCTAssertTrue(far.regionBorders.isEmpty, "регионов на дальнем уровне нет")
-    }
-
-    /// Демо-сид кладёт границу регионов В КАДР — иначе на симуляторе контуры
-    /// проверять не на чем.
-    ///
-    /// Всё остальное открытое сида лежит глубоко внутри одного региона, и на
-    /// любом масштабе, вмещающем его, ближайшая граница остаётся за краем
-    /// экрана: кадр «Атласа» показывал туман с коридорами и ни одной границы,
-    /// хотя рисовались они правильно. Короткий выезд из Краснодара за Кубань
-    /// это чинит: контур Адыгеи проходит по самому городу.
-    ///
-    /// Проверяется именно «вершина контура внутри кадра», а НЕ «концы выезда
-    /// в разных регионах»: в бандле кольцо Краснодарского края не прорезано
-    /// вокруг Адыгеи, поэтому `region(containing:)` отвечает `RU-KDA` по обе
-    /// стороны границы. Рисованию это не мешает — контур Адыгеи рисуется
-    /// своим кольцом, — а вот заливку «посещённого» получает край, не
-    /// республика. Геометрия бандла не моя (Задача 1), и тест говорит ровно
-    /// то, что ему видно.
-    func testDemoSeedPutsARegionBorderInFrame() async {
-        let atlas = RegionAtlas.shared
-        await atlas.loadIfNeeded()
-        let points = DebugMapSeed.borderCrossingWaypoints
-        let minLat = points.map(\.0).min()! - 0.05, maxLat = points.map(\.0).max()! + 0.05
-        let minLon = points.map(\.1).min()! - 0.05, maxLon = points.map(\.1).max()! + 0.05
-
-        var inFrame: [String: Int] = [:]
-        for region in atlas.regions {
-            for ring in region.rings {
-                for i in 0..<(ring.count / 2) {
-                    let la = ring[2 * i], lo = ring[2 * i + 1]
-                    guard la > minLat, la < maxLat, lo > minLon, lo < maxLon else { continue }
-                    inFrame[region.id, default: 0] += 1
-                }
-            }
-        }
-        print("[regions] контуров в кадре выезда: \(inFrame)")
-        XCTAssertNotNil(inFrame["RU-AD"],
-                        "контур Адыгеи обязан проходить через кадр выезда — иначе границ на "
-                            + "кадрах «Атласа» не увидеть")
-        XCTAssertGreaterThanOrEqual(inFrame["RU-AD"] ?? 0, 3,
-                                    "одной вершины мало: в кадре должен быть ОТРЕЗОК границы")
     }
 
     /// Анклав побеждает обёртку: Майкоп — это Адыгея, а не Краснодарский край.
@@ -291,9 +166,8 @@ final class RegionPathIndexTests: XCTestCase {
             DispatchQueue.global(qos: .userInitiated).async {
                 for _ in 0..<400 {
                     // Либо ничего (ещё не собрано), либо ЦЕЛЫЙ набор.
-                    if let paths = index.paths(in: .world, lod: .mid, visited: ["XX-01"]) {
-                        XCTAssertEqual(paths.regionBorders.count, 1)
-                        XCTAssertEqual(paths.countryBorders.count, 1)
+                    if let paths = index.paths(in: .world, lod: .far) {
+                        XCTAssertEqual(paths.countryBorders.count, 2)
                     }
                 }
                 reading.fulfill()

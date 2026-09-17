@@ -127,7 +127,7 @@ final class RegionLabelView: MKAnnotationView {
     /// Тот же тёплый светлый серый, которым в `FogVeilPainter` обведены
     /// границы регионов и стран — подпись и линия обязаны читаться как один
     /// язык, а не как два разных слоя, положенных друг на друга.
-    private static let warmColor = FogVeilPainter.regionBorderColor
+    private static let warmColor = FogVeilPainter.borderColor
     /// Посещённый регион (всегда) и посещённая страна читаются на треть
     /// ярче непосещённой — той на мировом зуме ещё только предстоит стать
     /// целью, а не памятью.

@@ -231,7 +231,11 @@ final class FogVeilView: UIView {
         // которые вместе накрывают экран целиком.
         backgroundColor = .clear
         layer.masksToBounds = true
-        letterbox.backgroundColor = FogVeilPainter.veilColorBottom.cgColor
+        // Ровная мгла за краем растра — ТОЙ ЖЕ прозрачности, что и сам растр
+        // («ночная карта»): непрозрачная подложка выдавала бы себя тёмной
+        // рамкой вокруг картинки, и настоящая карта за краем пропадала бы.
+        letterbox.backgroundColor = FogVeilPainter.veilColorBottom
+            .withAlphaComponent(FogVeilPainter.veilAlpha).cgColor
         letterbox.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
         letterboxMask.fillRule = .evenOdd
         letterboxMask.fillColor = UIColor.white.cgColor
@@ -1099,28 +1103,54 @@ enum FogVeilBitmap {
         let paths = chunks?
             .visiblePaths(in: band.insetBy(dx: -reach, dy: -reach), zoomScale: zoomScale) ?? []
 
+        // Сглаживание выключается на всю заливку тайлов: у прямоугольного
+        // клипа ему нечего сглаживать, а из-за него соседи и не сходились.
+        context.setShouldAntialias(false)
         let tileW = whole.width / Double(grid.cols)
         let tileH = whole.height / Double(grid.rows)
+        // Границы тайлов ПРИБИВАЮТСЯ К ПИКСЕЛЮ, и соседи берут их из одного
+        // массива. Без этого правый край одного тайла и левый край другого
+        // округлялись каждый сам: где-то пиксель оставался незакрашенным
+        // (мгла светлее), где-то закрашивался дважды (темнее). На
+        // непрозрачной вуали второго не было видно вовсе, а первое лечили
+        // нахлёстом; с «ночной картой» видно оба, и лечится это только общей
+        // границей.
+        func edges(from origin: Double, step: Double, count: Int) -> [Double] {
+            (0...count).map { i in
+                let exact = origin + Double(i) * step
+                return ((exact - origin) * pixelsPerMapPoint).rounded()
+                    / pixelsPerMapPoint + origin
+            }
+        }
+        let columns = edges(from: whole.minX, step: tileW, count: grid.cols)
+        let rows = edges(from: whole.minY, step: tileH, count: grid.rows)
         var tiles = 0
         let layers = paths.isEmpty ? 0 : 1
         if layers == 1 { context.beginTransparencyLayer(auxiliaryInfo: nil) }
         for col in 0..<grid.cols {
             for row in 0..<grid.rows {
-                let tile = MKMapRect(x: whole.minX + Double(col) * tileW,
-                                     y: whole.minY + Double(row) * tileH,
-                                     width: tileW, height: tileH)
+                // Прямоугольник ДЛЯ РИСОВАНИЯ берётся из прибитых к пикселю
+                // границ, а рампа глубины и сеялка дымки считаются по нему же:
+                // иначе узор поехал бы относительно мира на доли пикселя.
+                let tile = MKMapRect(x: columns[col], y: rows[row],
+                                     width: columns[col + 1] - columns[col],
+                                     height: rows[row + 1] - rows[row])
                 guard tile.intersects(band) else { continue }
                 tiles += 1
-                // Клип тайла сглаживается, и два соседа оставляют на общей
-                // границе по половине пикселя — линию, сквозь которую видно
-                // карту Apple. Полпикселя припуска в каждую сторону: сосед
-                // накрывает шов своей же заливкой, а рампа глубины на этом
-                // пикселе меняется меньше чем на уровень.
-                let half = 0.5 / pixelsPerMapPoint
+                // Тайл рисуется РОВНО по своим границам, без припуска.
+                //
+                // Припуск в полпикселя стоял здесь, пока мгла была
+                // непрозрачной: сглаженный клип оставлял на общей границе
+                // волосяную щель в карту, и сосед закрывал её своей заливкой.
+                // На полупрозрачной мгле («ночная карта») та же перекрышка
+                // складывает две альфы и даёт ТЁМНУЮ линию по всем стыкам —
+                // шов из дыры превратился в решётку. Поэтому щель закрывается
+                // не нахлёстом, а выключенным сглаживанием: прямоугольные
+                // клипы соседей сходятся тогда пиксель в пиксель.
                 FogVeilPainter.fillAndHaze(
                     context: context,
-                    tile: CGRect(x: tile.minX - half, y: tile.minY - half,
-                                 width: tile.width + half * 2, height: tile.height + half * 2),
+                    tile: CGRect(x: tile.minX, y: tile.minY,
+                                 width: tile.width, height: tile.height),
                     depth: FogVeilRenderer.depth(for: tile, lod: lod, haze: chunks != nil),
                     // Облака кладутся ПО СВОЕМУ ТАЙЛУ, ровно как у плиточного
                     // рендерера: узор привязан к миру, поэтому картинка от
@@ -1141,11 +1171,12 @@ enum FogVeilBitmap {
         // Границы — ОДИН раз на полосу (не на тайл): контуры приходят целыми
         // и клипа по тайлу не терпят, а внутри открытого их всё равно
         // прожигает то же перо, что и туман.
-        if let paths = regions?.paths(in: band, lod: lod, visited: visited) {
+        if let paths = regions?.paths(in: band, lod: lod) {
             FogVeilPainter.paintRegions(
                 context: context,
                 regions: FogVeilPainter.RegionPaint(paths: paths, zoomScale: zoomScale))
         }
+        context.setShouldAntialias(true)
         if layers == 1 {
             FogVeilPainter.punch(
                 context: context, corridors: paths, corridorWidth: width, passes: passes,

@@ -43,14 +43,25 @@ final class CloudTexture {
     /// человек делится, разъезжается с тем, что он видит.
     static let seed: UInt64 = 0x7472_6970_7472_6B31
 
-    /// Множитель плотности заливки. Единица — туман как есть, нижняя граница —
-    /// самое плотное место облака.
+    /// Непрозрачность тумана, которую лепит облако.
     ///
-    /// 0.70. Стояло 0.86 — и это было верно ровно для почти чёрной вуали, на
-    /// которой размах в 14 % упирался нижним краем в ноль. Тон тумана поднят
-    /// (`FogVeilPainter.veilColorTop`), и теперь 30 % размаха — это разница в
-    /// полтора десятка уровней RGB, то есть видимые комки, а не догадка.
-    static let densityRange: ClosedRange<Double> = 0.70...1.0
+    /// С «ночной карты» (17 сентября) туман ПОЛУПРОЗРАЧЕН, и облака лепят не
+    /// плотность цвета, а плотность самой мглы: где гуще — настоящая карта
+    /// проступает слабее. Владелец на устройстве про сплошную заливку: «вся
+    /// настоящесть реальной карты ушла, это игровая доска», — поэтому нижняя
+    /// граница тут высокая: даже в самом густом месте под мглой видно дороги
+    /// и берег.
+    static let opacityRange: ClosedRange<Double> = 0.62...0.78
+
+    /// Сколько непрозрачности облако ДОБАВЛЯЕТ поверх нижней границы.
+    ///
+    /// Туман заливается на `opacityRange.lowerBound`, а сверху ложится сама
+    /// текстура тем же тоном: `a + (1 - a) * x`. Отсюда и число — доля, при
+    /// которой самое густое облако доводит мглу ровно до верхней границы.
+    static var cloudTopUp: Double {
+        let low = opacityRange.lowerBound, high = opacityRange.upperBound
+        return low >= 1 ? 0 : (high - low) / (1 - low)
+    }
 
     /// Сколько прожигания остаётся в самом «плотном» месте перьевой ленты.
     ///
@@ -73,6 +84,8 @@ final class CloudTexture {
     /// умножения (поэтому непрозрачная серая), `mask` — на перьевую ленту
     /// коридора в режиме `.destinationIn` (поэтому важен её АЛЬФА-канал).
     struct Images {
+        /// Тон тумана с переменной альфой: ложится ПОВЕРХ залитой мглы и
+        /// догущает её до `opacityRange.upperBound`.
         let density: CGImage
         let mask: CGImage
     }
@@ -206,28 +219,39 @@ final class CloudTexture {
     /// Обе картинки из одних байтов шума.
     static func images(from noise: [UInt8]) -> Images? {
         guard noise.count == size * size else { return nil }
-        guard let density = grayImage(from: noise, range: densityRange),
+        guard let density = tintedImage(from: noise, tint: FogVeilPainter.veilColorBottom,
+                                        maxAlpha: cloudTopUp),
               let mask = alphaImage(from: noise, range: edgeKeepRange) else { return nil }
         return Images(density: density, mask: mask)
     }
 
-    /// Непрозрачный серый: умножение на него и есть «множитель плотности».
-    private static func grayImage(from noise: [UInt8], range: ClosedRange<Double>) -> CGImage? {
-        let span = range.upperBound - range.lowerBound
-        var bytes = [UInt8](repeating: 0, count: size * size)
+    /// Тон тумана с альфой по шуму: рисуется поверх залитой мглы обычным
+    /// режимом и догущает её. Раньше здесь был непрозрачный серый под
+    /// умножение — умножать стало нечего, когда туман перестал быть
+    /// непрозрачным.
+    private static func tintedImage(
+        from noise: [UInt8], tint: UIColor, maxAlpha: Double
+    ) -> CGImage? {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        tint.getRed(&r, green: &g, blue: &b, alpha: &a)
+        var bytes = [UInt8](repeating: 0, count: size * size * 4)
         for i in 0..<noise.count {
-            let level = range.lowerBound + span * Double(noise[i]) / 255
-            bytes[i] = UInt8(max(0, min(255, (level * 255).rounded())))
+            let alpha = maxAlpha * Double(noise[i]) / 255
+            // Премультиплицированный: каналы умножены на альфу.
+            bytes[i * 4] = UInt8(max(0, min(255, (Double(r) * alpha * 255).rounded())))
+            bytes[i * 4 + 1] = UInt8(max(0, min(255, (Double(g) * alpha * 255).rounded())))
+            bytes[i * 4 + 2] = UInt8(max(0, min(255, (Double(b) * alpha * 255).rounded())))
+            bytes[i * 4 + 3] = UInt8(max(0, min(255, (alpha * 255).rounded())))
         }
         guard let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
         return CGImage(
-            width: size, height: size, bitsPerComponent: 8, bitsPerPixel: 8,
-            bytesPerRow: size, space: CGColorSpaceCreateDeviceGray(),
-            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+            width: size, height: size, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: size * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
             provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
 
-    /// Чёрный с переменной альфой: `.destinationIn` оставляет от прожжённого
+    /// Чёрный с переменной альфой:    /// Чёрный с переменной альфой: `.destinationIn` оставляет от прожжённого
     /// ровно её долю.
     private static func alphaImage(from noise: [UInt8], range: ClosedRange<Double>) -> CGImage? {
         let span = range.upperBound - range.lowerBound
@@ -242,6 +266,16 @@ final class CloudTexture {
             width: size, height: size, bitsPerComponent: 8, bitsPerPixel: 32,
             bytesPerRow: size * 4, space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+
+    /// Серый PNG для КЭША — только чтобы сохранить сам шум на диск.
+    private static func grayCache(from noise: [UInt8]) -> CGImage? {
+        guard let provider = CGDataProvider(data: Data(noise) as CFData) else { return nil }
+        return CGImage(
+            width: size, height: size, bitsPerComponent: 8, bitsPerPixel: 8,
+            bytesPerRow: size, space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
             provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
 
@@ -275,7 +309,7 @@ final class CloudTexture {
     }
 
     static func writeCache(_ noise: [UInt8]) {
-        guard let url = cacheURL, let image = grayImage(from: noise, range: 0...1),
+        guard let url = cacheURL, let image = grayCache(from: noise),
               let data = UIImage(cgImage: image).pngData() else { return }
         do {
             try data.write(to: url, options: .atomic)

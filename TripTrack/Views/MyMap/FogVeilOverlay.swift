@@ -214,10 +214,23 @@ enum FogVeilPainter {
     /// поэтому светлее сюда идти нельзя без нового замера на устройстве.
     static let veilColorTop = UIColor(red: 0x26/255, green: 0x2B/255, blue: 0x36/255, alpha: 1)
     static let veilColorBottom = UIColor(red: 0x35/255, green: 0x3B/255, blue: 0x4A/255, alpha: 1)
-    /// Непрозрачна ВСЕГДА и на всех масштабах. До 0.7.0 здесь стояло 0.70, и
-    /// тридцать процентов карты Apple было видно всегда — это затемнение, а не
-    /// сокрытие.
-    static let veilAlpha: CGFloat = 1.0
+    /// Непрозрачность мглы — 0.70, и это «НОЧНАЯ КАРТА» (решение владельца
+    /// 17 сентября).
+    ///
+    /// Весь 0.7.0 туман был непрозрачным: мир закрыт, открыто ровно то, где
+    /// был. На устройстве это кончилось приговором — «вся настоящесть
+    /// реальной карты ушла, это игровая доска»: под сплошной мглой не видно
+    /// ни берега, ни городов, ни дорог, и карта перестаёт быть картой.
+    ///
+    /// Теперь настоящая карта видна ВЕЗДЕ, просто непройденное лежит под
+    /// синеватой ночью, а пройденное — при полном свете. Открытое от этого не
+    /// стало слабее: контраст между «под мглой» и «в коридоре» никуда не
+    /// делся, он просто перестал быть контрастом с пустотой.
+    ///
+    /// Выше 0.85 карта под мглой снова пропадает (см.
+    /// `CloudTextureTests.testCloudTopUpLandsOnTheUpperBound`), ниже 0.55
+    /// пропадает сама мгла.
+    static let veilAlpha: CGFloat = 0.70
     /// Пятно дымки — чуть светлее и чуть синее заливки. Поднято вместе с
     /// рампой и в той же пропорции: на своей альфе (6–10 %) оно даёт те же
     /// несколько уровней над заливкой, что и раньше. Оставь его на месте — и
@@ -399,56 +412,36 @@ enum FogVeilPainter {
         var mask: CGImage
     }
 
-    // MARK: Границы и заливка регионов
+    // MARK: Границы стран
 
-    /// Заливка посещённого региона — ОХРА (#D9A441), а не терракота бренда.
-    ///
-    /// `AppTheme.accent` (#C2452B) стоял здесь до фикс-волны 5 и на тёмном
-    /// тумане читался кирпично-красным, то есть «опасная зона», а не «здесь
-    /// я был». Тон у заливки одна работа: сказать «тёплый пергамент, который
-    /// уже проявили». Охра её делает, а заодно перестаёт спорить с янтарной
-    /// жилкой внутри коридора — та ярче и светлее, и на охре она остаётся
-    /// первой по яркости, как и должна.
-    static let visitedFillColor = UIColor(red: 0xD9/255, green: 0xA4/255, blue: 0x41/255, alpha: 1)
-    /// 0.30. Стояло 0.16 — столько спека 16 сентября назначала для почти
-    /// чёрной вуали; на поднятом тоне это по-прежнему было невидимо, и
-    /// владелец увидел ровно то же самое. Выше 0.30 заливка начинает спорить с
-    /// коридорами за внимание, а открытое — это коридоры, не регионы.
-    static let visitedFillAlpha: CGFloat = 0.28
-    /// Мягкий край ВНУТРЬ, 2 pt: без него заливка кончается математической
-    /// линией, и регион читается как наклейка, а не как подсвеченная земля.
-    /// Держится чуть ниже самой заливки — это тень внутрь, а не второй контур.
-    static let visitedEdgeAlpha: CGFloat = 0.26  // тот же тон, чуть тише заливки
-    static let visitedEdgeWidthPoints: CGFloat = 2
-
-    /// Тёплый светлый серый границ. Не белый: белая линия на вуали — самое
+    /// Тёплый светлый серый границы. Не белый: белая линия на мгле — самое
     /// яркое пятно экрана, и её видно раньше, чем то, ради чего карту открыли.
-    static let regionBorderColor = UIColor(red: 0xE4/255, green: 0xDC/255, blue: 0xCF/255, alpha: 1)
-    static let regionBorderWidthPoints: CGFloat = 0.8
-    /// 0.55 вместо 0.35: контур в 0.8 pt на альфе 0.35 — это линия, которую на
-    /// снимке приходится искать, а не видеть.
-    static let regionBorderAlpha: CGFloat = 0.55
-    /// Страна — толще и заметнее региона: на дальнем уровне это единственное,
-    /// что вообще делит мир.
-    static let countryBorderWidthPoints: CGFloat = 1.5
-    static let countryBorderAlpha: CGFloat = 0.75
+    static let borderColor = UIColor(red: 0xE4/255, green: 0xDC/255, blue: 0xCF/255, alpha: 1)
+    /// Только СТРАНЫ и только на дальнем уровне.
+    ///
+    /// Заливка посещённых регионов и контуры их границ были и ушли
+    /// («ночная карта», 17 сентября): под ними пропадала сама карта — «вся
+    /// настоящесть реальной карты ушла, это игровая доска». Ближе страны
+    /// тоже не рисуются: там границы показывает сама карта Apple, которая
+    /// теперь видна сквозь мглу.
+    static let countryBorderWidthPoints: CGFloat = 1
+    static let countryBorderAlpha: CGFloat = 0.45
 
-    /// Что рисовать поверх тумана и под коридорами.
+    /// Что рисовать поверх мглы и под коридорами.
     struct RegionPaint {
         var paths: RegionPaths
         var zoomScale: MKZoomScale
         /// Из координат ИНДЕКСА (точки карты) в координаты контекста. У растра
         /// и постера тождественное; у плиточного рендерера — то, что делает
-        /// `point(for:)`. Индекс при этом один на всех: пересобирать сорок
-        /// тысяч вершин ради смещения системы координат незачем.
+        /// `point(for:)`.
         var transform: CGAffineTransform = .identity
     }
 
-    /// Заливка посещённых регионов и контуры границ.
+    /// Контуры стран.
     ///
-    /// Зовётся ПОСЛЕ заливки тумана и ДО коридоров: внутри открытого границы
-    /// прожигает то же перо, и там человек видит границы Apple, а снаружи —
-    /// наши. Двойных линий не остаётся нигде.
+    /// Зовётся ПОСЛЕ заливки мглы и ДО коридоров: внутри открытого линию
+    /// прожигает то же перо, и там человек видит границу Apple, а снаружи —
+    /// нашу. Двойных линий не остаётся нигде.
     static func paintRegions(context: CGContext, regions: RegionPaint?) {
         guard let regions, !regions.paths.isEmpty, regions.zoomScale > 0 else { return }
         let scale = CGFloat(regions.zoomScale) * regions.transform.a
@@ -460,66 +453,12 @@ enum FogVeilPainter {
         context.setLineJoin(.round)
         context.setLineCap(.round)
         context.setLineDash(phase: 0, lengths: [])
-
-        let fills = regions.paths.fills
-        if !fills.isEmpty {
-            // Каждый регион — СВОЙ путь, и заливаются они по одному.
-            //
-            // Одним общим путём с правилом чётное-нечётное нельзя: Адыгея
-            // лежит ЦЕЛИКОМ внутри Краснодарского края, и XOR превратил бы
-            // посещённую республику в дырку посреди залитого края — то есть
-            // «здесь я был» читалось бы как «здесь меня не было». Внутри
-            // ОДНОГО региона XOR по-прежнему верен: кольца-бублики приезжают
-            // из атласа разрезанными.
-            //
-            // Альфа — на слое прозрачности, а не на цвете: у вложенных
-            // регионов заливки перекрываются, и на цвете они складывались бы
-            // в пятно вдвое плотнее соседнего.
-            context.saveGState()
-            context.setAlpha(visitedFillAlpha)
-            context.beginTransparencyLayer(auxiliaryInfo: nil)
-            context.setFillColor(visitedFillColor.cgColor)
-            for path in fills {
-                context.beginPath()
-                context.addPath(path)
-                context.fillPath(using: .evenOdd)
-            }
-            // Край внутрь: тот же контур, обведённый вдвое шире и обрезанный
-            // по самому себе, — наружу не выходит ни точки.
-            context.setStrokeColor(
-                visitedFillColor.withAlphaComponent(visitedEdgeAlpha / visitedFillAlpha).cgColor)
-            context.setLineWidth(visitedEdgeWidthPoints * 2 / scale)
-            for path in fills {
-                context.saveGState()
-                context.beginPath()
-                context.addPath(path)
-                context.clip(using: .evenOdd)
-                context.beginPath()
-                context.addPath(path)
-                context.strokePath()
-                context.restoreGState()
-            }
-            context.endTransparencyLayer()
-            context.setAlpha(1)
-            context.restoreGState()
-        }
-
-        strokeBorders(context: context, paths: regions.paths.regionBorders,
-                      width: regionBorderWidthPoints / scale, alpha: regionBorderAlpha)
-        strokeBorders(context: context, paths: regions.paths.countryBorders,
-                      width: countryBorderWidthPoints / scale, alpha: countryBorderAlpha)
-        context.restoreGState()
-    }
-
-    private static func strokeBorders(
-        context: CGContext, paths: [CGPath], width: CGFloat, alpha: CGFloat
-    ) {
-        guard !paths.isEmpty else { return }
         context.beginPath()
-        paths.forEach(context.addPath)
-        context.setLineWidth(width)
-        context.setStrokeColor(regionBorderColor.withAlphaComponent(alpha).cgColor)
+        regions.paths.countryBorders.forEach(context.addPath)
+        context.setLineWidth(countryBorderWidthPoints / scale)
+        context.setStrokeColor(borderColor.withAlphaComponent(countryBorderAlpha).cgColor)
         context.strokePath()
+        context.restoreGState()
     }
 
     /// Доля полуширины коридора, которую модулирует текстура облаков.
@@ -601,10 +540,11 @@ enum FogVeilPainter {
     ) {
         fill(context: context, rect: tile, depth: depth)
         if let clouds {
-            // Умножением, а не подложкой поверх: облака — это НЕРОВНОСТИ
-            // плотности того же тумана, и заливка с альфой светила бы своим
-            // цветом сквозь рампу глубины.
-            lay(image: clouds.density, of: clouds, in: context, clip: tile, blend: .multiply)
+            // ПОВЕРХ обычным режимом, а не умножением: умножать стало нечего,
+            // когда туман перестал быть непрозрачным. Текстура несёт тот же
+            // тон и догущает мглу с нижней границы до верхней — где облако
+            // гуще, настоящая карта проступает слабее.
+            lay(image: clouds.density, of: clouds, in: context, clip: tile, blend: .normal)
         }
     }
 
@@ -911,6 +851,12 @@ enum FogVeilPainter {
         )
     }
 
+    /// Рампа глубины живёт теперь в ПРОЗРАЧНОСТИ, а не только в цвете: форма
+    /// у неё та же (`FogVeilRenderer.depth`), но верх и низ куска отличаются
+    /// и плотностью мглы. На непрозрачной вуали объём давал только цвет, на
+    /// полупрозрачной его даёт то, насколько сильно проступает карта.
+    static let veilAlphaSpread: CGFloat = 0.04
+
     private static func ramp(_ t: CGFloat) -> UIColor {
         let k = min(1, max(0, t))
         var r0: CGFloat = 0, g0: CGFloat = 0, b0: CGFloat = 0, a0: CGFloat = 0
@@ -919,7 +865,9 @@ enum FogVeilPainter {
         veilColorBottom.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
         return UIColor(
             red: r0 + (r1 - r0) * k, green: g0 + (g1 - g0) * k,
-            blue: b0 + (b1 - b0) * k, alpha: veilAlpha
+            blue: b0 + (b1 - b0) * k,
+            alpha: CloudTexture.opacityRange.lowerBound
+                + Double(veilAlphaSpread) * Double(k - 0.5) * 2
         )
     }
 }
@@ -1329,8 +1277,7 @@ final class FogVeilRenderer: MKOverlayRenderer {
         in mapRect: MKMapRect, lod: RevealedLayer.LOD, zoomScale: MKZoomScale
     ) -> FogVeilPainter.RegionPaint? {
         guard veil.showsRegions,
-              let paths = veil.regionIndex.paths(
-                in: mapRect, lod: lod, visited: veil.visitedRegions)
+              let paths = veil.regionIndex.paths(in: mapRect, lod: lod)
         else { return nil }
         return FogVeilPainter.RegionPaint(
             paths: paths, zoomScale: zoomScale, transform: regionTransform)

@@ -174,9 +174,14 @@ final class MapRenderCostTests: XCTestCase {
             let span = 200 / Double(zoom)
             let empty = tile(at: CLLocationCoordinate2D(latitude: 53.0, longitude: 45.0), span: span)
             let alphas = Self.alphaColumn(renderer, empty, zoom: zoom)
-            XCTAssertEqual(
-                alphas.min() ?? 0, 255,
-                "на зуме \(zoom) в тумане есть просвет — вуаль не непрозрачна")
+            // Мгла полупрозрачна («ночная карта»), и проверяется теперь не
+            // «непрозрачна», а «ОДНОРОДНА»: просвет — это пиксель, где её
+            // заметно меньше, чем у соседей, а не пиксель без неё.
+            let low = alphas.min() ?? 0, high = alphas.max() ?? 0
+            XCTAssertGreaterThan(Int(low), 130,
+                                 "на зуме \(zoom) в мгле есть просвет")
+            XCTAssertLessThanOrEqual(Int(high) - Int(low), 60,
+                                     "на зуме \(zoom) мгла рвётся полосами")
         }
     }
 
@@ -188,8 +193,13 @@ final class MapRenderCostTests: XCTestCase {
         let zoom: MKZoomScale = 4e-3
         let empty = tile(at: CLLocationCoordinate2D(latitude: 53.0, longitude: 45.0),
                          span: 200 / Double(zoom))
-        let alphas = Set(Self.alphaColumn(renderer, empty, zoom: zoom))
-        XCTAssertEqual(alphas, [255], "прочищенного в пустом тайле быть не может")
+        let alphas = Self.alphaColumn(renderer, empty, zoom: zoom)
+        // «Мгла всюду», а не «альфа ровно 255»: с «ночной картой» она
+        // полупрозрачна и по построению гуляет (рампа глубины и облака живут
+        // теперь в прозрачности). Прочищенное от этого отличается не на
+        // уровень, а на всю глубину — перо снимает мглу в ноль.
+        XCTAssertGreaterThan(Int(alphas.min() ?? 0), 130,
+                             "прочищенного в пустом тайле быть не может")
     }
 
     /// Альфа по вертикали через середину тайла.

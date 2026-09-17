@@ -19,20 +19,14 @@ struct RegionOutline {
 }
 
 extension RegionOutline {
-    /// Регионы атласа — те же кольца, которыми считается попадание. Одна
-    /// геометрия на две работы нарочно: заливка посещённого обязана совпасть с
-    /// границей, по которой километры этому региону и приписаны.
-    static func regions(from atlas: RegionAtlas) -> [RegionOutline] {
-        atlas.regions.map { RegionOutline(id: $0.id, isCountry: false, rings: $0.rings) }
-    }
-
-    /// Контуры стран — у ВСЕХ стран мира, а не только у двадцати проезжаемых:
-    /// на дальнем уровне мир делят именно они.
+    /// Контуры стран — у ВСЕХ стран мира: на дальнем уровне мир делят именно
+    /// они. Страна без колец (микрогосударство, чьё кольцо не прошло порог
+    /// сборки бандла) отбрасывается здесь: у неё есть центр ради подписи, но
+    /// обводить нечего.
     ///
-    /// Страна без колец (микрогосударство, чьё кольцо не прошло порог сборки
-    /// бандла) отбрасывается здесь, а не в индексе: у неё есть центр и рамка
-    /// ради подписи, но обводить нечего, и пустая запись стоила бы прохода по
-    /// ней на каждом тайле.
+    /// Регионов здесь больше НЕТ. Их геометрия нужна была заливке
+    /// посещённого, а заливка ушла; подписи берут центроид и рамку прямо из
+    /// атласа, путей им не надо.
     static func countries(from atlas: RegionAtlas) -> [RegionOutline] {
         atlas.countries.compactMap { country in
             country.rings.isEmpty
@@ -41,19 +35,16 @@ extension RegionOutline {
         }
     }
 
-    static func all(from atlas: RegionAtlas) -> [RegionOutline] {
-        regions(from: atlas) + countries(from: atlas)
-    }
+    static func all(from atlas: RegionAtlas) -> [RegionOutline] { countries(from: atlas) }
 }
 
-/// Готовые пути этого куска мира: что залить, что обвести тонко, что толсто.
+/// Готовые контуры этого куска мира. Только страны: заливки посещённых
+/// регионов и контуры их границ были и ушли с «ночной картой» 17 сентября —
+/// под ними пропадала сама карта.
 struct RegionPaths {
-    /// Контуры ПОСЕЩЁННЫХ регионов — их заливает тёплый тон.
-    var fills: [CGPath] = []
-    var regionBorders: [CGPath] = []
     var countryBorders: [CGPath] = []
 
-    var isEmpty: Bool { fills.isEmpty && regionBorders.isEmpty && countryBorders.isEmpty }
+    var isEmpty: Bool { countryBorders.isEmpty }
 }
 
 /// Границы регионов и стран в `CGPath`, собранные ОДИН раз и вне главного
@@ -71,28 +62,13 @@ struct RegionPaths {
 final class RegionPathIndex {
     static let shared = RegionPathIndex()
 
-    /// Уровни детали, на которых границы вообще рисуются.
+    /// Уровень, на котором контуры вообще рисуются, — ровно один: `.far`.
     ///
-    /// На `.fine` (улица) не рисуется ничего: там свои границы показывает сама
-    /// карта Apple, и наши легли бы вторым контуром рядом. На `.far` (страна и
-    /// мир) — только страны: шестьсот региональных контуров на таком масштабе
-    /// превращаются в сетку, сквозь которую не видно ни тумана, ни открытого.
-    static func draws(countries lod: RevealedLayer.LOD) -> Bool { lod != .fine }
-    /// КОНТУРЫ регионов — только на `.mid`.
-    static func draws(regions lod: RevealedLayer.LOD) -> Bool { lod == .mid }
-    /// А вот ЗАЛИВКА посещённого рисуется и на `.far`, и это не то же самое.
-    ///
-    /// Возражение против регионов на дальнем уровне — «шестьсот контуров
-    /// превращаются в сетку»; к заливке оно не относится вовсе: посещённых у
-    /// человека единицы, линий они не добавляют ни одной, а отвечают ровно на
-    /// тот вопрос, ради которого карту открыли с высоты. Замер на симуляторе
-    /// (кадр `.mid` со ВСЕМИ регионами в посещённых) — 68 мс при потолке 160,
-    /// и на `.far` геометрия ещё и прорежена.
-    ///
-    /// Без этого заливку не видно почти никогда: полоса `.mid` — это
-    /// 1.5e-4…1.5e-3 зума, и камера проходит её насквозь за один двойной тап
-    /// (замер по логу: 1.29e-4 → 3.82e-4 → 4.31e-3).
-    static func fills(regions lod: RevealedLayer.LOD) -> Bool { lod != .fine }
+    /// Ближе границы показывает сама карта Apple, и с «ночной картой» она
+    /// видна сквозь мглу: вторая линия рядом с её собственной была бы просто
+    /// вторым контуром. На `.far` карта Apple свои границы уже не рисует, а
+    /// делить мир чем-то надо.
+    static func draws(countries lod: RevealedLayer.LOD) -> Bool { lod == .far }
 
     /// Через сколько вершин брать по одной. На дальнем уровне контур страны
     /// шириной в полтора экранных пикселя не стоит своих тысяч вершин; на
@@ -164,11 +140,8 @@ final class RegionPathIndex {
         for lod in RevealedLayer.LOD.allCases {
             guard Self.draws(countries: lod) else { continue }
             let step = Self.stride(for: lod)
-            // Регионы кладутся и на `.far` — там они нужны под заливку
-            // посещённого, хотя контуром не рисуются.
-            let wantsRegions = Self.draws(regions: lod) || Self.fills(regions: lod)
             var entries: [Entry] = []
-            for outline in outlines where outline.isCountry || wantsRegions {
+            for outline in outlines where outline.isCountry {
                 if let entry = Self.entry(for: outline, step: step, transform: transform) {
                     entries.append(entry)
                 }
@@ -182,26 +155,18 @@ final class RegionPathIndex {
         lock.unlock()
     }
 
-    /// Пути, задевающие `rect`. `nil` — «индекс ещё не собран» или «на этом
-    /// уровне границ не рисуют вовсе»; и то и другое значит для кисти одно:
-    /// рисовать туман без них.
-    func paths(
-        in rect: MKMapRect, lod: RevealedLayer.LOD, visited: Set<String>
-    ) -> RegionPaths? {
+    /// Контуры, задевающие `rect`. `nil` — «индекс ещё не собран» или «на
+    /// этом уровне контуров не рисуют вовсе»; и то и другое значит для кисти
+    /// одно: рисовать мглу без них.
+    func paths(in rect: MKMapRect, lod: RevealedLayer.LOD) -> RegionPaths? {
         lock.lock()
         let entries = built[lod]
         lock.unlock()
         guard let entries, !entries.isEmpty else { return nil }
 
-        let tracesRegions = Self.draws(regions: lod)
         var out = RegionPaths()
         for entry in entries where entry.box.intersects(rect) {
-            if entry.isCountry {
-                out.countryBorders.append(entry.path)
-            } else {
-                if tracesRegions { out.regionBorders.append(entry.path) }
-                if visited.contains(entry.id) { out.fills.append(entry.path) }
-            }
+            out.countryBorders.append(entry.path)
         }
         return out.isEmpty ? nil : out
     }

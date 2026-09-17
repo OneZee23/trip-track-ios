@@ -102,30 +102,26 @@ final class CloudTextureTests: XCTestCase {
         let images = try XCTUnwrap(CloudTexture.images(from: CloudTexture.noise()))
         XCTAssertEqual(images.density.width, CloudTexture.size)
         XCTAssertEqual(images.mask.width, CloudTexture.size)
-        XCTAssertEqual(images.density.alphaInfo, .none,
-                       "множитель плотности обязан быть непрозрачным")
+        XCTAssertEqual(images.density.alphaInfo, .premultipliedLast,
+                       "облако догущает мглу своей альфой, а не красит её цветом")
         XCTAssertEqual(images.mask.alphaInfo, .premultipliedLast,
                        "маска края живёт своей альфой")
     }
 
-    /// Множитель плотности не уходит за свой диапазон (сейчас 0.70…1.0) ни в
-    /// одном текселе: ниже — облако становится чёрной дырой в тумане, выше —
-    /// его не видно вовсе. Границы читаются из живой константы, а не вписаны
-    /// числом: их уже двигали (0.86 → 0.70), когда подняли тон тумана.
-    func testDensityStaysInsideItsRange() throws {
-        let images = try XCTUnwrap(CloudTexture.images(from: CloudTexture.noise()))
-        let size = CloudTexture.size
-        var bytes = [UInt8](repeating: 0, count: size * size)
-        bytes.withUnsafeMutableBytes { raw in
-            guard let context = CGContext(
-                data: raw.baseAddress, width: size, height: size, bitsPerComponent: 8,
-                bytesPerRow: size, space: CGColorSpaceCreateDeviceGray(),
-                bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return }
-            context.draw(images.density, in: CGRect(x: 0, y: 0, width: size, height: size))
-        }
-        let low = Int(CloudTexture.densityRange.lowerBound * 255) - 2
-        XCTAssertGreaterThanOrEqual(Int(bytes.min() ?? 0), low)
-        XCTAssertLessThanOrEqual(Int(bytes.max() ?? 0), 255)
+    /// Облако догущает мглу ровно до верхней границы и ни на уровень выше.
+    ///
+    /// С «ночной карты» облака лепят НЕПРОЗРАЧНОСТЬ, а не цвет: туман
+    /// заливается на `opacityRange.lowerBound`, текстура кладётся поверх тем
+    /// же тоном, и вместе они обязаны дать `upperBound`. Проверяется
+    /// арифметика композиции, а не картинка: ошибка здесь — это мгла, сквозь
+    /// которую не видно карту, то есть ровно то, что владелец назвал игровой
+    /// доской.
+    func testCloudTopUpLandsOnTheUpperBound() {
+        let low = CloudTexture.opacityRange.lowerBound
+        let composed = low + (1 - low) * CloudTexture.cloudTopUp
+        XCTAssertEqual(composed, CloudTexture.opacityRange.upperBound, accuracy: 1e-9)
+        XCTAssertLessThan(CloudTexture.opacityRange.upperBound, 0.85,
+                          "сквозь туман обязана быть видна настоящая карта")
     }
 
     /// `prepare` идемпотентна и отдаёт те же картинки — её зовут из трёх

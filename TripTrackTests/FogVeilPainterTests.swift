@@ -86,19 +86,20 @@ final class FogVeilPainterTests: XCTestCase {
         XCTAssertEqual(band.layers, 0)
     }
 
-    // MARK: Непрозрачность
+    // MARK: Швы
 
-    /// В растре НЕ ДОЛЖНО быть ни одного полупрозрачного пикселя, кроме
-    /// прожжённых коридоров.
+    /// Мгла ОДНОРОДНА: на стыках тайлов нет ни щели, ни тёмной линии.
     ///
-    /// Стык тайлов — это место, где полупрозрачность заводится сама: клип
-    /// сглаживается, и два соседних тайла оставляют на общей границе по
-    /// половине пикселя. У плиточного рендерера этого не видно (соседа рисует
-    /// MapKit в общий буфер), а в растре сквозь такую линию светит живая
-    /// карта Apple — ровно то, что туман обязан прятать.
+    /// Пока туман был непрозрачным, шов выглядел дырой в карту Apple, и
+    /// закрывали его нахлёстом в полпикселя. С «ночной картой» мгла
+    /// полупрозрачна, и тот же нахлёст стал складывать две альфы — шов из
+    /// дыры превратился в тёмную решётку по всем границам тайлов. Поэтому
+    /// припуска больше нет, а клип рисуется с выключенным сглаживанием:
+    /// прямоугольники соседей сходятся пиксель в пиксель. Проверяется ровно
+    /// это — РАЗБРОС альфы, а не её величина.
     func testRasterHasNoSeamsBetweenTiles() {
         // Растр ЗАВЕДОМО мимо сети: коридоров в нём нет вовсе, поэтому любая
-        // полупрозрачность в нём — шов, а не перьевой край дыры.
+        // неоднородность — это шов, а не перьевой край дыры.
         let revealed = layer()
         let far = MKMapRect(
             origin: MKMapPoint(CLLocationCoordinate2D(latitude: 53, longitude: 45)),
@@ -111,22 +112,47 @@ final class FogVeilPainterTests: XCTestCase {
         let grid = FogVeilBitmap.grid(sizePoints: sizePoints)
         XCTAssertGreaterThan(grid.cols * grid.rows, 4, "мерить нечего: тайлов должно быть много")
 
-        // Картинка на пиксель выше логической полосы — это припуск, который
-        // накрывает стык с соседней полосой; сама полоса кончается раньше.
-        let width = band.image.width
-        let height = band.image.height
+        let width = band.image.width, height = band.image.height
         guard let data = pixels(of: band.image, width: width, height: height)
         else { return XCTFail("пиксели обязаны прочитаться") }
 
-        var seams: [(Int, Int)] = []
+        // Шов — это СКАЧОК на известной границе, а не разброс по кадру:
+        // рампа глубины и облака живут теперь в прозрачности, и мгла честно
+        // гуляет (замер: 154…197). Поэтому меряется то же, чем меряется шов
+        // текстуры облаков: перепад через границу тайла против перепада между
+        // любыми соседними столбцами внутри него.
+        func alpha(_ x: Int, _ y: Int) -> Double {
+            Double(data[(y * width + x) * 4 + 3])
+        }
+        func meanJump(at columns: [Int]) -> Double {
+            var sum = 0.0
+            var count = 0
+            for x in columns where x > 0 && x < width - 1 {
+                for y in stride(from: 4, to: height - 6, by: 3) {
+                    sum += abs(alpha(x, y) - alpha(x - 1, y))
+                    count += 1
+                }
+            }
+            return count > 0 ? sum / Double(count) : 0
+        }
+        let borders = (1..<grid.cols).map { $0 * width / grid.cols }
+        let inside = borders.map { $0 + max(3, width / grid.cols / 3) }
+        let onSeam = meanJump(at: borders)
+        let ordinary = meanJump(at: inside)
+        print(String(format: "[veil] перепад на границе тайла %.3f, внутри %.3f", onSeam, ordinary))
+        XCTAssertLessThan(onSeam, max(ordinary * 3, 1.5),
+                          "на стыке тайлов мгла рвётся — это шов")
+
+        var low = 255, high = 0
         for y in 0..<(height - 1) {
-            for x in 0..<width where data[(y * width + x) * 4 + 3] != 255 {
-                seams.append((x, y))
+            for x in 0..<width {
+                let a = Int(data[(y * width + x) * 4 + 3])
+                low = min(low, a); high = max(high, a)
             }
         }
-        print("[veil] щелей в туман: \(seams.count), первые "
-              + "\(seams.prefix(5).map { "\($0.0)×\($0.1)" }.joined(separator: " "))")
-        XCTAssertTrue(seams.isEmpty, "на стыке тайлов остаётся щель в туман")
+        print("[veil] альфа мглы \(low)…\(high)")
+        XCTAssertGreaterThan(low, 130, "мгла слишком прозрачна")
+        XCTAssertLessThan(high, 215, "сквозь мглу обязана быть видна карта")
     }
 
     // MARK: Равенство с откатом
@@ -289,7 +315,8 @@ final class FogVeilPainterTests: XCTestCase {
     /// самую сердцевину. Вопрос «прочищена ли сердцевина» — про КИСТЬ, и
     /// спрашивать его надо у кисти.
     private func corridorRaster(
-        lod: RevealedLayer.LOD, metresPerPoint: Double, withClouds: Bool, side: Int = 400
+        lod: RevealedLayer.LOD, metresPerPoint: Double, withClouds: Bool,
+        withRoad: Bool = true, side: Int = 400
     ) -> (pixels: [UInt8], side: Int, halfWidthPixels: Double)? {
         let centre = CLLocationCoordinate2D(latitude: 45, longitude: 38.95)
         let metre = MKMapPointsPerMeterAtLatitude(centre.latitude)
@@ -322,7 +349,8 @@ final class FogVeilPainterTests: XCTestCase {
             context.translateBy(x: CGFloat(-rect.minX), y: CGFloat(-rect.minY))
             let box = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
             FogVeilPainter.paint(
-                context: context, paths: [road], corridorWidth: width, passes: passes,
+                context: context, paths: withRoad ? [road] : [],
+                corridorWidth: width, passes: passes,
                 tileRect: box, depth: FogVeilRenderer.depth(for: rect, lod: lod),
                 clouds: withClouds
                     ? FogVeilRenderer.clouds(for: rect, rect: box, lod: lod)
@@ -372,10 +400,18 @@ final class FogVeilPainterTests: XCTestCase {
             let mid = shot.side / 2
             let reach = Int((shot.halfWidthPixels * 1.45).rounded(.up)) + 1
             guard mid - reach > 2 else { return XCTFail("кадр мал для замера (\(lod))") }
+            // Эталон — ТОТ ЖЕ кадр без дороги. Сравнивать с одним числом
+            // больше нельзя: с «ночной картой» рампа глубины и облака живут в
+            // прозрачности, и мгла честно гуляет по кадру (замер: 166…192).
+            // «Нетронуто» значит «ровно как без коридора», и проверяется это
+            // пиксель в пиксель.
+            guard let clean = corridorRaster(
+                lod: lod, metresPerPoint: metresPerPoint, withClouds: true, withRoad: false)
+            else { return XCTFail("эталон обязан собраться (\(lod))") }
             for row in [mid - reach, mid + reach, 2, shot.side - 3] {
                 for x in stride(from: 4, to: shot.side - 4, by: 17) {
-                    let alpha = shot.pixels[(row * shot.side + x) * 4 + 3]
-                    XCTAssertEqual(alpha, 255,
+                    let i = (row * shot.side + x) * 4 + 3
+                    XCTAssertEqual(Int(shot.pixels[i]), Int(clean.pixels[i]), accuracy: 1,
                                    "туман за ореолом тронут: \(lod), ряд \(row), x = \(x)")
                 }
             }
@@ -419,10 +455,17 @@ final class FogVeilPainterTests: XCTestCase {
             let withClouds = spread(ragged)
             let without = spread(plain)
             print("[veil] край на \(lod): размах с облаками \(withClouds), без них \(without)")
-            XCTAssertLessThanOrEqual(without, 2,
+            // Пороги ниже прежних ВДВОЕ, и не потому, что край стал хуже: с
+            // «ночной картой» вся шкала альфы кончается на 0.70 × 255, и
+            // размах на ней арифметически меньше. «Без облаков» при этом уже
+            // не ноль — рампа глубины теперь тоже живёт в прозрачности и даёт
+            // свои несколько уровней вдоль дороги.
+            XCTAssertLessThanOrEqual(without, 8,
                                      "без облаков край прямой дороги обязан быть ровным (\(lod))")
-            XCTAssertGreaterThan(withClouds, 30,
+            XCTAssertGreaterThan(withClouds, 18,
                                  "с облаками край обязан клубиться (\(lod))")
+            XCTAssertGreaterThan(withClouds, without * 2,
+                                 "рваность обязана быть от облаков, а не от рампы (\(lod))")
         }
     }
 
@@ -489,268 +532,6 @@ final class FogVeilPainterTests: XCTestCase {
         print("[clouds] узор от разных кусков расходится на \(worst) уровня")
         XCTAssertLessThanOrEqual(worst, 2,
                                  "облака посчитаны от куска, а не от мира — узор поплывёт")
-    }
-
-    // MARK: Границы и заливка регионов
-
-    /// Два соседа по 0.95° долготы каждый: западный посещён, восточный — нет.
-    private func twoRegions() -> RegionPathIndex {
-        func box(_ minLon: Double, _ maxLon: Double) -> [Double] {
-            [44, minLon, 44, maxLon, 46, maxLon, 46, minLon]
-        }
-        let index = RegionPathIndex()
-        index.prepare(outlines: [
-            RegionOutline(id: "W", isCountry: false, rings: [box(38.0, 38.95)]),
-            RegionOutline(id: "E", isCountry: false, rings: [box(38.95, 39.9)]),
-        ])
-        return index
-    }
-
-    /// Кадр вокруг границы этих двух регионов, на заданных метрах на точку.
-    private func regionFrame(metresPerPoint: Double, side: CGFloat = 400)
-    -> (rect: MKMapRect, sizePoints: CGSize) {
-        let centre = CLLocationCoordinate2D(latitude: 45, longitude: 38.95)
-        let metre = MKMapPointsPerMeterAtLatitude(centre.latitude)
-        let span = Double(side) * metresPerPoint * metre
-        let origin = MKMapPoint(centre)
-        return (MKMapRect(x: origin.x - span / 2, y: origin.y - span / 2,
-                          width: span, height: span),
-                CGSize(width: side, height: side))
-    }
-
-    /// Средняя «теплота» куска картинки: насколько красного больше синего.
-    ///
-    /// Именно разность каналов, а не яркость: вуаль синеватая
-    /// (`veilColorTop` #0c0d12), заливка посещённого — терракота #C2452B, и
-    /// светлее от неё картинка почти не становится.
-    private func warmth(
-        _ pixels: [UInt8], width: Int, height: Int, column: ClosedRange<Double>
-    ) -> Double {
-        var sum = 0.0
-        var count = 0
-        for y in stride(from: height / 8, to: height / 3, by: 3) {
-            let from = Int(Double(width) * column.lowerBound)
-            let to = Int(Double(width) * column.upperBound)
-            for x in stride(from: from, to: to, by: 3) {
-                let i = (y * width + x) * 4
-                sum += Double(pixels[i + 2]) - Double(pixels[i])
-                count += 1
-            }
-        }
-        return count > 0 ? sum / Double(count) : 0
-    }
-
-    /// Посещённый регион ТЕПЛЕЕ непосещённого — и это единственное, чем они на
-    /// карте отличаются: контур есть у обоих.
-    func testVisitedRegionIsWarmerThanTheUnvisitedOne() {
-        let (rect, sizePoints) = regionFrame(metresPerPoint: 200)
-        let index = MapPathIndex()
-        index.prepare(source: { _ in [] }, transform: { CGPoint(x: $0.x, y: $0.y) })
-        guard let band = FogVeilBitmap.render(
-            rect: rect, sizePoints: sizePoints, scale: 1, index: index, selected: [],
-            regions: twoRegions(), visited: ["W"])
-        else { return XCTFail("растр обязан собраться") }
-        let width = band.image.width, height = band.image.height
-        guard let pixels = pixels(of: band.image, width: width, height: height)
-        else { return XCTFail("пиксели обязаны прочитаться") }
-
-        let visited = warmth(pixels, width: width, height: height, column: 0.15...0.40)
-        let plain = warmth(pixels, width: width, height: height, column: 0.60...0.85)
-        print(String(format: "[regions] теплота: посещённый %.2f, непосещённый %.2f",
-                     visited, plain))
-        XCTAssertGreaterThan(visited, plain + 3,
-                             "заливку посещённого региона не отличить от тумана")
-    }
-
-    /// На улице границ НЕТ ни одной: их показывает сама карта Apple, и наши
-    /// легли бы вторым контуром рядом с её.
-    func testFineZoomDrawsNoBorders() {
-        let (rect, sizePoints) = regionFrame(metresPerPoint: 2)
-        let index = MapPathIndex()
-        index.prepare(source: { _ in [] }, transform: { CGPoint(x: $0.x, y: $0.y) })
-        guard let bare = FogVeilBitmap.render(
-                rect: rect, sizePoints: sizePoints, scale: 1, index: index, selected: []),
-              let asked = FogVeilBitmap.render(
-                rect: rect, sizePoints: sizePoints, scale: 1, index: index, selected: [],
-                regions: twoRegions(), visited: ["W"])
-        else { return XCTFail("оба растра обязаны собраться") }
-        XCTAssertEqual(FogVeilRenderer.lod(
-            for: MKZoomScale(sizePoints.width / CGFloat(rect.width))), .fine)
-
-        let width = asked.image.width, height = asked.image.height
-        guard let without = pixels(of: bare.image, width: width, height: height),
-              let with = pixels(of: asked.image, width: width, height: height)
-        else { return XCTFail("пиксели обязаны прочитаться") }
-        XCTAssertEqual(without, with, "на масштабе улицы наших границ быть не должно")
-    }
-
-    /// И заливка, и граница живут ПОД коридорами: перо прожигает их вместе с
-    /// туманом, поэтому внутри открытого человек видит границы Apple, а
-    /// снаружи — наши. Двойных линий не остаётся.
-    func testCorridorsBurnThroughTheRegionFillToo() {
-        let revealed = layer()
-        let (rect, sizePoints) = frame()
-        let prepared = index(for: revealed)
-        // Регион, накрывающий весь кадр, и он посещён.
-        let regions = RegionPathIndex()
-        regions.prepare(outlines: [RegionOutline(
-            id: "W", isCountry: false, rings: [[44, 38, 44, 40, 46, 40, 46, 38]])])
-        guard let band = FogVeilBitmap.render(
-            rect: rect, sizePoints: sizePoints, scale: 1, index: prepared, selected: [],
-            regions: regions, visited: ["W"])
-        else { return XCTFail("растр обязан собраться") }
-
-        let width = band.image.width, height = band.image.height
-        guard let data = pixels(of: band.image, width: width, height: height)
-        else { return XCTFail("пиксели обязаны прочитаться") }
-        var clear = 0
-        for i in stride(from: 0, to: (height - 1) * width * 4, by: 4) where data[i + 3] == 0 {
-            clear += 1
-        }
-        print("[regions] полностью прожжённых пикселей под заливкой: \(clear)")
-        XCTAssertGreaterThan(clear, 500,
-                             "заливка региона легла ПОВЕРХ коридоров и закрыла открытое")
-    }
-
-    /// Тот же золотой тест, но на СРЕДНЕМ уровне и С ГРАНИЦАМИ: в кадре
-    /// посещённый регион, его непосещённый сосед и кольцо страны.
-    ///
-    /// Нужен отдельным тестом, потому что уличный кадр этого не проверяет
-    /// вовсе: на `.fine` границы не рисуются ни одной стороной. А проверять
-    /// их обязательно именно ЗДЕСЬ — у плиточного отката геометрия регионов
-    /// приезжает из ОБЩЕГО индекса в сырых `MKMapPoint` и переводится в его
-    /// систему координат аффинной матрицей, собранной руками в
-    /// `FogVeilRenderer.init` (`regionTransform`). У коридоров такой матрицы
-    /// нет — им `MapPathChunks` зовёт настоящий `point(for:)` на каждой
-    /// вершине, — поэтому ошибка в ней сдвинула бы или потеряла границы
-    /// ровно в том пути, который включается, когда экранная вуаль не села.
-    func testTiledFallbackDrawsTheSameRegionsAsTheRaster() {
-        let revealed = layer()
-        var withRegions = revealed
-        withRegions.regionKm["W"] = 12
-        let borders = twoRegionsAndACountry()
-        let (rect, sizePoints) = regionFrame(metresPerPoint: 200, side: 320)
-        XCTAssertEqual(FogVeilRenderer.lod(
-            for: MKZoomScale(sizePoints.width / CGFloat(rect.width))), .mid,
-            "кадр обязан попасть на уровень, где границы рисуются")
-
-        let prepared = index(for: withRegions)
-        guard let band = FogVeilBitmap.render(
-            rect: rect, sizePoints: sizePoints, scale: 1, index: prepared, selected: [],
-            regions: borders, visited: ["W"])
-        else { return XCTFail("растр обязан собраться") }
-
-        let width = band.image.width, height = band.image.height
-        guard let mine = pixels(of: band.image, width: width, height: height),
-              let theirs = tiledReference(rect: rect, sizePoints: sizePoints,
-                                          revealed: withRegions, width: width, height: height,
-                                          regions: borders)
-        else { return XCTFail("обе картинки обязаны собраться") }
-
-        var worse = 0
-        var total = 0.0
-        let compared = (height - 1) * width * 4
-        for i in stride(from: 0, to: compared, by: 4) {
-            for channel in 0..<3 {
-                let delta = abs(Int(mine[i + channel]) - Int(theirs[i + channel]))
-                total += Double(delta)
-                if delta > 8 { worse += 1; break }
-            }
-        }
-        let count = compared / 4
-        let share = Double(worse) / Double(count)
-        let mean = total / Double(count * 3)
-        print(String(format: "[veil] .mid с границами: расходятся %.3f %% пикселей, "
-                     + "средняя разница %.3f уровня", share * 100, mean))
-        XCTAssertLessThan(share, 0.02,
-                          "плиточный откат рисует границы не там, где растр")
-        XCTAssertLessThan(mean, 1.5)
-    }
-
-    /// Посещённый регион, его непосещённый сосед и кольцо страны — всё в
-    /// одном кадре.
-    private func twoRegionsAndACountry() -> RegionPathIndex {
-        func box(_ minLon: Double, _ maxLon: Double, _ minLat: Double = 44,
-                 _ maxLat: Double = 46) -> [Double] {
-            [minLat, minLon, minLat, maxLon, maxLat, maxLon, maxLat, minLon]
-        }
-        let index = RegionPathIndex()
-        index.prepare(outlines: [
-            RegionOutline(id: "W", isCountry: false, rings: [box(38.0, 38.95)]),
-            RegionOutline(id: "E", isCountry: false, rings: [box(38.95, 39.9)]),
-            RegionOutline(id: "XX", isCountry: true, rings: [box(37.0, 41.0, 43, 47)]),
-        ])
-        return index
-    }
-
-    /// Вложенный посещённый регион ЗАЛИТ, а не вырезан дыркой.
-    ///
-    /// Адыгея лежит целиком внутри Краснодарского края (Natural Earth отдаёт
-    /// край сплошным кольцом, без дырки под республикой). Одним общим путём с
-    /// правилом чётное-нечётное XOR превратил бы посещённую республику в
-    /// дырку посреди залитого края — «здесь я был» читалось бы как «здесь
-    /// меня не было».
-    func testANestedVisitedRegionIsFilledNotPunchedOut() {
-        func box(_ minLat: Double, _ minLon: Double,
-                 _ maxLat: Double, _ maxLon: Double) -> [Double] {
-            [minLat, minLon, minLat, maxLon, maxLat, maxLon, maxLat, minLon]
-        }
-        let index = RegionPathIndex()
-        index.prepare(outlines: [
-            RegionOutline(id: "KDA", isCountry: false, rings: [box(44, 38, 46, 40)]),
-            RegionOutline(id: "AD", isCountry: false, rings: [box(44.7, 38.7, 45.3, 39.3)]),
-        ])
-        let (rect, sizePoints) = regionFrame(metresPerPoint: 200, side: 360)
-        let paths = MapPathIndex()
-        paths.prepare(source: { _ in [] }, transform: { CGPoint(x: $0.x, y: $0.y) })
-        guard let band = FogVeilBitmap.render(
-            rect: rect, sizePoints: sizePoints, scale: 1, index: paths, selected: [],
-            regions: index, visited: ["KDA", "AD"])
-        else { return XCTFail("растр обязан собраться") }
-        let width = band.image.width, height = band.image.height
-        guard let pixels = pixels(of: band.image, width: width, height: height)
-        else { return XCTFail("пиксели обязаны прочитаться") }
-
-        // Середина кадра — центр вложенной «Адыгеи» (кадр центрирован на
-        // 45.0 / 38.95, а она накрывает 44.7…45.3 / 38.7…39.3).
-        let inner = warmth(pixels, width: width, height: height, column: 0.45...0.55)
-        print(String(format: "[regions] вложенный посещённый: теплота %.2f", inner))
-        XCTAssertGreaterThan(inner, 5,
-                             "вложенный регион вырезан дыркой вместо заливки")
-    }
-
-    /// Заливка посещённого рисуется и на ДАЛЬНЕМ уровне — там, где у карты
-    /// вопрос «где я вообще был», а контуров регионов уже нет.
-    func testVisitedRegionIsTintedAtCountryZoomToo() {
-        let (rect, sizePoints) = regionFrame(metresPerPoint: 1_500, side: 360)
-        XCTAssertEqual(FogVeilRenderer.lod(
-            for: MKZoomScale(sizePoints.width / CGFloat(rect.width))), .far)
-        let paths = MapPathIndex()
-        paths.prepare(source: { _ in [] }, transform: { CGPoint(x: $0.x, y: $0.y) })
-        // Регионы РАЗМЕРОМ С КАДР: на 1 500 м/pt кадр — это полтысячи
-        // километров, и пара двухсоткилометровых квадратов легла бы мимо
-        // обеих проверяемых колонок.
-        func big(_ minLon: Double, _ maxLon: Double) -> [Double] {
-            [40, minLon, 40, maxLon, 50, maxLon, 50, minLon]
-        }
-        let wide = RegionPathIndex()
-        wide.prepare(outlines: [
-            RegionOutline(id: "W", isCountry: false, rings: [big(30, 38.95)]),
-            RegionOutline(id: "E", isCountry: false, rings: [big(38.95, 48)]),
-        ])
-        guard let band = FogVeilBitmap.render(
-            rect: rect, sizePoints: sizePoints, scale: 1, index: paths, selected: [],
-            regions: wide, visited: ["W"])
-        else { return XCTFail("растр обязан собраться") }
-        let width = band.image.width, height = band.image.height
-        guard let pixels = pixels(of: band.image, width: width, height: height)
-        else { return XCTFail("пиксели обязаны прочитаться") }
-        let visited = warmth(pixels, width: width, height: height, column: 0.15...0.40)
-        let plain = warmth(pixels, width: width, height: height, column: 0.60...0.85)
-        print(String(format: "[regions] `.far`: посещённый %.2f, непосещённый %.2f",
-                     visited, plain))
-        XCTAssertGreaterThan(visited, plain + 3,
-                             "на масштабе страны заливки посещённого нет — а она там и нужна")
     }
 
     // MARK: Внутри

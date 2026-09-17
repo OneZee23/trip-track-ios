@@ -227,7 +227,9 @@ final class FogVeilRendererTests: XCTestCase {
         let alphas = ((size / 2)..<size).map { Int(pixels[($0 * size + column) * 4 + 3]) }
 
         XCTAssertLessThan(alphas[0], 12, "середина коридора обязана быть прочищена насквозь")
-        XCTAssertGreaterThan(alphas[alphas.count - 1], 245, "за коридором вуаль непрозрачна")
+        // За коридором — полная мгла, а она с «ночной картой» полупрозрачна:
+        // проверяется, что перо туда не дотянулось, а не что там 255.
+        XCTAssertGreaterThan(alphas[alphas.count - 1], 130, "за коридором мгла снята")
         for i in 1..<alphas.count {
             XCTAssertGreaterThanOrEqual(
                 alphas[i], alphas[i - 1] - 1,
@@ -264,7 +266,7 @@ final class FogVeilRendererTests: XCTestCase {
         }
 
         for i in stride(from: 0, to: size * size * 4, by: 4) {
-            XCTAssertEqual(Int(pixels[i + 3]), 255, "вуаль обязана быть непрозрачной")
+            XCTAssertGreaterThan(Int(pixels[i + 3]), 130, "мгла обязана лежать всюду")
             // Ярче своего же потолка вуаль быть не имеет права: чем она
             // светлее, тем заметнее полоса недогруженных плиток Apple на
             // ведущем крае панорамы.
@@ -372,7 +374,7 @@ final class FogVeilRendererTests: XCTestCase {
             let pixels = Self.drawnTile(
                 size: 48, mapRect: MKMapRect(x: origin, y: origin, width: span, height: span))
             for i in stride(from: 0, to: pixels.count, by: 4) {
-                XCTAssertEqual(Int(pixels[i + 3]), 255, "вуаль обязана быть непрозрачной")
+                XCTAssertGreaterThan(Int(pixels[i + 3]), 130, "мгла обязана лежать всюду")
                 XCTAssertLessThanOrEqual(Int(pixels[i + 2]), Self.brightestFogBlue,
                                          "дымка светлее, чем позволяют константы кисти")
             }
@@ -532,8 +534,13 @@ final class FogVeilRendererTests: XCTestCase {
             context.restoreGState()
             _ = rect
         }
+        // «Мгла лежит», а не «непрозрачно»: с «ночной картой» вуаль
+        // полупрозрачна всегда. Правило осталось прежним по смыслу — до
+        // готовности индекса тайл рисуется ЗАЛИВКОЙ без коридоров, а не
+        // дырой: карту Apple нельзя показать открытой ни на кадр.
         for i in stride(from: 0, to: size * size * 4, by: 4) {
-            XCTAssertEqual(Int(pixels[i + 3]), 255, "тайл до готовности индекса прозрачен")
+            XCTAssertGreaterThan(Int(pixels[i + 3]), 130,
+                                 "тайл до готовности индекса прозрачен")
         }
     }
 
@@ -552,39 +559,37 @@ final class FogVeilRendererTests: XCTestCase {
     /// цикл не мешает остальным тестам.
     // MARK: - Границы у ПЛИТОЧНОГО рендерера
 
-    /// Плиточный рендерер рисует границы и заливку там же, где растр.
+    /// Плиточный рендерер рисует контуры стран там же, где растр.
     ///
     /// Это единственный тест, который проходит через `FogVeilRenderer` с
     /// `showsRegions: true`, то есть через `regionTransform` — аффинную
     /// матрицу, собранную руками из `rect(for: .world)`. У коридоров такой
     /// матрицы нет (им `MapPathChunks` зовёт настоящий `point(for:)` на
-    /// каждой вершине), у границ она единственный мост между общим индексом в
-    /// сырых `MKMapPoint` и системой координат рендерера. Ошибись она — и
+    /// каждой вершине), у контуров она единственный мост между общим индексом
+    /// в сырых `MKMapPoint` и системой координат рендерера. Ошибись она — и
     /// границы уехали бы или пропали ровно в откате, то есть на экране, где
     /// экранная вуаль не села, и заметить это было бы нечем.
-    func testTiledRendererDrawsBordersAndFillsTheVisitedSide() {
-        // Кадр вокруг границы двух регионов: слева посещённый, справа нет.
+    ///
+    /// Заливок посещённого и контуров регионов здесь больше нет: они ушли с
+    /// «ночной картой» 17 сентября — под ними пропадала сама карта.
+    func testTiledRendererDrawsCountryBorders() {
         let centre = CLLocationCoordinate2D(latitude: 45, longitude: 38.95)
         let metre = MKMapPointsPerMeterAtLatitude(centre.latitude)
         let side = 320
-        let span = Double(side) * 200 * metre        // 200 м на точку — это `.mid`
+        // 2 000 м на точку — это `.far`, единственный уровень с контурами.
+        let span = Double(side) * 2_000 * metre
         let origin = MKMapPoint(centre)
         let mapRect = MKMapRect(x: origin.x - span / 2, y: origin.y - span / 2,
                                 width: span, height: span)
         let zoomScale = MKZoomScale(Double(side) / span)
-        XCTAssertEqual(FogVeilRenderer.lod(for: zoomScale), .mid)
+        XCTAssertEqual(FogVeilRenderer.lod(for: zoomScale), .far)
 
-        func boxRing(_ minLon: Double, _ maxLon: Double) -> [Double] {
-            [44, minLon, 44, maxLon, 46, maxLon, 46, minLon]
-        }
         let borders = RegionPathIndex()
         borders.prepare(outlines: [
-            RegionOutline(id: "W", isCountry: false, rings: [boxRing(38.0, 38.95)]),
-            RegionOutline(id: "E", isCountry: false, rings: [boxRing(38.95, 39.9)]),
+            RegionOutline(id: "XX", isCountry: true,
+                          rings: [[40, 30, 40, 38.95, 50, 38.95, 50, 30]]),
         ])
-        var revealed = RevealedLayer.empty
-        revealed.regionKm["W"] = 12
-
+        let revealed = RevealedLayer.empty
         let renderer = FogVeilRenderer(veil: FogVeilOverlay(
             layer: revealed, showsRegions: true, regionIndex: borders))
         let plain = FogVeilRenderer(veil: FogVeilOverlay(layer: revealed))
@@ -599,45 +604,24 @@ final class FogVeilRendererTests: XCTestCase {
                 context.restoreGState()
             }
         }
-        let withBorders = tile(renderer)
+        let withBorder = tile(renderer)
         let without = tile(plain)
 
-        // Заливка: посещённая половина ТЕПЛЕЕ непосещённой (разность каналов —
-        // терракота на синеватой вуали ярче почти не делает).
-        func warmth(_ pixels: [UInt8], columns: Range<Int>) -> Double {
-            var sum = 0.0
-            var count = 0
-            for y in stride(from: 40, to: side - 40, by: 3) {
-                for x in stride(from: columns.lowerBound, to: columns.upperBound, by: 3) {
-                    let i = (y * side + x) * 4
-                    sum += Double(pixels[i]) - Double(pixels[i + 2])
-                    count += 1
-                }
-            }
-            return count > 0 ? sum / Double(count) : 0
-        }
-        let visited = warmth(withBorders, columns: 20..<(side / 2 - 20))
-        let untouched = warmth(withBorders, columns: (side / 2 + 20)..<(side - 20))
-        print(String(format: "[regions] тайл рендерера: посещённый %.2f, непосещённый %.2f",
-                     visited, untouched))
-        XCTAssertGreaterThan(visited, untouched + 3,
-                             "плиточный откат не залил посещённый регион")
-
-        // Граница: без неё тайл и тайл без регионов совпадают по средней
-        // колонке, с ней — расходятся, и расходятся ИМЕННО там, где граница.
+        // Контур страны проходит по долготе 38.95 — ровно через середину
+        // кадра. Сравнение с тем же тайлом без контуров показывает, где он.
         func differences(column: Int) -> Int {
             var count = 0
             for y in stride(from: 20, to: side - 20, by: 1) {
                 let i = (y * side + column) * 4
-                if (0..<3).contains(where: { abs(Int(withBorders[i + $0])
-                                                - Int(without[i + $0])) > 10 }) { count += 1 }
+                if (0..<3).contains(where: { abs(Int(withBorder[i + $0])
+                                                - Int(without[i + $0])) > 6 }) { count += 1 }
             }
             return count
         }
-        let onBorder = (side / 2 - 2...side / 2 + 2).map(differences).max() ?? 0
-        print("[regions] пикселей границы в средней колонке: \(onBorder)")
+        let onBorder = (side / 2 - 3...side / 2 + 3).map(differences).max() ?? 0
+        print("[regions] пикселей контура страны в средней колонке: \(onBorder)")
         XCTAssertGreaterThan(onBorder, 100,
-                             "контур региона у плиточного отката не нарисован")
+                             "контур страны у плиточного отката не нарисован")
     }
 
     static func waitForIndex(
