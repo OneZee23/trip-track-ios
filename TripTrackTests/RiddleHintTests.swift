@@ -95,23 +95,50 @@ final class RiddleHintTests: XCTestCase {
 
     // MARK: - Что видно от значка на этом масштабе
 
-    /// Три порога, и каждый отвечает на свой вопрос.
+    /// Порог ОДИН, и уровня осталось два.
     ///
     /// Владелец на устройстве 16 сен: на стране три «?» со строками съезжаются
     /// в кучу поверх подписи «КРАСНОДАРСКИЙ КРАЙ». Круг задан в метрах, значок
     /// — в точках экрана, и на дальнем зуме три круга по тридцать километров
-    /// помещаются в один палец.
+    /// помещаются в один палец. Строку с карты 17 сен сняли совсем («сильно
+    /// много внимания на себя берут секреты и кружки вокруг них»), и вместе с
+    /// ней ушёл верхний уровень: показывать по-крупному стало нечего.
     func testBadgeAppearsOnlyWhenItsCircleIsBigEnoughToHoldIt() {
         // Страна: круг 30 км на экране в полпальца — не показываем ничего,
         // счёт несёт строка листа «N загадок рядом».
         XCTAssertEqual(HintBadgeLOD.level(diameterPt: 20), .none)
         XCTAssertEqual(HintBadgeLOD.level(diameterPt: 59.9), .none)
-        // Круг уже читается как круг — но строка в 190 pt в него не влезает.
+        // Круг уже читается как круг — значку есть к чему привязаться.
         XCTAssertEqual(HintBadgeLOD.level(diameterPt: 60), .badge)
         XCTAssertEqual(HintBadgeLOD.level(diameterPt: 159), .badge)
-        // Треть ширины телефона и больше — подпись остаётся внутри круга.
-        XCTAssertEqual(HintBadgeLOD.level(diameterPt: 160), .full)
-        XCTAssertEqual(HintBadgeLOD.level(diameterPt: 900), .full)
+        // Выше порога уровень БОЛЬШЕ НЕ РАСТЁТ: строки на карте нет, и
+        // «полный» уровень вернул бы её вместе с кучей на стране.
+        XCTAssertEqual(HintBadgeLOD.level(diameterPt: 160), .badge)
+        XCTAssertEqual(HintBadgeLOD.level(diameterPt: 900), .badge)
+    }
+
+    /// Значок — диск размером с ноготь, и строки под ним нет ни одной.
+    ///
+    /// Проверяется деревом вью, а не глазами: подпись, вернувшаяся на карту
+    /// новой строкой кода, иначе заметна только на устройстве. `UILabel` в
+    /// подвидах ровно один — сам «?».
+    func testBadgeCarriesNoCaptionOnTheMap() {
+        let view = RiddleHintView(
+            annotation: RiddleHintAnnotation(
+                hint: RiddleHint(id: "a", type: .lighthouse,
+                                 centre: CLLocationCoordinate2D(latitude: 45, longitude: 39),
+                                 radiusMetres: 10_000),
+                line: "Где-то здесь дорога упирается в море"),
+            reuseIdentifier: RiddleHintView.reuseID)
+
+        let labels = view.subviews.compactMap { $0 as? UILabel }
+        XCTAssertEqual(labels.count, 1, "на карте у подсказки только «?» — строка живёт в карточке")
+        XCTAssertEqual(labels.first?.text, "?")
+        XCTAssertEqual(view.bounds.width, RiddleHintView.badgeSide)
+        XCTAssertEqual(labels.first?.alpha, RiddleHintView.badgeAlpha)
+        // Незрячему «?» без подписи не говорит ничего — VoiceOver строку
+        // получает, экран нет.
+        XCTAssertEqual(view.accessibilityLabel, "Где-то здесь дорога упирается в море")
     }
 
     /// Значок уступает печати находки и ПОБЕЖДАЕТ подпись региона.

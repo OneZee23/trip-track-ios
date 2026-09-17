@@ -267,6 +267,106 @@ final class FogVeilPainterTests: XCTestCase {
         XCTAssertEqual(beyond, 0, "за кольцом туман обязан остаться нетронутым")
     }
 
+    /// На карте страны кольца НЕТ вовсе.
+    ///
+    /// Три круга по тридцать километров на `.far` перекрываются в одно пятно,
+    /// и «след на тумане» читается кляксой — владелец на устройстве 17 сен:
+    /// «сильно много внимания на себя берут секреты и кружки вокруг них».
+    /// Счёт подсказок на этом масштабе несёт строка под «Атласом», а не
+    /// геометрия.
+    func testEngravedRingIsGoneAtCountryZoom() {
+        XCTAssertFalse(FogVeilPainter.showsHints(lod: .far))
+        XCTAssertTrue(FogVeilPainter.showsHints(lod: .mid))
+        XCTAssertTrue(FogVeilPainter.showsHints(lod: .fine))
+
+        let revealed = layer()
+        let sizePoints = CGSize(width: 600, height: 600)
+        // Мир в кадре: 6 000 000 точек карты на 600 pt — `zoomScale` 1e-4, то
+        // есть `.far` (`FogVeilRenderer.lod(for:)`).
+        let rect = MKMapRect(
+            origin: MKMapPoint(CLLocationCoordinate2D(latitude: 53, longitude: 45)),
+            size: MKMapSize(width: 6_000_000, height: 6_000_000))
+        XCTAssertEqual(
+            FogVeilRenderer.lod(for: MKZoomScale(sizePoints.width / CGFloat(rect.width))), .far)
+        let prepared = index(for: revealed)
+        let hint = FogVeilPainter.EngravedHint(
+            centre: CGPoint(x: rect.midX, y: rect.midY), radius: CGFloat(rect.width / 4))
+
+        guard let plain = FogVeilBitmap.render(
+            rect: rect, sizePoints: sizePoints, scale: 1, index: prepared, selected: []),
+            let ringed = FogVeilBitmap.render(
+                rect: rect, sizePoints: sizePoints, scale: 1, index: prepared,
+                selected: [], hints: [hint])
+        else { return XCTFail("оба растра обязаны собраться") }
+
+        let width = ringed.image.width, height = ringed.image.height
+        guard let base = pixels(of: plain.image, width: width, height: height),
+              let drawn = pixels(of: ringed.image, width: width, height: height)
+        else { return XCTFail("пиксели обязаны прочитаться") }
+        XCTAssertEqual(base, drawn, "на карте страны подсказка не рисует ни пикселя")
+    }
+
+    /// Выбранное кольцо ярче обычного, и тёмного ободка внутри нет ни у того,
+    /// ни у другого.
+    ///
+    /// Ободок делал круг «вдавленным» и стоил ему четырёх точек толщины — то
+    /// есть ровно того внимания, которое с подсказки сняли. Яркость выбранного
+    /// — единственный отклик на нажатие: карточка открылась поверх карты, и
+    /// найти в тумане тот самый круг больше нечем.
+    func testSelectedRingBurnsBrighterAndNeitherHasARim() {
+        XCTAssertEqual(FogVeilPainter.hintRingAlpha, 0.18, accuracy: 0.001)
+        XCTAssertEqual(FogVeilPainter.hintRingSelectedAlpha, 0.45, accuracy: 0.001)
+        XCTAssertEqual(FogVeilPainter.hintRingWidthPoints, 1)
+        XCTAssertLessThan(FogVeilPainter.hintRingAlpha,
+                          FogVeilPainter.hintRingSelectedAlpha)
+
+        let revealed = layer()
+        let (rect, sizePoints) = emptyFrame()
+        let prepared = index(for: revealed)
+        let ppmp = Double(sizePoints.width) / rect.width
+        let radiusPixels = 180.0
+        let centre = CGPoint(x: rect.midX, y: rect.midY)
+        let radius = CGFloat(radiusPixels / ppmp)
+
+        func raster(_ hints: [FogVeilPainter.EngravedHint]) -> [UInt8]? {
+            guard let band = FogVeilBitmap.render(
+                rect: rect, sizePoints: sizePoints, scale: 1,
+                index: prepared, selected: [], hints: hints) else { return nil }
+            return pixels(of: band.image, width: band.image.width, height: band.image.height)
+        }
+
+        guard let plain = raster([]),
+              let quiet = raster([FogVeilPainter.EngravedHint(centre: centre, radius: radius)]),
+              let loud = raster([FogVeilPainter.EngravedHint(
+                  centre: centre, radius: radius, selected: true)])
+        else { return XCTFail("три растра обязаны собраться") }
+
+        let width = Int(sizePoints.width)
+        func deviation(from base: [UInt8], in drawn: [UInt8], atRadius radius: Double) -> Int {
+            var total = 0
+            for step in 0..<720 {
+                let angle = Double(step) / 720 * 2 * .pi
+                let x = Int((Double(width) / 2 + cos(angle) * radius).rounded())
+                let y = Int((Double(width) / 2 + sin(angle) * radius).rounded())
+                guard x >= 0, x < width, y >= 0, y < width else { continue }
+                let i = (y * width + x) * 4
+                total += (0..<3).map { abs(Int(base[i + $0]) - Int(drawn[i + $0])) }.max() ?? 0
+            }
+            return total
+        }
+
+        let quietOnRing = deviation(from: plain, in: quiet, atRadius: radiusPixels)
+        let loudOnRing = deviation(from: plain, in: loud, atRadius: radiusPixels)
+        print("[veil] кольцо: обычное \(quietOnRing), выбранное \(loudOnRing)")
+        XCTAssertGreaterThan(quietOnRing, 0, "кольцо обязано быть видно")
+        XCTAssertGreaterThan(loudOnRing, quietOnRing,
+                             "выбранное кольцо обязано гореть ярче обычного")
+
+        // Ободок стоял ВНУТРЬ от кольца на четыре точки — то есть здесь.
+        let insideRim = deviation(from: plain, in: quiet, atRadius: radiusPixels - 4)
+        XCTAssertEqual(insideRim, 0, "тёмного ободка внутри кольца больше нет")
+    }
+
     /// Кольцо — след, а не элемент управления: непрозрачность под потолком.
     ///
     /// Владелец на устройстве: «синий круг сильно выделяется — криво и страшно

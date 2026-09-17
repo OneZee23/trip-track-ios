@@ -304,13 +304,14 @@ final class FogVeilView: UIView {
     /// Радиус считается по широте ЦЕНТРА круга: в Меркаторе точка карты — это
     /// разное число метров на разной широте, и круг, посчитанный по широте
     /// растра, на юге страны разошёлся бы с кругом на севере.
-    func setHints(_ incoming: [RiddleHint]) {
+    func setHints(_ incoming: [RiddleHint], selectedId: String? = nil) {
         let converted = incoming.map { hint -> FogVeilPainter.EngravedHint in
             let metre = MKMapPointsPerMeterAtLatitude(hint.centre.latitude)
             let centre = MKMapPoint(hint.centre)
             return FogVeilPainter.EngravedHint(
                 centre: CGPoint(x: centre.x, y: centre.y),
-                radius: CGFloat(hint.radiusMetres * metre))
+                radius: CGFloat(hint.radiusMetres * metre),
+                selected: hint.id == selectedId)
         }
         guard converted != hints else { return }
         hints = converted
@@ -1228,15 +1229,15 @@ enum FogVeilBitmap {
         // рисуются нормальным режимом и стирать им нечего. Отбираются по
         // своей полосе: у подсказки радиус до тридцати километров, у полосы
         // на улице — двести метров.
-        if !hints.isEmpty {
+        if !hints.isEmpty, FogVeilPainter.showsHints(lod: lod) {
             let near = hints.filter { hint in
                 let reach = Double(hint.radius)
-                    + Double(FogVeilPainter.hintRimWidthPoints) / Double(zoomScale)
+                    + Double(FogVeilPainter.hintRingWidthPoints) / Double(zoomScale)
                 return MKMapRect(x: Double(hint.centre.x) - reach,
                                  y: Double(hint.centre.y) - reach,
                                  width: reach * 2, height: reach * 2).intersects(band)
             }
-            FogVeilPainter.engrave(context: context, hints: near, zoomScale: zoomScale)
+            FogVeilPainter.engrave(context: context, hints: near, zoomScale: zoomScale, lod: lod)
         }
 
         // Жилка сети — тем же индексом и теми же правилами, что у

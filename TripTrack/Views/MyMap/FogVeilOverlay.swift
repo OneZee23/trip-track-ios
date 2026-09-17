@@ -766,6 +766,11 @@ enum FogVeilPainter {
     struct EngravedHint: Equatable {
         let centre: CGPoint
         let radius: CGFloat
+        /// Подсказка, по которой только что нажали: её кольцо горит ярче
+        /// (`hintRingSelectedAlpha`), пока открыта карточка загадки. Одна
+        /// величина на всю подсказку, а не второй список выбранных: список
+        /// разошёлся бы с кругами на первом же пересчёте плана.
+        var selected: Bool = false
     }
 
     /// Цвет кольца — ОБЕСЦВЕЧЕННАЯ бирюза загадки (`SealPainter.ring(for:
@@ -778,16 +783,32 @@ enum FogVeilPainter {
     static let hintRingColor = UIColor(red: 0x6C/255, green: 0x8E/255, blue: 0x99/255, alpha: 1)
     /// Непрозрачность кольца. Потолок 0.45 держит `FogVeilPainterTests`: выше
     /// — это снова «нарисовано поверх», а не «вдавлено в туман».
-    static let hintRingAlpha: CGFloat = 0.40
+    ///
+    /// 0.18, а не 0.40: владелец на устройстве 17 сен — «сильно много внимания
+    /// на себя берут секреты и кружки вокруг них, сделать скрытнее». Круг
+    /// обязан читаться как след на тумане, который замечаешь, а не как
+    /// нарисованная поверх карты мишень.
+    static let hintRingAlpha: CGFloat = 0.18
+    /// Кольцо ВЫБРАННОЙ подсказки — той, чья карточка сейчас открыта.
+    ///
+    /// Ярче обычного ровно настолько, чтобы палец нашёл в тумане тот круг, по
+    /// которому нажал, и ни на шаг больше: это отклик на нажатие, а не
+    /// подсветка «тут важное».
+    static let hintRingSelectedAlpha: CGFloat = 0.45
     /// Толщина кольца в ТОЧКАХ ЭКРАНА — как и всё у кисти, делится на
     /// `zoomScale` при рисовании.
+    ///
+    /// Пунктира у кольца больше нет: штрих на просвечивающей мгле читается как
+    /// элемент интерфейса поверх карты, а ровная волосяная линия — как след.
     static let hintRingWidthPoints: CGFloat = 1
-    /// Штрих и пробел, в точках экрана.
-    static let hintRingDash: [CGFloat] = [4, 4]
-    /// Тёмный ободок ВНУТРЬ от кольца: он и делает круг вдавленным. Слабее
-    /// самого кольца и без пунктира — иначе это второе кольцо, а не тень.
-    static let hintRimAlpha: CGFloat = 0.20
-    static let hintRimWidthPoints: CGFloat = 4
+
+    /// Видно ли кольцо подсказки на этом уровне детали.
+    ///
+    /// На `.far` — нет: три круга по тридцать километров на карте страны
+    /// перекрываются в одно пятно, и «след» превращается в кляксу. Счёт
+    /// подсказок на этом масштабе несёт строка под «Атласом» («N загадок
+    /// рядом») и группа журнала, а не геометрия.
+    static func showsHints(lod: RevealedLayer.LOD) -> Bool { lod != .far }
 
     /// Круги подсказок, выгравированные в уже нарисованном тумане.
     ///
@@ -798,32 +819,23 @@ enum FogVeilPainter {
     /// круг рос и сжимался относительно карты. В растре он привязан к земле
     /// тем же аффинным преобразованием, что и весь туман, и расти ему нечем.
     static func engrave(
-        context: CGContext, hints: [EngravedHint], zoomScale: MKZoomScale
+        context: CGContext, hints: [EngravedHint], zoomScale: MKZoomScale,
+        lod: RevealedLayer.LOD
     ) {
-        guard !hints.isEmpty, zoomScale > 0 else { return }
+        guard showsHints(lod: lod), !hints.isEmpty, zoomScale > 0 else { return }
         let scale = CGFloat(zoomScale)
         context.saveGState()
         context.setBlendMode(.normal)
         context.setLineCap(.butt)
+        context.setLineDash(phase: 0, lengths: [])
+        context.setLineWidth(hintRingWidthPoints / scale)
         for hint in hints where hint.radius > 0 {
-            let rim = hintRimWidthPoints / scale
-            let inner = hint.radius - rim / 2
-            if inner > 0 {
-                context.setLineDash(phase: 0, lengths: [])
-                context.setLineWidth(rim)
-                context.setStrokeColor(veilColorTop.withAlphaComponent(hintRimAlpha).cgColor)
-                context.strokeEllipse(in: CGRect(
-                    x: hint.centre.x - inner, y: hint.centre.y - inner,
-                    width: inner * 2, height: inner * 2))
-            }
-            context.setLineDash(phase: 0, lengths: hintRingDash.map { $0 / scale })
-            context.setLineWidth(hintRingWidthPoints / scale)
-            context.setStrokeColor(hintRingColor.withAlphaComponent(hintRingAlpha).cgColor)
+            let alpha = hint.selected ? hintRingSelectedAlpha : hintRingAlpha
+            context.setStrokeColor(hintRingColor.withAlphaComponent(alpha).cgColor)
             context.strokeEllipse(in: CGRect(
                 x: hint.centre.x - hint.radius, y: hint.centre.y - hint.radius,
                 width: hint.radius * 2, height: hint.radius * 2))
         }
-        context.setLineDash(phase: 0, lengths: [])
         context.restoreGState()
     }
 
@@ -1293,7 +1305,7 @@ final class FogVeilRenderer: MKOverlayRenderer {
                 regions: regionPaint(in: mapRect, lod: level, zoomScale: zoomScale),
                 reveal: reveal(in: mapRect, zoomScale: zoomScale, metre: metre)
             )
-            engraveHints(in: context, mapRect: mapRect, zoomScale: zoomScale)
+            engraveHints(in: context, mapRect: mapRect, zoomScale: zoomScale, lod: level)
             return
         }
         let width = Self.corridorWidth(zoomScale: zoomScale, metre: metre)
@@ -1316,7 +1328,7 @@ final class FogVeilRenderer: MKOverlayRenderer {
             regions: regionPaint(in: mapRect, lod: level, zoomScale: zoomScale),
             reveal: reveal(in: mapRect, zoomScale: zoomScale, metre: metre)
         )
-        engraveHints(in: context, mapRect: mapRect, zoomScale: zoomScale)
+        engraveHints(in: context, mapRect: mapRect, zoomScale: zoomScale, lod: level)
     }
 
     /// Круги подсказок — те же, что у экранной вуали, и тем же кодом.
@@ -1326,17 +1338,19 @@ final class FogVeilRenderer: MKOverlayRenderer {
     /// Отсекаются круги, до которых этому тайлу нет дела: у подсказки радиус
     /// до тридцати километров, а тайл на улице — двести метров.
     private func engraveHints(
-        in context: CGContext, mapRect: MKMapRect, zoomScale: MKZoomScale
+        in context: CGContext, mapRect: MKMapRect, zoomScale: MKZoomScale,
+        lod: RevealedLayer.LOD
     ) {
+        guard FogVeilPainter.showsHints(lod: lod) else { return }
         let all = veil.hints
         guard !all.isEmpty else { return }
         let visible = all.filter { hint in
-            let reach = Double(hint.radius) + Double(FogVeilPainter.hintRimWidthPoints) / Double(zoomScale)
+            let reach = Double(hint.radius) + Double(FogVeilPainter.hintRingWidthPoints) / Double(zoomScale)
             let box = MKMapRect(x: Double(hint.centre.x) - reach, y: Double(hint.centre.y) - reach,
                                 width: reach * 2, height: reach * 2)
             return box.intersects(mapRect)
         }
-        FogVeilPainter.engrave(context: context, hints: visible, zoomScale: zoomScale)
+        FogVeilPainter.engrave(context: context, hints: visible, zoomScale: zoomScale, lod: lod)
     }
 
     /// Границы этого тайла — или `nil`, если экран их не показывает, индекс

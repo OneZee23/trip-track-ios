@@ -216,31 +216,28 @@ final class RiddleHintAnnotation: NSObject, MKAnnotation {
 /// простая: круг задан в метрах, а значок — в точках экрана, и на стране три
 /// круга по тридцать километров помещаются в один палец.
 ///
-/// Решение — уровни, и порог у каждого свой вопрос:
-/// - меньше `badgeDiameterPt` — круга на экране почти нет, и значок стоял бы
-///   не «в круге», а посреди карты. Не показываем ничего: в тумане остаётся
-///   выгравированное кольцо (чтобы было видно, что тут что-то есть), а счёт
-///   несёт строка листа «N загадок рядом»;
-/// - от `badgeDiameterPt` до `fullDiameterPt` — один «?»: круг уже читается
-///   как круг, но строка в 190 pt в него не вписана и легла бы на соседей;
-/// - от `fullDiameterPt` — «?» и строка: круг занимает треть ширины телефона,
-///   и подпись под значком остаётся внутри него.
+/// Уровней с 17 сен ДВА, а не три: строки на карте больше нет вовсе (владелец:
+/// «сильно много внимания на себя берут секреты и кружки вокруг них»). Читать
+/// «Где-то здесь дорога перевалит через хребет» поверх тумана человек не
+/// просил — это делает карту списком дел; строка живёт в журнале и в карточке,
+/// то есть там, куда за ней приходят.
+///
+/// Порог остался один и тот же: меньше `badgeDiameterPt` круга на экране почти
+/// нет, и значок стоял бы не «в круге», а посреди карты. Тогда от подсказки
+/// видно только выгравированное кольцо, а счёт несёт строка листа «N загадок
+/// рядом».
 enum HintBadgeLOD {
-    enum Level { case none, badge, full }
+    enum Level { case none, badge }
 
-    /// Строка шириной 190 pt читается «внутри круга» начиная с этого диаметра.
-    static let fullDiameterPt: CGFloat = 160
     /// Меньше этого круг на экране — точка, и значку не к чему привязаться.
     static let badgeDiameterPt: CGFloat = 60
 
     static func level(diameterPt: CGFloat) -> Level {
-        if diameterPt >= fullDiameterPt { return .full }
-        if diameterPt >= badgeDiameterPt { return .badge }
-        return .none
+        diameterPt >= badgeDiameterPt ? .badge : .none
     }
 }
 
-/// «?» и одна строка. КРУГА ЗДЕСЬ БОЛЬШЕ НЕТ.
+/// Один «?» размером с ноготь. НИ КРУГА, НИ СТРОКИ ЗДЕСЬ НЕТ.
 ///
 /// До 16 сен круг рисовал `CAShapeLayer` этой вью, в ТОЧКАХ ЭКРАНА, и радиус
 /// пересчитывался только на `regionDidChangeAnimated` — то есть когда камера
@@ -251,13 +248,19 @@ enum HintBadgeLOD {
 /// живёт в метрах на земле и едет за картой тем же аффинным преобразованием,
 /// что и весь туман: расти ему нечем по построению.
 ///
-/// Аннотацией остаётся только то, что обязано быть ПОВЕРХ тумана и постоянного
-/// размера, — значок и подпись.
+/// Строка под значком стояла здесь до 17 сен и ушла тем же приговором, что
+/// снял яркость с кольца: подсказка обязана быть заметной ровно настолько,
+/// чтобы по ней нажали, — а что именно ищется, отвечает уже карточка
+/// (`RiddleHintCard`).
 final class RiddleHintView: MKAnnotationView {
     static let reuseID = "RiddleHint"
 
+    /// Диаметр диска в точках экрана.
+    static let badgeSide: CGFloat = 22
+    /// Непрозрачность всего значка: он метка на тумане, а не кнопка на панели.
+    static let badgeAlpha: CGFloat = 0.75
+
     private let chip = UILabel()
-    private let caption = UILabel()
 
     /// Что показывать на текущем масштабе. Считает карта (диаметр круга в
     /// точках экрана) и ставит сюда — на каждом кадре жеста, три аннотации.
@@ -265,16 +268,17 @@ final class RiddleHintView: MKAnnotationView {
     /// вправе показать сам (пересчёт столкновений, переиспользование вью), и
     /// проверка «значение то же» оставила бы на стране «?», который мы уже
     /// прятали. Три аннотации и три булевых поля на кадр.
-    var lod: HintBadgeLOD.Level = .full {
+    var lod: HintBadgeLOD.Level = .badge {
         didSet { applyLOD() }
     }
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        frame = CGRect(x: 0, y: 0, width: 26, height: 26)
+        frame = CGRect(x: 0, y: 0, width: Self.badgeSide, height: Self.badgeSide)
         centerOffset = .zero
-        // Не контрол: у подсказки в этой волне нет действия, а перехваченный
-        // ею тап не дошёл бы до дороги под кругом.
+        // Не контрол MapKit: нажатие ловит один общий распознаватель карты
+        // (`Coordinator.handleTap`), который и решает, что открылось. Своя
+        // выборка MapKit здесь дала бы второй ответ на тот же тап.
         isEnabled = false
         // Выше подписи региона (`.defaultLow` у `RegionLabelView`): при
         // столкновении MapKit прячет ПРОИГРАВШЕГО, и уступить обязана подпись,
@@ -286,30 +290,20 @@ final class RiddleHintView: MKAnnotationView {
         // резервировал бы под ним пустые углы.
         collisionMode = .circle
         isAccessibilityElement = true
+        accessibilityTraits = .button
         layer.masksToBounds = false
         clipsToBounds = false
 
         chip.frame = bounds
         chip.textAlignment = .center
-        chip.font = .systemFont(ofSize: 15, weight: .heavy)
-        chip.textColor = SealPainter.ring(for: .riddle)
-        chip.backgroundColor = SealPainter.disc
-        chip.layer.cornerRadius = 13
-        chip.layer.borderWidth = 1.5
-        chip.layer.borderColor = SealPainter.ring(for: .riddle).withAlphaComponent(0.8).cgColor
+        chip.font = .systemFont(ofSize: 13, weight: .heavy)
+        chip.layer.cornerRadius = Self.badgeSide / 2
+        chip.layer.borderWidth = 1
         chip.layer.masksToBounds = true
         chip.text = "?"
+        chip.alpha = Self.badgeAlpha
         addSubview(chip)
-
-        caption.font = .systemFont(ofSize: 11, weight: .semibold)
-        caption.textColor = UIColor.white.withAlphaComponent(0.85)
-        caption.textAlignment = .center
-        caption.numberOfLines = 2
-        caption.layer.shadowColor = UIColor.black.cgColor
-        caption.layer.shadowOpacity = 0.8
-        caption.layer.shadowRadius = 3
-        caption.layer.shadowOffset = .zero
-        addSubview(caption)
+        applyPalette()
         configure()
     }
 
@@ -317,14 +311,28 @@ final class RiddleHintView: MKAnnotationView {
         didSet { configure() }
     }
 
+    /// Цвета значка — от палитры тумана, а не от темы экрана.
+    ///
+    /// Диск залит самой мглой: значок обязан читаться как её часть, а не как
+    /// плашка поверх карты. Отсюда же и знак вопроса с ободком — светлые на
+    /// ночной палитре, тёмные на дневной; взять их у `AppTheme` значило бы
+    /// поставить тёмный «?» на тёмную мглу в тот день, когда «Атлас» сменит
+    /// полярность.
+    private func applyPalette() {
+        let dark = FogVeilPainter.palette.isDark
+        let ink = dark ? UIColor.white : UIColor(red: 0x1C/255, green: 0x21/255,
+                                                 blue: 0x2C/255, alpha: 1)
+        chip.backgroundColor = FogVeilPainter.veilColorTop
+        chip.textColor = ink
+        chip.layer.borderColor = ink.withAlphaComponent(0.45).cgColor
+    }
+
     private func configure() {
         guard let hint = annotation as? RiddleHintAnnotation else { return }
-        caption.text = hint.line
+        // Строка на карте не печатается — но VoiceOver её читает: значок «?»
+        // без подписи не говорит незрячему ничего вовсе.
         accessibilityLabel = hint.line
-        let width: CGFloat = 190
-        let height = caption.sizeThatFits(CGSize(width: width, height: 60)).height
-        caption.frame = CGRect(x: bounds.midX - width / 2, y: bounds.maxY + 6,
-                               width: width, height: height)
+        applyPalette()
         applyLOD()
     }
 
@@ -332,8 +340,20 @@ final class RiddleHintView: MKAnnotationView {
         let hidden = lod == .none
         if isHidden != hidden { isHidden = hidden }
         if chip.isHidden != hidden { chip.isHidden = hidden }
-        let captionHidden = lod != .full
-        if caption.isHidden != captionHidden { caption.isHidden = captionHidden }
+    }
+
+    /// Отклик В МОМЕНТ КАСАНИЯ (канон «нажатие обязано отвечать»): диск
+    /// приседает и возвращается.
+    ///
+    /// Пружиной, а не цепочкой анимаций со сном: жест можно передумать, и
+    /// приложение не имеет права доигрывать. `PressableCardStyle` сюда не
+    /// дотянуться — это `MKAnnotationView`, а не SwiftUI.
+    func flashPress() {
+        chip.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
+        UIView.animate(withDuration: 0.28, delay: 0, usingSpringWithDamping: 0.6,
+                       initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+            self.chip.transform = .identity
+        }
     }
 
     @available(*, unavailable)
