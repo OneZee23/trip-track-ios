@@ -213,6 +213,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     var seals: [Discovery] = []
     /// Не больше трёх нерешённых загадок: круг и «?» без точки.
     var riddleHints: [RiddleHint] = []
+    /// Подсказка, чья карточка сейчас открыта: её кольцо горит ярче. Живёт в
+    /// экране, а не в координаторе, — карточку показывает он же.
+    var selectedHintId: String?
     /// Подписи регионов следуют языку приложения, который живёт в
     /// EnvironmentObject — координатору до него не дотянуться.
     var language: LanguageManager.Language
@@ -225,6 +228,8 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     var onSelectRoad: ([UUID]) -> Void
     /// Тап по печати — `Discovery.id`.
     var onSelectDiscovery: (UUID) -> Void = { _ in }
+    /// Тап по значку подсказки или по её кольцу — `Riddle.id`.
+    var onSelectHint: (String) -> Void = { _ in }
     var onTapMap: (CLLocationCoordinate2D) -> Void
     /// One-shot camera command; the binding is cleared once applied.
     @Binding var cameraCommand: MapCameraCommand?
@@ -298,12 +303,14 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         coordinator.onSelectTrip = onSelectTrip
         coordinator.onSelectRoad = onSelectRoad
         coordinator.onSelectDiscovery = onSelectDiscovery
+        coordinator.onSelectHint = onSelectHint
         coordinator.onTapMap = onTapMap
 
         coordinator.syncData(map, exploration: exploration, revealed: revealed,
                              language: language, veil: veil, vein: vein)
         coordinator.syncSeals(map, seals: seals, language: language)
-        coordinator.syncHints(map, hints: riddleHints, language: language)
+        coordinator.syncHints(map, hints: riddleHints, language: language,
+                              selectedId: selectedHintId)
         coordinator.syncSelectedRoute(map, route: selectedRoute, language: language)
         coordinator.syncSelection(map, selection: selection)
         coordinator.applyInitialCameraIfNeeded(map, exploration: exploration)
@@ -324,6 +331,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         var onSelectTrip: ((UUID) -> Void)?
         var onSelectRoad: (([UUID]) -> Void)?
         var onSelectDiscovery: ((UUID) -> Void)?
+        var onSelectHint: ((String) -> Void)?
         var onTapMap: ((CLLocationCoordinate2D) -> Void)?
 
         private weak var mapView: MKMapView?
@@ -372,6 +380,15 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// Последние круги подсказок: вуаль встаёт в дерево карты позже первой
         /// синхронизации и забирает их у координатора — как и слой открытого.
         private var lastHints: [RiddleHint] = []
+        /// Подсказка, чья карточка открыта: её кольцо гравируется ярче
+        /// (`FogVeilPainter.hintRingSelectedAlpha`).
+        private var selectedHintId: String?
+        /// Насколько мимо кольца можно попасть пальцем и всё-таки открыть
+        /// карточку. Кольцо — волосяная линия в точку толщиной, и без запаса
+        /// нажать по нему нельзя вовсе; 12 pt это половина канонной цели
+        /// нажатия в 44 pt, то есть промах прощается, а соседняя дорога под
+        /// кольцом остаётся своей.
+        static let hintRingTouchPoints: CGFloat = 12
         /// Первая синхронизация печатей уже прошла. До неё «новых» печатей не
         /// бывает: открытие вкладки с двадцатью находками не должно давать
         /// двадцать прорезей подряд.
@@ -427,7 +444,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // Круги подсказок переезжают на новый оверлей вместе с ним:
                 // плиточный рендерер — откат, и картинку он обязан рисовать
                 // ту же самую.
-                veil?.hints = veilHints(lastHints)
+                veil?.hints = veilHints(lastHints, selectedId: selectedHintId)
                 if screenVeil { host?.screenVeil.setLayer(revealed) }
             }
 
@@ -597,15 +614,19 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
 
         /// Подсказки — тем же диффом. Круг и строка меняются только вместе с
         /// набором загадок или языком.
-        func syncHints(_ map: MKMapView, hints: [RiddleHint], language: LanguageManager.Language) {
+        func syncHints(
+            _ map: MKMapView, hints: [RiddleHint], language: LanguageManager.Language,
+            selectedId: String? = nil
+        ) {
             // Круги — в туман, и не по диффу имён: их геометрия меняется
             // вместе со списком, а вуаль сама решит, перерисовываться ли.
             lastHints = hints
+            selectedHintId = selectedId
             if let host, host.screenVeilAttached {
-                host.screenVeil.setHints(hints)
+                host.screenVeil.setHints(hints, selectedId: selectedId)
             }
             if let veil = installedVeil {
-                let circles = veilHints(hints)
+                let circles = veilHints(hints, selectedId: selectedId)
                 if veil.hints != circles {
                     veil.hints = circles
                     // Плиточный откат сам о смене данных не узнаёт: у оверлея
@@ -633,14 +654,50 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         }
 
         /// Круги для плиточного ОТКАТА — в точках карты, как их ждёт кисть.
-        private func veilHints(_ hints: [RiddleHint]) -> [FogVeilPainter.EngravedHint] {
+        private func veilHints(
+            _ hints: [RiddleHint], selectedId: String?
+        ) -> [FogVeilPainter.EngravedHint] {
             hints.map { hint in
                 let metre = MKMapPointsPerMeterAtLatitude(hint.centre.latitude)
                 let centre = MKMapPoint(hint.centre)
                 return FogVeilPainter.EngravedHint(
                     centre: CGPoint(x: centre.x, y: centre.y),
-                    radius: CGFloat(hint.radiusMetres * metre))
+                    radius: CGFloat(hint.radiusMetres * metre),
+                    selected: hint.id == selectedId)
             }
+        }
+
+        /// Подсказка под пальцем — сам значок или её кольцо.
+        ///
+        /// Два вопроса подряд, и порядок не случаен: значок это цель, по
+        /// которой целятся, а кольцо — то, до чего человек дотягивается, когда
+        /// значка на экране нет (`HintBadgeLOD.none`) или когда палец лёг на
+        /// саму линию. Кольца на `.far` не существует вовсе
+        /// (`FogVeilPainter.showsHints`), и нажимать там не по чему: невидимая
+        /// цель хуже отсутствующей.
+        func hint(at point: CGPoint, on map: MKMapView) -> RiddleHintAnnotation? {
+            guard !installedHints.isEmpty else { return nil }
+            for hint in installedHints {
+                guard let view = map.view(for: hint) as? RiddleHintView, !view.isHidden
+                else { continue }
+                if view.frame.insetBy(dx: -6, dy: -6).contains(point) { return hint }
+            }
+            guard map.bounds.width > 0, map.visibleMapRect.size.width > 0 else { return nil }
+            let zoomScale = MKZoomScale(Double(map.bounds.width) / map.visibleMapRect.size.width)
+            guard zoomScale > 0, zoomScale.isFinite,
+                  FogVeilPainter.showsHints(lod: FogVeilRenderer.lod(for: zoomScale))
+            else { return nil }
+            let metresPerPoint = map.metersPerScreenPoint
+            guard metresPerPoint > 0, metresPerPoint.isFinite else { return nil }
+            var best: (hint: RiddleHintAnnotation, off: CGFloat)?
+            for hint in installedHints {
+                let centre = map.convert(hint.coordinate, toPointTo: map)
+                let radius = CGFloat(hint.radiusMetres / metresPerPoint)
+                let off = abs(hypot(point.x - centre.x, point.y - centre.y) - radius)
+                guard off <= Self.hintRingTouchPoints else { continue }
+                if best == nil || off < best!.off { best = (hint, off) }
+            }
+            return best?.hint
         }
 
         /// Что видно у подсказки на этом масштабе — значок со строкой, один
@@ -901,7 +958,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 $0 is FogVeilOverlay || ($0 as? RouteVeinOverlay)?.style == .network
             })
             host.screenVeil.setLayer(lastRevealed)
-            host.screenVeil.setHints(lastHints)
+            host.screenVeil.setHints(lastHints, selectedId: selectedHintId)
             if let route = installedRoute, let line = route.polylines(for: .fine).first {
                 map.removeOverlays(map.overlays.compactMap {
                     ($0 as? RouteVeinOverlay)?.style == .selected ? $0 : nil
@@ -985,8 +1042,13 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 activeTouches: fingers?.activeTouches ?? 0,
                 secondsSinceMultiTouch: fingers?.secondsSinceMultiTouch
             ) else { return }
-            let point = recognizer.location(in: map)
+            handleTap(at: recognizer.location(in: map), on: map)
+        }
 
+        /// Тот же тап, но ТОЧКОЙ: распознаватель остаётся снаружи, и разбор
+        /// «что под пальцем» проверяется тестом, а не открытым экраном
+        /// (тот же приём, что у `AutoTripPolicy` и `JourneyEditSheet`).
+        func handleTap(at point: CGPoint, on map: MKMapView) {
             var nearest: (annotation: MKAnnotation, distance: CGFloat)?
             for annotation in map.annotations {
                 // Route endpoints are labels on the trip already open. Letting
@@ -998,9 +1060,10 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // причине, что и концы маршрута — тап обязан дойти до того,
                 // что под ней, будь то дорога или пустой туман.
                 guard !(annotation is RegionLabelAnnotation) else { continue }
-                // Круг подсказки в этой волне не нажимается: своего экрана у
-                // нерешённой загадки нет (волна 4), а «?» размером в полэкрана
-                // съел бы тапы по дорогам под ним.
+                // Подсказка выбывает из общего хит-теста, но не из нажатий:
+                // у неё своя цель — значок ИЛИ кольцо, — и считает её `hint(at:
+                // on:)` ниже. В общем списке она мерилась бы рамкой значка, и
+                // кольцо остались бы не нажать.
                 guard !(annotation is RiddleHintAnnotation) else { continue }
                 guard let view = map.view(for: annotation), !view.isHidden else { continue }
                 let target = view.frame.insetBy(dx: -6, dy: -6)
@@ -1023,6 +1086,16 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 }
                 // Точка города — подпись, а не контрол: тап по ней не делает
                 // ничего (так было и до 0.7.0).
+                return
+            }
+
+            // Подсказка загадки — ПЕРЕД дорогой: её кольцо это волосяная линия
+            // с запасом в 12 pt, а дорога под ним никуда не девается — до неё
+            // палец дотянется в любом другом месте того же круга.
+            if let hint = hint(at: point, on: map) {
+                Haptics.tap()
+                (map.view(for: hint) as? RiddleHintView)?.flashPress()
+                onSelectHint?(hint.hintId)
                 return
             }
 

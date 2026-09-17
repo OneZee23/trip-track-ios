@@ -77,6 +77,10 @@ struct MyMapSheet: View {
     /// журнала уже держит готовые находки, и второй поход за ней в `vm` в
     /// момент показа ничего бы не уточнил.
     @State private var cardDiscovery: Discovery?
+    /// Карточка НЕрешённой загадки из группы «Загадки рядом» — та же, что
+    /// открывает тап по кругу на карте. Строка, которая ничего не открывает,
+    /// была бы обещанием без содержания (канон «нажатие обязано отвечать»).
+    @State private var cardRiddle: RiddleHintCardModel?
     @GestureState private var drag: CGFloat = 0
 
     var body: some View {
@@ -120,6 +124,11 @@ struct MyMapSheet: View {
             }
             .padding(.bottom, 20)
             .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
+        }
+        .sheet(item: $cardRiddle) { model in
+            RiddleHintCard(model: model)
+                .padding(.bottom, 20)
+                .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
         }
     }
 
@@ -291,6 +300,19 @@ struct MyMapSheet: View {
     }
 
     private func riddleRow(_ riddle: Journal.NearbyRiddle, _ c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            cardRiddle = RiddleHintCardModel.make(
+                riddle: riddle, unit: distanceUnit, lang: lang.language)
+        } label: {
+            riddleRowLabel(riddle, c)
+        }
+        .buttonStyle(PressableCardStyle())
+    }
+
+    private func riddleRowLabel(
+        _ riddle: Journal.NearbyRiddle, _ c: AppTheme.Colors
+    ) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Text("?")
                 .font(.inter(15, weight: .heavy))

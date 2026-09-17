@@ -1174,6 +1174,16 @@ enum AppStrings {
             .replacingOccurrences(of: "{date}", with: date)
     }
 
+    /// «решается проездом» — карточка НЕрешённой загадки (`RiddleHintCard`).
+    ///
+    /// Настоящее время, а не прошедшее: это правило игры, а не событие.
+    /// Единственная строка карточки, которая отвечает на вопрос «а что мне с
+    /// этим делать» — искать точку пальцем по карте не нужно, достаточно
+    /// проехать мимо.
+    static func cardSolvedByDriving(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "cardSolvedByDriving", ru: "решается проездом", en: "solved by driving past")
+    }
+
     /// Кнопка карточки, открытой из журнала: увезти камеру к печати.
     static func cardOnMap(_ lang: LanguageManager.Language) -> String {
         tr(lang, "cardOnMap", ru: "На карте", en: "Show on map")

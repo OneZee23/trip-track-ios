@@ -227,6 +227,7 @@ extension Translations {
         "cardFoundBy": "{count} buldu · ilk {name}",
         "cardFirstSomeone": "biri",
         "cardSolvedOn": "{date} tarihli sürüşte çözüldü",
+        "cardSolvedByDriving": "yanından geçerek çözülür",
         "cardOnMap": "Haritada göster",
         "cardStoryPending": "Hikâye bir güncellemeyle gelecek",
         "posterCaption": "{distance} keşfedildi",

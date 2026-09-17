@@ -227,6 +227,7 @@ extension Translations {
         "cardFoundBy": "ditemukan {count} · pertama {name}",
         "cardFirstSomeone": "seseorang",
         "cardSolvedOn": "terpecahkan saat berkendara {date}",
+        "cardSolvedByDriving": "terpecahkan dengan berkendara melewatinya",
         "cardOnMap": "Lihat di peta",
         "cardStoryPending": "Ceritanya akan hadir dengan pembaruan",
         "posterCaption": "{distance} terbuka",

@@ -227,6 +227,7 @@ extension Translations {
         "cardFoundBy": "знайшли {count} · першим — {name}",
         "cardFirstSomeone": "хтось",
         "cardSolvedOn": "розв'язана проїздом {date}",
+        "cardSolvedByDriving": "розв’язується проїздом",
         "cardOnMap": "На карті",
         "cardStoryPending": "Історія з'явиться з оновленням",
         "posterCaption": "{distance} відкрито",

@@ -227,6 +227,7 @@ extension Translations {
         "cardFoundBy": "nakita ng {count} · una si {name}",
         "cardFirstSomeone": "isang tao",
         "cardSolvedOn": "nalutas sa isang biyahe noong {date}",
+        "cardSolvedByDriving": "nalulutas sa pagdaan",
         "cardOnMap": "Ipakita sa mapa",
         "cardStoryPending": "Darating ang kuwento sa isang update",
         "posterCaption": "{distance} ang nabuksan",

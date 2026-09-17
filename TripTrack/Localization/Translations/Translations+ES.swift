@@ -227,6 +227,7 @@ extension Translations {
         "cardFoundBy": "encontrado por {count} · primero {name}",
         "cardFirstSomeone": "alguien",
         "cardSolvedOn": "resuelto en un viaje el {date}",
+        "cardSolvedByDriving": "se resuelve pasando en coche",
         "cardOnMap": "Ver en el mapa",
         "cardStoryPending": "La historia llegará con una actualización",
         "posterCaption": "{distance} descubiertos",

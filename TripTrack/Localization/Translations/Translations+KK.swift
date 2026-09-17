@@ -227,6 +227,7 @@ extension Translations {
         "cardFoundBy": "{count} тапты · бірінші — {name}",
         "cardFirstSomeone": "біреу",
         "cardSolvedOn": "{date} жолда шешілді",
+        "cardSolvedByDriving": "жанынан өткенде шешіледі",
         "cardOnMap": "Картадан көрсету",
         "cardStoryPending": "Тарих жаңартумен бірге келеді",
         "posterCaption": "{distance} ашылды",

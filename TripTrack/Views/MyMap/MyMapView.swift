@@ -12,6 +12,7 @@ struct MyMapView: View {
     @EnvironmentObject private var mapVM: MapViewModel
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.distanceUnit) private var distanceUnit
+    @Environment(\.colorScheme) private var scheme
     // Singleton by design — survives tab switches (see MyMapViewModel.shared).
     @ObservedObject private var vm = MyMapViewModel.shared
     @State private var zoomLevel: MapZoomLevel = .far
@@ -25,6 +26,11 @@ struct MyMapView: View {
     /// Постер собирается (снимок карты качается из сети). Живёт здесь, потому
     /// что здесь же и заказ — см. `posterProgress`.
     @State private var isRenderingPoster = false
+    /// Карточка нерешённой загадки, открытая тапом по кругу или по значку.
+    /// Модель целиком, а не id: пока она здесь, карточка показана, а кольцо
+    /// этой подсказки горит ярче (`selectedHintId`). Закрытие листа обнуляет
+    /// её само — второго места, где снимается выбор, нет.
+    @State private var openedHint: RiddleHintCardModel?
 
     /// «Есть туман или нет» is not a question a screenshot can settle by eye —
     /// a night map is dark either way. `-no-fog-veil` draws the same map
@@ -46,6 +52,7 @@ struct MyMapView: View {
                 selection: vm.selection,
                 seals: vm.seals,
                 riddleHints: vm.riddleHints,
+                selectedHintId: openedHint?.id,
                 language: lang.language,
                 // Логотип Apple и «Legal» встают над свёрнутым листом: под
                 // непрозрачным туманом он накрыл бы их насовсем.
@@ -55,6 +62,9 @@ struct MyMapView: View {
                 onSelectRoad: { vm.selectRoad($0) },
                 // Камера не двигается: палец уже стоит на печати.
                 onSelectDiscovery: { vm.select(.discovery($0), zoom: false) },
+                // Камера не двигается и здесь: круг уже на экране, а его
+                // середина — не ответ (`RiddleHint.offsetCentre`).
+                onSelectHint: { openHint($0) },
                 // Auto-zoom to the region only from the country view, where
                 // that IS the gesture. Down at street level a tap that misses
                 // the road is a miss, and answering it by flinging the camera
@@ -103,6 +113,11 @@ struct MyMapView: View {
         .onReceive(NotificationCenter.default.publisher(for: .navigateToDiscovery)) { note in
             guard let id = note.object as? UUID else { return }
             vm.focusDiscovery(id)
+        }
+        .sheet(item: $openedHint) { model in
+            RiddleHintCard(model: model)
+                .padding(.bottom, 20)
+                .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
         }
         .fullScreenCover(item: $openedTrip) { opened in
             NavigationStack {
@@ -199,6 +214,22 @@ struct MyMapView: View {
         }
         .frame(maxWidth: 280)
         .allowsHitTesting(false)
+    }
+
+    // MARK: - Загадка
+
+    /// Тап по кругу или по значку подсказки: собрать карточку и показать её.
+    ///
+    /// Строка и расстояние берутся ИЗ ЖУРНАЛА (`Journal.NearbyRiddle`), а не
+    /// считаются заново: расстояние до края круга уже посчитано там, от
+    /// центроидов открытого, и второй счёт однажды разошёлся бы с первым — как
+    /// расходились километры до `TripDistanceGate`. Круга нет в журнале
+    /// (пересчёт плана уже прошёл, а тап приехал от прежней аннотации) —
+    /// карточки не будет: показывать пустую нечем.
+    private func openHint(_ id: String) {
+        guard let riddle = vm.journal.riddles.first(where: { $0.id == id }) else { return }
+        openedHint = RiddleHintCardModel.make(
+            riddle: riddle, unit: distanceUnit, lang: lang.language)
     }
 
     // MARK: - Share
