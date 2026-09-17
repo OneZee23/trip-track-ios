@@ -39,9 +39,9 @@ final class MapHostController: UIViewController {
                             showsRegions: true)
     var screenVeil: FogVeilView { veilSeat.veil }
 
-    /// Светлая подложка под логотипом Apple и «Legal». Нужна ровно потому, что
-    /// карта здесь дневная, а туман над ней тёмный (см. `AttributionPlate`).
-    let attributionPlate = AttributionPlate()
+    /// Сколько раз уже искали атрибуцию, чтобы вырезать под ней мглу.
+    private var carveTries = 0
+    private var carvedOnce = false
     /// Встала ли вуаль в дерево. `false` — иерархия `MKMapView` незнакомая,
     /// и туман рисует плиточный `FogVeilRenderer`, как до 0.7.0.
     var screenVeilAttached: Bool { veilSeat.isAttached }
@@ -68,26 +68,65 @@ final class MapHostController: UIViewController {
         map.frame = view.bounds
         map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(map)
-        // Атрибуции не нашлось — карта возвращается в ночную: нечитаемый
-        // «Legal» это возврат из ревью, а тёмный «Атлас» — всего лишь то, как
-        // он выглядел до фикс-волны 2.
-        attributionPlate.onAttributionNotFound = { [weak self] in
-            self?.map.overrideUserInterfaceStyle = .dark
-        }
         applyBottomInset()
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         veilSeat.attach(to: map)
-        attributionPlate.attach(to: map)
+        updateAttributionCarve()
     }
 
     /// Подложка ездит вместе с атрибуцией, а та — вместе с нижним инсетом и
     /// разметкой карты. Оба повода приходят сюда, поэтому и место одно.
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        attributionPlate.attach(to: map)
+        applyPalette()
+        updateAttributionCarve()
+    }
+
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous)
+        applyPalette()
+    }
+
+    /// Палитра мглы идёт за темой ЭКРАНА, а карта под ней дневная в обоих
+    /// случаях: от карты зависит полярность, а не тема.
+    ///
+    /// Читается стиль СВОЕЙ вью, а не карты: у карты он принудительно
+    /// дневной. Тема живёт на окне (`ThemeManager` красит его), и трейт — это
+    /// то же значение, только уже доехавшее до UIKit.
+    private func applyPalette() {
+        let wanted: FogVeilPainter.Palette =
+            view.traitCollection.userInterfaceStyle == .light ? .mist : .night
+        guard wanted.isDark != FogVeilPainter.palette.isDark else { return }
+        FogVeilPainter.palette = wanted
+        // Тон облаков запечён в их картинках, а растр нарисован прежней
+        // палитрой — и то и другое пересобирается.
+        CloudTexture.shared.forget()
+        veilSeat.veil.invalidate()
+    }
+
+    /// Вырезает мглу под логотипом Apple и «Legal».
+    ///
+    /// Не плита поверх них, а дыра под ними: подпись садится на настоящую
+    /// карту Apple, то есть ровно на тот фон, под который MapKit её и красит.
+    /// Атрибуции не нашлось за `maxTries` проходов разметки — вырезать нечего,
+    /// и карта возвращается в ночную: нечитаемый «Legal» это возврат из ревью.
+    private func updateAttributionCarve() {
+        guard veilSeat.isAttached else { return }
+        let veil = veilSeat.veil
+        if let rect = AttributionCarve.carveRect(in: map, space: veil) {
+            carvedOnce = true
+            veil.setAttributionCarve(rect)
+            return
+        }
+        guard !carvedOnce else { return }
+        carveTries += 1
+        if carveTries == AttributionCarve.maxTries {
+            AttributionCarve.noteFallback()
+            map.overrideUserInterfaceStyle = .dark
+        }
     }
 
     /// Экран ушёл — вуаль уходит с ним, а туман возвращается плиточному
@@ -95,7 +134,6 @@ final class MapHostController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         veilSeat.detach()
-        attributionPlate.detach()
     }
 
     /// Поворот устройства меняет не камеру, а сам кадр: привязка растра
@@ -122,8 +160,8 @@ final class MapHostController: UIViewController {
         // Инсет двигает центр видимой области, то есть запас растра
         // перестаёт лежать вокруг того, что человек видит.
         veilSeat.invalidate()
-        // И поднимает саму атрибуцию — подложка обязана уехать с ней.
-        attributionPlate.layout()
+        // И поднимает саму атрибуцию — вырез обязан уехать с ней.
+        updateAttributionCarve()
     }
 }
 

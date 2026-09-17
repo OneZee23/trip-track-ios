@@ -160,6 +160,9 @@ final class FogVeilView: UIView {
     /// Прорезь у машины на живой записи. Маска на СВОЁМ слое: она обязана
     /// резать и растр, и ровный туман вокруг него.
     private let revealMask = VeilRevealMask()
+    /// Вырез под атрибуцией Apple. Маска, а не плита: см. `AttributionCarve`.
+    private let carveMask = VeilCarveMask()
+    private var carveRect: CGRect?
     private var liveReveal: (coordinate: CLLocationCoordinate2D, progress: Double, metres: Double)?
     /// Самое большее два: тот, что на экране, и тот, что въезжает поверх него.
     private var rasters: [Raster] = []
@@ -365,11 +368,11 @@ final class FogVeilView: UIView {
         guard let coordinate, progress > 0 else {
             guard liveReveal != nil else { return }
             liveReveal = nil
-            layer.mask = nil
+            applyMask()
             return
         }
         liveReveal = (coordinate, progress, metres)
-        if layer.mask !== revealMask.layer { layer.mask = revealMask.layer }
+        applyMask()
         guard let map else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -393,6 +396,42 @@ final class FogVeilView: UIView {
         guard metresPerPoint > 0, metresPerPoint.isFinite else { return }
         let radius = CGFloat(live.metres * live.progress / metresPerPoint)
         revealMask.update(bounds: bounds, centre: centre, radius: max(radius, 1))
+    }
+
+    /// Где на экране лежит атрибуция Apple — там мгла вырезается совсем.
+    ///
+    /// `nil` — вырезать нечего (атрибуции не нашлось), и зовущий обязан
+    /// вернуть карту в ночную: подпись на светлой карте под нашей мглой не
+    /// читается, и это возврат из ревью.
+    func setAttributionCarve(_ rect: CGRect?) {
+        guard rect != carveRect else { return }
+        carveRect = rect
+        applyMask()
+    }
+
+    /// Какая маска сейчас на слое.
+    ///
+    /// Прорезь у машины и вырез под атрибуцией — две ДЫРЫ в одной маске, а
+    /// альфа-маской две дыры не складываются: прозрачное плюс прозрачное это
+    /// по-прежнему прозрачное только если считать их вместе, чего слои не
+    /// делают. Поэтому приоритет: пока растёт прорезь (0.6–0.7 с анимации),
+    /// она и есть маска, а вырез возвращается сразу после. Атрибуция на эти
+    /// доли секунды остаётся под мглой — цена, которую видно только на
+    /// секундомере.
+    private func applyMask() {
+        if liveReveal != nil {
+            if layer.mask !== revealMask.layer { layer.mask = revealMask.layer }
+            return
+        }
+        guard let carveRect, bounds.width > 1 else {
+            if layer.mask != nil { layer.mask = nil }
+            return
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        carveMask.update(bounds: bounds, carve: carveRect)
+        if layer.mask !== carveMask.layer { layer.mask = carveMask.layer }
+        CATransaction.commit()
     }
 
     /// Всё, что лежит на экране, устарело: следующий заказ идёт без задержки.
@@ -718,6 +757,7 @@ final class FogVeilView: UIView {
         super.layoutSubviews()
         verifySeating()
         layoutLetterbox()
+        applyMask()
         if let map { maybeRender(map: map, settled: true) }
     }
 
