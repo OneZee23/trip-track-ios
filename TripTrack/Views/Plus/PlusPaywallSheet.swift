@@ -29,7 +29,8 @@ struct PlusPaywallSheet: View {
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
-        let plans = PlusPaywallModel.plans(infos, lang: l)
+        let plans = PlusPaywallModel.plans(
+            infos, eligibleForIntro: store.introEligible, lang: l)
 
         VStack(spacing: 0) {
             grabber
@@ -87,7 +88,9 @@ struct PlusPaywallSheet: View {
             if store.products.isEmpty { await store.loadProducts() }
             if selectedId == nil {
                 selectedId = PlusPaywallModel.defaultSelection(
-                    PlusPaywallModel.plans(infos, lang: lang.language))
+                    PlusPaywallModel.plans(infos,
+                                           eligibleForIntro: store.introEligible,
+                                           lang: lang.language))
             }
         }
     }
@@ -292,7 +295,10 @@ struct PlusPaywallSheet: View {
     private func restoreButton(_ l: LanguageManager.Language) -> some View {
         Button {
             Haptics.tap()
-            Task { await store.restore() }
+            Task {
+                notice = .none
+                notice = await store.restore()
+            }
         } label: {
             Text(AppStrings.plusRestore(l))
                 .font(.inter(13, weight: .semibold))

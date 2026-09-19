@@ -19,7 +19,7 @@ final class PlusPaywallModelTests: XCTestCase {
     /// Годовой первым и выбранным — даже если Apple вернула продукты в другом
     /// порядке. Порядок ответа StoreKit нигде не обещан.
     func testYearlyLeadsAndIsTheDefault() {
-        let plans = PlusPaywallModel.plans([monthly, yearly], lang: .ru)
+        let plans = PlusPaywallModel.plans([monthly, yearly], eligibleForIntro: true, lang: .ru)
         XCTAssertEqual(plans.map(\.id), [PlusStore.yearlyID, PlusStore.monthlyID])
         XCTAssertTrue(plans[0].isDefault)
         XCTAssertFalse(plans[1].isDefault)
@@ -29,12 +29,13 @@ final class PlusPaywallModelTests: XCTestCase {
     /// Годового не привезли — выбран первый из привезённых, а не «ничего»:
     /// пейвол с невыбранным тарифом это кнопка, которая не нажимается.
     func testWithoutTheYearlyTheFirstPlanIsSelected() {
-        let plans = PlusPaywallModel.plans([monthly], lang: .en)
+        let plans = PlusPaywallModel.plans([monthly], eligibleForIntro: true, lang: .en)
         XCTAssertEqual(PlusPaywallModel.defaultSelection(plans), PlusStore.monthlyID)
     }
 
     func testNoProductsMeansNoSelection() {
-        XCTAssertNil(PlusPaywallModel.defaultSelection(PlusPaywallModel.plans([], lang: .de)))
+        XCTAssertNil(PlusPaywallModel.defaultSelection(
+            PlusPaywallModel.plans([], eligibleForIntro: true, lang: .de)))
     }
 
     // MARK: - Цена
@@ -42,7 +43,7 @@ final class PlusPaywallModelTests: XCTestCase {
     /// Цена попадает на экран ровно такой, какой её напечатала витрина: своего
     /// форматтера у пейвола нет и быть не должно.
     func testPriceComesStraightFromDisplayPrice() {
-        let plans = PlusPaywallModel.plans([yearly, monthly], lang: .ru)
+        let plans = PlusPaywallModel.plans([yearly, monthly], eligibleForIntro: true, lang: .ru)
         XCTAssertTrue(plans[0].price.contains("29,99 €"), plans[0].price)
         XCTAssertTrue(plans[1].price.contains("6,99 €"), plans[1].price)
     }
@@ -52,7 +53,7 @@ final class PlusPaywallModelTests: XCTestCase {
     /// читает цену, которой не увидит на списании.
     func testNoLanguageWritesACurrencyOfItsOwn() {
         for lang in LanguageManager.Language.allCases {
-            let plans = PlusPaywallModel.plans([yearly, monthly], lang: lang)
+            let plans = PlusPaywallModel.plans([yearly, monthly], eligibleForIntro: true, lang: lang)
             for plan in plans {
                 let stripped = plan.price.replacingOccurrences(of: "29,99 €", with: "")
                     .replacingOccurrences(of: "6,99 €", with: "")
@@ -69,14 +70,14 @@ final class PlusPaywallModelTests: XCTestCase {
     /// «7 дней бесплатно, потом 29,99 € в год» — и длина, и цена приходят из
     /// предложения, а не из литерала.
     func testTrialCaptionCarriesBothTheLengthAndThePrice() {
-        let plans = PlusPaywallModel.plans([yearly, monthly], lang: .ru)
+        let plans = PlusPaywallModel.plans([yearly, monthly], eligibleForIntro: true, lang: .ru)
         XCTAssertEqual(plans[0].caption, "7 дней бесплатно, потом 29,99 € в год")
         XCTAssertNil(plans[1].caption, "у месячного триала нет — подписи тоже")
     }
 
     func testTrialCaptionIsTranslatedEverywhere() {
         for lang in LanguageManager.Language.allCases {
-            let plans = PlusPaywallModel.plans([yearly], lang: lang)
+            let plans = PlusPaywallModel.plans([yearly], eligibleForIntro: true, lang: lang)
             let caption = plans[0].caption ?? ""
             XCTAssertFalse(caption.isEmpty, lang.rawValue)
             XCTAssertFalse(caption.contains("{"), "\(lang.rawValue): токен не подставлен — \(caption)")
@@ -97,9 +98,9 @@ final class PlusPaywallModelTests: XCTestCase {
     // MARK: - Заголовки
 
     func testTitlesAreTheLanguagesOwnWords() {
-        let ru = PlusPaywallModel.plans([yearly, monthly], lang: .ru)
+        let ru = PlusPaywallModel.plans([yearly, monthly], eligibleForIntro: true, lang: .ru)
         XCTAssertEqual(ru.map(\.title), ["Год", "Месяц"])
-        let de = PlusPaywallModel.plans([yearly, monthly], lang: .de)
+        let de = PlusPaywallModel.plans([yearly, monthly], eligibleForIntro: true, lang: .de)
         XCTAssertEqual(de.map(\.title), ["Jahr", "Monat"])
     }
 
@@ -150,5 +151,22 @@ final class PlusPaywallModelTests: XCTestCase {
             XCTAssertFalse(trial.contains("{"), "\(lang.rawValue): \(trial)")
             XCTAssertTrue(trial.contains("7"), "\(lang.rawValue): длина триала потерялась — \(trial)")
         }
+    }
+
+    /// **Находка аудита M1.** `introductoryOffer` у продукта есть ВСЕГДА, а
+    /// право на него — нет. Вернувшемуся подписчику (отменил → передумал)
+    /// пейвол обещал «7 дней бесплатно, потом 29,99 €», а списывалось
+    /// 29,99 € сразу: это App Store Review 3.1.2 и потребительское право, а
+    /// не косметика.
+    func testTrialCaptionIsSilentWhenAppleWillNotGiveTheTrial() {
+        let yearly = PlusProductInfo(
+            id: PlusStore.yearlyID, displayPrice: "29,99 €", period: .yearly, trialDays: 7)
+
+        let promised = PlusPaywallModel.plans([yearly], eligibleForIntro: true, lang: .ru)
+        XCTAssertNotNil(promised.first?.caption, "тому, кто триал получит, — обещаем")
+
+        let silent = PlusPaywallModel.plans([yearly], eligibleForIntro: false, lang: .ru)
+        XCTAssertNil(silent.first?.caption, "тому, кто его уже съел, — ни слова")
+        XCTAssertEqual(silent.first?.price, promised.first?.price, "цена та же самая")
     }
 }

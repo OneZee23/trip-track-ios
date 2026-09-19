@@ -42,15 +42,24 @@ struct PlusPlan: Identifiable, Equatable {
 enum PlusPaywallModel {
     /// Годовой всегда первым и всегда выбранным по умолчанию — решение спеки,
     /// а не порядок, в котором Apple вернула продукты (он не обещан).
+    /// - Parameter eligibleForIntro: даст ли Apple вводное предложение ЭТОМУ
+    ///   Apple ID (`PlusStore.introEligible`). Параметр обязателен и без
+    ///   значения по умолчанию нарочно — тот же рычаг, что у `Measure.unit:`:
+    ///   новое место показа не соберётся, не сказав вслух, проверено ли
+    ///   право. `introductoryOffer` у продукта существует ВСЕГДА, поэтому
+    ///   строить подпись по нему значит обещать бесплатную неделю тому, кто
+    ///   её уже съел, — и списать полную цену сразу (Review 3.1.2).
     static func plans(
-        _ infos: [PlusProductInfo], lang: LanguageManager.Language
+        _ infos: [PlusProductInfo],
+        eligibleForIntro: Bool,
+        lang: LanguageManager.Language
     ) -> [PlusPlan] {
         let ordered = infos.sorted { a, _ in a.period == .yearly }
         return ordered.map { info in
             let price = info.period == .yearly
                 ? AppStrings.plusPerYear(lang, price: info.displayPrice)
                 : AppStrings.plusPerMonth(lang, price: info.displayPrice)
-            let caption = info.trialDays.map {
+            let caption = (eligibleForIntro ? info.trialDays : nil).map {
                 AppStrings.plusTrialCaption(lang, days: $0, price: price)
             }
             return PlusPlan(

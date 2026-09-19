@@ -1,6 +1,7 @@
 import XCTest
 import StoreKit
 import StoreKitTest
+import UIKit
 @testable import TripTrack
 
 /// «Плюс» на телефоне: что считается подпиской, что показывает витрина и что
@@ -58,14 +59,32 @@ final class PlusStoreTests: XCTestCase {
     }
 
     /// Витрина РФ платного не показывает вовсе — решение владельца 19 сентября.
-    /// Код трёхбуквенный: `Storefront.countryCode` отвечает по ISO 3166-1
-    /// alpha-3, и «RU» здесь не сработало бы никогда.
-    func testOnlyTheRussianStorefrontHidesPaidThings() {
+    ///
+    /// Кодов ДВА, и оба законны. `Storefront.countryCode` отвечает по
+    /// ISO 3166-1 alpha-3 (`RUS`), а `Locale.region.identifier`, которым
+    /// засевается ПЕРВЫЙ запуск (витрина ещё не ответила), — alpha-2 (`RU`).
+    /// Пока сравнение шло только с трёхбуквенным, засев молчал, и первый
+    /// холодный старт в РФ открывался со «платное видно».
+    func testBothSpellingsOfTheRussianStorefrontHidePaidThings() {
         XCTAssertTrue(PlusStore.hidesPlus(countryCode: "RUS"))
-        XCTAssertFalse(PlusStore.hidesPlus(countryCode: "RU"))
+        XCTAssertTrue(PlusStore.hidesPlus(countryCode: "RU"), "так отвечает Locale.region")
+        XCTAssertTrue(PlusStore.hidesPlus(countryCode: "ru"))
         XCTAssertFalse(PlusStore.hidesPlus(countryCode: "GEO"))
         XCTAssertFalse(PlusStore.hidesPlus(countryCode: "USA"))
         XCTAssertFalse(PlusStore.hidesPlus(countryCode: nil))
+    }
+
+    /// Самая поздняя дата, а не последняя в перечислении: порядок
+    /// `currentEntitlements` Apple не обещает, а строк в группе у человека,
+    /// переехавшего с месячного на годовой, две.
+    func testTheLatestExpiryWins() {
+        let early = Date(timeIntervalSince1970: 1_000)
+        let late = Date(timeIntervalSince1970: 2_000)
+        XCTAssertEqual(PlusStore.later(early, late), late)
+        XCTAssertEqual(PlusStore.later(late, early), late)
+        XCTAssertEqual(PlusStore.later(nil, late), late)
+        XCTAssertEqual(PlusStore.later(early, nil), early)
+        XCTAssertNil(PlusStore.later(nil, nil))
     }
 
     /// Уже купленный «Плюс» честно работает и на витрине, которая его больше
@@ -215,9 +234,19 @@ final class PlusStoreTests: XCTestCase {
     /// работать — здесь оно не куплено, поэтому гейт закрывает всё.
     func testTheRussianStorefrontHidesPaidThingsEndToEnd() async throws {
         let session = try makeSession()
+        let remembered = UserDefaults.standard.string(forKey: PlusAccess.storefrontKey)
         defer {
             session.storefront = "GEO"
             session.clearTransactions()
+            // Витрина теперь ЗАПОМИНАЕТСЯ (иначе каждый холодный старт в РФ
+            // начинался бы со «платное видно»), и оставить «RUS» за собой
+            // значило бы отдать её следующему прогону.
+            if let remembered {
+                UserDefaults.standard.set(remembered, forKey: PlusAccess.storefrontKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: PlusAccess.storefrontKey)
+            }
+            PlusAccess.shared.storefrontHidesPlus = PlusStore.hidesPlus(countryCode: remembered)
         }
 
         session.storefront = "RUS"
@@ -225,6 +254,8 @@ final class PlusStoreTests: XCTestCase {
 
         XCTAssertEqual(PlusStore.shared.storefrontCountry, "RUS")
         XCTAssertTrue(PlusAccess.shared.storefrontHidesPlus)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: PlusAccess.storefrontKey), "RUS",
+                       "витрина обязана пережить холодный старт")
         for feature in PlusFeature.allCases {
             XCTAssertEqual(
                 PlusGate.allows(feature,
@@ -233,5 +264,50 @@ final class PlusStoreTests: XCTestCase {
                 PlusAccessLevel.hidden,
                 "\(feature) на витрине РФ обязана пропасть целиком")
         }
+    }
+
+    // MARK: - Истечение замечается, пока приложение живо
+
+    /// **Находка аудита H1.** Истечение подписки не создаёт транзакции: Apple
+    /// молчит, `Transaction.updates` молчит, и пересчитать состояние физически
+    /// некому. А процесс TripTrack живёт сутками на фоновой геолокации —
+    /// то есть «Плюс» оставался открытым сколь угодно долго после конца
+    /// оплаченного периода.
+    ///
+    /// Разыгрывается ровно та дверь, которую чинили: уведомление системы о
+    /// возвращении в приложение. Симметрия важна и в обратную сторону —
+    /// подписка, купленная на втором телефоне, подхватывается тем же путём.
+    func testComingBackToTheAppRereadsTheEntitlements() async throws {
+        let session = try makeSession()
+        defer { session.clearTransactions() }
+        PlusStore.shared.start()
+
+        try await session.buyProduct(productIdentifier: PlusStore.yearlyID)
+        await PlusStore.shared.refreshAll()
+        XCTAssertTrue(PlusAccess.shared.isPlus)
+
+        session.clearTransactions()                  // подписка кончилась
+        NotificationCenter.default.post(
+            name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline, PlusAccess.shared.isPlus {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertFalse(PlusAccess.shared.isPlus,
+                       "возвращение в приложение обязано пересчитать права")
+    }
+
+    /// Право на вводное предложение спрашивается у Apple. Здесь оно ещё не
+    /// израсходовано, поэтому ответ положительный; отрицательную половину
+    /// правила держит `PlusPaywallModelTests` чистой функцией (разыграть
+    /// «триал уже съеден» в том же процессе StoreKit Testing нечем —
+    /// `isEligibleForIntroOffer` кэшируется на группу).
+    func testIntroEligibilityIsAskedOfStoreKitNotGuessedFromTheProduct() async throws {
+        let session = try makeSession()
+        defer { session.clearTransactions() }
+
+        await PlusStore.shared.loadProducts()
+        XCTAssertTrue(PlusStore.shared.introEligible)
     }
 }

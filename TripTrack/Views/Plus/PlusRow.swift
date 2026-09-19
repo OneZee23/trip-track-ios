@@ -81,7 +81,20 @@ struct PlusRow: View {
         .buttonStyle(PressableCardStyle())
         .surfaceCard(cornerRadius: 16)
         .accessibilityIdentifier("profile_plus_row")
-        .task(id: store.products.map(\.id)) { trialDays = Self.trialDays(of: store.yearly) }
+        // Право на триал спрашивается у Apple, а не выводится из наличия
+        // предложения у продукта: вернувшемуся подписчику строка обещала бы
+        // бесплатную неделю, которой он уже не получит.
+        .task(id: TrialKey(products: store.products.map(\.id),
+                           eligible: store.introEligible)) {
+            trialDays = store.introEligible ? Self.trialDays(of: store.yearly) : nil
+        }
+    }
+
+    /// Ключ перезапроса: и список продуктов, и право на предложение — ответ
+    /// меняется от обоих.
+    private struct TrialKey: Equatable {
+        let products: [String]
+        let eligible: Bool
     }
 
     /// Длина бесплатного периода — приманка в подписи у того, кто ещё не
