@@ -42,8 +42,8 @@
 ```
 THE ATLAS
 
-The Map tab is now the Atlas, and the world on it starts closed. Solid fog with nothing
-on it but region borders — and your own roads burned through it as
+The Map tab is now the Atlas, and the world on it starts closed. Solid fog, and
+your own roads burned through it as
 a living map: streets, names, the sea. Everything you have ever recorded is in
 there from the first launch; the app rebuilds it in the background. The sheet
 says how much you have opened, and "1,910 km opened" is the length of the
@@ -62,10 +62,9 @@ are driving: chasing a find belongs off the road.
 
 THE EXPLORER'S JOURNAL
 
-Pull the Atlas sheet up and it holds three things: how much you have opened and
-the regions with the date you first entered them, all your seals in one grid,
-and up to three unsolved riddles nearby — a circle and a single line, never a
-point. Tap a seal for its card: the story of a secret with "found by N, first
+Pull the Atlas sheet up and it holds how much you have opened and the regions
+with the date you first entered them, plus all your seals in one grid. Tap a
+seal for its card: the story of a secret with "found by N, first
 was ..."; the line and the circle of a riddle; the place and the date of a
 milestone.
 
@@ -82,8 +81,8 @@ fog, the same corridors, your seals. What you have not found is not on it.
 ```
 АТЛАС
 
-Вкладка «Карта» стала «Атласом», и мир на ней закрыт. Непрозрачная мгла, по
-которой проведены одни границы регионов, — и ваши собственные дороги, прожжённые в ней
+Вкладка «Карта» стала «Атласом», и мир на ней закрыт. Непрозрачная мгла — и
+ваши собственные дороги, прожжённые в ней
 живой картой: улицы, названия, море. Всё, что вы когда-либо записали, уже
 внутри с первого запуска: приложение разбирает библиотеку фоном. В листе видно,
 сколько открыто, и «1 910 км открыто» — это длина открытых коридоров, а не
@@ -100,9 +99,8 @@ fog, the same corridors, your seals. What you have not found is not on it.
 
 ЖУРНАЛ ПЕРВООТКРЫВАТЕЛЯ
 
-Потяните лист «Атласа» вверх — в нём три группы: сколько открыто и регионы с
-датой первого въезда, все ваши печати сеткой и до трёх нерешённых загадок
-рядом (круг и одна строка, никогда не точка). Тап по печати открывает карточку:
+Потяните лист «Атласа» вверх — в нём сколько открыто и регионы с датой первого
+въезда, и все ваши печати сеткой. Тап по печати открывает карточку:
 история секрета и «нашли N человек, первым — имя»; строка и круг загадки; место
 и дата вехи.
 
@@ -120,7 +118,7 @@ fog, the same corridors, your seals. What you have not found is not on it.
 DER ATLAS
 
 Aus dem Tab „Karte“ wurde „Atlas“, und die Welt darauf ist zu. Undurchsichtiger
-Nebel, darüber nur die Grenzen der Regionen — und mittendrin Ihre eigenen
+Nebel — und mittendrin Ihre eigenen
 Straßen, als lebendige Karte hineingebrannt: Straßennamen, Orte, das Meer.
 Alles, was Sie je aufgezeichnet haben, ist vom ersten Start an dabei; die App
 baut es im Hintergrund auf. Das Blatt zeigt, wie viel offen ist, und „1 910 km
@@ -140,10 +138,9 @@ nicht auf die Straße.
 
 DAS ENTDECKERTAGEBUCH
 
-Ziehen Sie das Atlas-Blatt nach oben, dann stehen dort drei Dinge: wie viel
-offen ist und die Regionen mit dem Datum der ersten Einfahrt, alle Ihre Siegel
-als Raster und bis zu drei ungelöste Rätsel in der Nähe — ein Kreis und eine
-Zeile, nie ein Punkt. Ein Tippen auf ein Siegel öffnet seine Karte: die
+Ziehen Sie das Atlas-Blatt nach oben, dann stehen dort wie viel
+offen ist und die Regionen mit dem Datum der ersten Einfahrt, sowie alle Ihre
+Siegel als Raster. Ein Tippen auf ein Siegel öffnet seine Karte: die
 Geschichte eines Geheimnisses mit „von N gefunden, als Erstes von …“; Zeile und
 Kreis eines Rätsels; Ort und Datum eines Meilensteins.
 
@@ -162,7 +159,7 @@ ist darauf nicht zu sehen.
 EL ATLAS
 
 La pestaña «Mapa» ahora es el «Atlas», y el mundo empieza cerrado. Niebla
-opaca con solo las fronteras de las regiones encima, y dentro tus carreteras,
+opaca, y dentro tus carreteras,
 quemadas en ella como un mapa vivo: calles, nombres, el mar. Todo lo que has
 grabado alguna vez está ahí desde el primer arranque; la app lo reconstruye en
 segundo plano. La hoja dice cuánto has abierto, y «1 910 km abiertos» es la
@@ -181,10 +178,9 @@ calcula ni se muestra nada: perseguir un hallazgo no es cosa de la carretera.
 
 EL DIARIO DEL EXPLORADOR
 
-Tira de la hoja del Atlas hacia arriba y verás tres grupos: cuánto has abierto
-y las regiones con la fecha en que entraste por primera vez, todos tus sellos
-en una cuadrícula y hasta tres enigmas sin resolver cerca: un círculo y una
-línea, nunca un punto. Al tocar un sello se abre su ficha: la historia de un
+Tira de la hoja del Atlas hacia arriba y verás cuánto has abierto
+y las regiones con la fecha en que entraste por primera vez, y todos tus sellos
+en una cuadrícula. Al tocar un sello se abre su ficha: la historia de un
 secreto con «lo han encontrado N, el primero fue …»; la línea y el círculo de
 un enigma; el lugar y la fecha de un hito.
 
@@ -203,7 +199,7 @@ aparece.
 L'ATLAS
 
 L'onglet « Carte » devient « Atlas », et le monde y est fermé. Un brouillard
-opaque, rien dessus que les frontières des régions — et vos propres routes
+opaque — et vos propres routes
 brûlées dedans comme une carte vivante : les rues, les noms, la mer. Tout ce
 que vous avez enregistré un jour s'y trouve dès le premier lancement ; l'app le
 reconstruit en arrière-plan. La feuille dit ce que vous avez ouvert, et
@@ -223,10 +219,9 @@ courir après une découverte n'a pas sa place sur la route.
 
 LE JOURNAL DE L'EXPLORATEUR
 
-Tirez la feuille de l'Atlas vers le haut : trois groupes. Ce que vous avez
-ouvert et les régions avec la date de votre première entrée, tous vos sceaux en
-grille, et jusqu'à trois énigmes non résolues à proximité — un cercle et une
-ligne, jamais un point. Touchez un sceau pour sa fiche : l'histoire d'un secret
+Tirez la feuille de l'Atlas vers le haut : ce que vous avez
+ouvert et les régions avec la date de votre première entrée, et tous vos sceaux
+en grille. Touchez un sceau pour sa fiche : l'histoire d'un secret
 avec « trouvé par N, le premier était … » ; la ligne et le cercle d'une
 énigme ; le lieu et la date d'un jalon.
 
@@ -245,7 +240,7 @@ n'avez pas trouvé n'y est pas.
 L'ATLANTE
 
 La scheda «Mappa» ora è «Atlante», e il mondo lì dentro parte chiuso. Nebbia
-opaca, sopra solo i confini delle regioni — e le tue strade bruciate
+opaca — e le tue strade bruciate
 dentro come una mappa viva: vie, nomi, il mare. Tutto quello che hai registrato
 c'è già dal primo avvio; l'app lo ricostruisce in background. Il foglio dice
 quanto hai aperto, e «1 910 km aperti» è la lunghezza dei corridoi aperti, non
@@ -263,9 +258,9 @@ mostra niente: rincorrere una scoperta non è roba da strada.
 
 IL DIARIO DELL'ESPLORATORE
 
-Tira su il foglio dell'Atlante: tre gruppi. Quanto hai aperto e le regioni con
-la data della prima volta che ci sei entrato, tutti i tuoi sigilli in griglia e
-fino a tre enigmi irrisolti vicini — un cerchio e una riga, mai un punto. Tocca
+Tira su il foglio dell'Atlante: quanto hai aperto e le regioni con
+la data della prima volta che ci sei entrato, e tutti i tuoi sigilli in
+griglia. Tocca
 un sigillo per la sua scheda: la storia di un segreto con «trovato da N, il
 primo è stato …»; la riga e il cerchio di un enigma; il luogo e la data di un
 traguardo.
@@ -285,7 +280,7 @@ non c'è.
 ATLAS
 
 Zakładka „Mapa” to teraz „Atlas”, a świat na niej jest zamknięty.
-Nieprzezroczysta mgła, a na niej same granice regionów — i twoje
+Nieprzezroczysta mgła — i twoje
 własne drogi wypalone w niej jak żywa mapa: ulice, nazwy, morze. Wszystko, co
 kiedykolwiek nagrałeś, jest tam od pierwszego uruchomienia; aplikacja składa to
 w tle. Arkusz mówi, ile odkryłeś, a „1 910 km odkrytych” to długość odkrytych
@@ -303,9 +298,8 @@ nie liczy i nic nie pokazuje: gonienie za znaleziskiem nie należy do drogi.
 
 DZIENNIK ODKRYWCY
 
-Pociągnij arkusz Atlasu w górę — są tam trzy grupy: ile odkryłeś i regiony z
-datą pierwszego wjazdu, wszystkie twoje pieczęcie w siatce oraz do trzech
-nierozwiązanych zagadek w pobliżu: okrąg i jedna linijka, nigdy punkt.
+Pociągnij arkusz Atlasu w górę — jest tam ile odkryłeś i regiony z
+datą pierwszego wjazdu, oraz wszystkie twoje pieczęcie w siatce.
 Dotknięcie pieczęci otwiera jej kartę: historia sekretu i „znalazło N osób,
 pierwszy był …”; linijka i okrąg zagadki; miejsce i data kamienia milowego.
 
@@ -323,7 +317,7 @@ mgła, te same korytarze, twoje pieczęcie. Tego, czego nie znalazłeś, tam nie
 ATLAS
 
 Tab "Peta" kini menjadi "Atlas", dan dunianya dimulai dalam keadaan tertutup.
-Kabut pekat, hanya garis batas wilayah di atasnya — dan di
+Kabut pekat — dan di
 dalamnya jalan-jalan Anda sendiri, terbakar menembus kabut sebagai peta hidup:
 nama jalan, nama tempat, laut. Semua yang pernah Anda rekam sudah ada sejak
 peluncuran pertama; aplikasi menyusunnya di latar belakang. Lembarnya
@@ -344,10 +338,9 @@ temuan bukan urusan di jalan.
 
 JURNAL PENJELAJAH
 
-Tarik lembar Atlas ke atas — ada tiga kelompok: berapa yang terbuka dan daftar
-wilayah dengan tanggal Anda pertama masuk, semua segel Anda dalam kisi, serta
-maksimal tiga teka-teki yang belum terpecahkan di dekat Anda: sebuah lingkaran
-dan satu baris, tidak pernah satu titik. Ketuk sebuah segel untuk membuka
+Tarik lembar Atlas ke atas — ada berapa yang terbuka dan daftar
+wilayah dengan tanggal Anda pertama masuk, serta semua segel Anda dalam kisi.
+Ketuk sebuah segel untuk membuka
 kartunya: kisah sebuah rahasia dengan "ditemukan N orang, yang pertama …";
 baris dan lingkaran sebuah teka-teki; tempat dan tanggal sebuah tonggak.
 
@@ -365,7 +358,7 @@ kabut yang sama, koridor yang sama, segel Anda. Yang belum ditemukan tidak ikut.
 ATLAS
 
 "Harita" sekmesi artık "Atlas" ve üzerindeki dünya kapalı başlıyor. Işık
-geçirmeyen bir sis, üstünde yalnızca bölge sınırları — ve sisin
+geçirmeyen bir sis — ve sisin
 içinde kendi yollarınız, canlı bir harita gibi yakılmış: sokaklar, adlar,
 deniz. Bugüne kadar kaydettiğiniz her şey ilk açılıştan itibaren orada;
 uygulama bunu arka planda toplar. Sayfa ne kadarını açtığınızı söyler ve
@@ -385,9 +378,8 @@ değildir.
 
 KÂŞİF GÜNLÜĞÜ
 
-Atlas sayfasını yukarı çekin, üç bölüm var: ne kadarını açtığınız ve ilk giriş
-tarihleriyle bölgeler, tüm mühürleriniz bir ızgarada ve yakınınızdaki en fazla
-üç çözülmemiş bilmece — bir daire ve tek satır, asla bir nokta. Bir mühre
+Atlas sayfasını yukarı çekin: ne kadarını açtığınız ve ilk giriş
+tarihleriyle bölgeler, ve tüm mühürleriniz bir ızgarada. Bir mühre
 dokunun, kartı açılsın: bir gizemin hikâyesi ve "N kişi buldu, ilk bulan …";
 bir bilmecenin satırı ve dairesi; bir dönüm noktasının yeri ve tarihi.
 
@@ -405,7 +397,7 @@ aynı sis, aynı koridorlar, sizin mühürleriniz. Bulmadığınız şey resimde
 ANG ATLAS
 
 Ang tab na "Mapa" ay "Atlas" na, at nakasara ang mundo roon sa simula.
-Makapal na hamog, mga hangganan lang ng rehiyon sa ibabaw — at sa
+Makapal na hamog — at sa
 loob nito ang sarili mong mga kalsada, nasunog papasok bilang buhay na mapa:
 mga kalye, mga pangalan, ang dagat. Nandoon na mula sa unang buksan ang lahat
 ng naitala mo kailanman; binubuo ito ng app sa likod. Sinasabi ng sheet kung
@@ -426,10 +418,9 @@ paghahabol sa natuklasan.
 
 TALAARAWAN NG MANANALIKSIK
 
-Hilahin pataas ang sheet ng Atlas — tatlong pangkat: kung gaano kalawak ang
-nabuksan at ang mga rehiyon na may petsa ng unang pagpasok, lahat ng tatak mo
-sa isang grid, at hanggang tatlong hindi pa nalulutas na palaisipan sa malapit:
-isang bilog at isang linya, hindi kailanman tuldok. Pindutin ang tatak para sa
+Hilahin pataas ang sheet ng Atlas — kung gaano kalawak ang
+nabuksan at ang mga rehiyon na may petsa ng unang pagpasok, at lahat ng tatak mo
+sa isang grid. Pindutin ang tatak para sa
 card nito: ang kuwento ng lihim at "N ang nakakita, una ay …"; ang linya at
 bilog ng palaisipan; ang lugar at petsa ng hangganan.
 
@@ -447,8 +438,8 @@ roon ang hindi mo pa natutuklasan.
 ```
 АТЛАС
 
-Вкладка «Карта» стала «Атласом», і світ на ній закритий. Непрозора мла, по якій
-проведено самі лише кордони регіонів, — і ваші власні дороги, пропалені в ній живою
+Вкладка «Карта» стала «Атласом», і світ на ній закритий. Непрозора мла — і ваші
+власні дороги, пропалені в ній живою
 картою: вулиці, назви, море. Усе, що ви коли-небудь записали, вже всередині з
 першого запуску: застосунок розбирає бібліотеку у фоні. У аркуші видно, скільки
 відкрито, і «1 910 км відкрито» — це довжина відкритих коридорів, а не сума
@@ -466,10 +457,9 @@ roon ang hindi mo pa natutuklasan.
 
 ЩОДЕННИК ПЕРШОВІДКРИВАЧА
 
-Потягніть аркуш «Атласа» вгору — там три групи: скільки відкрито й регіони з
-датою першого в'їзду, усі ваші печатки сіткою та до трьох нерозв'язаних загадок
-поруч (коло й один рядок, ніколи не точка). Дотик до печатки відкриває картку:
-історія секрету та «знайшли N людей, першим — ім'я»; рядок і коло загадки;
+Потягніть аркуш «Атласа» вгору — скільки відкрито й регіони з
+датою першого в'їзду, та усі ваші печатки сіткою. Дотик до печатки відкриває
+картку: історія секрету та «знайшли N людей, першим — ім'я»; рядок і коло загадки;
 місце й дата віхи.
 
 На екрані підсумків з'явився блок «Відкрито» — «42 км нового шляху · 1 загадка
@@ -485,8 +475,8 @@ roon ang hindi mo pa natutuklasan.
 ```
 O ATLAS
 
-A aba “Mapa” agora é “Atlas”, e o mundo nela começa fechado. Névoa opaca,
-com apenas as fronteiras das regiões por cima — e, dentro dela, as suas
+A aba “Mapa” agora é “Atlas”, e o mundo nela começa fechado. Névoa opaca —
+e, dentro dela, as suas
 estradas queimadas como um mapa vivo: ruas, nomes, o mar. Tudo o que você já
 gravou está lá desde a primeira abertura; o app monta isso em segundo plano. A
 folha diz quanto você abriu, e “1.910 km abertos” é o comprimento dos
@@ -505,10 +495,9 @@ correr atrás de uma descoberta não é assunto de estrada.
 
 O DIÁRIO DO EXPLORADOR
 
-Puxe a folha do Atlas para cima: são três grupos. Quanto você abriu e as
-regiões com a data em que entrou pela primeira vez, todos os seus selos em uma
-grade e até três enigmas não resolvidos por perto — um círculo e uma linha,
-nunca um ponto. Toque num selo para ver a ficha: a história de um segredo com
+Puxe a folha do Atlas para cima: quanto você abriu e as
+regiões com a data em que entrou pela primeira vez, e todos os seus selos em uma
+grade. Toque num selo para ver a ficha: a história de um segredo com
 “N pessoas encontraram, o primeiro foi …”; a linha e o círculo de um enigma; o
 lugar e a data de um marco.
 
