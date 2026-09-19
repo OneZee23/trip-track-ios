@@ -87,6 +87,11 @@ enum BadgeManager {
         // 3.6 вместо показа. Значок, разблокированный в милях, был бы значком
         // из другой игры.
         for trip in trips {
+            // Значки и рекорд скорости — только по записанному треку: у
+            // вписанной рукой поездки (0.8.0) «максимум» это средняя,
+            // назначенная человеком, и значок за 120 км/ч выдавался бы за
+            // набранное число.
+            guard trip.source == .recorded else { continue }
             totalDist += trip.scoringKm
             maxSpeed = max(maxSpeed, trip.maxSpeed * 3.6)
             totalDuration += trip.duration
@@ -231,6 +236,12 @@ enum BadgeManager {
     }
 
     static func evaluateBadgesForTrip(_ trip: Trip, allTrips: [Trip]) -> BadgeEvalResult {
+        // Вписанная рукой поездка (0.8.0) значков не приносит — ни разовых,
+        // ни повторяемых; `computeStats` её и так не считает, но выходить
+        // надо здесь, до записи `unlockedKey` в `UserDefaults`.
+        guard trip.source == .recorded else {
+            return BadgeEvalResult(allEarned: [], repeatedBadgeCounts: [:])
+        }
         // 1. Milestone badges: compute stats from ALL trips, diff with stored unlocked set
         let globalStats = computeStats(from: allTrips)
         let currentlyUnlocked = Set(unlockedBadges(for: globalStats).map(\.id))

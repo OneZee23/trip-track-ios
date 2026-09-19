@@ -18,6 +18,9 @@ final class GamificationManager {
     // MARK: - XP Calculation
 
     func calculateXP(for trip: Trip, allTrips: [Trip]) -> XPBreakdown {
+        // Опыт даёт только то, что телефон видел сам: вписанная рукой поездка
+        // (0.8.0) — это ввод с клавиатуры, а опыт и уровень лежат в базе.
+        guard trip.source == .recorded else { return XPBreakdown() }
         var breakdown = XPBreakdown()
 
         // Base: 1 XP per km
@@ -227,7 +230,11 @@ final class GamificationManager {
         guard entity.profileXP == 0, !trips.isEmpty else { return }
 
         var totalXP = 0
-        let sortedTrips = trips.sorted { $0.startDate < $1.startDate }
+        // Разовая досдача опыта по библиотеке — тот же вопрос, что и на
+        // финише: `source == .recorded`, иначе вписанные рукой километры
+        // подняли бы уровень задним числом, и откатить это было бы нечем.
+        let sortedTrips = trips.filter { $0.source == .recorded }
+            .sorted { $0.startDate < $1.startDate }
         var seenRegions = Set<String>()
 
         for trip in sortedTrips {
@@ -251,8 +258,10 @@ final class GamificationManager {
         entity.profileXP = Int64(totalXP)
         entity.profileLevel = Int32(LevelSystem.level(for: totalXP))
 
-        // Backfill vehicle odometers
-        backfillVehicleOdometers(trips: sortedTrips)
+        // Одометр — НЕ награда в этом смысле: километры вписанной рукой
+        // поездки машина честно проехала, и спека §2 их засчитывает. Поэтому
+        // сюда идёт полный список, а не отфильтрованный `sortedTrips`.
+        backfillVehicleOdometers(trips: trips.sorted { $0.startDate < $1.startDate })
 
         persistenceController.save()
         // Latch only after real work — this is the line the guard above used

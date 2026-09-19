@@ -128,6 +128,12 @@ final class DiscoveryProcessor {
         guard let trip = repository.fetchTripDetail(id: tripId), trip.trackPoints.count > 1 else {
             return empty
         }
+        // Находки — только по ЗАПИСАННОМУ треку. Вписанная рукой поездка
+        // (0.8.0) это линия `MKDirections`, а не проезд: секрет, «найденный»
+        // по ней, значил бы, что печать ставится за тап по карте. Километры и
+        // регионы из дельты тумана при этом остаются — их поездка открыла
+        // честно.
+        guard trip.source == .recorded else { return empty }
         let track = trip.trackPoints
 
         // 1. Секреты: хеш ячейки, потом `reach`. Каталог пуст — матчер выходит
