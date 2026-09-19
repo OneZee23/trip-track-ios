@@ -1333,7 +1333,11 @@ final class CoreDataTripRepository: TripRepository {
         // Only replace track points when server actually sent them (detail/push).
         // Pull delta omits track points — keep local ones intact.
         if let serverPoints = p.trackPoints {
-            if let existingTPs = entity.trackPoints as? Set<TrackPointEntity> {
+            // `trackPoints` is an ORDERED relationship (NSOrderedSet), not
+            // NSSet — casting straight to `Set<TrackPointEntity>` always
+            // fails and silently skips deletion, leaving stale local points
+            // alongside the server's replacement set.
+            if let existingTPs = entity.trackPoints?.array as? [TrackPointEntity] {
                 for tp in existingTPs { context.delete(tp) }
             }
             for pt in serverPoints {
