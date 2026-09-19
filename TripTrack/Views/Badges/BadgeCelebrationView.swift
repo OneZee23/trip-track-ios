@@ -16,7 +16,6 @@ struct BadgeCelebrationView: View {
     }
 
     var body: some View {
-        let c = AppTheme.colors(for: scheme)
         let badge = current.badge
         let count = current.count
 

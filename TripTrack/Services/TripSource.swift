@@ -33,7 +33,13 @@ struct TripSourceResult {
 // MARK: - Свои поездки
 
 /// Сегодняшнее поведение: библиотека владельца из CoreData.
-struct LocalTripSource: TripSource {
+///
+/// `@unchecked Sendable`: `TripManager` сам не `Sendable` (обычный синглтон,
+/// не изолированный актором), но `load()` трогает его РОВНО одним способом —
+/// внутри `MainActor.run` ниже, то есть всегда с главного потока. Небезопасной
+/// гонки за ссылку это не открывает, только снимает предупреждение о том, чего
+/// компилятор не может проверить сам.
+struct LocalTripSource: TripSource, @unchecked Sendable {
     let tripManager: TripManager
 
     func load() async -> TripSourceResult {

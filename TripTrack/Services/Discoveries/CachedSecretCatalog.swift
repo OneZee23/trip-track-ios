@@ -43,6 +43,17 @@ final class CachedSecretCatalog: SecretCatalog, @unchecked Sendable {
     private let lock = NSLock()
     private var cached: Cache?
 
+    /// Критическая секция — синхронной функцией, БЕЗ `await` внутри.
+    /// `NSLock.lock()/unlock()` напрямую в async-функции удерживали бы
+    /// блокировку через приостановку, если бы между ними оказался `await`;
+    /// обёртка делает такое физически невозможным — тело `body` синхронно по
+    /// типу, а не по дисциплине.
+    private func withLock<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
+    }
+
     /// То, что лежит на диске. `version` — ключ следующего разговора с
     /// сервером, и без него кэш бесполезен: пришлось бы качать список целиком
     /// каждые сутки.
@@ -69,13 +80,11 @@ final class CachedSecretCatalog: SecretCatalog, @unchecked Sendable {
     /// наоборот) значило бы считать хеши не тем ключом — то есть не найти
     /// ничего и никогда, молча.
     var salt: String {
-        lock.lock(); defer { lock.unlock() }
-        return usable(cached)?.salt ?? fallback.salt
+        withLock { usable(cached)?.salt ?? fallback.salt }
     }
 
     func all() -> [SecretRecord] {
-        lock.lock(); defer { lock.unlock() }
-        return usable(cached)?.secrets ?? fallback.all()
+        withLock { usable(cached)?.secrets ?? fallback.all() }
     }
 
     /// Пустой кэш — это НЕ каталог: список секретов пустеть не умеет (секреты
@@ -88,8 +97,7 @@ final class CachedSecretCatalog: SecretCatalog, @unchecked Sendable {
 
     /// Версия, известная этому телефону. `nil` — «не спрашивали ни разу».
     var version: String? {
-        lock.lock(); defer { lock.unlock() }
-        return cached?.version
+        withLock { cached?.version }
     }
 
     // MARK: - Обновление
@@ -125,9 +133,7 @@ final class CachedSecretCatalog: SecretCatalog, @unchecked Sendable {
                 return
             }
             let cache = Cache(version: response.version, salt: salt, secrets: secrets)
-            lock.lock()
-            cached = cache
-            lock.unlock()
+            withLock { cached = cache }
             write(cache)
             defaults.set(now, forKey: Self.refreshedAtKey)
             catalogLog.notice("catalog updated: \(secrets.count, privacy: .public) secrets")
@@ -140,9 +146,7 @@ final class CachedSecretCatalog: SecretCatalog, @unchecked Sendable {
     /// «удалить безвозвратно» незачем: он вернётся первым же обновлением, а
     /// файл, переживший вайп, выглядит как то, чего не стёрли.
     func wipe() {
-        lock.lock()
-        cached = nil
-        lock.unlock()
+        withLock { cached = nil }
         try? FileManager.default.removeItem(at: fileURL)
         defaults.removeObject(forKey: Self.refreshedAtKey)
     }

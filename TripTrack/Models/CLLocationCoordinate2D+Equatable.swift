@@ -11,7 +11,7 @@ import CoreLocation
 /// публичным, а свидетель требования обязан быть не уже него — компилятор
 /// отвечает «method '==' must be declared public». В таргете приложения это
 /// ничего не открывает наружу: модуль всё равно никто не импортирует.
-extension CLLocationCoordinate2D: Equatable {
+extension CLLocationCoordinate2D: @retroactive Equatable {
     public static func == (lhs: CLLocationCoordinate2D, rhs: CLLocationCoordinate2D) -> Bool {
         lhs.latitude == rhs.latitude && lhs.longitude == rhs.longitude
     }
