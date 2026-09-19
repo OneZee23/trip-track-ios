@@ -97,7 +97,12 @@ final class FogVeilView: UIView {
     static let crossfade: TimeInterval = 0.15
     /// Сколько ещё тянуть привязку после того, как камера встала: MapKit
     /// доводит инерцию и сам, уже без колбэков о начале движения.
-    static let trackingTail: TimeInterval = 0.4
+    ///
+    /// `nonisolated`: default-параметры функций считаются вне изоляции
+    /// актора, даже когда сама функция на MainActor (ограничение проверки
+    /// компилятора, не поведение) — без пометки обращение к простой
+    /// константе из значения по умолчанию не собирается.
+    nonisolated static let trackingTail: TimeInterval = 0.4
 
     private static let log = Logger(subsystem: "com.onezee.TripTrack", category: "fogveil")
     /// Про откат рассказываем ОДИН раз за запуск: он случается на каждой

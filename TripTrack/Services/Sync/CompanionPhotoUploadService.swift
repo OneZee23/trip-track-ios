@@ -147,9 +147,12 @@ final class CompanionPhotoUploadService {
     /// reason. `nil` only when the source image itself can't be resized at
     /// all (near-zero dimensions) — real picked photos always succeed.
     nonisolated private static func encode(image: UIImage) async -> EncodedVariants? {
-        guard let thumb = resized(image, maxDimension: thumbnailMaxDimension)?
+        // `thumbnailMaxDimension`/`thumbnailQuality`/… are static lets on a
+        // `@MainActor` class, so reading them from this `nonisolated`
+        // function needs a hop back to the main actor.
+        guard let thumb = await resized(image, maxDimension: thumbnailMaxDimension)?
             .jpegData(compressionQuality: thumbnailQuality),
-            let orig = resized(image, maxDimension: originalMaxDimension)?
+            let orig = await resized(image, maxDimension: originalMaxDimension)?
                 .jpegData(compressionQuality: originalQuality)
         else { return nil }
         return EncodedVariants(thumbnail: thumb, original: orig)

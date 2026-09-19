@@ -223,7 +223,7 @@ final class PlusStore: ObservableObject {
         }
         storefrontTask = Task { [weak self] in
             for await storefront in Storefront.updates {
-                await self?.applyStorefront(storefront.countryCode)
+                self?.applyStorefront(storefront.countryCode)
             }
         }
         // Вход в аккаунт — момент, когда накопленную привязку наконец есть

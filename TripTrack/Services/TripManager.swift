@@ -597,7 +597,7 @@ final class TripManager: ObservableObject {
         // второе написал человек, и его геокодер не трогает.
         let current = checkpoint.name ?? ""
         let looksDefault = current.isEmpty || LanguageManager.Language.allCases.contains { lang in
-            let word = NSRegularExpression.escapedPattern(for: AppStrings.checkpointWord(lang))
+            _ = NSRegularExpression.escapedPattern(for: AppStrings.checkpointWord(lang))
             return current.range(of: "^\\(word) \\d+$", options: .regularExpression) != nil
         }
         guard looksDefault else { return }

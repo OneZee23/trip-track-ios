@@ -488,7 +488,10 @@ final class SyncCoordinator {
     /// снимок из выборки уходит навсегда, и остаток подберётся следующим
     /// проходом. Очередь всё равно разбирается по одной операции, так что
     /// поставить две тысячи разом быстрее, чем двести, не сделало бы ничего.
-    private static let maxVehiclePhotosPerPass = 200
+    ///
+    /// `nonisolated`: читается из `pendingVehiclePhotoOperations`, тоже
+    /// `nonisolated` — простое число, изоляция актора ему не нужна.
+    private nonisolated static let maxVehiclePhotosPerPass = 200
 
     private func startForegroundTimer() {
         foregroundTimer?.invalidate()

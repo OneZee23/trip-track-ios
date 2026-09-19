@@ -92,7 +92,8 @@ final class BluetoothDetector: NSObject, ObservableObject {
         // Auto-stop scan after 30 seconds
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(30))
-            await MainActor.run { self?.stopScanning() }
+            guard let self else { return }
+            await MainActor.run { self.stopScanning() }
         }
     }
 
