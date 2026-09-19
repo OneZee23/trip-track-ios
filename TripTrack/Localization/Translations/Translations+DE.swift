@@ -1355,6 +1355,8 @@ extension Translations {
         "plusPrivacyLink": "Datenschutz",
         "plusAutoRenewFooter": "Das Abo verlängert sich automatisch. Schalte die Verlängerung spätestens 24 Stunden vor Ende des bezahlten Zeitraums in den Apple-ID-Einstellungen ab. Die Zahlung wird über deine Apple ID abgerechnet.",
         "plusPricesUnavailable": "Preise nicht geladen — prüfe die Verbindung",
+        "plusPurchasePending": "Wir warten auf die Bestätigung des Kaufs",
+        "plusPurchaseFailed": "Hat nicht geklappt — versuch es später noch einmal",
         "plusManage": "Abo verwalten",
         "plusUntil": "Plus bis {date}",
         "plusTrialAvailable": "{days} gratis",

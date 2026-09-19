@@ -361,12 +361,6 @@ struct ProfileView: View {
             .background(c.bg)
             .toast(item: $toastItem)
             .sheet(item: $composerAnchor) { anchor in journeyComposer(anchor: anchor) }
-            .sheet(isPresented: $showPaywall) {
-                PlusPaywallSheet().environmentObject(lang)
-            }
-            .sheet(isPresented: $showTipJar) {
-                TipJarSheet().environmentObject(lang)
-            }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: MeDest.self) { dest in
                 switch dest {
@@ -955,6 +949,17 @@ struct ProfileView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
+        // Оба листа висят ЗДЕСЬ, а не в цепочке `stage`: `ProfileView.body`
+        // уже один раз упёрся в предел вывода типов SwiftUI на ОДНОМ
+        // добавленном модификаторе (см. «Ловушки» в CLAUDE.md), и запас на
+        // этом файле тратить незачем. Это презентации, а не накладки, —
+        // правило «диалог вешать в корне экрана» их не касается.
+        .sheet(isPresented: $showPaywall) {
+            PlusPaywallSheet().environmentObject(lang)
+        }
+        .sheet(isPresented: $showTipJar) {
+            TipJarSheet().environmentObject(lang)
+        }
     }
 
     /// «Клубы — скоро» (0.6.8): под гаражом, над историей — там же, где и

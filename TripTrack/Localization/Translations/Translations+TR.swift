@@ -1355,6 +1355,8 @@ extension Translations {
         "plusPrivacyLink": "Gizlilik",
         "plusAutoRenewFooter": "Abonelik otomatik yenilenir. Bunu istemiyorsanız, ödenen dönem bitmeden en az 24 saat önce yenilemeyi Apple Kimliği ayarlarından kapatın. Ödeme Apple Kimliğinizden tahsil edilir.",
         "plusPricesUnavailable": "Fiyatlar yüklenmedi — bağlantıyı kontrol edin",
+        "plusPurchasePending": "Satın alma onayı bekleniyor",
+        "plusPurchaseFailed": "Olmadı — daha sonra tekrar deneyin",
         "plusManage": "Aboneliği yönet",
         "plusUntil": "{date} tarihine kadar Plus",
         "plusTrialAvailable": "{days} ücretsiz",

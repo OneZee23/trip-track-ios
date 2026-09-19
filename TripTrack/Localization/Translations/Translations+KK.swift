@@ -1355,6 +1355,8 @@ extension Translations {
         "plusPrivacyLink": "Құпиялылық",
         "plusAutoRenewFooter": "Жазылым автоматты түрде ұзартылады. Бұлай болмауы үшін ұзартуды төленген мерзім аяқталардан кемінде 24 сағат бұрын Apple ID параметрлерінде өшіріңіз. Төлем Apple ID арқылы алынады.",
         "plusPricesUnavailable": "Бағалар жүктелмеді — байланысты тексеріңіз",
+        "plusPurchasePending": "Сатып алудың расталуын күтудеміз",
+        "plusPurchaseFailed": "Болмады — кейінірек қайталап көріңіз",
         "plusManage": "Жазылымды басқару",
         "plusUntil": "{date} дейін Плюс",
         "plusTrialAvailable": "{days} тегін",

@@ -1355,6 +1355,8 @@ extension Translations {
         "plusPrivacyLink": "Prywatność",
         "plusAutoRenewFooter": "Subskrypcja odnawia się automatycznie. Aby tego uniknąć, wyłącz odnawianie najpóźniej 24 godziny przed końcem opłaconego okresu — w ustawieniach Apple ID. Płatność jest pobierana z Twojego Apple ID.",
         "plusPricesUnavailable": "Nie udało się wczytać cen — sprawdź połączenie",
+        "plusPurchasePending": "Czekamy na potwierdzenie zakupu",
+        "plusPurchaseFailed": "Nie udało się — spróbuj później",
         "plusManage": "Zarządzaj subskrypcją",
         "plusUntil": "Plus do {date}",
         "plusTrialAvailable": "{days} za darmo",

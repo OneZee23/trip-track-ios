@@ -46,8 +46,13 @@ final class PlusAttachQueue {
     private let backoff: @Sendable (Int) async -> Void
     private var draining = false
 
-    private static let pendingKey = "plus.attach.pending"
-    private static let sentKey = "plus.attach.sent"
+    /// Ключи с ВЕРСИЕЙ формата. Без неё смена формы строки (`[key, jws]`)
+    /// прошла бы молча: `loadPending` отбрасывает всё, что не пара, и очередь
+    /// просто оказалась бы пустой — то есть непривязанные покупки исчезли бы
+    /// без единой строки в логе. Меняешь форму — заводи `.v2` и решай судьбу
+    /// `.v1` явно.
+    private static let pendingKey = "plus.attach.pending.v1"
+    private static let sentKey = "plus.attach.sent.v1"
     private static let sentCap = 40
     /// Пять попыток подряд, дальше — до следующего запуска или возвращения в
     /// приложение. Столько же, сколько у `SyncQueue`.

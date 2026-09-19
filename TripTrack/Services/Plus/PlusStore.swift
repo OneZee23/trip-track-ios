@@ -59,6 +59,40 @@ final class PlusStore: ObservableObject {
         case revoked
     }
 
+    /// Чем кончилась покупка. `Bool` здесь стоял до ревью и был неправ: он
+    /// сваливал в один `false` три разных ответа — «передумал», «ждём
+    /// подтверждения взрослого» и «не вышло», — а экран на все три молчал.
+    /// Молчание правильно ровно для первого.
+    enum PurchaseOutcome {
+        case success
+        /// Человек сам закрыл лист Apple. Экрану говорить нечего.
+        case cancelled
+        /// Ask To Buy или подтверждение банка: вердикт приедет позже, в
+        /// `Transaction.updates`.
+        case pending
+        /// Сеть, StoreKit или непрошедшая проверка подписи. Причина едет
+        /// внутрь только для лога — на экран текст ошибки не попадает
+        /// никогда: он английский, системный и человеку ничего не объясняет.
+        case failed(Error)
+    }
+
+    /// Что экран показывает под кнопкой. Отдельный тип, потому что проверять
+    /// надо именно это отображение, а собрать `Product.PurchaseResult` в
+    /// тесте нечем.
+    enum PurchaseMessage: Equatable {
+        case none
+        case pending
+        case failed
+    }
+
+    nonisolated static func message(for outcome: PurchaseOutcome) -> PurchaseMessage {
+        switch outcome {
+        case .success, .cancelled: return .none
+        case .pending:             return .pending
+        case .failed:              return .failed
+        }
+    }
+
     static let yearlyID = "com.onezee.TripTrack.plus.yearly"
     static let monthlyID = "com.onezee.TripTrack.plus.monthly"
     /// Порядок значим: годовой первый и в пейволе, и в выборке продуктов.
@@ -232,11 +266,12 @@ final class PlusStore: ObservableObject {
 
     // MARK: - Покупка
 
-    /// `true` — покупка прошла. `false` — отменили, отложили или не вышло; во
-    /// всех трёх случаях пейвол просто остаётся открытым, без диалога.
+    /// Чем кончилась покупка — см. `PurchaseOutcome`. Пейвол закрывается
+    /// только на `.success`, а на `.pending` и `.failed` остаётся открытым и
+    /// говорит об этом строкой под кнопкой.
     @discardableResult
-    func purchase(_ product: Product) async -> Bool {
-        guard !isBusy else { return false }
+    func purchase(_ product: Product) async -> PurchaseOutcome {
+        guard !isBusy else { return .cancelled }
         isBusy = true
         defer { isBusy = false }
 
@@ -244,22 +279,38 @@ final class PlusStore: ObservableObject {
             let options = TipJarService.purchaseOptions(accountId: TokenStore.shared.accountId)
             switch try await product.purchase(options: options) {
             case .success(let verification):
+                // Непрошедшая проверка подписи — это ОТКАЗ, а не покупка:
+                // `handle` её игнорирует, и «Плюс» не откроется. Сказать при
+                // этом «успех» значило бы закрыть пейвол ни с чем.
+                if case .unverified(_, let error) = verification {
+                    await handle(verification, source: "purchase")
+                    return .failed(error)
+                }
                 await handle(verification, source: "purchase")
-                return isPlus
+                return isPlus ? .success : .failed(PurchaseError.entitlementDidNotArrive)
             case .userCancelled:
                 plusLog.notice("purchase cancelled")
-                return false
+                return .cancelled
             case .pending:
                 // Ask To Buy: вердикт приедет в `Transaction.updates`.
                 plusLog.notice("purchase pending")
-                return false
+                return .pending
             @unknown default:
-                return false
+                return .failed(PurchaseError.unknownResult)
             }
         } catch {
             plusLog.error("purchase failed: \(error.localizedDescription, privacy: .public)")
-            return false
+            return .failed(error)
         }
+    }
+
+    /// Две причины отказа, у которых своей ошибки нет ни у StoreKit, ни у сети.
+    enum PurchaseError: Error {
+        /// Транзакция прошла, а права не появилось. На живом StoreKit не
+        /// встречается, но молча считать это успехом нельзя.
+        case entitlementDidNotArrive
+        /// Новый случай `Product.PurchaseResult` из будущей iOS.
+        case unknownResult
     }
 
     /// Синхронизация с App Store — тест-шов.

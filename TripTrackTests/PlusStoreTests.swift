@@ -79,6 +79,35 @@ final class PlusStoreTests: XCTestCase {
             PlusAccessLevel.hidden)
     }
 
+    // MARK: - Что экран говорит про покупку
+
+    /// Три разных ответа StoreKit — три разных экрана, и молчит он ровно на
+    /// одном. До ревью все три сводились к `false`, и пейвол не говорил
+    /// ничего даже тому, у кого не прошла карта.
+    func testEachPurchaseOutcomeGetsItsOwnLine() {
+        XCTAssertEqual(PlusStore.message(for: .success), .none)
+        XCTAssertEqual(PlusStore.message(for: .cancelled), .none,
+                       "человек закрыл лист сам — комментировать нечего")
+        XCTAssertEqual(PlusStore.message(for: .pending), .pending)
+        XCTAssertEqual(
+            PlusStore.message(for: .failed(URLError(.notConnectedToInternet))), .failed)
+        XCTAssertEqual(
+            PlusStore.message(for: .failed(PlusStore.PurchaseError.entitlementDidNotArrive)),
+            .failed)
+    }
+
+    /// Текст ошибки StoreKit на экран не попадает ни на одном языке: он
+    /// английский, системный и человеку не объясняет ничего.
+    func testFailureCopyIsOursAndTranslatedEverywhere() {
+        for lang in LanguageManager.Language.allCases {
+            let failed = AppStrings.plusPurchaseFailed(lang)
+            let pending = AppStrings.plusPurchasePending(lang)
+            XCTAssertFalse(failed.isEmpty, lang.rawValue)
+            XCTAssertFalse(pending.isEmpty, lang.rawValue)
+            XCTAssertNotEqual(failed, pending, "\(lang.rawValue): два разных случая, один текст")
+        }
+    }
+
     // MARK: - Живой StoreKit
 
     /// Сессия поднимается на НАСТОЯЩЕМ `Config/TripTrack.storekit` — том же

@@ -1355,6 +1355,8 @@ extension Translations {
         "plusPrivacyLink": "Confidentialité",
         "plusAutoRenewFooter": "L'abonnement se renouvelle automatiquement. Pour l'éviter, désactivez le renouvellement au moins 24 heures avant la fin de la période payée, dans les réglages de l'identifiant Apple. Le paiement est débité de votre identifiant Apple.",
         "plusPricesUnavailable": "Prix non chargés — vérifiez la connexion",
+        "plusPurchasePending": "En attente de la confirmation de l'achat",
+        "plusPurchaseFailed": "Échec — réessayez plus tard",
         "plusManage": "Gérer l'abonnement",
         "plusUntil": "Plus jusqu'au {date}",
         "plusTrialAvailable": "{days} offerts",

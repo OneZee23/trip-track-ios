@@ -1355,6 +1355,8 @@ extension Translations {
         "plusPrivacyLink": "Конфіденційність",
         "plusAutoRenewFooter": "Підписка продовжується автоматично. Щоб цього не сталося, вимкніть продовження щонайпізніше за 24 години до кінця оплаченого періоду — у налаштуваннях Apple ID. Оплата списується з вашого Apple ID.",
         "plusPricesUnavailable": "Ціни не завантажилися — перевірте зв'язок",
+        "plusPurchasePending": "Чекаємо на підтвердження покупки",
+        "plusPurchaseFailed": "Не вдалося — спробуйте пізніше",
         "plusManage": "Керувати підпискою",
         "plusUntil": "Плюс до {date}",
         "plusTrialAvailable": "{days} безкоштовно",

@@ -18,6 +18,11 @@ struct PlusRow: View {
     @EnvironmentObject private var lang: LanguageManager
     @ObservedObject private var store = PlusStore.shared
 
+    /// Длина бесплатного периода годового тарифа. В `@State`, а не вычислением
+    /// в `body`: разбор `introductoryOffer` идёт на каждой перерисовке строки,
+    /// а меняется он ровно тогда, когда приезжает список продуктов.
+    @State private var trialDays: Int?
+
     var body: some View {
         let c = AppTheme.colors(for: scheme)
         let l = lang.language
@@ -76,12 +81,13 @@ struct PlusRow: View {
         .buttonStyle(PressableCardStyle())
         .surfaceCard(cornerRadius: 16)
         .accessibilityIdentifier("profile_plus_row")
+        .task(id: store.products.map(\.id)) { trialDays = Self.trialDays(of: store.yearly) }
     }
 
-    /// Длина бесплатного периода годового тарифа — приманка в подписи у того,
-    /// кто ещё не покупал. Из `introductoryOffer`, не из литерала.
-    private var trialDays: Int? {
-        store.yearly.flatMap(PlusProductInfo.init(product:))?.trialDays
+    /// Длина бесплатного периода — приманка в подписи у того, кто ещё не
+    /// покупал. Из `introductoryOffer`, не из литерала.
+    private static func trialDays(of product: Product?) -> Int? {
+        product.flatMap(PlusProductInfo.init(product:))?.trialDays
     }
 
     // MARK: - Правила

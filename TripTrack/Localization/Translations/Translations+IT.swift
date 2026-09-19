@@ -1355,6 +1355,8 @@ extension Translations {
         "plusPrivacyLink": "Privacy",
         "plusAutoRenewFooter": "L'abbonamento si rinnova automaticamente. Per evitarlo, disattiva il rinnovo almeno 24 ore prima della fine del periodo pagato, nelle impostazioni dell'ID Apple. L'addebito avviene sul tuo ID Apple.",
         "plusPricesUnavailable": "Prezzi non caricati — controlla la connessione",
+        "plusPurchasePending": "In attesa della conferma dell'acquisto",
+        "plusPurchaseFailed": "Non è andata a buon fine — riprova più tardi",
         "plusManage": "Gestisci abbonamento",
         "plusUntil": "Plus fino al {date}",
         "plusTrialAvailable": "{days} gratis",

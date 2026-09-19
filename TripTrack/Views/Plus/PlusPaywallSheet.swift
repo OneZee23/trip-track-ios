@@ -21,6 +21,10 @@ struct PlusPaywallSheet: View {
 
     /// Выбранный тариф. `nil` только до того, как приехали продукты.
     @State private var selectedId: String?
+    /// Что сказать под кнопкой о прошлой попытке. Сбрасывается в `.none`
+    /// перед каждой новой: строка про позавчерашний сбой над идущей покупкой
+    /// хуже, чем ничего.
+    @State private var notice: PlusStore.PurchaseMessage = .none
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -51,6 +55,8 @@ struct PlusPaywallSheet: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
 
+            noticeLine(c, l)
+
             restoreButton(l)
                 .padding(.top, 10)
 
@@ -66,6 +72,7 @@ struct PlusPaywallSheet: View {
                 .padding(.top, 10)
                 .padding(.bottom, 22)
         }
+        .animation(.easeInOut(duration: 0.2), value: notice)
         .contentSizedSheet(background: c.bg)
         .presentationDragIndicator(.hidden)
         // `children: .contain`, а не голый идентификатор: без него SwiftUI
@@ -227,8 +234,11 @@ struct PlusPaywallSheet: View {
         return Button {
             guard let product else { return }
             Haptics.action()
+            notice = .none
             Task {
-                if await store.purchase(product) { dismiss() }
+                let outcome = await store.purchase(product)
+                notice = PlusStore.message(for: outcome)
+                if case .success = outcome { dismiss() }
             }
         } label: {
             ZStack {
@@ -248,6 +258,33 @@ struct PlusPaywallSheet: View {
         .disabled(product == nil || store.isBusy)
         .opacity(product == nil ? 0.45 : 1)
         .accessibilityIdentifier("plus_buy")
+    }
+
+    /// Итог прошлой попытки. Отмену НЕ комментирует: человек закрыл лист сам,
+    /// и сообщать ему об этом — то же самое, что спорить.
+    @ViewBuilder
+    private func noticeLine(
+        _ c: AppTheme.Colors, _ l: LanguageManager.Language
+    ) -> some View {
+        switch notice {
+        case .none:
+            EmptyView()
+        case .pending:
+            noticeText(AppStrings.plusPurchasePending(l), c.textSecondary)
+        case .failed:
+            noticeText(AppStrings.plusPurchaseFailed(l), AppTheme.red)
+        }
+    }
+
+    private func noticeText(_ text: String, _ color: Color) -> some View {
+        Text(text)
+            .font(.inter(12, weight: .medium))
+            .foregroundStyle(color)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 24)
+            .padding(.top, 8)
+            .accessibilityIdentifier("plus_notice")
     }
 
     /// Обязательна для ревью и обязана работать у любого, кто когда-то платил

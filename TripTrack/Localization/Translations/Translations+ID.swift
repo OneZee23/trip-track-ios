@@ -1355,6 +1355,8 @@ extension Translations {
         "plusPrivacyLink": "Privasi",
         "plusAutoRenewFooter": "Langganan diperpanjang otomatis. Untuk mencegahnya, matikan perpanjangan paling lambat 24 jam sebelum periode berbayar berakhir, di pengaturan Apple ID. Pembayaran ditagihkan ke Apple ID Anda.",
         "plusPricesUnavailable": "Harga gagal dimuat — periksa koneksi",
+        "plusPurchasePending": "Menunggu konfirmasi pembelian",
+        "plusPurchaseFailed": "Tidak berhasil — coba lagi nanti",
         "plusManage": "Kelola langganan",
         "plusUntil": "Plus sampai {date}",
         "plusTrialAvailable": "{days} gratis",

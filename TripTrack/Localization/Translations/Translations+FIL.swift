@@ -1355,6 +1355,8 @@ extension Translations {
         "plusPrivacyLink": "Privacy",
         "plusAutoRenewFooter": "Awtomatikong nagre-renew ang subscription. Para maiwasan ito, i-off ang pag-renew nang hindi bababa sa 24 oras bago matapos ang bayad na panahon, sa mga setting ng Apple ID. Sisingilin ang iyong Apple ID.",
         "plusPricesUnavailable": "Hindi na-load ang mga presyo — tingnan ang koneksyon",
+        "plusPurchasePending": "Hinihintay ang kumpirmasyon ng pagbili",
+        "plusPurchaseFailed": "Hindi natuloy — subukan ulit mamaya",
         "plusManage": "Pamahalaan ang subscription",
         "plusUntil": "Plus hanggang {date}",
         "plusTrialAvailable": "Libre nang {days}",

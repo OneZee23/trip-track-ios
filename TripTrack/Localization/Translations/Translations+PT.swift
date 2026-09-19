@@ -1355,6 +1355,8 @@ extension Translations {
         "plusPrivacyLink": "Privacidade",
         "plusAutoRenewFooter": "A assinatura é renovada automaticamente. Para evitar, desative a renovação pelo menos 24 horas antes do fim do período pago, nos ajustes do Apple ID. A cobrança é feita no seu Apple ID.",
         "plusPricesUnavailable": "Os preços não carregaram — verifique a conexão",
+        "plusPurchasePending": "Aguardando a confirmação da compra",
+        "plusPurchaseFailed": "Não deu certo — tente mais tarde",
         "plusManage": "Gerenciar assinatura",
         "plusUntil": "Plus até {date}",
         "plusTrialAvailable": "{days} grátis",

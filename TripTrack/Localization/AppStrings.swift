@@ -7205,6 +7205,21 @@ enum AppStrings {
            en: "Prices didn't load — check your connection")
     }
 
+    /// Ask To Buy или подтверждение банка: ничего не упало, вердикт придёт
+    /// позже. Лист остаётся открытым, а строка объясняет, чего ждать.
+    static func plusPurchasePending(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusPurchasePending",
+           ru: "Ждём подтверждения покупки", en: "Waiting for the purchase to be confirmed")
+    }
+
+    /// Сбой покупки. Текст ошибки StoreKit сюда НЕ попадает: он английский,
+    /// системный и человеку не объясняет ничего — а «попробуйте позже» хотя бы
+    /// говорит, что делать.
+    static func plusPurchaseFailed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusPurchaseFailed",
+           ru: "Не удалось — попробуйте позже", en: "It didn't go through — try again later")
+    }
+
     static func plusManage(_ lang: LanguageManager.Language) -> String {
         tr(lang, "plusManage", ru: "Управлять подпиской", en: "Manage subscription")
     }
