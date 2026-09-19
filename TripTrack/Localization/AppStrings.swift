@@ -7097,4 +7097,12 @@ enum AppStrings {
     static func findFirstLabel(_ lang: LanguageManager.Language) -> String {
         tr(lang, "findFirstLabel", ru: "Нашли первым", en: "First to find it")
     }
+
+    // MARK: - Плюс (0.8.0)
+
+    /// Заглушка пейвола «Плюс» на время Задачи 0 — `PlusPaywallSheet`
+    /// целиком заменит Задача 2, поэтому строка одна и без подробностей.
+    static func plusPaywallPlaceholder(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusPaywallPlaceholder", ru: "«Плюс» скоро здесь", en: "Plus is coming soon")
+    }
 }

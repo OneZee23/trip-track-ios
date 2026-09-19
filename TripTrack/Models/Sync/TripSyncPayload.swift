@@ -96,6 +96,11 @@ struct TripSyncPayload: Codable {
     /// целиком заменяет прежний, ключ отсутствует — старый сервер, локальное
     /// не трогать.
     var segments: [TripSegmentPayload]?
+    /// Записана треком или вписана рукой (0.8.0). `nil` — старый сервер про
+    /// поле молчит, локальное не трогаем; см. `TripOrigin.init(from:)` —
+    /// незнакомая строка внутри читается как «записана треком», а не роняет
+    /// весь пейлоад.
+    var source: TripOrigin? = nil
 }
 
 extension TripSyncPayload {
@@ -157,6 +162,7 @@ extension TripSyncPayload {
                 id: $0.id, fromCheckpointId: $0.fromCheckpointId,
                 toCheckpointId: $0.toCheckpointId, name: $0.name)
         }
+        self.source = trip.source
     }
 
     /// Mirrors `Trip.movementSplit` — duplicated here (not called through the

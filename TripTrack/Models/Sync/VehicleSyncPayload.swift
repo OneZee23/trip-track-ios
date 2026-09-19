@@ -65,6 +65,11 @@ struct VehicleSyncPayload: Codable {
     /// значения. Ровно ради этого поле и сделано неопциональным в модели.
     let dashboardUnits: DashboardUnits?
 
+    /// Фон карточки машины (0.8.0, «Плюс»). `nil` — тот же смысл, что у
+    /// `dashboardUnits` выше: старый сервер про поле молчит либо значение
+    /// нам незнакомо, и оба случая читаются как «не трогать локальное».
+    let cardStyle: String?
+
     // Паспорт (0.6.4). Опциональные, как и всё, что появилось после первого
     // релиза: сервер до 0.6.4 этих ключей не знает, и их отсутствие обязано
     // означать «не трогать», а не «сбросить».
@@ -98,6 +103,7 @@ struct VehicleSyncPayload: Codable {
         visibleToOthers: Bool? = nil,
         fuelCurrency: String? = nil,
         dashboardUnits: DashboardUnits? = nil,
+        cardStyle: String? = nil,
         about: String? = nil,
         make: String? = nil,
         model: String? = nil,
@@ -136,6 +142,7 @@ struct VehicleSyncPayload: Codable {
         self.visibleToOthers = visibleToOthers
         self.fuelCurrency = fuelCurrency
         self.dashboardUnits = dashboardUnits
+        self.cardStyle = cardStyle
     }
 
     // MARK: - Codable вручную
@@ -163,6 +170,7 @@ struct VehicleSyncPayload: Codable {
         case stickersJson, cityConsumption, highwayConsumption, fuelPrice
         case conflictVersion, lastModifiedAt, vehicleType, avatarStyle
         case plate, plateVisible, visibleToOthers, fuelCurrency, dashboardUnits
+        case cardStyle
         case about, make, model, year, bodyType
         case mapVisible, photosVisible, isArchived, soldAt
     }
@@ -209,6 +217,7 @@ struct VehicleSyncPayload: Codable {
         // дают `nil`, а `nil` значит «не трогать локальное».
         dashboardUnits = DashboardUnits.parse(
             (try? c.decodeIfPresent(String.self, forKey: .dashboardUnits)) ?? nil)
+        cardStyle = try c.decodeIfPresent(String.self, forKey: .cardStyle)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -233,6 +242,7 @@ struct VehicleSyncPayload: Codable {
         try c.encodeIfPresent(visibleToOthers, forKey: .visibleToOthers)
         try c.encodeIfPresent(fuelCurrency, forKey: .fuelCurrency)
         try c.encodeIfPresent(dashboardUnits?.rawValue, forKey: .dashboardUnits)
+        try c.encodeIfPresent(cardStyle, forKey: .cardStyle)
         try c.encodeIfPresent(about, forKey: .about)
         try c.encodeIfPresent(make, forKey: .make)
         try c.encodeIfPresent(model, forKey: .model)

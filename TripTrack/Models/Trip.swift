@@ -79,6 +79,11 @@ struct Trip: Identifiable, Codable {
     /// `serverCreatedAt` until it actually uploads.
     var isOnServer: Bool = false
 
+    /// Записана треком или вписана рукой (0.8.0). См. `TripOrigin` — почему
+    /// не `TripSource`. Умолчание `.recorded`: каждая поездка до 0.8.0 была
+    /// такой, и незнакомая строка с сервера читается так же.
+    var source: TripOrigin = .recorded
+
     /// Decoded simplified coordinates for feed card route previews.
     /// Hits an `NSCache` keyed by trip id so a feed scroll past 30 cards
     /// doesn't redecode 30 polylines × 60Hz. Cache is bounded so memory
@@ -317,7 +322,8 @@ struct Trip: Identifiable, Codable {
          fuelCurrency: String? = nil,
          previewPolyline: Data? = nil, earnedBadgeIds: [String] = [],
          xpEarned: Int = 0,
-         companions: [TripCompanion] = [], isOnServer: Bool = false) {
+         companions: [TripCompanion] = [], isOnServer: Bool = false,
+         source: TripOrigin = .recorded) {
         self.id = id
         self.startDate = startDate
         self.endDate = endDate
@@ -343,6 +349,7 @@ struct Trip: Identifiable, Codable {
         self.xpEarned = xpEarned
         self.companions = companions
         self.isOnServer = isOnServer
+        self.source = source
     }
 
     var earnedBadges: [Badge] {

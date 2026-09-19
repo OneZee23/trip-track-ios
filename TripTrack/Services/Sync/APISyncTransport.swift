@@ -409,6 +409,7 @@ final class APISyncTransport: SyncTransport {
             visibleToOthers: vehicle.visibleToOthers,
             fuelCurrency: vehicle.fuelCurrency,
             dashboardUnits: vehicle.dashboardUnits,
+            cardStyle: vehicle.cardStyle,
             about: vehicle.about,
             make: vehicle.make,
             model: vehicle.model,

@@ -22,6 +22,20 @@ final class SettingsManager: ObservableObject {
     @Published var selectedVehicleId: UUID?
     @Published var vehicles: [Vehicle] = []
 
+    // MARK: - Плюс (0.8.0)
+
+    /// Рамка аватара — один из шести вариантов «Плюса». `nil` — без рамки,
+    /// тот же ответ, что у всех аккаунтов до 0.8.0. Персистится в
+    /// `UserSettingsEntity.avatarFrame` и синкается через
+    /// `SettingsSyncPayload.avatarFrame` тем же приёмом, что `dashboardUnits`
+    /// у машины: строка, а не enum — варианты знает `Views/Plus`.
+    @Published var avatarFrame: String?
+    /// Значок «Плюс» у имени в ленте/профиле/комментариях — можно выключить
+    /// в приватности, не теряя саму подписку. По умолчанию включён: значок
+    /// на аккаунте без «Плюса» ничего не покажет, а прятать награду молча —
+    /// решение, которое человек должен принять сам, а не получить готовым.
+    @Published var showPlusBadge: Bool = true
+
     // User identity (local UUID, persisted in UserSettingsEntity.id)
     @Published private(set) var localUserId: UUID = UUID()
 
@@ -533,6 +547,8 @@ final class SettingsManager: ObservableObject {
         fuelConsumption = entity.fuelConsumption
         fuelPrice = entity.fuelPrice
         selectedVehicleId = entity.selectedVehicleId
+        avatarFrame = entity.avatarFrame
+        showPlusBadge = entity.showPlusBadge
         // Gamification
         profileXP = Int(entity.profileXP)
         profileLevel = Int(entity.profileLevel)
@@ -607,6 +623,8 @@ final class SettingsManager: ObservableObject {
         entity.fuelConsumption = fuelConsumption
         entity.fuelPrice = fuelPrice
         entity.selectedVehicleId = selectedVehicleId
+        entity.avatarFrame = avatarFrame
+        entity.showPlusBadge = showPlusBadge
         // Единицы живут в `UserDefaults` (их читает `@AppStorage` на экранах),
         // а уезжают из колонки. Списываются здесь, а не в сеттере, чтобы любой
         // путь к сохранению донёс их до базы — включая тот, который забудут
@@ -867,6 +885,7 @@ final class SettingsManager: ObservableObject {
         // этот бинарник не знает, всё равно нечем. Сама строка в базе при этом
         // остаётся нетронутой — её не перезапишет никто, кроме человека.
         v.dashboardUnits = DashboardUnits.parse(entity.dashboardUnits) ?? .app
+        v.cardStyle = entity.cardStyle
         v.about = entity.about ?? ""
         v.make = entity.make ?? ""
         v.model = entity.model ?? ""

@@ -70,6 +70,14 @@ struct Vehicle: Identifiable, Codable {
     /// всегда.
     var dashboardUnits: DashboardUnits
 
+    // MARK: - Плюс (0.8.0)
+
+    /// Фон карточки машины в гараже — один из восьми вариантов «Плюса».
+    /// `nil` — обычная карточка, тот же ответ, что у всех машин до 0.8.0.
+    /// Строка, а не enum: варианты определяет `Views/Plus`, а модели про их
+    /// список знать незачем — ровно как `Vehicle.avatarStyle`.
+    var cardStyle: String?
+
     // MARK: - Паспорт машины (0.6.4)
 
     /// Одна строка о машине, написанная владельцем: «Первая своя. Брал, чтобы
@@ -128,7 +136,7 @@ struct Vehicle: Identifiable, Codable {
          createdAt: Date = Date(),
          cityConsumption: Double = 10.0, highwayConsumption: Double = 6.0,
          fuelPrice: Double = 56.0, fuelCurrency: String = FuelCurrency.current,
-         dashboardUnits: DashboardUnits = .app,
+         dashboardUnits: DashboardUnits = .app, cardStyle: String? = nil,
          about: String = "", make: String = "", model: String = "",
          year: Int = 0, bodyType: String = "",
          photosVisible: Bool = false, mapVisible: Bool = true,
@@ -160,6 +168,7 @@ struct Vehicle: Identifiable, Codable {
         self.fuelPrice = fuelPrice
         self.fuelCurrency = fuelCurrency
         self.dashboardUnits = dashboardUnits
+        self.cardStyle = cardStyle
     }
 
     /// Decoding tolerates payloads written before these fields existed —
@@ -199,6 +208,10 @@ struct Vehicle: Identifiable, Codable {
         // можно было бы сохранить, ещё не существует.
         dashboardUnits = DashboardUnits.parse(
             (try? c.decodeIfPresent(String.self, forKey: .dashboardUnits)) ?? nil) ?? .app
+        // Плюс (0.8.0). Отсутствие ключа — «обычная карточка», как и у
+        // паспорта ниже: ни один сохранённый payload и ни один сервер до
+        // 0.8.0 этого ключа не шлёт.
+        cardStyle = try c.decodeIfPresent(String.self, forKey: .cardStyle)
 
         // Поля паспорта (0.6.4). Все через `decodeIfPresent` с умолчанием: их
         // не шлёт ни один сохранённый payload и ни один сервер до 0.6.4, и

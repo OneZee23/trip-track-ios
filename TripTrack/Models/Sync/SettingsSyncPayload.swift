@@ -18,6 +18,44 @@ struct SettingsSyncPayload: Codable {
     let lastTripDate: Date?
     let conflictVersion: Int
     let lastModifiedAt: Date
+    /// Плюс (0.8.0). `nil` — «не сказано»: старый сервер про поле молчит,
+    /// локальное не трогаем — правило 0.6.7, применённое к этой паре так же,
+    /// как к `dashboardUnits` у машины.
+    let avatarFrame: String?
+    let showPlusBadge: Bool?
+
+    /// Явный инициализатор вместо синтезированного memberwise — с двумя
+    /// дефолтными аргументами в конце синтезированный вариант не даёт
+    /// вызывающему их опустить надёжно на этом языковом наборе, а старые
+    /// прямые вызовы (тесты, `RemoteSettingsMergeTests`) их не передают.
+    init(
+        id: UUID, avatarEmoji: String, themeMode: String, language: String,
+        distanceUnit: String, volumeUnit: String, fuelConsumption: Double,
+        fuelPrice: Double, fuelCurrency: String, selectedVehicleId: UUID?,
+        profileLevel: Int, profileXp: Int, currentStreak: Int, bestStreak: Int,
+        lastTripDate: Date?, conflictVersion: Int, lastModifiedAt: Date,
+        avatarFrame: String? = nil, showPlusBadge: Bool? = nil
+    ) {
+        self.id = id
+        self.avatarEmoji = avatarEmoji
+        self.themeMode = themeMode
+        self.language = language
+        self.distanceUnit = distanceUnit
+        self.volumeUnit = volumeUnit
+        self.fuelConsumption = fuelConsumption
+        self.fuelPrice = fuelPrice
+        self.fuelCurrency = fuelCurrency
+        self.selectedVehicleId = selectedVehicleId
+        self.profileLevel = profileLevel
+        self.profileXp = profileXp
+        self.currentStreak = currentStreak
+        self.bestStreak = bestStreak
+        self.lastTripDate = lastTripDate
+        self.conflictVersion = conflictVersion
+        self.lastModifiedAt = lastModifiedAt
+        self.avatarFrame = avatarFrame
+        self.showPlusBadge = showPlusBadge
+    }
 }
 
 extension SettingsSyncPayload {
@@ -31,16 +69,26 @@ extension SettingsSyncPayload {
     /// версией: единицы берутся у `SettingsManager` (то есть у человека), а не
     /// назначаются километрами.
     init(entity: UserSettingsEntity, settings: SettingsManager) {
+        // Разбито на именованные константы, а не одно выражение из 19
+        // аргументов: с добавлением `avatarFrame`/`showPlusBadge` (0.8.0)
+        // компилятор не укладывался в отведённое время на типизацию цельного
+        // вызова — тот же предел, что у `TripDetailView.body`.
+        let themeMode: String = entity.themeMode ?? "dark"
+        let language: String = entity.language ?? "ru"
+        let distanceUnit: String = entity.distanceUnit ?? settings.distanceUnit.rawValue
+        let volumeUnit: String = entity.volumeUnit ?? settings.volumeUnit.rawValue
+        let fuelCurrency: String = entity.fuelCurrency ?? "€"
+        let lastModifiedAt: Date = entity.lastModifiedAt ?? Date()
         self.init(
             id: settings.localUserId,
             avatarEmoji: settings.avatarEmoji,
-            themeMode: entity.themeMode ?? "dark",
-            language: entity.language ?? "ru",
-            distanceUnit: entity.distanceUnit ?? settings.distanceUnit.rawValue,
-            volumeUnit: entity.volumeUnit ?? settings.volumeUnit.rawValue,
+            themeMode: themeMode,
+            language: language,
+            distanceUnit: distanceUnit,
+            volumeUnit: volumeUnit,
             fuelConsumption: entity.fuelConsumption,
             fuelPrice: entity.fuelPrice,
-            fuelCurrency: entity.fuelCurrency ?? "€",
+            fuelCurrency: fuelCurrency,
             selectedVehicleId: settings.selectedVehicleId,
             profileLevel: Int(entity.profileLevel),
             profileXp: Int(entity.profileXP),
@@ -48,7 +96,9 @@ extension SettingsSyncPayload {
             bestStreak: Int(entity.bestStreak),
             lastTripDate: entity.lastTripDate,
             conflictVersion: Int(entity.conflictVersion),
-            lastModifiedAt: entity.lastModifiedAt ?? Date()
+            lastModifiedAt: lastModifiedAt,
+            avatarFrame: settings.avatarFrame,
+            showPlusBadge: settings.showPlusBadge
         )
     }
 }

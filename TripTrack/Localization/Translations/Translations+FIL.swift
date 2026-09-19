@@ -1337,6 +1337,7 @@ extension Translations {
         "findRarityHundreds": "daan-daan",
         "findRarityMany": "marami",
         "findFirstLabel": "Unang nakahanap",
+        "plusPaywallPlaceholder": "Malapit nang dumating ang Plus",
     ]
 
 }

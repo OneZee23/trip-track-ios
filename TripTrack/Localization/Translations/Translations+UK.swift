@@ -1337,6 +1337,7 @@ extension Translations {
         "findRarityHundreds": "сотні",
         "findRarityMany": "багато",
         "findFirstLabel": "Знайшли першим",
+        "plusPaywallPlaceholder": "Плюс скоро тут",
     ]
 
 }

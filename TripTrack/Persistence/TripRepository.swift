@@ -1217,7 +1217,8 @@ final class CoreDataTripRepository: TripRepository {
             vehicleId: entity.vehicleId, fuelCurrency: entity.fuelCurrency,
             previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds,
             xpEarned: Int(entity.xpEarned),
-            companions: companions, isOnServer: entity.serverCreatedAt != nil
+            companions: companions, isOnServer: entity.serverCreatedAt != nil,
+            source: TripOrigin(rawValue: entity.source ?? "") ?? .recorded
         )
     }
 
@@ -1276,6 +1277,10 @@ final class CoreDataTripRepository: TripRepository {
            Int(entity.conflictVersion) >= p.conflictVersion {
             return
         }
+        // Копия правила `applyRemoteVehicle` для `dashboardUnits`: правка,
+        // ещё не уехавшая, сильнее приехавшего ответа. Считается ДО
+        // присваиваний, пока `syncStatus` ещё не переписан ниже.
+        let hasLocalEdits = entity.syncStatus == SyncStatus.pendingUpload.rawValue
         entity.id = p.id
         entity.title = p.title
         entity.tripDescription = p.description
@@ -1294,6 +1299,9 @@ final class CoreDataTripRepository: TripRepository {
         // пометку «ехал пассажиром» — машина при этом уже снята, и поездка
         // оставалась без того и без другого.
         if let remoteTransfer = p.isTransfer { entity.isTransfer = remoteTransfer }
+        // Источник поездки (0.8.0) — тем же приёмом, что `dashboardUnits` у
+        // машины: ключ отсутствует или правка ещё не уехала — не трогаем.
+        if !hasLocalEdits, let remoteSource = p.source { entity.source = remoteSource.rawValue }
         entity.fuelCurrency = p.fuelCurrency
         entity.previewPolyline = p.previewPolyline.flatMap { Data(base64Encoded: $0) }
         // Кэш держал старую форму до перезапуска приложения.
@@ -1488,6 +1496,9 @@ final class CoreDataTripRepository: TripRepository {
         // мили — и списанные с панели 142 000 уезжают в базу как 228 527.
         // Пока правка не уехала, побеждает она.
         if !hasLocalEdits, let units = p.dashboardUnits { entity.dashboardUnits = units.rawValue }
+        // Фон карточки (0.8.0, «Плюс») — тем же приёмом, что единица
+        // приборки: ключ отсутствует или правка ещё не уехала — не трогаем.
+        if !hasLocalEdits, let style = p.cardStyle { entity.cardStyle = style }
         // Паспорт (0.6.4) — по тому же правилу: ключ пришёл, значит сервер
         // имеет мнение; не пришёл — молчит, и локальное трогать нельзя.
         if let about = p.about { entity.about = about }
@@ -1586,6 +1597,16 @@ final class CoreDataTripRepository: TripRepository {
             entity.selectedVehicleId = p.selectedVehicleId
             entity.currentStreak = Int32(p.currentStreak)
             entity.lastTripDate = p.lastTripDate
+            // Плюс (0.8.0) — той же «newest wins» защитой, что и остальные
+            // предпочтения в этом блоке, а НЕ гейтом `hasLocalEdits`
+            // (`dashboardUnits`-приёмом) у машины: `syncStatus` у строки
+            // настроек равен нулю с рождения (см. доку класса выше) и не
+            // отличает «правку, ждущую отправки» от «только что созданной
+            // строки» — гейт по нему держал бы эту пару вечно непримени́мой.
+            // `nil` здесь по-прежнему значит «сервер молчит» — локальное
+            // не трогаем.
+            if let frame = p.avatarFrame { entity.avatarFrame = frame }
+            if let showBadge = p.showPlusBadge { entity.showPlusBadge = showBadge }
             entity.lastModifiedAt = p.lastModifiedAt
         }
 
