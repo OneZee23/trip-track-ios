@@ -4,7 +4,144 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.7.0 — the Atlas: real fog and finds (current submission)
+## v0.8.0 — Plus: subscription, cosmetics, manual trips (current submission)
+
+### Короткая версия — вставить в App Store Connect
+
+```
+TripTrack 0.8.0 adds a subscription, "Plus": four cosmetic unlocks and one
+feature, plus a separate one-time tip that unlocks nothing.
+
+WHAT PLUS UNLOCKS. Eight premium profile backgrounds, an avatar frame with a
+small badge next to the user's name (toggleable in Privacy settings), a
+background for the vehicle's card in the garage, and a colour for the
+user's own route line on the maps — all four purely cosmetic and visible to
+other people only while the subscription is active. The one feature: adding
+a trip the user did not record, point to point by real roads (an address
+search or a map tap for start/end, up to three stops in between, MKDirections
+builds the route). A manual trip still counts toward the user's distance,
+regions, the Atlas and the assigned vehicle's odometer — it is a real road —
+but it earns no experience, no level, no badges and no finds, and its card
+carries a "written by hand" label. It cannot be edited after creation; only
+deleted and re-entered.
+
+PRICING. A yearly subscription at 29.99 EUR with a 7-day free trial (the
+default in the paywall), or monthly at 6.99 EUR with no trial. Both are
+clearly priced and timed on the paywall before purchase, and "Restore
+Purchases" is one tap away on the same screen and in the user's profile.
+Canceling an active subscription is Apple's own "Manage Subscription" sheet,
+reached from the profile.
+
+TIP JAR. Three one-time, non-consumable-adjacent purchases (small / medium /
+large) with no unlock attached to them at all — the screen says exactly that
+before payment, to satisfy 3.1.1: this is a tip, not a disguised feature
+gate.
+
+SOURCE OF TRUTH. Whether a purchase is active on THIS device is decided by
+StoreKit 2 (Transaction.currentEntitlements + Transaction.updates), so Plus
+keeps working offline and on a second phone signed into the same Apple ID.
+After a verified purchase the app separately sends the signed transaction to
+our server, which is the source of truth only for what OTHER people can see
+(the cosmetics on a public profile or garage) — never for gating the
+purchasing device itself.
+
+REGION. On the RUS storefront the paywall, its entry points and every
+premium-looking row are hidden outright rather than shown locked — there is
+no way to reach a purchase screen from that storefront. A Plus subscription
+already owned (bought before a storefront change, or via family/App Store
+gift) keeps working regardless of storefront.
+
+HOW TO TEST THE SUBSCRIPTION IN SANDBOX
+1. On the test device: Settings > App Store > Sandbox Account > sign in with
+   a Sandbox Tester Apple ID created in App Store Connect > Users and Access
+   > Sandbox Testers. Do this BEFORE opening the paywall — signing in from
+   the in-app purchase sheet works too, but the dedicated Settings screen is
+   more reliable.
+2. In the app: Profile > "Plus" row, or any locked cosmetic (Profile
+   appearance, a vehicle's card background, the route-line colour setting) >
+   opens the paywall. Tap the yearly plan (selected by default, "7 days
+   free, then EUR 29.99/year") or the monthly one, then the purchase button.
+   Sandbox subscriptions renew every few minutes instead of every year/month
+   — this is Apple's own sandbox behaviour, not a bug.
+3. Confirm the purchase in the system sheet with the sandbox account's
+   password. The paywall closes and the cosmetics/manual-trip entry point
+   unlock immediately.
+4. RESTORE: from a second sandbox device, or after deleting and reinstalling
+   the app, open the paywall and tap "Restore Purchases" — Plus is back
+   without a new charge.
+5. CANCEL / GRACE: Profile > active-subscription row > "Manage Subscription"
+   opens Apple's own sheet; cancelling there does not revoke access
+   immediately (the subscription remains active until the paid period ends,
+   matching Apple's own behaviour) — this is expected, not a bug to report.
+
+TIP JAR. Profile > "Support the app" > any of the three amounts > confirm in
+the sandbox purchase sheet. Nothing else changes on screen except a one-time
+"Thank you" toast — that is the entire feature.
+
+MANUAL TRIPS. Profile > "Mine" > "+" in the header (or "..." on the feed
+header > "Add a trip"), only reachable with an active Plus subscription (or
+a purchase already restored). Pick a start and an end by search or by
+tapping the map, optionally up to three stops, a vehicle, a date and a
+duration, then "Create". The new trip appears in the list with a pencil icon
+and no speed chart on its card.
+
+No new permissions are requested beyond what 0.7.0 already had.
+```
+
+### Если спросят про приватность и данные
+
+Это ответ на ОТДЕЛЬНЫЙ вопрос ревьюера, не продолжение вставки выше — вместе
+два блока уходят за 4000 знаков лимита Notes.
+
+```
+This release adds one new data type: Purchase History. When a purchase is
+verified by StoreKit on the device, the app sends the signed transaction to
+our server, which stores the subscription's product id, status, expiry date
+and trial flag against the user's account — this is what lets Plus
+cosmetics show correctly on the user's PUBLIC profile and garage to other
+people, and nothing else. It is linked to the user's identity and used only
+for App Functionality; it is never used for tracking, advertising or
+analytics, and it is not shared with any third party. The App Privacy
+answers for this submission add "Purchase History" accordingly; every other
+answer is unchanged from 0.7.0.
+
+The tip jar is a StoreKit consumable purchase with no server round trip at
+all — no receipt, no product id and no amount is sent to us; it does not
+appear anywhere in the Purchase History disclosure above.
+
+A manual trip's route, stops and title are user-entered content, handled
+exactly like a recorded trip's title and notes (existing "Other User
+Content" answer) — nothing new there. Its GPS-shaped points are
+synthesized from Apple's own MapKit directions, not measured, and only ever
+leave the device if the user has both signed in and turned Cloud Sync on
+(both off by default), same as any other trip.
+```
+
+### Длинная версия — для нас
+
+Схема CoreData v19: `TripEntity.source` (`recorded`/`manual`),
+`VehicleEntity.cardStyle`, `UserSettingsEntity.avatarFrame`/`showPlusBadge` —
+все четыре аддитивные. На бэкенде — `plus_subscription` (по строке на
+`original_transaction_id`, без внешних ключей — подписка переезжает между
+аккаунтами), `plus_event` (аудит, хранит SHA-256 payload, не сам payload) и
+денормализация `account.plus_until`, которую читает каждый публичный ответ
+(лента, профиль, гараж, комментарии) без обращения к платёжной таблице.
+
+`avatarFrame`/`showPlusBadge` едут ТОЛЬКО через `POST /auth/profile-update`
+(не через `/settings/upsert`) — см. CLAUDE.md «Плюс (0.8.0)». Косметика
+гасится по СПИСКУ (`plus-view.ts`), а не выключением поля целиком: человек,
+купивший бесплатный фон три года назад, не теряет его из-за того, что
+подписка кончилась.
+
+Демо-аккаунт по-прежнему не нужен и не заводится: вход — Sign in with Apple
+собственным Apple ID ревьюера, для песочницы покупок — отдельный Sandbox
+Tester (см. «How to test» выше, это НЕ учётная запись входа в приложение).
+§«Demo account (if reviewer asks)» внизу файла — запасной план на случай
+отказа ревью, а не текущая практика.
+
+---
+
+## v0.7.0 — the Atlas: real fog and finds (previous submission)
 
 ### Короткая версия — вставить в App Store Connect
 

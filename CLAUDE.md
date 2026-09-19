@@ -1297,6 +1297,93 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   районе» (< 1 км), а не «в той самой ячейке»: `firstHit` идёт по
   отсортированным хешам, и восьмисотметровый трек задевает их полдюжины.
 
+### Плюс (0.8.0)
+
+Подписка, донат и вписанная вручную поездка. Источник правды для того, что
+человек может нажать НА СВОЁМ телефоне, — StoreKit, а не сервер: он работает
+офлайн и переживает второй телефон на том же Apple ID. Сервер отвечает за то,
+что видят ДРУГИЕ люди — косметику в чужом профиле, счётчик, ленту.
+
+- **Один гейт на пять точек.** `PlusGate.allows(feature:isPlus:storefront:)`
+  — чистая функция, `.hidden` (витрина РФ, `Storefront.current.countryCode ==
+  "RUS"` — ни пейвола, ни замков, ни премиум-пунктов в списках) / `.locked`
+  (не РФ, не плюс) / `.open`. `isPlus` побеждает витрину: уже купленный на
+  другом регионе «Плюс» продолжает работать, даже если местная витрина больше
+  ничего не продаёт. Все пять фич ходят через эту функцию, а не через свои
+  проверки — иначе шестая точка однажды забыла бы про РФ.
+- **Идентификаторы косметики — whitelist СЕРВЕРА, не выдумка клиента.**
+  `plus_nebula`…`plus_storm` (8 фонов профиля), `frame_gold`…`frame_flame`
+  (6 рамок аватара), `card_carbon`…`card_sunset` (8 фонов карточки машины) —
+  их назвал бэкенд (`plus-view.ts`), и iOS обязан взять РОВНО эти строки.
+  Разойдись они — чужие глаза увидят не то, что человек выбрал, или не увидят
+  ничего.
+- **Когда «Плюс» кончился — выбор в базе остаётся, показ падает на
+  бесплатное.** Премиум-фон → `.none`, рамка → нет, фон карточки машины →
+  нет, линия маршрута → градиент скорости (у неё вообще нет синка — она живёт
+  в `UserDefaults`). Ничего не стирается: продлил — вернулось то же самое.
+  Правило живёт в ОДНОМ резолвере на косметику
+  (`ProfileBackground.effective(id:isPlus:)` и её тройники у рамки, фона
+  машины и линии), а не в проверке `isPlus` на каждом месте показа.
+- **`avatarFrame`/`showPlusBadge` едут через `POST /auth/profile-update`, а
+  НЕ через синк настроек.** `SettingsService.upsert` на сервере уже перестал
+  быть вторым писателем в профиль (два писателя устраивали гонку и затирали
+  свежее значение); лишние ключи в `settings/upsert` не роняют запрос — они
+  просто молча никуда не доедут. Единственная дверь — обёртка
+  `AuthService.pushPlusCosmetics()`, и любая новая правка косметики обязана
+  звать её, а не `syncProfileToServer` напрямую.
+- **Ручная поездка даёт километры, а не награды.** `Trip.source: TripOrigin`
+  (не `TripSource` — это имя уже занято протоколом «откуда читать список
+  поездок»). Одометр машины, слой открытого (`RevealedLayerStore`) и
+  статистика считают вписанную поездку как настоящую — дорога есть дорога.
+  Опыт, уровни, значки, находки и рекорд скорости — нет: `guard trip.source
+  == .recorded` с однострочной причиной у каждого наградного места, и это
+  держит `ManualTripRewardsTests`, читающий исходники по образцу
+  `VehicleUnitsStayOutOfRewardsTests`.
+- **Расстояние ручной поездки — `TripDistanceGate.totalDistance`, не
+  `MKRoute.distance`.** `MKRoute` меряет свою геометрию, а одометр, атлас и
+  статистика потом набирают число ПО ТОЧКАМ, которые легли в базу тем же
+  пятиметровым шагом. Разошедшийся второй счёт — ровно та поломка 0.6.5,
+  из-за которой все счётчики километров однажды свели в одну функцию.
+- **«После создания» ручной поездки — своя функция, и зовут её ДВОЕ.**
+  `ManualTripAftermath` (места + слой открытого) зовут и лист, и
+  `-debug`-сеялка `-seed-manual-trip` — сеть MapKit на симуляторе мертва, и
+  настоящий `MKDirections` там не построить ни разу. Не будь общей точки, сид
+  молча не открывал бы мир и не заводил бы мест, и по снимку с симулятора это
+  было бы не отличить от настоящего пути.
+- **Привязка покупки — своя очередь, не `SyncQueue`.** `PlusAttachQueue`: у
+  покупки нет строки в CoreData, её предмет — подпись Apple, и шестой тип
+  операции заставил бы `SyncQueue` доставать то, чего в базе нет.
+  Дедупликация по `originalTransactionID`, несколько попыток с откатом,
+  постоянный отказ (`PLUS_BELONGS_TO_ANOTHER`, любой 4xx кроме 408/429) роняет
+  попытку без дальнейших повторов; очередь и список отправленных лежат в
+  `UserDefaults` и переживают убийство приложения. Человеку отказ не виден
+  никогда — привязка не блокирует UI.
+- **Покупка отвечает `PurchaseOutcome`, а не булевым успехом.**
+  `.success/.cancelled/.pending/.failed(Error)` — что показать под кнопкой,
+  решает чистая `PlusStore.message(for:)`: `.pending` — «ждём подтверждения»,
+  `.failed` — «не удалось, попробуйте позже», `.cancelled` — ничего (человек
+  сам закрыл лист). Текст ошибки StoreKit на экран не попадает ни на одном
+  языке — он английский и системный.
+- **JWS — то же самое, что refresh-токен, и маскируется так же.**
+  `signedTransaction` (и `signedRenewalInfo`, `jws`, `appAccountToken`,
+  `originalTransactionId`) лежат в `PIISensitiveKeys.all`: подпись Apple
+  несёт платёжную историю, и `APILogger`/`SentryService` редактируют её тем
+  же механизмом, что и токен сессии.
+- **`-debug-plus` — Debug-only и снимает ТОЛЬКО замок**, витрину РФ не
+  трогает: иначе проверить, что РФ прячет пейвол, стало бы нечем на
+  симуляторе. То же место в `#if DEBUG` занял `-seed-manual-trip` для формы
+  вписанной поездки.
+- **StoreKit Testing врёт в двух местах — записано в доккомментариях
+  тестов, а не обойдено молча.** `expireSubscription` на iOS 18.6 продолжает
+  отдавать право в `currentEntitlements` ТОГО ЖЕ процесса — тест проверяет не
+  сам вызов, а следствие («право пропало через `clearTransactions` → «Плюс»
+  закрылся»), и таблица `testStateTable` отдельно держит правило «было и
+  кончилось → `.expired`, а не `.none`». `AppStore.sync()` ждёт системный
+  диалог и убивает прогон (`SKTestSession.disableDialogs` на него не
+  действует) — у `PlusStore` есть шов `syncWithAppStore` (`var` с настоящим
+  вызовом по умолчанию), и тест восстановления проверяет вторую половину:
+  перечитывание прав и снятие занятости.
+
 ### Ловушки, на которые уходит по часу
 
 - **Чанк `/sync/push` режется по БАЙТАМ JSON, не по точкам** (`SyncChunkBudget`,
@@ -1387,9 +1474,9 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   телефоне (`JourneyEditSheet.startBounds`/`endBounds`,
   `JourneyEditWindowTests`).
 
-## CoreData Schema (versioned, v18 — 0.7.0)
+## CoreData Schema (versioned, v19 — 0.8.0)
 
-`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `PlaceEntity`, `PlacePassEntity` (0.6.8, no relationships), `RevealedCellEntity`, `DiscoveryEntity` (0.7.0, no relationships — открытое на карте и найденное на нём), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v18 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`, v14 — `PlaceEntity`/`PlacePassEntity` + `TripEntity.placesMatchedAt`, v15 — `TripEntity.segmentsJSON`, v16 — `RevealedCellEntity`, v17 — `DiscoveryEntity` (находки; `id` — UUID v5 от вида и ключа, связей нет, `LocalDataWipe` называет её явно), v18 — история раскрытия у находки (`finders`, `firstFinderName`, `firstFinderAt`, `rarity`; аддитивно)).
+`TripEntity` is central, with cascade relationships to `TrackPointEntity` and `TripPhotoEntity`. Also: `TripCheckpointEntity` (0.6.5), `JourneyEntity` (0.6.6, no relationships — see below), `PlaceEntity`, `PlacePassEntity` (0.6.8, no relationships), `RevealedCellEntity`, `DiscoveryEntity` (0.7.0, no relationships — открытое на карте и найденное на нём), `VehicleEntity`, `VehiclePhotoEntity` (0.6.4), `UserSettingsEntity`, `VisitedGeohashEntity`, `GeocodeCacheEntity`, `RoadEntity`. Schema at `TripTrack/Persistence/TripTrack.xcdatamodeld/` (v1 = baseline, v19 = current; v10 существовала только в dev-сборках 0.6.5 и добавила отметки, v11 — прикреплённые снимки `photoIdsJSON`, v12 — `JourneyEntity`, v13 — `VehicleEntity.dashboardUnits`, v14 — `PlaceEntity`/`PlacePassEntity` + `TripEntity.placesMatchedAt`, v15 — `TripEntity.segmentsJSON`, v16 — `RevealedCellEntity`, v17 — `DiscoveryEntity` (находки; `id` — UUID v5 от вида и ключа, связей нет, `LocalDataWipe` называет её явно), v18 — история раскрытия у находки (`finders`, `firstFinderName`, `firstFinderAt`, `rarity`; аддитивно), v19 — «Плюс»: `TripEntity.source` (String, `recorded`/`manual`, дефолт `recorded`), `VehicleEntity.cardStyle` (String?), `UserSettingsEntity.avatarFrame`/`showPlusBadge` (String?/Bool, дефолт `true`); всё аддитивно).
 
 **Внимание:** `VehiclePhotoEntity` связи с машиной НЕ имеет — `vehicleId` это
 обычный атрибут. Значит каскад её не заберёт: удаление машины и стирание
