@@ -1398,6 +1398,8 @@ extension Translations {
         "manualTripErrorTooLong": "Занадто довгий маршрут для однієї поїздки",
         "manualTripErrorFailed": "Не вдалося побудувати маршрут",
         "manualTripBadge": "Вписана вручну",
+        "exportGPX": "Експортувати GPX",
+        "exportGPXFailed": "Не вдалося експортувати GPX",
     ]
 
 }

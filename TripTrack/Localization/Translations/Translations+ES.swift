@@ -1398,6 +1398,8 @@ extension Translations {
         "manualTripErrorTooLong": "Esta ruta es demasiado larga para un solo viaje",
         "manualTripErrorFailed": "No se pudo calcular la ruta",
         "manualTripBadge": "Añadido a mano",
+        "exportGPX": "Exportar GPX",
+        "exportGPXFailed": "No se pudo exportar el GPX",
     ]
 
 }

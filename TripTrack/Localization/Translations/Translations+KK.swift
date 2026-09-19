@@ -1398,6 +1398,8 @@ extension Translations {
         "manualTripErrorTooLong": "Бұл бағдар бір сапарға тым ұзақ",
         "manualTripErrorFailed": "Бағдарды құру мүмкін болмады",
         "manualTripBadge": "Қолмен қосылған",
+        "exportGPX": "GPX экспорттау",
+        "exportGPXFailed": "GPX экспорттау мүмкін болмады",
     ]
 
 }

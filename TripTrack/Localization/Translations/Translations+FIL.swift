@@ -1398,6 +1398,8 @@ extension Translations {
         "manualTripErrorTooLong": "Masyadong mahaba ang rutang ito para sa isang biyahe",
         "manualTripErrorFailed": "Hindi nabuo ang ruta",
         "manualTripBadge": "Idinagdag nang manu-mano",
+        "exportGPX": "I-export ang GPX",
+        "exportGPXFailed": "Hindi na-export ang GPX",
     ]
 
 }
