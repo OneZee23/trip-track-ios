@@ -7443,15 +7443,21 @@ enum AppStrings {
         tr(lang, "manualTripBadge", ru: "Вписана рукой", en: "Added by hand")
     }
 
-    // MARK: - Экспорт GPX (0.8.0)
+    // MARK: - Экспорт GPX и CSV (0.8.0)
 
     /// Пункт меню «…» на экране СВОЕЙ поездки.
     static func exportGPX(_ lang: LanguageManager.Language) -> String {
         tr(lang, "exportGPX", ru: "Экспорт GPX", en: "Export GPX")
     }
 
-    /// Тост: нет точек трека, или файл не записался.
-    static func exportGPXFailed(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "exportGPXFailed", ru: "Не удалось экспортировать GPX", en: "Could not export GPX")
+    /// Пункт меню «…» на экране СВОЕЙ поездки, сразу под «Экспорт GPX».
+    static func exportCSV(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "exportCSV", ru: "Экспорт CSV", en: "Export CSV")
+    }
+
+    /// Тост: нет точек трека, или файл не записался. Общий для GPX и CSV —
+    /// оба пути роняются одинаково, и различать причину человеку незачем.
+    static func exportFailed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "exportFailed", ru: "Не удалось экспортировать", en: "Export failed")
     }
 }

@@ -1399,7 +1399,8 @@ extension Translations {
         "manualTripErrorFailed": "Hindi nabuo ang ruta",
         "manualTripBadge": "Idinagdag nang manu-mano",
         "exportGPX": "I-export ang GPX",
-        "exportGPXFailed": "Hindi na-export ang GPX",
+        "exportCSV": "I-export ang CSV",
+        "exportFailed": "Hindi na-export",
     ]
 
 }

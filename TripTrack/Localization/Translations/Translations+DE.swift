@@ -1399,7 +1399,8 @@ extension Translations {
         "manualTripErrorFailed": "Route konnte nicht berechnet werden",
         "manualTripBadge": "Von Hand nachgetragen",
         "exportGPX": "GPX exportieren",
-        "exportGPXFailed": "GPX konnte nicht exportiert werden",
+        "exportCSV": "CSV exportieren",
+        "exportFailed": "Export fehlgeschlagen",
     ]
 
 }
