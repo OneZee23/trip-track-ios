@@ -3,6 +3,7 @@ import CoreData
 import CoreLocation
 @testable import TripTrack
 
+@MainActor
 final class PostTripTrackProcessorTests: XCTestCase {
 
     private var persistenceController: PersistenceController!
