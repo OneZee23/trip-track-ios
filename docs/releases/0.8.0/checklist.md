@@ -44,6 +44,12 @@ Apple привязывает In-App Purchase к отправленной сбо�
 - [ ] **Все пять товаров — «Ready to Submit» или «Approved» ДО архивации
       билда.** Пустой список товаров при ревью — типовая причина отказа 2.1
       («guideline 2.1 In-App Purchase products not submitted»).
+- [ ] **Family Sharing ВЫКЛЮЧЕН у обоих тарифов.** Локальный
+      `Config/TripTrack.storekit` ставит `familyShareable: false`, но
+      источник правды для прода — App Store Connect, и расхождение клиент не
+      поймает: `PlusStore` принимает право независимо от `ownershipType`, то
+      есть включённый в ASC семейный доступ молча раздал бы «Плюс» пятерым.
+      Либо выключить, либо завести это решением и снять проверку отсюда.
 - [ ] **Paid Apps Agreement активен.** Решение владельца — кодом не
       проверяем, но без него StoreKit не отдаёт товары вовсе, и это ловится
       ТОЛЬКО на устройстве или в песочнице, не тестами.
@@ -59,6 +65,24 @@ Apple привязывает In-App Purchase к отправленной сбо�
       отвечает 200 и пишет строку в `plus_event` (`outcome =
       ignored:unknown_type`, это ожидаемо для `TEST`). Смотреть лог/таблицу
       сразу после нажатия.
+- [ ] **И убедиться, что уведомление доехало ДО ORIGIN, а не умерло по
+      дороге.** Проверка — та же кнопка, но вопрос другой: не «ответили ли
+      мы 200», а `SELECT created_at, notification_type, outcome FROM
+      plus_event ORDER BY created_at DESC LIMIT 5` — строка обязана
+      появиться. Цена молчания несимметрична: Apple повторяет доставку трое
+      суток и сдаётся, а потерянные `REFUND`/`REVOKE`/`EXPIRED` означают, что
+      человек вернул деньги, а «Плюс» остался у него навсегда — `attach` с
+      телефона строку не отзывает, `revokedAt` приходит только уведомлением.
+      Заметить это потом нечем: пустой `plus_event` выглядит одинаково и в
+      норме, и при полной потере доставки. В первую неделю после релиза —
+      `SELECT count(*) FROM plus_event WHERE created_at > now() - interval
+      '1 day'`.
+- [ ] **Cloudflare: `api.trip-track.app` сегодня DNS-only** (в ответе нет
+      `cf-ray`), поэтому правила не нужны — как `/s/*` и `/j/*` на сайте, но
+      с обратным знаком. Если хост когда-нибудь уйдёт под оранжевое облако
+      (лечение RU-DPI шло именно так), `/plus/apple` обязан получить правило
+      Bot Fight Mode → skip и никакого челленджа: Apple начнёт получать 403 и
+      замолчит навсегда. Записано в `docs/plus.md`.
 - [ ] **Ключ App Store Server API — по необходимости.** Нужен ТОЛЬКО для
       запасного пути `POST /plus/attach {transactionId}` (без него обычный
       путь через подписанную транзакцию StoreKit 2 работает целиком). Если
@@ -148,9 +172,14 @@ Apple).
 2. **`.xccurrentversion` = `TripTrack v19`.** Одна новая версия модели —
    `xcodegen generate` **ДВАЖДЫ** (первый прогон переписывает файл на
    прежнюю версию), проверить после генерации.
-3. **Sentry**: `SENTRY_DSN[config=Release]` в `Local.xcconfig` на месте,
-   после архива — `/usr/libexec/PlistBuddy -c "Print :SENTRY_DSN"
-   <архив>/…/TripTrack.app/Info.plist` не пуст.
+3. **Sentry**: ключа `SENTRY_DSN` в шаблоне `TripTrack/Info.plist` НЕ БЫЛО
+   ни разу за всю историю файла — оттого Sentry молчал десять релизов, хотя
+   `Local.xcconfig`, `AppConfig.sentryDSN` и вызов `SentryService.start()`
+   были на месте. Строка добавлена в 0.8.0; проверить, что
+   `SENTRY_DSN[config=Release]` в `Local.xcconfig` на месте, и после архива —
+   `/usr/libexec/PlistBuddy -c "Print :SENTRY_DSN"
+   <архив>/…/TripTrack.app/Info.plist` не пуст. В прогоне тестов то же самое
+   держит `SentryDSNWiringTests` по собранному Debug-продукту.
 4. Xcode → Product → Archive → Distribute → App Store Connect.
 5. **Товары из §1 уже «Ready to Submit» ДО этого шага** — иначе ревью
    пройдёт без подписки в билде.
@@ -160,9 +189,13 @@ Apple).
 7. **App Privacy — обновить, не пропустить.** В отличие от 0.6.8 и 0.7.0 в
    этом релизе ЕСТЬ изменение: «Purchases → Purchase History» переходит с
    ❌ на ✅ (App Functionality, Linked to You, Tracking = No) — сервер
-   хранит статус подписки по аккаунту. Донат в это не входит. Текст ответа —
-   `app-review-notes.md`. Обновить и `docs/releases/app-privacy.md` (строка
-   24) тем же ходом.
+   хранит статус подписки по аккаунту. Донат входит — это тоже покупка.
+   Текст ответа — `app-review-notes.md`. Тем же ходом обновлены (проверить,
+   что не разъехались): `docs/releases/app-privacy.md` строка 24 И ФАЙЛ
+   `TripTrack/PrivacyInfo.xcprivacy` — блок
+   `NSPrivacyCollectedDataTypePurchaseHistory`, `Linked = true`,
+   `Tracking = false`, цель `AppFunctionality`. Манифест — не дубль анкеты:
+   Xcode собирает из него Privacy Report, и расхождение видит МАШИНА.
 8. **Notes для ревьюера** — блок v0.8.0 из `docs/releases/app-review-notes.md`,
    включая «How to test the subscription in sandbox» (свой Sandbox Tester,
    не Sign in with Apple ревьюера — это разные учётки).

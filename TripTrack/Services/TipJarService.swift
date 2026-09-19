@@ -153,7 +153,7 @@ final class TipJarService: ObservableObject {
         let options = Self.purchaseOptions(accountId: TokenStore.shared.accountId)
         tipLog.notice("""
             purchase begin id=\(product.id, privacy: .public) \
-            accountToken=\(TokenStore.shared.accountId?.uuidString ?? "—", privacy: .public)
+            accountToken=\(TokenStore.shared.accountId?.uuidString ?? "—", privacy: .private)
             """)
 
         do {
@@ -196,9 +196,9 @@ final class TipJarService: ObservableObject {
             phase = .succeeded
             tipLog.notice("""
                 tx verified source=\(source, privacy: .public) \
-                id=\(String(transaction.id), privacy: .public) \
+                id=\(Self.shortId(transaction.id), privacy: .public) \
                 env=\(transaction.environment.rawValue, privacy: .public) \
-                accountToken=\(transaction.appAccountToken?.uuidString ?? "—", privacy: .public)
+                accountToken=\(transaction.appAccountToken?.uuidString ?? "—", privacy: .private)
                 """)
             // Незакрытая расходуемая покупка передаётся заново вечно.
             await transaction.finish()
@@ -215,10 +215,23 @@ final class TipJarService: ObservableObject {
             phase = .failed("Подпись не прошла проверку")
             tipLog.error("""
                 tx UNVERIFIED source=\(source, privacy: .public) \
-                id=\(String(transaction.id), privacy: .public) \
+                id=\(Self.shortId(transaction.id), privacy: .public) \
                 error=\(error.localizedDescription, privacy: .public)
                 """)
         }
+    }
+
+    /// Хвост id транзакции — ровно столько, чтобы склеить строку лога с
+    /// серверной, и не столько, чтобы получился идентификатор покупки.
+    ///
+    /// **Дисциплина лога держится только на дисциплине авторов строк.**
+    /// `APILogger.redact` чистит ТЕЛА HTTP, а `DebugLogExporter` и «Журнал»
+    /// копируют `log.composedMessage` дословно — `PIISensitiveKeys` их не
+    /// касается вовсе. Файл был пробником под `#if DEBUG` и логи писал
+    /// щедро; с 0.8.0 он боевой, а серверное правило «не длиннее восьми
+    /// символов» (`plus.service.ts`) теперь соблюдают обе стороны.
+    nonisolated static func shortId(_ id: UInt64) -> String {
+        String(String(id).suffix(8))
     }
 
     // MARK: - Reporting

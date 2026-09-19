@@ -19,6 +19,18 @@
 	<true/>
 	<key>API_BASE_URL</key>
 	<string>$(API_BASE_URL)</string>
+	<!--
+		Ключ Sentry. Подставляется из `Local.xcconfig` (`SENTRY_DSN[config=…]`)
+		и читается `AppConfig.sentryDSN`.
+
+		Строки здесь не было НИ РАЗУ за всю историю файла, и ровно поэтому
+		Sentry молчал десять релизов: xcconfig-переменная попадает в plist
+		только через сам plist, а `project.yml` про неё не знает. Пустое
+		значение законно (Debug), отсутствующий ключ — нет. Держит
+		`SentryDSNWiringTests` по СОБРАННОМУ артефакту.
+	-->
+	<key>SENTRY_DSN</key>
+	<string>$(SENTRY_DSN)</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>TripTrack использует локальную сеть для связи с dev-сервером синхронизации.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

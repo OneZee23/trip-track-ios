@@ -221,6 +221,31 @@
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
 			</array>
 		</dict>
+		<!--
+			Покупки (0.8.0, «Плюс»). Сервер хранит строку подписки, привязанную
+			к аккаунту: `plus_subscription` (product_id, original_transaction_id,
+			expires_at, is_trial, environment), `plus_event` и
+			`account.plus_until`. Значит Purchase History мы СОБИРАЕМ, и
+			Linked = true: `appAccountToken` в каждой покупке — это id нашего
+			аккаунта, и по нему сервер сверяет чек с человеком.
+
+			Пункт заведён вместе с анкетой одним ходом нарочно: расхождение
+			между манифестом и анкетой App Store Connect видит машина (Xcode
+			собирает Privacy Report из манифеста), и стоит оно цикла ревью на
+			ПЕРВОМ платном релизе. Донат сюда тоже входит — это покупка.
+		-->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePurchaseHistory</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
 	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
