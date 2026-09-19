@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "Түс тек сіздің карталарыңызда көрінеді. Таспада және басқалардың профилінде маршруттар бұрынғыдай сызылады.",
         "privacyPlusBadgeTitle": "«Плюс» белгісі",
         "privacyPlusBadgeSub": "Белгіні таспада, профильде және пікірлерде атыңыздың қасында көрсету.",
+        "manualTripEntry": "Сапарды қолмен қосу",
+        "manualTripSubtitle": "Нүктелер арасындағы жолдармен өтетін бағдар. GPS-сіз және марапатсыз.",
+        "manualTripFrom": "Қайдан",
+        "manualTripTo": "Қайда",
+        "manualTripVia": "Арқылы",
+        "manualTripAddVia": "Аялдама қосу",
+        "manualTripSearchHint": "Қала, көше, орын",
+        "manualTripStart": "Шықты",
+        "manualTripDuration": "Жолда",
+        "manualTripSuggestedTime": "Жолмен шамамен {time}",
+        "manualTripCreate": "Сапар жасау",
+        "manualTripRouting": "Бағдар құрылуда…",
+        "manualTripErrorNoRoute": "Бұл нүктелердің арасында автожол жоқ",
+        "manualTripErrorOffline": "Бағдар үшін байланыс қажет. Қайталап көріңіз",
+        "manualTripErrorFailed": "Бағдарды құру мүмкін болмады",
+        "manualTripBadge": "Қолмен қосылған",
     ]
 
 }

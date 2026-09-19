@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "Kolor widać tylko na twoich mapach. W tablicy i w cudzych profilach trasy wyglądają jak dotąd.",
         "privacyPlusBadgeTitle": "Odznaka Plus",
         "privacyPlusBadgeSub": "Pokazuj odznakę obok twojego imienia w tablicy, profilu i komentarzach.",
+        "manualTripEntry": "Dopisz przejazd",
+        "manualTripSubtitle": "Trasa drogami między twoimi punktami. Bez GPS i bez nagród.",
+        "manualTripFrom": "Skąd",
+        "manualTripTo": "Dokąd",
+        "manualTripVia": "Przez",
+        "manualTripAddVia": "Dodaj przystanek",
+        "manualTripSearchHint": "Miasto, ulica, miejsce",
+        "manualTripStart": "Wyjazd",
+        "manualTripDuration": "W drodze",
+        "manualTripSuggestedTime": "Około {time} drogami",
+        "manualTripCreate": "Utwórz przejazd",
+        "manualTripRouting": "Liczymy trasę…",
+        "manualTripErrorNoRoute": "Między tymi punktami nie ma drogi",
+        "manualTripErrorOffline": "Trasa wymaga połączenia. Spróbuj jeszcze raz",
+        "manualTripErrorFailed": "Nie udało się wyznaczyć trasy",
+        "manualTripBadge": "Dopisane ręcznie",
     ]
 
 }

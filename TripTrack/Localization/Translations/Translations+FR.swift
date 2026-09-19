@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "La couleur n’apparaît que sur vos cartes. Dans le fil et sur les profils des autres, les trajets restent comme avant.",
         "privacyPlusBadgeTitle": "Badge Plus",
         "privacyPlusBadgeSub": "Afficher le badge à côté de votre nom dans le fil, le profil et les commentaires.",
+        "manualTripEntry": "Ajouter un trajet passé",
+        "manualTripSubtitle": "Un itinéraire par les routes entre vos points. Sans GPS ni récompenses.",
+        "manualTripFrom": "Départ",
+        "manualTripTo": "Arrivée",
+        "manualTripVia": "Par",
+        "manualTripAddVia": "Ajouter une étape",
+        "manualTripSearchHint": "Ville, rue, lieu",
+        "manualTripStart": "Parti à",
+        "manualTripDuration": "Sur la route",
+        "manualTripSuggestedTime": "Environ {time} par la route",
+        "manualTripCreate": "Créer le trajet",
+        "manualTripRouting": "Calcul de l'itinéraire…",
+        "manualTripErrorNoRoute": "Aucune route ne relie ces points",
+        "manualTripErrorOffline": "L'itinéraire demande une connexion. Réessayez",
+        "manualTripErrorFailed": "Impossible de calculer l'itinéraire",
+        "manualTripBadge": "Ajouté à la main",
     ]
 
 }

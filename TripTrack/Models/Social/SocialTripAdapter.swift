@@ -46,7 +46,10 @@ extension Trip {
             earnedBadgeIds: social.badgeIds,
             // A feed/`/companions/my-trips` item could only have arrived
             // here by existing server-side.
-            isOnServer: true
+            isOnServer: true,
+            // Ключа нет — «записана треком»: такой была каждая поездка,
+            // доехавшая сюда до 0.8.0.
+            source: social.source ?? .recorded
         )
     }
 }

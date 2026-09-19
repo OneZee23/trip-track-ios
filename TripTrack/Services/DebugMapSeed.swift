@@ -29,6 +29,17 @@ enum DebugMapSeed {
     /// иначе не показывается нигде, а завести отрезок руками в UI-тесте —
     /// это два листа и четыре тапа до первого же кадра.
     static let segmentArgument = "-seed-segment-demo"
+
+    /// Одна поездка, вписанная рукой (0.8.0), — для проверки пометки на
+    /// карточке и на экране поездки БЕЗ сети.
+    ///
+    /// Настоящий вход в ручную поездку зовёт `MKDirections`, а в симуляторе
+    /// сеть MapKit мертва (плитки карты там не грузятся вовсе — заметка
+    /// владельца), то есть маршрута не построить ни разу. Сид кладёт вместо
+    /// него готовую линию и прогоняет её через ТОТ ЖЕ `ManualTripBuilder` и
+    /// `TripManager.createManualTrip`, что и лист: подделывается только
+    /// геометрия дороги, всё остальное — настоящее.
+    static let manualArgument = "-seed-manual-trip"
     /// Пятым аргументом клонирует «Краснодар → Ростов-на-Дону» ещё дважды на
     /// других датах — иначе у мест демо-отрезка (0.6.5+0.6.8) ровно один
     /// проезд, «Здесь 1 раз» ничего не отвечает, и строка истории отрезка
@@ -72,6 +83,10 @@ enum DebugMapSeed {
 
     static var isSegmentRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(segmentArgument)
+    }
+
+    static var isManualRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(manualArgument)
     }
 
     static var isDiscoveriesRequested: Bool {
@@ -167,6 +182,7 @@ enum DebugMapSeed {
             if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
             if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
             if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
+            if isManualRequested { seedManualTrip(persistence: persistence) }
             seedPhotos(persistence: persistence)
             return
         }
@@ -224,6 +240,7 @@ enum DebugMapSeed {
         if isJourneyRequested { seedJourneyDemo(persistence: persistence) }
         if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
         if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
+        if isManualRequested { seedManualTrip(persistence: persistence) }
         seedPhotos(persistence: persistence)
     }
 
@@ -239,6 +256,39 @@ enum DebugMapSeed {
     /// Картинки рисуются на месте (`UIGraphicsImageRenderer`), а не лежат в
     /// ресурсах: в бандл релиза они попасть не должны, а весь файл и так
     /// `#if DEBUG`. Идемпотентно: хоть один снимок в базе — выходим.
+    /// Вписанная рукой поездка: Краснодар → Джубга по прямой линии.
+    ///
+    /// Идемпотентно: одна такая в базе — выходим. Геокодер не спрашивается
+    /// (`namesFromGeocoder: false`) по той же причине, по какой сид вообще
+    /// существует: сети у симулятора для MapKit нет.
+    private static func seedManualTrip(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let existing: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        existing.predicate = NSPredicate(format: "source == %@", TripOrigin.manual.rawValue)
+        existing.fetchLimit = 1
+        if let found = try? context.count(for: existing), found > 0 { return }
+
+        let waypoints: [(Double, Double)] = [
+            (45.0355, 38.9753), (44.9000, 38.8000), (44.7000, 38.6000),
+            (44.5000, 38.5500), (44.3196, 38.7089)
+        ]
+        let coordinates = densify(waypoints, stepMeters: 300)
+        // Четыре часа назад, а не три дня: карточка обязана оказаться ПЕРВОЙ
+        // в «Мои», иначе снимок ловит соседнюю записанную поездку.
+        let start = Calendar.current.date(byAdding: .hour, value: -4, to: Date()) ?? Date()
+        let draft = ManualTripBuilder.Draft(
+            coordinates: coordinates,
+            startDate: start,
+            duration: 3 * 3600,
+            vehicleId: nil,
+            title: "Краснодар → Джубга"
+        )
+        guard let trip = ManualTripBuilder.build(draft) else { return }
+        let manager = TripManager(
+            locationManager: LocationManager(), persistenceController: persistence)
+        manager.createManualTrip(trip, namesFromGeocoder: false)
+    }
+
     private static func seedPhotos(persistence: PersistenceController) {
         let context = persistence.container.viewContext
         let existing: NSFetchRequest<TripPhotoEntity> = TripPhotoEntity.fetchRequest()

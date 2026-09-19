@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "Колір видно лише на ваших картах. У стрічці та в чужих профілях маршрути мають звичний вигляд.",
         "privacyPlusBadgeTitle": "Значок «Плюс»",
         "privacyPlusBadgeSub": "Показувати значок поряд з іменем — у стрічці, профілі та коментарях.",
+        "manualTripEntry": "Вписати поїздку",
+        "manualTripSubtitle": "Маршрут дорогами між твоїми точками. Без GPS і без нагород.",
+        "manualTripFrom": "Звідки",
+        "manualTripTo": "Куди",
+        "manualTripVia": "Через",
+        "manualTripAddVia": "Додати точку",
+        "manualTripSearchHint": "Місто, вулиця, місце",
+        "manualTripStart": "Виїхали",
+        "manualTripDuration": "У дорозі",
+        "manualTripSuggestedTime": "Дорогами приблизно {time}",
+        "manualTripCreate": "Створити поїздку",
+        "manualTripRouting": "Будуємо маршрут…",
+        "manualTripErrorNoRoute": "Між цими точками немає автомобільної дороги",
+        "manualTripErrorOffline": "Без зв'язку маршрут не побудувати. Спробуйте ще раз",
+        "manualTripErrorFailed": "Не вдалося побудувати маршрут",
+        "manualTripBadge": "Вписана вручну",
     ]
 
 }

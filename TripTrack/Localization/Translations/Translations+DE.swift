@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "Die Farbe erscheint nur auf deinen eigenen Karten. Im Feed und in fremden Profilen sehen Routen aus wie immer.",
         "privacyPlusBadgeTitle": "Plus-Abzeichen",
         "privacyPlusBadgeSub": "Das Abzeichen neben deinem Namen im Feed, im Profil und in Kommentaren zeigen.",
+        "manualTripEntry": "Fahrt nachtragen",
+        "manualTripSubtitle": "Eine Route über die Straßen zwischen deinen Punkten. Ohne GPS, ohne Belohnungen.",
+        "manualTripFrom": "Von",
+        "manualTripTo": "Nach",
+        "manualTripVia": "Über",
+        "manualTripAddVia": "Zwischenstopp",
+        "manualTripSearchHint": "Stadt, Straße, Ort",
+        "manualTripStart": "Losgefahren",
+        "manualTripDuration": "Unterwegs",
+        "manualTripSuggestedTime": "Etwa {time} über Straßen",
+        "manualTripCreate": "Fahrt anlegen",
+        "manualTripRouting": "Route wird berechnet …",
+        "manualTripErrorNoRoute": "Zwischen diesen Punkten gibt es keine Straßenverbindung",
+        "manualTripErrorOffline": "Für die Route braucht es Verbindung. Versuch es noch einmal",
+        "manualTripErrorFailed": "Route konnte nicht berechnet werden",
+        "manualTripBadge": "Von Hand nachgetragen",
     ]
 
 }

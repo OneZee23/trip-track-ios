@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "Sa sarili mong mga mapa lang lumalabas ang kulay. Sa feed at sa profile ng iba, gaya pa rin ng dati ang mga ruta.",
         "privacyPlusBadgeTitle": "Badge na Plus",
         "privacyPlusBadgeSub": "Ipakita ang badge katabi ng pangalan mo sa feed, profile at mga komento.",
+        "manualTripEntry": "Magdagdag ng lumang biyahe",
+        "manualTripSubtitle": "Rutang dumadaan sa kalsada sa pagitan ng iyong mga punto. Walang GPS at walang gantimpala.",
+        "manualTripFrom": "Mula sa",
+        "manualTripTo": "Papunta sa",
+        "manualTripVia": "Dadaan sa",
+        "manualTripAddVia": "Magdagdag ng hinto",
+        "manualTripSearchHint": "Lungsod, kalye, lugar",
+        "manualTripStart": "Umalis",
+        "manualTripDuration": "Nasa biyahe",
+        "manualTripSuggestedTime": "Mga {time} sa kalsada",
+        "manualTripCreate": "Gumawa ng biyahe",
+        "manualTripRouting": "Binubuo ang ruta…",
+        "manualTripErrorNoRoute": "Walang kalsada sa pagitan ng mga puntong ito",
+        "manualTripErrorOffline": "Kailangan ng koneksyon ang ruta. Subukan ulit",
+        "manualTripErrorFailed": "Hindi nabuo ang ruta",
+        "manualTripBadge": "Idinagdag nang manu-mano",
     ]
 
 }

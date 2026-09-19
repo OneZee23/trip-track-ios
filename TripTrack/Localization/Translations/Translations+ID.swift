@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "Warna hanya tampil di peta kamu. Di beranda dan di profil orang lain rute tampil seperti biasa.",
         "privacyPlusBadgeTitle": "Lencana Plus",
         "privacyPlusBadgeSub": "Tampilkan lencana di samping namamu di beranda, profil, dan komentar.",
+        "manualTripEntry": "Tambahkan perjalanan lama",
+        "manualTripSubtitle": "Rute lewat jalan antara titik-titikmu. Tanpa GPS dan tanpa hadiah.",
+        "manualTripFrom": "Dari",
+        "manualTripTo": "Ke",
+        "manualTripVia": "Lewat",
+        "manualTripAddVia": "Tambah perhentian",
+        "manualTripSearchHint": "Kota, jalan, tempat",
+        "manualTripStart": "Berangkat",
+        "manualTripDuration": "Di perjalanan",
+        "manualTripSuggestedTime": "Sekitar {time} lewat jalan",
+        "manualTripCreate": "Buat perjalanan",
+        "manualTripRouting": "Menyusun rute…",
+        "manualTripErrorNoRoute": "Tidak ada jalan mobil antara titik-titik ini",
+        "manualTripErrorOffline": "Rute butuh koneksi. Coba lagi",
+        "manualTripErrorFailed": "Rute tidak bisa dibuat",
+        "manualTripBadge": "Ditambahkan manual",
     ]
 
 }

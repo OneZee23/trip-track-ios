@@ -146,6 +146,9 @@ struct ProfileView: View {
     /// reason the three field editors are: one host owns every presentation
     /// this stack raises.
     @State private var showBackgroundPicker = false
+    /// Лист «Вписать поездку» (0.8.0). Гейт решает, что покажется в нём —
+    /// форма или пейвол (`manualTripHost`).
+    @State private var showManualTrip = false
     /// The three field editors behind «Мой профиль». The hub only reports the
     /// tap; presenting them here keeps every editor on one host, which is what
     /// keeps them all on one host — a
@@ -222,6 +225,11 @@ struct ProfileView: View {
     /// месте, а не там, где его дописали.
     var body: some View {
         stage
+            .manualTripHost(
+                isPresented: $showManualTrip,
+                tripManager: mapVM.tripManager,
+                onCreated: { _ in Task { await loadAggregates() } }
+            )
             // Путешествия меняются и без перезагрузки библиотеки: пул с
             // другого телефона, стирание данных, удаление обёртки с её экрана.
             // Подсказка считается по ним (`existing` в
@@ -236,6 +244,16 @@ struct ProfileView: View {
                 guard homeAcceptedTick > 0 else { return }
                 await refreshJourneyPrompts(trips: allTrips)
             }
+    }
+
+    /// Вынесено из цепочки `stage`: `body` этого экрана уже упирался в предел
+    /// вывода типов SwiftUI на одном добавленном `.onChange` (CLAUDE.md,
+    /// «Ловушки»), и собранный на месте `Binding` — самое дорогое звено в ней.
+    private var authErrorBinding: Binding<Bool> {
+        Binding(
+            get: { auth.lastAuthError != nil },
+            set: { if !$0 { auth.lastAuthError = nil } }
+        )
     }
 
     @ViewBuilder
@@ -332,6 +350,13 @@ struct ProfileView: View {
                             // the section simply wasn't rendered, so a fresh
                             // user saw the Я tab end after the stat grid with
                             // nothing telling them what happens next.
+                            //
+                            // Шапка над ней — ради «+» (0.8.0): без неё
+                            // единственный вход в «Вписать поездку» из «Мои»
+                            // появлялся бы только после ПЕРВОЙ записанной
+                            // поездки, а человеку с пустой библиотекой
+                            // вписать старую дорогу нужнее всех.
+                            historyHeader(c)
                             noTripsCard(c)
                         } else {
                             // Nil aggregates with no trips means the library
@@ -489,6 +514,11 @@ struct ProfileView: View {
         .onReceive(NotificationCenter.default.publisher(for: .tripRecordingEnded)) { _ in
             Task { await loadAggregates() }
         }
+        // 0.8.0: вписанная рукой поездка ложится в базу мимо записи — без
+        // этого её карточка не появилась бы в «Мои» до перезахода на вкладку.
+        .onReceive(NotificationCenter.default.publisher(for: .manualTripCreated)) { _ in
+            Task { await loadAggregates() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .syncPullCompleted)) { _ in
             Task { await loadAggregates() }
         }
@@ -593,9 +623,7 @@ struct ProfileView: View {
         // Acknowledgement only: «ОК» is the single way out, so there is no
         // cancel row under it.
         .appConfirm(
-            isPresented: Binding(
-                get: { auth.lastAuthError != nil },
-                set: { if !$0 { auth.lastAuthError = nil } }),
+            isPresented: authErrorBinding,
             title: AppStrings.signInFailedTitle(lang.language),
             // Generic localized copy — same defence as SignInPromptSheet:
             // never echo `String(describing: APIError)` because the
@@ -1292,6 +1320,11 @@ struct ProfileView: View {
             Spacer(minLength: 8)
 
             HStack(spacing: 10) {
+                // «Вписать поездку» (0.8.0). На витрине, которая не продаёт
+                // платное, кнопки нет вовсе — не «есть, но с замком».
+                if ManualTripEntry.isVisible {
+                    historyAddButton(c)
+                }
                 historyModeButton(
                     .grid,
                     systemImage: "square.grid.2x2.fill",
@@ -1313,6 +1346,27 @@ struct ProfileView: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 8)
+    }
+
+    /// «+» в шапке «Истории» — единственный вход в ручную поездку из «Мои».
+    /// Замок рядом с плюсом, когда «Плюса» нет: пункт виден, но честно
+    /// говорит, что за ним витрина.
+    private func historyAddButton(_ c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            showManualTrip = true
+        } label: {
+            Image(systemName: ManualTripEntry.isLocked ? "plus.circle" : "plus")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(ManualTripEntry.isLocked ? c.textTertiary : AppTheme.accent)
+                .frame(width: 26, height: 44)
+                .contentShape(Rectangle())
+                .padding(.horizontal, -5)
+                .padding(.vertical, -12)
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityLabel(AppStrings.manualTripEntry(lang.language))
+        .accessibilityIdentifier("profile_history_add")
     }
 
     private func historyModeButton(

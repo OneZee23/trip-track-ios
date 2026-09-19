@@ -1380,6 +1380,98 @@ final class TripManager: ObservableObject {
         repository.updatePrivacy(for: tripId, isPrivate: isPrivate)
     }
 
+    // MARK: - Ручная поездка (0.8.0)
+
+    /// Кладёт в базу поездку, собранную `ManualTripBuilder`, и заводит её ровно
+    /// так же, как заводит себя запись на финише: превью, `pendingUpload`,
+    /// очередь синка, имя от геокодера.
+    ///
+    /// Чего здесь НЕТ и не будет:
+    /// - `PostTripTrackProcessor` — он чинит разрывы и выбросы GPS, а у
+    ///   вписанной рукой поездки нет ни того, ни другого; его пересчёт
+    ///   ПЕРЕЗАПИСАЛ бы километры, набранные пятиметровым шагом по линии
+    ///   маршрута, своим проходом по тем же точкам с другим результатом.
+    /// - `GamificationManager`, `BadgeManager`, `DiscoveryProcessor` — опыт,
+    ///   уровни, значки и находки ручная поездка не даёт (спека §2). Гейт стоит
+    ///   у каждого из них, здесь его нет НАРОЧНО: дверь, закрытая только тем,
+    ///   что в неё не стучатся, откроется на первом же новом вызывающем.
+    ///
+    /// А `RevealedLayerStore.ingest` и `PlaceManager.process` зовёт ВЫЗЫВАЮЩИЙ
+    /// (лист) — той же цепочкой, что `MapViewModel` на финише: километры,
+    /// регионы, атлас и места у вписанной поездки настоящие.
+    /// - Parameter namesFromGeocoder: спрашивать ли у `CLGeocoder` имя и
+    ///   регион. `false` передаёт только тест: геокодер отвечает ПОЗЖЕ и
+    ///   держит при себе `TripEntity`, а тест к тому времени уже закончился —
+    ///   из такого хвоста процесс падает в ЧУЖОМ классе через полалфавита
+    ///   (CLAUDE.md, «Ловушки»). В приложении параметр не передаётся никогда.
+    @discardableResult
+    func createManualTrip(_ trip: Trip, namesFromGeocoder: Bool = true) -> Trip? {
+        guard trip.trackPoints.count > 1, let endDate = trip.endDate else { return nil }
+
+        let context = persistenceController.container.viewContext
+        let entity = TripEntity(context: context)
+        entity.id = trip.id
+        entity.startDate = trip.startDate
+        entity.endDate = endDate
+        entity.distance = trip.distance
+        entity.maxSpeed = trip.maxSpeed
+        entity.averageSpeed = trip.averageSpeed
+        entity.elevation = trip.elevation
+        entity.title = trip.title
+        entity.titleIsCustom = trip.titleIsCustom
+        entity.vehicleId = trip.vehicleId
+        entity.isPrivate = trip.isPrivate
+        entity.source = trip.source.rawValue
+        entity.fuelCurrency = FuelCurrency.current
+        entity.userId = SettingsManager.shared.localUserId
+        entity.lastModifiedAt = Date()
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+
+        for point in trip.trackPoints {
+            let pointEntity = TrackPointEntity(context: context)
+            pointEntity.id = point.id
+            pointEntity.latitude = point.latitude
+            pointEntity.longitude = point.longitude
+            pointEntity.altitude = point.altitude
+            pointEntity.speed = point.speed
+            pointEntity.course = point.course
+            pointEntity.horizontalAccuracy = point.horizontalAccuracy
+            pointEntity.timestamp = point.timestamp
+            pointEntity.trip = entity
+        }
+
+        generatePreviewPolyline(for: entity)
+        persistenceController.save()
+
+        // Имя человека сильнее подсказки геокодера — то же правило, что у
+        // `Place.rename`/`adoptName`. Без имени спрашиваем «откуда → куда»;
+        // с именем берём у геокодера только регион, без которого поездка
+        // выпала бы из статистики по регионам и из бонуса за новый край.
+        if namesFromGeocoder {
+            if trip.titleIsCustom {
+                geocodeRegion(for: entity) {}
+            } else {
+                geocodeAndNameTrip(entity: entity)
+            }
+        }
+
+        let created = repository.fetchTripDetail(id: trip.id)
+
+        let tripId = trip.id
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .upload))
+        }
+
+        // НЕ `.tripRecordingEnded`: у того есть побочные дела финиша —
+        // `ContentView` по нему переключает вкладку на карточку итогов, а
+        // `MyMapViewModel` ждёт следом `.revealedLayerChanged` и
+        // `.territoryRebuilt` одним пакетом. Своё уведомление, и подписаны на
+        // него те же, кому есть что перечитать.
+        NotificationCenter.default.post(name: .manualTripCreated, object: tripId)
+
+        return created
+    }
+
     /// Which of these trips this device holds a PRIVATE local row for.
     ///
     /// The feed asks before drawing: a trip taken private here is still served

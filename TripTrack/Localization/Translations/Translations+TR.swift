@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "Renk yalnızca senin haritalarında görünür. Akışta ve başkalarının profilinde rotalar eskisi gibi çizilir.",
         "privacyPlusBadgeTitle": "Plus rozeti",
         "privacyPlusBadgeSub": "Rozeti akışta, profilde ve yorumlarda adının yanında göster.",
+        "manualTripEntry": "Geçmiş yolculuk ekle",
+        "manualTripSubtitle": "Noktaların arasında yollardan geçen bir rota. GPS yok, ödül yok.",
+        "manualTripFrom": "Nereden",
+        "manualTripTo": "Nereye",
+        "manualTripVia": "Üzerinden",
+        "manualTripAddVia": "Durak ekle",
+        "manualTripSearchHint": "Şehir, sokak, yer",
+        "manualTripStart": "Çıkış",
+        "manualTripDuration": "Yolda",
+        "manualTripSuggestedTime": "Yollardan yaklaşık {time}",
+        "manualTripCreate": "Yolculuk oluştur",
+        "manualTripRouting": "Rota hesaplanıyor…",
+        "manualTripErrorNoRoute": "Bu noktalar arasında araç yolu yok",
+        "manualTripErrorOffline": "Rota için bağlantı gerekiyor. Tekrar deneyin",
+        "manualTripErrorFailed": "Rota oluşturulamadı",
+        "manualTripBadge": "Elle eklendi",
     ]
 
 }

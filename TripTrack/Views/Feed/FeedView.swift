@@ -15,6 +15,9 @@ struct FeedView: View {
     /// Drives the connectivity banner — when ops accumulate in `failed`,
     /// the network is genuinely broken and we surface that to the user.
     @ObservedObject private var syncQueue = SyncQueue.shared
+    /// 0.8.0: «…» в шапке есть или нет по гейту «Плюса», а тот приезжает
+    /// асинхронно (витрина, `currentEntitlements`).
+    @ObservedObject private var plusAccess = PlusAccess.shared
     /// Drives the offline strip + the "you're offline" flavour of the error
     /// state. Shared instance — CacheManager owns the only monitor.
     @ObservedObject private var network = CacheManager.shared.networkMonitor
@@ -121,6 +124,9 @@ struct FeedView: View {
     /// which fires before dismiss) so presenting the share sheet can't collide
     /// with the sign-in sheet still animating away.
     @State private var resumeAfterAuth = false
+    /// «…» в шапке ленты и лист «Вписать поездку» за ним (0.8.0).
+    @State private var showHeaderActions = false
+    @State private var showManualTrip = false
 
     init(tripManager: TripManager, selectedTab: Binding<AppTab>) {
         feedVM = FeedViewModel.shared(tripManager: tripManager)
@@ -321,6 +327,7 @@ struct FeedView: View {
             }
             feedVM.retryGeocodingIfNeeded()
         }
+        .manualTripHost(isPresented: $showManualTrip, tripManager: feedVM.tripManager)
         .onReceive(NotificationCenter.default.publisher(for: .tripRecordingEnded)) { _ in
             // New trip → may flip the "has any private trip" cache.
             hasAnyPrivateTrip = feedVM.tripManager.hasAnyPrivateTrip()
@@ -628,6 +635,36 @@ struct FeedView: View {
                 showDiscover = true
             }
             .accessibilityIdentifier("feed_search")
+
+            // «…» — вход в ручную поездку (0.8.0). Гостю его не показываем:
+            // вписанная поездка ложится в свою библиотеку, а у гостя её нет.
+            if auth.isSignedIn && ManualTripEntry.isVisible {
+                headerCircleButton(
+                    icon: ManualTripEntry.isLocked ? "ellipsis.circle" : "ellipsis", c: c
+                ) {
+                    showHeaderActions = true
+                }
+                .accessibilityIdentifier("feed_header_menu")
+                .accessibilityLabel(AppStrings.moreActions(lang.language))
+                // Поповер, а не `Menu`: тот оставляет за собой плашку со своим
+                // радиусом на круглой кнопке (см. `ActionPopoverList`).
+                .popover(isPresented: $showHeaderActions, arrowEdge: .top) {
+                    ActionPopoverList(items: [
+                        ActionPopoverList.Item(
+                            title: AppStrings.manualTripEntry(lang.language),
+                            systemImage: ManualTripEntry.isLocked ? "lock.fill" : "pencil.line",
+                            accessibilityId: "feed_manual_trip",
+                            action: {
+                                showHeaderActions = false
+                                // На пол-удара позже: лист, поднятый пока
+                                // поповер ещё уезжает, теряет одну из двух
+                                // презентаций.
+                                Task { @MainActor in showManualTrip = true }
+                            }
+                        )
+                    ])
+                }
+            }
 
             if auth.isSignedIn {
                 headerCircleButton(icon: "bell", c: c) {

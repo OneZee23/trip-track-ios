@@ -7338,4 +7338,100 @@ enum AppStrings {
     static func privacyPlusBadgeSub(_ lang: LanguageManager.Language) -> String {
         tr(lang, "privacyPlusBadgeSub", ru: "Показывать значок рядом с именем — в ленте, в профиле и в комментариях.", en: "Show the badge next to your name in the feed, on your profile and in comments.")
     }
+
+    // MARK: - Ручная поездка (0.8.0)
+
+    /// Пункт меню и заголовок листа. «Вписать», а не «Добавить»: добавляют
+    /// новое, а вписывают то, что уже было, — поездку, которую забыли
+    /// записать.
+    static func manualTripEntry(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripEntry", ru: "Вписать поездку", en: "Add a past trip")
+    }
+
+    /// Подзаголовок листа — одной строкой объясняет, что получится.
+    static func manualTripSubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripSubtitle",
+           ru: "Маршрут по дорогам между точками. Без GPS и без наград.",
+           en: "A route along the roads between your points. No GPS, no rewards.")
+    }
+
+    /// Поле «откуда».
+    static func manualTripFrom(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripFrom", ru: "Откуда", en: "From")
+    }
+
+    /// Поле «куда».
+    static func manualTripTo(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripTo", ru: "Куда", en: "To")
+    }
+
+    /// Промежуточная точка — «через».
+    static func manualTripVia(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripVia", ru: "Через", en: "Via")
+    }
+
+    /// Кнопка «добавить промежуточную точку». Пропадает на потолке в три
+    /// точки — нажатие, которое ничего не делает, хуже отсутствующего.
+    static func manualTripAddVia(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripAddVia", ru: "Добавить точку", en: "Add a stop")
+    }
+
+    /// Подсказка в поле поиска.
+    static func manualTripSearchHint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripSearchHint", ru: "Город, улица, место", en: "City, street, place")
+    }
+
+    /// Заголовок над датой и временем старта.
+    static func manualTripStart(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripStart", ru: "Выехали", en: "Departed")
+    }
+
+    /// Заголовок над длительностью.
+    static func manualTripDuration(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripDuration", ru: "В пути", en: "Time on the road")
+    }
+
+    /// Строка под длительностью: сколько Apple насчитала по этому маршруту.
+    /// Число приходит уже собранным — единицу времени печатает вызывающий.
+    static func manualTripSuggestedTime(_ lang: LanguageManager.Language, time: String) -> String {
+        tr(lang, "manualTripSuggestedTime",
+           ru: "По дорогам примерно {time}", en: "About {time} by road")
+            .replacingOccurrences(of: "{time}", with: time)
+    }
+
+    /// Кнопка создания.
+    static func manualTripCreate(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripCreate", ru: "Создать поездку", en: "Create trip")
+    }
+
+    /// Пока считается маршрут.
+    static func manualTripRouting(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripRouting", ru: "Строим маршрут…", en: "Building the route…")
+    }
+
+    /// Дороги между точками нет.
+    static func manualTripErrorNoRoute(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripErrorNoRoute",
+           ru: "Между этими точками нет автомобильной дороги",
+           en: "There is no road route between these points")
+    }
+
+    /// Сети нет — единственная ошибка, которую стоит повторить той же кнопкой.
+    static func manualTripErrorOffline(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripErrorOffline",
+           ru: "Без связи маршрут не построить. Попробуйте ещё раз",
+           en: "The route needs a connection. Try again")
+    }
+
+    /// Всё остальное. Текст Apple сюда не попадает — он на языке системы.
+    static func manualTripErrorFailed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripErrorFailed",
+           ru: "Не удалось построить маршрут", en: "Could not build the route")
+    }
+
+    /// Пометка на карточке и на экране поездки. Короткая нарочно: она стоит в
+    /// строке рядом с датой, а не отдельным блоком.
+    static func manualTripBadge(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripBadge", ru: "Вписана рукой", en: "Added by hand")
+    }
 }

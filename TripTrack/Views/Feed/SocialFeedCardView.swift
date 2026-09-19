@@ -191,10 +191,24 @@ struct SocialFeedCardView: View {
                             .fixedSize()
                     }
                 }
-                Text(dateRegionText(lng: lng))
-                    .font(.inter(11))
-                    .foregroundStyle(c.textTertiary)
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(dateRegionText(lng: lng))
+                        .font(.inter(11))
+                        .foregroundStyle(c.textTertiary)
+                        .lineLimit(1)
+
+                    // Карандаш у вписанной рукой поездки (0.8.0). Поле в
+                    // ленте опционально — старый сервер его не шлёт, и тогда
+                    // пометки просто нет.
+                    if trip.source == .manual {
+                        Image(systemName: "pencil.line")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(c.textTertiary)
+                            .fixedSize()
+                            .accessibilityLabel(AppStrings.manualTripBadge(lng))
+                            .accessibilityIdentifier("feed_card_manual")
+                    }
+                }
             }
             // Claim every pixel of leftover horizontal space. Without this
             // the VStack sized to its intrinsic content, so a short name

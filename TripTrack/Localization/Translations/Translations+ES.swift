@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "El color solo aparece en tus mapas. En el feed y en los perfiles de otras personas las rutas se ven como siempre.",
         "privacyPlusBadgeTitle": "Insignia Plus",
         "privacyPlusBadgeSub": "Mostrar la insignia junto a tu nombre en el feed, el perfil y los comentarios.",
+        "manualTripEntry": "Añadir un viaje pasado",
+        "manualTripSubtitle": "Una ruta por carretera entre tus puntos. Sin GPS y sin recompensas.",
+        "manualTripFrom": "Desde",
+        "manualTripTo": "Hasta",
+        "manualTripVia": "Pasando por",
+        "manualTripAddVia": "Añadir parada",
+        "manualTripSearchHint": "Ciudad, calle, lugar",
+        "manualTripStart": "Salida",
+        "manualTripDuration": "En camino",
+        "manualTripSuggestedTime": "Unos {time} por carretera",
+        "manualTripCreate": "Crear viaje",
+        "manualTripRouting": "Calculando la ruta…",
+        "manualTripErrorNoRoute": "No hay carretera entre estos puntos",
+        "manualTripErrorOffline": "La ruta necesita conexión. Inténtalo de nuevo",
+        "manualTripErrorFailed": "No se pudo calcular la ruta",
+        "manualTripBadge": "Añadido a mano",
     ]
 
 }

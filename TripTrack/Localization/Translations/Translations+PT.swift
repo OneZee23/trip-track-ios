@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "A cor aparece apenas nos seus mapas. No feed e nos perfis de outras pessoas os percursos continuam como antes.",
         "privacyPlusBadgeTitle": "Selo Plus",
         "privacyPlusBadgeSub": "Mostrar o selo ao lado do seu nome no feed, no perfil e nos comentários.",
+        "manualTripEntry": "Adicionar uma viagem antiga",
+        "manualTripSubtitle": "Uma rota pelas estradas entre os teus pontos. Sem GPS e sem recompensas.",
+        "manualTripFrom": "De",
+        "manualTripTo": "Para",
+        "manualTripVia": "Passando por",
+        "manualTripAddVia": "Adicionar paragem",
+        "manualTripSearchHint": "Cidade, rua, lugar",
+        "manualTripStart": "Partida",
+        "manualTripDuration": "A caminho",
+        "manualTripSuggestedTime": "Cerca de {time} pela estrada",
+        "manualTripCreate": "Criar viagem",
+        "manualTripRouting": "A calcular a rota…",
+        "manualTripErrorNoRoute": "Não há estrada entre estes pontos",
+        "manualTripErrorOffline": "A rota precisa de ligação. Tenta outra vez",
+        "manualTripErrorFailed": "Não foi possível calcular a rota",
+        "manualTripBadge": "Adicionada à mão",
     ]
 
 }

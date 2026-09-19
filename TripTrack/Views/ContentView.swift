@@ -24,6 +24,15 @@ extension Notification.Name {
     static let dismissTripSummary = Notification.Name("dismissTripSummary")
     static let tripDeleted = Notification.Name("tripDeleted")
     static let tripRecordingEnded = Notification.Name("tripRecordingEnded")
+    /// Поездку вписали рукой (0.8.0, «Плюс»): `TripManager.createManualTrip`.
+    /// Object — `UUID` поездки.
+    ///
+    /// Отдельно от `.tripRecordingEnded` нарочно. У того на хвосте висят дела
+    /// ФИНИША — `ContentView` переключает вкладку на карточку итогов, а
+    /// `MyMapViewModel` ждёт следом ещё двух уведомлений одним пакетом, — и
+    /// ничего из этого к вписанной рукой поездке не относится. Слушают его те
+    /// же, кому есть что перечитать: лента и «Мои».
+    static let manualTripCreated = Notification.Name("manualTripCreated")
     static let territoryRebuilt = Notification.Name("territoryRebuilt")
     static let syncPullCompleted = Notification.Name("syncPullCompleted")
     /// Открытое на карте изменилось (0.7.0): финиш поездки, фоновая сборка

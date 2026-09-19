@@ -108,6 +108,17 @@ struct ProfileTripCardView: View {
                 .foregroundStyle(c.textTertiary)
                 .lineLimit(1)
 
+            // Карандаш у вписанной рукой поездки (0.8.0). Значок без слова:
+            // строка и так тесная, а подпись для озвучки едет отдельно.
+            if trip.source == .manual {
+                Image(systemName: "pencil.line")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(c.textTertiary)
+                    .fixedSize()
+                    .accessibilityLabel(AppStrings.manualTripBadge(lang.language))
+                    .accessibilityIdentifier("profile_trip_manual")
+            }
+
             if let vehicle, let asset = vehicle.avatarImageName {
                 // «Which car was this?» is a caption-weight fact, so it rides
                 // on this line rather than growing the card a row of its own.

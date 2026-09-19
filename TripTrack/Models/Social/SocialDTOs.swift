@@ -130,6 +130,12 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
     /// зовут перестройки карточки (`SocialReactions`), и дефолт молча
     /// стирал бы «Часть путешествия» на каждой реакции.
     var journey: SocialFeedTripJourney?
+    /// Записана треком или вписана рукой (0.8.0). Опционально по той же
+    /// причине, что `commentCountRaw` и `journey`: сервер, который поля ещё не
+    /// шлёт, не должен ронять разбор всей ленты. `nil` читается как
+    /// `.recorded` — каждая поездка, доехавшая сюда без этого ключа, была
+    /// записана треком.
+    var source: TripOrigin?
 
     /// Decode-safe comment total: absent key (pre-comments backend) → 0.
     var commentCount: Int { commentCountRaw ?? 0 }
@@ -144,6 +150,7 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
         case reactionCount, reactionBreakdown, myReaction, badgeIds
         case commentCountRaw = "commentCount"
         case journey
+        case source
     }
 
     /// Средняя за поездку, в метрах в секунду — как у своей поездки

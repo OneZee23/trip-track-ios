@@ -1381,6 +1381,22 @@ extension Translations {
         "routeLinePickerFootnote": "Il colore compare solo sulle tue mappe. Nel feed e nei profili altrui i percorsi restano come sempre.",
         "privacyPlusBadgeTitle": "Badge Plus",
         "privacyPlusBadgeSub": "Mostra il badge accanto al tuo nome nel feed, nel profilo e nei commenti.",
+        "manualTripEntry": "Aggiungi un viaggio passato",
+        "manualTripSubtitle": "Un percorso sulle strade fra i tuoi punti. Senza GPS e senza premi.",
+        "manualTripFrom": "Da",
+        "manualTripTo": "A",
+        "manualTripVia": "Passando per",
+        "manualTripAddVia": "Aggiungi tappa",
+        "manualTripSearchHint": "Città, via, luogo",
+        "manualTripStart": "Partenza",
+        "manualTripDuration": "In viaggio",
+        "manualTripSuggestedTime": "Circa {time} su strada",
+        "manualTripCreate": "Crea viaggio",
+        "manualTripRouting": "Calcolo del percorso…",
+        "manualTripErrorNoRoute": "Non c'è una strada fra questi punti",
+        "manualTripErrorOffline": "Il percorso richiede una connessione. Riprova",
+        "manualTripErrorFailed": "Impossibile calcolare il percorso",
+        "manualTripBadge": "Aggiunto a mano",
     ]
 
 }

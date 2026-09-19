@@ -94,7 +94,10 @@ final class FeedViewModel: ObservableObject {
             NotificationCenter.default.publisher(for: .syncPullCompleted),
             NotificationCenter.default.publisher(for: .tripPhotosChanged),
             NotificationCenter.default.publisher(for: .tripPrivacyChanged),
-            NotificationCenter.default.publisher(for: .tripDeleted)
+            NotificationCenter.default.publisher(for: .tripDeleted),
+            // 0.8.0: вписанная рукой поездка появляется в базе мимо
+            // записи, и без этого её карточка ждала бы следующего пула.
+            NotificationCenter.default.publisher(for: .manualTripCreated)
         )
         .throttle(for: .milliseconds(800), scheduler: DispatchQueue.main, latest: true)
         .sink { [weak self] _ in

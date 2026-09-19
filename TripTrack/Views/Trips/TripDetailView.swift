@@ -2277,7 +2277,11 @@ isOwn
                 }
             }
 
-            if speedSeries.count > 1 {
+            // График скорости — только у записанной поездки (0.8.0): у
+            // вписанной рукой скорость постоянна по построению, и прямая
+            // линия через весь экран утверждала бы про дорогу то, чего мы не
+            // измеряли.
+            if speedSeries.count > 1, trip.source == .recorded {
                 VStack(alignment: .leading, spacing: 10) {
                     DetailSectionHeader(text: AppStrings.speedSection(lang.language))
                     SpeedChartCard(
@@ -2403,6 +2407,11 @@ isOwn
 
                 vehicleChip(trip: trip, c: c)
 
+                // «Вписана рукой» (0.8.0). Стоит здесь, а не отдельной
+                // строкой: это такой же факт о поездке, как час выезда и
+                // машина, — и читается он вместе с ними.
+                manualChip(trip: trip)
+
                 // Privacy chip is per-trip and works independently of global
                 // Cloud Sync (privacy-first model: publishing one trip should
                 // NOT require turning on full-account mirror).
@@ -2414,6 +2423,18 @@ isOwn
         .scrollClipDisabled()
     }
 
+
+    /// Пометка «вписана рукой» у ручной поездки (0.8.0). У записанной её нет
+    /// вовсе — «записана треком» это не факт, а умолчание.
+    @ViewBuilder
+    private func manualChip(trip: Trip) -> some View {
+        if trip.source == .manual {
+            DetailChipSurface {
+                Label(AppStrings.manualTripBadge(lang.language), systemImage: "pencil.line")
+            }
+            .accessibilityIdentifier("trip_manual_chip")
+        }
+    }
 
     /// Цвет машины поездки для машинки на карте. `nil` — транспорта нет или
     /// у него эмодзи вместо спрайта: цвета в этом случае просто нет.
@@ -3297,13 +3318,19 @@ isOwn
                 color: AppTheme.blue,
                 staggerIndex: 4
             )
-            DetailStatCard(
-                value: tripMaxSpeed(trip, l).value,
-                unit: tripMaxSpeed(trip, l).unit,
-                label: AppStrings.statMax(l),
-                color: AppTheme.red,
-                staggerIndex: 5
-            )
+            // «Макс.» у вписанной рукой поездки равен средней — плитка рядом
+            // со средней печатала бы то же число дважды. Её нет вовсе, а не
+            // «есть с прочерком»: прочерк это обещание измерения, которого
+            // не было.
+            if trip.source == .recorded {
+                DetailStatCard(
+                    value: tripMaxSpeed(trip, l).value,
+                    unit: tripMaxSpeed(trip, l).unit,
+                    label: AppStrings.statMax(l),
+                    color: AppTheme.red,
+                    staggerIndex: 5
+                )
+            }
             DetailStatCard(
                 value: tripElevationGain(l).value,
                 unit: tripElevationGain(l).unit,
