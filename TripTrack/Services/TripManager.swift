@@ -596,11 +596,7 @@ final class TripManager: ObservableObject {
         // Дефолтное имя — ровно «Отметка 7» на любом языке, не «Отметка у моря»:
         // второе написал человек, и его геокодер не трогает.
         let current = checkpoint.name ?? ""
-        let looksDefault = current.isEmpty || LanguageManager.Language.allCases.contains { lang in
-            _ = NSRegularExpression.escapedPattern(for: AppStrings.checkpointWord(lang))
-            return current.range(of: "^\\(word) \\d+$", options: .regularExpression) != nil
-        }
-        guard looksDefault else { return }
+        guard CheckpointDefaultName.looksLikeDefaultCheckpointName(current) else { return }
         repository.updateCheckpoint(
             id: id, name: name, photoId: checkpoint.photoId, photoIds: checkpoint.photoIds)
         Task { @MainActor in
