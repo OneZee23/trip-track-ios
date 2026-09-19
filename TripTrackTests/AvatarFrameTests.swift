@@ -69,6 +69,34 @@ final class AvatarFrameTests: XCTestCase {
         }
     }
 
+    /// «Сервер молчит» — это «подписки нет», и одинаково для всех трёх
+    /// косметик чужого профиля: фона, рамки и значка. Пока правило стояло
+    /// трижды по месту, значок при `nil` гас, а фон и рамка показывались —
+    /// то есть истёкший подписчик, у которого сервер не вычистил поле,
+    /// оставался с премиум-фоном вопреки «Плюс кончился → бесплатное».
+    func testServerSilenceMeansNoPlusForEveryCosmetic() {
+        XCTAssertFalse(PlusBadgeVisibility.saysPlus(nil))
+        XCTAssertFalse(PlusBadgeVisibility.saysPlus(false))
+        XCTAssertTrue(PlusBadgeVisibility.saysPlus(true))
+
+        let silent = PlusBadgeVisibility.saysPlus(nil)
+        XCTAssertEqual(
+            ProfileBackground.effective(id: "plus_gold", isPlus: silent), .none)
+        XCTAssertEqual(
+            AvatarFrame.effective(id: "frame_gold", isPlus: silent), AvatarFrame.none)
+        XCTAssertFalse(
+            PlusBadgeVisibility.shows(isPlus: nil, isOwn: false, showsOwnBadge: true))
+
+        // А сказанное «да» одинаково зажигает все три.
+        let said = PlusBadgeVisibility.saysPlus(true)
+        XCTAssertEqual(
+            ProfileBackground.effective(id: "plus_gold", isPlus: said), .plusGold)
+        XCTAssertEqual(
+            AvatarFrame.effective(id: "frame_gold", isPlus: said), AvatarFrame.gold)
+        XCTAssertTrue(
+            PlusBadgeVisibility.shows(isPlus: true, isOwn: false, showsOwnBadge: true))
+    }
+
     /// Автор в ленте и в комментариях — один и тот же DTO, и косметика в нём
     /// опциональна: старый сервер ключей не шлёт, и разбор обязан пройти.
     func testAuthorDecodesWithoutThePlusKeys() throws {

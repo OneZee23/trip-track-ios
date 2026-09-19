@@ -761,15 +761,19 @@ struct PublicProfileView: View {
     private func heroSection(_ c: AppTheme.Colors) -> some View {
         let avatarSize: CGFloat = 84
         let emoji = profile?.avatarEmoji ?? preloaded?.avatarEmoji ?? "🚗"
-        // Косметика «Плюса» приходит с сервера, и сервер отдаёт её ТОЛЬКО у
-        // аккаунта с живой подпиской. `isPlus == nil` — «не сказано» (старый
-        // сервер), и тогда решение принимает он, а не мы: перепроверив его
-        // здесь своим `false`, мы сняли бы фон у того, кому сервер его выдал.
-        let saidPlus = profile?.isPlus ?? preloaded?.isPlus
+        // «Сервер молчит» (`isPlus == nil`) читается как «подписки нет» — во
+        // всех трёх местах этой функции одинаково, включая значок
+        // (`PlusBadgeVisibility.shows` требует ровно `true`). Одна переменная
+        // с двумя правилами — это спор с самим собой в десяти строках: а
+        // побеждает в таком споре тот случай, когда сервер 0.8.0 прислал
+        // устаревшее премиум-значение истёкшему подписчику, но `isPlus` в
+        // этом ответе не прислал. Спека §2 на это отвечает однозначно:
+        // «Плюс» кончился — показывается бесплатное.
+        let saidPlus = PlusBadgeVisibility.saysPlus(profile?.isPlus ?? preloaded?.isPlus)
         let background = ProfileBackground.effective(
-            id: profile?.profileBackground, isPlus: saidPlus ?? true)
+            id: profile?.profileBackground, isPlus: saidPlus)
         let frame = AvatarFrame.effective(
-            id: profile?.avatarFrame ?? preloaded?.avatarFrame, isPlus: saidPlus ?? true)
+            id: profile?.avatarFrame ?? preloaded?.avatarFrame, isPlus: saidPlus)
 
         return VStack(spacing: 0) {
             Text(emoji)

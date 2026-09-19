@@ -424,6 +424,46 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         private weak var mapView: MKMapView?
         /// Хозяин карты — через него координатор достаёт штору.
         weak var host: MapHostController?
+
+        /// Подписка на смену цвета линии маршрута (0.8.0).
+        ///
+        /// Рендерер жилки держит цвет СНИМКОМ (`RouteVeinRenderer.veinColor`):
+        /// в `draw` его не переспрашивают, иначе на каждом кадре жеста шли бы
+        /// чтения `UserDefaults`. Значит новый цвет доезжает не сам —
+        /// переставить оверлей должен кто-то снаружи, и это здесь.
+        private var routeLineObserver: NSObjectProtocol?
+
+        override init() {
+            super.init()
+            routeLineObserver = NotificationCenter.default.addObserver(
+                forName: .routeLineStyleChanged, object: nil, queue: .main
+            ) { [weak self] _ in
+                self?.refreshRouteLineColour()
+            }
+        }
+
+        deinit {
+            if let routeLineObserver {
+                NotificationCenter.default.removeObserver(routeLineObserver)
+            }
+        }
+
+        /// Переставить жилку и выбранный маршрут, чтобы MapKit спросил у них
+        /// рендерер заново — вместе с новым снимком цвета. Экранной вуали
+        /// хватает нового растра: цвет она берёт тем же снимком, когда его
+        /// готовит.
+        private func refreshRouteLineColour() {
+            if let host, host.screenVeilAttached {
+                host.screenVeil.setLayer(lastRevealed)
+                return
+            }
+            guard let map = mapView else { return }
+            for overlay in [installedVein, installedRoute].compactMap({ $0 })
+            where map.overlays.contains(where: { $0 === overlay }) {
+                map.removeOverlay(overlay)
+                map.addOverlay(overlay, level: .aboveLabels)
+            }
+        }
         var fingers: FingerWatch?
         private var level: MapZoomLevel = .far
         private var didSetInitialCamera = false

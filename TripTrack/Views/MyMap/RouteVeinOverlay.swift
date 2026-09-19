@@ -67,17 +67,33 @@ final class RouteVeinRenderer: MKOverlayRenderer {
     /// главный поток в момент первого показа карты.
     private let index = MapPathIndex()
 
-    /// Тёплый янтарь из эталонных кадров владельца. Не акцент бренда: жилка —
-    /// это свет внутри тумана, а не элемент интерфейса.
+    /// Чем красить жилку ПРЯМО СЕЙЧАС. Спрашивают её ровно там, где готовят
+    /// новую картинку: `init` этого рендерера, растр экранной вуали и постер.
     ///
-    /// С 0.8.0 его перебивает выбранный цвет линии маршрута
+    /// С 0.8.0 янтарь перебивает выбранный цвет линии маршрута
     /// (`RouteLineStyle`) — тот же цвет, которым рисуется маршрут на экране
     /// поездки: две карты в одном приложении обязаны рисовать пройденное
-    /// одинаково. Вычисляемое, а не `let`, потому что выбор меняется без
-    /// пересборки рендерера, и спрашивается оно с ПОТОКОВ ОТРИСОВКИ MapKit —
-    /// поэтому за ответом ходят в `UserDefaults`, а не в главноактёрный
-    /// `PlusAccess` (см. `RouteLineStyle.plusMirrorKey`).
-    static var veinColor: UIColor { RouteLineStyle.currentUIColor ?? defaultVeinColor }
+    /// одинаково. Ответ лежит в `UserDefaults`, а не в главноактёрном
+    /// `PlusAccess`, потому что готовят картинку не на главном потоке
+    /// (см. `RouteLineStyle.plusMirrorKey`).
+    static func resolvedVeinColor() -> UIColor {
+        RouteLineStyle.currentUIColor ?? defaultVeinColor
+    }
+
+    /// Цвет этого рендерера — СНИМОК, сделанный один раз в `init`.
+    ///
+    /// Не вычисляемое свойство: `draw(_:zoomScale:in:)` MapKit зовёт много раз
+    /// за кадр жеста и параллельно на нескольких потоках, а каждое обращение к
+    /// `RouteLineStyle.currentUIColor` — два чтения `UserDefaults`. Это ровно
+    /// то расточительство, ради которого индекс путей строится в `init`, а не
+    /// в `draw` (раздел «Дешёвые тайлы», 0.7.0).
+    ///
+    /// Смена выбора этот снимок не правит — она ПЕРЕСТАВЛЯЕТ оверлей
+    /// (`.routeLineStyleChanged` → `MyMapRepresentable.Coordinator
+    /// .refreshRouteLineColour`), и MapKit спрашивает рендерер заново. Правка
+    /// поля на месте была бы записью с главного потока в то, что читают потоки
+    /// отрисовки, — то самое, из-за чего у `revealAround` свой замок.
+    let veinColor: UIColor
 
     static let defaultVeinColor = UIColor(red: 0xf0/255, green: 0xa0/255, blue: 0x70/255, alpha: 1)
     /// Выбранная поездка — тот же цвет, светлее и плотнее.
@@ -110,6 +126,7 @@ final class RouteVeinRenderer: MKOverlayRenderer {
 
     init(vein: RouteVeinOverlay) {
         self.vein = vein
+        self.veinColor = Self.resolvedVeinColor()
         super.init(overlay: vein)
         // Индекс — вне главного потока, как у вуали; `point(for:)` при этом
         // зовётся с фоновой очереди, и это законно: MapKit сам зовёт
@@ -171,7 +188,7 @@ final class RouteVeinRenderer: MKOverlayRenderer {
             context.beginPath()
             paths.forEach(context.addPath)
             context.setLineWidth(min(halo.width / zoomScale, ceiling))
-            context.setStrokeColor(Self.veinColor.withAlphaComponent(halo.alpha).cgColor)
+            context.setStrokeColor(veinColor.withAlphaComponent(halo.alpha).cgColor)
             context.strokePath()
         }
 
@@ -189,7 +206,7 @@ final class RouteVeinRenderer: MKOverlayRenderer {
         context.setStrokeColor(
             vein.style == .selected
                 ? Self.selectedColor.cgColor
-                : Self.veinColor.withAlphaComponent(0.9).cgColor
+                : veinColor.withAlphaComponent(0.9).cgColor
         )
         context.strokePath()
     }

@@ -1315,6 +1315,8 @@ enum FogVeilBitmap {
         guard !paths.isEmpty else { return }
         context.setLineCap(.round)
         context.setLineJoin(.round)
+        // Один снимок на оба прохода — см. `FogVeilVein.strokes`.
+        let veinColor = RouteVeinRenderer.resolvedVeinColor()
         if let halo = RouteVeinRenderer.halo(for: lod) {
             let metre = MKMapPointsPerMeterAtLatitude(
                 MKMapPoint(x: rect.midX, y: rect.midY).coordinate.latitude)
@@ -1323,13 +1325,13 @@ enum FogVeilBitmap {
             paths.forEach(context.addPath)
             context.setLineWidth(min(halo.width / CGFloat(zoomScale), ceiling))
             context.setStrokeColor(
-                RouteVeinRenderer.veinColor.withAlphaComponent(halo.alpha).cgColor)
+                veinColor.withAlphaComponent(halo.alpha).cgColor)
             context.strokePath()
         }
         context.beginPath()
         paths.forEach(context.addPath)
         context.setLineWidth(screenWidth / CGFloat(zoomScale))
-        context.setStrokeColor(RouteVeinRenderer.veinColor.withAlphaComponent(0.9).cgColor)
+        context.setStrokeColor(veinColor.withAlphaComponent(0.9).cgColor)
         context.strokePath()
     }
 

@@ -88,17 +88,42 @@ enum RouteLineStyle: String, CaseIterable, Identifiable {
     /// «Градиент скорости» и стирала бы его выбор на глазах.
     static var stored: RouteLineStyle {
         get { from(store.string(forKey: storageKey)) }
-        set { store.set(newValue.rawValue, forKey: storageKey) }
+        set {
+            guard newValue != stored else { return }
+            store.set(newValue.rawValue, forKey: storageKey)
+            announce()
+        }
     }
 
     /// Запомнить, активен ли «Плюс», — зовётся с главного потока.
     static func rememberPlus(_ isPlus: Bool) {
         guard store.bool(forKey: plusMirrorKey) != isPlus else { return }
         store.set(isPlus, forKey: plusMirrorKey)
+        announce()
     }
 
     /// Чем красить ПРЯМО СЕЙЧАС, с любого потока. `nil` — градиент скорости.
+    ///
+    /// Зовут её там, где ГОТОВЯТ картинку: `init` рендерера маршрута и жилки,
+    /// растр экранной вуали, постер. В `draw` её не зовёт никто — цвет там
+    /// лежит снимком (`RouteVeinRenderer.veinColor`).
     static var currentUIColor: UIColor? {
         stored.effective(isPlus: store.bool(forKey: plusMirrorKey)).uiColor
     }
+
+    /// Сказать картам, что цвет сменился.
+    ///
+    /// Рендереры держат СНИМОК цвета и сами его не переспрашивают — иначе
+    /// пришлось бы читать `UserDefaults` на каждом кадре жеста. Поэтому
+    /// перерисовку заказывает эта дверь, а карта на неё переставляет оверлей:
+    /// MapKit спрашивает рендерер заново только у нового оверлея.
+    private static func announce() {
+        NotificationCenter.default.post(name: .routeLineStyleChanged, object: nil)
+    }
+}
+
+extension Notification.Name {
+    /// Человек сменил цвет линии маршрута — или подписка «Плюс» зажглась
+    /// либо погасла, что для карты одно и то же событие.
+    static let routeLineStyleChanged = Notification.Name("routeLineStyleChanged")
 }

@@ -52,6 +52,10 @@ enum FogVeilVein {
         // экранные ширины в координатах растра берутся как есть.
         let zoomScale = MKZoomScale(sizePoints.width / CGFloat(rect.width))
         let lod = FogVeilRenderer.lod(for: zoomScale)
+        // Один снимок цвета на весь набор проходов: он же лежит в рендерере
+        // (`RouteVeinRenderer.veinColor`), и спрашивать его дважды значит
+        // дважды сходить в `UserDefaults` за одним и тем же ответом.
+        let veinColor = RouteVeinRenderer.resolvedVeinColor()
         // Сдвиг к левому верхнему углу растра, затем масштаб: `p' = (p − o)·z`.
         let transform = CGAffineTransform(scaleX: CGFloat(zoomScale), y: CGFloat(zoomScale))
             .translatedBy(x: CGFloat(-rect.minX), y: CGFloat(-rect.minY))
@@ -74,11 +78,11 @@ enum FogVeilVein {
                         * 1.2 * CGFloat(zoomScale)
                     out.append(Stroke(
                         path: net, width: min(halo.width, ceiling),
-                        color: RouteVeinRenderer.veinColor.withAlphaComponent(halo.alpha)))
+                        color: veinColor.withAlphaComponent(halo.alpha)))
                 }
                 out.append(Stroke(
                     path: net, width: RouteVeinRenderer.width(for: lod),
-                    color: RouteVeinRenderer.veinColor.withAlphaComponent(0.9)))
+                    color: veinColor.withAlphaComponent(0.9)))
             }
         }
 
