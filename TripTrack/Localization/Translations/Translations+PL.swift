@@ -1395,6 +1395,7 @@ extension Translations {
         "manualTripRouting": "Liczymy trasę…",
         "manualTripErrorNoRoute": "Między tymi punktami nie ma drogi",
         "manualTripErrorOffline": "Trasa wymaga połączenia. Spróbuj jeszcze raz",
+        "manualTripErrorTooLong": "Ta trasa jest za długa na jeden przejazd",
         "manualTripErrorFailed": "Nie udało się wyznaczyć trasy",
         "manualTripBadge": "Dopisane ręcznie",
     ]

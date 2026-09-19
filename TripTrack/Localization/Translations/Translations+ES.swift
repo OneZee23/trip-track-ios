@@ -1395,6 +1395,7 @@ extension Translations {
         "manualTripRouting": "Calculando la ruta…",
         "manualTripErrorNoRoute": "No hay carretera entre estos puntos",
         "manualTripErrorOffline": "La ruta necesita conexión. Inténtalo de nuevo",
+        "manualTripErrorTooLong": "Esta ruta es demasiado larga para un solo viaje",
         "manualTripErrorFailed": "No se pudo calcular la ruta",
         "manualTripBadge": "Añadido a mano",
     ]

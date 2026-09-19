@@ -1420,6 +1420,11 @@ final class TripManager: ObservableObject {
         entity.title = trip.title
         entity.titleIsCustom = trip.titleIsCustom
         entity.vehicleId = trip.vehicleId
+        // Штампуется вместе с машиной, а не через `setTransfer`: тот
+        // обнуляет `vehicleId` и пересчитывает одометры, и на ещё не
+        // сохранённой поездке один из двух вызовов обязательно встал бы не в
+        // том порядке (та же причина, что у `startTrip`).
+        entity.isTransfer = trip.isTransfer
         entity.isPrivate = trip.isPrivate
         entity.source = trip.source.rawValue
         entity.fuelCurrency = FuelCurrency.current
@@ -1442,6 +1447,18 @@ final class TripManager: ObservableObject {
 
         generatePreviewPolyline(for: entity)
         persistenceController.save()
+
+        // Одометр машины — ЕДИНСТВЕННАЯ награда, которую вписанная поездка
+        // даёт (спека §2: «одометр машины — ДА»), и взводить его здесь надо
+        // руками. У записанной поездки его двигает `processCompletedTrip` по
+        // дороге к опыту и значкам, а ручная всю ту цепочку пропускает
+        // нарочно — без этой строки пробег и уровень машины оставались бы
+        // вчерашними до чужого события (удаления другой поездки, смены
+        // машины, полного пула), то есть у человека без облака — «никогда».
+        if let vehicleId = trip.vehicleId, !trip.isTransfer {
+            repository.recomputeOdometers(forVehicles: [vehicleId])
+            persistenceController.save()
+        }
 
         // Имя человека сильнее подсказки геокодера — то же правило, что у
         // `Place.rename`/`adoptName`. Без имени спрашиваем «откуда → куда»;

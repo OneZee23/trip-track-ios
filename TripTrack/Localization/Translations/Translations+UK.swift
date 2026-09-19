@@ -1395,6 +1395,7 @@ extension Translations {
         "manualTripRouting": "Будуємо маршрут…",
         "manualTripErrorNoRoute": "Між цими точками немає автомобільної дороги",
         "manualTripErrorOffline": "Без зв'язку маршрут не побудувати. Спробуйте ще раз",
+        "manualTripErrorTooLong": "Занадто довгий маршрут для однієї поїздки",
         "manualTripErrorFailed": "Не вдалося побудувати маршрут",
         "manualTripBadge": "Вписана вручну",
     ]

@@ -262,6 +262,14 @@ struct ManualTripSheet: View {
             Text(AppStrings.manualTripRouting(lang.language))
                 .font(.system(size: 13))
                 .foregroundStyle(c.textSecondary)
+        } else if model.isRouteTooLong {
+            // Кнопка выключена, и рядом написано почему. Молча выключенная
+            // кнопка — та самая мёртвая, которую запрещает CLAUDE.md.
+            Text(AppStrings.manualTripErrorTooLong(lang.language))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppTheme.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("manual_trip_too_long")
         } else if let error = model.routeError {
             Text(errorText(error))
                 .font(.system(size: 13, weight: .semibold))

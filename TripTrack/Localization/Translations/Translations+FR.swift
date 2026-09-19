@@ -1395,6 +1395,7 @@ extension Translations {
         "manualTripRouting": "Calcul de l'itinéraire…",
         "manualTripErrorNoRoute": "Aucune route ne relie ces points",
         "manualTripErrorOffline": "L'itinéraire demande une connexion. Réessayez",
+        "manualTripErrorTooLong": "Cet itinéraire est trop long pour un seul trajet",
         "manualTripErrorFailed": "Impossible de calculer l'itinéraire",
         "manualTripBadge": "Ajouté à la main",
     ]

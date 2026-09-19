@@ -1395,6 +1395,7 @@ extension Translations {
         "manualTripRouting": "Calcolo del percorso…",
         "manualTripErrorNoRoute": "Non c'è una strada fra questi punti",
         "manualTripErrorOffline": "Il percorso richiede una connessione. Riprova",
+        "manualTripErrorTooLong": "Questo percorso è troppo lungo per un solo viaggio",
         "manualTripErrorFailed": "Impossibile calcolare il percorso",
         "manualTripBadge": "Aggiunto a mano",
     ]

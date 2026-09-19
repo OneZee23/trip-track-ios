@@ -1395,6 +1395,7 @@ extension Translations {
         "manualTripRouting": "A calcular a rota…",
         "manualTripErrorNoRoute": "Não há estrada entre estes pontos",
         "manualTripErrorOffline": "A rota precisa de ligação. Tenta outra vez",
+        "manualTripErrorTooLong": "Esta rota é demasiado longa para uma só viagem",
         "manualTripErrorFailed": "Não foi possível calcular a rota",
         "manualTripBadge": "Adicionada à mão",
     ]

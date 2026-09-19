@@ -1395,6 +1395,7 @@ extension Translations {
         "manualTripRouting": "Бағдар құрылуда…",
         "manualTripErrorNoRoute": "Бұл нүктелердің арасында автожол жоқ",
         "manualTripErrorOffline": "Бағдар үшін байланыс қажет. Қайталап көріңіз",
+        "manualTripErrorTooLong": "Бұл бағдар бір сапарға тым ұзақ",
         "manualTripErrorFailed": "Бағдарды құру мүмкін болмады",
         "manualTripBadge": "Қолмен қосылған",
     ]

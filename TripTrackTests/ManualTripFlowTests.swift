@@ -43,6 +43,25 @@ final class ManualTripFlowTests: XCTestCase {
         return ManualTripBuilder.build(draft)!
     }
 
+    /// Машина в гараже того же хранилища — чтобы одометр было чему двигать.
+    private func makeVehicle(odometerKm: Double = 0) throws -> UUID {
+        let context = pc.container.viewContext
+        let vehicle = VehicleEntity(context: context)
+        let id = UUID()
+        vehicle.id = id
+        vehicle.name = "Тойота"
+        vehicle.odometerKm = odometerKm
+        vehicle.vehicleLevel = Int32(VehicleLevelSystem.level(for: odometerKm))
+        try context.save()
+        return id
+    }
+
+    private func vehicleEntity(_ id: UUID) throws -> VehicleEntity {
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        return try XCTUnwrap(try pc.container.viewContext.fetch(request).first)
+    }
+
     private func entity(_ id: UUID) throws -> TripEntity {
         let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
@@ -111,6 +130,37 @@ final class ManualTripFlowTests: XCTestCase {
     }
 
     // MARK: - Награды не начисляются
+
+    // MARK: - Одометр машины
+
+    /// Единственная награда, которую вписанная поездка ДАЁТ (спека §2), и
+    /// проверяется она ЧЕРЕЗ НАСТОЯЩИЙ ПУТЬ, а не чистой функцией: у
+    /// записанной поездки одометр двигает `processCompletedTrip` по дороге к
+    /// опыту, а ручная всю ту цепочку пропускает — и ровно на этом пробег
+    /// оставался вчерашним, пока никто не удалял соседнюю поездку.
+    func testCreatingAManualTripMovesTheVehicleOdometerImmediately() throws {
+        let vehicleId = try makeVehicle()
+        let trip = built(vehicleId: vehicleId)
+        let saved = try XCTUnwrap(
+            manager.createManualTrip(trip, namesFromGeocoder: false))
+
+        let vehicle = try vehicleEntity(vehicleId)
+        XCTAssertEqual(vehicle.odometerKm, saved.distance / 1000, accuracy: 0.01)
+        XCTAssertGreaterThan(vehicle.odometerKm, 0, "фикстура обязана быть настоящей дорогой")
+        XCTAssertEqual(vehicle.vehicleLevel,
+                       Int32(VehicleLevelSystem.level(for: vehicle.odometerKm)))
+    }
+
+    /// А поездка ПАССАЖИРОМ машину не наматывает — то же правило, что у
+    /// записанной (`VehicleOdometer`, `recomputeOdometers`).
+    func testATransferDoesNotTouchTheOdometer() throws {
+        let vehicleId = try makeVehicle(odometerKm: 1000)
+        var trip = built(vehicleId: vehicleId)
+        trip.isTransfer = true
+        _ = try XCTUnwrap(manager.createManualTrip(trip, namesFromGeocoder: false))
+
+        XCTAssertEqual(try vehicleEntity(vehicleId).odometerKm, 1000, accuracy: 0.001)
+    }
 
     /// Опыт у профиля не двигается: `createManualTrip` в наградную цепочку не
     /// заходит вовсе, а если однажды зайдёт — гейт в `calculateXP` вернёт ноль.

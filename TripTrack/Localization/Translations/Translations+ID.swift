@@ -1395,6 +1395,7 @@ extension Translations {
         "manualTripRouting": "Menyusun rute…",
         "manualTripErrorNoRoute": "Tidak ada jalan mobil antara titik-titik ini",
         "manualTripErrorOffline": "Rute butuh koneksi. Coba lagi",
+        "manualTripErrorTooLong": "Rute ini terlalu panjang untuk satu perjalanan",
         "manualTripErrorFailed": "Rute tidak bisa dibuat",
         "manualTripBadge": "Ditambahkan manual",
     ]

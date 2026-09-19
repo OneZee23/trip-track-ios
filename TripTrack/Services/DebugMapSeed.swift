@@ -286,7 +286,11 @@ enum DebugMapSeed {
         guard let trip = ManualTripBuilder.build(draft) else { return }
         let manager = TripManager(
             locationManager: LocationManager(), persistenceController: persistence)
-        manager.createManualTrip(trip, namesFromGeocoder: false)
+        guard let saved = manager.createManualTrip(trip, namesFromGeocoder: false) else { return }
+        // Тем же хвостом, что у настоящего листа: иначе сидовая поездка
+        // молча отличалась бы от живой — карта её не открывала бы, места не
+        // видели, а по снимку с симулятора этого не заметить.
+        Task { @MainActor in await ManualTripAftermath.settle(tripId: saved.id) }
     }
 
     private static func seedPhotos(persistence: PersistenceController) {

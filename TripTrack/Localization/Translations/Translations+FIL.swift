@@ -1395,6 +1395,7 @@ extension Translations {
         "manualTripRouting": "Binubuo ang ruta…",
         "manualTripErrorNoRoute": "Walang kalsada sa pagitan ng mga puntong ito",
         "manualTripErrorOffline": "Kailangan ng koneksyon ang ruta. Subukan ulit",
+        "manualTripErrorTooLong": "Masyadong mahaba ang rutang ito para sa isang biyahe",
         "manualTripErrorFailed": "Hindi nabuo ang ruta",
         "manualTripBadge": "Idinagdag nang manu-mano",
     ]

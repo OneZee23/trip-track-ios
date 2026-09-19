@@ -7423,6 +7423,14 @@ enum AppStrings {
            en: "The route needs a connection. Try again")
     }
 
+    /// Дорога длиннее, чем помещается в одну поездку. Стоит рядом с
+    /// выключенной кнопкой: молча выключенная кнопка — мёртвая кнопка.
+    static func manualTripErrorTooLong(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripErrorTooLong",
+           ru: "Слишком длинный маршрут для одной поездки",
+           en: "This route is too long for a single trip")
+    }
+
     /// Всё остальное. Текст Apple сюда не попадает — он на языке системы.
     static func manualTripErrorFailed(_ lang: LanguageManager.Language) -> String {
         tr(lang, "manualTripErrorFailed",

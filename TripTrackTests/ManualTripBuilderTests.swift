@@ -165,6 +165,33 @@ final class ManualTripBuilderTests: XCTestCase {
         XCTAssertFalse(trip.isJunk)
     }
 
+    /// Верхняя граница обязана ПЕРЕКРЫВАТЬ любой маршрут, который отдаст
+    /// `MKDirections` по дорогам. Сутки её не перекрывали: у дороги длиннее
+    /// 4 320 км пол поднимался выше потолка, и «Создать» выключалась навсегда
+    /// без единого слова о причине.
+    func testTheCeilingCoversAnyRoadRouteOnEarth() {
+        // Самая длинная автомобильная дорога мира — Панамерикана, около
+        // 30 000 км; `MKDirections` по дорогам большего не вернёт.
+        let panamerican: Double = 30_000_000
+        XCTAssertLessThanOrEqual(
+            ManualTripBuilder.feasibleDuration(forRouteMetres: panamerican),
+            ManualTripBuilder.maximumDuration,
+            "потолок длительности ниже пола — кнопка «Создать» выключится навсегда"
+        )
+    }
+
+    /// И обратная граница: если маршрут ВСЁ-ТАКИ длиннее потолка, пол
+    /// честно оказывается выше — это то состояние, под которое на экране
+    /// написана отдельная строка, а не молча выключенная кнопка.
+    func testAnImpossiblyLongRouteIsDetectableRatherThanSilent() {
+        let absurd = ManualTripBuilder.maximumDuration
+            * ManualTripBuilder.maxPlausibleAverage * 2
+        XCTAssertGreaterThan(
+            ManualTripBuilder.feasibleDuration(forRouteMetres: absurd),
+            ManualTripBuilder.maximumDuration
+        )
+    }
+
     func testTheFeasibleDurationNeverGoesBelowTheFloor() {
         XCTAssertEqual(ManualTripBuilder.feasibleDuration(forRouteMetres: 0),
                        ManualTripBuilder.minimumDuration)

@@ -201,14 +201,25 @@ final class ManualTripModel: ObservableObject {
         return min(earliest, startDate)...max(now, startDate)
     }
 
+    /// Дорога, которую нельзя проехать даже за верхний предел длительности.
+    ///
+    /// Потолок в неделю выбран так, что `MKDirections` такого маршрута не
+    /// вернёт (30 240 км), — но проверка стоит ОТДЕЛЬНО и с ней связана
+    /// строка на экране: иначе единственным следом этого состояния была бы
+    /// выключенная кнопка без объяснения, а это ровно та мёртвая кнопка,
+    /// ради которой потолок и поднимали.
+    var isRouteTooLong: Bool {
+        route != nil && minimumDuration > ManualTripBuilder.maximumDuration
+    }
+
     var canCreate: Bool {
-        route != nil && !isRouting && duration >= minimumDuration
+        route != nil && !isRouting && !isRouteTooLong && duration >= minimumDuration
     }
 
     // MARK: - Создание
 
-    /// Поездка в базе, и дальше — ровно две вещи из цепочки финиша: слой
-    /// открытого и места. Ни `PostTripTrackProcessor`, ни наград —
+    /// Поездка в базе, и дальше — `ManualTripAftermath`: места и слой
+    /// открытого, и ничего больше. Ни `PostTripTrackProcessor`, ни наград —
     /// см. `TripManager.createManualTrip`.
     func create(using manager: TripManager) async -> UUID? {
         guard let route else { return nil }
@@ -222,8 +233,7 @@ final class ManualTripModel: ObservableObject {
         guard let built = ManualTripBuilder.build(draft),
               let saved = manager.createManualTrip(built) else { return nil }
 
-        await PlaceManager.shared.process(tripId: saved.id)
-        await RevealedLayerStore.shared.ingest(tripId: saved.id)
+        await ManualTripAftermath.settle(tripId: saved.id)
         return saved.id
     }
 }

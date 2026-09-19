@@ -1395,6 +1395,7 @@ extension Translations {
         "manualTripRouting": "Rota hesaplanıyor…",
         "manualTripErrorNoRoute": "Bu noktalar arasında araç yolu yok",
         "manualTripErrorOffline": "Rota için bağlantı gerekiyor. Tekrar deneyin",
+        "manualTripErrorTooLong": "Bu rota tek bir yolculuk için çok uzun",
         "manualTripErrorFailed": "Rota oluşturulamadı",
         "manualTripBadge": "Elle eklendi",
     ]
