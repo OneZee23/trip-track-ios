@@ -1466,6 +1466,33 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   не оптом, а вместе с переходом на Swift 6 (0.9.0), потому что каждое —
   вопрос «а на каком актёре это вообще должно жить».
 
+### Экспорт GPX и CSV (0.8.0)
+
+Пункты «Экспорт GPX» и «Экспорт CSV» в «…» своей поездки; чужой их не видит.
+
+- **Экспортёры — чистые функции** (`GPXExporter.gpx(for:points:)`,
+  `CSVExporter.csv(for:points:)`): GPX 1.1 с одним `<trk>`, CSV с заголовком
+  `timestamp,latitude,longitude,altitude_m,speed_mps,course_deg,
+  horizontal_accuracy_m`. Числа печатаются с `en_US_POSIX` — точка независимо
+  от локали. Это ФАЙЛ ФОРМАТА, а не место показа: единицы СИ и в именах
+  колонок, `Measure` здесь не зовётся, и `UnitsDisciplineTests` их не
+  трогает.
+- **Неизвестное — пусто, а не ноль.** `speed < 0` и `course < 0` — пустое
+  поле / нет `<extensions>`; `altitude == 0` — нет `<ele>`: ноль высоты это
+  сентинел `ManualTripBuilder` (и дефолт `TrackPoint`), а не уровень моря.
+- **Точки берутся так же, как у карты и реплея.** У локальной поездки —
+  `trip.trackPoints`; у своей поездки, открытой ИЗ ЛЕНТЫ без локальной строки
+  (`isRemoteBacked`, `Trip(social:)` даёт `trackPoints: []`), — `remoteTrack`,
+  тот же массив, что читает `replayInput`. Первая версия читала только
+  `trip.trackPoints`, и у такой поездки пункт всегда падал в тост.
+- **Одна обвязка на оба формата** — `TripDetailView.performExport`: сборка
+  строки в `Task.detached`, папка `temporaryDirectory/<ext>-export/`, которая
+  ЧИСТИТСЯ перед каждым экспортом (иначе файлы копились бы вечно), безопасное
+  имя из заголовка, `ShareLinkPresenter.present(url:title:)` (единственный
+  системный лист, который разрешён — он и был), ошибка — `ToastView` с общим
+  `exportFailed`. Третий формат — третья строка `performExport`, а не третья
+  копия.
+
 ### Ловушки, на которые уходит по часу
 
 - **Чанк `/sync/push` режется по БАЙТАМ JSON, не по точкам** (`SyncChunkBudget`,
