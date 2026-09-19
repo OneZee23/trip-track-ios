@@ -182,9 +182,19 @@ final class MapViewModel: ObservableObject {
     private var fogRevealCoordinate: CLLocationCoordinate2D?
 
     init() {
+        // Diagnostic marks for the gap between "services started" (App.init)
+        // and "ContentView ready" — this initializer runs synchronously on
+        // the main actor as part of producing ContentView's first frame
+        // (`ContentView`'s `@StateObject private var mapVM = MapViewModel()`
+        // constructs before `body` draws), so everything here is on the
+        // critical path to first paint. Cheap to leave in; see CLAUDE.md
+        // "Ловушки" for why they stay after the investigation.
+        StartupTrace.mark("MapViewModel.init begin")
         let manager = LocationManager()
         self.locationManager = manager
+        StartupTrace.mark("MapViewModel.init LocationManager()")
         self.tripManager = TripManager(locationManager: manager)
+        StartupTrace.mark("MapViewModel.init TripManager()")
 
         // Wire up Live Activity + Shortcuts intent handlers
         // Both buttons answer for a card that can outlive its trip: force-quit
@@ -230,10 +240,14 @@ final class MapViewModel: ObservableObject {
         PhoneConnectivityManager.shared.mapViewModel = self
 
         setupRecordingBindings()
+        StartupTrace.mark("MapViewModel.init setupRecordingBindings")
         setupSunBasedTheme()
         checkSunTheme() // Immediate check using cached location
+        StartupTrace.mark("MapViewModel.init sunTheme")
         refreshTripStats()
+        StartupTrace.mark("MapViewModel.init refreshTripStats")
         restoreActiveRecordingIfNeeded()
+        StartupTrace.mark("MapViewModel.init restoreActiveRecordingIfNeeded")
 
         // Rebuild territory when a trip is deleted. Also recompute the
         // cached trip stats — ProfileView renders cachedTripCount/TotalKm
@@ -314,11 +328,13 @@ final class MapViewModel: ObservableObject {
                 )
             }
             .store(in: &cancellables)
+        StartupTrace.mark("MapViewModel.init subscriptions")
 
         // Туман (0.7.0): дверь пула в открытый мир. Взводится ЗДЕСЬ, а не в
         // задаче миграций ниже: первый пул приходит по `didBecomeActive`, и
         // подписка обязана стоять раньше него.
         RevealedLayerSync.shared.start()
+        StartupTrace.mark("MapViewModel.init end")
 
         Task { @MainActor [tripManager, gamificationManager, territoryManager] in
             StartupTrace.mark("migrations begin")
