@@ -548,7 +548,15 @@ struct TripDetailView: View {
     /// empty file would be useless to share either way) is a toast, not a
     /// share sheet with nothing in it.
     private func exportGPX(trip: Trip) {
-        let points = trip.trackPoints
+        // Our own trip opened from the feed (`isOwn` compares the author id,
+        // not where the data came from) never gets a local CoreData row —
+        // `Trip(social:)` hands it `trackPoints: []` — so `trip.trackPoints`
+        // is the wrong array to ask here. Its drive lives in `remoteTrack`,
+        // the same field `replayInput` reads for the map/replay when the
+        // trip is remote-backed.
+        let points: [TrackPoint] = isRemoteBacked
+            ? Self.trackPoints(from: remoteTrack)
+            : trip.trackPoints
         guard !points.isEmpty else {
             toastItem = ToastItem(type: .error, message: AppStrings.exportGPXFailed(lang.language))
             return
@@ -566,9 +574,17 @@ struct TripDetailView: View {
             let content = await Task.detached(priority: .userInitiated) {
                 GPXExporter.gpx(for: trip, points: points)
             }.value
-            let url = FileManager.default.temporaryDirectory
-                .appendingPathComponent(safeName)
-                .appendingPathExtension("gpx")
+            // Own subfolder, cleared before every export: a `.gpx` written
+            // to `temporaryDirectory` directly is never cleaned up by
+            // anything, and a phone that exports often would slowly pile up
+            // one file per trip forever.
+            let fm = FileManager.default
+            let dir = fm.temporaryDirectory.appendingPathComponent("gpx-export", isDirectory: true)
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            if let existing = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                for file in existing { try? fm.removeItem(at: file) }
+            }
+            let url = dir.appendingPathComponent(safeName).appendingPathExtension("gpx")
             guard let data = content.data(using: .utf8),
                   (try? data.write(to: url, options: .atomic)) != nil else {
                 await MainActor.run {
@@ -581,6 +597,15 @@ struct TripDetailView: View {
             // fires right after the «…» popover finishes dismissing.
             await ShareLinkPresenter.present(url: url, title: safeName)
         }
+    }
+
+    /// `SocialTrackPoint` → `TrackPoint`: the same three fields `replayInput`
+    /// already reads off `remoteTrack` (`lat`/`lon`, `speed`, `t`) — the wire
+    /// carries nothing else, so altitude, course and accuracy land on
+    /// `TrackPoint`'s own "unknown" defaults (0, -1, 0) rather than a second,
+    /// slightly different guess at the same three fields.
+    private static func trackPoints(from remote: [SocialTrackPoint]) -> [TrackPoint] {
+        remote.map { TrackPoint(latitude: $0.lat, longitude: $0.lon, speed: $0.speed, timestamp: $0.t) }
     }
 
     /// Fix 3: whether `myAccountId` is an ACCEPTED companion on a trip it
