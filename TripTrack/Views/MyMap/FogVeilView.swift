@@ -113,6 +113,10 @@ final class FogVeilView: UIView {
         let sizePoints: CGSize
         let scale: CGFloat
         let container = CALayer()
+        /// Жилка и выбранный маршрут — вектором поверх полос этого растра
+        /// (`FogVeilVein`). В самом растре их нет: тонкая линия в полтора
+        /// пикселя на точку идёт лесенкой.
+        let vein = VeinLayer()
         var bands: [(rect: MKMapRect, drawn: MKMapRect, image: CGImage)] = []
         var bytes = 0
         var expected: Int
@@ -133,6 +137,7 @@ final class FogVeilView: UIView {
                 "position": NSNull(), "bounds": NSNull(),
                 "transform": NSNull(), "sublayers": NSNull(),
             ]
+            container.addSublayer(vein)
         }
 
         var isComplete: Bool { bands.count >= expected }
@@ -868,6 +873,22 @@ final class FogVeilView: UIView {
         let whole = bands.count == 1
         let visited = visitedRegions
 
+        // Жилка и выбранный маршрут — своей задачей и своим слоем: они не
+        // зависят ни от полос, ни от их порядка, а растру достаётся только
+        // туман.
+        let veinRect = rect
+        queue.async { [weak self] in
+            guard let self, self.isLive(token) else { return }
+            let lod = FogVeilRenderer.lod(
+                for: MKZoomScale(sizePoints.width / CGFloat(veinRect.width)))
+            let strokes = FogVeilVein.strokes(
+                rect: veinRect, sizePoints: sizePoints,
+                chunks: indexRef.ready(for: lod), selected: route)
+            Task { @MainActor [weak self] in
+                self?.installVein(strokes, token: token)
+            }
+        }
+
         for band in bands {
             if let ready = reusable?.band(for: band, scale: scale, sizePoints: sizePoints) {
                 install(image: ready.image, band: band, drawn: ready.drawn,
@@ -880,7 +901,7 @@ final class FogVeilView: UIView {
                 let made = FogVeilBitmap.render(
                     whole: rect, band: band, sizePoints: sizePoints, scale: scale,
                     grid: grid, index: indexRef, selected: route, hints: circles,
-                    visited: visited)
+                    visited: visited, vein: false)
                 // Меряем только ЦЕЛЫЙ кадр: по трети растра о цене полного
                 // судить нельзя, а первый кадр вуали всегда целый.
                 if whole { Self.recordFullFrameCost(CACurrentMediaTime() - started) }
@@ -892,6 +913,25 @@ final class FogVeilView: UIView {
             }
         }
     }
+
+    /// Кладёт жилку на растр. Экранный масштаб, а не растровый: в этом весь
+    /// смысл выноса — линия рисуется вектором и растеризуется в три пикселя
+    /// на точку, пока туман под ней остаётся в полтора.
+    private func installVein(_ strokes: [FogVeilVein.Stroke], token: Int) {
+        guard token == generation, let raster = rasters.last else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        raster.vein.apply(strokes,
+                          bounds: CGRect(origin: .zero, size: raster.sizePoints),
+                          scale: Self.veinScale)
+        CATransaction.commit()
+    }
+
+    /// В скольких пикселях на точку растеризуется жилка. Экран, а не растр.
+    static let veinScale: CGFloat = UIScreen.main.scale
+
+    /// Сколько проходов пера лежит на верхнем растре — для теста.
+    var veinStrokeCount: Int { rasters.last?.vein.strokeCount ?? 0 }
 
     private func isLive(_ token: Int) -> Bool {
         genLock.lock(); defer { genLock.unlock() }
@@ -1083,11 +1123,12 @@ enum FogVeilBitmap {
         rect: MKMapRect, sizePoints: CGSize, scale: CGFloat,
         index: MapPathIndex, selected: [MKMapPoint],
         hints: [FogVeilPainter.EngravedHint] = [],
-        visited: Set<String> = []
+        visited: Set<String> = [],
+        vein: Bool = true
     ) -> Band? {
         render(whole: rect, band: rect, sizePoints: sizePoints, scale: scale,
                grid: grid(sizePoints: sizePoints), index: index, selected: selected,
-               hints: hints, visited: visited)
+               hints: hints, visited: visited, vein: vein)
     }
 
     /// Одна полоса растра. `whole` задаёт систему координат и сетку тайлов,
@@ -1096,7 +1137,14 @@ enum FogVeilBitmap {
         whole: MKMapRect, band: MKMapRect, sizePoints: CGSize, scale: CGFloat,
         grid: Grid, index: MapPathIndex, selected: [MKMapPoint],
         hints: [FogVeilPainter.EngravedHint] = [],
-        visited: Set<String> = []
+        visited: Set<String> = [],
+        /// Рисовать ли жилку и выбранный маршрут ПРЯМО В РАСТР.
+        ///
+        /// `true` — постер и тесты: одна картинка, слоёв ей не отдать.
+        /// `false` — экранная вуаль: там линия живёт вектором (`FogVeilVein`)
+        /// и растеризуется в экранном масштабе, а не в полутора пикселях на
+        /// точку, из которых и складывалась лесенка.
+        vein: Bool = true
     ) -> Band? {
         guard whole.width > 0, whole.height > 0, band.width > 0, band.height > 0,
               sizePoints.width > 0, sizePoints.height > 0 else { return nil }
@@ -1209,6 +1257,16 @@ enum FogVeilBitmap {
                 clouds: clouds)
             context.endTransparencyLayer()
         }
+        // Сглаживание ставится ЗАНОВО, и это не перестраховка.
+        //
+        // `beginTransparencyLayer` запоминает графическое состояние, а
+        // `endTransparencyLayer` его возвращает — то есть вместе с ним
+        // возвращается и выключенное сглаживание, которым заливаются тайлы.
+        // Всё, что рисуется после, оказывалось от этого ступенчатым: и кольца
+        // подсказок, и жилка. У плиточного отката этой беды не было вовсе —
+        // там контекст приходит от MapKit со сглаживанием по умолчанию, и
+        // потеря места в дереве меняла КАРТИНКУ, а не только место отрисовки.
+        context.setShouldAntialias(true)
 
         // Круги подсказок — ПОСЛЕ коридоров и вне слоя прозрачности: они
         // рисуются нормальным режимом и стирать им нечего. Отбираются по
@@ -1227,11 +1285,14 @@ enum FogVeilBitmap {
 
         // Жилка сети — тем же индексом и теми же правилами, что у
         // `RouteVeinRenderer`: источник один, разъехаться им нельзя.
-        if let chunks {
-            drawVein(context: context, rect: band, chunks: chunks, zoomScale: zoomScale, lod: lod)
-        }
-        if selected.count > 1 {
-            drawSelected(context: context, points: selected, zoomScale: zoomScale)
+        if vein {
+            if let chunks {
+                drawVein(context: context, rect: band, chunks: chunks,
+                         zoomScale: zoomScale, lod: lod)
+            }
+            if selected.count > 1 {
+                drawSelected(context: context, points: selected, zoomScale: zoomScale)
+            }
         }
 
         guard let image = context.makeImage() else { return nil }
