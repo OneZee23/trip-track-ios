@@ -238,8 +238,17 @@ targets:
       # `TripTrackTests` выше, отдельной строки ей не нужно.
       - path: TripTrack/Resources/Secrets.json
         buildPhase: resources
+      # Конфигурация StoreKit — в ресурсы ТЕСТОВОГО бандла, не приложения:
+      # `SKTestSession(contentsOf:)` читает её файлом, а таргет `TripTrack`
+      # по-прежнему её не видит (иначе она уехала бы в релизную сборку, см.
+      # `fileGroups` выше).
+      - path: Config/TripTrack.storekit
+        buildPhase: resources
     dependencies:
       - target: TripTrack
+      # StoreKit Testing: `SKTestSession` живёт в отдельном фреймворке, который
+      # есть только у тестов — в приложение он не линкуется никогда.
+      - sdk: StoreKitTest.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.onezee.TripTrackTests
@@ -281,6 +290,7 @@ schemes:
       storeKitConfiguration: Config/TripTrack.storekit
     test:
       config: Debug
+      storeKitConfiguration: Config/TripTrack.storekit
       targets:
         - TripTrackTests
         - TripTrackUITests

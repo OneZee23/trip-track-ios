@@ -1,53 +1,55 @@
-#if DEBUG
 import Foundation
 import StoreKit
 import OSLog
 
 private let tipLog = Logger(subsystem: "com.triptrack", category: "tipjar")
 
-/// The donation tract probe — NOT a shipping feature.
+/// Чаевые: три расходуемые покупки, которые НЕ открывают ничего.
 ///
-/// The question this exists to answer is not «can the user pay», it is
-/// «where does the money land and in what shape». So every step logs the
-/// fields you would otherwise have to guess at: the storefront the device is
-/// actually on, the currency the price came back in, and — the one that
-/// matters most — `Transaction.environment`, because a green purchase in
-/// `.xcode` proves only that this file compiles.
+/// Файл родился пробником денежного тракта (0.7.0) и с 0.8.0 стал боевым —
+/// логи и оговорки пробника остались намеренно. Вопрос, ради которого они
+/// писались, никуда не делся: зелёная покупка в `.xcode` доказывает, что
+/// компилируется код, и ничего больше.
 ///
-/// Three environments, and they answer different questions:
+/// Три окружения, и отвечают они на разное:
 ///
-///   * `.xcode`     — the local `Config/TripTrack.storekit` file. Never
-///                    touches Apple's servers, the receipt is signed by a
-///                    local test certificate, and any server-side validation
-///                    rejects it. Proves the CODE works. Needs no App Store
-///                    Connect record, no agreement, no bank account.
-///   * `.sandbox`   — a real product record in App Store Connect bought with
-///                    a sandbox Apple ID. Proves the PRODUCT exists and the
-///                    account plumbing is real. Still moves no money and
-///                    appears in no financial report.
-///   * `.production`— the only one where money exists.
+///   * `.xcode`     — локальный `Config/TripTrack.storekit`. На серверы Apple
+///                    не ходит, чек подписан локальным сертификатом, и любая
+///                    серверная проверка его отвергнет. Доказывает, что
+///                    работает КОД.
+///   * `.sandbox`   — настоящая запись в App Store Connect, купленная
+///                    sandbox-аккаунтом. Доказывает, что ПРОДУКТ существует.
+///                    Денег всё равно не двигает.
+///   * `.production`— единственное, где деньги есть.
 ///
-/// The row that reaches this service is compiled out of Release builds (see
-/// `ProfileSettingsSheet.devGroup`), so nothing here can reach a user.
+/// **Расходуемые, а не единоразовые.** Чаевые должны повторяться, и правило
+/// 3.1.1 обязывает КАЖДУЮ единоразовую покупку нести рабочее «Восстановить»,
+/// для которого у чаевых нет смысла. Обещать за них нечего — и текст листа
+/// (`TipJarSheet`) не обещает: одно спасибо.
 @MainActor
 final class TipJarService: ObservableObject {
     static let shared = TipJarService()
 
-    /// Deliberately the id we would actually ship, not a `…probe` throwaway:
-    /// a product identifier in App Store Connect is permanent — once created
-    /// it can never be reused, even after the product is deleted. Burning a
-    /// good id on a test is a mistake you cannot undo.
+    /// Идентификатор в App Store Connect ПОСТОЯНЕН: однажды заведённый, он не
+    /// переиспользуется никогда, даже после удаления продукта. Поэтому ещё
+    /// пробник 0.7.0 брал боевой id, а не `…probe`.
     static let tipID = "com.onezee.TripTrack.tip.small"
+    static let tipMediumID = "com.onezee.TripTrack.tip.medium"
+    static let tipLargeID = "com.onezee.TripTrack.tip.large"
+    /// Порядок значим — он же порядок кнопок в листе.
+    static let tipIDs = [tipID, tipMediumID, tipLargeID]
 
-    /// Consumable, not non-consumable. A tip should be repeatable, and
-    /// guideline 3.1.1 obliges every non-consumable to carry a working
-    /// «Restore Purchases» control — which a tip jar has no meaning for.
-    @Published private(set) var product: Product?
+    @Published private(set) var products: [Product] = []
     @Published private(set) var phase: Phase = .idle
-    /// Human-readable dump of the last transaction — this is the actual
-    /// output of the probe, meant to be read on screen and screenshotted.
-    @Published private(set) var report: String?
     @Published private(set) var storefront: String?
+    #if DEBUG
+    /// Человекочитаемый разбор последней транзакции — вывод пробника, который
+    /// читают глазами на экране `TipJarDebugView`.
+    @Published private(set) var report: String?
+    #endif
+
+    /// Самая мелкая — её покупает пробник и с неё начинается лист.
+    var product: Product? { products.first { $0.id == Self.tipID } }
 
     enum Phase: Equatable {
         case idle
@@ -56,15 +58,15 @@ final class TipJarService: ObservableObject {
         case purchasing
         case succeeded
         case cancelled
-        /// Ask To Buy / SCA — the purchase is neither done nor failed, and
-        /// the resolution arrives later through `Transaction.updates`.
+        /// Ask To Buy / SCA — покупка ни прошла, ни упала, и вердикт приедет
+        /// позже через `Transaction.updates`.
         case deferred
         case failed(String)
     }
 
-    /// Started once, never cancelled: the singleton outlives every screen.
-    /// Without this listener an unfinished consumable is re-delivered on
-    /// every launch, which reads exactly like a StoreKit bug and is not one.
+    /// Заведён один раз и не отменяется: синглтон переживает любой экран. Без
+    /// слушателя незакрытая расходуемая покупка переигрывается на каждом
+    /// запуске — это выглядит ровно как баг StoreKit и им не является.
     private var updatesTask: Task<Void, Never>?
 
     private init() {
@@ -79,28 +81,33 @@ final class TipJarService: ObservableObject {
 
     func load() async {
         phase = .loading
+        #if DEBUG
         report = nil
+        #endif
         storefront = await Self.describeStorefront()
 
         do {
-            let found = try await Product.products(for: [Self.tipID])
-            guard let p = found.first else {
-                // An empty array IS a result, not an error: the id did not
-                // resolve. In `.xcode` that means the scheme is not pointing
-                // at the .storekit file; in sandbox it means the product is
-                // missing, not yet propagated, or in a non-sellable state.
-                phase = .failed("Продукт не найден. id=\(Self.tipID)")
-                tipLog.error("load: no product for id=\(Self.tipID, privacy: .public)")
+            let found = try await Product.products(for: Self.tipIDs)
+            let ordered = Self.tipIDs.compactMap { id in found.first { $0.id == id } }
+            guard !ordered.isEmpty else {
+                // Пустой массив — это РЕЗУЛЬТАТ, а не ошибка: ни один id не
+                // разрешился. В `.xcode` это значит, что схема не смотрит на
+                // `.storekit`; в песочнице — что продуктов нет, они ещё не
+                // разъехались или не в продажном состоянии.
+                phase = .failed("Продукты не найдены")
+                tipLog.error("load: no products for \(Self.tipIDs.joined(separator: ","), privacy: .public)")
                 return
             }
-            product = p
+            products = ordered
             phase = .ready
-            tipLog.notice("""
-                load ok id=\(p.id, privacy: .public) \
-                displayPrice=\(p.displayPrice, privacy: .public) \
-                currency=\(p.priceFormatStyle.currencyCode, privacy: .public) \
-                storefront=\(self.storefront ?? "—", privacy: .public)
-                """)
+            for p in ordered {
+                tipLog.notice("""
+                    load ok id=\(p.id, privacy: .public) \
+                    displayPrice=\(p.displayPrice, privacy: .public) \
+                    currency=\(p.priceFormatStyle.currencyCode, privacy: .public) \
+                    storefront=\(self.storefront ?? "—", privacy: .public)
+                    """)
+            }
         } catch {
             phase = .failed(error.localizedDescription)
             tipLog.error("load failed: \(error.localizedDescription, privacy: .public)")
@@ -109,34 +116,39 @@ final class TipJarService: ObservableObject {
 
     // MARK: - Buy
 
-    /// Which options a purchase carries. Pure and separated from `buy()` so the
-    /// rule can be tested without StoreKit.
+    /// Какие опции несёт покупка. Чистая и вынесенная из `buy()`, чтобы
+    /// правило проверялось без StoreKit.
     ///
-    /// `appAccountToken` is written into the signed transaction and is
-    /// readable later through the App Store Server API, so it is the one
-    /// chance to tie a payment to an account in our backend — and it cannot be
-    /// added retroactively. Purchases made without it stay anonymous forever.
+    /// `appAccountToken` записывается в подписанную транзакцию и читается
+    /// потом через App Store Server API — это единственный шанс связать платёж
+    /// с аккаунтом в нашем бэкенде, и задним числом он не добавляется. Покупки
+    /// без него остаются анонимными навсегда.
     ///
-    /// It is stamped ONLY when signed in. The tempting fallback,
-    /// `SettingsManager.localUserId`, is the id of a CoreData row: it is minted
-    /// afresh whenever the store is lost, which we watched happen twice to one
-    /// real user inside two weeks. Writing an identifier that resets into a
-    /// field that never changes would produce receipts pointing at identities
-    /// that no longer exist. `TokenStore.accountId` lives in the Keychain and
-    /// survives both a store wipe and a reinstall.
+    /// Ставится ТОЛЬКО когда человек вошёл. Соблазнительный запасной вариант,
+    /// `SettingsManager.localUserId`, — это id строки CoreData: он рождается
+    /// заново при потере стора, что на живом пользователе случилось дважды за
+    /// две недели. Писать сбрасывающийся идентификатор в поле, которое не
+    /// меняется никогда, значит получить чеки, указывающие на личности,
+    /// которых больше нет. `TokenStore.accountId` живёт в Keychain и
+    /// переживает и стирание базы, и переустановку.
     ///
-    /// Signed out therefore means an anonymous purchase, which is honest.
-    /// Demanding a sign-in before accepting a tip would not be.
+    /// Не вошёл — покупка анонимна, и это честно. Требовать входа прежде, чем
+    /// принять чаевые, честно не было бы.
     nonisolated static func purchaseOptions(accountId: UUID?) -> Set<Product.PurchaseOption> {
         guard let accountId else { return [] }
         return [.appAccountToken(accountId)]
     }
 
+    /// Пробник: покупает самую мелкую. Боевой лист зовёт `buy(_:)`.
     func buy() async {
         guard let product else {
             phase = .failed("Нечего покупать — сначала загрузите продукт")
             return
         }
+        await buy(product)
+    }
+
+    func buy(_ product: Product) async {
         phase = .purchasing
         let options = Self.purchaseOptions(accountId: TokenStore.shared.accountId)
         tipLog.notice("""
@@ -154,9 +166,9 @@ final class TipJarService: ObservableObject {
                 tipLog.notice("purchase cancelled by user")
 
             case .pending:
-                // Ask To Buy (child account) or a bank-side confirmation.
-                // Nothing is owed yet and nothing failed — the verdict will
-                // arrive on `Transaction.updates`, possibly days later.
+                // Ask To Buy (детский аккаунт) или подтверждение банка. Ничего
+                // не должны и ничего не упало — вердикт приедет позже, иногда
+                // через дни.
                 phase = .deferred
                 tipLog.notice("purchase pending (ask-to-buy / SCA)")
 
@@ -175,7 +187,12 @@ final class TipJarService: ObservableObject {
     private func apply(_ result: VerificationResult<Transaction>, source: String) async {
         switch result {
         case .verified(let transaction):
+            // Подписка едет тем же потоком, и закрывать её здесь нельзя: у неё
+            // свой хозяин (`PlusStore`), которому нужна её подпись.
+            guard Self.tipIDs.contains(transaction.productID) else { return }
+            #if DEBUG
             report = Self.describe(transaction, verified: true)
+            #endif
             phase = .succeeded
             tipLog.notice("""
                 tx verified source=\(source, privacy: .public) \
@@ -183,15 +200,18 @@ final class TipJarService: ObservableObject {
                 env=\(transaction.environment.rawValue, privacy: .public) \
                 accountToken=\(transaction.appAccountToken?.uuidString ?? "—", privacy: .public)
                 """)
-            // A consumable that is never finished is redelivered forever.
+            // Незакрытая расходуемая покупка передаётся заново вечно.
             await transaction.finish()
 
         case .unverified(let transaction, let error):
-            // Deliberately NOT finished. Finishing an unverified transaction
-            // silently is how a real failure becomes invisible; leaving it
-            // open means it comes back and stays visible.
+            guard Self.tipIDs.contains(transaction.productID) else { return }
+            // Нарочно НЕ закрывается. Тихо закрыть непроверенную транзакцию —
+            // это способ сделать настоящий сбой невидимым; оставленная
+            // открытой, она вернётся и останется видна.
+            #if DEBUG
             report = Self.describe(transaction, verified: false)
                 + "\n\nОШИБКА ПРОВЕРКИ: \(error.localizedDescription)"
+            #endif
             phase = .failed("Подпись не прошла проверку")
             tipLog.error("""
                 tx UNVERIFIED source=\(source, privacy: .public) \
@@ -203,6 +223,7 @@ final class TipJarService: ObservableObject {
 
     // MARK: - Reporting
 
+    #if DEBUG
     private static func describe(_ t: Transaction, verified: Bool) -> String {
         let env: String
         switch t.environment {
@@ -224,10 +245,10 @@ final class TipJarService: ObservableObject {
         appAccountToken:  \(t.appAccountToken?.uuidString ?? "— (покупка анонимна: не вошёл)")
         """
     }
+    #endif
 
     private static func describeStorefront() async -> String {
         guard let sf = await Storefront.current else { return "неизвестен" }
         return "\(sf.countryCode) (id \(sf.id))"
     }
 }
-#endif

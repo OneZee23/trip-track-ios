@@ -143,6 +143,12 @@ enum AppBootstrap {
         AutoTripService.shared.handleBackgroundLaunch()
         SyncQueue.shared.configure(transport: APISyncTransport.shared)
         SyncCoordinator.shared.start()
+        // «Плюс» (0.8.0). Стартует ЗДЕСЬ, а не из `.task` первого экрана:
+        // слушатель `Transaction.updates` обязан жить всё время работы
+        // приложения, иначе покупка, подтверждённая после Ask To Buy, и
+        // продление приезжают в никуда, а транзакция переигрывается на
+        // каждом запуске.
+        PlusStore.shared.start()
         // Diagnostic — verifies our ISO date parser produces UTC-correct dates.
         ISODate.runSelfTest()
     }

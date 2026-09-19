@@ -58,6 +58,11 @@ enum APIEndpoint {
     /// заявок у человека бывают сотни, и у сервера нет удаления по одной.
     static let secretsForgetAll = "/secrets/forget-all"
 
+    /// «Плюс» (0.8.0). `attach` — привязка подписанной транзакции к аккаунту,
+    /// `status` — что сервер о ней думает. Оба под JWT: подписка личная.
+    static let plusAttach = "/plus/attach"
+    static let plusStatus = "/plus/status"
+
     static let syncPull = "/sync/pull"
     static let syncPush = "/sync/push"
     static let syncManifest = "/sync/manifest"
