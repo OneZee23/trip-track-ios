@@ -57,6 +57,9 @@ struct MyMapView: View {
                 // Логотип Apple и «Legal» встают над свёрнутым листом: под
                 // непрозрачным туманом он накрыл бы их насовсем.
                 bottomOverlayHeight: MyMapSheet.collapsedHeight,
+                // И по ЛЕВОМУ краю той же карточки: две левые границы в одном
+                // углу экрана ничего друг про друга не объясняют.
+                bottomOverlayMaxWidth: MyMapSheet.summaryMaxWidth,
                 onZoomLevelChange: { zoomLevel = $0 },
                 onSelectTrip: { vm.select(.trip($0)) },
                 onSelectRoad: { vm.selectRoad($0) },

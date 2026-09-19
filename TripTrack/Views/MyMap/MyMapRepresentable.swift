@@ -62,6 +62,18 @@ final class MapHostController: UIViewController {
         didSet { applyBottomInset() }
     }
 
+    /// Ширина, на которую капится свёрнутая карточка листа. Ноль — карта без
+    /// листа (чужая карта, карта машины): выравнивать подпись Apple не с чем,
+    /// и левый инсет остаётся нулевым.
+    var bottomOverlayMaxWidth: CGFloat = 0 {
+        didSet { applyAttributionLeading() }
+    }
+
+    /// Собственное поле MapKit слева от логотипа. Меряется ОДИН раз, при
+    /// нулевом левом инсете: числа в API нет, а выравнивать подпись по левому
+    /// краю листа без него нечем — инсет сдвинул бы её на своё поле плюс это.
+    private var attributionPadding: CGFloat?
+
     override func viewDidLoad() {
         super.viewDidLoad()
         map.frame = view.bounds
@@ -81,12 +93,16 @@ final class MapHostController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         applyPalette()
+        applyAttributionLeading()
         updateAttributionCarve()
     }
 
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
         super.traitCollectionDidChange(previous)
         applyPalette()
+        // Палитра решает, вырезать ли мглу под подписью, — значит смена темы
+        // это и повод пересмотреть вырез, а не только перерисовать туман.
+        updateAttributionCarve()
     }
 
     /// Палитра мглы идёт за темой ЭКРАНА, а карта под ней дневная в обоих
@@ -115,6 +131,14 @@ final class MapHostController: UIViewController {
     private func updateAttributionCarve() {
         guard veilSeat.isAttached else { return }
         let veil = veilSeat.veil
+        // Вырез — только под НОЧНОЙ мглой. Под бледной дымкой светлой темы
+        // тёмно-серая подпись Apple читается и так, а вырезанное светлое в
+        // светлом читается ровно тем, чем и оказалось на устройстве: бледной
+        // коробкой, наехавшей на верхний край листа.
+        guard AttributionCarve.carves(palette: FogVeilPainter.palette) else {
+            veil.setAttributionCarve(nil)
+            return
+        }
         if let rect = AttributionCarve.carveRect(in: map, space: veil) {
             carvedOnce = true
             veil.setAttributionCarve(rect)
@@ -152,7 +176,8 @@ final class MapHostController: UIViewController {
     private func applyBottomInset() {
         let extra = MapBottomInset.additional(
             overlayHeight: bottomOverlayHeight,
-            safeAreaBottom: UIApplication.tt_safeAreaInsets?.bottom ?? 0
+            safeAreaBottom: UIApplication.tt_safeAreaInsets?.bottom ?? 0,
+            gap: bottomOverlayMaxWidth > 0 ? MapBottomInset.attributionGap : 0
         )
         guard abs(additionalSafeAreaInsets.bottom - extra) > 0.5 else { return }
         additionalSafeAreaInsets.bottom = extra
@@ -160,6 +185,38 @@ final class MapHostController: UIViewController {
         // перестаёт лежать вокруг того, что человек видит.
         veilSeat.invalidate()
         // И поднимает саму атрибуцию — вырез обязан уехать с ней.
+        updateAttributionCarve()
+    }
+
+    /// Ставит подпись Apple по ЛЕВОМУ КРАЮ ЛИСТА.
+    ///
+    /// «Эппл-мапс стоит неровно с другими элементами» (владелец на устройстве,
+    /// 18 сентября): логотип живёт на своём поле в десяток точек от края
+    /// экрана, а свёрнутая карточка листа капится по ширине и стоит на
+    /// тридцати пяти. Две левые границы в одном углу экрана, и ни одна не
+    /// объясняет другую.
+    ///
+    /// Двигают подпись только `additionalSafeAreaInsets` (с iOS 11
+    /// `layoutMargins` на неё не действует), и своё поле MapKit добавляет
+    /// СВЕРХ инсета — поэтому его сначала меряют, а потом вычитают.
+    private func applyAttributionLeading() {
+        guard bottomOverlayMaxWidth > 0, view.bounds.width > 1 else {
+            guard additionalSafeAreaInsets.left != 0 else { return }
+            additionalSafeAreaInsets.left = 0
+            return
+        }
+        if attributionPadding == nil, additionalSafeAreaInsets.left == 0,
+           let rect = AttributionCarve.carveRect(in: map, space: view) {
+            attributionPadding = max(0, rect.minX + AttributionCarve.padding
+                                     - view.safeAreaInsets.left)
+        }
+        guard let padding = attributionPadding else { return }
+        let wanted = MapBottomInset.leftInset(
+            width: view.bounds.width, cardMaxWidth: bottomOverlayMaxWidth,
+            mapPadding: padding)
+        guard abs(additionalSafeAreaInsets.left - wanted) > 0.5 else { return }
+        additionalSafeAreaInsets.left = wanted
+        veilSeat.invalidate()
         updateAttributionCarve()
     }
 }
@@ -184,10 +241,34 @@ enum MapBottomInset {
         max(0, windowHeight - panelTop)
     }
 
+    /// Зазор между подписью Apple и верхним краем листа.
+    ///
+    /// Двенадцать — то же поле, которым в приложении отделяют карточку от
+    /// карточки. До правки подпись поднимали ровно на высоту листа, и она
+    /// садилась на его край: «Эппл-мапс стоит неровно с другими элементами».
+    static let attributionGap: CGFloat = 12
+
     /// Добавочный инсет карты: `MKMapView` уже уважает безопасную зону окна,
     /// поэтому доплачивать надо только за то, что панель выше неё.
-    static func additional(overlayHeight: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
-        max(0, overlayHeight - safeAreaBottom)
+    static func additional(
+        overlayHeight: CGFloat, safeAreaBottom: CGFloat, gap: CGFloat = 0
+    ) -> CGFloat {
+        max(0, overlayHeight + gap - safeAreaBottom)
+    }
+
+    /// Левый инсет: подпись Apple встаёт по левому краю свёрнутой карточки.
+    ///
+    /// Карточка капится по ширине (`MyMapSheet.summaryMaxWidth`) и на широком
+    /// экране стоит НЕ на шестнадцати точках поля, а посередине — поэтому
+    /// левый край считается, а не берётся константой. `mapPadding` — своё поле
+    /// MapKit слева от логотипа: оно добавляется сверх инсета, и инсет обязан
+    /// его вычесть.
+    static func leftInset(
+        width: CGFloat, cardMaxWidth: CGFloat, mapPadding: CGFloat, margin: CGFloat = 16
+    ) -> CGFloat {
+        guard width > 0, cardMaxWidth > 0 else { return 0 }
+        let card = min(max(0, width - margin * 2), cardMaxWidth)
+        return max(0, (width - card) / 2 - mapPadding)
     }
 }
 
@@ -220,6 +301,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     var language: LanguageManager.Language
     /// Высота свёрнутого листа: на столько поднимаются логотип и «Legal».
     var bottomOverlayHeight: CGFloat = 0
+    /// Ширина, на которую капится свёрнутая карточка листа: по её левому краю
+    /// встаёт подпись Apple. Ноль — карты без листа, там выравнивать не с чем.
+    var bottomOverlayMaxWidth: CGFloat = 0
 
     var onZoomLevelChange: (MapZoomLevel) -> Void
     var onSelectTrip: (UUID) -> Void
@@ -297,6 +381,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: MapHostController, context: Context) {
         let map = controller.map
         controller.bottomOverlayHeight = bottomOverlayHeight
+        controller.bottomOverlayMaxWidth = bottomOverlayMaxWidth
         let coordinator = context.coordinator
         coordinator.onZoomLevelChange = onZoomLevelChange
         coordinator.onSelectTrip = onSelectTrip

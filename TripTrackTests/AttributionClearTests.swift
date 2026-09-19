@@ -125,6 +125,96 @@ final class AttributionClearTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(ratio, 4.5)
     }
 
+    // MARK: Когда вырезать, а когда нет
+
+    /// Вырез — ТОЛЬКО под ночной мглой.
+    ///
+    /// «Эппл-мапс стоит неровно с другими элементами» (владелец на устройстве,
+    /// 18 сентября): на светлой теме вырез читался бледной коробкой за словами
+    /// «Maps / Legal», наехавшей на верхний край листа. Вырезать светлое из
+    /// светлого нечего — подпись Apple там и так тёмно-серая на бледной дымке.
+    func testCarveOnlyHappensUnderTheNightVeil() {
+        XCTAssertTrue(AttributionCarve.carves(palette: .night))
+        XCTAssertFalse(AttributionCarve.carves(palette: .mist))
+    }
+
+    /// И это не вкус: подпись на бледной дымке читается с запасом.
+    ///
+    /// Худший случай считается честно — самый тёмный конец рампы мглы на самой
+    /// высокой её непрозрачности поверх светлой карты Apple.
+    func testGlyphContrastOnThePaleMistClearsTheBar() {
+        let map = UIColor(red: 0xF2/255, green: 0xF1/255, blue: 0xEC/255, alpha: 1)
+        let mist = FogVeilPainter.Palette.mist
+        let worst = Self.composite(mist.bottom, over: map,
+                                   alpha: CGFloat(mist.opacityRange.upperBound))
+        let glyph = UIColor.label.resolvedColor(
+            with: UITraitCollection(userInterfaceStyle: .light))
+        let ratio = Self.contrast(glyph, worst)
+        print(String(format: "[attribution] контраст на дымке %.1f : 1", ratio))
+        XCTAssertGreaterThanOrEqual(ratio, 4.5)
+    }
+
+    /// Растушёвка шире самой подписи — иначе вырез снова читается коробкой.
+    /// Высота «` Maps`» на iOS 18 — около шестнадцати точек.
+    func testFeatherIsWiderThanTheGlyphItHides() {
+        XCTAssertGreaterThanOrEqual(AttributionCarve.feather, 12)
+    }
+
+    // MARK: Где стоит подпись
+
+    /// Левый край подписи Apple совпадает с левым краем свёрнутой карточки.
+    ///
+    /// Карточка капится по ширине и на широком экране стоит НЕ на шестнадцати
+    /// точках поля, а посередине; своё поле MapKit добавляет сверх инсета,
+    /// поэтому инсет его вычитает.
+    func testAttributionLeftEdgeLinesUpWithTheSheet() {
+        let card = MyMapSheet.summaryMaxWidth
+        let padding: CGFloat = 10
+
+        // Широкий экран: карточка упёрлась в потолок ширины.
+        let wide: CGFloat = 440
+        let inset = MapBottomInset.leftInset(
+            width: wide, cardMaxWidth: card, mapPadding: padding)
+        XCTAssertEqual(inset + padding, (wide - card) / 2, accuracy: 0.5)
+
+        // Узкий экран: карточка живёт на своих шестнадцати точках поля.
+        let narrow: CGFloat = 375
+        let tight = MapBottomInset.leftInset(
+            width: narrow, cardMaxWidth: card, mapPadding: padding)
+        XCTAssertEqual(tight + padding, 16, accuracy: 0.5)
+
+        // Карта без листа — инсета нет вовсе.
+        XCTAssertEqual(
+            MapBottomInset.leftInset(width: wide, cardMaxWidth: 0, mapPadding: padding), 0)
+    }
+
+    /// Подпись встаёт на двенадцать точек ВЫШЕ листа, а не на его край.
+    func testBottomInsetLeavesTheGapAboveTheSheet() {
+        let safeArea: CGFloat = 34
+        let sheet = MyMapSheet.collapsedHeight(bottomInset: safeArea)
+        let extra = MapBottomInset.additional(
+            overlayHeight: sheet, safeAreaBottom: safeArea,
+            gap: MapBottomInset.attributionGap)
+        XCTAssertEqual(extra, sheet + MapBottomInset.attributionGap - safeArea, accuracy: 0.01)
+        // Без зазора — как было: контракт карт без листа не менялся.
+        XCTAssertEqual(
+            MapBottomInset.additional(overlayHeight: sheet, safeAreaBottom: safeArea),
+            sheet - safeArea, accuracy: 0.01)
+    }
+
+    /// Смешение полупрозрачной мглы с картой под ней.
+    private static func composite(
+        _ veil: UIColor, over base: UIColor, alpha: CGFloat
+    ) -> UIColor {
+        var vr: CGFloat = 0, vg: CGFloat = 0, vb: CGFloat = 0, va: CGFloat = 0
+        var br: CGFloat = 0, bg: CGFloat = 0, bb: CGFloat = 0, ba: CGFloat = 0
+        veil.getRed(&vr, green: &vg, blue: &vb, alpha: &va)
+        base.getRed(&br, green: &bg, blue: &bb, alpha: &ba)
+        return UIColor(red: vr * alpha + br * (1 - alpha),
+                       green: vg * alpha + bg * (1 - alpha),
+                       blue: vb * alpha + bb * (1 - alpha), alpha: 1)
+    }
+
     private static func luminance(_ colour: UIColor) -> Double {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         colour.getRed(&r, green: &g, blue: &b, alpha: &a)
