@@ -19,6 +19,9 @@ struct GarageView: View {
     @State private var tripCounts: [UUID: Int] = [:]
 
     @ObservedObject private var settings = SettingsManager.shared
+    /// Фон карточки гаснет вместе с подпиской — экран обязан перерисоваться
+    /// в тот же миг, поэтому наблюдение, а не чтение.
+    @ObservedObject private var plus = PlusAccess.shared
 
     @State private var showAddVehicle = false
     @State private var detailVehicleId: UUID?
@@ -321,6 +324,12 @@ struct GarageView: View {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(AppTheme.accentBg)
             }
+            // Фон «Плюса» — ПОВЕРХ персиковой заливки основной машины и под
+            // содержимым: заливка отвечает «на эту пишутся поездки», фон —
+            // «эта машина выглядит так», и первое важнее, поэтому его не
+            // закрашивают целиком (у фонов прозрачность 0.14…0.38).
+            VehicleCardStyleWash(
+                style: VehicleCardStyle.from(vehicle.cardStyle).effective(isPlus: plus.isPlus))
         }
         .surfaceCard(cornerRadius: 16)
         .overlay {

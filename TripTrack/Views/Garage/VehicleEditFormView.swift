@@ -83,6 +83,14 @@ struct VehicleEditFormView: View {
     /// вовсе — см. раздел «Dialogs» в CLAUDE.md.
     @State private var showDashboardPicker = false
 
+    /// Фон карточки машины — косметика «Плюса» (0.8.0). Как и приборка,
+    /// ложится в `@State` и сохраняется вместе с формой: запись прямо из
+    /// пикера сохранила бы выбор у человека, закрывшего форму крестиком.
+    @State private var cardStyle: VehicleCardStyle
+    @State private var showCardStylePicker = false
+    @State private var showPaywall = false
+    @ObservedObject private var plus = PlusAccess.shared
+
     /// Snapshot of the edited vehicle taken at init — used for
     /// changed-only saves so SyncEnqueuer isn't churned needlessly.
     private let editedVehicle: Vehicle?
@@ -105,6 +113,7 @@ struct VehicleEditFormView: View {
             let shownDistance = vehicle.dashboardUnit(app: appDistance)
             let shownUnit = ConsumptionUnit.forDashboard(shownDistance)
             _dashboardUnits = State(initialValue: vehicle.dashboardUnits)
+            _cardStyle = State(initialValue: VehicleCardStyle.from(vehicle.cardStyle))
             _name = State(initialValue: vehicle.name)
             _selectedType = State(initialValue: vehicle.type)
             _plate = State(initialValue: vehicle.plate)
@@ -143,6 +152,7 @@ struct VehicleEditFormView: View {
             // У новой машины приборки ещё нет — «как в приложении», ровно как
             // у всех заведённых до 0.6.7.
             _dashboardUnits = State(initialValue: defaults.dashboardUnits)
+            _cardStyle = State(initialValue: .none)
             let shownUnit = ConsumptionUnit.forDashboard(
                 defaults.dashboardUnit(app: appDistance))
             _name = State(initialValue: "")
@@ -244,6 +254,74 @@ struct VehicleEditFormView: View {
                 .environmentObject(lang)
                 .preferredColorScheme(scheme)
         }
+        .sheet(isPresented: $showCardStylePicker) {
+            cardStylePicker(lang.language)
+                .environmentObject(lang)
+                .preferredColorScheme(scheme)
+        }
+        .sheet(isPresented: $showPaywall) {
+            PlusPaywallSheet()
+                .environmentObject(lang)
+                .preferredColorScheme(scheme)
+        }
+    }
+
+    // MARK: - Фон карточки (0.8.0)
+
+    private var cardStyleAccess: PlusAccessLevel {
+        PlusGate.allows(.vehicleCardStyle,
+                        isPlus: plus.isPlus, storefrontHidesPlus: plus.storefrontHidesPlus)
+    }
+
+    /// Заперто — строка ведёт ПРЯМО в пейвол, а не в пикер с замками на
+    /// восьми строках из девяти: лист поверх листа здесь не открыть (двух
+    /// системных презентаций подряд UIKit не даёт), а выбор, который нельзя
+    /// выбрать, всё равно ничего не отвечает.
+    private func cardStyleRow(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
+        let locked = cardStyleAccess == .locked
+        let shown = cardStyle.effective(isPlus: plus.isPlus)
+        return Button {
+            Haptics.tap()
+            if locked { showPaywall = true } else { showCardStylePicker = true }
+        } label: {
+            HStack(spacing: 10) {
+                Text(AppStrings.settingsVehicleCardStyle(l))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(c.text)
+                Spacer(minLength: 8)
+                if locked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(c.textTertiary)
+                }
+                Text(shown == .none ? AppStrings.cosmeticDefaultOption(l) : shown.displayName)
+                    .font(.system(size: 13))
+                    .foregroundStyle(c.textSecondary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(c.textTertiary)
+            }
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("vehicle_card_style_row")
+    }
+
+    private func cardStylePicker(_ l: LanguageManager.Language) -> some View {
+        SettingsOptionPicker(
+            title: AppStrings.settingsVehicleCardStyle(l),
+            options: VehicleCardStyle.allCases,
+            selection: cardStyle,
+            footnote: AppStrings.vehicleCardStylePickerFootnote(l),
+            badge: { _ in "car.fill" },
+            badgeIsSymbol: true,
+            badgeTint: { $0.colors.first },
+            label: { $0 == .none ? AppStrings.cosmeticDefaultOption(l) : $0.displayName },
+            onSelect: { cardStyle = $0 },
+            accessibilityPrefix: "vehicle_card_style"
+        )
     }
 
     // MARK: - Nav Row
@@ -627,6 +705,13 @@ struct VehicleEditFormView: View {
 
             GarageSectionLabel(text: AppStrings.avatarColorSection(l), color: c.textSecondary)
             colorRow(c: c)
+
+            // Фон карточки — здесь, а не отдельной картой: это про то, как
+            // машина ВЫГЛЯДИТ, ровно как силуэт и цвет над ней. В витрине
+            // без платного строки нет вовсе (`PlusGate` → `.hidden`).
+            if cardStyleAccess != .hidden {
+                cardStyleRow(c: c, l: l)
+            }
         }
         .padding(14)
         .surfaceCard(cornerRadius: 16)
@@ -1282,6 +1367,9 @@ struct VehicleEditFormView: View {
             if dashboardUnits != Vehicle().dashboardUnits {
                 settings.setDashboardUnits(vehicleId: newId, dashboardUnits)
             }
+            if cardStyle != .none {
+                settings.setCardStyle(vehicleId: newId, cardStyle)
+            }
             settings.selectVehicle(id: newId)
 
         case .edit(let id):
@@ -1292,6 +1380,9 @@ struct VehicleEditFormView: View {
             // одной единицей, при ещё старом значении поля.
             if dashboardUnits != original.dashboardUnits {
                 settings.setDashboardUnits(vehicleId: id, dashboardUnits)
+            }
+            if cardStyle != VehicleCardStyle.from(original.cardStyle) {
+                settings.setCardStyle(vehicleId: id, cardStyle)
             }
             // Реальный пробег живёт отдельной записью: он не часть «личности»
             // машины и не должен тащить за собой её sync-операцию, когда

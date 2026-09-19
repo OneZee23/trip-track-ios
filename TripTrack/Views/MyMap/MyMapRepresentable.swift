@@ -318,6 +318,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     @Binding var cameraCommand: MapCameraCommand?
 
     func makeUIViewController(context: Context) -> MapHostController {
+        // То же зеркало, что у `RouteMapView.makeUIView`: жилка «Атласа»
+        // считается на фоновой очереди и спросить `PlusAccess` не может.
+        RouteLineStyle.rememberPlus(PlusAccess.shared.isPlus)
         let controller = MapHostController()
         let map = controller.map
         let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)

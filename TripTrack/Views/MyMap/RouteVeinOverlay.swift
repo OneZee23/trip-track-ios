@@ -69,7 +69,17 @@ final class RouteVeinRenderer: MKOverlayRenderer {
 
     /// Тёплый янтарь из эталонных кадров владельца. Не акцент бренда: жилка —
     /// это свет внутри тумана, а не элемент интерфейса.
-    static let veinColor = UIColor(red: 0xf0/255, green: 0xa0/255, blue: 0x70/255, alpha: 1)
+    ///
+    /// С 0.8.0 его перебивает выбранный цвет линии маршрута
+    /// (`RouteLineStyle`) — тот же цвет, которым рисуется маршрут на экране
+    /// поездки: две карты в одном приложении обязаны рисовать пройденное
+    /// одинаково. Вычисляемое, а не `let`, потому что выбор меняется без
+    /// пересборки рендерера, и спрашивается оно с ПОТОКОВ ОТРИСОВКИ MapKit —
+    /// поэтому за ответом ходят в `UserDefaults`, а не в главноактёрный
+    /// `PlusAccess` (см. `RouteLineStyle.plusMirrorKey`).
+    static var veinColor: UIColor { RouteLineStyle.currentUIColor ?? defaultVeinColor }
+
+    static let defaultVeinColor = UIColor(red: 0xf0/255, green: 0xa0/255, blue: 0x70/255, alpha: 1)
     /// Выбранная поездка — тот же цвет, светлее и плотнее.
     static let selectedColor = UIColor(red: 0xf6/255, green: 0xb9/255, blue: 0x8a/255, alpha: 1)
     /// Тёмная обводка: без неё выбранная линия сливается с прочищенным

@@ -24,6 +24,10 @@ struct SettingsOptionPicker<Option: Hashable>: View {
     /// Symbol name when `badgeIsSymbol` is set.
     let badge: (Option) -> String
     var badgeIsSymbol: Bool = false
+    /// Цвет кружка вместо жетона — для выбора, где ответ и есть цвет (линия
+    /// маршрута). `nil` у варианта означает «цвета нет», и тогда рисуется
+    /// обычный жетон: у «градиента скорости» одного цвета не существует.
+    var badgeTint: ((Option) -> Color?)? = nil
     let label: (Option) -> String
     let onSelect: (Option) -> Void
     /// Stem for the sheet's accessibility identifiers («units_row_0»,
@@ -188,7 +192,12 @@ struct SettingsOptionPicker<Option: Hashable>: View {
             RoundedRectangle(cornerRadius: 16)
                 .fill(isSelected ? AppTheme.accentDim : c.cardAlt)
 
-            if badgeIsSymbol {
+            if let tint = badgeTint?(option) {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 18, height: 18)
+                    .overlay(Circle().strokeBorder(.black.opacity(0.12), lineWidth: 1))
+            } else if badgeIsSymbol {
                 Image(systemName: badge(option))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(isSelected ? AppTheme.accent : c.text)

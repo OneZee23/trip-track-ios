@@ -174,6 +174,10 @@ struct PublicGarageView: View {
         // Обычный отклик, а не «держи и что-то будет»: долгого меню на чужой
         // машине нет, и обещать его затяжным сжатием — врать пальцу.
         .buttonStyle(PressableCardStyle())
+        // Фон карточки — косметика «Плюса» владельца. Сервер присылает её
+        // только у аккаунта с живой подпиской, поэтому здесь ничего не
+        // перепроверяется; незнакомую строку `from` читает как «без фона».
+        .background { VehicleCardStyleWash(style: VehicleCardStyle.from(v.cardStyle)) }
         .surfaceCard(cornerRadius: 16)
     }
 

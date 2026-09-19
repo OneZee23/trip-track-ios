@@ -314,6 +314,11 @@ struct RouteMapView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> MKMapView {
+        // Зеркало «Плюс активен» для рендереров: они спрашивают цвет с
+        // потоков отрисовки MapKit, а `PlusAccess` главноактёрный. Здесь мы
+        // на главном и до первого кадра — единственное место, где карта
+        // может это узнать сама, не открывая настроек.
+        RouteLineStyle.rememberPlus(PlusAccess.shared.isPlus)
         // Карта с хостом строится ОДИН раз за жизнь экрана поездки: герой и
         // полноэкранная раскладка — два представления одной и той же карты,
         // и второй разрез маршрута по скорости здесь не нужен никому.
@@ -1456,7 +1461,11 @@ struct RouteMapView: UIViewRepresentable {
             }
             if let speedLine = overlay as? SpeedPolyline {
                 let renderer = routeRenderer(for: speedLine)
-                renderer.strokeColor = Self.color(forSpeedMS: speedLine.speed)
+                // Выбранный цвет «Плюса» перебивает градиент скорости — и
+                // только он: `nil` у `currentUIColor` это и есть «градиент»,
+                // второго флага рядом нет нарочно.
+                renderer.strokeColor =
+                    RouteLineStyle.currentUIColor ?? Self.color(forSpeedMS: speedLine.speed)
                 return renderer
             }
             if let polyline = overlay as? MKPolyline {

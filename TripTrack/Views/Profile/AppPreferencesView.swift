@@ -29,9 +29,16 @@ struct AppPreferencesView: View {
     /// единицу, а лист поверх листа своего окружения не наследует — строка
     /// показала бы прежнюю единицу до закрытия экрана.
     @ObservedObject private var units = UnitsManager.shared
+    @ObservedObject private var plus = PlusAccess.shared
 
     @State private var showUnitsPicker = false
     @State private var showAvgSpeedPicker = false
+    @State private var showRouteLinePicker = false
+    @State private var showPaywall = false
+    /// Выбор живёт в `UserDefaults`, а не в `SettingsManager`: он локальный и
+    /// не синкается вовсе (спека §2). Зеркалится в `@State`, чтобы строка и
+    /// пикер перерисовывались сразу после выбора.
+    @State private var routeLine: RouteLineStyle = RouteLineStyle.stored
 
     var body: some View {
         let c = AppTheme.colors(for: scheme)
@@ -59,6 +66,21 @@ struct AppPreferencesView: View {
         }
         .sheet(isPresented: $showAvgSpeedPicker) {
             avgSpeedPicker(l)
+        }
+        .sheet(isPresented: $showRouteLinePicker) {
+            routeLinePicker(l)
+        }
+        .sheet(isPresented: $showPaywall) {
+            PlusPaywallSheet()
+                .environmentObject(lang)
+                .preferredColorScheme(scheme)
+        }
+        .task {
+            // Зеркало «Плюс активен» для тех, кто спрашивает цвет линии вне
+            // главного актёра (жилка «Атласа», рендерер маршрута). Пишется
+            // отсюда и с карт — см. `RouteLineStyle.plusMirrorKey`.
+            RouteLineStyle.rememberPlus(plus.isPlus)
+            routeLine = RouteLineStyle.stored
         }
     }
 
@@ -130,6 +152,37 @@ struct AppPreferencesView: View {
                                  : AppStrings.avgSpeedMoving(l))
             }
             .accessibilityIdentifier("settings_avg_speed")
+
+            // Цвет линии маршрута — косметика «Плюса». В витрине без платного
+            // строки нет вовсе (`PlusGate` → `.hidden`).
+            if routeLineAccess != .hidden {
+                rowDivider(c)
+
+                // Заперто — строка ведёт ПРЯМО в пейвол, а не в пикер с
+                // замками на шести строках из семи. Так не приходится
+                // открывать один лист поверх другого: двух системных
+                // презентаций подряд UIKit не даёт (та же мина, что у
+                // просмотрщика снимков на карте), а выбор, который нельзя
+                // выбрать, всё равно ничего не отвечает.
+                SettingsIconRow(
+                    icon: "scribble.variable",
+                    title: AppStrings.settingsRouteLine(l),
+                    action: {
+                        if routeLineAccess == .locked { showPaywall = true }
+                        else { showRouteLinePicker = true }
+                    }
+                ) {
+                    HStack(spacing: 6) {
+                        if routeLineAccess == .locked {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(c.textTertiary)
+                        }
+                        SettingsRowValue(text: routeLineRowValue(l))
+                    }
+                }
+                .accessibilityIdentifier("settings_route_line")
+            }
         }
         .surfaceCard(cornerRadius: 16)
     }
@@ -165,6 +218,41 @@ struct AppPreferencesView: View {
             // телефона (та же ошибка, что была у `selectedVehicleId`).
             onSelect: { settings.setDistanceUnit($0) },
             accessibilityPrefix: "settings_units"
+        )
+    }
+
+    // MARK: - Линия маршрута (0.8.0)
+
+    private var routeLineAccess: PlusAccessLevel {
+        PlusGate.allows(.routeLineStyle,
+                        isPlus: plus.isPlus, storefrontHidesPlus: plus.storefrontHidesPlus)
+    }
+
+    /// Что РИСУЕТСЯ сейчас, а не что выбрано: без подписки строка обязана
+    /// говорить «градиент скорости», потому что именно он и на карте.
+    private func routeLineRowValue(_ l: LanguageManager.Language) -> String {
+        let effective = routeLine.effective(isPlus: plus.isPlus)
+        return effective == .speed ? AppStrings.routeLineSpeedGradient(l) : effective.displayName
+    }
+
+    /// Домашний пикер, как у единиц и темы: системных меню и диалогов в
+    /// приложении нет. Кружок цвета вместо жетона — ответ здесь И ЕСТЬ цвет,
+    /// а две буквы в жетоне про него ничего не говорят.
+    private func routeLinePicker(_ l: LanguageManager.Language) -> some View {
+        SettingsOptionPicker(
+            title: AppStrings.settingsRouteLine(l),
+            options: RouteLineStyle.allCases,
+            selection: routeLine.effective(isPlus: plus.isPlus),
+            footnote: AppStrings.routeLinePickerFootnote(l),
+            badge: { $0 == .speed ? "speedometer" : "" },
+            badgeIsSymbol: true,
+            badgeTint: { $0.color },
+            label: { $0 == .speed ? AppStrings.routeLineSpeedGradient(l) : $0.displayName },
+            onSelect: { style in
+                RouteLineStyle.stored = style
+                routeLine = style
+            },
+            accessibilityPrefix: "settings_route_line"
         )
     }
 
