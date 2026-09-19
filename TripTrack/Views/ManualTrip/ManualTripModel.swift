@@ -222,6 +222,12 @@ final class ManualTripModel: ObservableObject {
     /// открытого, и ничего больше. Ни `PostTripTrackProcessor`, ни наград —
     /// см. `TripManager.createManualTrip`.
     func create(using manager: TripManager) async -> UUID? {
+        // Гейт спрашивается ЗДЕСЬ, а не только при открытии листа:
+        // содержимое `.sheet` выбирается один раз, при показе, и
+        // отозванная (возврат денег) за эти секунды подписка поездку бы не
+        // остановила. Тот же довод, по которому `recordableVehicleId`
+        // спрашивает хранилище, а не список в памяти.
+        guard ManualTripEntry.level == .open else { return nil }
         guard let route else { return nil }
         let draft = ManualTripBuilder.Draft(
             coordinates: route.coordinates,

@@ -1419,7 +1419,12 @@ final class TripManager: ObservableObject {
         entity.elevation = trip.elevation
         entity.title = trip.title
         entity.titleIsCustom = trip.titleIsCustom
-        entity.vehicleId = trip.vehicleId
+        // Последний рубеж перед штампом — тот же, что у записи
+        // (`MapViewModel`): архивная или проданная машина не принимает новых
+        // поездок НИГДЕ (CLAUDE.md). Лист предлагает правильный список, но
+        // правило, которое держится только листом, проедет мимо на первом же
+        // новом вызывающем — сид, «Команды», архивация при открытом листе.
+        entity.vehicleId = repository.recordableVehicleId(trip.vehicleId)
         // Штампуется вместе с машиной, а не через `setTransfer`: тот
         // обнуляет `vehicleId` и пересчитывает одометры, и на ещё не
         // сохранённой поездке один из двух вызовов обязательно встал бы не в
@@ -1455,7 +1460,7 @@ final class TripManager: ObservableObject {
         // нарочно — без этой строки пробег и уровень машины оставались бы
         // вчерашними до чужого события (удаления другой поездки, смены
         // машины, полного пула), то есть у человека без облака — «никогда».
-        if let vehicleId = trip.vehicleId, !trip.isTransfer {
+        if let vehicleId = entity.vehicleId, !trip.isTransfer {
             repository.recomputeOdometers(forVehicles: [vehicleId])
             persistenceController.save()
         }

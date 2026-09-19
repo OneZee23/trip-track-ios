@@ -199,4 +199,50 @@ final class ManualTripBuilderTests: XCTestCase {
                        ManualTripBuilder.minimumDuration,
                        "у короткого маршрута побеждает общий пол в минуту")
     }
+
+    // MARK: - Границы дат
+
+    /// **Находка аудита L7.** Границы стояли ТОЛЬКО в листе
+    /// (`ManualTripModel.startBounds`), то есть проверялись руками на открытом
+    /// экране. Сборка принимала поездку на год вперёд и тридцатилетней
+    /// давности молча — и `DebugMapSeed` с любым следующим вызывающим проехали
+    /// бы мимо. Теперь это отказ, и он чистая функция.
+    func testABuilderRefusesATripThatHasNotHappenedYet() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let coords = [
+            CLLocationCoordinate2D(latitude: 45.0, longitude: 39.0),
+            CLLocationCoordinate2D(latitude: 45.1, longitude: 39.1),
+        ]
+
+        let future = ManualTripBuilder.build(
+            .init(coordinates: coords,
+                  startDate: now.addingTimeInterval(365 * 24 * 3600),
+                  duration: 3600),
+            now: now)
+        XCTAssertNil(future, "поездки, которой ещё не было, не бывает")
+
+        let ancient = ManualTripBuilder.build(
+            .init(coordinates: coords,
+                  startDate: now.addingTimeInterval(-30 * 365 * 24 * 3600),
+                  duration: 3600),
+            now: now)
+        XCTAssertNil(ancient, "тридцать лет назад — тоже нет")
+
+        let yesterday = ManualTripBuilder.build(
+            .init(coordinates: coords,
+                  startDate: now.addingTimeInterval(-24 * 3600),
+                  duration: 3600),
+            now: now)
+        XCTAssertNotNil(yesterday, "а вчерашняя собирается, как собиралась")
+    }
+
+    func testStartPlausibilityIsATableNotAnOpinion() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        XCTAssertTrue(ManualTripBuilder.isPlausibleStart(now, now: now), "ровно сейчас — можно")
+        XCTAssertFalse(ManualTripBuilder.isPlausibleStart(now.addingTimeInterval(1), now: now))
+        XCTAssertTrue(ManualTripBuilder.isPlausibleStart(
+            now.addingTimeInterval(-ManualTripBuilder.maximumAge + 1), now: now))
+        XCTAssertFalse(ManualTripBuilder.isPlausibleStart(
+            now.addingTimeInterval(-ManualTripBuilder.maximumAge - 1), now: now))
+    }
 }

@@ -91,12 +91,26 @@ enum ManualTripBuilder {
     /// среднем на дорогах не бывает.
     static let maxPlausibleAverage: Double = 50
 
+    /// Насколько давней бывает вписанная поездка. Двадцать лет — столько же,
+    /// сколько предлагает лист; здесь это ОТКАЗ, а не зажим.
+    static let maximumAge: TimeInterval = 20 * 365 * 24 * 3600
+
+    /// Поездка, которой ещё не было, вписана быть не может — как у
+    /// путешествия (`JourneyEditSheet`). Проверка стоит ЗДЕСЬ, а не только в
+    /// листе: границы, которые держит открытый экран, проверяются руками, а
+    /// `DebugMapSeed` и любой следующий вызывающий проедут мимо них. Чистая
+    /// функция — значит держит её тест.
+    static func isPlausibleStart(_ date: Date, now: Date = Date()) -> Bool {
+        date <= now && date >= now.addingTimeInterval(-maximumAge)
+    }
+
     /// `nil` значит «собрать не из чего»: меньше двух точек или неположительная
     /// длительность. Отказ, а не поездка нулевой длины, — такую пришлось бы
     /// потом отличать от настоящей на каждом экране.
-    static func build(_ draft: Draft) -> Trip? {
+    static func build(_ draft: Draft, now: Date = Date()) -> Trip? {
         let coords = draft.coordinates
         guard coords.count > 1, draft.duration > 0 else { return nil }
+        guard isPlausibleStart(draft.startDate, now: now) else { return nil }
 
         let endDate = draft.startDate.addingTimeInterval(draft.duration)
         let stamps = timestamps(count: coords.count,
