@@ -318,6 +318,10 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
     @Binding var cameraCommand: MapCameraCommand?
 
     func makeUIViewController(context: Context) -> MapHostController {
+        // Diagnostic (round 2, 19 сен 2026) — brackets native `MKMapView`
+        // construction + registration. Per the brief this stays where it
+        // is: `MKMapView()` itself is not something to defer, only measure.
+        StartupTrace.mark("MyMapRepresentable.makeUIViewController begin")
         // То же зеркало, что у `RouteMapView.makeUIView`: жилка «Атласа»
         // считается на фоновой очереди и спросить `PlusAccess` не может.
         RouteLineStyle.rememberPlus(PlusAccess.shared.isPlus)
@@ -378,6 +382,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             guard let controller, let coordinator else { return }
             coordinator.screenVeilStoodDown(controller)
         }
+        StartupTrace.mark("MyMapRepresentable.makeUIViewController end")
         return controller
     }
 

@@ -137,16 +137,26 @@ final class BundleRiddleCatalog: RiddleCatalog {
     /// каталог и строка в логе; карта без загадок хуже карты с ними, но
     /// падение приложения хуже обеих.
     init(url: URL? = BundleRiddleCatalog.bundledURL()) {
+        // Diagnostic (round 2 of the perf pass, 19 сен 2026): first access to
+        // `DiscoveryProcessor.shared` — triggered synchronously from
+        // `MyMapViewModel.init` via `riddleCatalog ?? DiscoveryProcessor
+        // .shared.riddleCatalog` — lands HERE, on the main actor, before the
+        // Atlas's first frame. This is a real disk read + `JSONDecoder`
+        // parse + geohash index build of `Riddles.json` (1 028 points,
+        // 92 КБ per CLAUDE.md), not a cheap default-value evaluation.
+        StartupTrace.mark("BundleRiddleCatalog.init begin")
         guard let url else {
             print("[RiddleCatalog] Riddles.json not found in any bundle")
             riddles = []
             byCell = [:]
+            StartupTrace.mark("BundleRiddleCatalog.init end (no file)")
             return
         }
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else {
             print("[RiddleCatalog] cannot read \(url.lastPathComponent)")
             riddles = []
             byCell = [:]
+            StartupTrace.mark("BundleRiddleCatalog.init end (unreadable)")
             return
         }
         let parsed: [Riddle]
@@ -156,6 +166,7 @@ final class BundleRiddleCatalog: RiddleCatalog {
             print("[RiddleCatalog] decode failed: \(error)")
             riddles = []
             byCell = [:]
+            StartupTrace.mark("BundleRiddleCatalog.init end (decode failed)")
             return
         }
         riddles = parsed
@@ -167,6 +178,7 @@ final class BundleRiddleCatalog: RiddleCatalog {
             index[cell, default: []].append(offset)
         }
         byCell = index
+        StartupTrace.mark("BundleRiddleCatalog.init end (\(parsed.count) riddles)")
     }
 
     func all() -> [Riddle] { riddles }
