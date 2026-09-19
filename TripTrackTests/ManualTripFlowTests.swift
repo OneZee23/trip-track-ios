@@ -147,8 +147,14 @@ final class ManualTripFlowTests: XCTestCase {
         let vehicle = try vehicleEntity(vehicleId)
         XCTAssertEqual(vehicle.odometerKm, saved.distance / 1000, accuracy: 0.01)
         XCTAssertGreaterThan(vehicle.odometerKm, 0, "фикстура обязана быть настоящей дорогой")
-        XCTAssertEqual(vehicle.vehicleLevel,
-                       Int32(VehicleLevelSystem.level(for: vehicle.odometerKm)))
+        // А УРОВЕНЬ эти километры не двигают (находка аудита M3): пробег —
+        // «сколько машина проехала», уровень — «что приложение видело своими
+        // глазами». До фикса он выводился прямо из одометра, и нарисованный
+        // по карте маршрут давал уровень, который копится годами.
+        XCTAssertEqual(vehicle.vehicleLevel, 1)
+        XCTAssertEqual(
+            repo.unrewardedKm(forVehicle: vehicleId), saved.distance / 1000, accuracy: 0.01,
+            "все километры вписанной поездки — ненаграждаемые")
     }
 
     /// А поездка ПАССАЖИРОМ машину не наматывает — то же правило, что у

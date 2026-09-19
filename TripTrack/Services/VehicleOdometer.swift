@@ -39,4 +39,21 @@ enum VehicleOdometer {
         }
         return metres.mapValues { $0 / 1000 }
     }
+
+    /// НАГРАДНЫЕ километры по машинам — от чего считается уровень.
+    ///
+    /// Отдельная функция, а не флаг у первой: у одометра и у уровня разные
+    /// вопросы. Одометр спрашивает «сколько машина проехала» (вписанная
+    /// рукой поездка — проехала), уровень — «что приложение видело своими
+    /// глазами». Складывать их в одну сумму значит отдать уровень тому, кто
+    /// нарисовал маршрут по карте. Правило про «что даёт награды» живёт в
+    /// `Trip.rewardKm` и больше нигде.
+    static func rewardByVehicle(from trips: [Trip]) -> [UUID: Double] {
+        var km: [UUID: Double] = [:]
+        for trip in trips {
+            guard let id = trip.vehicleId, !trip.isTransfer else { continue }
+            km[id, default: 0] += trip.rewardKm
+        }
+        return km
+    }
 }

@@ -118,6 +118,17 @@ protocol TripRepository {
     func recomputeOdometers(forVehicles vehicleIds: [UUID])
     /// Whole-garage version, for when the library changes wholesale.
     func recomputeAllVehicleOdometers()
+    /// Наградные километры по машинам: сумма ТОЛЬКО записанных поездок.
+    /// От одометра отличается ровно вписанными рукой (0.8.0) — см.
+    /// `Trip.rewardKm`.
+    func rewardKmByVehicle() -> [UUID: Double]
+    /// Километры машины, которые НЕ идут в уровень, — сумма вписанных рукой.
+    /// Вычитанием, а не пересчётом: одометр бывает набран и не только
+    /// поездками, и отнимать у него надо ровно ненаграждаемое.
+    func unrewardedKm(forVehicle vehicleId: UUID) -> Double
+    /// Можно ли писать НОВУЮ поездку на эту машину. Читает запись, а не
+    /// список в памяти: список — снимок, и однажды его не перечитают.
+    func recordableVehicleId(_ id: UUID?) -> UUID?
     func deleteVehicleHard(id: UUID)
     /// «Отправлено и подтверждено» для машины. См. реализацию.
     func markVehicleSynced(id: UUID, conflictVersion: Int)
@@ -1218,7 +1229,7 @@ final class CoreDataTripRepository: TripRepository {
             previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds,
             xpEarned: Int(entity.xpEarned),
             companions: companions, isOnServer: entity.serverCreatedAt != nil,
-            source: TripOrigin(rawValue: entity.source ?? "") ?? .recorded
+            source: Self.origin(of: entity)
         )
     }
 
@@ -1700,16 +1711,75 @@ final class CoreDataTripRepository: TripRepository {
                 NSPredicate(format: "vehicleId == %@", vehicleId as CVarArg),
                 NSPredicate(format: "isTransfer == NO"),
             ])
-            let metres = (try? context.fetch(req))?.reduce(0.0) { $0 + $1.distance } ?? 0
-            let km = metres / 1000
+            let trips = (try? context.fetch(req)) ?? []
+            let km = trips.reduce(0.0) { $0 + $1.distance } / 1000
+            // **Одометр и уровень считаются от РАЗНЫХ сумм, и это правило.**
+            // Километры вписанной рукой поездки машина честно проехала
+            // (спека §2, «одометр машины — ДА»), а уровень — награда за то,
+            // что приложение видело своими глазами. Пока сумма была одна,
+            // нарисованный по карте маршрут Краснодар → Владивосток давал
+            // уровень, который копится годами, и уезжал чужим глазам в
+            // `VehicleSyncPayload.level`.
+            let rewardKm = trips.reduce(0.0) { sum, trip in
+                sum + (Self.origin(of: trip).earnsRewards ? trip.distance : 0)
+            } / 1000
 
             let vReq: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
             vReq.predicate = NSPredicate(format: "id == %@", vehicleId as CVarArg)
             vReq.fetchLimit = 1
             guard let vehicle = try? context.fetch(vReq).first else { continue }
             vehicle.odometerKm = km
-            vehicle.vehicleLevel = Int32(VehicleLevelSystem.level(for: km))
+            vehicle.vehicleLevel = Int32(VehicleLevelSystem.level(for: rewardKm))
         }
+    }
+
+    /// Как эта строка попала в базу. Терпимо, как и везде: незнакомая строка
+    /// — «записана», а не отказ (см. `TripOrigin`).
+    static func origin(of entity: TripEntity) -> TripOrigin {
+        TripOrigin(rawValue: entity.source ?? "") ?? .recorded
+    }
+
+    func rewardKmByVehicle() -> [UUID: Double] {
+        let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        req.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            completedTripPredicate,
+            NSPredicate(format: "vehicleId != nil"),
+            NSPredicate(format: "isTransfer == NO"),
+        ])
+        var metres: [UUID: Double] = [:]
+        for trip in (try? context.fetch(req)) ?? [] {
+            guard let id = trip.vehicleId, Self.origin(of: trip).earnsRewards else { continue }
+            metres[id, default: 0] += trip.distance
+        }
+        return metres.mapValues { $0 / 1000 }
+    }
+
+    func unrewardedKm(forVehicle vehicleId: UUID) -> Double {
+        let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        req.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            completedTripPredicate,
+            NSPredicate(format: "vehicleId == %@", vehicleId as CVarArg),
+            NSPredicate(format: "isTransfer == NO"),
+        ])
+        let metres = ((try? context.fetch(req)) ?? []).reduce(0.0) { sum, trip in
+            Self.origin(of: trip).earnsRewards ? sum : sum + trip.distance
+        }
+        return metres / 1000
+    }
+
+    /// Последний рубеж перед штампом машины на НОВОЙ поездке: архивная или
+    /// проданная не принимает их нигде (CLAUDE.md). Живёт здесь, а не в
+    /// `SettingsManager`, потому что вызывающих двое и хранилище у них своё:
+    /// запись идёт через `MapViewModel`, вписанная рукой — через
+    /// `TripManager.createManualTrip`, и правило у них обязано быть одно.
+    func recordableVehicleId(_ id: UUID?) -> UUID? {
+        guard let id else { return nil }
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.fetchLimit = 1
+        guard let entity = try? context.fetch(request).first,
+              !entity.isArchived, entity.soldAt == nil else { return nil }
+        return id
     }
 
     /// Recomputes every vehicle — used after the library changes wholesale,

@@ -271,5 +271,27 @@ final class ScoringStaysMetricTests: XCTestCase {
         XCTAssertEqual(miles, "124 mi")
         XCTAssertEqual(trip.scoringKm, 200, accuracy: 0.000_1,
                        "scoringKm — метры делить на тысячу, и ничего больше")
+        XCTAssertEqual(trip.rewardKm, 200, accuracy: 0.000_1,
+                       "rewardKm у записанной поездки — то же число")
+    }
+
+    /// Наградные километры — тоже метрические, и у вписанной рукой поездки их
+    /// НОЛЬ. Обе половины в одном месте: единица и источник — разные оси, но
+    /// ошибка в любой из них одинаково необратима (опыт и уровень в базе).
+    func testRewardKilometresAreMetricAndZeroForAHandWrittenTrip() {
+        select(.miles)
+        let driven = longTrip()
+        var handWritten = longTrip()
+        handWritten.source = .manual
+
+        XCTAssertEqual(driven.rewardKm, 200, accuracy: 0.000_1)
+        XCTAssertEqual(handWritten.rewardKm, 0,
+                       "нарисованный по карте маршрут наград не даёт")
+        XCTAssertEqual(handWritten.scoringKm, 200, accuracy: 0.000_1,
+                       "а километры у него настоящие — одометр и атлас их считают")
+
+        select(.km)
+        XCTAssertEqual(driven.rewardKm, 200, accuracy: 0.000_1,
+                       "единица показа наградного числа не касается")
     }
 }

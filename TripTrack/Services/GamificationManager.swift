@@ -8,11 +8,16 @@ final class GamificationManager {
     static let backfillKey = "gamification_backfill_done"
 
     private let defaults: UserDefaults
+    /// Наградные километры машины считает репозиторий: правило «что считать»
+    /// живёт там, вместе с пересчётом одометра, и двух его копий быть не
+    /// должно.
+    private let repository: TripRepository
 
     init(persistenceController: PersistenceController = .shared,
          defaults: UserDefaults = .standard) {
         self.persistenceController = persistenceController
         self.defaults = defaults
+        self.repository = CoreDataTripRepository(persistenceController: persistenceController)
     }
 
     // MARK: - XP Calculation
@@ -24,10 +29,10 @@ final class GamificationManager {
         var breakdown = XPBreakdown()
 
         // Base: 1 XP per km
-        breakdown.base = max(1, Int(trip.scoringKm))
+        breakdown.base = max(1, Int(trip.rewardKm))
 
         // Long trip bonus: x2 for 200+ km (adds extra base amount)
-        if trip.scoringKm >= 200 {
+        if trip.rewardKm >= 200 {
             breakdown.longTripBonus = breakdown.base
         }
 
@@ -90,11 +95,20 @@ final class GamificationManager {
         let vehicleLevelBefore = Int(vehicleEntity?.vehicleLevel ?? 1)
 
         if let vehicle = vehicleEntity {
+            // Одометр копит ВСЁ, что машина проехала, — включая вписанное
+            // рукой (спека §2). Уровень считается от наградных километров, и
+            // это разные суммы: см. `Trip.rewardKm`. Сюда доходят только
+            // записанные поездки (у вписанной своя дорога через
+            // `TripManager.createManualTrip`), но брать уровень от одометра
+            // всё равно нельзя — в нём уже могут лежать чужие километры.
             let newOdometer = vehicleOdometerBefore + trip.scoringKm
             vehicle.odometerKm = newOdometer
-            let newVehicleLevel = VehicleLevelSystem.level(for: newOdometer)
-            vehicle.vehicleLevel = Int32(newVehicleLevel)
-
+            // ВЫЧИТАНИЕМ, а не пересчётом по поездкам: одометр здесь копится
+            // инкрементально и бывает набран не только тем, что лежит в базе
+            // сейчас, — отнимать у него надо ровно ненаграждаемое.
+            let unrewarded = vehicle.id.map { repository.unrewardedKm(forVehicle: $0) } ?? 0
+            vehicle.vehicleLevel = Int32(
+                VehicleLevelSystem.level(for: max(0, newOdometer - unrewarded)))
         }
 
         let vehicleOdometerAfter = vehicleEntity?.odometerKm ?? vehicleOdometerBefore
@@ -239,17 +253,17 @@ final class GamificationManager {
 
         for trip in sortedTrips {
             // Base XP
-            var tripXP = max(1, Int(trip.scoringKm))
+            var tripXP = max(1, Int(trip.rewardKm))
 
             // Long trip bonus
-            if trip.scoringKm >= 200 {
-                tripXP += max(1, Int(trip.scoringKm))
+            if trip.rewardKm >= 200 {
+                tripXP += max(1, Int(trip.rewardKm))
             }
 
             // Region discovery
             if let region = trip.region, !seenRegions.contains(region) {
                 seenRegions.insert(region)
-                tripXP += 50 + max(1, Int(trip.scoringKm)) / 2
+                tripXP += 50 + max(1, Int(trip.rewardKm)) / 2
             }
 
             totalXP += tripXP
@@ -272,15 +286,18 @@ final class GamificationManager {
     private func backfillVehicleOdometers(trips: [Trip]) {
         let context = persistenceController.container.viewContext
         // Правило «что считать» живёт в `VehicleOdometer` и покрыто тестами:
-        // трансферы сюда не попадают.
+        // трансферы сюда не попадают. Сумм ДВЕ — пробег и наградные
+        // километры, — и уровень берётся у второй (см. `Trip.rewardKm`).
         let odometerMap = VehicleOdometer.trackedByVehicle(from: trips)
+        let rewardMap = VehicleOdometer.rewardByVehicle(from: trips)
 
         for (vehicleId, km) in odometerMap {
             let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
             request.predicate = NSPredicate(format: "id == %@", vehicleId as CVarArg)
             if let entity = try? context.fetch(request).first {
                 entity.odometerKm = km
-                entity.vehicleLevel = Int32(VehicleLevelSystem.level(for: km))
+                entity.vehicleLevel = Int32(
+                    VehicleLevelSystem.level(for: rewardMap[vehicleId] ?? 0))
             }
         }
     }

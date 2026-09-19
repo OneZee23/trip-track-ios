@@ -13,7 +13,13 @@ import SwiftUI
 /// there is nothing to change, only something to understand.
 struct VehicleLevelInfoView: View {
     let level: Int
-    let odometerKm: Double
+    /// От чего считается уровень — `Vehicle.levelSourceKm`, а не пробег.
+    ///
+    /// Имя параметра стоило смены: он назывался `odometerKm`, а зовут его
+    /// только `kmToNextLevel`/`progressToNext`. Функция (или поле),
+    /// названная по ОДНОЙ величине и используемая для другой, — это уже баг,
+    /// просто ещё не сработавший (CLAUDE.md, история `GarageFormat.odometer`).
+    let levelKm: Double
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -75,7 +81,7 @@ struct VehicleLevelInfoView: View {
 
     private func levelCard(c: AppTheme.Colors, l: LanguageManager.Language) -> some View {
         let color = VehicleLevelSystem.color(for: level)
-        let remaining = VehicleLevelSystem.kmToNextLevel(km: odometerKm, level: level)
+        let remaining = VehicleLevelSystem.kmToNextLevel(km: levelKm, level: level)
 
         return VStack(spacing: 14) {
             // The same atom the detail screen's level row draws, at the size
@@ -85,7 +91,7 @@ struct VehicleLevelInfoView: View {
             VehicleLevelPill(level: level, size: 40)
 
             VehicleXPBar(
-                progress: VehicleLevelSystem.progressToNext(km: odometerKm, level: level),
+                progress: VehicleLevelSystem.progressToNext(km: levelKm, level: level),
                 tint: color
             )
 

@@ -178,6 +178,22 @@ struct Trip: Identifiable, Codable {
         distance / 1000.0
     }
 
+    /// Километры для НАГРАД — опыта, уровня человека, значков и уровня
+    /// машины. Метрические всегда, как и `scoringKm`, и на экран не идут.
+    ///
+    /// Отличается от `scoringKm` ровно одним: у вписанной рукой поездки
+    /// (0.8.0, «Плюс») он НОЛЬ. Разница между этими двумя числами и есть
+    /// правило «километры настоящие, награды нет»: одометр машины,
+    /// статистика, атлас и места зовут `scoringKm`/`distance` и считают
+    /// вписанное наравне, а наградные места зовут `rewardKm` и не считают
+    /// вовсе. Пока правило жило отдельной строкой `guard trip.source ==
+    /// .recorded` в каждой двери, одну дверь забыли — уровень машины, — и
+    /// нарисованный по карте маршрут поднимал его до цифры, которая копится
+    /// годами. Пишешь новую награду — бери отсюда, и забыть будет нечего.
+    var rewardKm: Double {
+        source.earnsRewards ? scoringKm : 0
+    }
+
     /// Time spent actually moving vs sitting stationary (engine running but
     /// not making progress — traffic, lights, parked-but-recording). Computed
     /// from track points: walks pairs of points, classifies each gap by the

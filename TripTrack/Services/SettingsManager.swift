@@ -747,13 +747,12 @@ final class SettingsManager: ObservableObject {
         // сделает: ровно так синк уже проносил архивную машину мимо проверки.
         // Это последний рубеж, он обязан спрашивать у хранилища, а не у копии.
         // Цена — один запрос на старт поездки, раз в несколько часов.
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
-        request.fetchLimit = 1
-        guard let entity = try? context.fetch(request).first,
-              !entity.isArchived, entity.soldAt == nil else { return nil }
-        return id
+        //
+        // Сама выборка живёт в репозитории: вписанная рукой поездка
+        // (`TripManager.createManualTrip`) проходит тот же рубеж, а хранилище
+        // у неё своё — две копии этого запроса однажды разошлись бы.
+        return CoreDataTripRepository(persistenceController: persistenceController)
+            .recordableVehicleId(id)
     }
 
     /// Resolve a vehicle by id. Nil in, nil out.
@@ -780,7 +779,13 @@ final class SettingsManager: ObservableObject {
         let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
         request.sortDescriptors = [NSSortDescriptor(keyPath: \VehicleEntity.name, ascending: true)]
 
-        vehicles = (try? context.fetch(request))?.compactMap { vehicleFromEntity($0) } ?? []
+        // Наградные километры — ОДНОЙ выборкой на весь гараж, а не по машине
+        // на карточку: уровень у всех считается от них, и второй проход по
+        // поездкам здесь стоил бы столько же, сколько первый.
+        let rewardKm = CoreDataTripRepository(persistenceController: persistenceController)
+            .rewardKmByVehicle()
+        vehicles = (try? context.fetch(request))?
+            .compactMap { vehicleFromEntity($0, rewardKm: rewardKm[$0.id ?? UUID()] ?? 0) } ?? []
         healStuckSelection()
     }
 
@@ -882,7 +887,11 @@ final class SettingsManager: ObservableObject {
         }
     }
 
-    private func vehicleFromEntity(_ entity: VehicleEntity) -> Vehicle? {
+    /// - Parameter rewardKm: наградные километры ЭТОЙ машины — сумма только
+    ///   записанных поездок. Приходит параметром, а не считается здесь:
+    ///   выборка одна на весь гараж (`loadVehicles`), и заводить её по разу
+    ///   на карточку значило бы читать библиотеку N раз.
+    private func vehicleFromEntity(_ entity: VehicleEntity, rewardKm: Double) -> Vehicle? {
         guard let id = entity.id else { return nil }
 
         // Decode stickers from JSON
@@ -906,12 +915,17 @@ final class SettingsManager: ObservableObject {
             // NSNumber, а не Double: колонка опциональна, и «не заполнено»
             // должно отличаться от «ноль» (ноль — законный пробег новой машины).
             manualOdometerKm: entity.manualOdometerKm?.doubleValue,
+            rewardOdometerKm: rewardKm,
             // Derived, not read. The stored column was written by the old
             // ten-rung curve, so every vehicle that existed before this change
             // carries a number that no longer means anything — and the level
-            // is a function of the odometer, so there is nothing to store.
+            // is a function of the mileage, so there is nothing to store.
             // The column stays for the sync payload's sake.
-            level: VehicleLevelSystem.level(for: entity.odometerKm),
+            //
+            // От НАГРАДНЫХ километров, а не от одометра (0.8.0): вписанная
+            // рукой поездка идёт в пробег, но не в уровень — см.
+            // `Trip.rewardKm`.
+            level: VehicleLevelSystem.level(for: rewardKm),
             stickers: stickers,
             createdAt: entity.createdAt ?? Date(),
             cityConsumption: entity.cityConsumption,

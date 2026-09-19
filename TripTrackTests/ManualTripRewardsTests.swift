@@ -38,8 +38,23 @@ final class ManualTripRewardsTests: XCTestCase {
 
         ("TripTrack/Services/Discoveries/DiscoveryProcessor.swift",
          "Секреты, загадки и вехи. Зачёт только по ЗАПИСАННОМУ треку (0.7.0): "
-         + "печать за тап по карте обесценивает все остальные.")
+         + "печать за тап по карте обесценивает все остальные."),
+
+        ("TripTrack/Persistence/TripRepository.swift",
+         "УРОВЕНЬ МАШИНЫ. Пятое наградное место, и единственное, которое живёт "
+         + "не в наградном файле — оттого его и забыли: `recomputeOdometers` "
+         + "выводил уровень прямо из одометра, а одометр вписанные километры "
+         + "засчитывает. Нарисованный по карте Краснодар → Владивосток давал "
+         + "уровень, который копится годами, и уезжал чужим глазам в "
+         + "`VehicleSyncPayload.level`.")
     ]
+
+    /// Чем гейт бывает записан. Два написания, и оба законны:
+    /// `guard trip.source == .recorded` там, где есть `Trip`, и `earnsRewards`
+    /// / `rewardKm` там, где считают по строкам базы. Второе — это ОДНА дверь
+    /// (`Trip.rewardKm` / `TripOrigin.earnsRewards`), и добавлять её пришлось
+    /// ровно потому, что написанное строкой правило однажды не написали.
+    private static let gateSpellings = ["source == .recorded", "earnsRewards", "rewardKm"]
 
     /// То, что километры вписанной поездки засчитывает.
     private static let unfiltered: [(path: String, reason: String)] = [
@@ -68,7 +83,7 @@ final class ManualTripRewardsTests: XCTestCase {
             // проверка. Тот же инструмент, что у `UnitsDisciplineTests`.
             let code = UnitGuard.strip(text).code
             let hasGuard = code.contains { line in
-                line.contains("source == .recorded") || line.contains(".source == .recorded")
+                Self.gateSpellings.contains { line.contains($0) }
             }
             if !hasGuard { ungated.append("\(entry.path)\n    ПОЧЕМУ НУЖЕН: \(entry.reason)") }
         }
@@ -175,5 +190,71 @@ final class ManualTripRewardsTests: XCTestCase {
 
         let tracked = VehicleOdometer.trackedByVehicle(from: [hand])
         XCTAssertEqual(tracked[vehicleId] ?? 0, 120, accuracy: 0.001)
+    }
+
+    /// **Находка аудита M3.** Одометр и уровень считаются от РАЗНЫХ сумм, и
+    /// разница между ними — ровно вписанное рукой.
+    func testManualKilometresRaiseTheOdometerButNotTheLevelSource() {
+        let vehicleId = UUID()
+        var hand = manual(km: 5_000)
+        hand.vehicleId = vehicleId
+        var driven = recorded(km: 300)
+        driven.vehicleId = vehicleId
+
+        let odometer = VehicleOdometer.trackedByVehicle(from: [hand, driven])
+        let reward = VehicleOdometer.rewardByVehicle(from: [hand, driven])
+        XCTAssertEqual(odometer[vehicleId] ?? 0, 5_300, accuracy: 0.001,
+                       "машина проехала всё")
+        XCTAssertEqual(reward[vehicleId] ?? 0, 300, accuracy: 0.001,
+                       "а видело приложение только треканное")
+        XCTAssertGreaterThan(VehicleLevelSystem.level(for: 5_300),
+                             VehicleLevelSystem.level(for: 300),
+                             "разница именно в уровне, а не в округлении")
+    }
+
+    /// И то же самое на настоящем пересчёте: он читает строки базы, а не
+    /// массив `Trip`, и до фикса это была ЕДИНСТВЕННАЯ дорога к уровню.
+    func testRecomputeGivesTheCarTheKilometresAndTheLevelSeparately() {
+        let ctx = Self.pc.container.viewContext
+        let vehicleId = UUID()
+        let vehicle = VehicleEntity(context: ctx)
+        vehicle.id = vehicleId
+        vehicle.name = "Car"
+        vehicle.odometerKm = 0
+        vehicle.vehicleLevel = 1
+
+        for (km, source) in [(5_000.0, TripOrigin.manual), (300.0, TripOrigin.recorded)] {
+            let t = TripEntity(context: ctx)
+            t.id = UUID()
+            t.startDate = Date(timeIntervalSince1970: 1_700_000_000)
+            t.endDate = t.startDate?.addingTimeInterval(3600)
+            t.distance = km * 1000
+            t.vehicleId = vehicleId
+            t.isTransfer = false
+            t.source = source.rawValue
+        }
+        try? ctx.save()
+
+        let repo = CoreDataTripRepository(persistenceController: Self.pc)
+        repo.recomputeOdometers(forVehicles: [vehicleId])
+
+        XCTAssertEqual(vehicle.odometerKm, 5_300, accuracy: 0.001,
+                       "одометр считает вписанное (спека §2)")
+        XCTAssertEqual(Int(vehicle.vehicleLevel), VehicleLevelSystem.level(for: 300),
+                       "а уровень — нет")
+        XCTAssertEqual(repo.unrewardedKm(forVehicle: vehicleId), 5_000, accuracy: 0.001,
+                       "ненаграждаемое — это ровно вписанное рукой")
+        XCTAssertEqual(repo.rewardKmByVehicle()[vehicleId] ?? 0, 300, accuracy: 0.001)
+    }
+
+    /// Показанный уровень берётся у `levelSourceKm`, а `nil` в нём значит «не
+    /// спрашивали» — так отвечают машины, приехавшие с провода, и уровень у
+    /// них считается по одометру, как считался всегда.
+    func testLevelSourceFallsBackToTheOdometerWhenNobodyAsked() {
+        let fromWire = Vehicle(name: "Wire", odometerKm: 1_200)
+        XCTAssertEqual(fromWire.levelSourceKm, 1_200, accuracy: 0.001)
+
+        let fromGarage = Vehicle(name: "Garage", odometerKm: 5_300, rewardOdometerKm: 300)
+        XCTAssertEqual(fromGarage.levelSourceKm, 300, accuracy: 0.001)
     }
 }

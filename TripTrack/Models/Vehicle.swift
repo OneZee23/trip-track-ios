@@ -33,6 +33,14 @@ struct Vehicle: Identifiable, Codable {
     /// новой машины, и отличить его от «не заполнено» иначе нечем. Разрыв
     /// между этим числом и `odometerKm` — и есть то, что хочется дотрекать.
     var manualOdometerKm: Double?
+    /// Наградные километры — сумма ТОЛЬКО записанных поездок этой машины.
+    /// От `odometerKm` отличается ровно вписанными рукой (0.8.0).
+    ///
+    /// `nil` — «не спрашивали»: так отвечают машины, приехавшие с провода и
+    /// из кэша, где поля нет и взяться ему неоткуда. Тогда уровень считается
+    /// по одометру, как считался всегда. Заполняет его один читатель —
+    /// `SettingsManager.loadVehicles`, у которого есть поездки.
+    var rewardOdometerKm: Double?
     var level: Int
     var stickers: [VehicleSticker]
     var createdAt: Date
@@ -132,7 +140,8 @@ struct Vehicle: Identifiable, Codable {
          avatarStyle: String = VehicleAvatar.defaultStyle,
          type: VehicleType = .car, plate: String = "", plateVisible: Bool = false,
          visibleToOthers: Bool = true,
-         odometerKm: Double = 0, manualOdometerKm: Double? = nil, level: Int = 1, stickers: [VehicleSticker] = [],
+         odometerKm: Double = 0, manualOdometerKm: Double? = nil,
+         rewardOdometerKm: Double? = nil, level: Int = 1, stickers: [VehicleSticker] = [],
          createdAt: Date = Date(),
          cityConsumption: Double = 10.0, highwayConsumption: Double = 6.0,
          fuelPrice: Double = 56.0, fuelCurrency: String = FuelCurrency.current,
@@ -160,6 +169,7 @@ struct Vehicle: Identifiable, Codable {
         self.visibleToOthers = visibleToOthers
         self.odometerKm = odometerKm
         self.manualOdometerKm = manualOdometerKm
+        self.rewardOdometerKm = rewardOdometerKm
         self.level = level
         self.stickers = stickers
         self.createdAt = createdAt
@@ -351,18 +361,19 @@ struct Vehicle: Identifiable, Codable {
     }
 
     /// От какого числа считается уровень. ВСЕГДА треканный: уровень — награда
-    /// за то, что приложение видело своими глазами, а не за цифру с клавиатуры.
-    var levelSourceKm: Double { odometerKm }
+    /// за то, что приложение видело своими глазами, а не за цифру с
+    /// клавиатуры — и, с 0.8.0, не за маршрут, нарисованный по карте.
+    var levelSourceKm: Double { rewardOdometerKm ?? odometerKm }
 
     // MARK: - Level
 
     var progressToNextLevel: Double {
-        VehicleLevelSystem.progressToNext(km: odometerKm, level: level)
+        VehicleLevelSystem.progressToNext(km: levelSourceKm, level: level)
     }
 
     /// Always a number: the ladder has no top rung.
     var kmToNextLevel: Double {
-        VehicleLevelSystem.kmToNextLevel(km: odometerKm, level: level)
+        VehicleLevelSystem.kmToNextLevel(km: levelSourceKm, level: level)
     }
 
     var levelColor: Color {

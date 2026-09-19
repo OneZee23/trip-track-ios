@@ -219,7 +219,7 @@ struct VehicleDetailView: View {
             // Pushed, not presented: the level screen is a chapter of this one,
             // and the Garage stack that hosts this view hosts it too.
             .navigationDestination(isPresented: $showLevelInfo) {
-                VehicleLevelInfoView(level: vehicle.level, odometerKm: vehicle.odometerKm)
+                VehicleLevelInfoView(level: vehicle.level, levelKm: vehicle.levelSourceKm)
             }
             .sheet(isPresented: $showEditForm) {
                 VehicleEditFormView(mode: .edit(vehicleId))

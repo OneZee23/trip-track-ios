@@ -83,7 +83,7 @@ enum BadgeManager {
 
         // Всё, что копится в этом цикле, — ПОРОГИ ЗНАЧКОВ: 42.195, 500, 20,
         // 120 км/ч, 40 075. Они одинаковы для всех и остаются метрическими при
-        // любой настройке — отсюда `scoringKm` и явное умножение скорости на
+        // любой настройке — отсюда `rewardKm` и явное умножение скорости на
         // 3.6 вместо показа. Значок, разблокированный в милях, был бы значком
         // из другой игры.
         for trip in trips {
@@ -92,16 +92,16 @@ enum BadgeManager {
             // назначенная человеком, и значок за 120 км/ч выдавался бы за
             // набранное число.
             guard trip.source == .recorded else { continue }
-            totalDist += trip.scoringKm
+            totalDist += trip.rewardKm
             maxSpeed = max(maxSpeed, trip.maxSpeed * 3.6)
             totalDuration += trip.duration
-            longestTrip = max(longestTrip, trip.scoringKm)
+            longestTrip = max(longestTrip, trip.rewardKm)
             longestTripDuration = max(longestTripDuration, trip.duration)
 
             if let r = trip.region { regions.insert(r) }
 
-            if trip.scoringKm >= 42.195 { hasSingleMarathon = true }
-            if trip.scoringKm >= 500 { hasSingleIronButt = true }
+            if trip.rewardKm >= 42.195 { hasSingleMarathon = true }
+            if trip.rewardKm >= 500 { hasSingleIronButt = true }
 
             // Overlap-based: award if ANY part of the trip falls in the window, so
             // an overnight drive that STARTS in the evening (e.g. 20:00→07:00) still
@@ -141,7 +141,7 @@ enum BadgeManager {
             }
 
             // Sea level check: mostly at low altitude, decent distance
-            if trip.scoringKm >= 20 && !trip.trackPoints.isEmpty {
+            if trip.rewardKm >= 20 && !trip.trackPoints.isEmpty {
                 let lowPoints = trip.trackPoints.filter { $0.altitude < 10 && $0.altitude >= 0 }
                 if Double(lowPoints.count) / Double(trip.trackPoints.count) > 0.8 {
                     hasSeaLevel = true
