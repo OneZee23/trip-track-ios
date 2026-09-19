@@ -69,7 +69,15 @@ struct KeychainJWSVault: PlusJWSVault {
 ///    запрос и не принял его. Заявка остаётся в очереди, но помечается
 ///    сборкой, которой отказали, и не повторяется ДО следующего обновления
 ///    приложения: новая сборка шлёт другой запрос, и молча хоронить
-///    оплаченную подписку из-за вчерашней ошибки нельзя.
+///    оплаченную подписку из-за вчерашней ошибки нельзя. Но не вечно: после
+///    ТРЁХ разных сборок заявка выбрасывается совсем, вместе с подписью в
+///    Keychain. Чаще всего это `PLUS_BELONGS_TO_ANOTHER` — чужая подписка, и
+///    держать её подписанный чек у себя годами незачем.
+///
+/// **Очередь ограничена по длине** (`maxPending`). Настоящих заявок там
+/// одна-две; полсотни означают, что что-то их плодит, и расти списку
+/// подписанных чеков дальше нельзя — выбрасывается самая старая, со строкой
+/// в логе.
 @MainActor
 final class PlusAttachQueue {
     static let shared = PlusAttachQueue()
@@ -83,9 +91,15 @@ final class PlusAttachQueue {
         var attempts: Int = 0
         /// Раньше этого времени не пробовать (экспоненциальный откат).
         var notBefore: Date?
-        /// Сборка, которой сервер отказал ПО СМЫСЛУ. Пока она текущая —
-        /// заявка спит; обновление приложения будит её ровно один раз.
-        var rejectedBuild: String?
+        /// Сборки, которым сервер отказал ПО СМЫСЛУ. Пока текущая среди них —
+        /// заявка спит; обновление приложения будит её РОВНО ОДИН раз, и не
+        /// больше трёх раз всего (`maxRejections`).
+        ///
+        /// Список, а не одна строка: «повторить после обновления» без счётчика
+        /// означало «повторять после КАЖДОГО обновления вечно», и чужая
+        /// подписка (`PLUS_BELONGS_TO_ANOTHER`) навсегда осталась бы и в
+        /// очереди, и — что хуже — подписью в Keychain.
+        var rejectedBuilds: [String] = []
     }
 
     /// Ждут отправки.
@@ -133,6 +147,12 @@ final class PlusAttachQueue {
     static let maxRetryDelay: TimeInterval = 24 * 3600
     /// Отказы по смыслу: сервер понял запрос и не принял его.
     static let semanticRejections: Set<Int> = [400, 409, 422]
+    /// Сколько РАЗНЫХ сборок могут получить отказ по смыслу, прежде чем
+    /// заявку выбросят вместе с подписью.
+    static let maxRejections = 3
+    /// Потолок очереди. Заявок здесь бывает одна-две; полсотни — это уже не
+    /// очередь, а накопитель чужих платёжных документов.
+    static let maxPending = 50
 
     init(transport: PlusTransport = PlusAPI(),
          isAllowed: @escaping @MainActor () -> Bool = { AuthService.shared.isSignedIn },
@@ -151,8 +171,21 @@ final class PlusAttachQueue {
         self.build = build
         self.backoff = backoff
         self.now = now
-        pending = Self.loadPending(defaults, vault: vault)
+        let loaded = Self.loadPending(defaults, vault: vault)
+        pending = loaded.items
         sent = defaults.stringArray(forKey: Self.sentKey) ?? []
+        if loaded.orphaned > 0 {
+            // Бухгалтерия лежит в общих `UserDefaults`, а подпись — в Keychain,
+            // ИМЯ СЕРВИСА которого собрано из bundle id и ХОСТА API
+            // (`KeychainHelper.composeService`). Переезд между локальным
+            // бэкендом и продом внутри одной сборки меняет второе и не меняет
+            // первое: строки остаются, подписей к ним больше нет. Чистим их
+            // здесь, чтобы очередь не таскала вечно пустые заявки, и говорим
+            // об этом одной строкой — без единого идентификатора.
+            attachLog.notice(
+                "plus.attach.host_changed pending=\(loaded.orphaned, privacy: .public)")
+            savePending()
+        }
     }
 
     /// Поставить транзакцию в очередь и попробовать отправить сейчас.
@@ -165,6 +198,12 @@ final class PlusAttachQueue {
         guard !sent.contains(key) else { return }
         guard !pending.contains(where: { $0.key == key }) else { return }
         pending.append(Item(key: key, jws: jws))
+        while pending.count > Self.maxPending {
+            let dropped = pending.removeFirst()
+            attachLog.notice("""
+                attach queue full — dropping \(dropped.key.suffix(8), privacy: .public)
+                """)
+        }
         savePending()
         Task { await drain() }
     }
@@ -188,7 +227,7 @@ final class PlusAttachQueue {
         while index < pending.count {
             let item = pending[index]
             if let notBefore = item.notBefore, notBefore > now() { index += 1; continue }
-            if let rejected = item.rejectedBuild, rejected == build { index += 1; continue }
+            if item.rejectedBuilds.contains(build) { index += 1; continue }
 
             var outcome = Outcome.deferred
             for attempt in 0..<Self.maxAttempts {
@@ -220,14 +259,25 @@ final class PlusAttachQueue {
                 savePending()
 
             case .rejected(let reason):
-                attachLog.notice("""
-                    attach rejected for \(item.key.suffix(8), privacy: .public): \
-                    \(reason, privacy: .public) — sleeping until the next build
-                    """)
-                pending[slot].rejectedBuild = build
+                pending[slot].rejectedBuilds.append(build)
                 pending[slot].notBefore = nil
-                savePending()
-                index = slot + 1
+                if pending[slot].rejectedBuilds.count >= Self.maxRejections {
+                    attachLog.notice("""
+                        attach rejected for \(item.key.suffix(8), privacy: .public): \
+                        \(reason, privacy: .public) — given up after \
+                        \(Self.maxRejections, privacy: .public) builds
+                        """)
+                    pending.remove(at: slot)
+                    savePending()   // и подпись уходит из Keychain вместе с заявкой
+                    index = slot
+                } else {
+                    attachLog.notice("""
+                        attach rejected for \(item.key.suffix(8), privacy: .public): \
+                        \(reason, privacy: .public) — sleeping until the next build
+                        """)
+                    savePending()
+                    index = slot + 1
+                }
 
             case .deferred:
                 // Сеть не поднялась за пять попыток. Останавливаем ВЕСЬ заход:
@@ -302,7 +352,7 @@ final class PlusAttachQueue {
         let rows: [[String: Any]] = pending.map { item in
             var row: [String: Any] = ["k": item.key, "a": item.attempts]
             if let notBefore = item.notBefore { row["n"] = notBefore.timeIntervalSince1970 }
-            if let rejected = item.rejectedBuild { row["b"] = rejected }
+            if !item.rejectedBuilds.isEmpty { row["b"] = item.rejectedBuilds }
             return row
         }
         defaults.set(rows, forKey: Self.pendingKey)
@@ -310,26 +360,44 @@ final class PlusAttachQueue {
         vault.write(Dictionary(pending.map { ($0.key, $0.jws) }, uniquingKeysWith: { a, _ in a }))
     }
 
-    private static func loadPending(_ defaults: UserDefaults, vault: PlusJWSVault) -> [Item] {
+    /// Заявки и СКОЛЬКО строк бухгалтерии осталось без подписи: второе —
+    /// признак того, что Keychain отвечает по другому имени сервиса (сменился
+    /// хост API), и его надо не проглотить, а сказать вслух.
+    private static func loadPending(
+        _ defaults: UserDefaults, vault: PlusJWSVault
+    ) -> (items: [Item], orphaned: Int) {
         let signatures = vault.read()
         if let rows = defaults.array(forKey: pendingKey) as? [[String: Any]] {
-            return rows.compactMap { row in
-                guard let key = row["k"] as? String, let jws = signatures[key] else { return nil }
-                return Item(
+            var items: [Item] = []
+            var orphaned = 0
+            for row in rows {
+                guard let key = row["k"] as? String else { continue }
+                guard let jws = signatures[key] else { orphaned += 1; continue }
+                // `b` был строкой до этой волны — читаем оба написания, иначе
+                // заявка, отвергнутая прежней сборкой, проснулась бы заново.
+                let rejected: [String]
+                if let list = row["b"] as? [String] { rejected = list }
+                else if let one = row["b"] as? String { rejected = [one] }
+                else { rejected = [] }
+                items.append(Item(
                     key: key,
                     jws: jws,
                     attempts: row["a"] as? Int ?? 0,
                     notBefore: (row["n"] as? TimeInterval).map(Date.init(timeIntervalSince1970:)),
-                    rejectedBuild: row["b"] as? String)
+                    rejectedBuilds: rejected))
             }
+            return (items, orphaned)
         }
         // Формат 0.8.0-beta: пары `[ключ, подпись]` прямо в `UserDefaults`.
         // Подхватываем и переносим подпись в Keychain при первом сохранении;
         // старый ключ стирает `savePending`.
-        guard let legacy = defaults.array(forKey: pendingKeyV1) as? [[String]] else { return [] }
-        return legacy.compactMap { row in
+        guard let legacy = defaults.array(forKey: pendingKeyV1) as? [[String]] else {
+            return ([], 0)
+        }
+        let items = legacy.compactMap { row -> Item? in
             guard row.count == 2 else { return nil }
             return Item(key: row[0], jws: row[1])
         }
+        return (items, 0)
     }
 }

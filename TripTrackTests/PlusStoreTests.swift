@@ -298,6 +298,30 @@ final class PlusStoreTests: XCTestCase {
                        "возвращение в приложение обязано пересчитать права")
     }
 
+    /// Одно возвращение в приложение — ОДНО обновление прав.
+    ///
+    /// `didBecomeActive` приходит не только после фона: его шлёт и снятый
+    /// системный лист (Апл-ай-ди, шторка, звонок). Пока слушались ОБА
+    /// уведомления перехода, на каждый возврат уходило по два запроса к
+    /// StoreKit; теперь слушается одно, а подряд идущие схлопывает
+    /// `foregroundDebounce`.
+    func testTwoForegroundNotificationsInARowCauseOneRefresh() async throws {
+        let session = try makeSession()
+        defer { session.clearTransactions() }
+        PlusStore.shared.start()
+
+        let before = PlusStore.shared.entitlementRefreshes
+        PlusStore.shared.scheduleForegroundRefresh()
+        PlusStore.shared.scheduleForegroundRefresh()
+        NotificationCenter.default.post(
+            name: UIApplication.didBecomeActiveNotification, object: nil)
+
+        try? await Task.sleep(
+            nanoseconds: UInt64((PlusStore.foregroundDebounce + 1.5) * 1_000_000_000))
+        XCTAssertEqual(PlusStore.shared.entitlementRefreshes - before, 1,
+                       "три повода подряд — одно обновление")
+    }
+
     /// Право на вводное предложение спрашивается у Apple. Здесь оно ещё не
     /// израсходовано, поэтому ответ положительный; отрицательную половину
     /// правила держит `PlusPaywallModelTests` чистой функцией (разыграть

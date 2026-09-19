@@ -237,6 +237,69 @@ final class PlusAttachTests: XCTestCase {
         XCTAssertEqual(updated.sent, ["A"])
     }
 
+    /// Чужая подписка (`PLUS_BELONGS_TO_ANOTHER`) не повторяется вечно:
+    /// «после каждого обновления» без счётчика означало, что её подписанный
+    /// чек лежит у нас в Keychain до переустановки, а запрос уходит на сервер
+    /// после каждого релиза. Три разные сборки — и заявка выброшена вместе с
+    /// подписью.
+    func testAForeignSubscriptionIsGivenUpAfterThreeBuilds() async {
+        transport.fail(times: .max, with: APIError.unknownServer(
+            code: "PLUS_BELONGS_TO_ANOTHER", message: ""))
+
+        for (index, build) in ["62", "63", "64"].enumerated() {
+            let queue = makeQueue(build: build)
+            if index == 0 { queue.enqueue(key: "A", jws: "jws-a") } else { await queue.drain() }
+            // Ждём СОСТОЯНИЕ очереди, а не счётчик попыток: `enqueue` пускает
+            // дренаж отдельной задачей, и попытка успевает случиться раньше,
+            // чем отказ ляжет на диск.
+            await waitUntil { queue.pending.first?.rejectedBuilds.contains(build) ?? true }
+            XCTAssertEqual(transport.attempts.count, index + 1,
+                           "по одной попытке на сборку, не больше")
+            if index < 2 {
+                XCTAssertEqual(queue.pending.map(\.key), ["A"])
+            } else {
+                XCTAssertTrue(queue.pending.isEmpty, "на третьей сборке заявка выброшена")
+                XCTAssertNil(vault.read()["A"], "и подпись ушла из Keychain вместе с ней")
+            }
+        }
+
+        // Четвёртая сборка не находит уже ничего.
+        let after = makeQueue(build: "65")
+        await after.drain()
+        XCTAssertEqual(transport.attempts.count, 3)
+    }
+
+    /// Очередь не растёт без предела: полсотни подписанных чеков — это уже не
+    /// очередь, а накопитель. Выбрасывается самая старая.
+    func testTheQueueIsCappedAndDropsTheOldest() async {
+        transport.fail(times: .max)
+        let queue = makeQueue()
+        for i in 0...PlusAttachQueue.maxPending {
+            queue.enqueue(key: "K\(i)", jws: "jws-\(i)")
+        }
+        XCTAssertEqual(queue.pending.count, PlusAttachQueue.maxPending)
+        XCTAssertNil(queue.pending.first { $0.key == "K0" }, "самая старая выброшена")
+        XCTAssertNotNil(queue.pending.first { $0.key == "K\(PlusAttachQueue.maxPending)" })
+        XCTAssertNil(vault.read()["K0"], "и её подпись тоже")
+    }
+
+    /// Бухгалтерия лежит в общих `UserDefaults`, а подпись — в Keychain, имя
+    /// сервиса которого собрано из bundle id и ХОСТА API. Переезд между
+    /// локальным бэкендом и продом внутри одной сборки оставляет строки без
+    /// подписей: чистим их и говорим об этом одной строкой, без единого
+    /// идентификатора.
+    func testBookkeepingWithoutSignaturesIsClearedWhenTheHostChanges() {
+        defaults.set([["k": "A", "a": 2], ["k": "B", "a": 0]], forKey: "plus.attach.pending.v2")
+        // Keychain отвечает по другому имени сервиса — подписей к этим ключам нет.
+        vault.write([:])
+
+        let queue = makeQueue()
+
+        XCTAssertTrue(queue.pending.isEmpty, "заявка без подписи — не заявка")
+        let rows = defaults.array(forKey: "plus.attach.pending.v2") as? [[String: Any]]
+        XCTAssertEqual(rows?.count, 0, "бухгалтерия осиротевших строк вычищена")
+    }
+
     func testPermanenceRule() {
         XCTAssertTrue(PlusAttachQueue.isPermanent(APIError.validationFailed("")))
         XCTAssertTrue(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(400)))

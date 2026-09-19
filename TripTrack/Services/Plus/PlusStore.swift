@@ -124,7 +124,13 @@ final class PlusStore: ObservableObject {
     private var updatesTask: Task<Void, Never>?
     private var storefrontTask: Task<Void, Never>?
     private var recheckTask: Task<Void, Never>?
-    private var foregroundObservers: [NSObjectProtocol] = []
+    private var foregroundObserver: NSObjectProtocol?
+    private var foregroundTask: Task<Void, Never>?
+    /// Сколько раз права перечитывались. Существует ради сторожа: «одно
+    /// возвращение в приложение = одно обновление» иначе не проверить ничем —
+    /// результат у двух обновлений подряд одинаковый, а стоят они по запросу
+    /// к StoreKit каждое.
+    private(set) var entitlementRefreshes = 0
     private var cancellables = Set<AnyCancellable>()
     private var started = false
 
@@ -132,6 +138,17 @@ final class PlusStore: ObservableObject {
     /// подписка кончается по календарю, а не по событию: истечение НЕ создаёт
     /// транзакции, и `Transaction.updates` про него молчит.
     static let recheckInterval: TimeInterval = 24 * 3600
+
+    /// Пауза перед обновлением прав после возвращения в приложение.
+    ///
+    /// Нужна потому, что одно возвращение — это НЕСКОЛЬКО уведомлений
+    /// (`willEnterForeground`, затем `didBecomeActive`; плюс `didBecomeActive`
+    /// приходит и после снятого системного листа — Apple ID, шторки, звонка).
+    /// Подписавшись на оба, мы получали два запроса к StoreKit на каждый
+    /// переход. Слушается теперь ОДИН (`didBecomeActive` — он приходит и
+    /// после холодного старта, и после возврата из фона), а подряд идущие
+    /// схлопываются сюда.
+    static let foregroundDebounce: TimeInterval = 2
 
     #if DEBUG
     /// Флаг запуска, которым снимаются экраны платного. Читается свежо:
@@ -228,14 +245,10 @@ final class PlusStore: ObservableObject {
         // бы до перезапуска). Зовётся именно `refreshEntitlements`, а не
         // `refreshAll`: витрина и продукты на каждом фокусе не нужны, а
         // `currentEntitlements` отвечает офлайн и стоит ничего.
-        for name in [UIApplication.didBecomeActiveNotification,
-                     UIApplication.willEnterForegroundNotification] {
-            let token = NotificationCenter.default.addObserver(
-                forName: name, object: nil, queue: .main
-            ) { _ in
-                Task { @MainActor in await PlusStore.shared.refreshEntitlements() }
-            }
-            foregroundObservers.append(token)
+        foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in PlusStore.shared.scheduleForegroundRefresh() }
         }
         // И на всякий случай — раз в сутки у приложения, которое так и не
         // уходило в фон: подписка кончается по календарю.
@@ -251,6 +264,18 @@ final class PlusStore: ObservableObject {
         Task { [weak self] in
             await self?.refreshAll()
             await PlusAttachQueue.shared.drain()
+        }
+    }
+
+    /// Схлопнуть подряд идущие возвращения в одно обновление прав.
+    /// Не приватная — её зовёт сторож, разыгрывающий два уведомления подряд.
+    func scheduleForegroundRefresh() {
+        foregroundTask?.cancel()
+        foregroundTask = Task { [weak self] in
+            try? await Task.sleep(
+                nanoseconds: UInt64(Self.foregroundDebounce * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await self?.refreshEntitlements()
         }
     }
 
@@ -292,6 +317,7 @@ final class PlusStore: ObservableObject {
     // MARK: - Права
 
     func refreshEntitlements() async {
+        entitlementRefreshes += 1
         var entitled = false
         var isTrial = false
         var expires: Date?
