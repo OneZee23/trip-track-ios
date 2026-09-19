@@ -109,6 +109,16 @@ struct MyMapView: View {
         // of the screen, and the bar sitting on top of it clipped the
         // progress row clean off.
         .hideAppTabBar(vm.selection != nil || isSummaryExpanded)
+        .onAppear {
+            // Diagnostic (round 2, 19 сен 2026): fires once this subtree has
+            // been laid out — the closest SwiftUI gets to "first frame of
+            // this screen drew". Refires on every visit to the Maps tab
+            // (`ContentView` destroys/rebuilds `MyMapView` on tab switch —
+            // see `AppTab` doc), so cold (first ever) vs warm (revisit,
+            // `MyMapViewModel.shared`/`BundleRiddleCatalog.shared` already
+            // built) both show up in the trace naturally.
+            StartupTrace.mark("MyMapView.onAppear")
+        }
         .task {
             await vm.loadIfNeeded(tripManager: mapVM.tripManager, territory: mapVM.territoryManager)
         }

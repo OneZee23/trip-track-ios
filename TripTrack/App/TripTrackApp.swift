@@ -3,7 +3,20 @@ import CoreText
 
 @main
 struct TripTrackApp: App {
+    /// Stored-property default initializers on a struct with a custom
+    /// `init()` all run BEFORE that `init()`'s body — in source declaration
+    /// order (verified empirically: Swift does not defer them to the body).
+    /// `StartupTrace`'s `t0` is set lazily on the FIRST `mark` call, so
+    /// putting that call here, ahead of `persistenceController`, is what
+    /// pulls `loadPersistentStores` (+ lightweight migration) into the trace
+    /// instead of hiding it before t0 existed.
+    private let startupMarkBegin: Void = StartupTrace.mark("app init begin")
     let persistenceController = PersistenceController.shared
+    /// Right after the store attaches — see `startupMarkBegin` above. Must
+    /// stay directly below `persistenceController` so nothing else (e.g.
+    /// `storeHealth`'s default, which also touches `PersistenceController
+    /// .shared`) races it into being the first access.
+    private let startupMarkStoreOpened: Void = StartupTrace.mark("store opened")
     @StateObject private var themeManager = ThemeManager()
     @StateObject private var languageManager = LanguageManager()
     /// Выбранная единица расстояния. Живёт рядом с языком и по той же причине:
@@ -22,7 +35,8 @@ struct TripTrackApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        StartupTrace.mark("app init begin")
+        // "app init begin" now fires from `startupMarkBegin` above, before
+        // any stored-property default initializer runs — see its doc comment.
         // Bundled fonts are registered at runtime instead of via Info.plist
         // UIAppFonts — Info.plist is skip-worktree-protected local config in
         // this repo, so the registration must live in code. PressStart2P =

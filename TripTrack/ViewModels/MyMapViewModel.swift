@@ -195,6 +195,14 @@ final class MyMapViewModel: ObservableObject {
     /// умолчания считаются на СТОРОНЕ ВЫЗОВА, то есть вне главного актёра.
     init(discoveryStore: DiscoveryStore = .shared,
          riddleCatalog: RiddleCatalog? = nil) {
+        // Diagnostic (round 2, 19 сен 2026) — this is the init `MyMapView`'s
+        // `@ObservedObject private var vm = MyMapViewModel.shared` triggers
+        // on the FIRST visit to the Maps tab, synchronously, before the tab's
+        // first frame: `MyMapViewModel.shared` is a plain expression
+        // evaluated wherever it's first referenced, and `ContentView.body`'s
+        // `switch selectedTab { case .maps: MyMapView() }` references it
+        // while building that frame.
+        StartupTrace.mark("MyMapViewModel.init begin")
         self.remoteSource = nil
         self.discoveryStore = discoveryStore
         self.riddleCatalog = riddleCatalog ?? DiscoveryProcessor.shared.riddleCatalog
@@ -233,6 +241,7 @@ final class MyMapViewModel: ObservableObject {
                 Task { await self.reloadDiscoveries() }
             }
         }
+        StartupTrace.mark("MyMapViewModel.init end")
     }
 
     func loadIfNeeded(tripManager: TripManager, territory: TerritoryManager) async {
@@ -242,6 +251,13 @@ final class MyMapViewModel: ObservableObject {
     }
 
     func reload(tripManager: TripManager, territory: TerritoryManager) async {
+        // Diagnostic (round 2, 19 сен 2026): this is the FIRST async work
+        // `MyMapView`'s `.task` kicks off (`loadIfNeeded`) — all off the
+        // synchronous first-frame path already (the view shows the empty
+        // state / `CarLoadingView` until this finishes), so nothing below
+        // is a mark-and-move candidate — it's here to complete the cold vs
+        // warm table, not because it blocks paint.
+        StartupTrace.mark("MyMapViewModel.reload begin")
         tripManagerRef = tripManager
         territoryRef = territory
         stale = false
@@ -253,15 +269,18 @@ final class MyMapViewModel: ObservableObject {
         if exploration.isEmpty { isLoading = true }
 
         await RegionAtlas.shared.loadIfNeeded()
+        StartupTrace.mark("MyMapViewModel.reload RegionAtlas.loadIfNeeded done")
 
         // Main-actor: CoreData fetch. Everything after it is pure value work.
         let trips = tripManager.fetchTripsForMap()
+        StartupTrace.mark("MyMapViewModel.reload fetchTripsForMap done")
         let hashes = territory.visitedGeohashes
         let atlas = RegionAtlas.shared
         // Открытое читается ГОТОВЫМ — своим фоновым контекстом, не главным
         // актёром. Пересчитывать туман по всем поездкам на каждое открытие
         // вкладки стоило бы 0.5–2 с; чтение тайлов — 50–150 мс.
         let tiles = await RevealedLayerStore.shared.tiles()
+        StartupTrace.mark("MyMapViewModel.reload tiles() done")
 
         let built = await Task.detached(priority: .userInitiated) {
             // Оверлеи собираются здесь же: превращение сети в `MKPolyline` —
@@ -274,13 +293,16 @@ final class MyMapViewModel: ObservableObject {
                 openedKmByRegion: layer.regionKm)
             return (exploration, layer)
         }.value
+        StartupTrace.mark("MyMapViewModel.reload build done")
 
         // A newer reload superseded this one while the build was detached.
         guard generation == loadGeneration else { return }
 
         apply(exploration: built.0, layer: built.1)
         isLoading = false
+        StartupTrace.mark("MyMapViewModel.reload apply done")
         await reloadDiscoveries()
+        StartupTrace.mark("MyMapViewModel.reload end")
     }
 
     // MARK: - Находки
