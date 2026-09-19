@@ -1398,6 +1398,8 @@ extension Translations {
         "manualTripErrorTooLong": "Ta trasa jest za długa na jeden przejazd",
         "manualTripErrorFailed": "Nie udało się wyznaczyć trasy",
         "manualTripBadge": "Dopisane ręcznie",
+        "exportGPX": "Eksportuj GPX",
+        "exportGPXFailed": "Nie udało się wyeksportować GPX",
     ]
 
 }

@@ -1398,6 +1398,8 @@ extension Translations {
         "manualTripErrorTooLong": "Rute ini terlalu panjang untuk satu perjalanan",
         "manualTripErrorFailed": "Rute tidak bisa dibuat",
         "manualTripBadge": "Ditambahkan manual",
+        "exportGPX": "Ekspor GPX",
+        "exportGPXFailed": "GPX gagal diekspor",
     ]
 
 }

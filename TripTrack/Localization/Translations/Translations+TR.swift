@@ -1398,6 +1398,8 @@ extension Translations {
         "manualTripErrorTooLong": "Bu rota tek bir yolculuk için çok uzun",
         "manualTripErrorFailed": "Rota oluşturulamadı",
         "manualTripBadge": "Elle eklendi",
+        "exportGPX": "GPX olarak dışa aktar",
+        "exportGPXFailed": "GPX dışa aktarılamadı",
     ]
 
 }

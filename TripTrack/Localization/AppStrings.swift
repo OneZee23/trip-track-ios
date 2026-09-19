@@ -7442,4 +7442,16 @@ enum AppStrings {
     static func manualTripBadge(_ lang: LanguageManager.Language) -> String {
         tr(lang, "manualTripBadge", ru: "Вписана рукой", en: "Added by hand")
     }
+
+    // MARK: - Экспорт GPX (0.8.0)
+
+    /// Пункт меню «…» на экране СВОЕЙ поездки.
+    static func exportGPX(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "exportGPX", ru: "Экспорт GPX", en: "Export GPX")
+    }
+
+    /// Тост: нет точек трека, или файл не записался.
+    static func exportGPXFailed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "exportGPXFailed", ru: "Не удалось экспортировать GPX", en: "Could not export GPX")
+    }
 }

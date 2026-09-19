@@ -515,6 +515,14 @@ struct TripDetailView: View {
                 present { showJourneyComposer = true }
             })
         }
+        // Own trip only — a companion's copy has no local track to read.
+        items.append(.init(
+            title: AppStrings.exportGPX(lang.language),
+            systemImage: "square.and.arrow.down",
+            accessibilityId: "detail_action_export_gpx"
+        ) {
+            present { exportGPX(trip: trip) }
+        })
         // Last in the list, and the only destructive entry. It lived as a
         // red button at the foot of the screen for a while; a screen that
         // ENDS on «delete» reads as if that were the conclusion of looking
@@ -528,6 +536,76 @@ struct TripDetailView: View {
             present { showDeleteConfirm = true }
         })
         return items
+    }
+
+    /// «Экспорт GPX» — same trip.track this screen already replays, written
+    /// to a `.gpx` file and handed to the system share sheet. Points come
+    /// straight off `trip.trackPoints`: for an own trip that's the same array
+    /// the replay engine and the checkpoint locator already read (line 2153
+    /// et al.), loaded in full by `TripRepository.fetchTripDetail`.
+    ///
+    /// A trip with no points (should not happen for a saved trip, but an
+    /// empty file would be useless to share either way) is a toast, not a
+    /// share sheet with nothing in it.
+    private func exportGPX(trip: Trip) {
+        // Our own trip opened from the feed (`isOwn` compares the author id,
+        // not where the data came from) never gets a local CoreData row —
+        // `Trip(social:)` hands it `trackPoints: []` — so `trip.trackPoints`
+        // is the wrong array to ask here. Its drive lives in `remoteTrack`,
+        // the same field `replayInput` reads for the map/replay when the
+        // trip is remote-backed.
+        let points: [TrackPoint] = isRemoteBacked
+            ? Self.trackPoints(from: remoteTrack)
+            : trip.trackPoints
+        guard !points.isEmpty else {
+            toastItem = ToastItem(type: .error, message: AppStrings.exportGPXFailed(lang.language))
+            return
+        }
+        let fileName = GPXExporter.displayName(for: trip)
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeName = fileName.isEmpty ? "TripTrack" : fileName
+        Task {
+            // Building the XML is the heavy part on a long trip (tens of
+            // thousands of points) — off the main actor per CLAUDE.md, while
+            // the project is still on Swift 5.9 (`Task.detached`, not
+            // `@concurrent`).
+            let content = await Task.detached(priority: .userInitiated) {
+                GPXExporter.gpx(for: trip, points: points)
+            }.value
+            // Own subfolder, cleared before every export: a `.gpx` written
+            // to `temporaryDirectory` directly is never cleaned up by
+            // anything, and a phone that exports often would slowly pile up
+            // one file per trip forever.
+            let fm = FileManager.default
+            let dir = fm.temporaryDirectory.appendingPathComponent("gpx-export", isDirectory: true)
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            if let existing = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                for file in existing { try? fm.removeItem(at: file) }
+            }
+            let url = dir.appendingPathComponent(safeName).appendingPathExtension("gpx")
+            guard let data = content.data(using: .utf8),
+                  (try? data.write(to: url, options: .atomic)) != nil else {
+                await MainActor.run {
+                    toastItem = ToastItem(type: .error, message: AppStrings.exportGPXFailed(lang.language))
+                }
+                return
+            }
+            // Same wrapper the debug-log journal shares its file through:
+            // waits for a controller that can actually present, since this
+            // fires right after the «…» popover finishes dismissing.
+            await ShareLinkPresenter.present(url: url, title: safeName)
+        }
+    }
+
+    /// `SocialTrackPoint` → `TrackPoint`: the same three fields `replayInput`
+    /// already reads off `remoteTrack` (`lat`/`lon`, `speed`, `t`) — the wire
+    /// carries nothing else, so altitude, course and accuracy land on
+    /// `TrackPoint`'s own "unknown" defaults (0, -1, 0) rather than a second,
+    /// slightly different guess at the same three fields.
+    private static func trackPoints(from remote: [SocialTrackPoint]) -> [TrackPoint] {
+        remote.map { TrackPoint(latitude: $0.lat, longitude: $0.lon, speed: $0.speed, timestamp: $0.t) }
     }
 
     /// Fix 3: whether `myAccountId` is an ACCEPTED companion on a trip it
