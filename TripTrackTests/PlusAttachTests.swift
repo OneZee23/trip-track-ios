@@ -39,6 +39,16 @@ final class PlusAttachTests: XCTestCase {
         }
     }
 
+    /// Подписи в прогоне — в памяти, а не в Keychain: боевое хранилище одно
+    /// на приложение, и тест, писавший в него, оставлял бы подпись следующему
+    /// (и, хуже, следующему ПРОГОНУ).
+    private final class MemoryVault: PlusJWSVault {
+        private var rows: [String: String] = [:]
+        func read() -> [String: String] { rows }
+        func write(_ rows: [String: String]) { self.rows = rows }
+    }
+
+    private var vault: MemoryVault!
     private var defaults: UserDefaults!
     private var suiteName: String!
     private var transport: StubTransport!
@@ -48,6 +58,7 @@ final class PlusAttachTests: XCTestCase {
         super.setUp()
         suiteName = "plus.attach.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
+        vault = MemoryVault()
         transport = StubTransport()
         MockURLProtocol.reset()
         let config = URLSessionConfiguration.ephemeral
@@ -60,6 +71,7 @@ final class PlusAttachTests: XCTestCase {
     override func tearDown() {
         defaults?.removePersistentDomain(forName: suiteName)
         defaults = nil
+        vault = nil
         suiteName = nil
         transport = nil
         MockURLProtocol.reset()
@@ -70,12 +82,18 @@ final class PlusAttachTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeQueue(signedIn: Bool = true) -> PlusAttachQueue {
-        PlusAttachQueue(
+    private func makeQueue(
+        signedIn: Bool = true, build: String = "62", after: TimeInterval = 0
+    ) -> PlusAttachQueue {
+        let clock = Date().addingTimeInterval(after)
+        return PlusAttachQueue(
             transport: transport,
             isAllowed: { signedIn },
             defaults: defaults,
-            backoff: { _ in }   // откат мгновенный: предмет проверки — счёт попыток
+            vault: vault,
+            build: build,
+            backoff: { _ in },  // откат мгновенный: предмет проверки — счёт попыток
+            now: { clock }
         )
     }
 
@@ -151,7 +169,8 @@ final class PlusAttachTests: XCTestCase {
         await waitUntil { transport.attempts.count >= PlusAttachQueue.maxAttempts }
 
         transport.fail(times: 0)
-        let second = makeQueue()
+        // Заявка после пяти неудач спит минуту — человек вернулся позже.
+        let second = makeQueue(after: 2 * 3600)
         XCTAssertEqual(second.pending.map(\.key), ["A"])
         await second.drain()
         await waitUntil { second.pending.isEmpty }
@@ -162,26 +181,104 @@ final class PlusAttachTests: XCTestCase {
 
     /// Транзакция чужого аккаунта — ответ навсегда. Повторять её пять раз
     /// значит пять раз получить то же самое.
-    func testPermanentRejectionIsDroppedAfterOneAttempt() async {
+    func testPermanentRejectionIsTriedOnceAndThenSleeps() async {
         transport.fail(times: .max, with: APIError.unknownServer(
             code: "PLUS_BELONGS_TO_ANOTHER", message: ""))
         let queue = makeQueue()
         queue.enqueue(key: "A", jws: "jws-a")
         await queue.drain()
 
-        await waitUntil { queue.pending.isEmpty }
+        await waitUntil { !queue.pending.isEmpty && transport.attempts.count == 1 }
         XCTAssertEqual(transport.attempts.count, 1)
-        XCTAssertTrue(queue.pending.isEmpty, "постоянный отказ не копится в очереди")
+        await queue.drain()
+        XCTAssertEqual(transport.attempts.count, 1, "той же сборкой — ни одной новой попытки")
+    }
+
+    /// **Находка аудита H2.** 404 значит «маршрута ещё нет» (он катится
+    /// отдельной задачей), 401 — «токен ещё не обновился». Раньше любой из
+    /// них снимал заявку И клал её ключ в `sent`, откуда `enqueue` больше не
+    /// выпускал: деньги списаны, сервер о подписке не знает НИКОГДА, и
+    /// лечится это только переустановкой приложения.
+    func testARouteThatIsNotDeployedYetDoesNotOrphanTheSubscriptionForever() async {
+        transport.fail(times: .max, with: APIError.invalidHTTPStatus(404))
+        let queue = makeQueue()
+        queue.enqueue(key: "2000000123456789", jws: "JWS-REAL")
+
+        await waitUntil { transport.attempts.count >= PlusAttachQueue.maxAttempts }
+        XCTAssertEqual(queue.pending.map(\.key), ["2000000123456789"],
+                       "заявка осталась в очереди")
+        XCTAssertTrue(queue.sent.isEmpty, "и НЕ записана как доставленная")
+
+        // Сервер починили, человек вернулся в приложение позже отката.
+        transport.fail(times: 0)
+        let later = makeQueue(after: 2 * 3600)
+        XCTAssertEqual(later.pending.map(\.key), ["2000000123456789"])
+        await later.drain()
+        await waitUntil { later.pending.isEmpty }
+        XCTAssertEqual(later.sent, ["2000000123456789"], "и доехала")
+    }
+
+    /// Отказ ПО СМЫСЛУ спит до следующей сборки — но не дольше: новая сборка
+    /// шлёт другой запрос, и хоронить оплаченную подписку из-за вчерашней
+    /// ошибки клиента нельзя.
+    func testASemanticRejectionIsRetriedOnceAfterTheNextAppUpdate() async {
+        transport.fail(times: .max, with: APIError.invalidHTTPStatus(422))
+        let queue = makeQueue(build: "62")
+        queue.enqueue(key: "A", jws: "jws-a")
+        await waitUntil { transport.attempts.count == 1 }
+        await queue.drain()
+        XCTAssertEqual(transport.attempts.count, 1)
+
+        transport.fail(times: 0)
+        let updated = makeQueue(build: "63")
+        await updated.drain()
+        await waitUntil { updated.pending.isEmpty }
+        XCTAssertEqual(transport.attempts.count, 2, "обновление будит заявку ровно один раз")
+        XCTAssertEqual(updated.sent, ["A"])
     }
 
     func testPermanenceRule() {
         XCTAssertTrue(PlusAttachQueue.isPermanent(APIError.validationFailed("")))
-        XCTAssertTrue(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(404)))
+        XCTAssertTrue(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(400)))
+        XCTAssertTrue(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(409)))
+        XCTAssertTrue(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(422)))
+        XCTAssertFalse(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(404)),
+                       "маршрут ещё не выкачен — это «попробуй позже», а не «никогда»")
+        XCTAssertFalse(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(410)))
+        XCTAssertFalse(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(401)),
+                       "токен ещё не обновился")
+        XCTAssertFalse(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(403)))
         XCTAssertFalse(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(429)),
                        "троттлинг — это «попробуй позже»")
         XCTAssertFalse(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(408)))
         XCTAssertFalse(PlusAttachQueue.isPermanent(APIError.invalidHTTPStatus(503)))
         XCTAssertFalse(PlusAttachQueue.isPermanent(URLError(.notConnectedToInternet)))
+    }
+
+    /// Откат растёт вдвое и упирается в сутки — дальше растить бессмысленно:
+    /// очередь всё равно разбирается на каждом запуске и входе.
+    func testRetryBackoffGrowsAndStopsAtADay() {
+        XCTAssertEqual(PlusAttachQueue.retryDelay(attempt: 1), 60, accuracy: 0.001)
+        XCTAssertEqual(PlusAttachQueue.retryDelay(attempt: 2), 120, accuracy: 0.001)
+        XCTAssertEqual(PlusAttachQueue.retryDelay(attempt: 5), 960, accuracy: 0.001)
+        XCTAssertEqual(PlusAttachQueue.retryDelay(attempt: 40),
+                       PlusAttachQueue.maxRetryDelay, accuracy: 0.001)
+    }
+
+    /// Сама подпись Apple в `UserDefaults` не лежит: она платёжный документ,
+    /// а plist уезжает в незашифрованную резервную копию.
+    func testTheSignatureItselfNeverTouchesUserDefaults() async {
+        transport.fail(times: .max)
+        let queue = makeQueue()
+        queue.enqueue(key: "A", jws: "eyJhbGciOiJFUzI1NiJ9.PAYLOAD.SIG")
+        await waitUntil { !self.transport.attempts.isEmpty }
+
+        let plist = defaults.dictionaryRepresentation()
+        let dumped = plist.values.map { "\($0)" }.joined(separator: " ")
+        XCTAssertFalse(dumped.contains("eyJhbGciOiJFUzI1NiJ9.PAYLOAD.SIG"),
+                       "подпись обязана лежать в Keychain, а не в plist")
+        XCTAssertEqual(vault.read()["A"], "eyJhbGciOiJFUzI1NiJ9.PAYLOAD.SIG")
+        _ = queue
     }
 
     // MARK: - Без аккаунта
