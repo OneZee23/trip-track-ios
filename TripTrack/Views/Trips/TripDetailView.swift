@@ -523,6 +523,13 @@ struct TripDetailView: View {
         ) {
             present { exportGPX(trip: trip) }
         })
+        items.append(.init(
+            title: AppStrings.exportCSV(lang.language),
+            systemImage: "tablecells",
+            accessibilityId: "detail_action_export_csv"
+        ) {
+            present { exportCSV(trip: trip) }
+        })
         // Last in the list, and the only destructive entry. It lived as a
         // red button at the foot of the screen for a while; a screen that
         // ENDS on «delete» reads as if that were the conclusion of looking
@@ -539,15 +546,33 @@ struct TripDetailView: View {
     }
 
     /// «Экспорт GPX» — same trip.track this screen already replays, written
-    /// to a `.gpx` file and handed to the system share sheet. Points come
-    /// straight off `trip.trackPoints`: for an own trip that's the same array
-    /// the replay engine and the checkpoint locator already read (line 2153
-    /// et al.), loaded in full by `TripRepository.fetchTripDetail`.
-    ///
-    /// A trip with no points (should not happen for a saved trip, but an
-    /// empty file would be useless to share either way) is a toast, not a
-    /// share sheet with nothing in it.
+    /// to a `.gpx` file and handed to the system share sheet.
     private func exportGPX(trip: Trip) {
+        performExport(trip: trip, fileExtension: "gpx", build: GPXExporter.gpx(for:points:))
+    }
+
+    /// «Экспорт CSV» — same track, same plumbing, a different pure function
+    /// building the file content.
+    private func exportCSV(trip: Trip) {
+        performExport(trip: trip, fileExtension: "csv", build: CSVExporter.csv(for:points:))
+    }
+
+    /// Shared plumbing for every «Экспорт …» action: read the track, build
+    /// the file off the main actor, write it into a per-format export folder
+    /// cleared before every run, and hand it to the system share sheet.
+    /// `exportGPX`/`exportCSV` differ only in `fileExtension` and which pure
+    /// function turns points into a file's content — everything else (folder
+    /// cleanup, safe file name, share sheet, error toast) is one path.
+    ///
+    /// Points come straight off `trip.trackPoints`: for an own trip that's
+    /// the same array the replay engine and the checkpoint locator already
+    /// read (line 2153 et al.), loaded in full by
+    /// `TripRepository.fetchTripDetail`. A trip with no points (should not
+    /// happen for a saved trip, but an empty file would be useless to share
+    /// either way) is a toast, not a share sheet with nothing in it.
+    private func performExport(
+        trip: Trip, fileExtension: String, build: @escaping (Trip, [TrackPoint]) -> String
+    ) {
         // Our own trip opened from the feed (`isOwn` compares the author id,
         // not where the data came from) never gets a local CoreData row —
         // `Trip(social:)` hands it `trackPoints: []` — so `trip.trackPoints`
@@ -558,7 +583,7 @@ struct TripDetailView: View {
             ? Self.trackPoints(from: remoteTrack)
             : trip.trackPoints
         guard !points.isEmpty else {
-            toastItem = ToastItem(type: .error, message: AppStrings.exportGPXFailed(lang.language))
+            toastItem = ToastItem(type: .error, message: AppStrings.exportFailed(lang.language))
             return
         }
         let fileName = GPXExporter.displayName(for: trip)
@@ -567,28 +592,28 @@ struct TripDetailView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let safeName = fileName.isEmpty ? "TripTrack" : fileName
         Task {
-            // Building the XML is the heavy part on a long trip (tens of
+            // Building the file is the heavy part on a long trip (tens of
             // thousands of points) — off the main actor per CLAUDE.md, while
             // the project is still on Swift 5.9 (`Task.detached`, not
             // `@concurrent`).
             let content = await Task.detached(priority: .userInitiated) {
-                GPXExporter.gpx(for: trip, points: points)
+                build(trip, points)
             }.value
-            // Own subfolder, cleared before every export: a `.gpx` written
-            // to `temporaryDirectory` directly is never cleaned up by
+            // Own subfolder per format, cleared before every export: a file
+            // written to `temporaryDirectory` directly is never cleaned up by
             // anything, and a phone that exports often would slowly pile up
             // one file per trip forever.
             let fm = FileManager.default
-            let dir = fm.temporaryDirectory.appendingPathComponent("gpx-export", isDirectory: true)
+            let dir = fm.temporaryDirectory.appendingPathComponent("\(fileExtension)-export", isDirectory: true)
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
             if let existing = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
                 for file in existing { try? fm.removeItem(at: file) }
             }
-            let url = dir.appendingPathComponent(safeName).appendingPathExtension("gpx")
+            let url = dir.appendingPathComponent(safeName).appendingPathExtension(fileExtension)
             guard let data = content.data(using: .utf8),
                   (try? data.write(to: url, options: .atomic)) != nil else {
                 await MainActor.run {
-                    toastItem = ToastItem(type: .error, message: AppStrings.exportGPXFailed(lang.language))
+                    toastItem = ToastItem(type: .error, message: AppStrings.exportFailed(lang.language))
                 }
                 return
             }

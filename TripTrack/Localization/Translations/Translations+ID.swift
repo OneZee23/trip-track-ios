@@ -1399,7 +1399,8 @@ extension Translations {
         "manualTripErrorFailed": "Rute tidak bisa dibuat",
         "manualTripBadge": "Ditambahkan manual",
         "exportGPX": "Ekspor GPX",
-        "exportGPXFailed": "GPX gagal diekspor",
+        "exportCSV": "Ekspor CSV",
+        "exportFailed": "Gagal diekspor",
     ]
 
 }

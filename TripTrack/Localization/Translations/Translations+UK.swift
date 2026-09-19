@@ -1399,7 +1399,8 @@ extension Translations {
         "manualTripErrorFailed": "Не вдалося побудувати маршрут",
         "manualTripBadge": "Вписана вручну",
         "exportGPX": "Експортувати GPX",
-        "exportGPXFailed": "Не вдалося експортувати GPX",
+        "exportCSV": "Експортувати CSV",
+        "exportFailed": "Не вдалося експортувати",
     ]
 
 }

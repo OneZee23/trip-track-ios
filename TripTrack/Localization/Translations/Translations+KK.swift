@@ -1399,7 +1399,8 @@ extension Translations {
         "manualTripErrorFailed": "Бағдарды құру мүмкін болмады",
         "manualTripBadge": "Қолмен қосылған",
         "exportGPX": "GPX экспорттау",
-        "exportGPXFailed": "GPX экспорттау мүмкін болмады",
+        "exportCSV": "CSV экспорттау",
+        "exportFailed": "Экспорттау мүмкін болмады",
     ]
 
 }

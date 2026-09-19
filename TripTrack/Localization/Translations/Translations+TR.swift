@@ -1399,7 +1399,8 @@ extension Translations {
         "manualTripErrorFailed": "Rota oluşturulamadı",
         "manualTripBadge": "Elle eklendi",
         "exportGPX": "GPX olarak dışa aktar",
-        "exportGPXFailed": "GPX dışa aktarılamadı",
+        "exportCSV": "CSV olarak dışa aktar",
+        "exportFailed": "Dışa aktarılamadı",
     ]
 
 }
