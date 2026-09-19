@@ -43,6 +43,10 @@ struct RiddleHint: Identifiable, Equatable {
         layer: RevealedLayer,
         limit: Int = RiddleHint.maxShown
     ) -> [RiddleHint] {
+        // Единственный гейт видимости (`RiddleHints`, 17 сентября) — весь
+        // остальной путь (аннотации, гравировка тумана, журнал, заголовок)
+        // читает то, что вернула эта функция, и молчит сам на пустом списке.
+        guard RiddleHints.isActive else { return [] }
         guard !centroids.isEmpty, limit > 0 else { return [] }
         let unsolved = riddles.filter { !solvedRiddleIds.contains($0.id) }
         guard !unsolved.isEmpty else { return [] }

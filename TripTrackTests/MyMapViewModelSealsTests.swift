@@ -22,6 +22,10 @@ final class MyMapViewModelSealsTests: XCTestCase {
         super.setUp()
         pc = PersistenceController(inMemory: true)
         store = DiscoveryStore(persistence: pc)
+        // Подсказки загадок скрыты владельцем 17 сентября
+        // (`RiddleHints.isEnabled == false`); этот класс проверяет сам план
+        // подсказок, а не то, включён ли флаг видимости.
+        RiddleHints.isEnabledOverride = true
     }
 
     /// Каждое поле обнуляется: XCTest держит экземпляры до конца прогона, и
@@ -31,6 +35,7 @@ final class MyMapViewModelSealsTests: XCTestCase {
         models.removeAll()
         store = nil
         pc = nil
+        RiddleHints.isEnabledOverride = nil
         super.tearDown()
     }
 
@@ -106,6 +111,21 @@ final class MyMapViewModelSealsTests: XCTestCase {
         await vm.reloadDiscoveries(layer: openedAround(lat: 45.0, lon: 39.0))
 
         XCTAssertEqual(vm.riddleHints.map(\.id), ["a", "b", "c"])
+    }
+
+    /// Владелец 17 сентября: убрать загадки из видимости. `RiddleHints
+    /// .isEnabled` (прод-константа, а не тестовый шов из `setUp`) обязана
+    /// опустошить и карту, и журнал — теми же данными, на которых выше три
+    /// подсказки встают на карту, когда флаг включён тестом.
+    @MainActor
+    func testHintsAreHiddenWhenTheFlagIsOff() async {
+        RiddleHints.isEnabledOverride = nil
+        let vm = makeViewModel(fiveRiddles)
+
+        await vm.reloadDiscoveries(layer: openedAround(lat: 45.0, lon: 39.0))
+
+        XCTAssertTrue(vm.riddleHints.isEmpty, "аннотаций подсказок на карте быть не должно")
+        XCTAssertTrue(vm.journal.riddles.isEmpty, "секции «Загадки рядом» в журнале быть не должно")
     }
 
     @MainActor

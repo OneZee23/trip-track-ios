@@ -12,6 +12,23 @@ import MapKit
 /// дважды.
 final class RiddleHintTests: XCTestCase {
 
+    // MARK: - Флаг видимости
+
+    /// `RiddleHint.plan` гейтится `RiddleHints.isActive` (скрыто владельцем
+    /// 17 сентября), а этот класс проверяет саму математику плана — она
+    /// обязана работать независимо от прод-константы. Обнуляется в
+    /// `tearDown`, иначе хвост роняет следующий класс тестов (см. CLAUDE.md
+    /// «Ловушки, на которые уходит по часу»).
+    override func setUp() {
+        super.setUp()
+        RiddleHints.isEnabledOverride = true
+    }
+
+    override func tearDown() {
+        RiddleHints.isEnabledOverride = nil
+        super.tearDown()
+    }
+
     // MARK: - Фикстуры
 
     private func riddle(
