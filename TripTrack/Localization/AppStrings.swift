@@ -7100,9 +7100,166 @@ enum AppStrings {
 
     // MARK: - Плюс (0.8.0)
 
-    /// Заглушка пейвола «Плюс» на время Задачи 0 — `PlusPaywallSheet`
-    /// целиком заменит Задача 2, поэтому строка одна и без подробностей.
-    static func plusPaywallPlaceholder(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "plusPaywallPlaceholder", ru: "«Плюс» скоро здесь", en: "Plus is coming soon")
+    /// Имя подписки. Одно слово: им подписан и заголовок пейвола, и строка в
+    /// профиле, и значок у имени в ленте — трём написаниям разъехаться нельзя.
+    static func plusTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusTitle", ru: "Плюс", en: "Plus")
+    }
+
+    /// Что покупают — одной фразой, до списка. Про «оформление» и «поездки»,
+    /// а не про «безлимит» и «профи»: платного, что ограничивает бесплатное,
+    /// в 0.8.0 нет ни одного.
+    static func plusPaywallSubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusPaywallSubtitle",
+           ru: "Оформление, которое видят все, и поездки, которые не обязательно ехать",
+           en: "Looks everyone can see, and trips you don't have to drive")
+    }
+
+    static func plusFeatureBackgrounds(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusFeatureBackgrounds",
+           ru: "Премиум-фоны профиля", en: "Premium profile backgrounds")
+    }
+    static func plusFeatureAvatarFrame(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusFeatureAvatarFrame",
+           ru: "Рамка аватара и значок у имени", en: "Avatar frame and a badge by your name")
+    }
+    static func plusFeatureCardStyle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusFeatureCardStyle",
+           ru: "Фон карточки машины в гараже", en: "A background for your car's card")
+    }
+    static func plusFeatureRouteLine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusFeatureRouteLine",
+           ru: "Цвет линии маршрута на своих картах", en: "Route line colour on your own maps")
+    }
+    static func plusFeatureManualTrip(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusFeatureManualTrip",
+           ru: "Ручная поездка: откуда и куда по дорогам",
+           en: "Manual trip: from here to there, along the roads")
+    }
+
+    static func plusPlanYear(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusPlanYear", ru: "Год", en: "Year")
+    }
+    static func plusPlanMonth(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusPlanMonth", ru: "Месяц", en: "Month")
+    }
+
+    /// «29,99 € в год». Цена приходит подстановкой и ТОЛЬКО из
+    /// `Product.displayPrice`: валюту, разделитель и позицию знака решает
+    /// витрина Apple, а не мы, и вписать сюда «€» значило бы соврать всем, у
+    /// кого витрина не еврозона.
+    static func plusPerYear(_ lang: LanguageManager.Language, price: String) -> String {
+        tr(lang, "plusPerYear", ru: "{price} в год", en: "{price} per year")
+            .replacingOccurrences(of: "{price}", with: price)
+    }
+    static func plusPerMonth(_ lang: LanguageManager.Language, price: String) -> String {
+        tr(lang, "plusPerMonth", ru: "{price} в месяц", en: "{price} per month")
+            .replacingOccurrences(of: "{price}", with: price)
+    }
+
+    /// «7 дней бесплатно, потом 29,99 € в год». Длина триала приходит из
+    /// `introductoryOffer`, а не записана в текст: поменяв её в App Store
+    /// Connect, мы не имеем права оставить на экране старое число.
+    static func plusTrialCaption(
+        _ lang: LanguageManager.Language, days: Int, price: String
+    ) -> String {
+        tr(lang, "plusTrialCaption",
+           ru: "{days} бесплатно, потом {price}", en: "{days} free, then {price}")
+            .replacingOccurrences(of: "{days}", with: "\(days) \(nounDays(lang, days))")
+            .replacingOccurrences(of: "{price}", with: price)
+    }
+
+    static func plusSubscribe(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusSubscribe", ru: "Оформить", en: "Subscribe")
+    }
+    static func plusRestore(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusRestore", ru: "Восстановить покупки", en: "Restore purchases")
+    }
+    static func plusTermsLink(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusTermsLink", ru: "Условия", en: "Terms")
+    }
+    static func plusPrivacyLink(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusPrivacyLink", ru: "Конфиденциальность", en: "Privacy")
+    }
+
+    /// Подвал автопродления. Обязателен для ревью Apple и обязан называть три
+    /// вещи: что продлевается само, где это выключить и за сколько до конца
+    /// периода. Чисел-единиц в нём нет — только часы, которые к расстояниям
+    /// отношения не имеют.
+    static func plusAutoRenewFooter(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusAutoRenewFooter",
+           ru: "Подписка продлевается автоматически. Чтобы этого не произошло, "
+             + "отключите продление не позднее чем за 24 часа до конца оплаченного "
+             + "периода — в настройках Apple ID. Оплата списывается с вашего Apple ID.",
+           en: "The subscription renews automatically. To stop it, turn renewal off at "
+             + "least 24 hours before the paid period ends, in your Apple ID settings. "
+             + "Payment is charged to your Apple ID.")
+    }
+
+    /// Продукты не приехали. Это РЕЗУЛЬТАТ, а не ошибка (витрина без
+    /// соглашения, продукт ещё не разъехался), и человеку он говорится
+    /// словами, а не пустыми карточками с нулями.
+    static func plusPricesUnavailable(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusPricesUnavailable",
+           ru: "Цены не загрузились — проверьте связь",
+           en: "Prices didn't load — check your connection")
+    }
+
+    static func plusManage(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusManage", ru: "Управлять подпиской", en: "Manage subscription")
+    }
+
+    /// «Плюс до 12 окт» — статус в профиле. Дата приходит уже напечатанной
+    /// форматтером своего языка.
+    static func plusUntil(_ lang: LanguageManager.Language, date: String) -> String {
+        tr(lang, "plusUntil", ru: "Плюс до {date}", en: "Plus until {date}")
+            .replacingOccurrences(of: "{date}", with: date)
+    }
+
+    /// «7 дней бесплатно» — приманка в строке профиля у того, кто ещё не
+    /// покупал и кому триал доступен.
+    static func plusTrialAvailable(_ lang: LanguageManager.Language, days: Int) -> String {
+        tr(lang, "plusTrialAvailable", ru: "{days} бесплатно", en: "{days} free")
+            .replacingOccurrences(of: "{days}", with: "\(days) \(nounDays(lang, days))")
+    }
+
+    /// Грейс: «Плюс» работает, но платёж не прошёл. Не тревога и не упрёк —
+    /// человек ничего не нарушил, у него протухла карта.
+    static func plusGraceStatus(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusGraceStatus",
+           ru: "Оплата не прошла — Apple пробует ещё раз",
+           en: "Payment didn't go through — Apple is retrying")
+    }
+    static func plusExpiredStatus(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusExpiredStatus", ru: "Подписка кончилась", en: "Subscription ended")
+    }
+    /// Подпись строки у того, кто ещё не покупал и кому триал не полагается.
+    static func plusRowSubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusRowSubtitle",
+           ru: "Оформление и ручные поездки", en: "Looks and manual trips")
+    }
+
+    // MARK: - Донат (0.8.0)
+
+    /// Заголовок листа чаевых. «Поддержать», а не «Купить»: покупкой это не
+    /// является — доступа за ним нет никакого (правило 3.1.1).
+    static func tipTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipTitle", ru: "Поддержать автора", en: "Support the author")
+    }
+    /// Единственное обещание листа — что обещаний нет.
+    static func tipSubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipSubtitle",
+           ru: "Спасибо — и больше ничего: доступ это не открывает",
+           en: "A thank-you and nothing else: it unlocks nothing")
+    }
+    static func tipThanks(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "tipThanks", ru: "Спасибо!", en: "Thank you!")
+    }
+    static func profileRowSupport(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileRowSupport", ru: "Поддержать", en: "Support")
+    }
+    static func profileRowSupportSubtitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileRowSupportSubtitle",
+           ru: "Чаевые автору, без обещаний", en: "A tip for the author, no promises")
     }
 }

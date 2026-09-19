@@ -32,6 +32,9 @@ struct ProfileView: View {
     /// поездки, и «Мои» обязаны схлопнуть плечи сразу по возвращении, а не
     /// после следующей перезагрузки ленты.
     @ObservedObject private var journeys = JourneyManager.shared
+    /// Два бита про платное — «куплено?» и «эта витрина вообще продаёт?».
+    /// Читаются только здесь, решение принимает `PlusGate`.
+    @ObservedObject private var plusAccess = PlusAccess.shared
 
     /// True when hosted as the «Я» tab (0.6.0) — the floating tab bar needs
     /// scroll clearance. False when presented as the legacy Feed sheet.
@@ -190,6 +193,11 @@ struct ProfileView: View {
     /// нечем — то же решение, что на экране поездки.
     @State private var toastItem: ToastItem?
 
+    /// Витрина «Плюса» и лист чаевых. Два листа, а не один с сегментом:
+    /// подписка и чаевые — разные сделки (см. `ProfileSupportRow`).
+    @State private var showPaywall = false
+    @State private var showTipJar = false
+
     // MARK: - Подсказка путешествия (0.6.6) — состояние
 
     /// Цепочка, которую предлагает `JourneySuggester`. Пусто — баннера нет.
@@ -260,6 +268,8 @@ struct ProfileView: View {
                         // do before the first kilometre.
                         garageSection(c)
 
+                        plusSection()
+
                         clubsSection()
                     } else {
                         if !auth.isSignedIn {
@@ -306,6 +316,8 @@ struct ProfileView: View {
                         // full.
                         garageSection(c)
 
+                        plusSection()
+
                         clubsSection()
 
                         // Над «Историей», а не под ней: подсказка про только
@@ -349,6 +361,12 @@ struct ProfileView: View {
             .background(c.bg)
             .toast(item: $toastItem)
             .sheet(item: $composerAnchor) { anchor in journeyComposer(anchor: anchor) }
+            .sheet(isPresented: $showPaywall) {
+                PlusPaywallSheet().environmentObject(lang)
+            }
+            .sheet(isPresented: $showTipJar) {
+                TipJarSheet().environmentObject(lang)
+            }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: MeDest.self) { dest in
                 switch dest {
@@ -905,6 +923,37 @@ struct ProfileView: View {
             }
             .padding(.horizontal, 16)
         }
+        .padding(.bottom, 12)
+    }
+
+    /// «Плюс» и «Поддержать» — под гаражом, над клубами.
+    ///
+    /// Строка «Плюс» ПРОПАДАЕТ целиком на витрине, которая платного не
+    /// продаёт (`PlusGate` → `.hidden`), а не показывается серой: спека §1
+    /// требует, чтобы платного не было ВИДНО, а не только чтобы оно не
+    /// покупалось. Уже купивший видит строку и там — `PlusGate` пропускает его
+    /// первым правилом.
+    ///
+    /// «Поддержать» спрашивает витрину НАПРЯМУЮ, а не через гейт: чаевые не
+    /// фича, `PlusFeature` для них нет и заводить его нельзя — список из пяти
+    /// закрыт. Причина скрытия при этом та же: кнопка, которая не может
+    /// сработать, хуже отсутствующей.
+    @ViewBuilder
+    private func plusSection() -> some View {
+        let level = PlusGate.allows(
+            .profileBackgrounds,
+            isPlus: plusAccess.isPlus,
+            storefrontHidesPlus: plusAccess.storefrontHidesPlus
+        )
+        VStack(alignment: .leading, spacing: 10) {
+            if level != .hidden {
+                PlusRow { showPaywall = true }
+            }
+            if !plusAccess.storefrontHidesPlus {
+                ProfileSupportRow { showTipJar = true }
+            }
+        }
+        .padding(.horizontal, 16)
         .padding(.bottom, 12)
     }
 
