@@ -5,6 +5,7 @@ import CoreLocation
 
 /// Хранилище открытого мира: пишет только новое, читает готовое, а фоновая
 /// сборка после обновления взводит флаг ТОЛЬКО сделав работу.
+@MainActor
 final class RevealedLayerStoreTests: XCTestCase {
     private var pc: PersistenceController!
     private var defaults: UserDefaults!

@@ -10,6 +10,7 @@ import MapKit
 /// финише ЭТОЙ поездки» — и ошибиться в ней значит показать человеку дороги,
 /// которых он тогда ещё не знал. Вторая отвечает за то, чтобы прорезь у машины
 /// не стоила пересборки индекса путей всего мира шестьдесят раз в секунду.
+@MainActor
 final class FogVeilTemporalTests: XCTestCase {
     private var pc: PersistenceController!
     private var defaults: UserDefaults!

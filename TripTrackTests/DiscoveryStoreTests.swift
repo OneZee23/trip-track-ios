@@ -5,6 +5,7 @@ import CoreLocation
 
 /// Хранилище находок: пишет только новое, отдаёт свежее сверху, а повтор той
 /// же находки — пустой ответ, а не вторая печать.
+@MainActor
 final class DiscoveryStoreTests: XCTestCase {
     private var pc: PersistenceController!
     private var store: DiscoveryStore!

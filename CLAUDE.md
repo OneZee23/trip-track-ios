@@ -1582,6 +1582,19 @@ Build config lives in `project.yml` (xcodegen). Local signing in `Local.xcconfig
   найти: он в классе, который отработал раньше и зелёным. Ищется
   `-skip-testing:` по подозреваемому, лечится обнулением полей — как в
   `PrivacyFlowE2ETests` и `RemoteSettingsMergeTests`.
+- **`async`-тест, читающий `viewContext`, обязан быть `@MainActor`.** Тело
+  `func test…() async` у класса без изоляции исполняется на кооперативном
+  пуле, а `viewContext` — контекст ГЛАВНОЙ очереди: каждый `save()` из такого
+  теста — гонка с мерджем соседнего теста, и раз в два-три полных прогона она
+  роняет процесс (`NSSet addObject: nil`, `_NSRequestConcreteObject`,
+  «sqlite is corrupted» — три разные подписи одной причины, 19 сен 2026: пять
+  крэш-репортов за день). Симптом не воспроизводится парой классов — нужен
+  весь набор. Утром так починили `PostTripTrackProcessorTests`, вечером —
+  `FogVeilTemporalTests`, `DebugMapSeedTests`, `DiscoveryStoreTests`,
+  `RevealedLayerStoreTests`. Новый тест с CoreData и `async` — ставь
+  `@MainActor` на класс сразу; проверка одной строкой:
+  `grep -L "@MainActor" $(grep -l "viewContext" TripTrackTests/*.swift)` и
+  посмотреть, у кого есть `async`-тесты.
 - **Модель у CoreData ОДНА на процесс, и это не оптимизация.**
   `PersistenceController.managedObjectModel` — `static let` из `TripTrack.momd`
   (семантика `.xccurrentversion` сохраняется: `momd` несёт `VersionInfo.plist`),

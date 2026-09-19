@@ -9,6 +9,7 @@ import CoreLocation
 /// трека без сервера ни имени, ни счётчика нашедших не даст. Поэтому проверять
 /// его надо здесь: на экране «поле не заполнилось» выглядит как «карточка так и
 /// задумана», и кадр уехал бы в релизный пакет молча.
+@MainActor
 final class DebugMapSeedTests: XCTestCase {
     private var pc: PersistenceController!
     private var store: DiscoveryStore!
