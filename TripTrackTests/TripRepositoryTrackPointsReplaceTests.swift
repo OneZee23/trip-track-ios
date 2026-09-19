@@ -84,4 +84,16 @@ final class TripRepositoryTrackPointsReplaceTests: XCTestCase {
         let points = entity.trackPoints?.array as? [TrackPointEntity] ?? []
         XCTAssertEqual(points.count, 2, "отсутствие ключа не должно трогать локальные точки")
     }
+
+    /// An explicit empty list is "the other phone deleted the track", not
+    /// silence — the delete branch must run and leave nothing behind.
+    func testEmptyServerTrackPointsDeleteAllLocalPoints() {
+        repo.applyRemoteTrip(payload(trackPoints: []))
+
+        guard let entity = repo.fetchEntity(id: tripId) else {
+            return XCTFail("поездка не нашлась")
+        }
+        let points = entity.trackPoints?.array as? [TrackPointEntity] ?? []
+        XCTAssertEqual(points.count, 0, "пустой список заменяет локальные точки целиком")
+    }
 }
