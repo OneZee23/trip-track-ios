@@ -113,6 +113,27 @@ final class APIClient {
         return (raw, raw, false)
     }
 
+    /// Decodes the response envelope OFF the main actor — same reasoning and
+    /// shape as `serializeBody` above. `JSONDecoder.decode` runs the custom
+    /// ISO8601 date strategy through a `DateFormatter` call per timestamp
+    /// field; on a `/sync/pull` response carrying hundreds of trips that is
+    /// real CPU work, and it used to run synchronously on `@MainActor`
+    /// `APIClient`. A fresh `JSONDecoder` per call, for the same reason
+    /// `serializeBody` builds a fresh `JSONEncoder`: neither type is formally
+    /// `Sendable`, so nothing here is shared across the hop to the
+    /// cooperative pool (SE-0338) — good enough on Swift 5.9, where
+    /// `@concurrent` does not exist yet.
+    nonisolated private func decodeEnvelope<Res: Decodable>(_ data: Data) async throws -> APIEnvelope<Res> {
+        let dec = JSONDecoder()
+        dec.dateDecodingStrategy = .custom { d in
+            let c = try d.singleValueContainer()
+            let s = try c.decode(String.self)
+            if let date = ISODate.parse(s) { return date }
+            throw APIError.decoding("invalid ISO8601: \(s)")
+        }
+        return try dec.decode(APIEnvelope<Res>.self, from: data)
+    }
+
     /// `singleAttempt` opts a call out of the transport-level retry loop.
     /// Use it for NON-IDEMPOTENT writes (e.g. comment create): -1001/-1005
     /// can fire after the server already processed the request, and an
@@ -238,7 +259,7 @@ final class APIClient {
         }
         let envelope: APIEnvelope<Res>
         do {
-            envelope = try decoder.decode(APIEnvelope<Res>.self, from: data)
+            envelope = try await decodeEnvelope(data)
         } catch {
             throw APIError.decoding("\(error)")
         }
@@ -346,7 +367,7 @@ final class APIClient {
         }
         let envelope: APIEnvelope<Res>
         do {
-            envelope = try decoder.decode(APIEnvelope<Res>.self, from: data)
+            envelope = try await decodeEnvelope(data)
         } catch {
             throw APIError.decoding("\(error)")
         }
@@ -414,7 +435,7 @@ final class APIClient {
             if let throttled = Self.throttleError(status: status, data: data) { throw throttled }
             throw APIError.invalidHTTPStatus(status)
         }
-        let envelope = try decoder.decode(APIEnvelope<Res>.self, from: data)
+        let envelope: APIEnvelope<Res> = try await decodeEnvelope(data)
         switch envelope.status {
         case .ok:
             guard let payload = envelope.payload else {
