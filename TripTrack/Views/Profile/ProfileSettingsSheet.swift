@@ -471,7 +471,11 @@ struct ProfileSettingsSheet: View {
     /// The one address the app publishes (privacy policy + terms). Swap it the
     /// day there is a dedicated feedback inbox — the row's copy already
     /// promises «отзывы и идеи», not a legal channel.
-    private static let authorEmail = "privacy@trip-track.app"
+    ///
+    /// Internal, not `private`: `AtlasBetaSheetModel` reuses this SAME address
+    /// for its feedback button rather than hardcoding a second copy of it —
+    /// one inbox, one place that knows it exists.
+    static let authorEmail = "privacy@trip-track.app"
     private static let telegramChannelURL = "https://t.me/onezee_co"
 
     // MARK: - Footer

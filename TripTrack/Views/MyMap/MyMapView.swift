@@ -31,6 +31,8 @@ struct MyMapView: View {
     /// этой подсказки горит ярче (`selectedHintId`). Закрытие листа обнуляет
     /// её само — второго места, где снимается выбор, нет.
     @State private var openedHint: RiddleHintCardModel?
+    /// Карточка «Атлас в бете», открытая тапом по `AtlasBetaChip`.
+    @State private var showBetaSheet = false
 
     /// «Есть туман или нет» is not a question a screenshot can settle by eye —
     /// a night map is dark either way. `-no-fog-veil` draws the same map
@@ -122,6 +124,10 @@ struct MyMapView: View {
                 .padding(.bottom, 20)
                 .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
         }
+        .sheet(isPresented: $showBetaSheet) {
+            AtlasBetaSheet(model: .make(), onDismiss: { showBetaSheet = false })
+                .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
+        }
         .fullScreenCover(item: $openedTrip) { opened in
             NavigationStack {
                 TripDetailView(
@@ -148,17 +154,24 @@ struct MyMapView: View {
         .allowsHitTesting(false)
     }
 
-    /// «Атлас» и под ним одна строка итога.
+    /// «Атлас», значок «Бета» рядом с ним и под тем и другим — строка итога.
     ///
-    /// Значка «БЕТА» с диалогом больше нет: он объяснял карту, которой тут
-    /// больше нет, а карта, которая объясняется значком, объясняется плохо.
+    /// Значок с диалогом вернулся 19 сентября: снятый 15 сентября объяснял
+    /// карту, которой на экране уже не было (редизайн 0.7.0 как раз подводил
+    /// её под собственное имя), — а теперь объясняемая карта снова ЗДЕСЬ, и
+    /// доработка продолжается. Живёт до релизной версии, которая закроет
+    /// переделку атласа — см. «Журнал и карточки» в CLAUDE.md.
     private var title: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(AppStrings.myMapTitle(lang.language))
-                    .font(.inter(22, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.5), radius: 8, y: 1)
+                HStack(spacing: 8) {
+                    Text(AppStrings.myMapTitle(lang.language))
+                        .font(.inter(22, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.5), radius: 8, y: 1)
+
+                    AtlasBetaChip { showBetaSheet = true }
+                }
 
                 if !vm.isEmpty {
                     Text(openedSummary)
