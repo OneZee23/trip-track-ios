@@ -138,6 +138,10 @@ struct SocialFeedCardView: View {
                     Text(trip.author.avatarEmoji ?? "🙂")
                         .font(.system(size: 19))
                 }
+                // Рамка «Плюса». Сервер присылает её только у аккаунта с
+                // живой подпиской, поэтому здесь ничего не перепроверяется —
+                // незнакомую строку `AvatarFrame.from` читает как «без рамки».
+                .avatarFrame(AvatarFrame.from(trip.author.avatarFrame), lineWidth: 2)
                 .onTapGesture {
                     Haptics.tap()
                     onTapAuthor?()
@@ -164,6 +168,14 @@ struct SocialFeedCardView: View {
                         .font(.custom("Handjet-Black", fixedSize: 13))
                         .foregroundStyle(DriverRank.from(level: trip.author.profileLevel).color)
                         .fixedSize()
+                    // Значок «Плюс» — перед пилюлей «Вы»: он про аккаунт, а
+                    // она про то, чья это карточка. Своя карточка спрашивает
+                    // ещё и тумблер приватности — чужая не имеет права.
+                    if PlusBadgeVisibility.shows(
+                        isPlus: trip.author.isPlus, isOwn: isOwn,
+                        showsOwnBadge: SettingsManager.shared.showPlusBadge) {
+                        PlusBadge(size: 13)
+                    }
                     if isOwn {
                         // Subtle "this is you" badge — explicit signal that
                         // the card is yours without breaking the unified

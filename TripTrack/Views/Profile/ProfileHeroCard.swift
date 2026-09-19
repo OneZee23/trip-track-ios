@@ -40,6 +40,15 @@ struct ProfileHeroCard: View {
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
+    /// Косметику «Плюса» карточка читает САМА, а не получает параметром.
+    ///
+    /// Не экономия строчки: и рамка, и значок гаснут вместе с подпиской, то
+    /// есть зависят от `PlusAccess` — наблюдаемого объекта. Передавать их
+    /// сверху значило бы заставить `ProfileView` наблюдать его ради чужой
+    /// перерисовки; фон при этом по-прежнему приходит параметром, потому что
+    /// его выбирают на другом экране, а карточка его только носит.
+    @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var plus = PlusAccess.shared
 
     private static let avatarSize: CGFloat = 64
 
@@ -82,6 +91,9 @@ struct ProfileHeroCard: View {
                     .frame(width: Self.avatarSize, height: Self.avatarSize)
                     .background(Circle().fill(.white.opacity(0.18)))
                     .overlay(Circle().strokeBorder(.white.opacity(0.28), lineWidth: 1))
+                    .avatarFrame(
+                        AvatarFrame.effective(id: settings.avatarFrame, isPlus: plus.isPlus),
+                        lineWidth: 3)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("profile_avatar")
@@ -91,14 +103,23 @@ struct ProfileHeroCard: View {
                     Haptics.tap()
                     onTapProfile()
                 } label: {
-                    Text(name)
-                        .font(.system(size: 20, weight: .heavy))
-                        .tracking(-0.2)
-                        .foregroundStyle(.white.opacity(isNamePlaceholder ? 0.7 : 1))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
-                        .contentShape(Rectangle())
+                    HStack(spacing: 5) {
+                        Text(name)
+                            .font(.system(size: 20, weight: .heavy))
+                            .tracking(-0.2)
+                            .foregroundStyle(.white.opacity(isNamePlaceholder ? 0.7 : 1))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+                        // Значок «Плюс» — своя карточка, поэтому и подписка, и
+                        // тумблер «показывать значок» читаются локально.
+                        if PlusBadgeVisibility.shows(
+                            isPlus: plus.isPlus, isOwn: true,
+                            showsOwnBadge: settings.showPlusBadge) {
+                            PlusBadge(size: 15)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
@@ -207,9 +228,15 @@ struct ProfileHeroCard: View {
 
     // MARK: - Backdrop
 
-    @ViewBuilder
+    // Не `@ViewBuilder`: тело начинается с `let`, а строитель результата
+    // явного `return` после инструкции не принимает. Внутри `ZStack` своя
+    // сборка, поэтому ветки `if/else` от этого не страдают.
     private var backdrop: some View {
-        ZStack {
+        // Через общий резолвер: премиум-фон у аккаунта без подписки
+        // показывается как «без фона» — то же правило и в «Моём профиле», и в
+        // чужом, одной функцией на все три.
+        let background = self.background.effective(isPlus: plus.isPlus)
+        return ZStack {
             if background == .none {
                 // The default has to be the best-looking one, not the leftover:
                 // most people never open the picker. Ink rather than accent so

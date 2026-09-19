@@ -1368,6 +1368,19 @@ extension Translations {
         "tipThanks": "Merci !",
         "profileRowSupport": "Soutenir",
         "profileRowSupportSubtitle": "Un pourboire pour l'auteur, sans promesse",
+        "plusPaywallPlaceholder": "Plus arrive bientôt",
+        "plusBadgeLabel": "Abonnement Plus",
+        "plusSectionTitle": "Avec Plus",
+        "cosmeticDefaultOption": "Par défaut",
+        "profileLookTitle": "Apparence",
+        "settingsAvatarFrame": "Cadre de l’avatar",
+        "settingsVehicleCardStyle": "Fond de la carte",
+        "vehicleCardStylePickerFootnote": "Le fond apparaît sur la carte de ce véhicule — dans votre garage et sur votre profil public.",
+        "settingsRouteLine": "Ligne du trajet",
+        "routeLineSpeedGradient": "Dégradé de vitesse",
+        "routeLinePickerFootnote": "La couleur n’apparaît que sur vos cartes. Dans le fil et sur les profils des autres, les trajets restent comme avant.",
+        "privacyPlusBadgeTitle": "Badge Plus",
+        "privacyPlusBadgeSub": "Afficher le badge à côté de votre nom dans le fil, le profil et les commentaires.",
     ]
 
 }

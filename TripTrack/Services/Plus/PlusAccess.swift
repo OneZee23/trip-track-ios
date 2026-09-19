@@ -25,5 +25,15 @@ final class PlusAccess: ObservableObject {
     /// Витрина устройства не продаёт платное (РФ). Пока всегда `false`.
     @Published var storefrontHidesPlus = false
 
-    private init() {}
+    private init() {
+        #if DEBUG
+        // Косметику «Плюса» без витрины иначе не увидеть ни глазами, ни
+        // снимком экрана: `PlusStore` (Задача 2) ещё не существует, а
+        // StoreKit в симуляторе покупку не оформит. Только в Debug и только
+        // по явному аргументу запуска — в релизной сборке этого кода нет.
+        if ProcessInfo.processInfo.arguments.contains("-debug-plus") {
+            isPlus = true
+        }
+        #endif
+    }
 }

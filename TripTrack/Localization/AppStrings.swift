@@ -7277,4 +7277,65 @@ enum AppStrings {
         tr(lang, "profileRowSupportSubtitle",
            ru: "Чаевые автору, без обещаний", en: "A tip for the author, no promises")
     }
+
+    // MARK: - Косметика «Плюса» (0.8.0)
+    /// Подпись значка «Плюс» для VoiceOver — сам значок это глиф
+    /// без текста.
+    static func plusBadgeLabel(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusBadgeLabel", ru: "Подписка «Плюс»", en: "Plus subscriber")
+    }
+    /// Заголовок премиум-секции в пикерах косметики. В витрине,
+    /// которая платного не продаёт, секции нет вовсе — не «есть, но
+    /// заперта» (`PlusGate`).
+    static func plusSectionTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "plusSectionTitle", ru: "С «Плюсом»", en: "With Plus")
+    }
+    /// «Обычный» — отсутствие косметики: без рамки, без фона
+    /// карточки. Имена самих вариантов («Sunset», «Gold») — имена
+    /// собственные и через таблицы не идут.
+    static func cosmeticDefaultOption(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "cosmeticDefaultOption", ru: "Обычный", en: "Default")
+    }
+    /// Заголовок листа, где выбирают фон профиля и рамку аватара.
+    static func profileLookTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "profileLookTitle", ru: "Внешний вид", en: "Appearance")
+    }
+    /// Строка «Рамка аватара» в «Моём профиле».
+    static func settingsAvatarFrame(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "settingsAvatarFrame", ru: "Рамка аватара", en: "Avatar frame")
+    }
+    /// Строка «Фон карточки» в паспорте машины.
+    static func settingsVehicleCardStyle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "settingsVehicleCardStyle", ru: "Фон карточки", en: "Card background")
+    }
+
+    /// Подпись под пикером фона карточки: где именно он виден.
+    static func vehicleCardStylePickerFootnote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "vehicleCardStylePickerFootnote",
+           ru: "Фон видно на карточке этой машины — в гараже и в публичном профиле.",
+           en: "The background shows on this vehicle's card — in your garage and in your public profile.")
+    }
+    /// Строка «Линия маршрута» в «Единицах и формате».
+    static func settingsRouteLine(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "settingsRouteLine", ru: "Линия маршрута", en: "Route line")
+    }
+    /// Бесплатный вариант линии — тот самый градиент
+    /// скорости, который рисовался всегда. Описывает ПОВЕДЕНИЕ, поэтому
+    /// переводится, в отличие от имён цветов.
+    static func routeLineSpeedGradient(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "routeLineSpeedGradient", ru: "Градиент скорости", en: "Speed gradient")
+    }
+    /// Подпись под пикером линии: выбор локальный и на чужие
+    /// глаза не попадает.
+    static func routeLinePickerFootnote(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "routeLinePickerFootnote", ru: "Цвет виден только на ваших картах. В ленте и в чужих профилях маршруты рисуются как раньше.", en: "The colour shows on your own maps only. In the feed and on other people’s profiles routes look as they always did.")
+    }
+    /// Тумблер «Значок «Плюс»» в «Приватности».
+    static func privacyPlusBadgeTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "privacyPlusBadgeTitle", ru: "Значок «Плюс»", en: "Plus badge")
+    }
+    /// Подпись под тумблером: где именно значок показывается.
+    static func privacyPlusBadgeSub(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "privacyPlusBadgeSub", ru: "Показывать значок рядом с именем — в ленте, в профиле и в комментариях.", en: "Show the badge next to your name in the feed, on your profile and in comments.")
+    }
 }

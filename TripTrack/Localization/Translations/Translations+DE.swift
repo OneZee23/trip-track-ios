@@ -1368,6 +1368,19 @@ extension Translations {
         "tipThanks": "Danke!",
         "profileRowSupport": "Unterstützen",
         "profileRowSupportSubtitle": "Trinkgeld für den Autor, ohne Versprechen",
+        "plusPaywallPlaceholder": "Plus kommt bald",
+        "plusBadgeLabel": "Plus-Abo",
+        "plusSectionTitle": "Mit Plus",
+        "cosmeticDefaultOption": "Standard",
+        "profileLookTitle": "Erscheinungsbild",
+        "settingsAvatarFrame": "Avatar-Rahmen",
+        "settingsVehicleCardStyle": "Kartenhintergrund",
+        "vehicleCardStylePickerFootnote": "Der Hintergrund erscheint auf der Karte dieses Fahrzeugs — in deiner Garage und in deinem öffentlichen Profil.",
+        "settingsRouteLine": "Routenlinie",
+        "routeLineSpeedGradient": "Geschwindigkeitsverlauf",
+        "routeLinePickerFootnote": "Die Farbe erscheint nur auf deinen eigenen Karten. Im Feed und in fremden Profilen sehen Routen aus wie immer.",
+        "privacyPlusBadgeTitle": "Plus-Abzeichen",
+        "privacyPlusBadgeSub": "Das Abzeichen neben deinem Namen im Feed, im Profil und in Kommentaren zeigen.",
     ]
 
 }

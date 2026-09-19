@@ -1597,16 +1597,10 @@ final class CoreDataTripRepository: TripRepository {
             entity.selectedVehicleId = p.selectedVehicleId
             entity.currentStreak = Int32(p.currentStreak)
             entity.lastTripDate = p.lastTripDate
-            // Плюс (0.8.0) — той же «newest wins» защитой, что и остальные
-            // предпочтения в этом блоке, а НЕ гейтом `hasLocalEdits`
-            // (`dashboardUnits`-приёмом) у машины: `syncStatus` у строки
-            // настроек равен нулю с рождения (см. доку класса выше) и не
-            // отличает «правку, ждущую отправки» от «только что созданной
-            // строки» — гейт по нему держал бы эту пару вечно непримени́мой.
-            // `nil` здесь по-прежнему значит «сервер молчит» — локальное
-            // не трогаем.
-            if let frame = p.avatarFrame { entity.avatarFrame = frame }
-            if let showBadge = p.showPlusBadge { entity.showPlusBadge = showBadge }
+            // Рамки аватара и значка «Плюс» здесь НЕТ: они живут на
+            // аккаунте и приезжают в `/auth/me`, а не этим проводом
+            // (см. `SettingsSyncPayload`). Один писатель на поле — иначе
+            // пул и профиль спорили бы за одну строку.
             entity.lastModifiedAt = p.lastModifiedAt
         }
 

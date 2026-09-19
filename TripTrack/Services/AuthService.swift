@@ -775,7 +775,7 @@ final class AuthService: ObservableObject {
         // their weekly-recap push to match what they see in the app.
         let preferredLanguage = LanguageManager.currentLanguage.rawValue
 
-        let req = ProfileUpdateRequest(
+        var req = ProfileUpdateRequest(
             displayName: userName,
             avatarEmoji: settings.avatarEmoji,
             profileBackground: settings.profileBackground,
@@ -787,6 +787,13 @@ final class AuthService: ObservableObject {
             language: preferredLanguage,
             showOnPublicMap: settings.showOnPublicMap
         )
+        // Косметика «Плюса» едет ЗДЕСЬ и только здесь (0.8.0): в
+        // `SettingsSyncPayload` её нет нарочно, а этот запрос и так везёт
+        // `profileBackground` — тот же класс данных, тот же аккаунт, тот же
+        // единственный писатель. Пустая строка рамки уезжает как `nil`:
+        // «без рамки» на сервере это отсутствие значения, а не строка "".
+        req.avatarFrame = settings.avatarFrame ?? ""
+        req.showPlusBadge = settings.showPlusBadge
         do {
             let _: EmptyResponse = try await APIClient.shared.post(
                 APIEndpoint.profileUpdate, body: req)
@@ -855,6 +862,18 @@ final class AuthService: ObservableObject {
     /// dropped; the server processed them in send order).
     private var publicProfileGeneration = 0
 
+    /// Отправить косметику «Плюса» (рамка, значок) на аккаунт.
+    ///
+    /// Своя дверь, а не голый `syncProfileToServer`, ровно за одним: она
+    /// ВЗВОДИТ `publicProfileGeneration`. Без этого `/auth/me`, запрошенный
+    /// до правки и ответивший после неё, применил бы прежнюю рамку поверх
+    /// только что выбранной — тот же откат тумблера, от которого это
+    /// поколение и завели.
+    func pushPlusCosmetics() {
+        publicProfileGeneration &+= 1
+        Task { await syncProfileToServer(refreshFeedAfter: false) }
+    }
+
     func refreshMe() async {
         guard isSignedIn else { return }
         let gen = publicProfileGeneration
@@ -875,6 +894,15 @@ final class AuthService: ObservableObject {
                 visibility = Self.merged(
                     incoming: fresh, current: visibility,
                     generationsAtRequest: blockGens, generationsNow: visibilityGeneration)
+            }
+            // Косметика «Плюса» приезжает отсюда — своего пула у неё нет
+            // (см. `SettingsSyncPayload`). Поколение то же, что у тумблера
+            // приватности: правка, сделанная ПОКА запрос летел, побеждает
+            // ответ, снятый до неё, — иначе рамка, выбранная секунду назад,
+            // отскочила бы на прежнюю.
+            if gen == publicProfileGeneration {
+                SettingsManager.shared.applyRemotePlusCosmetics(
+                    avatarFrame: res.avatarFrame, showPlusBadge: res.showPlusBadge)
             }
             if userEmail == nil, let email = res.email,
                !email.trimmingCharacters(in: .whitespaces).isEmpty {

@@ -35,6 +35,9 @@ struct MyProfileView: View {
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
+    /// Косметика «Плюса» гаснет и зажигается вместе с подпиской, и экран
+    /// обязан перерисоваться в тот же миг — отсюда наблюдение, а не чтение.
+    @ObservedObject private var plus = PlusAccess.shared
 
     @State private var isEditingAvatar = false
     /// Follower / following totals for THIS account, straight from the same
@@ -227,7 +230,10 @@ struct MyProfileView: View {
     /// public profile and the preview already introduce a person, so the hub
     /// that edits the profile now opens the same way the profile itself does.
     private func hero(_ c: AppTheme.Colors, _ l: LanguageManager.Language) -> some View {
-        let background = ProfileBackground.from(settings.profileBackground)
+        // Через общий резолвер: «Плюс» кончился — премиум-фон показывается
+        // как «без фона», а выбор в базе остаётся (спека §2).
+        let background = ProfileBackground.effective(
+            id: settings.profileBackground, isPlus: plus.isPlus)
 
         // ДВЕ зоны, а не одна кнопка на весь герой. Раньше баннер, аватар и
         // подпись лежали внутри общего Button, и тап по фону открывал выбор
@@ -299,6 +305,13 @@ struct MyProfileView: View {
                             // punched out of the banner rather than dropped on
                             // top of it.
                             .overlay(Circle().strokeBorder(c.bg, lineWidth: 4))
+                            // Рамка «Плюса» — ПОВЕРХ той обводки: она и есть
+                            // край диска, а кольцо цвета страницы лежит под
+                            // ней как подложка.
+                            .avatarFrame(
+                                AvatarFrame.effective(id: settings.avatarFrame,
+                                                      isPlus: plus.isPlus),
+                                lineWidth: 4)
 
                         if !isEditingAvatar {
                             pencilBadge(c)
@@ -332,6 +345,25 @@ struct MyProfileView: View {
             }
             .frame(maxWidth: .infinity)
         .accessibilityIdentifier("my_profile_avatar")
+    }
+
+    // MARK: - Косметика «Плюса»
+
+    private var avatarFrameAccess: PlusAccessLevel {
+        PlusGate.allows(.avatarFrame,
+                        isPlus: plus.isPlus, storefrontHidesPlus: plus.storefrontHidesPlus)
+    }
+
+    /// Имя пресета — имя собственное («Sunset»), поэтому мимо `AppStrings`;
+    /// переводится только «обычный», то есть отсутствие косметики.
+    private func backgroundRowValue(_ l: LanguageManager.Language) -> String {
+        let bg = ProfileBackground.effective(id: settings.profileBackground, isPlus: plus.isPlus)
+        return bg == .none ? AppStrings.cosmeticDefaultOption(l) : bg.displayName
+    }
+
+    private func avatarFrameRowValue(_ l: LanguageManager.Language) -> String {
+        let frame = AvatarFrame.effective(id: settings.avatarFrame, isPlus: plus.isPlus)
+        return frame == .none ? AppStrings.cosmeticDefaultOption(l) : frame.displayName
     }
 
     private func pencilBadge(_ c: AppTheme.Colors) -> some View {
@@ -505,11 +537,27 @@ struct MyProfileView: View {
                     // The preset's own name — «Sunset», «Ocean». Proper nouns,
                     // the same word the picker shows, so it is not routed
                     // through AppStrings.
-                    value: ProfileBackground.from(settings.profileBackground).displayName,
+                    value: backgroundRowValue(l),
                     isUnset: false,
                     identifier: "my_profile_row_background",
                     action: onTapBackground
                 )
+                // Вторая дверь в ТОТ ЖЕ лист. Нужна потому, что смотрят в неё
+                // в другой момент: фон выбирают, глядя на баннер, рамку — на
+                // аватар, и человек, ищущий рамку, не станет открывать строку
+                // с названием фона. В витрине без платного строки нет вовсе —
+                // не «есть, но заперта» (`PlusGate`).
+                if avatarFrameAccess != .hidden {
+                    divider(c)
+                    row(
+                        icon: "circle.dashed",
+                        label: AppStrings.settingsAvatarFrame(l),
+                        value: avatarFrameRowValue(l),
+                        isUnset: false,
+                        identifier: "my_profile_row_avatar_frame",
+                        action: onTapBackground
+                    )
+                }
                 // «Как видят другие» used to hang off an undocumented
                 // long-press on the header name — i.e. off nothing anyone would
                 // find. It is a view of your identity, so it sits with the row

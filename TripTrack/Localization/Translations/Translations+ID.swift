@@ -1368,6 +1368,19 @@ extension Translations {
         "tipThanks": "Terima kasih!",
         "profileRowSupport": "Dukung",
         "profileRowSupportSubtitle": "Tip untuk pembuatnya, tanpa janji",
+        "plusPaywallPlaceholder": "Plus segera hadir",
+        "plusBadgeLabel": "Langganan Plus",
+        "plusSectionTitle": "Dengan Plus",
+        "cosmeticDefaultOption": "Bawaan",
+        "profileLookTitle": "Tampilan",
+        "settingsAvatarFrame": "Bingkai avatar",
+        "settingsVehicleCardStyle": "Latar kartu",
+        "vehicleCardStylePickerFootnote": "Latar tampil di kartu kendaraan ini — di garasi dan di profil publikmu.",
+        "settingsRouteLine": "Garis rute",
+        "routeLineSpeedGradient": "Gradien kecepatan",
+        "routeLinePickerFootnote": "Warna hanya tampil di peta kamu. Di beranda dan di profil orang lain rute tampil seperti biasa.",
+        "privacyPlusBadgeTitle": "Lencana Plus",
+        "privacyPlusBadgeSub": "Tampilkan lencana di samping namamu di beranda, profil, dan komentar.",
     ]
 
 }

@@ -58,6 +58,11 @@ struct MeResponse: Codable {
     let displayName: String?
     let avatarEmoji: String?
     let profileBackground: String?
+    /// Косметика «Плюса», живущая на аккаунте (0.8.0). Опциональны по той же
+    /// причине, что флаги видимости выше: старый сервер их не шлёт, и это
+    /// «не сказано» — локальный выбор в таком случае не трогается.
+    let avatarFrame: String?
+    let showPlusBadge: Bool?
     let profileLevel: Int?
     let isPublic: Bool
     let showOnPublicMap: Bool?

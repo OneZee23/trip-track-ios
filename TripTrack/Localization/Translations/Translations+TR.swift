@@ -1368,6 +1368,19 @@ extension Translations {
         "tipThanks": "Teşekkürler!",
         "profileRowSupport": "Destek ol",
         "profileRowSupportSubtitle": "Yazara bahşiş, söz vermeden",
+        "plusPaywallPlaceholder": "Plus yakında geliyor",
+        "plusBadgeLabel": "Plus aboneliği",
+        "plusSectionTitle": "Plus ile",
+        "cosmeticDefaultOption": "Varsayılan",
+        "profileLookTitle": "Görünüm",
+        "settingsAvatarFrame": "Avatar çerçevesi",
+        "settingsVehicleCardStyle": "Kart arka planı",
+        "vehicleCardStylePickerFootnote": "Arka plan bu aracın kartında görünür — garajında ve herkese açık profilinde.",
+        "settingsRouteLine": "Rota çizgisi",
+        "routeLineSpeedGradient": "Hız geçişi",
+        "routeLinePickerFootnote": "Renk yalnızca senin haritalarında görünür. Akışta ve başkalarının profilinde rotalar eskisi gibi çizilir.",
+        "privacyPlusBadgeTitle": "Plus rozeti",
+        "privacyPlusBadgeSub": "Rozeti akışta, profilde ve yorumlarda adının yanında göster.",
     ]
 
 }

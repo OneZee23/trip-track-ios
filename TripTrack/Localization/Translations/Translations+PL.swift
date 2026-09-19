@@ -1368,6 +1368,19 @@ extension Translations {
         "tipThanks": "Dziękujemy!",
         "profileRowSupport": "Wesprzyj",
         "profileRowSupportSubtitle": "Napiwek dla autora, bez obietnic",
+        "plusPaywallPlaceholder": "Plus już wkrótce",
+        "plusBadgeLabel": "Subskrypcja Plus",
+        "plusSectionTitle": "Z Plusem",
+        "cosmeticDefaultOption": "Domyślny",
+        "profileLookTitle": "Wygląd",
+        "settingsAvatarFrame": "Ramka awatara",
+        "settingsVehicleCardStyle": "Tło karty",
+        "vehicleCardStylePickerFootnote": "Tło widać na karcie tego pojazdu — w garażu i w publicznym profilu.",
+        "settingsRouteLine": "Linia trasy",
+        "routeLineSpeedGradient": "Gradient prędkości",
+        "routeLinePickerFootnote": "Kolor widać tylko na twoich mapach. W tablicy i w cudzych profilach trasy wyglądają jak dotąd.",
+        "privacyPlusBadgeTitle": "Odznaka Plus",
+        "privacyPlusBadgeSub": "Pokazuj odznakę obok twojego imienia w tablicy, profilu i komentarzach.",
     ]
 
 }

@@ -1368,6 +1368,19 @@ extension Translations {
         "tipThanks": "Рақмет!",
         "profileRowSupport": "Қолдау",
         "profileRowSupportSubtitle": "Авторға шайлық, уәдесіз",
+        "plusPaywallPlaceholder": "Плюс жақында осында",
+        "plusBadgeLabel": "«Плюс» жазылымы",
+        "plusSectionTitle": "«Плюспен»",
+        "cosmeticDefaultOption": "Әдепкі",
+        "profileLookTitle": "Сыртқы түрі",
+        "settingsAvatarFrame": "Аватар жақтауы",
+        "settingsVehicleCardStyle": "Карточка фоны",
+        "vehicleCardStylePickerFootnote": "Фон осы көліктің карточкасында көрінеді — гаражда және ашық профильде.",
+        "settingsRouteLine": "Маршрут сызығы",
+        "routeLineSpeedGradient": "Жылдамдық градиенті",
+        "routeLinePickerFootnote": "Түс тек сіздің карталарыңызда көрінеді. Таспада және басқалардың профилінде маршруттар бұрынғыдай сызылады.",
+        "privacyPlusBadgeTitle": "«Плюс» белгісі",
+        "privacyPlusBadgeSub": "Белгіні таспада, профильде және пікірлерде атыңыздың қасында көрсету.",
     ]
 
 }

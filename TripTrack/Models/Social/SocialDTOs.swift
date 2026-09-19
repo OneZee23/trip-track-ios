@@ -8,6 +8,18 @@ struct SocialAuthor: Codable, Hashable {
     let displayName: String?
     let avatarEmoji: String?
     let profileLevel: Int
+    /// Косметика «Плюса» у автора (0.8.0). Приходит в ленте, в списках и в
+    /// комментариях — всюду, где рисуется имя, — и опциональна: старый сервер
+    /// этих ключей не шлёт, и это «не сказано», а не «подписки нет».
+    ///
+    /// `var` с `nil`-умолчанием, чтобы поэлементный конструктор остался
+    /// исходно-совместимым: автора собирают руками пять мест (свой
+    /// комментарий, попутчик, заглушка профиля), и ни одному из них нечего
+    /// сказать про чужую подписку.
+    var isPlus: Bool? = nil
+    /// Рамка аватара — строка контракта (`frame_gold`, …). Незнакомую
+    /// разбирает `AvatarFrame.from` как «без рамки».
+    var avatarFrame: String? = nil
 }
 
 /// Lightweight vehicle metadata shipped on each feed item — name + avatar
@@ -465,6 +477,13 @@ struct SocialProfile: Codable, Hashable {
     /// не упасть. Ненайденное сюда не попадает никогда — сервер отдаёт только
     /// `verified` строки, и клиент этот фильтр не повторяет.
     let finds: [SocialFind]?
+    /// Подписка «Плюс» у владельца профиля (0.8.0): от неё зависят значок у
+    /// имени и право показать премиум-фон. `nil` — старый сервер, «не
+    /// сказано».
+    var isPlus: Bool? = nil
+    /// Рамка аватара владельца профиля. Сервер отдаёт её только у аккаунта с
+    /// живой подпиской — клиент эту проверку не повторяет и не обязан.
+    var avatarFrame: String? = nil
 }
 
 /// Одна печать в блоке «Находки» публичного профиля (спека §4).
@@ -575,7 +594,9 @@ extension SocialProfile {
             // — пустой («находок нет»), кривая строка — её просто нет в
             // списке. Три разных ответа, и ни один из них не ошибка экрана.
             finds: try c.decodeIfPresent([LossySocialFind].self, forKey: .finds)?
-                .compactMap(\.value)
+                .compactMap(\.value),
+            isPlus: try c.decodeIfPresent(Bool.self, forKey: .isPlus),
+            avatarFrame: try c.decodeIfPresent(String.self, forKey: .avatarFrame)
         )
     }
 }
@@ -727,6 +748,13 @@ struct ProfileUpdateRequest: Encodable {
     var statsPublic: Bool? = nil
     var mapPublic: Bool? = nil
     var achievementsPublic: Bool? = nil
+    /// Рамка аватара и значок «Плюс» (0.8.0). Живут на АККАУНТЕ, и этот
+    /// запрос — их единственный писатель: в `SettingsSyncPayload` их нет
+    /// нарочно (см. комментарий там). `nil` = «не менять», как у всех
+    /// остальных полей этого запроса, поэтому `syncProfileToServer` шлёт их
+    /// зеркалом локального выбора — ровно как `profileBackground`.
+    var avatarFrame: String? = nil
+    var showPlusBadge: Bool? = nil
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -745,6 +773,8 @@ struct ProfileUpdateRequest: Encodable {
         try c.encodeIfPresent(statsPublic, forKey: .statsPublic)
         try c.encodeIfPresent(mapPublic, forKey: .mapPublic)
         try c.encodeIfPresent(achievementsPublic, forKey: .achievementsPublic)
+        try c.encodeIfPresent(avatarFrame, forKey: .avatarFrame)
+        try c.encodeIfPresent(showPlusBadge, forKey: .showPlusBadge)
     }
 
     /// ВНИМАНИЕ: этот тип кодируется ВРУЧНУЮ, потому что отсутствующее поле
@@ -757,6 +787,7 @@ struct ProfileUpdateRequest: Encodable {
         case profileLevel, profileXp, currentStreak, bestStreak
         case activeVehicleId, language, showOnPublicMap, isPublic
         case countersPublic, statsPublic, mapPublic, achievementsPublic
+        case avatarFrame, showPlusBadge
     }
 }
 

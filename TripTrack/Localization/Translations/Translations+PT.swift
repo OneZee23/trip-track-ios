@@ -1368,6 +1368,19 @@ extension Translations {
         "tipThanks": "Obrigado!",
         "profileRowSupport": "Apoiar",
         "profileRowSupportSubtitle": "Uma gorjeta para o autor, sem promessas",
+        "plusPaywallPlaceholder": "Plus chega em breve",
+        "plusBadgeLabel": "Assinatura Plus",
+        "plusSectionTitle": "Com o Plus",
+        "cosmeticDefaultOption": "Padrão",
+        "profileLookTitle": "Aparência",
+        "settingsAvatarFrame": "Moldura do avatar",
+        "settingsVehicleCardStyle": "Fundo do cartão",
+        "vehicleCardStylePickerFootnote": "O fundo aparece no cartão deste veículo — na sua garagem e no seu perfil público.",
+        "settingsRouteLine": "Linha do percurso",
+        "routeLineSpeedGradient": "Gradiente de velocidade",
+        "routeLinePickerFootnote": "A cor aparece apenas nos seus mapas. No feed e nos perfis de outras pessoas os percursos continuam como antes.",
+        "privacyPlusBadgeTitle": "Selo Plus",
+        "privacyPlusBadgeSub": "Mostrar o selo ao lado do seu nome no feed, no perfil e nos comentários.",
     ]
 
 }

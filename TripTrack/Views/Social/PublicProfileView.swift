@@ -761,33 +761,70 @@ struct PublicProfileView: View {
     private func heroSection(_ c: AppTheme.Colors) -> some View {
         let avatarSize: CGFloat = 84
         let emoji = profile?.avatarEmoji ?? preloaded?.avatarEmoji ?? "🚗"
+        // Косметика «Плюса» приходит с сервера, и сервер отдаёт её ТОЛЬКО у
+        // аккаунта с живой подпиской. `isPlus == nil` — «не сказано» (старый
+        // сервер), и тогда решение принимает он, а не мы: перепроверив его
+        // здесь своим `false`, мы сняли бы фон у того, кому сервер его выдал.
+        let saidPlus = profile?.isPlus ?? preloaded?.isPlus
+        let background = ProfileBackground.effective(
+            id: profile?.profileBackground, isPlus: saidPlus ?? true)
+        let frame = AvatarFrame.effective(
+            id: profile?.avatarFrame ?? preloaded?.avatarFrame, isPlus: saidPlus ?? true)
 
         return VStack(spacing: 0) {
             Text(emoji)
                 .font(.system(size: avatarSize * 0.52))
                 .frame(width: avatarSize, height: avatarSize)
                 .background(Circle().fill(c.cardAlt))
+                .avatarFrame(frame, lineWidth: 3)
+                // Фон профиля — ПОД аватаром и только когда он выбран.
+                // Канон рисует герой без обложки, и пустой баннер у всех
+                // остальных был бы полосой ни о чём; здесь он появляется
+                // ровно у того, кто его выбрал, и ровно за тем, за чем и
+                // выбирался, — чтобы его увидели чужие глаза.
+                .background(alignment: .top) {
+                    if background != .none {
+                        ProfileBackgroundBanner(background: background, height: avatarSize * 0.72)
+                            .frame(width: 600)
+                            .offset(y: -avatarSize * 0.34)
+                            .allowsHitTesting(false)
+                    }
+                }
 
             // Long-press copies the name. It is the one string that can be
             // pasted into Поиск and actually find this person again: the
             // server matches display names, and the @handle is still
             // device-local (no profile field behind it).
-            Text(resolvedDisplayName)
-                .font(.system(size: 21, weight: .heavy))
-                .tracking(-0.21)
-                .foregroundStyle(c.text)
-                .multilineTextAlignment(.center)
-                .padding(.top, 10)
-                .contentShape(Rectangle())
-                .onLongPressGesture {
-                    UIPasteboard.general.string = resolvedDisplayName
-                    Haptics.success()
-                    toastItem = ToastItem(
-                        type: .success,
-                        message: AppStrings.profileNameCopied(lang.language)
-                    )
+            HStack(spacing: 6) {
+                Text(resolvedDisplayName)
+                    .font(.system(size: 21, weight: .heavy))
+                    .tracking(-0.21)
+                    .foregroundStyle(c.text)
+                    .multilineTextAlignment(.center)
+                    .contentShape(Rectangle())
+                    .onLongPressGesture {
+                        UIPasteboard.general.string = resolvedDisplayName
+                        Haptics.success()
+                        toastItem = ToastItem(
+                            type: .success,
+                            message: AppStrings.profileNameCopied(lang.language)
+                        )
+                    }
+                    // Идентификатор остаётся НА ИМЕНИ, а не на строке: id на
+                    // контейнере делает его одним элементом для VoiceOver и
+                    // для UI-тестов, и значок рядом забрал бы у имени и то,
+                    // и другое.
+                    .accessibilityIdentifier("profile_display_name")
+
+                // Свой профиль в превью подчиняется тумблеру приватности —
+                // иначе «как видят другие» показывало бы не то, что видят.
+                if PlusBadgeVisibility.shows(
+                    isPlus: saidPlus, isOwn: isOwnProfile,
+                    showsOwnBadge: settings.showPlusBadge) {
+                    PlusBadge(size: 16)
                 }
-                .accessibilityIdentifier("profile_display_name")
+            }
+            .padding(.top, 10)
 
             // Rank and flag on ONE line, the flag trailing. They are two chips
             // of the same kind — who this driver is — and stacking them put a
@@ -2221,7 +2258,11 @@ private extension SocialProfile {
             recentTrips: recentTrips,
             followerCount: followerCount, followingCount: followingCount,
             isFollowing: isFollowing, bio: bio, visibility: visibility,
-            finds: finds
+            finds: finds,
+            // Косметику надо ПЕРЕНОСИТЬ, а не ронять на умолчание: подписка
+            // с кнопки «Подписаться» пересобирает профиль, и забытое поле
+            // сняло бы с чужого профиля рамку и значок на глазах.
+            isPlus: isPlus, avatarFrame: avatarFrame
         )
     }
 }

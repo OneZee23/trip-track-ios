@@ -383,6 +383,7 @@ struct TripCommentsSection: View {
                     .fill(c.cardAlt)
                     .frame(width: 34, height: 34)
                     .overlay { Text(comment.user.avatarEmoji ?? "🚗").font(.system(size: 17)) }
+                    .avatarFrame(AvatarFrame.from(comment.user.avatarFrame), lineWidth: 2)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -393,6 +394,13 @@ struct TripCommentsSection: View {
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(c.text)
                             .lineLimit(1)
+                    }
+                    // Тот же вопрос и тот же ответ, что в ленте: свой значок
+                    // подчиняется тумблеру приватности, чужой — нет.
+                    if PlusBadgeVisibility.shows(
+                        isPlus: comment.user.isPlus, isOwn: comment.isMine,
+                        showsOwnBadge: SettingsManager.shared.showPlusBadge) {
+                        PlusBadge(size: 12)
                     }
                     Text("· \(Self.relativeAge(of: comment.createdAt, lang: lang.language))")
                         .font(.system(size: 11))

@@ -1368,6 +1368,19 @@ extension Translations {
         "tipThanks": "Salamat!",
         "profileRowSupport": "Suportahan",
         "profileRowSupportSubtitle": "Tip para sa may-akda, walang pangako",
+        "plusPaywallPlaceholder": "Malapit nang dumating ang Plus",
+        "plusBadgeLabel": "Subscription na Plus",
+        "plusSectionTitle": "Kasama ang Plus",
+        "cosmeticDefaultOption": "Default",
+        "profileLookTitle": "Itsura",
+        "settingsAvatarFrame": "Frame ng avatar",
+        "settingsVehicleCardStyle": "Background ng card",
+        "vehicleCardStylePickerFootnote": "Lumalabas ang background sa card ng sasakyang ito — sa garahe mo at sa public profile mo.",
+        "settingsRouteLine": "Linya ng ruta",
+        "routeLineSpeedGradient": "Gradient ng bilis",
+        "routeLinePickerFootnote": "Sa sarili mong mga mapa lang lumalabas ang kulay. Sa feed at sa profile ng iba, gaya pa rin ng dati ang mga ruta.",
+        "privacyPlusBadgeTitle": "Badge na Plus",
+        "privacyPlusBadgeSub": "Ipakita ang badge katabi ng pangalan mo sa feed, profile at mga komento.",
     ]
 
 }

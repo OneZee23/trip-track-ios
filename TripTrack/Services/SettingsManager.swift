@@ -26,15 +26,59 @@ final class SettingsManager: ObservableObject {
 
     /// Рамка аватара — один из шести вариантов «Плюса». `nil` — без рамки,
     /// тот же ответ, что у всех аккаунтов до 0.8.0. Персистится в
-    /// `UserSettingsEntity.avatarFrame` и синкается через
-    /// `SettingsSyncPayload.avatarFrame` тем же приёмом, что `dashboardUnits`
-    /// у машины: строка, а не enum — варианты знает `Views/Plus`.
+    /// `UserSettingsEntity.avatarFrame`, а НА СЕРВЕР уезжает через
+    /// `POST /auth/profile-update` — тем же путём, что `profileBackground`, и
+    /// нигде больше (в `SettingsSyncPayload` её нет нарочно). Строка, а не
+    /// enum: варианты знает `Views/Profile/AvatarFrame.swift`.
+    /// Пишется дверью `setAvatarFrame(_:)`, не присваиванием.
     @Published var avatarFrame: String?
     /// Значок «Плюс» у имени в ленте/профиле/комментариях — можно выключить
     /// в приватности, не теряя саму подписку. По умолчанию включён: значок
     /// на аккаунте без «Плюса» ничего не покажет, а прятать награду молча —
     /// решение, которое человек должен принять сам, а не получить готовым.
     @Published var showPlusBadge: Bool = true
+
+    /// Выбрать рамку аватара. Дверь, а не присваивание: кроме памяти выбор
+    /// обязан доехать до `UserSettingsEntity` (иначе он не переживёт
+    /// перезапуск) и до аккаунта (иначе его не увидит никто, кроме владельца
+    /// телефона) — ровно та же ошибка, что ловил `selectedVehicleId`.
+    func setAvatarFrame(_ raw: String?) {
+        let normalized = (raw?.isEmpty == true) ? nil : raw
+        guard normalized != avatarFrame else { return }
+        avatarFrame = normalized
+        saveSettings()
+        // `SettingsManager` не главноактёрный целиком, `AuthService` —
+        // главноактёрный: тот же хоп, что у `SyncEnqueuer.enqueue` строкой
+        // ниже по файлу.
+        Task { @MainActor in AuthService.shared.pushPlusCosmetics() }
+    }
+
+    /// Тумблер «Значок «Плюс»» из «Приватности». Та же дверь и та же причина.
+    func setShowPlusBadge(_ value: Bool) {
+        guard value != showPlusBadge else { return }
+        showPlusBadge = value
+        saveSettings()
+        Task { @MainActor in AuthService.shared.pushPlusCosmetics() }
+    }
+
+    /// Ответ `/auth/me`: аккаунт — источник правды для этой пары, потому что
+    /// он единственный, кто её хранит. `nil` — «сервер молчит» (старая
+    /// сборка бэкенда), и тогда локальное не трогается: правило 0.6.7.
+    func applyRemotePlusCosmetics(avatarFrame remoteFrame: String?, showPlusBadge remoteBadge: Bool?) {
+        var changed = false
+        if let remoteFrame {
+            let normalized = remoteFrame.isEmpty ? nil : remoteFrame
+            if normalized != avatarFrame { avatarFrame = normalized; changed = true }
+        }
+        if let remoteBadge, remoteBadge != showPlusBadge {
+            showPlusBadge = remoteBadge
+            changed = true
+        }
+        guard changed, let entity = settingsEntity else { return }
+        entity.avatarFrame = avatarFrame
+        entity.showPlusBadge = showPlusBadge
+        persistenceController.save()
+    }
 
     // User identity (local UUID, persisted in UserSettingsEntity.id)
     @Published private(set) var localUserId: UUID = UUID()
@@ -1064,6 +1108,27 @@ final class SettingsManager: ObservableObject {
         request.fetchLimit = 1
         guard let entity = try? context.fetch(request).first else { return }
         entity.dashboardUnits = units.rawValue
+        entity.syncStatus = SyncStatus.pendingUpload.rawValue
+        persistenceController.save()
+        loadVehicles()
+        Task { @MainActor in
+            SyncEnqueuer.enqueue(
+                SyncOperation(entityType: .vehicle, entityId: vehicleId, action: .update))
+        }
+    }
+
+    /// Фон карточки машины — косметика «Плюса» (0.8.0). Отдельной дверью, как
+    /// `setDashboardUnits`: своя строка в очереди синка на своё изменение, и
+    /// смена фона не тащит за собой правку имени и типа.
+    func setCardStyle(vehicleId: UUID, _ style: VehicleCardStyle) {
+        let context = persistenceController.container.viewContext
+        let request: NSFetchRequest<VehicleEntity> = VehicleEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", vehicleId as CVarArg)
+        request.fetchLimit = 1
+        guard let entity = try? context.fetch(request).first else { return }
+        // Пустая строка — «без фона»: в базе это `nil`, а не "", чтобы
+        // «ничего не выбрано» имело один вид, а не два.
+        entity.cardStyle = style == .none ? nil : style.rawValue
         entity.syncStatus = SyncStatus.pendingUpload.rawValue
         persistenceController.save()
         loadVehicles()

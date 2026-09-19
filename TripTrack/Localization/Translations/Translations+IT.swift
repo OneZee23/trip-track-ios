@@ -1368,6 +1368,19 @@ extension Translations {
         "tipThanks": "Grazie!",
         "profileRowSupport": "Sostieni",
         "profileRowSupportSubtitle": "Una mancia per l'autore, senza promesse",
+        "plusPaywallPlaceholder": "Plus arriva presto",
+        "plusBadgeLabel": "Abbonamento Plus",
+        "plusSectionTitle": "Con Plus",
+        "cosmeticDefaultOption": "Predefinito",
+        "profileLookTitle": "Aspetto",
+        "settingsAvatarFrame": "Cornice dell’avatar",
+        "settingsVehicleCardStyle": "Sfondo della scheda",
+        "vehicleCardStylePickerFootnote": "Lo sfondo compare sulla scheda di questo veicolo: nel tuo garage e nel tuo profilo pubblico.",
+        "settingsRouteLine": "Linea del percorso",
+        "routeLineSpeedGradient": "Sfumatura di velocità",
+        "routeLinePickerFootnote": "Il colore compare solo sulle tue mappe. Nel feed e nei profili altrui i percorsi restano come sempre.",
+        "privacyPlusBadgeTitle": "Badge Plus",
+        "privacyPlusBadgeSub": "Mostra il badge accanto al tuo nome nel feed, nel profilo e nei commenti.",
     ]
 
 }

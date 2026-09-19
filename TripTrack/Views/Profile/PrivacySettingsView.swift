@@ -28,6 +28,7 @@ struct PrivacySettingsView: View {
 
     @ObservedObject private var settings = SettingsManager.shared
     @ObservedObject private var auth = AuthService.shared
+    @ObservedObject private var plus = PlusAccess.shared
 
     /// Optimistic value for «Публичный профиль» while the server write is in
     /// flight; nil = mirror `auth.isPublicProfile`.
@@ -249,6 +250,29 @@ struct PrivacySettingsView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("settings_visibility_preview")
+
+                rowDivider(c)
+            }
+
+            // Значок «Плюс» у имени. Показывается ТОЛЬКО подписчику, и это
+            // не гейт из осторожности: без подписки значок не рисуется
+            // нигде, и тумблер не менял бы ничего — а переключатель, который
+            // ничего не делает, хуже отсутствующего (то же правило, по
+            // которому кнопка «Отрезок до…» не показывается на потолке).
+            // Витрина без платного не показывает его тем более.
+            if PlusGate.allows(.avatarFrame, isPlus: plus.isPlus,
+                               storefrontHidesPlus: plus.storefrontHidesPlus) == .open {
+                PrivacyToggleRow(
+                    icon: "plus.diamond.fill",
+                    tint: AppTheme.accent,
+                    title: AppStrings.privacyPlusBadgeTitle(l),
+                    subtitle: AppStrings.privacyPlusBadgeSub(l),
+                    isOn: Binding(
+                        get: { settings.showPlusBadge },
+                        set: { settings.setShowPlusBadge($0) }
+                    )
+                )
+                .accessibilityIdentifier("settings_plus_badge")
 
                 rowDivider(c)
             }

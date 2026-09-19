@@ -1368,6 +1368,19 @@ extension Translations {
         "tipThanks": "Дякуємо!",
         "profileRowSupport": "Підтримати",
         "profileRowSupportSubtitle": "Чайові автору, без обіцянок",
+        "plusPaywallPlaceholder": "Плюс скоро тут",
+        "plusBadgeLabel": "Підписка «Плюс»",
+        "plusSectionTitle": "З «Плюсом»",
+        "cosmeticDefaultOption": "Звичайний",
+        "profileLookTitle": "Вигляд",
+        "settingsAvatarFrame": "Рамка аватара",
+        "settingsVehicleCardStyle": "Тло картки",
+        "vehicleCardStylePickerFootnote": "Тло видно на картці цієї машини — у гаражі та в публічному профілі.",
+        "settingsRouteLine": "Лінія маршруту",
+        "routeLineSpeedGradient": "Градієнт швидкості",
+        "routeLinePickerFootnote": "Колір видно лише на ваших картах. У стрічці та в чужих профілях маршрути мають звичний вигляд.",
+        "privacyPlusBadgeTitle": "Значок «Плюс»",
+        "privacyPlusBadgeSub": "Показувати значок поряд з іменем — у стрічці, профілі та коментарях.",
     ]
 
 }
