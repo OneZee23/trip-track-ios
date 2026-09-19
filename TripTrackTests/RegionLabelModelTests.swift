@@ -3,21 +3,14 @@ import CoreLocation
 @testable import TripTrack
 
 /// `RegionLabelModel`: какое имя получает подпись на каждом языке, кто
-/// получает подпись вообще (только посещённые регионы, все страны), и как
-/// строка километров зависит от единицы — все чистыми функциями.
+/// получает подпись вообще (только посещённые регионы), и как строка
+/// километров зависит от единицы — все чистыми функциями.
 final class RegionLabelModelTests: XCTestCase {
 
     private let kuban = RegionAtlas.Region(
         id: "RU-KDA", countryCode: "RU", nameRu: "Краснодарский край", nameEn: "Krasnodar Krai",
         center: CLLocationCoordinate2D(latitude: 45.0, longitude: 39.0),
         bounds: GeoBounds(minLat: 44.0, maxLat: 46.5, minLon: 36.5, maxLon: 41.0),
-        rings: []
-    )
-
-    private let russia = RegionAtlas.MapCountry(
-        id: "RU", nameRu: "Россия", nameEn: "Russia",
-        center: CLLocationCoordinate2D(latitude: 60.0, longitude: 90.0),
-        bounds: GeoBounds(minLat: 41.0, maxLat: 82.0, minLon: 19.0, maxLon: 180.0),
         rings: []
     )
 
@@ -91,23 +84,5 @@ final class RegionLabelModelTests: XCTestCase {
         )
         XCTAssertEqual(labels.first?.kmLine, Measure.distance(km: 143.2, unit: .miles, lang: .en))
         XCTAssertNotEqual(labels.first?.kmLine, Measure.distance(km: 143.2, unit: .km, lang: .en))
-    }
-
-    // MARK: - Страны: все, посещённые ярче
-
-    func testCountryLabelsIncludeUnvisited() {
-        let labels = RegionLabelModel.countryLabels(
-            countries: [russia], visitedCountryCodes: [], language: .ru
-        )
-        XCTAssertEqual(labels.count, 1)
-        XCTAssertFalse(labels[0].isVisited)
-        XCTAssertNil(labels[0].kmLine)
-    }
-
-    func testCountryLabelBrightensWhenVisited() {
-        let labels = RegionLabelModel.countryLabels(
-            countries: [russia], visitedCountryCodes: ["RU"], language: .ru
-        )
-        XCTAssertTrue(labels[0].isVisited)
     }
 }

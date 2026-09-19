@@ -41,21 +41,20 @@ final class RegionAtlas {
         }
     }
 
-    /// Country outline — geometry only, no lookups. `RegionPathIndex`
-    /// (0.7.0, `RegionAtlas.countries`) uses these rings to draw a border
-    /// for every country on earth at world zoom; `regions` above still
-    /// carries the point-in-polygon detail for the 20 driveable countries.
+    /// Every country on earth, name + centroid/bbox only — no geometry.
+    ///
+    /// Used to carry an outline (`RegionPathIndex`, 0.7.0) for a border drawn
+    /// on the Atlas at world zoom, plus a label for every country. Both were
+    /// removed 17 September: the owner's device showed the outline visibly
+    /// offset near Japan/Philippines at world zoom, and — borders aside —
+    /// geopolitics has no place on this map. `regions` above still carries
+    /// the point-in-polygon detail for the 20 driveable countries.
     struct MapCountry {
         let id: String
         let nameRu: String
         let nameEn: String
         let center: CLLocationCoordinate2D
         let bounds: GeoBounds
-        /// Outer rings, flat [lat, lon, lat, lon, …]. Empty for a country
-        /// whose ring fell under the build script's span floor (micro-
-        /// states) — it still has a `center`/`bounds` for a label anchor
-        /// and LOD sizing, just nothing to trace.
-        let rings: [[Double]]
 
         func localizedName(_ language: LanguageManager.Language) -> String {
             language == .ru ? nameRu : nameEn
@@ -306,13 +305,10 @@ final class RegionAtlas {
             let en: String
             let c: [Double]
             let b: [Double]
-            /// Optional (0.7.0): a country whose ring fell under the build
-            /// script's span floor ships without `r` at all. `JSONDecoder`
-            /// fails an entire array on one bad element, so this being
-            /// non-optional would let ONE tiny-country row take every
-            /// country — and every region and city alongside it, since
-            /// they all decode as one `Payload` — down with it.
-            let r: [[Double]]?
+            // No `r` (country ring) since 17 September: the border it drew
+            // was removed, `Tools/build_map_regions.py` no longer emits the
+            // key, and `Decodable` silently ignores it if an older cached
+            // bundle still carries it — decode stays tolerant either way.
         }
         struct RawCity: Decodable {
             let n: String
@@ -466,8 +462,7 @@ final class RegionAtlas {
                 nameRu: raw.ru,
                 nameEn: raw.en,
                 center: CLLocationCoordinate2D(latitude: raw.c[0], longitude: raw.c[1]),
-                bounds: GeoBounds(minLat: raw.b[0], maxLat: raw.b[2], minLon: raw.b[1], maxLon: raw.b[3]),
-                rings: raw.r ?? []
+                bounds: GeoBounds(minLat: raw.b[0], maxLat: raw.b[2], minLon: raw.b[1], maxLon: raw.b[3])
             ))
         }
 

@@ -35,8 +35,7 @@ final class MapHostController: UIViewController {
     ///
     /// Место — ПОД контейнером аннотаций: жилку сети и выбранный маршрут
     /// «Атлас» уводит в растр, и оверлеев под вуалью не остаётся.
-    let veilSeat = VeilSeat(margin: FogVeilView.atlasMargin, seat: .belowAnnotations,
-                            showsRegions: true)
+    let veilSeat = VeilSeat(margin: FogVeilView.atlasMargin, seat: .belowAnnotations)
     var screenVeil: FogVeilView { veilSeat.veil }
 
     /// Сколько раз уже искали атрибуцию, чтобы вырезать под ней мглу.
@@ -501,19 +500,14 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                         )
                     }
                 }
-                // Регионы — только посещённые; страны — все, ярче у
-                // посещённых. Подписи стоят на карте ВСЕГДА с этого момента:
-                // масштаб решает не добавление/удаление, а видимость каждой
-                // (`updateRegionLabelLOD`), как у `installedHints`.
-                let visitedCountryCodes = Set(
-                    visitedRegionIds.compactMap { RegionAtlas.shared.region(id: $0)?.countryCode }
-                )
+                // Только посещённые регионы. Подписи стоят на карте ВСЕГДА с
+                // этого момента: масштаб решает не добавление/удаление, а
+                // видимость каждой (`updateRegionLabelLOD`), как у
+                // `installedHints`. Стран здесь больше нет — их подписи и
+                // контуры убраны 17 сентября вместе с границами.
                 regionLabels = RegionLabelModel.regionLabels(
                     regions: RegionAtlas.shared.regions, revealed: revealed,
                     visitedRegionIds: visitedRegionIds, unit: unit, language: language
-                ) + RegionLabelModel.countryLabels(
-                    countries: RegionAtlas.shared.countries,
-                    visitedCountryCodes: visitedCountryCodes, language: language
                 )
                 // The annotations on screen are stale copies of what just
                 // changed underneath them.
@@ -725,11 +719,10 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             guard map.bounds.width > 0, map.visibleMapRect.size.width > 0 else { return }
             let zoomScale = MKZoomScale(Double(map.bounds.width) / map.visibleMapRect.size.width)
             guard zoomScale > 0, zoomScale.isFinite else { return }
-            let lod = FogVeilRenderer.lod(for: zoomScale)
             for label in regionLabels {
                 guard let view = map.view(for: label) as? RegionLabelView else { continue }
                 let side = label.bounds.minSidePt(zoomScale: zoomScale)
-                view.visible = RegionLabelLOD.level(bboxMinSidePt: side, lod: lod, isCountry: label.isCountry)
+                view.visible = RegionLabelLOD.level(bboxMinSidePt: side)
             }
         }
 

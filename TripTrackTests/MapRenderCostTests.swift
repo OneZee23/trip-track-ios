@@ -495,68 +495,6 @@ final class MapRenderCostTests: XCTestCase {
         XCTAssertLessThan(best, 0.25, "сборка постера заняла \(best * 1000) мс")
     }
 
-    /// Полный кадр на масштабе СТРАНЫ — с границами регионов и заливками
-    /// посещённого, то есть со всем, что добавила волна «Атлас как атлас».
-    ///
-    /// Потолок 160 мс, и он не новый: это тот же потолок, что у кадра при
-    /// запасе «Атласа» (90 мс × рост площади). Кадр здесь дешевле по
-    /// коридорам — на среднем уровне проходов пера четыре, а не четырнадцать,
-    /// — но дороже по геометрии: шестьсот контуров из бандла, у самого тяжёлого
-    /// под три тысячи вершин. Упрётся в потолок — сначала прореживать контуры
-    /// на `.mid`, потом отказываться от заливки, но НЕ от ореола: ореол и есть
-    /// ответ на «где я был».
-    func testFullVeilFrameAtCountryZoomWithBordersFitsItsBudget() async {
-        let atlas = RegionAtlas.shared
-        await atlas.loadIfNeeded()
-        let borders = RegionPathIndex()
-        borders.prepare(outlines: RegionOutline.all(from: atlas))
-
-        let revealed = layer()
-        let index = MapPathIndex()
-        index.prepare(
-            source: { revealed.polylines(for: $0) },
-            transform: { CGPoint(x: $0.x, y: $0.y) }
-        )
-        // Худший конец среднего уровня: дальше него регионы уже не рисуются.
-        let centre = CLLocationCoordinate2D(latitude: 45.03, longitude: 38.99)
-        let metre = MKMapPointsPerMeterAtLatitude(centre.latitude)
-        let visibleWidth = 440 * 600 * metre
-        let origin = MKMapPoint(centre)
-        let visible = MKMapRect(
-            x: origin.x - visibleWidth / 2, y: origin.y - visibleWidth * 956 / 440 / 2,
-            width: visibleWidth, height: visibleWidth * 956 / 440)
-        let rect = FogVeilView.renderRect(visible: visible, margin: FogVeilView.atlasMargin)
-        let ppmp = 440 / visible.width
-        let sizePoints = CGSize(width: CGFloat(rect.width * ppmp),
-                                height: CGFloat(rect.height * ppmp))
-        XCTAssertEqual(FogVeilRenderer.lod(
-            for: MKZoomScale(sizePoints.width / CGFloat(rect.width))), .mid,
-            "кадр обязан попасть на уровень, где регионы рисуются")
-        // Худший случай заливки: посещено ВСЁ, что попало в кадр.
-        let visited = Set(atlas.regions.map(\.id))
-
-        // Облака — ДО часов: кисть рисует их всегда, и кадр без них меряет
-        // не то, что видит человек. `prepare()` идемпотентна.
-        _ = CloudTexture.shared.prepare()
-        // Облака — ДО часов: кисть рисует их всегда, и кадр без них меряет
-        // не то, что видит человек. `prepare()` идемпотентна.
-        _ = CloudTexture.shared.prepare()
-        var times: [TimeInterval] = []
-        for _ in 0..<5 {
-            let started = Date()
-            let band = FogVeilBitmap.render(
-                rect: rect, sizePoints: sizePoints, scale: FogVeilView.renderScale,
-                index: index, selected: [], regions: borders, visited: visited)
-            times.append(Date().timeIntervalSince(started))
-            XCTAssertNotNil(band, "растр обязан собраться")
-        }
-        let median = times.sorted()[times.count / 2]
-        print(String(format: "[veil] полный кадр .mid с границами @2.0× %.0f×%.0f pt: "
-                     + "медиана %.1f мс, минимум %.1f мс", sizePoints.width, sizePoints.height,
-                     median * 1000, times.min()! * 1000))
-        XCTAssertLessThan(median, 0.16,
-                          "кадр вуали с границами занял \(median * 1000) мс")
-    }
 
     /// Region outlines are drawn from the bundled atlas, and a heavy one would
     /// show up as the border crawling in behind the camera.

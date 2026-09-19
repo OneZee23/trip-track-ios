@@ -3,7 +3,7 @@
 
 Sources (all public domain / open):
   - Natural Earth 1:10m admin-1 states & provinces  → region borders
-  - Natural Earth 1:10m admin-0 countries            → country borders (0.7.0)
+  - Natural Earth 1:10m admin-0 countries            → country name/centroid/bbox
   - Natural Earth 1:10m populated places             → RU→EN city names
   - pensnarik/russian-cities                         → RU city list per subject
 
@@ -14,14 +14,19 @@ as 128 points, which put Adler and Krasnaya Polyana OUTSIDE their own region.
 Regions are simplified with a tolerance SCALED to each ring's own span
 (`detail 0.002, lo 0.003, hi 0.012`, ~0.7.0): a fixed epsilon is the wrong
 trade — it shreds a small region's coastline or leaves a giant carrying
-thousands of points nobody will ever see. Countries — everything on earth,
-not just the 20 the app breaks into regions — use a flat 0.01° tolerance
-instead (`countries[].r`): at world zoom the shape only needs to read as the
-country, and a scaled tolerance would make Russia dwarf the file. A country
-ring below `min_span` (0.15°, ~micro-states) is dropped rather than kept
-illegibly small; `countries[].c`/`.b` still come from the FULL unfiltered
-geometry, because a micro-state without a drawable border still needs a
-label anchor and a box for LOD sizing.
+thousands of points nobody will ever see.
+
+Countries — everything on earth, not just the 20 the app breaks into
+regions — used to carry their own ring (`countries[].r`, flat 0.01°
+tolerance) for a border drawn on the Atlas at world zoom, plus a label.
+`--no-country-rings` (on by default since 17 Sep 2026) drops that ring: the
+owner's device showed the border visibly offset near Japan/Philippines at
+world zoom, and — borders aside — geopolitics has no place on this map.
+`countries[].c`/`.b`/`id`/`ru`/`en` still ship (name lookups: milestone and
+extreme-point copy read them via `RegionAtlas.countryName(_:)`), and the ring
+machinery (`country_geometry`, `min_span`, the exclave force-keep below)
+stays in this file in case a future version wants the shape back — it just
+does not reach the JSON.
 
 Countries used to ship as a name-only list of the 20 driveable ones. As of
 0.7.0 every country on earth gets an entry (§3.3 of the atlas-look spec):
@@ -49,7 +54,7 @@ to force a re-fetch.
 
 Licences: Natural Earth is public domain; pensnarik/russian-cities is open.
 """
-import json, math, os, sys, urllib.error, urllib.request
+import argparse, json, math, os, sys, urllib.error, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "cache")
@@ -371,7 +376,7 @@ def english_city_names():
     return table
 
 
-def build_countries(regions):
+def build_countries(regions, include_rings=False):
     """One entry per country on earth: the 20 atlas countries keep their
     hand-picked names (Natural Earth's «Молдавия»/«Туркмения»/«Белоруссия»/
     Turkey disagree with product decisions already made), everyone else
@@ -381,6 +386,14 @@ def build_countries(regions):
     `regions` — the already-built region list, so each country's outline can
     be forced to cover every one of its OWN regions' centroids (exclaves like
     Kaliningrad, Nakhchivan) regardless of span rank; see `country_geometry`.
+
+    `include_rings` — off by default (`--no-country-rings`, 17 Sep 2026): the
+    Atlas no longer draws a country border or a country label at world zoom
+    (the owner's device showed the border visibly offset near Japan and the
+    Philippines, and geopolitics has no place on this map besides), so
+    `countries[].r` is dead weight — every entry still ships `id`/`ru`/`en`/
+    `c`/`b` for `RegionAtlas.countryName(_:)` (used by milestone/extreme-point
+    copy) and for a future label anchor, just no ring to trace.
     """
     admin0 = json.load(open(ADMIN0_PATH, encoding="utf-8"))
     by_cc = {cc: (ru, en) for cc, ru, en in COUNTRIES.values()}
@@ -422,13 +435,22 @@ def build_countries(regions):
         if bbox is None:
             continue
         row = {"id": code, "ru": ru, "en": en, "c": centroid, "b": bbox}
-        if rings:
+        if include_rings and rings:
             row["r"] = rings
         countries.append(row)
     return countries
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--no-country-rings", action="store_true", default=True,
+        help="omit countries[].r (country border rings) from the output — "
+             "on by default since the Atlas stopped drawing a country "
+             "border or label at world zoom (17 Sep 2026)",
+    )
+    args = parser.parse_args()
+
     ensure_cached()
 
     admin1 = json.load(open(ADMIN1_PATH, encoding="utf-8"))
@@ -497,7 +519,7 @@ def main():
             "r": flat_rings,
         })
 
-    countries = build_countries(regions)
+    countries = build_countries(regions, include_rings=not args.no_country_rings)
 
     # --- Cities, assigned to a region by point-in-polygon ------------------
     ru_regions = [r for r in regions if r["cc"] == "RU"]

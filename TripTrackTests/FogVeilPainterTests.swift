@@ -682,12 +682,9 @@ final class FogVeilPainterTests: XCTestCase {
     /// каждый тайл — ровно так его зовёт MapKit.
     private func tiledReference(
         rect: MKMapRect, sizePoints: CGSize, revealed: RevealedLayer,
-        width: Int, height: Int,
-        regions: RegionPathIndex? = nil
+        width: Int, height: Int
     ) -> [UInt8]? {
-        let renderer = FogVeilRenderer(veil: FogVeilOverlay(
-            layer: revealed, showsRegions: regions != nil,
-            regionIndex: regions ?? RegionPathIndex()))
+        let renderer = FogVeilRenderer(veil: FogVeilOverlay(layer: revealed))
         guard FogVeilRendererTests.waitForIndex(renderer) else { return nil }
         // Жилку растр рисует сам (оверлеем она лежала бы ПОД вуалью), поэтому
         // в откате её тоже надо нарисовать — на экране это те же два оверлея

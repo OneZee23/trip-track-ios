@@ -453,54 +453,14 @@ enum FogVeilPainter {
         var mask: CGImage
     }
 
-    // MARK: Границы стран
+    // MARK: Тёплый цвет подписи
 
-    /// Тёплый светлый серый границы. Не белый: белая линия на мгле — самое
-    /// яркое пятно экрана, и её видно раньше, чем то, ради чего карту открыли.
+    /// Тёплый светлый серый — тот же, которым раньше рисовались границы
+    /// стран (ушли 17 сентября вместе с самими странами на «Атласе»: контур
+    /// у Японии и Филиппин был заметно смещён на мировом зуме, а геополитика
+    /// на карте нам не нужна). Цвет остался: им по-прежнему обведена подпись
+    /// региона (`RegionLabelView.warmColor`).
     static var borderColor: UIColor { palette.border }
-    /// Только СТРАНЫ и только на дальнем уровне.
-    ///
-    /// Заливка посещённых регионов и контуры их границ были и ушли
-    /// («ночная карта», 17 сентября): под ними пропадала сама карта — «вся
-    /// настоящесть реальной карты ушла, это игровая доска». Ближе страны
-    /// тоже не рисуются: там границы показывает сама карта Apple, которая
-    /// теперь видна сквозь мглу.
-    static let countryBorderWidthPoints: CGFloat = 1
-    static let countryBorderAlpha: CGFloat = 0.45
-
-    /// Что рисовать поверх мглы и под коридорами.
-    struct RegionPaint {
-        var paths: RegionPaths
-        var zoomScale: MKZoomScale
-        /// Из координат ИНДЕКСА (точки карты) в координаты контекста. У растра
-        /// и постера тождественное; у плиточного рендерера — то, что делает
-        /// `point(for:)`.
-        var transform: CGAffineTransform = .identity
-    }
-
-    /// Контуры стран.
-    ///
-    /// Зовётся ПОСЛЕ заливки мглы и ДО коридоров: внутри открытого линию
-    /// прожигает то же перо, и там человек видит границу Apple, а снаружи —
-    /// нашу. Двойных линий не остаётся нигде.
-    static func paintRegions(context: CGContext, regions: RegionPaint?) {
-        guard let regions, !regions.paths.isEmpty, regions.zoomScale > 0 else { return }
-        let scale = CGFloat(regions.zoomScale) * regions.transform.a
-        guard scale > 0, scale.isFinite else { return }
-
-        context.saveGState()
-        context.concatenate(regions.transform)
-        context.setBlendMode(.normal)
-        context.setLineJoin(.round)
-        context.setLineCap(.round)
-        context.setLineDash(phase: 0, lengths: [])
-        context.beginPath()
-        regions.paths.countryBorders.forEach(context.addPath)
-        context.setLineWidth(countryBorderWidthPoints / scale)
-        context.setStrokeColor(borderColor.withAlphaComponent(countryBorderAlpha).cgColor)
-        context.strokePath()
-        context.restoreGState()
-    }
 
     /// Доля полуширины коридора, которую модулирует текстура облаков.
     ///
@@ -542,7 +502,6 @@ enum FogVeilPainter {
         tileRect: CGRect,
         depth: Depth,
         clouds: CloudLay? = nil,
-        regions: RegionPaint? = nil,
         reveal: Reveal? = nil
     ) {
         // Большинство тайлов не лежит рядом ни с одной своей дорогой: сплошная
@@ -552,7 +511,6 @@ enum FogVeilPainter {
         // большинство тайлов.
         guard !paths.isEmpty || reveal != nil else {
             fillAndHaze(context: context, tile: tileRect, depth: depth, clouds: clouds)
-            paintRegions(context: context, regions: regions)
             return
         }
 
@@ -563,7 +521,6 @@ enum FogVeilPainter {
         // действительно нужны.
         context.beginTransparencyLayer(auxiliaryInfo: nil)
         fillAndHaze(context: context, tile: tileRect, depth: depth, clouds: clouds)
-        paintRegions(context: context, regions: regions)
         punch(context: context, corridors: paths, corridorWidth: corridorWidth,
               passes: passes, clouds: clouds, reveal: reveal)
         context.endTransparencyLayer()
@@ -1007,29 +964,14 @@ final class FogVeilOverlay: NSObject, MKOverlay {
         var progress: Double
     }
 
-    /// Рисовать ли границы регионов и стран. Правда только у «Атласа»: на
-    /// карте одной поездки и на записи они шум — там вопрос «куда я еду», а не
-    /// «где я был».
-    let showsRegions: Bool
-
     /// Посещённые регионы — те, у которых в слое открытого есть километры.
     /// Выводится из самого слоя, а не приезжает отдельным списком: слой и есть
     /// то, что вью-модель передаёт, и второй источник этого списка однажды
     /// разошёлся бы с первым.
     let visitedRegions: Set<String>
 
-    /// Откуда брать контуры. Свойство, а не обращение к синглтону из
-    /// рендерера, ради ОДНОГО теста — того, что сравнивает растр с плиточным
-    /// откатом попиксельно: обе половины обязаны рисовать по одним и тем же
-    /// контурам, а подменить общий индекс на время теста значило бы подменить
-    /// его и всем остальным в процессе.
-    let regionIndex: RegionPathIndex
-
-    init(layer: RevealedLayer, showsRegions: Bool = false,
-         regionIndex: RegionPathIndex = .shared, revealAround: RevealPoint? = nil) {
+    init(layer: RevealedLayer, revealAround: RevealPoint? = nil) {
         self.layer = layer
-        self.showsRegions = showsRegions
-        self.regionIndex = regionIndex
         self.visitedRegions = Set(layer.regionKm.filter { $0.value > 0 }.map(\.key))
         self.storedReveal = revealAround
         super.init()
@@ -1041,10 +983,6 @@ final class FogVeilOverlay: NSObject, MKOverlay {
 final class FogVeilRenderer: MKOverlayRenderer {
     private let veil: FogVeilOverlay
     private let index = MapPathIndex()
-    /// Из точек карты (в них собран `RegionPathIndex`) в координаты этого
-    /// рендерера. Считается один раз: система координат выводится из
-    /// `boundingMapRect` оверлея и зафиксирована с `super.init`.
-    private var regionTransform: CGAffineTransform = .identity
 
     /// Сколько наборов бакетов собрано. Потолок — четыре достижимых пары
     /// (уровень детали × уровень бакетов), и вырасти он не имеет права:
@@ -1091,12 +1029,6 @@ final class FogVeilRenderer: MKOverlayRenderer {
     init(veil: FogVeilOverlay) {
         self.veil = veil
         super.init(overlay: veil)
-        let world = rect(for: .world)
-        if world.width > 0 {
-            let k = world.width / CGFloat(MKMapSize.world.width)
-            regionTransform = CGAffineTransform(translationX: world.minX, y: world.minY)
-                .scaledBy(x: k, y: k)
-        }
         // Трансформ `point(for:)` появляется только после `super.init` — и это
         // единственная причина, по которой сборка вообще привязана к
         // рендереру. Сам `init` зовёт `rendererFor` на ГЛАВНОМ потоке перед
@@ -1118,7 +1050,6 @@ final class FogVeilRenderer: MKOverlayRenderer {
             // ПОСЛЕ первого кадра они потребовали бы второй перерисовки всего
             // экрана ради узора.
             CloudTexture.shared.prepare()
-            if veil.showsRegions { veil.regionIndex.prepareIfNeeded() }
             self.index.prepare(
                 source: { veil.layer.polylines(for: $0) },
                 transform: { self.point(for: $0) }
@@ -1302,7 +1233,6 @@ final class FogVeilRenderer: MKOverlayRenderer {
             FogVeilPainter.paint(
                 context: context, paths: [], corridorWidth: 0, passes: 0,
                 tileRect: tile, depth: Self.depth(for: mapRect, lod: level, haze: false),
-                regions: regionPaint(in: mapRect, lod: level, zoomScale: zoomScale),
                 reveal: reveal(in: mapRect, zoomScale: zoomScale, metre: metre)
             )
             engraveHints(in: context, mapRect: mapRect, zoomScale: zoomScale, lod: level)
@@ -1325,7 +1255,6 @@ final class FogVeilRenderer: MKOverlayRenderer {
             tileRect: tile,
             depth: Self.depth(for: mapRect, lod: level),
             clouds: Self.clouds(for: mapRect, rect: tile, lod: level),
-            regions: regionPaint(in: mapRect, lod: level, zoomScale: zoomScale),
             reveal: reveal(in: mapRect, zoomScale: zoomScale, metre: metre)
         )
         engraveHints(in: context, mapRect: mapRect, zoomScale: zoomScale, lod: level)
@@ -1351,18 +1280,6 @@ final class FogVeilRenderer: MKOverlayRenderer {
             return box.intersects(mapRect)
         }
         FogVeilPainter.engrave(context: context, hints: visible, zoomScale: zoomScale, lod: lod)
-    }
-
-    /// Границы этого тайла — или `nil`, если экран их не показывает, индекс
-    /// ещё не собран или на этом уровне детали их не рисуют.
-    private func regionPaint(
-        in mapRect: MKMapRect, lod: RevealedLayer.LOD, zoomScale: MKZoomScale
-    ) -> FogVeilPainter.RegionPaint? {
-        guard veil.showsRegions,
-              let paths = veil.regionIndex.paths(in: mapRect, lod: lod)
-        else { return nil }
-        return FogVeilPainter.RegionPaint(
-            paths: paths, zoomScale: zoomScale, transform: regionTransform)
     }
 
     private func reveal(

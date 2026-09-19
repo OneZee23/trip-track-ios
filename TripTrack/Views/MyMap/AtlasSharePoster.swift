@@ -105,14 +105,6 @@ enum AtlasSharePoster {
         // Облака — синхронно, как и индекс: постер собирается в фоне и один
         // раз, а туман без них разошёлся бы с экраном.
         CloudTexture.shared.prepare()
-        // И границы: постер — это «Атлас», и заливка посещённых регионов на
-        // нём обязана быть та же, что на экране. Предусловие — атлас уже
-        // загружен (сегодня постер достижим только из «Атласа», а значит он
-        // всегда загружен); не загружен — постер молча рисуется без границ и
-        // без заливки, а не ждёт и не падает.
-        if !RegionPathIndex.shared.isReady, RegionAtlas.shared.isLoaded {
-            RegionPathIndex.shared.prepare(outlines: RegionOutline.all(from: .shared))
-        }
         let index = MapPathIndex()
         index.prepare(
             source: { layer.polylines(for: $0) },
@@ -120,7 +112,6 @@ enum AtlasSharePoster {
         )
         guard let band = FogVeilBitmap.render(
             rect: rect, sizePoints: size, scale: scale, index: index, selected: [],
-            regions: .shared,
             visited: Set(layer.regionKm.filter { $0.value > 0 }.map(\.key))
         ) else { return }
 

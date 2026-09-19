@@ -28,29 +28,14 @@ final class MapRegionsBundleTests: XCTestCase {
         throw XCTSkip("MapRegions.json not resolvable from the test bundle")
     }
 
-    func testBundleSizeStaysUnderFourMegabytes() throws {
+    /// 1.5 MB, not the earlier 4 MB: `countries[].r` (the world's country
+    /// outlines, drawn nowhere since 17 September — the owner's device showed
+    /// the border visibly offset near Japan/Philippines at world zoom, and
+    /// geopolitics has no place on this map besides) is gone from the bundle.
+    func testBundleSizeStaysUnderOnePointFiveMegabytes() throws {
         let url = try Self.bundleURL()
         let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? .max
-        XCTAssertLessThanOrEqual(size, 4 * 1024 * 1024, "\(size) bytes")
-    }
-
-    /// The twenty countries the app breaks into regions — the only ones
-    /// `region(containing:)` can ever attribute a trip to. Every one of them
-    /// must also carry a country-level outline for world-zoom drawing.
-    private static let atlasCountryCodes = [
-        "RU", "GE", "AM", "AZ", "KZ", "BY", "UA", "FI", "EE", "LV",
-        "LT", "MD", "PL", "MN", "TR", "KG", "UZ", "TJ", "TM", "NO",
-    ]
-
-    func testEveryAtlasCountryCarriesRings() {
-        let byId = Dictionary(uniqueKeysWithValues: atlas.countries.map { ($0.id, $0) })
-        for code in Self.atlasCountryCodes {
-            guard let country = byId[code] else {
-                XCTFail("no MapCountry entry for \(code)")
-                continue
-            }
-            XCTAssertFalse(country.rings.isEmpty, "\(code) has no rings")
-        }
+        XCTAssertLessThanOrEqual(size, Int(1.5 * 1024 * 1024), "\(size) bytes")
     }
 
     /// Below twelve points a LARGE region reads as an octagon, not a border —
@@ -115,30 +100,6 @@ final class MapRegionsBundleTests: XCTestCase {
     func testRegionIdsAreUnique() {
         let ids = atlas.regions.map(\.id)
         XCTAssertEqual(Set(ids).count, ids.count, "duplicate region id shipped in the bundle")
-    }
-
-    /// Review round 1: Russia's country-level outline dropped Kaliningrad —
-    /// its ring ranked 14th by span, two past the old `max_rings=12` cutoff,
-    /// so at world zoom the exclave read as unclaimed space between Poland
-    /// and Lithuania. `country_geometry()` now force-keeps any ring covering
-    /// one of the country's OWN region centroids, independent of rank.
-    func testCountryOutlinesCoverTheirOwnExclaveRegions() {
-        let cases: [(code: String, coordinate: CLLocationCoordinate2D)] = [
-            ("RU", CLLocationCoordinate2D(latitude: 54.71, longitude: 20.51)),   // Kaliningrad
-            ("AZ", CLLocationCoordinate2D(latitude: 39.21, longitude: 45.41)),   // Nakhchivan
-        ]
-        let byId = Dictionary(uniqueKeysWithValues: atlas.countries.map { ($0.id, $0) })
-        for testCase in cases {
-            guard let country = byId[testCase.code] else {
-                XCTFail("no MapCountry entry for \(testCase.code)")
-                continue
-            }
-            XCTAssertTrue(
-                RegionAtlas.contains(
-                    lat: testCase.coordinate.latitude, lon: testCase.coordinate.longitude,
-                    rings: country.rings),
-                "\(testCase.code) outline does not cover \(testCase.coordinate)")
-        }
     }
 
     /// A synthetic duplicate, independent of whatever the shipped bundle

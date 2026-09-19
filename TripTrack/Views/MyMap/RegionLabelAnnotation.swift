@@ -1,42 +1,39 @@
 import MapKit
 
-/// Название региона или страны поверх тумана «Атласа».
+/// Название региона поверх тумана «Атласа».
 ///
-/// Координата — из БАНДЛА (`RegionAtlas.Region.center` / `MapCountry.center`),
-/// не из открытой части слоя: имя обязано стоять в географическом центре
-/// края, а не гулять вслед за тем, куда именно в этот раз проехала машина.
+/// Координата — из БАНДЛА (`RegionAtlas.Region.center`), не из открытой части
+/// слоя: имя обязано стоять в географическом центре края, а не гулять вслед
+/// за тем, куда именно в этот раз проехала машина.
+///
+/// Только регионы: подписи стран и их контуры на «Атласе» убраны 17 сентября
+/// (контур у Японии и Филиппин был заметно смещён на мировом зуме, а
+/// геополитика на карте нам не нужна).
 ///
 /// Заглавные буквы и строка километров приходят ГОТОВЫМИ (`RegionLabelModel`
 /// их собирает) — у аннотации нет языка, его знает карта, которая её строит;
 /// тот же приём, что у `SealAnnotation.accessibilityText`.
 final class RegionLabelAnnotation: NSObject, MKAnnotation {
     let coordinate: CLLocationCoordinate2D
-    /// ISO 3166-2 у региона (`"RU-KDA"`), alpha-2 у страны (`"RU"`) — не
-    /// путать с `MKAnnotation.title`, который несёт уже локализованное имя.
+    /// ISO 3166-2 региона (`"RU-KDA"`) — не путать с `MKAnnotation.title`,
+    /// который несёт уже локализованное имя.
     let labelId: String
-    let isCountry: Bool
-    /// У региона всегда `true` — список уже отфильтрован по открытым
-    /// километрам. У страны решает яркость подписи (`RegionLabelView`).
-    let isVisited: Bool
     let name: String
-    /// «N км» — только у посещённого региона. У страны всегда `nil`: сумма
-    /// открытого по её регионам нигде не хранится, а считать её заново здесь
-    /// значило бы завести ВТОРОЙ счёт рядом с `RevealedLayer.regionKm`.
+    /// «N км» — список уже отфильтрован по открытым километрам, поэтому
+    /// подпись есть только у посещённого региона.
     let kmLine: String?
-    /// Bbox региона/страны из бандла — по нему `RegionLabelLOD` решает,
-    /// показывать подпись на этом масштабе или нет.
+    /// Bbox региона из бандла — по нему `RegionLabelLOD` решает, показывать
+    /// подпись на этом масштабе или нет.
     let bounds: GeoBounds
 
     var title: String? { name }
 
     init(
-        labelId: String, coordinate: CLLocationCoordinate2D, isCountry: Bool, isVisited: Bool,
+        labelId: String, coordinate: CLLocationCoordinate2D,
         name: String, kmLine: String?, bounds: GeoBounds
     ) {
         self.labelId = labelId
         self.coordinate = coordinate
-        self.isCountry = isCountry
-        self.isVisited = isVisited
         self.name = name
         self.kmLine = kmLine
         self.bounds = bounds
@@ -50,8 +47,8 @@ extension GeoBounds {
     /// Меньшая сторона bbox на экране, в точках, на данном масштабе.
     ///
     /// Считается в координатах `MKMapPoint`, теми же, в которых уже живёт
-    /// весь туман (`RegionPathIndex`, `FogVeilRenderer`) — `zoomScale` и есть
-    /// множитель «точка карты → точка экрана», второго счёта заводить незачем.
+    /// весь туман (`FogVeilRenderer`) — `zoomScale` и есть множитель «точка
+    /// карты → точка экрана», второго счёта заводить незачем.
     /// Меркатор не линеен, но для bbox края (не полушария) плоская погрешность
     /// ничтожна рядом с порогом в 140 pt.
     func minSidePt(zoomScale: MKZoomScale) -> CGFloat {
@@ -65,9 +62,13 @@ extension GeoBounds {
 
 // MARK: - Модель
 
-/// Собирает `RegionLabelAnnotation` из атласа и слоя открытого — чистыми
-/// функциями, без обращения к `RegionAtlas.shared`, чтобы тест кормил их
-/// синтетическими регионами и странами напрямую.
+/// Собирает `RegionLabelAnnotation` из атласа и слоя открытого — чистой
+/// функцией, без обращения к `RegionAtlas.shared`, чтобы тест кормил её
+/// синтетическими регионами напрямую.
+///
+/// Стран здесь больше нет: их подписи и контуры убраны 17 сентября вместе с
+/// границами — геополитика на карте нам не нужна, а контур у Японии и
+/// Филиппин к тому же был заметно смещён на мировом зуме.
 enum RegionLabelModel {
     /// Только регионы, где что-то открыто (`visitedRegionIds`) — тот же
     /// набор, что красит заливку (`FogVeilOverlay.visitedRegions`), а не
@@ -85,32 +86,9 @@ enum RegionLabelModel {
             return RegionLabelAnnotation(
                 labelId: region.id,
                 coordinate: region.center,
-                isCountry: false,
-                isVisited: true,
                 name: region.localizedName(language).uppercased(language),
                 kmLine: Measure.distance(km: km, unit: unit, lang: language),
                 bounds: region.bounds
-            )
-        }
-    }
-
-    /// Все страны атласа — «страны у всех при мировом масштабе»; посещённые
-    /// решает `visitedCountryCodes`, выведенный из ТОГО ЖЕ набора id регионов,
-    /// что и `regionLabels` выше.
-    static func countryLabels(
-        countries: [RegionAtlas.MapCountry],
-        visitedCountryCodes: Set<String>,
-        language: LanguageManager.Language
-    ) -> [RegionLabelAnnotation] {
-        countries.map { country in
-            RegionLabelAnnotation(
-                labelId: country.id,
-                coordinate: country.center,
-                isCountry: true,
-                isVisited: visitedCountryCodes.contains(country.id),
-                name: country.localizedName(language).uppercased(language),
-                kmLine: nil,
-                bounds: country.bounds
             )
         }
     }
@@ -124,15 +102,12 @@ enum RegionLabelModel {
 final class RegionLabelView: MKAnnotationView {
     static let reuseID = "RegionLabel"
 
-    /// Тот же тёплый светлый серый, которым в `FogVeilPainter` обведены
-    /// границы регионов и стран — подпись и линия обязаны читаться как один
-    /// язык, а не как два разных слоя, положенных друг на друга.
+    /// Тот же тёплый светлый серый, которым раньше на «Атласе» рисовались
+    /// границы стран — подпись региона и он обязаны читаться как один язык.
     private static let warmColor = FogVeilPainter.borderColor
-    /// Посещённый регион (всегда) и посещённая страна читаются на треть
-    /// ярче непосещённой — той на мировом зуме ещё только предстоит стать
-    /// целью, а не памятью.
+    /// Список уже отфильтрован по открытым километрам, поэтому подпись у
+    /// региона всегда «посещённая» яркость.
     private static let brightAlpha: CGFloat = 0.85
-    private static let dimAlpha: CGFloat = 0.4
 
     /// Тёмный ореол вокруг букв. Подпись лежит и на тумане, и на СВЕТЛОЙ
     /// карте Apple внутри коридора (с фикс-волны 2 «Атлас» дневной), а
@@ -208,7 +183,7 @@ final class RegionLabelView: MKAnnotationView {
         // Под светлой дымкой тёплый светлый текст исчезает — там подпись
         // тёмная (#1E2230), а обводка, наоборот, светлая.
         let base = FogVeilPainter.palette.isDark ? Self.warmColor : Self.darkText
-        let color = base.withAlphaComponent(region.isVisited ? Self.brightAlpha : Self.dimAlpha)
+        let color = base.withAlphaComponent(Self.brightAlpha)
 
         // Разрядка 0.08 em: капитель без нее читается сплошным пятном,
         // разряженная — гравюрой. Заглавные буквы приходят готовыми в
