@@ -312,7 +312,19 @@ struct FeedView: View {
             // page (limit=20) — extra pages load lazily via loadMoreIfNeeded when the
             // user scrolls, so the cost stays bounded even with a large feed.
             feedVM.language = lang.language
-            feedVM.loadTrips()
+            // Synchronous ONLY on the very first appearance with no cached
+            // data — `loadTrips()` faults the whole library on the main
+            // thread (docstring on `loadTripsAsync()`: ~200ms on iPhone 12 /
+            // 70+ trips). Every other appearance (tab switch back, return
+            // from detail) already has `allTrips` populated from a prior
+            // load, so there is nothing on screen that a one-frame-later
+            // async refresh could flash empty — route those through the
+            // background-context path instead of re-paying the freeze.
+            if feedVM.allTrips.isEmpty {
+                feedVM.loadTrips()
+            } else {
+                Task { await feedVM.loadTripsAsync() }
+            }
             // Cache the private-trip flag here (not in body) — see the
             // @State declaration for the AttributeGraph rationale.
             hasAnyPrivateTrip = feedVM.tripManager.hasAnyPrivateTrip()
