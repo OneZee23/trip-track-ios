@@ -4,8 +4,14 @@ import MapKit
 struct PlacePin: Identifiable, Equatable {
     let id: UUID
     let coordinate: CLLocationCoordinate2D
+    /// Подсказка (`PlaceSuggestions`), а не заведённое место: рисуется
+    /// полупрозрачной и пустой внутри — «сюда МОЖНО поставить булавку», а не
+    /// «здесь она стоит». Входит в сравнение: одна и та же ячейка меняет вид,
+    /// когда подсказка становится местом, а координата у неё та же.
+    var isSuggested = false
     static func == (a: PlacePin, b: PlacePin) -> Bool {
-        a.id == b.id && a.coordinate.latitude == b.coordinate.latitude && a.coordinate.longitude == b.coordinate.longitude
+        a.id == b.id && a.isSuggested == b.isSuggested
+            && a.coordinate.latitude == b.coordinate.latitude && a.coordinate.longitude == b.coordinate.longitude
     }
 }
 
@@ -106,6 +112,7 @@ struct PlacesMapView: UIViewRepresentable {
             // Свежедобавленная булавка ещё не видна `map.view(for:)` в цикле
             // ниже по `sync()`, а переиспользованный вид мог прийти с чужим
             // масштабом — красим по актуальному выбору здесь же.
+            (view as? PlacePinView)?.setSuggested(place.pin.isSuggested)
             (view as? PlacePinView)?.setSelectedAppearance(place.pin.id == selectedId)
             return view
         }
@@ -166,6 +173,21 @@ final class PlacePinView: MKAnnotationView {
         // Иначе переиспользованный вид мог на кадр мелькнуть с прежним
         // масштабом 1.35 до того, как `mapView(_:viewFor:)` перекрасит его.
         setSelectedAppearance(false)
+        setSuggested(false)
+    }
+
+    /// Подсказка: тот же диск, но полый и приглушённый. Место — заливка,
+    /// подсказка — контур: разницу видно и на мелком масштабе, где 18 pt
+    /// булавки это всё, что есть.
+    func setSuggested(_ suggested: Bool) {
+        disc.backgroundColor = suggested ? UIColor(AppTheme.accent).withAlphaComponent(0.22)
+                                         : UIColor(AppTheme.accent)
+        disc.layer.borderColor = suggested ? UIColor(AppTheme.accent).withAlphaComponent(0.75).cgColor
+                                           : UIColor.white.cgColor
+        disc.layer.borderWidth = suggested ? 2 : 3
+        // Место всегда побеждает подсказку в споре за пиксель: заведённое
+        // важнее предложенного.
+        displayPriority = suggested ? .defaultHigh : .required
     }
 
     func setSelectedAppearance(_ selected: Bool) {

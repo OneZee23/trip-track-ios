@@ -164,6 +164,11 @@ protocol TripRepository {
     func checkpointsWithoutPlace() -> [(checkpoint: TripCheckpoint, tripId: UUID)]
     /// Координаты отметок места — для центроида.
     func checkpointCoordinates(placeId: UUID) -> [CLLocationCoordinate2D]
+    /// Все `placeId`, какие когда-либо проставлялись отметкам, — живые места
+    /// И надгробия удалённых. Нужно подсказке (`PlaceSuggestions`): ячейку
+    /// удалённого места предлагать заново нельзя, а по списку живых мест
+    /// надгробие от новой точки не отличить.
+    func checkpointPlaceIds() -> Set<UUID>
     /// Лёгкая выборка для предфильтра: id, старт и превью, без снимков,
     /// отметок и точек. `needingPlaceMatch: true` — только ещё не сверенные.
     func tripPreviews(needingPlaceMatch: Bool) -> [TripPreviewRef]
@@ -1060,6 +1065,17 @@ final class CoreDataTripRepository: TripRepository {
         return ((try? context.fetch(request)) ?? []).map {
             CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
         }
+    }
+
+    func checkpointPlaceIds() -> Set<UUID> {
+        // Словарная выборка одной колонки: отметок у зрелой библиотеки сотни,
+        // и материализовать их ради одного поля незачем.
+        let request = NSFetchRequest<NSDictionary>(entityName: "TripCheckpointEntity")
+        request.resultType = .dictionaryResultType
+        request.propertiesToFetch = ["placeId"]
+        request.predicate = NSPredicate(format: "placeId != nil")
+        request.returnsDistinctResults = true
+        return Set(((try? context.fetch(request)) ?? []).compactMap { $0["placeId"] as? UUID })
     }
 
     func tripPreviews(needingPlaceMatch: Bool) -> [TripPreviewRef] {
