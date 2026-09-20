@@ -3898,6 +3898,9 @@ enum AppStrings {
     static func today(_ lang: LanguageManager.Language) -> String {
         tr(lang, "today", ru: "Сегодня", en: "Today")
     }
+    static func yesterday(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "yesterday", ru: "Вчера", en: "Yesterday")
+    }
     static func earlier(_ lang: LanguageManager.Language) -> String {
         tr(lang, "earlier", ru: "Ранее", en: "Earlier")
     }
@@ -7441,6 +7444,39 @@ enum AppStrings {
     /// строке рядом с датой, а не отдельным блоком.
     static func manualTripBadge(_ lang: LanguageManager.Language) -> String {
         tr(lang, "manualTripBadge", ru: "Вписана рукой", en: "Added by hand")
+    }
+
+    // MARK: - Редизайн 20 сен 2026: чипы, кнопка-итог, тост после записи
+
+    /// Чип «Дом» над полями точек.
+    static func manualTripChipHome(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripChipHome", ru: "Дом", en: "Home")
+    }
+
+    /// Чип «Точка на карте» — взводит тап по герою листа; то же имя ставится
+    /// точке, пока обратный геокодер не ответил.
+    static func manualTripChipMapPoint(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripChipMapPoint", ru: "Точка на карте", en: "Point on map")
+    }
+
+    /// На кнопке «Записать», пока не заданы обе точки.
+    static func manualTripNeedPoints(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripNeedPoints", ru: "Укажите, откуда и куда", en: "Set where from and where to")
+    }
+
+    /// Заголовок тоста после успешной записи.
+    static func manualTripSuccessMessage(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripSuccessMessage", ru: "Поездка добавлена", en: "Trip added")
+    }
+
+    /// Первая кнопка тоста.
+    static func manualTripSuccessOpen(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripSuccessOpen", ru: "Открыть поездку", en: "Open trip")
+    }
+
+    /// Вторая кнопка тоста — открывает тот же лист с перевёрнутыми точками.
+    static func manualTripSuccessReturn(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "manualTripSuccessReturn", ru: "Добавить обратную дорогу", en: "Add the way back")
     }
 
     // MARK: - Экспорт GPX и CSV (0.8.0)
