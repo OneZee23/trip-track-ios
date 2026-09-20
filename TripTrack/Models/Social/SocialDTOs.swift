@@ -189,10 +189,37 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
         guard let s = stoppedTime, s > 0 else { return nil }
         return Trip.formattedTimeHuman(TimeInterval(s), lang: lang)
     }
+    /// Decoded route for the card's map preview. Hits an `NSCache` keyed by
+    /// trip id — mirrors `Trip.previewCoordinates` (see its doc comment).
+    /// `SocialFeedCardView.body` reads this from `mapSection` AND the
+    /// diagnostics logger, and `store.trips` republishes the whole array on
+    /// every reaction/comment/photo bump, so an uncached decode ran the
+    /// base64 + Float32 parse again for every visible card on every such
+    /// event, not just on first appearance. `previewPolyline` is a `let` —
+    /// the same id never carries a different polyline — so, unlike `Trip`,
+    /// there is no edit path that needs an invalidation hook.
     var previewCoordinates: [CLLocationCoordinate2D] {
+        if let cached = Self.previewCache.object(forKey: id as NSUUID) {
+            return cached.coords
+        }
         guard let s = previewPolyline, let data = Data(base64Encoded: s) else { return [] }
-        return Trip.decodePolyline(data)
+        let coords = Trip.decodePolyline(data)
+        Self.previewCache.setObject(SocialCoordsBox(coords: coords), forKey: id as NSUUID)
+        return coords
     }
+
+    private static let previewCache: NSCache<NSUUID, SocialCoordsBox> = {
+        let cache = NSCache<NSUUID, SocialCoordsBox>()
+        cache.countLimit = 300
+        return cache
+    }()
+}
+
+/// Wrapper class because `NSCache` requires an `AnyObject` value type.
+/// Shared by every social DTO with a `previewCoordinates` cache below.
+private final class SocialCoordsBox {
+    let coords: [CLLocationCoordinate2D]
+    init(coords: [CLLocationCoordinate2D]) { self.coords = coords }
 }
 
 // MARK: - Public journeys (0.6.8)
