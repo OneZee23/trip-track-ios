@@ -272,6 +272,7 @@ enum DebugMapSeed {
             if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
             if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
             if isManualRequested { seedManualTrip(persistence: persistence) }
+            seedGeocodeCache(persistence: persistence)
             seedPhotos(persistence: persistence)
             return
         }
@@ -330,7 +331,47 @@ enum DebugMapSeed {
         if isSegmentRequested { seedSegmentDemo(persistence: persistence) }
         if isDiscoveriesRequested { seedDiscoveries(persistence: persistence) }
         if isManualRequested { seedManualTrip(persistence: persistence) }
+        seedGeocodeCache(persistence: persistence)
         seedPhotos(persistence: persistence)
+    }
+
+    // MARK: - Кэш геокодера (0.8.0)
+
+    /// Названия городов для концов демо-маршрутов.
+    ///
+    /// Подсказки «Похоже, вы здесь бываете» берут имя ТОЛЬКО из кэша
+    /// геокодера (своего запроса они не делают — пять сетевых кругов на
+    /// открытие вкладки), а кэш наполняет `TripManager` на финише настоящей
+    /// поездки, которого у сида нет. Без этих строк каждая подсказка на
+    /// симуляторе зовётся «Точка на карте», и по снимку не отличить
+    /// «геокодер молчит» от «имя не доезжает до строки».
+    ///
+    /// Ключ — geohash-5, ровно как у `cachedGeocode(for:)`; идемпотентно —
+    /// существующие строки не трогаются.
+    private static func seedGeocodeCache(persistence: PersistenceController) {
+        let context = persistence.container.viewContext
+        let named: [(Double, Double, String, String)] = [
+            (45.035, 38.975, "Краснодар", "Краснодарский край"),
+            (47.222, 39.719, "Ростов-на-Дону", "Ростовская область"),
+            (44.561, 38.077, "Геленджик", "Краснодарский край"),
+            (43.585, 39.723, "Сочи", "Краснодарский край"),
+            (44.630, 39.130, "Горячий Ключ", "Краснодарский край"),
+            (44.960, 38.845, "Майкоп", "Адыгея"),
+            (41.640, 41.640, "Батуми", "Аджария"),
+        ]
+        for (latitude, longitude, locality, region) in named {
+            let geohash = GeohashEncoder.encode(latitude: latitude, longitude: longitude, precision: 5)
+            let request: NSFetchRequest<GeocodeCacheEntity> = GeocodeCacheEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "geohash5 == %@", geohash)
+            request.fetchLimit = 1
+            if let found = try? context.count(for: request), found > 0 { continue }
+            let entity = GeocodeCacheEntity(context: context)
+            entity.geohash5 = geohash
+            entity.locality = locality
+            entity.region = region
+            entity.cachedAt = Date()
+        }
+        persistence.save()
     }
 
     // MARK: - Снимки на маршруте (0.7.0)

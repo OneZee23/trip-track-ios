@@ -134,6 +134,52 @@ enum AppStrings {
         tr(lang, "placeNoDirection", ru: "Без направления", en: "No direction")
     }
 
+    // MARK: - Places · подсказки и объяснение (0.8.0)
+    /// Заголовок секции под списком мест. «Похоже» — потому что приложение
+    /// догадывается по концам маршрутов, а не знает.
+    static func placeSuggestSection(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeSuggestSection", ru: "Похоже, вы здесь бываете", en: "Looks like you come here")
+    }
+    /// «3 поездки начинались или заканчивались здесь» — число уже с
+    /// просклонённым словом «поездки».
+    static func placeSuggestTrips(_ lang: LanguageManager.Language, trips: String) -> String {
+        tr(lang, "placeSuggestTrips",
+           ru: "{trips} начинались или заканчивались здесь",
+           en: "{trips} started or ended here")
+            .replacingOccurrences(of: "{trips}", with: trips)
+    }
+    static func placeSuggestSave(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeSuggestSave", ru: "Сохранить как место", en: "Save as place")
+    }
+    /// Подсказка без имени: кэш геокодера этот двор ещё не называл.
+    /// Координату не пишем — число из семи знаков ничего не объясняет.
+    static func placeSuggestUnnamed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placeSuggestUnnamed", ru: "Точка на карте", en: "A spot on the map")
+    }
+    /// Заголовок карточки «как это работает» — показывается, пока мест почти
+    /// нет и подсказать нечего.
+    static func placesHowTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesHowTitle", ru: "Как появляются места", en: "Where places come from")
+    }
+    static func placesHowMark(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesHowMark",
+           ru: "Кнопка отметки на экране записи — прямо на ходу",
+           en: "The checkpoint button while you drive")
+    }
+    static func placesHowTap(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesHowTap",
+           ru: "Нажатие на маршрут открытой поездки — отметка встанет на дорогу",
+           en: "A tap on an open trip's route drops a checkpoint on the road")
+    }
+    static func placesHowSuggest(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesHowSuggest",
+           ru: "Приложение само предложит двор, куда вы возвращаетесь",
+           en: "The app will suggest the spots you keep returning to")
+    }
+    static func placesOpenLastTrip(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "placesOpenLastTrip", ru: "Открыть последнюю поездку", en: "Open the last trip")
+    }
+
     // MARK: - Groups (coming soon, Figma 117:2265)
     static func groupsComingTitle(_ lang: LanguageManager.Language) -> String {
         tr(lang, "groupsComingTitle", ru: "Клубы — скоро", en: "Clubs — coming soon")
