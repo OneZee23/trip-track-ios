@@ -9,7 +9,13 @@ import MapKit
 /// переключает ТОТ ЖЕ лист во вторую стадию). Поиск здесь — вторая стадия,
 /// машина — ряд фишек.
 ///
-/// Ошибки маршрута стоят строкой под точками, а не диалогом: системных
+/// Редизайн 20 сен 2026 (решения владельца, все четыре — «рекомендованный»
+/// вариант): карта — герой, порядок «маршрут → когда → машина → Записать»;
+/// точки ставятся чипами («Дом», частые места, тап по карте) не только
+/// поиском; длительность подстраивается под маршрут сама, пока её не тронули
+/// рукой; лист умеет открыться уже заполненным — `preset`.
+///
+/// Ошибки маршрута стоят строкой под картой, а не диалогом: системных
 /// модалок в приложении нет вовсе (CLAUDE.md, «Dialogs»), а «нет дороги» —
 /// это состояние формы, а не вопрос к человеку.
 struct ManualTripSheet: View {
@@ -17,18 +23,36 @@ struct ManualTripSheet: View {
     /// `TripManager` его нет — экземпляр держит `MapViewModel`, и оба входа
     /// (лента и «Мои») до него дотягиваются.
     let tripManager: TripManager
-    /// Поездка создана — id для «открыть» и для тоста. Лист закрывает себя сам.
-    var onCreated: (UUID) -> Void = { _ in }
+    /// Готовый лист — дата с календаря, зеркало «обратной дороги». `nil` —
+    /// пустая форма, как раньше.
+    var preset: ManualTripPreset?
+    /// Поездка создана — точки/машина/id для «Открыть»/«Обратно» и для тоста.
+    /// Лист закрывает себя сам.
+    var onCreated: (ManualTripCreationResult) -> Void = { _ in }
 
-    @StateObject private var model = ManualTripModel()
+    @StateObject private var model: ManualTripModel
     @State private var searchTarget: SearchTarget?
     @State private var isCreating = false
+    /// «Точка на карте» взведена — следующий тап по герою листа ставит точку
+    /// в активное поле (`ManualTripActiveField`), как и в поиске.
+    @State private var mapTapArmed = false
+    @State private var frequentPlaces: [Place] = []
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.distanceUnit) private var distanceUnit
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = SettingsManager.shared
+
+    init(
+        tripManager: TripManager, preset: ManualTripPreset? = nil,
+        onCreated: @escaping (ManualTripCreationResult) -> Void = { _ in }
+    ) {
+        self.tripManager = tripManager
+        self.preset = preset
+        self.onCreated = onCreated
+        _model = StateObject(wrappedValue: preset.map(ManualTripModel.init(preset:)) ?? ManualTripModel())
+    }
 
     /// Какую из точек сейчас ищут. `via` хранит индекс, а не сам объект:
     /// промежуточную можно удалить, пока открыт поиск.
@@ -53,6 +77,11 @@ struct ManualTripSheet: View {
         .background(c.bg)
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
+        .task {
+            frequentPlaces = ManualTripFrequentPlaces.top(
+                PlaceManager.shared.places, passCount: { PlaceManager.shared.passCount(for: $0) }
+            )
+        }
     }
 
     // MARK: - Шапка
@@ -92,14 +121,18 @@ struct ManualTripSheet: View {
 
     private func formStage(_ c: AppTheme.Colors) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                mapCard(c)
-                subtitleLine(c)
+            VStack(alignment: .leading, spacing: 14) {
                 pointsCard(c)
+                ManualTripQuickPointsRow(
+                    home: settings.homeLocation,
+                    frequentPlaces: frequentPlaces,
+                    isMapTapArmed: mapTapArmed,
+                    onPick: quickPick,
+                    onArmMapTap: { mapTapArmed = true }
+                )
+                mapCard(c, height: 260)
                 routeStatus(c)
-                startCard(c)
-                durationCard(c)
-                vehicleCard(c)
+                ManualTripWhenVehicleCard(model: model, vehicles: settings.recordableVehicles)
                 titleCard(c)
             }
             .padding(16)
@@ -108,23 +141,29 @@ struct ManualTripSheet: View {
         .scrollDismissesKeyboard(.interactively)
     }
 
-    private func subtitleLine(_ c: AppTheme.Colors) -> some View {
-        Text(AppStrings.manualTripSubtitle(lang.language))
-            .font(.system(size: 12.5))
-            .foregroundStyle(c.textTertiary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func mapCard(_ c: AppTheme.Colors) -> some View {
+    private func mapCard(_ c: AppTheme.Colors, height: CGFloat) -> some View {
         ManualTripMapView(
             points: orderedPoints,
             route: model.route?.coordinates ?? [],
-            onTap: searchTarget == nil ? nil : { coordinate in
-                Task { await pick(await model.point(at: coordinate)) }
+            onTap: effectiveTarget == nil ? nil : { coordinate in
+                Task {
+                    let point = await model.point(at: coordinate)
+                    await pick(point)
+                }
             }
         )
-        .frame(height: 190)
+        .frame(height: height)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            // Взведённая «Точка на карте» — единственный признак того, что
+            // следующий тап по герою сработает: без рамки это было бы
+            // нажатие, эффект которого не виден (CLAUDE.md, «Нажатие обязано
+            // отвечать»).
+            if mapTapArmed && searchTarget == nil {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(AppTheme.accent, lineWidth: 2)
+            }
+        }
         .accessibilityIdentifier("manual_trip_map")
     }
 
@@ -139,12 +178,25 @@ struct ManualTripSheet: View {
         return all
     }
 
+    /// Куда идёт следующий тап по карте — явная цель поиска, а пока её нет,
+    /// взведённая чипом «Точка на карте» активная точка формы
+    /// (`ManualTripActiveField`). `nil` — тап по карте ничего не делает.
+    private var effectiveTarget: SearchTarget? {
+        if let searchTarget { return searchTarget }
+        guard mapTapArmed else { return nil }
+        switch ManualTripActiveField.resolve(from: model.from, to: model.to) {
+        case .from: return .from
+        case .to: return .to
+        }
+    }
+
     // MARK: - Точки
 
     private func pointsCard(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 0) {
             pointRow(label: AppStrings.manualTripFrom(lang.language),
                      point: model.from, target: .from, c: c)
+            swapRow(c)
             ForEach(Array(model.via.enumerated()), id: \.element.id) { index, stop in
                 Divider().overlay(c.border).padding(.leading, 16)
                 pointRow(label: AppStrings.manualTripVia(lang.language),
@@ -158,30 +210,69 @@ struct ManualTripSheet: View {
             // делает, хуже отсутствующего (то же правило, что у «Отрезок до…»).
             if model.via.count < ManualTripRouter.maxViaPoints {
                 Divider().overlay(c.border).padding(.leading, 16)
-                Button {
-                    Haptics.tap()
-                    model.via.append(ManualTripPoint(name: "", coordinate: CLLocationCoordinate2D()))
-                    searchTarget = .via(model.via.count - 1)
-                    model.updateSearch("")
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(AppTheme.accent)
-                        Text(AppStrings.manualTripAddVia(lang.language))
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(AppTheme.accent)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 13)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PressableCardStyle())
-                .accessibilityIdentifier("manual_trip_add_via")
+                addViaButton(c)
             }
         }
         .surfaceCard(cornerRadius: 16)
+    }
+
+    /// Тонкая строка со знаком «поменять местами» поверх границы: точки, а не
+    /// маршрут, — via остаётся в прежнем порядке, но едет в обратную сторону
+    /// вместе с концами.
+    private func swapRow(_ c: AppTheme.Colors) -> some View {
+        ZStack {
+            Divider().overlay(c.border).padding(.leading, 16)
+        }
+        .frame(height: 1)
+        .overlay(alignment: .trailing) {
+            Button {
+                Haptics.tap()
+                swapPoints()
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(c.textSecondary)
+                    .frame(width: 28, height: 28)
+                    .background(c.card, in: Circle())
+                    .overlay(Circle().strokeBorder(c.border, lineWidth: 1))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(PressableCardStyle())
+            .accessibilityIdentifier("manual_trip_swap")
+            .padding(.trailing, 12)
+        }
+    }
+
+    private func swapPoints() {
+        let oldFrom = model.from
+        model.from = model.to
+        model.to = oldFrom
+        model.via.reverse()
+        model.recomputeRoute()
+    }
+
+    private func addViaButton(_ c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            model.via.append(ManualTripPoint(name: "", coordinate: CLLocationCoordinate2D()))
+            searchTarget = .via(model.via.count - 1)
+            model.updateSearch("")
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+                Text(AppStrings.manualTripAddVia(lang.language))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppTheme.accent)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("manual_trip_add_via")
     }
 
     @ViewBuilder
@@ -193,6 +284,7 @@ struct ManualTripSheet: View {
             Button {
                 Haptics.tap()
                 searchTarget = target
+                mapTapArmed = false
                 model.updateSearch("")
             } label: {
                 HStack(spacing: 10) {
@@ -254,6 +346,16 @@ struct ManualTripSheet: View {
         return point.name
     }
 
+    /// Чип («Дом», частое место) в стадии поиска идёт в цель поиска, в форме —
+    /// в первое пустое поле (`ManualTripModel.assignQuickPoint`).
+    private func quickPick(_ point: ManualTripPoint) {
+        if searchTarget != nil {
+            Task { await pick(point) }
+        } else {
+            model.assignQuickPoint(point)
+        }
+    }
+
     // MARK: - Состояние маршрута
 
     @ViewBuilder
@@ -307,139 +409,6 @@ struct ManualTripSheet: View {
         }
     }
 
-    // MARK: - Когда и сколько
-
-    private func startCard(_ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(AppStrings.manualTripStart(lang.language))
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-            DatePicker(
-                "",
-                selection: $model.startDate,
-                in: model.startBounds,
-                displayedComponents: [.date, .hourAndMinute]
-            )
-            .labelsHidden()
-            .accessibilityIdentifier("manual_trip_start")
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .surfaceCard(cornerRadius: 16)
-    }
-
-    private func durationCard(_ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(AppStrings.manualTripDuration(lang.language))
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-
-            HStack(spacing: 14) {
-                durationButton("minus", c: c) {
-                    model.adjustDuration(by: -ManualTripModel.durationStep)
-                }
-                Text(durationText(model.duration))
-                    .font(.system(size: 20, weight: .heavy))
-                    .foregroundStyle(c.text)
-                    .frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("manual_trip_duration")
-                durationButton("plus", c: c) {
-                    model.adjustDuration(by: ManualTripModel.durationStep)
-                }
-            }
-
-            if let suggested = model.suggestedDuration {
-                Button {
-                    Haptics.tap()
-                    model.applySuggestedDuration()
-                } label: {
-                    Text(AppStrings.manualTripSuggestedTime(
-                        lang.language, time: durationText(suggested)))
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(PressableCardStyle())
-                .accessibilityIdentifier("manual_trip_suggested")
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .surfaceCard(cornerRadius: 16)
-    }
-
-    private func durationButton(
-        _ icon: String, c: AppTheme.Colors, action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            Haptics.tap()
-            action()
-        } label: {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(c.text)
-                .frame(width: 38, height: 38)
-                .background(c.cardAlt, in: Circle())
-                .contentShape(Circle())
-        }
-        .buttonStyle(PressableCardStyle())
-    }
-
-    /// «2 ч 30 мин». Единиц расстояния тут нет — только часы и минуты, и обе
-    /// подписи берутся у `AppStrings`, а не пишутся строкой.
-    private func durationText(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds.rounded())
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let h = AppStrings.hoursUnitShort(lang.language)
-        let m = AppStrings.minutesUnitShort(lang.language)
-        if hours == 0 { return "\(minutes) \(m)" }
-        if minutes == 0 { return "\(hours) \(h)" }
-        return "\(hours) \(h) \(minutes) \(m)"
-    }
-
-    // MARK: - Машина
-
-    private func vehicleCard(_ c: AppTheme.Colors) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(AppStrings.vehiclePickerTitle(lang.language))
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(c.textTertiary)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    vehicleChip(id: nil, title: AppStrings.noVehicle(lang.language), c: c)
-                    // «На что можно писать сейчас» — тот же список, что у
-                    // экрана записи: архивная и проданная машина не принимает
-                    // новых поездок НИГДЕ (CLAUDE.md, 0.6.4).
-                    ForEach(settings.recordableVehicles) { vehicle in
-                        vehicleChip(id: vehicle.id, title: vehicle.name, c: c)
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .surfaceCard(cornerRadius: 16)
-    }
-
-    private func vehicleChip(id: UUID?, title: String, c: AppTheme.Colors) -> some View {
-        let selected = model.vehicleId == id
-        return Button {
-            Haptics.selection()
-            model.vehicleId = id
-        } label: {
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(selected ? .white : c.text)
-                .lineLimit(1)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(selected ? AppTheme.accent : c.cardAlt, in: Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(PressableCardStyle())
-    }
-
     // MARK: - Название
 
     private func titleCard(_ c: AppTheme.Colors) -> some View {
@@ -465,9 +434,11 @@ struct ManualTripSheet: View {
             Haptics.action()
             create()
         } label: {
-            Text(AppStrings.manualTripCreate(lang.language))
+            Text(footerLabel)
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
                 .background(
@@ -485,14 +456,32 @@ struct ManualTripSheet: View {
         .accessibilityIdentifier("manual_trip_create")
     }
 
+    /// «420 км · 5 ч 30 мин · вчера 09:00», как только маршрут готов; иначе —
+    /// подсказка, чего не хватает. Молча выключенная кнопка запрещена тем же
+    /// правилом, что держит строку у «слишком длинного» маршрута.
+    private var footerLabel: String {
+        if let route = model.route, model.canCreate {
+            return ManualTripSummaryLine.compose(
+                distance: Measure.distance(metres: routeDistance(route), unit: distanceUnit,
+                                           lang: lang.language, style: .tenths),
+                duration: ManualTripDurationText.string(model.duration, lang: lang.language),
+                when: RelativeTripDate.string(from: model.startDate, language: lang.language)
+            )
+        }
+        if model.from == nil || model.to == nil {
+            return AppStrings.manualTripNeedPoints(lang.language)
+        }
+        return AppStrings.manualTripCreate(lang.language)
+    }
+
     private func create() {
         guard !isCreating else { return }
         isCreating = true
         Task {
-            let id = await model.create(using: tripManager)
+            let result = await model.create(using: tripManager)
             isCreating = false
-            guard let id else { return }
-            onCreated(id)
+            guard let result else { return }
+            onCreated(result)
             dismiss()
         }
     }
@@ -501,11 +490,21 @@ struct ManualTripSheet: View {
 
     private func searchStage(_ c: AppTheme.Colors) -> some View {
         VStack(spacing: 0) {
-            mapCard(c)
+            mapCard(c, height: 190)
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
 
             searchField(c)
+
+            ManualTripQuickPointsRow(
+                home: settings.homeLocation,
+                frequentPlaces: frequentPlaces,
+                isMapTapArmed: mapTapArmed,
+                onPick: quickPick,
+                onArmMapTap: { mapTapArmed = true }
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
 
             // Список сам по себе скроллится — `LazyVStack` внутри `ScrollView`
             // по правилу проекта для списков длиннее двадцати строк.
@@ -569,10 +568,10 @@ struct ManualTripSheet: View {
         .accessibilityIdentifier("manual_trip_result")
     }
 
-    /// Точка выбрана — кладём её на место, закрываем стадию поиска и
-    /// пересчитываем маршрут. Один путь для поиска и для тапа по карте.
+    /// Точка выбрана — кладём её на место цели (поиск ИЛИ взведённый тап по
+    /// карте), закрываем стадию поиска и пересчитываем маршрут.
     private func pick(_ point: ManualTripPoint) async {
-        switch searchTarget {
+        switch effectiveTarget {
         case .from: model.from = point
         case .to: model.to = point
         case .via(let index):
@@ -581,6 +580,7 @@ struct ManualTripSheet: View {
         case nil: return
         }
         searchTarget = nil
+        mapTapArmed = false
         model.updateSearch("")
         model.recomputeRoute()
     }

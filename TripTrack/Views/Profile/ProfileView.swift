@@ -149,6 +149,13 @@ struct ProfileView: View {
     /// Лист «Вписать поездку» (0.8.0). Гейт решает, что покажется в нём —
     /// форма или пейвол (`manualTripHost`).
     @State private var showManualTrip = false
+    /// Чем лист открывается: `nil` у обычных входов («+», карточка
+    /// приветствия), дата — у пустого дня календаря, зеркало точек/машины —
+    /// у «Добавить обратную дорогу». Ставится ДО `showManualTrip = true`.
+    @State private var manualTripPreset: ManualTripPreset?
+    /// Тост после успешной записи (§4в) — «Открыть поездку» /
+    /// «Добавить обратную дорогу», наш `AppConfirmDialog`, не системный алерт.
+    @State private var manualTripResult: ManualTripCreationResult?
     /// The three field editors behind «Мой профиль». The hub only reports the
     /// tap; presenting them here keeps every editor on one host, which is what
     /// keeps them all on one host — a
@@ -228,7 +235,16 @@ struct ProfileView: View {
             .manualTripHost(
                 isPresented: $showManualTrip,
                 tripManager: mapVM.tripManager,
-                onCreated: { _ in Task { await loadAggregates() } }
+                preset: manualTripPreset,
+                onCreated: { result in
+                    Task { await loadAggregates() }
+                    manualTripResult = result
+                }
+            )
+            .appConfirm(
+                item: $manualTripResult,
+                title: { _ in AppStrings.manualTripSuccessMessage(lang.language) },
+                actions: manualTripResultActions
             )
             // Путешествия меняются и без перезагрузки библиотеки: пул с
             // другого телефона, стирание данных, удаление обёртки с её экрана.
@@ -244,6 +260,38 @@ struct ProfileView: View {
                 guard homeAcceptedTick > 0 else { return }
                 await refreshJourneyPrompts(trips: allTrips)
             }
+    }
+
+    // MARK: - Ручная поездка (0.8.0, редизайн 20 сен)
+
+    /// Тап по пустому дню календаря: только дата, лист открывается пустым во
+    /// всём остальном.
+    private func openManualTrip(forDay day: Date) {
+        manualTripPreset = .forDay(day)
+        showManualTrip = true
+    }
+
+    /// «Открыть поездку» / «Добавить обратную дорогу» на тосте после записи —
+    /// в этом порядке, безопасное (открыть) ближе к большому пальцу.
+    private func manualTripResultActions(_ result: ManualTripCreationResult) -> [AppDialogAction] {
+        [
+            AppDialogAction(
+                AppStrings.manualTripSuccessOpen(lang.language),
+                kind: .primary, identifier: "manual_trip_toast_open"
+            ) {
+                push(.trip(result.tripId))
+            },
+            AppDialogAction(
+                AppStrings.manualTripSuccessReturn(lang.language),
+                kind: .plain, identifier: "manual_trip_toast_return"
+            ) {
+                manualTripPreset = .returnTrip(
+                    from: result.from, to: result.to,
+                    vehicleId: result.vehicleId, firstTripEnd: result.endDate
+                )
+                showManualTrip = true
+            }
+        ]
     }
 
     /// Вынесено из цепочки `stage`: `body` этого экрана уже упирался в предел
@@ -1166,7 +1214,8 @@ struct ProfileView: View {
             dateTo: $dateTo,
             kmByDay: kmByDay,
             maxKmDay: maxKmDay,
-            filteredCount: trips.count
+            filteredCount: trips.count,
+            onEmptyDayTap: ManualTripEntry.isVisible ? openManualTrip(forDay:) : nil
         )
         .padding(.horizontal, 16)
         // Canon's 16pt gap to the first card. As padding rather than a spacer
@@ -1354,6 +1403,7 @@ struct ProfileView: View {
     private func historyAddButton(_ c: AppTheme.Colors) -> some View {
         Button {
             Haptics.tap()
+            manualTripPreset = nil
             showManualTrip = true
         } label: {
             Image(systemName: ManualTripEntry.isLocked ? "plus.circle" : "plus")
@@ -1805,7 +1855,20 @@ struct ProfileView: View {
     /// Friendly empty-state replacement for the stats stack on first launch
     /// (cachedTripCount == 0). Tap routes to the Tracking tab — the one
     /// action that matters before any data exists.
+    ///
+    /// Second button (0.8.0, §4б): «Вписать прошлую поездку», под тем же
+    /// гейтом, что «+» в шапке «Истории» — на витрине, которая не продаёт
+    /// платное, её нет вовсе; без «Плюса» замок ведёт в тот же пейвол.
     private func firstTripWelcomeCard(_ c: AppTheme.Colors) -> some View {
+        VStack(spacing: 10) {
+            recordFirstTripRow(c)
+            if ManualTripEntry.isVisible {
+                writePastTripRow(c)
+            }
+        }
+    }
+
+    private func recordFirstTripRow(_ c: AppTheme.Colors) -> some View {
         let lng = lang.language
         return Button {
             Haptics.tap()
@@ -1838,7 +1901,31 @@ struct ProfileView: View {
             .padding(14)
             .surfaceCard(cornerRadius: 16)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("profile_welcome_record")
+    }
+
+    private func writePastTripRow(_ c: AppTheme.Colors) -> some View {
+        Button {
+            Haptics.tap()
+            manualTripPreset = nil
+            showManualTrip = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: ManualTripEntry.isLocked ? "lock.fill" : "square.and.pencil")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(ManualTripEntry.isLocked ? c.textTertiary : AppTheme.accent)
+                Text(AppStrings.manualTripEntry(lang.language))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(c.text)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .surfaceCard(cornerRadius: 16)
+        }
+        .buttonStyle(PressableCardStyle())
+        .accessibilityIdentifier("profile_welcome_manual_trip")
     }
 
     // MARK: - Data

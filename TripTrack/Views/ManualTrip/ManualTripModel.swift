@@ -46,6 +46,11 @@ final class ManualTripModel: ObservableObject {
     @Published private(set) var route: ManualTripRouter.Route?
     @Published private(set) var isRouting = false
     @Published private(set) var routeError: ManualTripRouteError?
+    /// Человек хоть раз подвинул длительность стрелкой ± — решение владельца
+    /// 20 сен: пока флаг снят, свежепосчитанный маршрут сам подставляет
+    /// `suggestedDuration` (`ManualTripDurationPolicy`), а тронутое рукой
+    /// пересчёт больше не трогает.
+    @Published private(set) var durationTouched = false
 
     // MARK: - Поиск
 
@@ -71,6 +76,20 @@ final class ManualTripModel: ObservableObject {
         completerBox.onResults = { [weak self] results in
             self?.completions = results
         }
+    }
+
+    /// Лист открыт уже заполненным — тап по пустому дню в календаре или
+    /// «Добавить обратную дорогу» после успешной записи. `startDate:` у
+    /// обычного `init` сдвигает «сейчас» на час назад — здесь дата пресета
+    /// уже прошедшая и трогать её не нужно, поэтому она ставится ПОСЛЕ.
+    convenience init(preset: ManualTripPreset) {
+        self.init()
+        from = preset.from
+        to = preset.to
+        vehicleId = preset.vehicleId
+        if let startDate = preset.startDate { self.startDate = startDate }
+        if let duration = preset.duration { self.duration = duration }
+        if from != nil || to != nil { recomputeRoute() }
     }
 
     // MARK: - Поиск места
@@ -146,7 +165,14 @@ final class ManualTripModel: ObservableObject {
         // подтягиваем время, а не показываем ошибку: человек ещё ничего не
         // сделал неправильно, он просто выбрал точки после того, как выставил
         // длительность.
-        duration = clampDuration(duration)
+        //
+        // Не тронутую рукой длительность решение владельца 20 сен ставит на
+        // подсказку Apple сама — `ManualTripDurationPolicy` держит это
+        // правило чистой функцией.
+        duration = clampDuration(ManualTripDurationPolicy.resolve(
+            current: duration, suggested: suggestedDuration,
+            touched: durationTouched, step: Self.durationStep
+        ))
     }
 
     private func fail(_ error: Error) {
@@ -178,11 +204,16 @@ final class ManualTripModel: ObservableObject {
     }
 
     func adjustDuration(by delta: TimeInterval) {
+        durationTouched = true
         duration = clampDuration(duration + delta)
     }
 
+    /// Явное согласие на подсказку Apple — не «правка», а отказ от своей и
+    /// возврат к автоследованию: следующий пересчитанный маршрут снова
+    /// подставит свежую подсказку сам.
     func applySuggestedDuration() {
         guard let suggested = suggestedDuration else { return }
+        durationTouched = false
         duration = clampDuration((suggested / Self.durationStep).rounded() * Self.durationStep)
     }
 
@@ -192,13 +223,23 @@ final class ManualTripModel: ObservableObject {
 
     /// Даты — только прошедшие, как у путешествия (`JourneyEditSheet`):
     /// поездка, которой ещё не было, вписана быть не может.
-    var startBounds: ClosedRange<Date> {
-        let now = Date()
-        let earliest = Calendar.current.date(byAdding: .year, value: -20, to: now) ?? now
-        // Перевернуть нельзя по построению: верхняя граница не меньше уже
-        // выбранного значения. `a...b` с `b < a` — падение, а не пустой
-        // диапазон (CLAUDE.md, «Ловушки»).
-        return min(earliest, startDate)...max(now, startDate)
+    var startBounds: ClosedRange<Date> { ManualTripDateDefaults.bounds(for: startDate) }
+
+    /// Чипы «Сегодня»/«Вчера»: меняют дату, время встаёт на умолчание
+    /// (`ManualTripDateDefaults`) — набранное время человек здесь ещё не
+    /// трогал, поэтому переписывать нечего.
+    func setStartDay(_ day: Date) {
+        startDate = ManualTripDateDefaults.defaultStartDate(forDay: day)
+    }
+
+    /// Точка от чипа («Дом», частое место, тап по карте) — в активное поле:
+    /// сначала «Откуда», потом «Куда» (`ManualTripActiveField`).
+    func assignQuickPoint(_ point: ManualTripPoint) {
+        switch ManualTripActiveField.resolve(from: from, to: to) {
+        case .from: from = point
+        case .to: to = point
+        }
+        recomputeRoute()
     }
 
     /// Дорога, которую нельзя проехать даже за верхний предел длительности.
@@ -221,14 +262,18 @@ final class ManualTripModel: ObservableObject {
     /// Поездка в базе, и дальше — `ManualTripAftermath`: места и слой
     /// открытого, и ничего больше. Ни `PostTripTrackProcessor`, ни наград —
     /// см. `TripManager.createManualTrip`.
-    func create(using manager: TripManager) async -> UUID? {
+    ///
+    /// Возвращает не голый `UUID`, а точки/машину/конец поездки — тот же
+    /// набор, из которого лист сам собран, а «Добавить обратную дорогу»
+    /// строит зеркальный `ManualTripPreset`, не перечитывая базу.
+    func create(using manager: TripManager) async -> ManualTripCreationResult? {
         // Гейт спрашивается ЗДЕСЬ, а не только при открытии листа:
         // содержимое `.sheet` выбирается один раз, при показе, и
         // отозванная (возврат денег) за эти секунды подписка поездку бы не
         // остановила. Тот же довод, по которому `recordableVehicleId`
         // спрашивает хранилище, а не список в памяти.
         guard ManualTripEntry.level == .open else { return nil }
-        guard let route else { return nil }
+        guard let route, let from, let to else { return nil }
         let draft = ManualTripBuilder.Draft(
             coordinates: route.coordinates,
             startDate: startDate,
@@ -240,8 +285,23 @@ final class ManualTripModel: ObservableObject {
               let saved = manager.createManualTrip(built) else { return nil }
 
         await ManualTripAftermath.settle(tripId: saved.id)
-        return saved.id
+        return ManualTripCreationResult(
+            tripId: saved.id, from: from, to: to, vehicleId: vehicleId,
+            endDate: startDate.addingTimeInterval(duration)
+        )
     }
+}
+
+/// Итог успешного создания — то, чем кормится тост «Открыть поездку» /
+/// «Добавить обратную дорогу».
+struct ManualTripCreationResult: Identifiable {
+    let tripId: UUID
+    let from: ManualTripPoint
+    let to: ManualTripPoint
+    let vehicleId: UUID?
+    let endDate: Date
+
+    var id: UUID { tripId }
 }
 
 /// Делегат `MKLocalSearchCompleter` отдельным объектом.

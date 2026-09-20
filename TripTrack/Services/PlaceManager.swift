@@ -62,6 +62,11 @@ final class PlaceManager: ObservableObject {
 
     func stats(for placeId: UUID) -> PlaceStats { PlaceStats.build(from: store.passes(placeId: placeId)) }
 
+    /// Просто счёт, без похода за всеми проездами — им кормятся чипы «частых
+    /// мест» листа «Вписать поездку» (`ManualTripFrequentPlaces`), и там их
+    /// спрашивают у КАЖДОГО места в библиотеке.
+    func passCount(for placeId: UUID) -> Int { store.passCount(placeId: placeId) }
+
     /// Дождаться досчёта истории, начатого `registerCheckpoint`.
     func settle() async { await backfillTask?.value }
 

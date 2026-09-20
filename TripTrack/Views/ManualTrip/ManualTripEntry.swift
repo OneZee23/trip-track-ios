@@ -31,7 +31,11 @@ enum ManualTripEntry {
 private struct ManualTripHost: ViewModifier {
     @Binding var isPresented: Bool
     let tripManager: TripManager
-    let onCreated: (UUID) -> Void
+    /// Прочитан ОДИН раз при показе — тот же снимок, что и у `isPresented`:
+    /// вызывающий выставляет обе переменные вместе, до того как лист
+    /// откроется, поэтому смены пресета на лету здесь не бывает.
+    let preset: ManualTripPreset?
+    let onCreated: (ManualTripCreationResult) -> Void
 
     @EnvironmentObject private var lang: LanguageManager
 
@@ -44,7 +48,7 @@ private struct ManualTripHost: ViewModifier {
                 PlusPaywallSheet()
                     .environmentObject(lang)
             } else {
-                ManualTripSheet(tripManager: tripManager, onCreated: onCreated)
+                ManualTripSheet(tripManager: tripManager, preset: preset, onCreated: onCreated)
                     .environmentObject(lang)
             }
         }
@@ -57,9 +61,10 @@ extension View {
     func manualTripHost(
         isPresented: Binding<Bool>,
         tripManager: TripManager,
-        onCreated: @escaping (UUID) -> Void = { _ in }
+        preset: ManualTripPreset? = nil,
+        onCreated: @escaping (ManualTripCreationResult) -> Void = { _ in }
     ) -> some View {
         modifier(ManualTripHost(
-            isPresented: isPresented, tripManager: tripManager, onCreated: onCreated))
+            isPresented: isPresented, tripManager: tripManager, preset: preset, onCreated: onCreated))
     }
 }

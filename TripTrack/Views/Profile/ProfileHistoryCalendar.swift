@@ -21,6 +21,10 @@ struct ProfileHistoryCalendar: View {
     let maxKmDay: Double
     /// How many trips the current range matches — drives the «сбросить» row.
     let filteredCount: Int
+    /// A tap on a day with zero km (0.8.0, §4а) — opens «Вписать поездку»
+    /// with that date preset instead of starting a range. `nil` keeps the
+    /// calendar exactly as it shipped before manual trips existed.
+    var onEmptyDayTap: ((Date) -> Void)?
 
     @EnvironmentObject private var lang: LanguageManager
     @Environment(\.colorScheme) private var scheme
@@ -228,7 +232,15 @@ struct ProfileHistoryCalendar: View {
         let isBounced = bouncedDay.map { calendar.isDate($0, inSameDayAs: day) } == true
 
         return Button {
-            handleDayTap(date)
+            // An empty day opens «Вписать поездку» pre-dated instead of
+            // starting a range: a range over a day with nothing on it would
+            // just filter the list to nothing, with no obvious way out.
+            if km == 0, let onEmptyDayTap {
+                Haptics.tap()
+                onEmptyDayTap(day)
+            } else {
+                handleDayTap(date)
+            }
         } label: {
             RoundedRectangle(cornerRadius: 8)
                 .fill(dayFill(km: km, scale: scale, isFuture: isFuture, inRange: inRange, isEndpoint: isEndpoint, c: c))
