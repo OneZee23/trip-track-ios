@@ -189,10 +189,40 @@ struct SocialFeedTrip: Codable, Identifiable, Hashable {
         guard let s = stoppedTime, s > 0 else { return nil }
         return Trip.formattedTimeHuman(TimeInterval(s), lang: lang)
     }
+    /// Decoded route for the card's map preview. Hits an `NSCache` keyed by
+    /// trip id — mirrors `Trip.previewCoordinates` (see its doc comment).
+    /// `SocialFeedCardView.body` reads this from `mapSection` AND the
+    /// diagnostics logger, and `store.trips` republishes the whole array on
+    /// every reaction/comment/photo bump, so an uncached decode ran the
+    /// base64 + Float32 parse again for every visible card on every such
+    /// event, not just on first appearance. The key carries the polyline's
+    /// own hash next to the id: a re-synced trip can come back under the
+    /// same id with a re-processed track, and an id-only key would keep
+    /// drawing the old one until the process died.
     var previewCoordinates: [CLLocationCoordinate2D] {
-        guard let s = previewPolyline, let data = Data(base64Encoded: s) else { return [] }
-        return Trip.decodePolyline(data)
+        guard let s = previewPolyline else { return [] }
+        let key = "\(id.uuidString)#\(s.count)#\(s.hashValue)" as NSString
+        if let cached = Self.previewCache.object(forKey: key) {
+            return cached.coords
+        }
+        guard let data = Data(base64Encoded: s) else { return [] }
+        let coords = Trip.decodePolyline(data)
+        Self.previewCache.setObject(SocialCoordsBox(coords: coords), forKey: key)
+        return coords
     }
+
+    private static let previewCache: NSCache<NSString, SocialCoordsBox> = {
+        let cache = NSCache<NSString, SocialCoordsBox>()
+        cache.countLimit = 300
+        return cache
+    }()
+}
+
+/// Wrapper class because `NSCache` requires an `AnyObject` value type.
+/// Shared by every social DTO with a `previewCoordinates` cache below.
+private final class SocialCoordsBox {
+    let coords: [CLLocationCoordinate2D]
+    init(coords: [CLLocationCoordinate2D]) { self.coords = coords }
 }
 
 // MARK: - Public journeys (0.6.8)

@@ -108,7 +108,43 @@ enum PhotoStorageService {
 
     // MARK: - Async Loading
 
-    private static let thumbnailCache = NSCache<NSString, UIImage>()
+    /// Unbounded until this fix (no `countLimit`/`totalCostLimit`): every
+    /// distinct "name + size" key (see the class doc comment) stayed
+    /// resident forever, and a feed/moments scroll past a few hundred
+    /// photos across the 64…1200pt tiers had nothing evicting the older
+    /// ones. `cost:` at each `setObject` call below is the decoded
+    /// bitmap's byte size, so the limit actually bounds RAM rather than
+    /// image count. Mirrors `MapSnapshotPreview.snapshotCache`'s bound +
+    /// memory-warning eviction, the app's other per-item image cache.
+    private static let thumbnailCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 600
+        cache.totalCostLimit = 80 * 1024 * 1024 // ~80 MB of decoded bitmaps
+        return cache
+    }()
+
+    private static let thumbnailMemoryWarningObserver: Any = {
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil, queue: .main
+        ) { _ in
+            thumbnailCache.removeAllObjects()
+        }
+    }()
+
+    /// Registers the memory-warning observer on first use — same lazy
+    /// `ensureObserver()` pattern as `MapSnapshotPreview`.
+    private static func ensureThumbnailObserver() { _ = thumbnailMemoryWarningObserver }
+
+    /// Approximate decoded RGBA byte size (`width × height × 4`), read in
+    /// POINTS × scale to match how the image was actually decoded — this is
+    /// an `NSCache` cost hint, not an exact figure, and only needs to be in
+    /// the right order of magnitude for the eviction policy to bound RAM.
+    private static func decodedByteCost(of image: UIImage) -> Int {
+        let pixelWidth = image.size.width * image.scale
+        let pixelHeight = image.size.height * image.scale
+        return max(1, Int(pixelWidth * pixelHeight * 4))
+    }
 
     /// Load a photo asynchronously off the main thread.
     static func loadPhotoAsync(filename: String) async -> UIImage? {
@@ -174,6 +210,7 @@ enum PhotoStorageService {
     /// Same load, but says which of "no picture" it was.
     @MainActor
     static func loadThumbnailOutcome(filename: String, maxSize: CGFloat = 150) async -> ThumbnailOutcome {
+        ensureThumbnailObserver()
         let key = thumbnailCacheKey(filename, maxSize)
 
         // L1: in-memory cache
@@ -189,7 +226,7 @@ enum PhotoStorageService {
             if let diskURL = thumbnailDiskURL(for: filename, maxSize: maxSize),
                let diskData = try? Data(contentsOf: diskURL),
                let diskImage = UIImage(data: diskData) {
-                thumbnailCache.setObject(diskImage, forKey: key)
+                thumbnailCache.setObject(diskImage, forKey: key, cost: decodedByteCost(of: diskImage))
                 return ThumbnailOutcome.image(diskImage)
             }
 
@@ -214,7 +251,7 @@ enum PhotoStorageService {
             }
 
             let thumbnail = UIImage(cgImage: cgImage)
-            thumbnailCache.setObject(thumbnail, forKey: key)
+            thumbnailCache.setObject(thumbnail, forKey: key, cost: decodedByteCost(of: thumbnail))
 
             // Write to disk cache for next launch
             if let jpegData = thumbnail.jpegData(compressionQuality: 0.7),
