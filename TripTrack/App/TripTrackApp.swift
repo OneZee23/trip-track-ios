@@ -60,6 +60,15 @@ struct TripTrackApp: App {
             UserDefaults.standard.set(AppTab.maps.rawValue, forKey: AppTab.storageKey)
             DebugMapSeed.run(territory: TerritoryManager())
         }
+        // `-seed-hang-stress`: задача H — библиотека в масштабе Sentry-тегов
+        // (400 поездок × 2000 точек) с латчами миграций, сброшенными как
+        // после обновления из стора. Замерять после этого — время до
+        // «ContentView ready» и лог `StartupTrace`.
+        if DebugMapSeed.isHangStressRequested {
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+            UserDefaults.standard.set(AppTab.maps.rawValue, forKey: AppTab.storageKey)
+            DebugMapSeed.runHangStressIfNeeded()
+        }
         #endif
         // Crash reporting MUST start first — otherwise any panic in the
         // services below would crash silently. No-op when SENTRY_DSN

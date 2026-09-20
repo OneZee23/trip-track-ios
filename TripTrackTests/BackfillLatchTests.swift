@@ -9,6 +9,7 @@ import CoreData
 /// work was finished, and nothing ever reconsiders.
 ///
 /// Latching on "I found nothing" records an accident as a decision.
+@MainActor
 final class BackfillLatchTests: XCTestCase {
     private var defaults: UserDefaults!
     private var pc: PersistenceController!
@@ -76,16 +77,16 @@ final class BackfillLatchTests: XCTestCase {
 
     // MARK: - Territory
 
-    func testTerritoryBackfillDoesNotLatchWithoutTrackPoints() {
+    func testTerritoryBackfillDoesNotLatchWithoutTrackPoints() async {
         let tm = TerritoryManager(persistenceController: pc, defaults: defaults)
 
-        tm.backfillIfNeeded()
+        await tm.backfillIfNeeded()
 
         XCTAssertFalse(defaults.bool(forKey: TerritoryManager.backfillKey),
                        "no points yet is not the same as no territory")
     }
 
-    func testTerritoryBackfillLatchesOncePointsExist() {
+    func testTerritoryBackfillLatchesOncePointsExist() async {
         let ctx = pc.container.viewContext
         let trip = TripEntity(context: ctx)
         trip.id = UUID()
@@ -99,9 +100,10 @@ final class BackfillLatchTests: XCTestCase {
             p.timestamp = Date()
             p.trip = trip
         }
+        try? ctx.save()
 
         let tm = TerritoryManager(persistenceController: pc, defaults: defaults)
-        tm.backfillIfNeeded()
+        await tm.backfillIfNeeded()
 
         XCTAssertTrue(defaults.bool(forKey: TerritoryManager.backfillKey))
     }

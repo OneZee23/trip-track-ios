@@ -258,49 +258,72 @@ final class TerritoryManager: ObservableObject {
 
     // MARK: - Backfill from existing trips
 
-    func backfillIfNeeded() {
+    /// Фоновая версия: перебор ВСЕЙ библиотеки трек-точек (сотни тысяч на
+    /// зрелой установке) шёл на `viewContext` без единой точки уступки —
+    /// первый запуск после обновления держал главный поток секундами
+    /// (Sentry AppHang ≥ 2000 мс, 0.6.8/0.7.0). Тот же приём, что у
+    /// `rebuildFromTrips`: фетч и геохэш идут на СВОЁМ фоновом контексте,
+    /// на главный актёр возвращается только готовый список хэшей.
+    func backfillIfNeeded() async {
         guard !defaults.bool(forKey: Self.backfillKey) else { return }
 
-        let context = persistenceController.container.viewContext
-        let request: NSFetchRequest<TrackPointEntity> = TrackPointEntity.fetchRequest()
-        request.fetchBatchSize = 500
-        request.propertiesToFetch = ["latitude", "longitude", "timestamp"]
+        let bgContext = persistenceController.container.newBackgroundContext()
+        let alreadyVisited = visitedCache
 
-        // No points is not "nothing to do" — on the launch that lost a user's
-        // store it meant "the data has not come back yet", and latching there
-        // would have kept the fog empty forever. Leave the flag open and let a
-        // later launch, after a heal, actually do the work.
-        guard let points = try? context.fetch(request), !points.isEmpty else { return }
+        let newHashes: [(String, Date)]? = await bgContext.perform {
+            let request: NSFetchRequest<TrackPointEntity> = TrackPointEntity.fetchRequest()
+            request.fetchBatchSize = 500
+            request.propertiesToFetch = ["latitude", "longitude", "timestamp"]
 
-        var newHashes: [(String, Date)] = []
-        for point in points {
-            let hash6 = GeohashEncoder.encode(
-                latitude: point.latitude,
-                longitude: point.longitude,
-                precision: 6
-            )
-            if !visitedCache.contains(hash6) {
-                visitedCache.insert(hash6)
-                newHashes.append((hash6, point.timestamp ?? Date()))
+            // No points is not "nothing to do" — on the launch that lost a
+            // user's store it meant "the data has not come back yet", and
+            // latching there would have kept the fog empty forever. Leave the
+            // flag open and let a later launch, after a heal, actually do the
+            // work.
+            guard let points = try? bgContext.fetch(request), !points.isEmpty else { return nil }
+
+            var seen = alreadyVisited
+            var found: [(String, Date)] = []
+            for point in points {
+                let hash6 = GeohashEncoder.encode(
+                    latitude: point.latitude,
+                    longitude: point.longitude,
+                    precision: 6
+                )
+                if !seen.contains(hash6) {
+                    seen.insert(hash6)
+                    found.append((hash6, point.timestamp ?? Date()))
+                }
             }
+
+            let batchSize = 500
+            for i in stride(from: 0, to: found.count, by: batchSize) {
+                let batch = found[i..<min(i + batchSize, found.count)]
+                for (hash, date) in batch {
+                    let entity = VisitedGeohashEntity(context: bgContext)
+                    entity.hash6 = hash
+                    entity.firstVisited = date
+                    entity.lastVisited = date
+                    entity.visitCount = 1
+                }
+                try? bgContext.save()
+            }
+            return found
         }
 
-        let batchSize = 500
-        for i in stride(from: 0, to: newHashes.count, by: batchSize) {
-            let batch = newHashes[i..<min(i + batchSize, newHashes.count)]
-            for (hash, date) in batch {
-                let entity = VisitedGeohashEntity(context: context)
-                entity.hash6 = hash
-                entity.firstVisited = date
-                entity.lastVisited = date
-                entity.visitCount = 1
-            }
-            persistenceController.save()
-        }
+        guard let newHashes else { return }
 
-        visitedTileCount = visitedCache.count
-        // Latch only after real work.
-        defaults.set(true, forKey: Self.backfillKey)
+        // `TerritoryManager` carries no actor annotation, so the continuation
+        // above is not guaranteed to resume on the main actor — and
+        // `visitedCache`/`visitedTileCount` are read by the main-actor
+        // `MapViewModel`/UI. One explicit hop, same as `rebuildFromTrips`'s
+        // `Task { @MainActor ... }`.
+        await MainActor.run {
+            for (hash, _) in newHashes { self.visitedCache.insert(hash) }
+            self.visitedTileCount = self.visitedCache.count
+            // Latch only after real work.
+            self.defaults.set(true, forKey: Self.backfillKey)
+        }
     }
 
     // MARK: - Stats
