@@ -116,70 +116,92 @@ final class VeilCarveMask {
         layer.addSublayer(window)
     }
 
+    /// Окно и четыре полосы, вместе покрывающие `bounds` без зазора и без
+    /// нахлёста. Чистая функция — тестируется без настоящего `CALayer`, и
+    /// `update` обязан звать ровно её, а не пересчитывать `box` заново: два
+    /// счёта одной геометрии однажды разойдутся, как километры в 0.6.5.
+    static func layout(bounds: CGRect, carve: CGRect) -> (window: CGRect, bars: [CGRect]) {
+        let box = carve.insetBy(dx: -AttributionCarve.feather, dy: -AttributionCarve.feather)
+        return (box, VeilRevealMask.barsAround(bounds: bounds, hole: box))
+    }
+
     /// Ставит вырез. `carve` — уже с полем, в координатах вуали.
     func update(bounds: CGRect, carve: CGRect) {
         layer.frame = bounds
-        let box = carve.insetBy(dx: -AttributionCarve.feather, dy: -AttributionCarve.feather)
+        let (box, barRects) = VeilCarveMask.layout(bounds: bounds, carve: carve)
         window.frame = box
         if drawnSize != box.size {
             window.contents = VeilCarveMask.windowImage(size: box.size)
             window.contentsScale = UIScreen.main.scale
             drawnSize = box.size
         }
-        for (bar, rect) in zip(bars, VeilRevealMask.barsAround(bounds: bounds, hole: box)) {
+        for (bar, rect) in zip(bars, barRects) {
             bar.frame = rect
         }
     }
 
     /// Белое поле с мягким скруглённым окном посередине.
     ///
-    /// Кольцами, каждое своей альфой: у края картинки мгла целая, у самой
-    /// коробки выреза её нет, между ними ровный спад. Два способа, которые не
-    /// работают и проверены падением теста: `.clear` с глобальной альфой
-    /// (режим обнуляет пиксель целиком и альфу не слушает — выходит
-    /// ступенька) и наложение одинаковых полупрозрачных слоёв друг на друга
-    /// (сумма даёт 0.65 вместо единицы, и по краю остаётся щель).
-    /// Ступеней ДВАДЦАТЬ ЧЕТЫРЕ, а не десять: на растушёвке в двенадцать точек
-    /// десять колец давали спад по 1.2 pt на кольцо, и на устройстве вырез
-    /// читался концентрическими рамками. Картинка рисуется один раз на размер
-    /// коробки, так что ступеней можно не жалеть.
-    static func windowImage(size: CGSize, steps: Int = 24) -> CGImage? {
-        guard size.width > 1, size.height > 1, steps > 1 else { return nil }
-        let format = UIGraphicsImageRendererFormat()
-        format.opaque = false
-        let bounds = CGRect(origin: .zero, size: size)
-        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
-            let cg = context.cgContext
-            cg.setFillColor(UIColor.white.cgColor)
-            // Углы картинки лежат ЗА скруглением самого внешнего кольца, и
-            // без этой заливки они остаются пустыми — то есть в мгле
-            // появляются четыре дырки по углам выреза.
-            cg.saveGState()
-            cg.addRect(bounds)
-            cg.addPath(UIBezierPath(
-                roundedRect: bounds, cornerRadius: AttributionCarve.corner).cgPath)
-            cg.clip(using: .evenOdd)
-            cg.fill(bounds)
-            cg.restoreGState()
-            for step in 0..<(steps - 1) {
-                let t = CGFloat(step) / CGFloat(steps - 1)
-                let next = CGFloat(step + 1) / CGFloat(steps - 1)
-                let outer = bounds.insetBy(dx: AttributionCarve.feather * t,
-                                           dy: AttributionCarve.feather * t)
-                let inner = bounds.insetBy(dx: AttributionCarve.feather * next,
-                                           dy: AttributionCarve.feather * next)
-                guard inner.width > 0, inner.height > 0 else { continue }
-                cg.saveGState()
-                cg.addPath(UIBezierPath(
-                    roundedRect: outer, cornerRadius: AttributionCarve.corner).cgPath)
-                cg.addPath(UIBezierPath(
-                    roundedRect: inner, cornerRadius: AttributionCarve.corner).cgPath)
-                cg.clip(using: .evenOdd)
-                cg.setAlpha(1 - t)
-                cg.fill(bounds)
-                cg.restoreGState()
+    /// Альфа СЧИТАНА, а не наложена кольцами: у каждого пикселя — расстояние
+    /// до скруглённого прямоугольника выреза (`carve`, то есть картинка минус
+    /// `feather` со всех сторон), поделённое на `feather`. Прежняя версия
+    /// клала двадцать четыре сплошных кольца друг на друга, и на устройстве
+    /// это читалось не растушёвкой, а «вторым прямоугольником с жёсткой
+    /// кромкой» — эффект Маха на границе между соседними ступенями, который
+    /// не лечится увеличением их числа (десять колец на 0.6.5 читались
+    /// коробкой, двадцать четыре — ореолом с кромкой). У НЕПРЕРЫВНОЙ функции
+    /// ступеней нет вовсе, и Маху не на чем сработать. На самой границе
+    /// картинки (расстояние ровно `feather`) альфа — точно 1.0, то есть та же
+    /// величина, что у полос вокруг: край окна и полосы сходятся БЕЗ шва по
+    /// построению, а не потому что успели совпасть.
+    static func windowImage(size: CGSize) -> CGImage? {
+        guard size.width > 1, size.height > 1 else { return nil }
+        let scale = UIScreen.main.scale
+        let pixelWidth = max(1, Int((size.width * scale).rounded()))
+        let pixelHeight = max(1, Int((size.height * scale).rounded()))
+        let cx = size.width / 2, cy = size.height / 2
+        // Половина стороны СКРУГЛЁННОГО прямоугольника выреза — той самой
+        // `carve`, а не картинки целиком: картинка шире её ровно на `feather`.
+        let halfW = size.width / 2 - AttributionCarve.feather
+        let halfH = size.height / 2 - AttributionCarve.feather
+        let corner = AttributionCarve.corner
+        let coreW = max(halfW - corner, 0)
+        let coreH = max(halfH - corner, 0)
+        let feather = AttributionCarve.feather
+
+        var pixels = [UInt8](repeating: 0, count: pixelWidth * pixelHeight * 4)
+        // dx/dy по осям считаются один раз на столбец/строку, а не на пиксель
+        // — расстояние до скруглённого прямоугольника раскладывается по осям.
+        let dxByColumn = (0..<pixelWidth).map { px -> CGFloat in
+            let x = (CGFloat(px) + 0.5) / scale
+            return max(abs(x - cx) - coreW, 0)
+        }
+        let dyByRow = (0..<pixelHeight).map { py -> CGFloat in
+            let y = (CGFloat(py) + 0.5) / scale
+            return max(abs(y - cy) - coreH, 0)
+        }
+        for py in 0..<pixelHeight {
+            let dy = dyByRow[py]
+            let rowBase = py * pixelWidth * 4
+            for px in 0..<pixelWidth {
+                let dx = dxByColumn[px]
+                let distance = (dx * dx + dy * dy).squareRoot() - corner
+                let alpha = min(max(distance / feather, 0), 1)
+                let a = UInt8((alpha * 255).rounded())
+                let idx = rowBase + px * 4
+                // Премультиплицированный белый: R=G=B=A — маску читают только
+                // по альфе, но канал обязан быть согласован с ней.
+                pixels[idx] = a
+                pixels[idx + 1] = a
+                pixels[idx + 2] = a
+                pixels[idx + 3] = a
             }
         }
-        return image.cgImage
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(
+            width: pixelWidth, height: pixelHeight, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: pixelWidth * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
 }

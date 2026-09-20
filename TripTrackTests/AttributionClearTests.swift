@@ -112,6 +112,94 @@ final class AttributionClearTests: XCTestCase {
                       "край выреза — ступенька, а не растушёвка")
     }
 
+    /// Альфа читается прямиком из растра — общий помощник для тестов ниже.
+    private func alphaGrid(_ image: CGImage) -> (w: Int, h: Int, alpha: (Int, Int) -> Int) {
+        let w = image.width, h = image.height
+        var data = [UInt8](repeating: 0, count: w * h * 4)
+        data.withUnsafeMutableBytes { bytes in
+            guard let ctx = CGContext(
+                data: bytes.baseAddress, width: w, height: h, bitsPerComponent: 8,
+                bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        }
+        return (w, h, { x, y in Int(data[(y * w + x) * 4 + 3]) })
+    }
+
+    /// На САМОЙ границе картинки альфа обязана совпасть с полосами вокруг —
+    /// то есть быть полной, а не почти полной. Второй прямоугольник с жёсткой
+    /// кромкой (владелец на устройстве, задача A) — это шов там, где край
+    /// окна не дотягивает до alpha=1 и полосы обрывают его резко.
+    func testWindowEdgeIsFullyOpaqueLikeTheBars() throws {
+        let size = CGSize(width: 120, height: 48)
+        let image = try XCTUnwrap(VeilCarveMask.windowImage(size: size))
+        let (w, h, alpha) = alphaGrid(image)
+        // Крайний пиксель сэмплится в своём ЦЕНТРЕ, на полпикселя внутрь от
+        // математической границы, — поэтому не 255 ровно, а вплотную к ней.
+        XCTAssertGreaterThanOrEqual(alpha(0, h / 2), 250, "левый край — та же альфа, что у полосы рядом")
+        XCTAssertGreaterThanOrEqual(alpha(w / 2, 0), 250, "верхний край — та же альфа, что у полосы рядом")
+        XCTAssertGreaterThanOrEqual(alpha(w - 1, h / 2), 250)
+        XCTAssertGreaterThanOrEqual(alpha(w / 2, h - 1), 250)
+    }
+
+    /// Спад — НЕПРЕРЫВНАЯ функция, а не двадцать четыре кольца. Ступеней
+    /// (одинаковых соседних значений на протяжении нескольких пикселей)
+    /// быть не должно: именно они читались на устройстве отдельной рамкой —
+    /// эффектом Маха на границе между кольцами.
+    func testWindowRampHasNoDiscreteSteps() throws {
+        let size = CGSize(width: 120, height: 48)
+        let image = try XCTUnwrap(VeilCarveMask.windowImage(size: size))
+        let (w, h, alpha) = alphaGrid(image)
+        // Индекс 0 — у самого края картинки, конец диапазона — у центра
+        // выреза: альфа монотонно НЕ РАСТЁТ по мере приближения к центру.
+        let ramp = (0..<(w / 2)).map { alpha($0, h / 2) }
+        for i in 1..<ramp.count {
+            XCTAssertLessThanOrEqual(ramp[i], ramp[i - 1], "альфа обязана падать к центру")
+        }
+        // Достаточно РАЗНЫХ значений на растушёвке, чтобы это была растушёвка,
+        // а не горстка широких ступеней.
+        let distinctInFeather = Set(ramp.filter { $0 > 0 && $0 < 255 })
+        XCTAssertGreaterThan(distinctInFeather.count, 20,
+                             "растушёвка обязана быть непрерывной, а не ступенчатой")
+    }
+
+    /// Окно и четыре полосы — та же геометрия, что реально ставит `update`, —
+    /// вместе покрывают `bounds` РОВНО, без дыр и без нахлёста. Дыра — это
+    /// незакрытый кусок тумана (или наоборот, кусок с двойной альфой), и
+    /// геометрия ловит её раньше, чем это увидит глаз на устройстве.
+    func testWindowAndBarsTileBoundsWithoutGapsOrOverlaps() {
+        let bounds = CGRect(x: 0, y: 0, width: 400, height: 800)
+        let carve = CGRect(x: 40, y: 700, width: 120, height: 30)
+        let (window, bars) = VeilCarveMask.layout(bounds: bounds, carve: carve)
+        let rects = bars + [window]
+        for i in 0..<rects.count {
+            for j in (i + 1)..<rects.count {
+                let inter = rects[i].intersection(rects[j])
+                XCTAssertTrue(
+                    inter.isNull || inter.width <= 0.001 || inter.height <= 0.001,
+                    "прямоугольники \(i) и \(j) перекрываются: \(inter)")
+            }
+        }
+        let totalArea = rects.reduce(CGFloat(0)) { $0 + $1.width * $1.height }
+        XCTAssertEqual(totalArea, bounds.width * bounds.height, accuracy: 0.5,
+                       "сумма площадей обязана сойтись с площадью bounds без остатка")
+    }
+
+    /// Тот же тест, но коробка выреза упёрлась в край экрана — самый частый
+    /// случай в жизни (атрибуция стоит у самого низа карты).
+    func testWindowAndBarsTileBoundsWhenCarveTouchesTheEdge() {
+        let bounds = CGRect(x: 0, y: 0, width: 400, height: 800)
+        let carve = CGRect(x: -10, y: 770, width: 120, height: 40)
+        let (window, bars) = VeilCarveMask.layout(bounds: bounds, carve: carve)
+        let rects = bars + [window]
+        for i in 0..<rects.count {
+            for j in (i + 1)..<rects.count {
+                let inter = rects[i].intersection(rects[j])
+                XCTAssertTrue(inter.isNull || inter.width <= 0.001 || inter.height <= 0.001)
+            }
+        }
+    }
+
     /// Контраст подписи Apple на том, что остаётся в вырезе, — не меньше
     /// 4.5 : 1. В вырезе мгла снята полностью, то есть подпись лежит на
     /// светлой карте Apple, под которую MapKit её и красит.
