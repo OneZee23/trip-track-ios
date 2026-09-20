@@ -13,11 +13,15 @@ import CoreLocation
 ///  • запуск → та же сверка, что после пула (`placesMatchedAt` помнит,
 ///    что уже сделано, поэтому обычный запуск не стоит ничего).
 ///
-/// Всё считается на главном потоке через `viewContext` — как
-/// `TerritoryManager.backfillIfNeeded` и `PostTripTrackProcessor`; между
-/// поездками — `Task.yield()`, чтобы первая сверка большой библиотеки не
-/// замораживала экран. Точки поездки поднимаются ТОЛЬКО для кандидатов
-/// предфильтра: у большинства поездок мест рядом нет.
+/// Предфильтр (списки превью, `candidatePlaces`) и запись готовых проездов —
+/// на главном актёре, через `store`/`viewContext`, как и раньше. Но подъём
+/// полного трека кандидата и сам геометрический проход
+/// (`PlaceMatcher.passes`, до 2000+ точек на поездку × десятки мест) — на
+/// фоне (`fetchTripDetailAsync` + `Task.detached`, задача H): чанк с этим на
+/// главном актёре одной поездки уже превышал бюджет Sentry AppHang, и
+/// `Task.yield()` между поездками ничего не спасал — разрыв был ВНУТРИ
+/// чанка. Точки поездки поднимаются ТОЛЬКО для кандидатов предфильтра: у
+/// большинства поездок мест рядом нет.
 @MainActor
 final class PlaceManager: ObservableObject {
     static let shared = PlaceManager()
@@ -147,15 +151,24 @@ final class PlaceManager: ObservableObject {
     /// берёт их ОДИН раз на весь проход, а не на каждую поездку — при тысяче
     /// поездок это был миллион строк превью с блобами на главном потоке.
     /// Метку «сверено» ставит вызывающий, пачкой.
+    ///
+    /// Чанк ЭТОГО метода на главном актёре — задача H (Sentry AppHang, окно
+    /// 0.6.8): один чанк это до 2000 точек трека × каждое место-кандидат из
+    /// десятков, и `Task.yield()` МЕЖДУ поездками цикла `reconcile()` внутри
+    /// одного чанка не помогает. Подъём полного трека и сам геометрический
+    /// проход (`PlaceMatcher.passes`) теперь на фоне; на главный актёр
+    /// возвращается только запись готовых `PlacePass` в `store`.
     func process(_ ref: TripPreviewRef, places: [Place]) async {
         let candidates = candidatePlaces(for: ref, places: places)
-        guard !candidates.isEmpty,
-              let trip = repository.fetchTripDetail(id: ref.id), trip.trackPoints.count > 1 else { return }
+        guard !candidates.isEmpty else { return }
+        guard let trip = await repository.fetchTripDetailAsync(id: ref.id),
+              trip.trackPoints.count > 1 else { return }
+        let computed = await Self.computePasses(
+            candidates: candidates, tripId: trip.id, points: trip.trackPoints, startDate: trip.startDate)
         // Одна выборка проездов на поездку, а не по одной на каждое место.
         let existing = store.passes(tripId: ref.id)
         var changed = false
-        for place in candidates {
-            let passes = PlaceMatcher.passes(through: place, tripId: trip.id, points: trip.trackPoints, startDate: trip.startDate)
+        for (place, passes) in computed {
             if !passes.isEmpty || existing.contains(where: { $0.placeId == place.id }) {
                 store.replacePasses(placeId: place.id, tripId: trip.id, with: passes)
                 changed = true
@@ -164,14 +177,34 @@ final class PlaceManager: ObservableObject {
         if changed { NotificationCenter.default.post(name: .placesChanged, object: nil) }
     }
 
+    /// Чистая геометрия для ОДНОЙ поездки против списка мест-кандидатов —
+    /// вынесена `nonisolated`, чтобы `Task.detached` (см. CLAUDE.md
+    /// «Performance» — пока Swift 5.9, правильный инструмент для тяжёлого
+    /// счёта) реально считал вне главного актёра, а не просто без проверки
+    /// изоляции на нём же.
+    nonisolated private static func computePasses(
+        candidates: [Place], tripId: UUID, points: [TrackPoint], startDate: Date
+    ) async -> [(Place, [PlacePass])] {
+        await Task.detached(priority: .utility) {
+            candidates.map { place in
+                (place, PlaceMatcher.passes(through: place, tripId: tripId, points: points, startDate: startDate))
+            }
+        }.value
+    }
+
     /// История нового места по всей библиотеке: предфильтр по превью,
-    /// точки — только у кандидатов.
+    /// точки — только у кандидатов. Тот же перенос, что у `process(_:places:)`:
+    /// подъём трека и `PlaceMatcher.passes` — вне главного актёра.
     func matchAllTrips(against place: Place) async {
         var changed = false
         for ref in repository.tripPreviews(needingPlaceMatch: false) {
-            guard PlaceMatcher.isCandidate(place: place, tripCells: PlaceMatcher.cells(of: ref.previewCoordinates)),
-                  let trip = repository.fetchTripDetail(id: ref.id), trip.trackPoints.count > 1 else { continue }
-            let passes = PlaceMatcher.passes(through: place, tripId: trip.id, points: trip.trackPoints, startDate: trip.startDate)
+            guard PlaceMatcher.isCandidate(place: place, tripCells: PlaceMatcher.cells(of: ref.previewCoordinates))
+            else { continue }
+            guard let trip = await repository.fetchTripDetailAsync(id: ref.id),
+                  trip.trackPoints.count > 1 else { continue }
+            let passes = await Task.detached(priority: .utility) {
+                PlaceMatcher.passes(through: place, tripId: trip.id, points: trip.trackPoints, startDate: trip.startDate)
+            }.value
             if !passes.isEmpty {
                 store.replacePasses(placeId: place.id, tripId: trip.id, with: passes)
                 changed = true

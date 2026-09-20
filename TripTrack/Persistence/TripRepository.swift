@@ -28,6 +28,13 @@ protocol TripRepository {
     func fetchTripsForMap() -> [Trip]
     func fetchTripsModifiedSince(_ date: Date) -> [Trip]
     func fetchTripDetail(id: UUID) -> Trip?
+    /// Тот же `fetchTripDetail`, но на фоновом контексте — для мест (0.6.8):
+    /// поднять полный трек (до 2000+ точек) на `viewContext` внутри цикла
+    /// сверки значило держать главный поток на каждой поездке-кандидате
+    /// (задача H, Sentry AppHang). См. `fetchTripSyncPayloadAsync` — тот же
+    /// приём: значение возвращается, managed object границу контекста не
+    /// переходит.
+    func fetchTripDetailAsync(id: UUID) async -> Trip?
     func fetchTripCount() -> Int
     func fetchLastTripDate() -> Date?
     func fetchTripStats() -> (count: Int, totalDistance: Double)
@@ -341,6 +348,22 @@ final class CoreDataTripRepository: TripRepository {
     func fetchTripDetail(id: UUID) -> Trip? {
         guard let entity = fetchEntity(id: id) else { return nil }
         return tripFromEntity(entity)
+    }
+
+    func fetchTripDetailAsync(id: UUID) async -> Trip? {
+        let bgContext = persistenceController.container.newBackgroundContext()
+        return await withCheckedContinuation { (cont: CheckedContinuation<Trip?, Never>) in
+            bgContext.perform {
+                let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+                request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+                request.fetchLimit = 1
+                guard let entity = try? bgContext.fetch(request).first else {
+                    cont.resume(returning: nil)
+                    return
+                }
+                cont.resume(returning: self.tripFromEntity(entity))
+            }
+        }
     }
 
     func fetchTripCount() -> Int {
