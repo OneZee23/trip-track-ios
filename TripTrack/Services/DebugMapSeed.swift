@@ -65,6 +65,15 @@ enum DebugMapSeed {
     /// вместе с `-seed-map-demo -seed-discoveries` и только с ними.
     static let secretBadgeArgument = "-seed-secret-badge"
 
+    /// Стресс-сид задачи H (Sentry AppHang ≥ 2000 мс, 0.6.8/0.7.0):
+    /// «сотни поездок, тысячи точек» из тегов Sentry — 400 поездок по
+    /// 2000 точек (~800k точек) плюс 60 отметок без места. Независим от
+    /// `-seed-map-demo`: та сеет дюжину поездок и для стресса не годится.
+    /// Сбрасывает латчи миграций, как это делает свежая установка после
+    /// обновления из стора — `reveal_rebuild_v18_done`,
+    /// `territory_backfill_done`, `discoveries.extremes.v2`.
+    static let hangStressArgument = "-seed-hang-stress"
+
     static var isRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(launchArgument)
     }
@@ -95,6 +104,86 @@ enum DebugMapSeed {
 
     static var isSecretBadgeRequested: Bool {
         ProcessInfo.processInfo.arguments.contains(secretBadgeArgument)
+    }
+
+    static var isHangStressRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains(hangStressArgument)
+    }
+
+    /// Сеет 400×2000 точек и сбрасывает миграционные латчи — задача H.
+    /// Идемпотентно (проверяет непустую базу перед сидом): второй запуск с
+    /// тем же флагом не досевает ещё 400 поездок и не роняет латчи заново.
+    static func runHangStressIfNeeded(persistence: PersistenceController = .shared) {
+        guard isHangStressRequested else { return }
+        let context = persistence.container.viewContext
+        let existing: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        existing.fetchLimit = 1
+        if let found = try? context.count(for: existing), found > 0 { return }
+
+        let tripCount = 400
+        let pointsPerTrip = 2000
+        let base = Date()
+
+        for t in 0..<tripCount {
+            autoreleasepool {
+                let trip = TripEntity(context: context)
+                trip.id = UUID()
+                let start = base.addingTimeInterval(-Double(t + 1) * 3600)
+                trip.startDate = start
+                trip.endDate = start.addingTimeInterval(Double(pointsPerTrip) * 5)
+                trip.isPrivate = true
+                trip.title = "Stress \(t)"
+                // Уже разобрана предыдущими версиями — стресс должен бить
+                // именно по МЕСТАМ/ТУМАНУ/ТЕРРИТОРИИ, а не по
+                // `PostTripTrackProcessor`, у него свой путь и своя цена.
+                trip.isTrackProcessed = true
+
+                let latBase = 45.0 + Double(t) * 0.01
+                let lonBase = 38.9 + Double(t) * 0.01
+                var coords: [CLLocationCoordinate2D] = []
+                coords.reserveCapacity(pointsPerTrip)
+                for p in 0..<pointsPerTrip {
+                    let lat = latBase + Double(p) * 0.00003
+                    let lon = lonBase + Double(p) * 0.00002
+                    let point = TrackPointEntity(context: context)
+                    point.id = UUID()
+                    point.latitude = lat
+                    point.longitude = lon
+                    point.altitude = 40
+                    point.speed = 14
+                    point.timestamp = start.addingTimeInterval(Double(p) * 5)
+                    point.trip = trip
+                    coords.append(CLLocationCoordinate2D(latitude: lat, longitude: lon))
+                }
+                trip.previewPolyline = Trip.encodePolyline(coords)
+                trip.distance = pathLength(coords)
+                trip.maxSpeed = 20
+                trip.averageSpeed = 14
+
+                // 60 отметок БЕЗ места (`placeId == nil`) — ровно то, что
+                // `PlaceManager.reconcile()` подбирает на запуске
+                // (`repository.checkpointsWithoutPlace()`).
+                if t < 60 {
+                    let cp = TripCheckpointEntity(context: context)
+                    cp.id = UUID()
+                    cp.timestamp = start.addingTimeInterval(Double(pointsPerTrip / 2) * 5)
+                    cp.latitude = coords[pointsPerTrip / 2].latitude
+                    cp.longitude = coords[pointsPerTrip / 2].longitude
+                    cp.distanceFromStart = trip.distance / 2
+                    cp.elapsedFromStart = Double(pointsPerTrip / 2) * 5
+                    cp.createdAt = start
+                    cp.lastModifiedAt = start
+                    cp.trip = trip
+                }
+            }
+            if t % 20 == 0 { try? context.save() }
+        }
+        try? context.save()
+
+        // Свежая установка после обновления: миграции ещё не бежали.
+        UserDefaults.standard.removeObject(forKey: "reveal_rebuild_v18_done")
+        UserDefaults.standard.removeObject(forKey: "territory_backfill_done")
+        UserDefaults.standard.removeObject(forKey: "discoveries.extremes.v2")
     }
 
     private struct Route {
