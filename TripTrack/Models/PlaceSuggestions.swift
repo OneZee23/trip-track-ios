@@ -43,6 +43,12 @@ enum PlaceSuggestions {
     /// человека с первой поездкой экран снова пуст, а он-то как раз и не
     /// знает, что места вообще бывают.
     static let smallLibrary = 5
+    /// Одна подсказка на ячейку ГЕОКОДЕРА (geohash-5, ~5 км): имя берётся
+    /// оттуда же, и дом, работа и магазин в одном городе дали бы четыре
+    /// строки «Краснодар» подряд — список, который нечем прочитать. Победит
+    /// самый частый двор; остальные вернутся сами, когда он станет местом и
+    /// уйдёт из подсказок.
+    static let namePrecision = 5
 
     /// `previews` — лёгкие ссылки (`tripPreviews`), точки не поднимаются
     /// нигде: у предложения вопрос «откуда выехал и куда приехал», а на него
@@ -83,8 +89,14 @@ enum PlaceSuggestions {
                 if $0.lastAt != $1.lastAt { return $0.lastAt > $1.lastAt }
                 return $0.cell < $1.cell
             }
-            .prefix(limit)
-            .map { $0 }
+            .reduce(into: (kept: [PlaceSuggestion](), seen: Set<String>())) { acc, suggestion in
+                let coarse = GeohashEncoder.encode(latitude: suggestion.latitude,
+                                                   longitude: suggestion.longitude,
+                                                   precision: namePrecision)
+                guard acc.kept.count < limit, acc.seen.insert(coarse).inserted else { return }
+                acc.kept.append(suggestion)
+            }
+            .kept
     }
 
     /// То же, но вне главного актёра: разбор превью всей библиотеки — это

@@ -137,13 +137,17 @@ struct PlacesView: View {
                     .textCase(.uppercase)
                     .foregroundStyle(c.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    // Идентификатор — на ЗАГОЛОВКЕ, не на колонке: на
+                    // контейнере он достаётся и строкам внутри, и каждая
+                    // подсказка теряет своё имя (`place_suggestion_<ячейка>`),
+                    // то есть тест не может найти ни одну по отдельности.
+                    .accessibilityIdentifier("places_suggestions")
                 ForEach(model.suggestions) { suggestion in
                     PlaceSuggestionCardView(suggestion: suggestion) { model.save(suggestion) }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.top, 6)
-            .accessibilityIdentifier("places_suggestions")
         }
     }
 

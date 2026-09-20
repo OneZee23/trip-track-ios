@@ -163,13 +163,41 @@ final class PlaceSuggestionsTests: XCTestCase {
         // Десять разных дворов, каждый по два раза.
         var previews: [TripPreviewRef] = []
         for k in 0..<10 {
-            let spot = CLLocationCoordinate2D(latitude: 45.0 + Double(k) * 0.05, longitude: 38.5)
+            // Полградуса между дворами — заведомо разные ячейки геокодера,
+            // иначе потолок проверялся бы на списке, уже срезанном именем.
+            let spot = CLLocationCoordinate2D(latitude: 45.0 + Double(k) * 0.5, longitude: 38.5)
             previews.append(preview(spot, spot, daysAgo: k * 3))
             previews.append(preview(spot, rostov, daysAgo: k * 3 + 1))
         }
         let found = PlaceSuggestions.build(previews: previews, taken: [])
         XCTAssertEqual(found.count, PlaceSuggestions.limit)
         XCTAssertEqual(PlaceSuggestions.limit, 5)
+    }
+
+    /// Дом, работа и магазин одного города зовутся одинаково — геокодер
+    /// знает имя с точностью geohash-5. Строка «Краснодар» четыре раза
+    /// подряд ничего не различает, поэтому из одной такой ячейки остаётся
+    /// самая частая подсказка.
+    func testOnlyOneSuggestionPerGeocoderCell() {
+        // Три двора внутри одного города (десятки–сотни метров друг от друга).
+        let yard = CLLocationCoordinate2D(latitude: 45.0350, longitude: 38.9750)
+        let work = CLLocationCoordinate2D(latitude: 45.0368, longitude: 38.9778)
+        let shop = CLLocationCoordinate2D(latitude: 45.0332, longitude: 38.9722)
+        XCTAssertEqual(
+            Set([yard, work, shop].map {
+                GeohashEncoder.encode(latitude: $0.latitude, longitude: $0.longitude,
+                                      precision: PlaceSuggestions.namePrecision)
+            }).count, 1, "фикстура обязана лежать в одной ячейке геокодера")
+        var previews = (0..<4).map { preview(yard, rostov, daysAgo: $0) }
+        previews += (0..<3).map { preview(work, rostov, daysAgo: 10 + $0) }
+        previews += (0..<2).map { preview(shop, rostov, daysAgo: 20 + $0) }
+        let found = PlaceSuggestions.build(previews: previews, taken: [])
+        XCTAssertEqual(found.filter { [cell(yard), cell(work), cell(shop)].contains($0.cell) }.map(\.cell),
+                       [cell(yard)], "из города остаётся самый частый двор")
+        // Двор стал местом — следующий по частоте возвращается сам.
+        let afterSaving = PlaceSuggestions.build(
+            previews: previews, taken: [Place.id(forCell: cell(yard))])
+        XCTAssertTrue(afterSaving.map(\.cell).contains(cell(work)))
     }
 
     /// Ячейка и id — те же, что у настоящего места: подсказка, ставшая

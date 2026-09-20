@@ -346,8 +346,11 @@ enum DebugMapSeed {
     /// симуляторе зовётся «Точка на карте», и по снимку не отличить
     /// «геокодер молчит» от «имя не доезжает до строки».
     ///
-    /// Ключ — geohash-5, ровно как у `cachedGeocode(for:)`; идемпотентно —
-    /// существующие строки не трогаются.
+    /// Ключ — geohash-5, ровно как у `cachedGeocode(for:)`. Пустую строку
+    /// ЧИНИТ, а не пропускает: на симуляторе `CLGeocoder` молчит, а
+    /// `TripManager.saveGeocodeCache` кладёт его молчание в кэш как ответ
+    /// (`locality == nil`) — то есть первый же запуск затирает засеянное
+    /// имя ничем. Названное руками не трогается.
     private static func seedGeocodeCache(persistence: PersistenceController) {
         let context = persistence.container.viewContext
         let named: [(Double, Double, String, String)] = [
@@ -364,8 +367,9 @@ enum DebugMapSeed {
             let request: NSFetchRequest<GeocodeCacheEntity> = GeocodeCacheEntity.fetchRequest()
             request.predicate = NSPredicate(format: "geohash5 == %@", geohash)
             request.fetchLimit = 1
-            if let found = try? context.count(for: request), found > 0 { continue }
-            let entity = GeocodeCacheEntity(context: context)
+            let existing = try? context.fetch(request).first
+            if let existing, !(existing.locality ?? "").isEmpty { continue }
+            let entity = existing ?? GeocodeCacheEntity(context: context)
             entity.geohash5 = geohash
             entity.locality = locality
             entity.region = region
