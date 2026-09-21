@@ -2,6 +2,7 @@ import Foundation
 import CoreData
 import CoreLocation
 
+@MainActor
 final class TerritoryManager: ObservableObject {
     @Published var visitedTileCount: Int = 0
 
@@ -355,7 +356,7 @@ final class TerritoryManager: ObservableObject {
     /// поездки и первой точкой следующей досэмплирование протянуло бы прямую
     /// через полстраны и закрасило тайлы, где человек не был. Именно из этих
     /// тайлов потом считаются «Новые места» и покрытие городов.
-    static func geohashes(
+    nonisolated static func geohashes(
         fromTrips trips: [[CLLocationCoordinate2D]],
         precision: Int
     ) -> Set<String> {
@@ -366,7 +367,7 @@ final class TerritoryManager: ObservableObject {
         return all
     }
 
-    static func geohashes(
+    nonisolated static func geohashes(
         from coordinates: [CLLocationCoordinate2D],
         precision: Int
     ) -> Set<String> {

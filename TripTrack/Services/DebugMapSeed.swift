@@ -11,6 +11,7 @@ import UIKit
 /// Runs ONLY when the `-seed-map-demo` launch argument is present, which
 /// nothing but a manual simulator run or a UI test ever passes, and is
 /// compiled out of release builds entirely.
+@MainActor
 enum DebugMapSeed {
     static let launchArgument = "-seed-map-demo"
     /// Вторым аргументом поверх обычного сида поездок добавляет одну отметку

@@ -12,6 +12,7 @@ import CoreLocation
 ///     заново; чужие тайлы, попавшие туда, закрасят свой туман необратимо.
 ///  2. Чужая карта не трогает `MyMapViewModel.shared`. Тот синглтон переживает
 ///     переключение табов и держит состояние карты ВЛАДЕЛЬЦА.
+@MainActor
 final class RemoteMapTests: XCTestCase {
 
     private func polyline(_ coords: [(Double, Double)]) -> Data {
