@@ -65,13 +65,15 @@ final class PlusStoreTests: XCTestCase {
     /// засевается ПЕРВЫЙ запуск (витрина ещё не ответила), — alpha-2 (`RU`).
     /// Пока сравнение шло только с трёхбуквенным, засев молчал, и первый
     /// холодный старт в РФ открывался со «платное видно».
+    /// `available: true` — правило витрины само по себе; глобальный выключатель
+    /// (`PlusAvailability`) держит отдельный `PlusAvailabilityTests`.
     func testBothSpellingsOfTheRussianStorefrontHidePaidThings() {
-        XCTAssertTrue(PlusStore.hidesPlus(countryCode: "RUS"))
-        XCTAssertTrue(PlusStore.hidesPlus(countryCode: "RU"), "так отвечает Locale.region")
-        XCTAssertTrue(PlusStore.hidesPlus(countryCode: "ru"))
-        XCTAssertFalse(PlusStore.hidesPlus(countryCode: "GEO"))
-        XCTAssertFalse(PlusStore.hidesPlus(countryCode: "USA"))
-        XCTAssertFalse(PlusStore.hidesPlus(countryCode: nil))
+        XCTAssertTrue(PlusStore.hidesPlus(countryCode: "RUS", available: true))
+        XCTAssertTrue(PlusStore.hidesPlus(countryCode: "RU", available: true), "так отвечает Locale.region")
+        XCTAssertTrue(PlusStore.hidesPlus(countryCode: "ru", available: true))
+        XCTAssertFalse(PlusStore.hidesPlus(countryCode: "GEO", available: true))
+        XCTAssertFalse(PlusStore.hidesPlus(countryCode: "USA", available: true))
+        XCTAssertFalse(PlusStore.hidesPlus(countryCode: nil, available: true))
     }
 
     /// Самая поздняя дата, а не последняя в перечислении: порядок

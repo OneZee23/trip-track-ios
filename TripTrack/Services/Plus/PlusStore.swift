@@ -153,7 +153,7 @@ final class PlusStore: ObservableObject {
     #if DEBUG
     /// Флаг запуска, которым снимаются экраны платного. Читается свежо:
     /// `PlusAccess.init` спрашивает его до того, как этот класс существует.
-    static var isDebugPlus: Bool {
+    nonisolated static var isDebugPlus: Bool {
         ProcessInfo.processInfo.arguments.contains("-debug-plus")
     }
     #endif
@@ -175,7 +175,18 @@ final class PlusStore: ObservableObject {
     /// (`RUS`), а `Locale.region.identifier`, которым засевается первый
     /// запуск, — двухбуквенный (`RU`). Сравнение только с одним из них
     /// молча пропустило бы второй.
-    nonisolated static func hidesPlus(countryCode: String?) -> Bool {
+    nonisolated static func hidesPlus(
+        countryCode: String?, available: Bool = PlusAvailability.isEnabled
+    ) -> Bool {
+        #if DEBUG
+        // `-debug-plus` показывает платное на симуляторе и при выключенном
+        // «Плюсе»: иначе пейвол и косметику нельзя было бы ни собрать, ни
+        // снять на снимок до 0.8.1.
+        if isDebugPlus { return false }
+        #endif
+        // Выключенный «Плюс» — это витрина без платного для ВСЕХ, см.
+        // `PlusAvailability`.
+        guard available else { return true }
         guard let code = countryCode?.uppercased() else { return false }
         return code == "RUS" || code == "RU"
     }
