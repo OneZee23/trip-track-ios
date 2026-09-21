@@ -96,9 +96,16 @@ final class R2PhotoStorage: RemotePhotoStorage {
         metadataAlreadyClean: Bool = false
     ) async throws -> PhotoUploadResponse {
         let cleanData = metadataAlreadyClean ? data : stripImageMetadata(data)
+        // Идентификаторы — СТРОЧНЫМИ. Postgres хранит uuid каноническим строчным
+        // hex, а `UUID.uuidString` печатает заглавные; сервер до хотфикса
+        // `100d8b7` сравнивал `vehicle_id` снимка со значением из формы как
+        // строки, и первое фото каждой машины падало в `photoNotFound` уже
+        // после того, как байты легли в хранилище (0.6.4–0.7.0 из стора).
+        // Сервер починен, но прод обновляется отдельно от приложения, и
+        // клиент не должен зависеть от того, что выкатили раньше.
         let fields: [(name: String, value: String)] = [
-            ("vehicleId", vehicleId.uuidString),
-            ("photoId", photoId.uuidString),
+            ("vehicleId", vehicleId.uuidString.lowercased()),
+            ("photoId", photoId.uuidString.lowercased()),
             ("type", type.rawValue),
             ("isMain", isMain ? "true" : "false"),
             ("takenAt", ISODate.format(takenAt)),
