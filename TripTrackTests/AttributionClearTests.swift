@@ -18,8 +18,11 @@ private final class TTPlainView: UIView {}
 ///
 /// До 17 сентября под них подкладывали светлую плиту. На устройстве она
 /// читалась отдельным блоком, наехавшим на край листа, и владелец это увидел.
-/// Теперь мгла под атрибуцией ВЫРЕЗАЕТСЯ: подпись садится на настоящую карту
-/// Apple, то есть на тот фон, под который MapKit её и красит.
+/// 20 сентября плиту заменил полный вырез (мгла снималась до нуля) — и на
+/// дневной карте «Атласа» под ним снова читалась плита, просто без своего
+/// фона: голая светлая карта. Теперь мгла под атрибуцией ПРИГЛУШАЕТСЯ до
+/// половины силы (`AttributionCarve.windowFloor`), а не снимается совсем —
+/// подпись лежит на смягчённой мгле, не на голой карте (задача A2, 21 сен).
 @MainActor
 final class AttributionClearTests: XCTestCase {
 
@@ -89,9 +92,10 @@ final class AttributionClearTests: XCTestCase {
 
     // MARK: Картинка маски
 
-    /// В середине выреза маска ПРОЗРАЧНА (мгла снята совсем), по краю —
-    /// непрозрачна, а между ними растушёвка, а не ступенька.
-    func testWindowIsClearInsideAndSolidOutside() throws {
+    /// В середине окна маска держит `windowFloor` (мгла ПРИГЛУШЕНА до половины
+    /// силы, а не снята совсем — задача A2), по краю — непрозрачна, а между
+    /// ними растушёвка, а не ступенька.
+    func testWindowIsDimmedInsideAndSolidOutside() throws {
         let size = CGSize(width: 120, height: 48)
         let image = try XCTUnwrap(VeilCarveMask.windowImage(size: size))
         let w = image.width, h = image.height
@@ -104,12 +108,14 @@ final class AttributionClearTests: XCTestCase {
             ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         }
         func alpha(_ x: Int, _ y: Int) -> Int { Int(data[(y * w + x) * 4 + 3]) }
-        XCTAssertEqual(alpha(w / 2, h / 2), 0, "в середине выреза мгла обязана быть снята")
-        XCTAssertGreaterThan(alpha(0, 0), 200, "за краем выреза мгла обязана остаться")
+        let floor = Int((AttributionCarve.windowFloor * 255).rounded())
+        XCTAssertLessThanOrEqual(abs(alpha(w / 2, h / 2) - floor), 1,
+                       "в середине окна мгла обязана остаться на floor, а не сняться совсем")
+        XCTAssertGreaterThan(alpha(0, 0), 200, "за краем окна мгла обязана остаться полной")
         // Растушёвка: где-то между ними альфа промежуточная.
         let edge = (0..<(w / 2)).map { alpha($0, h / 2) }
-        XCTAssertTrue(edge.contains { $0 > 20 && $0 < 235 },
-                      "край выреза — ступенька, а не растушёвка")
+        XCTAssertTrue(edge.contains { $0 > floor + 5 && $0 < 235 },
+                      "край окна — ступенька, а не растушёвка")
     }
 
     /// Альфа читается прямиком из растра — общий помощник для тестов ниже.
@@ -157,9 +163,12 @@ final class AttributionClearTests: XCTestCase {
             XCTAssertLessThanOrEqual(ramp[i], ramp[i - 1], "альфа обязана падать к центру")
         }
         // Достаточно РАЗНЫХ значений на растушёвке, чтобы это была растушёвка,
-        // а не горстка широких ступеней.
+        // а не горстка широких ступеней. Порог вдвое ниже прежнего (20): и
+        // амплитуда теперь вдвое меньше (`windowFloor`…255, а не 0…255), и
+        // сама растушёвка вдвое короче (6 pt, а не 12) — на том же экранном
+        // масштабе шагов физически меньше, а не грубее.
         let distinctInFeather = Set(ramp.filter { $0 > 0 && $0 < 255 })
-        XCTAssertGreaterThan(distinctInFeather.count, 20,
+        XCTAssertGreaterThan(distinctInFeather.count, 10,
                              "растушёвка обязана быть непрерывной, а не ступенчатой")
     }
 
@@ -200,16 +209,23 @@ final class AttributionClearTests: XCTestCase {
         }
     }
 
-    /// Контраст подписи Apple на том, что остаётся в вырезе, — не меньше
-    /// 4.5 : 1. В вырезе мгла снята полностью, то есть подпись лежит на
-    /// светлой карте Apple, под которую MapKit её и красит.
+    /// Контраст подписи Apple на том, что остаётся в окне, — не меньше
+    /// 4.5 : 1. Окно больше НЕ снимает мглу до нуля (задача A2): мгла
+    /// приглушена до `windowFloor`, и подпись лежит на СМЯГЧЁННОЙ мгле, не на
+    /// голой светлой карте. Худший случай — как у дымки: самый тёмный конец
+    /// рампы (`.top`) на самом высоком краю диапазона непрозрачности, дальше
+    /// приглушённый маской `windowFloor`.
     func testGlyphContrastInsideTheCarveClearsTheBar() {
         // Светлая карта Apple под мглой — примерно #F2F1EC у подложки суши.
         let map = UIColor(red: 0xF2/255, green: 0xF1/255, blue: 0xEC/255, alpha: 1)
+        let night = FogVeilPainter.Palette.night
+        let effectiveAlpha = AttributionCarve.windowFloor
+            * CGFloat(night.opacityRange.upperBound)
+        let worst = Self.composite(night.top, over: map, alpha: effectiveAlpha)
         let glyph = UIColor.label.resolvedColor(
             with: UITraitCollection(userInterfaceStyle: .light))
-        let ratio = Self.contrast(glyph, map)
-        print(String(format: "[attribution] контраст в вырезе %.1f : 1", ratio))
+        let ratio = Self.contrast(glyph, worst)
+        print(String(format: "[attribution] контраст в окне %.1f : 1", ratio))
         XCTAssertGreaterThanOrEqual(ratio, 4.5)
     }
 
@@ -242,10 +258,13 @@ final class AttributionClearTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(ratio, 4.5)
     }
 
-    /// Растушёвка шире самой подписи — иначе вырез снова читается коробкой.
-    /// Высота «` Maps`» на iOS 18 — около шестнадцати точек.
-    func testFeatherIsWiderThanTheGlyphItHides() {
-        XCTAssertGreaterThanOrEqual(AttributionCarve.feather, 12)
+    /// Растушёвка не меньше шести точек — вдвое короче прежней (двенадцать),
+    /// потому что вдвое мягче стал сам перепад (`windowFloor` = 0.5, а не
+    /// полный 0→1). У полного перепада хватало только растушёвки шире самой
+    /// подписи; у половинного порог ниже — короче растушёвка уже не читается
+    /// краем (задача A2, проверено на устройстве и `attr2-after-crop.png`).
+    func testFeatherIsWiderThanHalfOfWhatItWasBeforeThePartialWindow() {
+        XCTAssertGreaterThanOrEqual(AttributionCarve.feather, 6)
     }
 
     // MARK: Где стоит подпись
