@@ -41,6 +41,12 @@ New». Лимиты: «What's New» — 4000, промо-текст — 170.
 ### English (U.S.)
 
 ```
+ATLAS
+
+The Atlas is smooth now: pinch, zoom and pan run without stutter, reloading or
+squares at any scale. The fog is even, the edge of an opened road is soft, and
+the picture you share matches what you see on screen.
+
 PLACES
 
 Places now suggests spots you seem to visit, guessed from where your trips
@@ -61,6 +67,13 @@ on the Atlas no longer looks like a bright plate. Car photos sync again.
 ### Russian
 
 ```
+АТЛАС
+
+«Атлас» стал плавным: приближение, отдаление и перетаскивание идут без рывков,
+подгрузок и квадратиков на любом масштабе. Туман теперь ровный, край открытой
+дороги — мягкий, а картинка, которой вы делитесь, совпадает с тем, что видно
+на экране.
+
 МЕСТА
 
 Вкладка «Места» теперь подсказывает: «Похоже, вы здесь бываете» — по тому,
@@ -80,6 +93,13 @@ on the Atlas no longer looks like a bright plate. Car photos sync again.
 ### German
 
 ```
+ATLAS
+
+Der Atlas läuft jetzt flüssig: Zoomen und Verschieben gehen in jedem Maßstab
+ohne Ruckeln, Nachladen oder Kacheln. Der Nebel ist gleichmäßig, die Kante
+einer freigefahrenen Straße weich, und das geteilte Bild sieht aus wie der
+Bildschirm.
+
 ORTE
 
 Orte schlägt jetzt Stellen vor, an denen Sie öfter sind — geschätzt danach, wo
@@ -102,6 +122,13 @@ Autofotos werden wieder synchronisiert.
 ### Spanish (Spain)
 
 ```
+ATLAS
+
+El Atlas ahora es fluido: acercar, alejar y desplazar van sin tirones, cargas
+ni cuadrados en cualquier escala. La niebla es uniforme, el borde de una
+carretera abierta es suave y la imagen que compartes coincide con lo que ves
+en pantalla.
+
 LUGARES
 
 Lugares ahora sugiere sitios que pareces visitar a menudo, calculados a partir
@@ -123,6 +150,13 @@ sincronizarse.
 ### French
 
 ```
+ATLAS
+
+L'Atlas est désormais fluide : zoom et déplacement se font sans à-coups, sans
+rechargement ni carrés, à n'importe quelle échelle. Le brouillard est
+uniforme, le bord d'une route ouverte est doux, et l'image partagée
+correspond à ce que vous voyez à l'écran.
+
 LIEUX
 
 Lieux suggère désormais des endroits que vous semblez fréquenter, déduits d'où
@@ -145,6 +179,12 @@ voiture se synchronisent à nouveau.
 ### Italian
 
 ```
+ATLANTE
+
+L'Atlante ora è fluido: zoom e trascinamento vanno senza scatti, ricariche o
+quadrati a qualsiasi scala. La nebbia è uniforme, il bordo di una strada
+aperta è morbido e l'immagine che condividi coincide con quella a schermo.
+
 LUOGHI
 
 Luoghi ora suggerisce i posti che sembri frequentare, dedotti da dove iniziano
@@ -166,6 +206,12 @@ sincronizzarsi.
 ### Polish
 
 ```
+ATLAS
+
+Atlas jest teraz płynny: przybliżanie, oddalanie i przesuwanie działają bez
+zacięć, doczytywania i kwadratów w każdej skali. Mgła jest równa, krawędź
+odkrytej drogi miękka, a udostępniany obrazek wygląda tak samo jak ekran.
+
 MIEJSCA
 
 Miejsca podpowiadają teraz miejsca, które chyba odwiedzasz często — na
@@ -188,6 +234,13 @@ synchronizują.
 ### Indonesian
 
 ```
+ATLAS
+
+Atlas kini mulus: memperbesar, memperkecil, dan menggeser berjalan tanpa
+tersendat, tanpa pemuatan ulang atau kotak-kotak di skala mana pun. Kabutnya
+rata, tepi jalan yang terbuka lembut, dan gambar yang Anda bagikan sama
+dengan yang terlihat di layar.
+
 TEMPAT
 
 Tempat kini menyarankan lokasi yang sepertinya sering Anda kunjungi,
@@ -209,6 +262,13 @@ Atlas tidak lagi terlihat seperti pelat terang. Foto mobil tersinkron lagi.
 ### Turkish
 
 ```
+ATLAS
+
+Atlas artık akıcı: yakınlaştırma, uzaklaştırma ve kaydırma her ölçekte
+takılmadan, yeniden yüklemeden ve karelere bölünmeden çalışıyor. Sis düzgün,
+açılan yolun kenarı yumuşak ve paylaştığınız görsel ekranda gördüğünüzle
+aynı.
+
 YERLER
 
 Yerler artık sık geldiğinizi tahmin ettiği noktaları öneriyor —
@@ -231,6 +291,13 @@ senkronize oluyor.
 ### Filipino → вставлять в слот **Finnish**
 
 ```
+ATLAS
+
+Tuloy-tuloy na ngayon ang Atlas: ang pag-zoom at paggalaw ng mapa ay walang
+pag-antala, pag-reload, o mga kahon sa kahit anong laki. Pantay ang ulap,
+malambot ang gilid ng nabuksang kalsada, at katulad ng nasa screen ang
+larawang ibinabahagi mo.
+
 MGA LUGAR
 
 Nagmumungkahi na ngayon ang Mga Lugar ng mga lugar na mukhang madalas mong
@@ -253,6 +320,13 @@ mga larawan ng sasakyan.
 ### Ukrainian
 
 ```
+АТЛАС
+
+«Атлас» став плавним: наближення, віддалення і перетягування йдуть без ривків,
+підвантажень і квадратиків на будь-якому масштабі. Туман тепер рівний, край
+відкритої дороги — м'який, а картинка, якою ви ділитеся, збігається з тим, що
+видно на екрані.
+
 МІСЦЯ
 
 Вкладка «Місця» тепер підказує: «Схоже, ви тут буваєте» — за тим, звідки
@@ -273,6 +347,13 @@ mga larawan ng sasakyan.
 ### Portuguese (Brazil)
 
 ```
+ATLAS
+
+O Atlas ficou fluido: aproximar, afastar e arrastar acontecem sem travadas,
+recarregamentos ou quadrados em qualquer escala. A névoa está uniforme, a
+borda de uma estrada aberta ficou suave e a imagem que você compartilha
+coincide com o que aparece na tela.
+
 LUGARES
 
 Lugares agora sugere pontos que você parece frequentar, deduzidos de onde suas
@@ -294,6 +375,13 @@ sincronizar.
 ### Kazakh — В КАРТОЧКЕ ЭТОЙ ЛОКАЛИ НЕТ, вставлять некуда
 
 ```
+АТЛАС
+
+«Атлас» енді бірқалыпты: жақындату, алыстату және сүйреу кез келген масштабта
+кідіріссіз, қайта жүктеусіз және шаршыларсыз жүреді. Тұман біркелкі, ашылған
+жолдың шеті жұмсақ, ал сіз бөлісетін сурет экранда көрінетінмен сәйкес
+келеді.
+
 ОРЫНДАР
 
 «Орындар» енді сіз жиі баратын жерлерді ұсынады — сапарларыңыздың әдетте
@@ -322,73 +410,73 @@ Maps жазбасы енді жарқын тақташаға ұқсамайды.
 **English (U.S.)**
 
 ```
-Faster and more stable this time. Places now suggests spots you seem to visit, and any trip exports as GPX or CSV from its ••• menu.
+Faster and smoother. The Atlas now zooms and pans without a stutter, Places suggests spots you seem to visit, and any trip exports as GPX or CSV.
 ```
 
 **Russian**
 
 ```
-Быстрее и стабильнее. «Места» подсказывают, где вы обычно бываете, а поездку можно выгрузить в GPX или CSV из «…».
+Быстрее и плавнее. «Атлас» стал плавным на любом масштабе, «Места» подсказывают, где вы обычно бываете, а поездку можно выгрузить в GPX или CSV.
 ```
 
 **German**
 
 ```
-Schneller und stabiler. Orte schlägt jetzt Stellen vor, an denen Sie öfter sind, und jede Fahrt lässt sich als GPX oder CSV exportieren.
+Schneller und flüssiger. Der Atlas läuft ohne Ruckeln, Orte schlägt Stellen vor, an denen Sie öfter sind, und jede Fahrt exportieren Sie als GPX oder CSV.
 ```
 
 **Spanish (Spain)**
 
 ```
-Más rápida y estable. Lugares ahora sugiere sitios que sueles visitar, y puedes exportar cualquier trayecto como GPX o CSV.
+Más rápida y fluida. El Atlas se mueve sin tirones, Lugares sugiere sitios que sueles visitar y puedes exportar cualquier trayecto como GPX o CSV.
 ```
 
 **French**
 
 ```
-Plus rapide et plus stable. Lieux suggère désormais des endroits que vous fréquentez, et chaque trajet s'exporte en GPX ou CSV.
+Plus rapide et plus fluide. L'Atlas bouge sans à-coups, Lieux suggère des endroits que vous fréquentez, et chaque trajet s'exporte en GPX ou CSV.
 ```
 
 **Italian**
 
 ```
-Più veloce e stabile. Luoghi ora suggerisce i posti che frequenti, e ogni viaggio si esporta in GPX o CSV dal menu •••.
+Più veloce e fluida. L'Atlante scorre senza scatti, Luoghi suggerisce i posti che frequenti e ogni viaggio si esporta in GPX o CSV.
 ```
 
 **Polish**
 
 ```
-Szybciej i stabilniej. Miejsca podpowiadają teraz miejsca, które odwiedzasz, a każdy przejazd można wyeksportować do GPX lub CSV.
+Szybciej i płynniej. Atlas działa bez zacięć, Miejsca podpowiadają miejsca, które odwiedzasz, a każdy przejazd wyeksportujesz do GPX lub CSV.
 ```
 
 **Indonesian**
 
 ```
-Lebih cepat dan stabil. Tempat kini menyarankan lokasi yang sering dikunjungi, dan setiap perjalanan bisa diekspor sebagai GPX atau CSV.
+Lebih cepat dan mulus. Atlas bergerak tanpa tersendat, Tempat menyarankan lokasi yang sering dikunjungi, dan perjalanan bisa diekspor sebagai GPX atau CSV.
 ```
 
 **Turkish**
 
 ```
-Daha hızlı ve kararlı. Yerler artık sık geldiğiniz noktaları öneriyor, ve her yolculuğu GPX ya da CSV olarak dışa aktarabilirsiniz.
+Daha hızlı ve akıcı. Atlas takılmadan hareket ediyor, Yerler sık geldiğiniz noktaları öneriyor ve her yolculuğu GPX ya da CSV olarak dışa aktarın.
 ```
 
 **Filipino → слот Finnish**
 
 ```
-Mas mabilis at matatag. Nagmumungkahi na ang Mga Lugar ng lugar na madalas mong puntahan, at pwede mo nang i-export ang biyahe bilang GPX o CSV.
+Mas mabilis at tuloy-tuloy. Walang pag-antala ang Atlas, nagmumungkahi ang Mga Lugar ng madalas mong puntahan, at pwedeng i-export ang biyahe sa GPX o CSV.
 ```
 
 **Ukrainian**
 
 ```
-Швидше і стабільніше. «Місця» підказують, де ви зазвичай буваєте, а поїздку можна вивантажити у GPX або CSV.
+Швидше і плавніше. «Атлас» став плавним на будь-якому масштабі, «Місця» підказують, де ви буваєте, а поїздку можна вивантажити у GPX або CSV.
 ```
 
 **Portuguese (Brazil)**
 
 ```
-Mais rápido e estável. Lugares agora sugere pontos que você costuma visitar, e você pode exportar qualquer viagem como GPX ou CSV.
+Mais rápido e fluido. O Atlas se move sem travadas, Lugares sugere pontos que você costuma visitar e você exporta qualquer viagem como GPX ou CSV.
 ```
 
 ---

@@ -210,6 +210,19 @@ final class FogVeilView: UIView {
     /// вернуть на карту `FogVeilOverlay`.
     var onLostFromHierarchy: (() -> Void)?
 
+    /// На «Атласе» туман рисует `FogMetalVeil`; эта вуаль остаётся хостом
+    /// ВЕКТОРНЫХ слоёв — жилки сети и выбранного маршрута. Растр не
+    /// заказывается, летербокс скрыт: платить за картинку, которую никто не
+    /// увидит, незачем.
+    ///
+    /// А вот `MapPathIndex` продолжает строиться, и это не недосмотр.
+    /// Бакеты индекса — ЕДИНСТВЕННЫЙ источник жилки (`FogVeilVein.strokes`
+    /// принимает `MapPathChunks`), и без него «Атлас» потерял бы сеть всех
+    /// поездок, то есть картинка разошлась бы с эталоном 0.8.0. Индекс
+    /// уйдёт отсюда тогда же, когда жилка научится читать слой напрямую, —
+    /// не раньше.
+    var vectorOnly = false
+
     /// Поколение отрисовки: заказ, который успели обогнать, свою картинку не
     /// показывает и на фоне не досчитывается.
     private let genLock = NSLock()
@@ -428,7 +441,12 @@ final class FogVeilView: UIView {
             if layer.mask !== revealMask.layer { layer.mask = revealMask.layer }
             return
         }
-        guard let carveRect, bounds.width > 1 else {
+        // На «Атласе» (`vectorOnly`) окно под подписью Apple вырезает себе сам
+        // Metal-слой, а на этой вуали от тумана не осталось ничего — только
+        // жилка сети и выбранный маршрут. Маска приглушила бы ИХ: линия сети
+        // в углу с логотипом выцветала бы наполовину без единой причины —
+        // мгла там уже приглушена, и приглушать её второй раз нечем.
+        guard !vectorOnly, let carveRect, bounds.width > 1 else {
             if layer.mask != nil { layer.mask = nil }
             return
         }
@@ -743,6 +761,7 @@ final class FogVeilView: UIView {
     }
 
     private func layoutLetterbox() {
+        letterbox.isHidden = vectorOnly
         letterbox.frame = bounds
         letterboxMask.frame = bounds
         letterboxMask.path = Self.letterboxPath(bounds: bounds, quad: coveredQuadPoints)
@@ -862,8 +881,11 @@ final class FogVeilView: UIView {
         rendering = true
         gate.raster = rect
 
+        // При `vectorOnly` полос не будет ни одной, и растр обязан считаться
+        // полным сразу: иначе `rendering` остался бы взведённым навсегда и
+        // жилка перестала бы обновляться после первого же кадра.
         let incoming = Raster(rect: rect, sizePoints: sizePoints, scale: scale,
-                              expected: bands.count)
+                              expected: vectorOnly ? 0 : bands.count)
         // Больше двух растров не живёт никогда: старый уходит сразу, не
         // дожидаясь кроссфейда, — восемь мегабайт на каждый.
         while rasters.count >= 2 { rasters.removeFirst().container.removeFromSuperlayer() }
@@ -893,6 +915,9 @@ final class FogVeilView: UIView {
                 self?.installVein(strokes, token: token)
             }
         }
+
+        // «Атлас»: туман рисует GPU, вуали остаётся только жилка.
+        guard !vectorOnly else { finish(token: token); return }
 
         for band in bands {
             if let ready = reusable?.band(for: band, scale: scale, sizePoints: sizePoints) {
@@ -1049,7 +1074,7 @@ final class FogVeilView: UIView {
 /// Тайлы нужны не ради скорости: от них зависит и рампа глубины, и сеялка
 /// дымки (`FogVeilRenderer.depth`), — один кусок на весь экран дал бы другой
 /// рисунок. А вот слой прозрачности открывается ОДИН на полосу, а не на тайл:
-/// по замеру спайка (15 сен) цену полного кадра держит число тайлов, а не
+/// по замеру 15 сентября цену полного кадра держит число тайлов, а не
 /// число пикселей — 24 тайла дали 211 мс против 142 мс на 15 тайлах, потому
 /// что каждый открывает свой буфер и кладёт до четырнадцати проходов пера.
 enum FogVeilBitmap {

@@ -179,6 +179,7 @@ struct MyMapView: View {
                         .font(.inter(22, weight: .heavy))
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.5), radius: 8, y: 1)
+                        .allowsHitTesting(false)
 
                     AtlasBetaChip { showBetaSheet = true }
                 }
@@ -190,6 +191,7 @@ struct MyMapView: View {
                         .shadow(color: .black.opacity(0.5), radius: 6, y: 1)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
+                        .allowsHitTesting(false)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -197,7 +199,6 @@ struct MyMapView: View {
             .padding(.top, 4)
             Spacer()
         }
-        .allowsHitTesting(false)
     }
 
     /// «1 910 км открыто · 4 региона» — километры берутся из слоя открытого,

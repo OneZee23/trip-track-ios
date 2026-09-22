@@ -91,17 +91,35 @@ enum AtlasSharePoster {
         }
     }
 
-    /// Туман тем же растром, которым его рисует экран.
+    /// Туман тем же кодом, которым его рисует экран.
     ///
-    /// `FogVeilBitmap.render` сам режет площадь на тайлы, сеет дымку по
-    /// МИРОВОЙ сетке и прожигает коридоры одним слоем прозрачности — то есть
-    /// постер получает не «похожий» туман, а тот же самый. Индекс путей
-    /// собирается прямо здесь, синхронно: постер рисуется в фоне и один раз,
-    /// а ждать фоновую сборку ради одной картинки незачем.
+    /// Правило 0.7.0 — постер обязан рисовать ТУ ЖЕ картинку, что экран, — и
+    /// Metal его не отменяет, а меняет исполнителя: с 0.8.0 «Атлас» рисует
+    /// мглу `FogMetalVeil`, значит и снимок накрывается ей же —
+    /// `FogOffscreen.render` собирает тот же кадр теми же порогами, только
+    /// без экрана. Растровый путь остаётся ОТКАТОМ: Metal выключен флагом или
+    /// недоступен на устройстве — постер собирает `FogVeilBitmap.render`, и
+    /// отличается он от экрана ровно так же, как и сам экран в откате.
+    ///
+    /// Окна под подписью Apple (`carve`) у постера нет: подписи в кадре нет
+    /// вовсе, вырезать нечего.
+    ///
+    /// В откате индекс путей собирается прямо здесь, синхронно: постер
+    /// рисуется в фоне и один раз, а ждать фоновую сборку ради одной картинки
+    /// незачем.
     private static func drawVeil(
         in cg: CGContext, rect: MKMapRect, size: CGSize, scale: CGFloat, layer: RevealedLayer
     ) {
         guard !layer.isEmpty else { return }
+        if FogMetalAvailability.isActive,
+           let image = FogOffscreen.render(
+               layer: layer, rect: rect, sizePoints: size, scale: scale,
+               palette: FogVeilPainter.palette) {
+            // Кадр офскрина лежит РОВНО на `rect`, без припуска, — значит и
+            // кладётся он на всю картинку.
+            place(image, in: cg, box: CGRect(origin: .zero, size: size), size: size)
+            return
+        }
         // Облака — синхронно, как и индекс: постер собирается в фоне и один
         // раз, а туман без них разошёлся бы с экраном.
         CloudTexture.shared.prepare()
@@ -125,12 +143,22 @@ enum AtlasSharePoster {
             width: CGFloat(drawn.width / rect.width) * size.width,
             height: CGFloat(drawn.height / rect.height) * size.height
         )
+        place(band.image, in: cg, box: box, size: size)
+    }
+
+    /// Положить кадр тумана в постер. Оба пути — и Metal, и растр — кладут
+    /// картинку ОДНИМ способом: разойдись они переворотом, туман встал бы
+    /// вверх ногами ровно у одного из них, и заметить это можно было бы
+    /// только глазами.
+    private static func place(
+        _ image: CGImage, in cg: CGContext, box: CGRect, size: CGSize
+    ) {
         cg.saveGState()
         // CGImage рисуется в перевёрнутой системе координат UIKit.
         cg.translateBy(x: 0, y: size.height)
         cg.scaleBy(x: 1, y: -1)
-        cg.draw(band.image, in: CGRect(x: box.minX, y: size.height - box.maxY,
-                                       width: box.width, height: box.height))
+        cg.draw(image, in: CGRect(x: box.minX, y: size.height - box.maxY,
+                                  width: box.width, height: box.height))
         cg.restoreGState()
     }
 
