@@ -128,16 +128,27 @@ final class FogMetalVeil: MTKView {
     ///
     /// Фабрикой, а не `init?()`: у `UIView` свой непроваливающийся `init()`,
     /// и переопределить его провальным Swift не даёт.
-    static func make() -> FogMetalVeil? {
+    /// - Parameter notifications: центр уведомлений жизненного цикла. Свой у
+    ///   теста — потому что в общий `.default` подписаны живые синглтоны
+    ///   (`SyncCoordinator` на уход в фон, `PhotoStorageService` на нехватку
+    ///   памяти), и тест, постучавший туда, будит половину приложения в чужом
+    ///   прогоне — ровно тот класс поломок, про который CLAUDE.md пишет «тест
+    ///   роняет ЧУЖОЙ класс».
+    static func make(notifications: NotificationCenter = .default) -> FogMetalVeil? {
         guard let device = MTLCreateSystemDefaultDevice(),
               let queue = device.makeCommandQueue(),
               let encoder = FogFrameEncoder(device: device) else { return nil }
-        return FogMetalVeil(device: device, queue: queue, encoder: encoder)
+        return FogMetalVeil(
+            device: device, queue: queue, encoder: encoder, notifications: notifications)
     }
 
-    private init(device: MTLDevice, queue: MTLCommandQueue, encoder: FogFrameEncoder) {
+    private let notifications: NotificationCenter
+
+    private init(device: MTLDevice, queue: MTLCommandQueue, encoder: FogFrameEncoder,
+                 notifications: NotificationCenter) {
         self.queue = queue
         self.encoder = encoder
+        self.notifications = notifications
         super.init(frame: .zero, device: device)
 
         colorPixelFormat = .bgra8Unorm
@@ -153,7 +164,7 @@ final class FogMetalVeil: MTKView {
         // Жесты обязаны доходить до карты под нами.
         isUserInteractionEnabled = false
 
-        let centre = NotificationCenter.default
+        let centre = notifications
         // Уход в фон и возвращение из него — не «полировка жизненного цикла»,
         // а единственное место, где решается, жив ли процесс: работа на GPU
         // из фонового приложения обрывается системой (см. `draw(_:)`).
@@ -161,6 +172,8 @@ final class FogMetalVeil: MTKView {
                            name: UIApplication.didEnterBackgroundNotification, object: nil)
         centre.addObserver(self, selector: #selector(handleWillEnterForeground),
                            name: UIApplication.willEnterForegroundNotification, object: nil)
+        centre.addObserver(self, selector: #selector(handleDidBecomeActive),
+                           name: UIApplication.didBecomeActiveNotification, object: nil)
         // Текстура покрытия — единственное, что мы держим сверх буферов
         // открытого мира, и единственное, что имеет смысл отдать по нехватке
         // памяти: следующий кадр заводит её заново (спека §8).
@@ -169,6 +182,11 @@ final class FogMetalVeil: MTKView {
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    /// Наблюдатели снимаются явно — не потому что iOS их не снимет сама
+    /// (с iOS 9 снимет), а потому что так стоит у соседа (`FogVeilView`), и
+    /// расходиться этим двум незачем.
+    deinit { notifications.removeObserver(self) }
 
     // MARK: Жизненный цикл приложения
 
@@ -180,18 +198,27 @@ final class FogMetalVeil: MTKView {
         forgetFrame()
     }
 
-    /// Вернулись: кадр догоняем сами. В фоне мы его пропустили, а камера
-    /// могла не тронуться ни разу — «Атлас», открытый и убранный в карман,
-    /// это обычное дело, и ждать от него движения пальца значит показать
-    /// человеку голую карту Apple.
+    /// Возвращаемся: помечаем кадр несуществующим, но НЕ рисуем.
     ///
-    /// Зовётся по `willEnterForeground`, а не по `didBecomeActive`: к этому
-    /// моменту состояние приложения уже `.inactive`, то есть проверка фона в
-    /// `draw(_:)` кадр пропустит, а лишнего кадра на каждый Центр управления
-    /// мы не платим.
+    /// `willEnterForeground` приходит, пока `applicationState` ещё
+    /// `.background` — в `.inactive` он переходит ПОСЛЕ этого уведомления.
+    /// Рисовать отсюда значит упереться в собственную защиту из `draw(_:)` и
+    /// молча потерять тот самый догоняющий кадр: человек увидел бы голую
+    /// карту Apple (растровая вуаль на «Атласе» тумана не рисует) до первого
+    /// движения пальцем. Поймано ревью 22 сентября, доккомментарий здесь до
+    /// того утверждал обратное.
     @objc private func handleWillEnterForeground() {
         meshDirty = true
         forgetFrame()
+    }
+
+    /// Стали активными — вот теперь кадр догоняем. Состояние уже `.active`,
+    /// право на GPU есть.
+    ///
+    /// Лишнего кадра на каждый Центр управления это не стоит: `redrawIfNeeded`
+    /// молчит, пока камера та же и ничего не помечено грязным, а после
+    /// настоящего ухода в фон помечено (`forgetFrame` выше).
+    @objc private func handleDidBecomeActive() {
         redrawIfNeeded()
     }
 

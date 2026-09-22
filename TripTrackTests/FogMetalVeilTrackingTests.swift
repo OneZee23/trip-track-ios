@@ -82,7 +82,10 @@ final class FogMetalVeilTrackingTests: XCTestCase {
     /// нарисованным. Считался бы — и вернувшийся человек смотрел бы на голую
     /// карту Apple до первого движения пальцем.
     func testNoFrameIsDrawnInTheBackgroundAndTheMissedOneCatchesUpOnReturn() throws {
-        guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
+        let centre = NotificationCenter()
+        guard let veil = FogMetalVeil.make(notifications: centre) else {
+            throw XCTSkip("Metal недоступен")
+        }
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
         veil.frame = map.bounds
         var backgrounded = false
@@ -96,11 +99,18 @@ final class FogMetalVeilTrackingTests: XCTestCase {
         veil.setAttributionCarve(CGRect(x: 20, y: 540, width: 120, height: 26))
         XCTAssertEqual(veil.frames, before, "в фоне за кадр не берёмся вовсе")
 
+        // Последовательность НАСТОЯЩАЯ: на `willEnterForeground` состояние ещё
+        // фоновое (в `.inactive` оно уходит ПОСЛЕ уведомления), и кадр оттуда
+        // упёрся бы в собственную защиту. Пока догоняющий кадр рисовался на
+        // нём, «Атлас» после кармана показывал голую карту Apple.
+        centre.post(name: UIApplication.willEnterForegroundNotification, object: nil)
+        XCTAssertEqual(veil.frames, before,
+                       "на willEnterForeground состояние ещё фоновое — за кадр не берёмся")
+
         backgrounded = false
-        NotificationCenter.default.post(
-            name: UIApplication.willEnterForegroundNotification, object: nil)
+        centre.post(name: UIApplication.didBecomeActiveNotification, object: nil)
         XCTAssertEqual(veil.frames, before + 1,
-                       "вернулись — пропущенный кадр догоняется сам, без движения камеры")
+                       "стали активными — пропущенный кадр догнан без движения камеры")
     }
 
     /// Кадр, который НЕ СОСТОЯЛСЯ, не считается нарисованным.
@@ -135,15 +145,17 @@ final class FogMetalVeilTrackingTests: XCTestCase {
     /// первый же тик пришёлся бы ровно на возвращение — то есть кадр раньше,
     /// чем приложение снова получило право на GPU.
     func testGoingToTheBackgroundStopsTheDisplayLink() throws {
-        guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
+        let centre = NotificationCenter()
+        guard let veil = FogMetalVeil.make(notifications: centre) else {
+            throw XCTSkip("Metal недоступен")
+        }
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
         veil.frame = map.bounds
         veil.attach(map: map)
         veil.startTracking(tail: 5)
         XCTAssertTrue(veil.isTracking)
 
-        NotificationCenter.default.post(
-            name: UIApplication.didEnterBackgroundNotification, object: nil)
+        centre.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
         XCTAssertFalse(veil.isTracking, "ушли в фон — ссылка снята")
     }
 
@@ -157,14 +169,16 @@ final class FogMetalVeilTrackingTests: XCTestCase {
     /// кадре, следующего не случилось бы до движения камеры, и «Атлас» остался
     /// бы без тумана ровно после того, как системе не хватило памяти.
     func testAMemoryWarningGivesUpTheCoverageTextureAndTheNextFrameRebuildsIt() throws {
-        guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
+        let centre = NotificationCenter()
+        guard let veil = FogMetalVeil.make(notifications: centre) else {
+            throw XCTSkip("Metal недоступен")
+        }
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
         veil.frame = map.bounds
         veil.attach(map: map)
         try XCTSkipUnless(veil.hasCoverageTexture, "кадр не состоялся — отдавать нечего")
 
-        NotificationCenter.default.post(
-            name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        centre.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
         XCTAssertFalse(veil.hasCoverageTexture, "под нехватку памяти текстура отдаётся")
 
         veil.invalidate()
