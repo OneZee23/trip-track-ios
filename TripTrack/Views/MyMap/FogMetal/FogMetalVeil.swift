@@ -1,7 +1,6 @@
 import MapKit
 import MetalKit
 import UIKit
-import simd
 import os
 
 /// Метал-туман «Атласа».
@@ -16,10 +15,14 @@ import os
 /// текстуру со смешиванием `max` (стык отрезков не даёт ни бусины, ни кольца)
 /// и композит ровной мглы поверх карты с премультиплицированной альфой.
 ///
+/// Сам кадр кодирует `FogFrameEncoder` — тот же, которым рисует без экрана
+/// `FogOffscreen`: картинка постера обязана совпасть с картинкой экрана, а
+/// два кода, считающих одно и то же, однажды разойдутся молча.
+///
 /// Чего здесь нарочно НЕТ: облаков, рампы глубины, подписей регионов,
-/// гравировки подсказок, выреза под атрибуцией, живой прорези у машины и
-/// постера. Картинка, которую эта вуаль показывает, — эталон 0.8.0 и менять
-/// её не имеет права ни одна задача: числа перечислены в спеке
+/// гравировки подсказок, выреза под атрибуцией и живой прорези у машины.
+/// Картинка, которую эта вуаль показывает, — эталон 0.8.0 и менять её не
+/// имеет права ни одна задача: числа перечислены в спеке
 /// `docs/superpowers/specs/2026-09-22-080-fog-metal-design.md` §3.
 @MainActor
 final class FogMetalVeil: MTKView {
@@ -27,7 +30,10 @@ final class FogMetalVeil: MTKView {
 
     /// Ширина пера — доля полуширины коридора. Та же мягкость, что у кисти
     /// растра, только считается на GPU в каждом кадре.
-    static let featherRatio: Double = 0.4
+    ///
+    /// `nonisolated`, потому что то же число спрашивает офскрин
+    /// (`FogOffscreen.params`), а он рисует без экрана и без главного актёра.
+    nonisolated static let featherRatio: Double = 0.4
 
     /// Сколько ещё тикаем после последнего движения карты.
     ///
@@ -40,8 +46,9 @@ final class FogMetalVeil: MTKView {
     nonisolated static let trackingTail: TimeInterval = 0.4
 
     private let queue: MTLCommandQueue
-    private let coveragePipeline: MTLRenderPipelineState
-    private let compositePipeline: MTLRenderPipelineState
+    /// Кодировщик кадра — ОДИН и тот же, что у офскрина: картинка экрана и
+    /// картинка постера обязаны совпасть.
+    private let encoder: FogFrameEncoder
 
     private var mesh = FogMesh.empty
     private var meshDirty = true
@@ -87,20 +94,6 @@ final class FogMetalVeil: MTKView {
     private(set) var frames = 0
     private(set) var encodeSeconds: Double = 0
 
-    /// Совпадать с `FogUniforms` в шейдере байт в байт.
-    private struct Uniforms {
-        var m: SIMD4<Float>
-        var translation: SIMD2<Float>
-        var viewport: SIMD2<Float>
-        var halfWidth: Float
-        var feather: Float
-    }
-
-    private struct Composite {
-        var colour: SIMD4<Float>
-        var alpha: Float
-    }
-
     /// `nil` — на этом устройстве Metal недоступен или шейдеры не собрались:
     /// зовущий остаётся на растровой вуали, как до 0.8.0.
     ///
@@ -109,38 +102,13 @@ final class FogMetalVeil: MTKView {
     static func make() -> FogMetalVeil? {
         guard let device = MTLCreateSystemDefaultDevice(),
               let queue = device.makeCommandQueue(),
-              let library = device.makeDefaultLibrary() else { return nil }
-
-        let coverage = MTLRenderPipelineDescriptor()
-        coverage.vertexFunction = library.makeFunction(name: "fog_coverage_vertex")
-        coverage.fragmentFunction = library.makeFunction(name: "fog_coverage_fragment")
-        coverage.colorAttachments[0].pixelFormat = .r8Unorm
-        // Перекрытие берёт БОЛЬШЕЕ, а не складывает: сложение давало бы на
-        // каждом стыке двух отрезков светлую бусину, а на повороте — кольцо.
-        coverage.colorAttachments[0].isBlendingEnabled = true
-        coverage.colorAttachments[0].rgbBlendOperation = .max
-        coverage.colorAttachments[0].alphaBlendOperation = .max
-        coverage.colorAttachments[0].sourceRGBBlendFactor = .one
-        coverage.colorAttachments[0].destinationRGBBlendFactor = .one
-        coverage.colorAttachments[0].sourceAlphaBlendFactor = .one
-        coverage.colorAttachments[0].destinationAlphaBlendFactor = .one
-
-        let composite = MTLRenderPipelineDescriptor()
-        composite.vertexFunction = library.makeFunction(name: "fog_composite_vertex")
-        composite.fragmentFunction = library.makeFunction(name: "fog_composite_fragment")
-        composite.colorAttachments[0].pixelFormat = .bgra8Unorm
-
-        guard let first = try? device.makeRenderPipelineState(descriptor: coverage),
-              let second = try? device.makeRenderPipelineState(descriptor: composite)
-        else { return nil }
-        return FogMetalVeil(device: device, queue: queue, coverage: first, composite: second)
+              let encoder = FogFrameEncoder(device: device) else { return nil }
+        return FogMetalVeil(device: device, queue: queue, encoder: encoder)
     }
 
-    private init(device: MTLDevice, queue: MTLCommandQueue,
-                 coverage: MTLRenderPipelineState, composite: MTLRenderPipelineState) {
+    private init(device: MTLDevice, queue: MTLCommandQueue, encoder: FogFrameEncoder) {
         self.queue = queue
-        self.coveragePipeline = coverage
-        self.compositePipeline = composite
+        self.encoder = encoder
         super.init(frame: .zero, device: device)
 
         colorPixelFormat = .bgra8Unorm
@@ -324,18 +292,24 @@ final class FogMetalVeil: MTKView {
         let centreLat = MKMapPoint(x: visible.midX, y: visible.midY).coordinate.latitude
         let metresPerPoint = MKMetersPerMapPointAtLatitude(centreLat) / pointsPerMapPoint
         let halfWidth = FogVeilRenderer.haloHalfWidth(metresPerPoint: metresPerPoint) / metresPerPoint
-        let feather = halfWidth * Self.featherRatio
-        let lod = FogVeilRenderer.lod(for: MKZoomScale(pointsPerMapPoint))
-        let chunks = mesh.chunks[lod] ?? []
+        let params = FogFrameParams(
+            frame: frame,
+            visible: visible,
+            viewportPoints: bounds.size,
+            drawableSize: drawableSize,
+            halfWidthPoints: halfWidth,
+            featherPoints: halfWidth * Self.featherRatio,
+            lod: FogVeilRenderer.lod(for: MKZoomScale(pointsPerMapPoint)),
+            palette: FogVeilPainter.palette)
 
-        // Отсечение с запасом на коридор: кусок, чьи отрезки лежат за краем
-        // экрана, всё равно красит его своим ореолом.
-        let pad = (halfWidth + feather) / pointsPerMapPoint
-        let needed = visible.insetBy(dx: -pad, dy: -pad)
-
-        encodeCoverage(chunks: chunks, needed: needed, frame: frame, rect: visible,
-                       halfWidth: halfWidth, feather: feather, into: buffer, device: device)
-        encodeComposite(pass: pass, into: buffer)
+        // Текстура покрытия пережила прошлый кадр — её не стало только если
+        // сменился размер или память отобрали. Не создалась вовсе — кадр
+        // выходит пустым, но `present` всё равно нужен: иначе drawable
+        // остался бы у нас на руках.
+        if let coverage = coverageTexture(device: device) {
+            encoder.encode(mesh: mesh, params: params, coverage: coverage,
+                           target: pass, into: buffer)
+        }
 
         buffer.present(drawable)
         buffer.commit()
@@ -350,74 +324,13 @@ final class FogMetalVeil: MTKView {
         }
     }
 
-    private func encodeCoverage(
-        chunks: [FogChunk], needed: MKMapRect, frame: VeilFrame, rect: MKMapRect,
-        halfWidth: Double, feather: Double, into buffer: MTLCommandBuffer, device: MTLDevice
-    ) {
-        guard let texture = coverageTexture(device: device) else { return }
-        let pass = MTLRenderPassDescriptor()
-        pass.colorAttachments[0].texture = texture
-        pass.colorAttachments[0].loadAction = .clear
-        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-        pass.colorAttachments[0].storeAction = .store
-        guard let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return }
-        encoder.setRenderPipelineState(coveragePipeline)
-
-        let viewport = SIMD2<Float>(Float(bounds.width), Float(bounds.height))
-        let m = SIMD4<Float>(Float(frame.a), Float(frame.b), Float(frame.c), Float(frame.d))
-        for chunk in chunks where chunk.rect.intersects(needed) {
-            // Сдвиг куска считается в DOUBLE и только потом опускается до
-            // float: в этом и весь смысл отдельного угла у каждого куска.
-            let dx = chunk.origin.x - rect.minX
-            let dy = chunk.origin.y - rect.minY
-            var uniforms = Uniforms(
-                m: m,
-                translation: SIMD2<Float>(
-                    Float(Double(frame.origin.x) + Double(frame.a) * dx + Double(frame.c) * dy),
-                    Float(Double(frame.origin.y) + Double(frame.b) * dx + Double(frame.d) * dy)),
-                viewport: viewport,
-                halfWidth: Float(halfWidth),
-                feather: Float(feather))
-            encoder.setVertexBuffer(chunk.buffer, offset: 0, index: 0)
-            encoder.setVertexBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
-            encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
-            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4,
-                                   instanceCount: chunk.count)
-        }
-        encoder.endEncoding()
-    }
-
-    private func encodeComposite(pass: MTLRenderPassDescriptor, into buffer: MTLCommandBuffer) {
-        guard let texture = coverage,
-              let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return }
-        encoder.setRenderPipelineState(compositePipeline)
-        encoder.setFragmentTexture(texture, index: 0)
-        var composite = Self.composite(palette: FogVeilPainter.palette)
-        encoder.setFragmentBytes(&composite, length: MemoryLayout<Composite>.stride, index: 0)
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-        encoder.endEncoding()
-    }
-
-    /// Цвет и сила мглы — из палитры кисти, чтобы метал шёл за темой так же,
-    /// как растровая вуаль.
-    private static func composite(palette: FogVeilPainter.Palette) -> Composite {
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        _ = palette.top.getRed(&r, green: &g, blue: &b, alpha: &a)
-        return Composite(colour: SIMD4<Float>(Float(r), Float(g), Float(b), 1),
-                         alpha: Float(palette.alpha))
-    }
-
     private func coverageTexture(device: MTLDevice) -> MTLTexture? {
         let width = max(1, Int(drawableSize.width))
         let height = max(1, Int(drawableSize.height))
         if let texture = coverage, texture.width == width, texture.height == height {
             return texture
         }
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .r8Unorm, width: width, height: height, mipmapped: false)
-        descriptor.usage = [.renderTarget, .shaderRead]
-        descriptor.storageMode = .private
-        coverage = device.makeTexture(descriptor: descriptor)
+        coverage = FogFrameEncoder.makeCoverageTexture(device: device, width: width, height: height)
         if coverage == nil { Self.log.notice("метал-туман: текстура покрытия не создалась") }
         return coverage
     }
