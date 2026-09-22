@@ -39,6 +39,8 @@ final class MapHostController: UIViewController {
     let veilSeat = VeilSeat(margin: FogVeilView.atlasMargin, seat: .belowAnnotations)
     var screenVeil: FogVeilView { veilSeat.veil }
 
+    /// Пересадка Metal-слоя идёт прямо сейчас — см. `verifyFogMetalSeating`.
+    private var reseatingFogMetal = false
     /// Сколько раз уже искали атрибуцию, чтобы вырезать под ней мглу.
     private var carveTries = 0
     private var carvedOnce = false
@@ -127,6 +129,50 @@ final class MapHostController: UIViewController {
         fogMetal?.removeFromSuperview()
     }
 
+    /// Сидит ли Metal-слой на своём месте: в том же родителе, что растровая
+    /// вуаль, и НИЖЕ её.
+    ///
+    /// Чистая — потому что живое дерево MapKit в тесте не построить, а вопрос
+    /// здесь арифметический: два `firstIndex` и сравнение родителей.
+    ///
+    /// Вуаль без родителя — это «не сейчас», а не «пересадить». Место в
+    /// дереве ищет она (`FogVeilView.verifySeating`), и пока она сама не
+    /// вернулась, Metal-слою садиться не подо что; спросят снова следующим
+    /// проходом разметки.
+    static func fogMetalNeedsReseating(metal: UIView?, veil: UIView) -> Bool {
+        guard let metal, let parent = veil.superview else { return false }
+        guard metal.superview === parent,
+              let mine = parent.subviews.firstIndex(of: metal),
+              let theirs = parent.subviews.firstIndex(of: veil),
+              mine < theirs else { return true }
+        return false
+    }
+
+    /// Место Metal-слоя проверяется на КАЖДОМ проходе разметки, и это не
+    /// перестраховка.
+    ///
+    /// `FogVeilView.verifySeating` возвращает в дерево СЕБЯ и, вернувшись
+    /// удачно, молчит: `onLostFromHierarchy` тогда не зовётся вовсе, а
+    /// `seatFogMetal` висит на `onAttached`. То есть пересборка сабвью MapKit
+    /// (восстановление после нехватки памяти, будущая iOS) вернула бы
+    /// растровую вуаль на место, а Metal-слой остался бы снаружи — и «Атлас»
+    /// показывал бы ГОЛУЮ карту Apple: растра у вуали нет (`vectorOnly`),
+    /// плиточные оверлеи сняты, и заметить это можно было бы, только уйдя с
+    /// экрана и вернувшись.
+    private func verifyFogMetalSeating() {
+        guard veilSeat.isAttached, !reseatingFogMetal,
+              Self.fogMetalNeedsReseating(metal: fogMetal, veil: screenVeil) else { return }
+        // Пересадка трогает дерево, а дерево зовёт разметку — то есть эту же
+        // проверку изнутри неё самой. Тот же приём, что у `FogVeilView`.
+        reseatingFogMetal = true
+        defer { reseatingFogMetal = false }
+        // `insertSubview` и сам переставил бы слой, но снятие делает «сядем
+        // заново» одинаковым для обоих случаев — и вылетевшего из дерева, и
+        // просто всплывшего поверх вуали.
+        fogMetal?.removeFromSuperview()
+        seatFogMetal()
+    }
+
     /// Открытый мир — в ОБЕ вуали сразу, и это единственная дверь.
     ///
     /// Раньше слой доезжал до Metal замыканием, которое дёргала сама
@@ -177,6 +223,7 @@ final class MapHostController: UIViewController {
         super.viewDidLayoutSubviews()
         applyPalette()
         applyAttributionLeading()
+        verifyFogMetalSeating()
         updateAttributionCarve()
     }
 

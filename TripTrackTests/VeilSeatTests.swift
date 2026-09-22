@@ -96,6 +96,81 @@ final class VeilSeatTests: XCTestCase {
                           "после возврата вуаль снова под оверлеями")
     }
 
+    // MARK: Metal-слой в дереве
+
+    /// Своё место Metal-слоя — тот же родитель, что у вуали, и НИЖЕ её.
+    ///
+    /// Проверяет это чистая функция, а не живое дерево: вопрос у неё
+    /// арифметический, а цена ошибки несимметрична. Всплыл поверх вуали —
+    /// жилка сети и выбранный маршрут ушли под мглу; вылетел из дерева —
+    /// «Атлас» остался БЕЗ тумана вовсе, потому что растра у вуали нет
+    /// (`vectorOnly`), а плиточные оверлеи сняты.
+    func testFogMetalSeatIsJudgedByParentAndOrder() {
+        let parent = UIView()
+        let metal = UIView()
+        let veil = UIView()
+        parent.addSubview(metal)
+        parent.addSubview(veil)
+        XCTAssertFalse(MapHostController.fogMetalNeedsReseating(metal: metal, veil: veil),
+                       "в том же родителе и ниже вуали — это и есть своё место")
+
+        parent.bringSubviewToFront(metal)
+        XCTAssertTrue(MapHostController.fogMetalNeedsReseating(metal: metal, veil: veil),
+                      "поверх вуали мгла накрыла бы жилку и выбранный маршрут")
+
+        metal.removeFromSuperview()
+        XCTAssertTrue(MapHostController.fogMetalNeedsReseating(metal: metal, veil: veil),
+                      "вылетел из дерева — тумана на «Атласе» не осталось вовсе")
+
+        XCTAssertFalse(MapHostController.fogMetalNeedsReseating(metal: metal, veil: UIView()),
+                       "вуаль сама вне дерева — садиться не подо что, спросят снова")
+        XCTAssertFalse(MapHostController.fogMetalNeedsReseating(metal: nil, veil: veil),
+                       "Metal недоступен — пересаживать нечего")
+    }
+
+    /// Живое дерево: MapKit пересобрал сабвью и Metal-слой вылетел — вернуть
+    /// его обязан ближайший проход разметки.
+    ///
+    /// Разметка, а не `onLostFromHierarchy`: `FogVeilView.verifySeating`
+    /// возвращает СЕБЯ и, вернувшись удачно, молчит, — то есть о пересборке
+    /// дерева Metal-слою не сказал бы никто, и «Атлас» показывал бы голую
+    /// карту Apple до ухода с экрана и возврата.
+    func testALayoutPassPutsTheMetalVeilBackUnderTheRasterOne() throws {
+        let host = MapHostController()
+        let metal = try XCTUnwrap(host.metalVeil, "Metal недоступен")
+        host.loadViewIfNeeded()
+        host.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        host.view.layoutIfNeeded()
+        host.viewDidAppear(false)
+        try XCTSkipUnless(host.screenVeilAttached,
+                          "дерево MKMapView на этом SDK незнакомое — сажать некуда")
+        let parent = try XCTUnwrap(host.screenVeil.superview)
+
+        // Первая посадка тоже за разметкой: `seatFogMetal` висит на
+        // `onVeilAttached`, а его ставит представление SwiftUI — здесь его
+        // нет, и слой обязан сесть всё равно.
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        try assertMetalSitsUnderTheVeil(metal, veil: host.screenVeil, parent: parent)
+
+        metal.removeFromSuperview()
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+        try assertMetalSitsUnderTheVeil(metal, veil: host.screenVeil, parent: parent)
+    }
+
+    /// Порядок без принудительных развёрток: упавший `!` уронил бы ВЕСЬ
+    /// прогон, а не один тест (CLAUDE.md «Ловушки»).
+    private func assertMetalSitsUnderTheVeil(
+        _ metal: UIView, veil: UIView, parent: UIView
+    ) throws {
+        XCTAssertTrue(metal.superview === parent, "Metal-слой садится в родителя вуали")
+        let mine = try XCTUnwrap(parent.subviews.firstIndex(of: metal),
+                                 "Metal-слоя нет в дереве — «Атлас» без тумана вовсе")
+        let theirs = try XCTUnwrap(parent.subviews.firstIndex(of: veil))
+        XCTAssertLessThan(mine, theirs, "и ложится ПОД вуаль: сверху жилка и маршрут")
+    }
+
     // MARK: Кто какую вуаль заказывает
 
     /// Три карты — три заказа, и все три отличаются по существу.

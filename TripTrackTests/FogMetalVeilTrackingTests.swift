@@ -69,6 +69,108 @@ final class FogMetalVeilTrackingTests: XCTestCase {
         XCTAssertEqual(veil.frames, before + 2, "снятое окно — тоже перемена")
     }
 
+    // MARK: Фон
+
+    /// В ФОНЕ GPU НЕ ТРОГАЕМ ВОВСЕ, и это про жизнь процесса, а не про
+    /// батарею: работа, посланная на GPU из фонового приложения, обрывается
+    /// системой (IOAF «Insufficient Permission (to submit GPU work from
+    /// background)»). TripTrack живёт в фоне часами на геолокации, и дорога
+    /// сюда короткая: поездка финишировала в кармане → `.revealedLayerChanged`
+    /// → перезагрузка «Атласа» → новый слой → кадр.
+    ///
+    /// Вторая половина не менее обязательна: пропущенный кадр НЕ считается
+    /// нарисованным. Считался бы — и вернувшийся человек смотрел бы на голую
+    /// карту Apple до первого движения пальцем.
+    func testNoFrameIsDrawnInTheBackgroundAndTheMissedOneCatchesUpOnReturn() throws {
+        guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
+        veil.frame = map.bounds
+        var backgrounded = false
+        veil.isBackgrounded = { backgrounded }
+        veil.attach(map: map)
+        // Кадр покоя нарисован: дальше считаем только то, что заказал фон.
+        veil.invalidate()
+
+        backgrounded = true
+        let before = veil.frames
+        veil.setAttributionCarve(CGRect(x: 20, y: 540, width: 120, height: 26))
+        XCTAssertEqual(veil.frames, before, "в фоне за кадр не берёмся вовсе")
+
+        backgrounded = false
+        NotificationCenter.default.post(
+            name: UIApplication.willEnterForegroundNotification, object: nil)
+        XCTAssertEqual(veil.frames, before + 1,
+                       "вернулись — пропущенный кадр догоняется сам, без движения камеры")
+    }
+
+    /// Кадр, который НЕ СОСТОЯЛСЯ, не считается нарисованным.
+    ///
+    /// `invalidate()` взводит латч «кадр покоя нарисован» ДО отрисовки, и
+    /// вышедший ни с чем `draw` обязан его снять. Иначе следующий заказ — та
+    /// же смена темы, то же съехавшее окно атрибуции — молчал бы, а на экране
+    /// осталась бы картинка, которой там уже нет.
+    ///
+    /// Выходов «кадр не состоялся» два: фон и невыданный drawable. В тесте
+    /// достижим первый — симулятор выдаёт drawable даже виду без окна, — но
+    /// снимает латч у обоих ОДНА функция (`forgetFrame`), и проверка через
+    /// фон сторожит оба.
+    func testAFrameThatNeverHappenedIsNotRememberedAsDrawn() throws {
+        guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
+        veil.frame = map.bounds
+        var backgrounded = false
+        veil.isBackgrounded = { backgrounded }
+        veil.attach(map: map)
+
+        backgrounded = true
+        veil.invalidate()
+        backgrounded = false
+        let before = veil.frames
+        veil.invalidate()
+        XCTAssertEqual(veil.frames, before + 1,
+                       "несостоявшийся кадр обязан оставить заказ невыполненным")
+    }
+
+    /// `CADisplayLink` в фоне не тикает и сам, но ссылку мы снимаем: иначе
+    /// первый же тик пришёлся бы ровно на возвращение — то есть кадр раньше,
+    /// чем приложение снова получило право на GPU.
+    func testGoingToTheBackgroundStopsTheDisplayLink() throws {
+        guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
+        veil.frame = map.bounds
+        veil.attach(map: map)
+        veil.startTracking(tail: 5)
+        XCTAssertTrue(veil.isTracking)
+
+        NotificationCenter.default.post(
+            name: UIApplication.didEnterBackgroundNotification, object: nil)
+        XCTAssertFalse(veil.isTracking, "ушли в фон — ссылка снята")
+    }
+
+    // MARK: Память
+
+    /// Нехватка памяти отдаёт текстуру покрытия — единственное, что вуаль
+    /// держит сверх буферов открытого мира (спека §8), — а следующий кадр
+    /// заводит её заново.
+    ///
+    /// Вторая половина здесь тоже про латч: не сними мы память о нарисованном
+    /// кадре, следующего не случилось бы до движения камеры, и «Атлас» остался
+    /// бы без тумана ровно после того, как системе не хватило памяти.
+    func testAMemoryWarningGivesUpTheCoverageTextureAndTheNextFrameRebuildsIt() throws {
+        guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))
+        veil.frame = map.bounds
+        veil.attach(map: map)
+        try XCTSkipUnless(veil.hasCoverageTexture, "кадр не состоялся — отдавать нечего")
+
+        NotificationCenter.default.post(
+            name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        XCTAssertFalse(veil.hasCoverageTexture, "под нехватку памяти текстура отдаётся")
+
+        veil.invalidate()
+        XCTAssertTrue(veil.hasCoverageTexture, "и заводится заново первым же кадром")
+    }
+
     func testInvalidateDrawsExactlyOnce() throws {
         guard let veil = FogMetalVeil.make() else { throw XCTSkip("Metal недоступен") }
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 300, height: 600))

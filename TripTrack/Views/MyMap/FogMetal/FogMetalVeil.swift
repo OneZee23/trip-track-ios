@@ -49,6 +49,16 @@ final class FogMetalVeil: MTKView {
     /// покинет, а хвост останется.
     nonisolated static let trackingTail: TimeInterval = 0.4
 
+    /// В фоне ли приложение прямо сейчас — и, значит, запрещено ли трогать
+    /// GPU (см. `draw(_:)`).
+    ///
+    /// Швом, а не прямым вызовом: подменить `UIApplication.applicationState`
+    /// в тесте нечем, а правило слишком дорогое, чтобы остаться без сторожа —
+    /// его нарушение это не мигнувший кадр, а убитый системой процесс.
+    var isBackgrounded: @MainActor () -> Bool = {
+        UIApplication.shared.applicationState == .background
+    }
+
     private let queue: MTLCommandQueue
     /// Кодировщик кадра — ОДИН и тот же, что у офскрина: картинка экрана и
     /// картинка постера обязаны совпасть.
@@ -103,9 +113,13 @@ final class FogMetalVeil: MTKView {
     /// кодирование — для замера «сколько это стоит процессору».
     ///
     /// `frames` считается ПО ВЫЗОВУ `draw(_:)`, а не по доехавшему до экрана
-    /// кадру: вид без окна `currentDrawable` не даёт вовсе, и счёт «только
+    /// кадру: вид без окна drawable может и не выдать, и счёт «только
     /// нарисованного» молчал бы в тестах, ради которых число и открыто
     /// наружу. Вопрос у него один — «тикаем мы в покое или нет».
+    ///
+    /// Кадр, пропущенный фоном, сюда не попадает: за него мы не брались
+    /// вовсе, и именно этим тест отличает «в фоне GPU не трогаем» от «в фоне
+    /// рисуем, но в пустоту».
     private(set) var frames = 0
     private(set) var encodeSeconds: Double = 0
 
@@ -138,9 +152,74 @@ final class FogMetalVeil: MTKView {
         enableSetNeedsDisplay = false
         // Жесты обязаны доходить до карты под нами.
         isUserInteractionEnabled = false
+
+        let centre = NotificationCenter.default
+        // Уход в фон и возвращение из него — не «полировка жизненного цикла»,
+        // а единственное место, где решается, жив ли процесс: работа на GPU
+        // из фонового приложения обрывается системой (см. `draw(_:)`).
+        centre.addObserver(self, selector: #selector(handleDidEnterBackground),
+                           name: UIApplication.didEnterBackgroundNotification, object: nil)
+        centre.addObserver(self, selector: #selector(handleWillEnterForeground),
+                           name: UIApplication.willEnterForegroundNotification, object: nil)
+        // Текстура покрытия — единственное, что мы держим сверх буферов
+        // открытого мира, и единственное, что имеет смысл отдать по нехватке
+        // памяти: следующий кадр заводит её заново (спека §8).
+        centre.addObserver(self, selector: #selector(handleMemoryWarning),
+                           name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) не используется") }
+
+    // MARK: Жизненный цикл приложения
+
+    /// Ушли в фон: `CADisplayLink` гасим сами. Система его в фоне и так не
+    /// тикает, но оставленная ссылка — это тик ровно на возвращении, то есть
+    /// кадр РАНЬШЕ, чем приложение снова получило право на GPU.
+    @objc private func handleDidEnterBackground() {
+        stopTracking()
+        forgetFrame()
+    }
+
+    /// Вернулись: кадр догоняем сами. В фоне мы его пропустили, а камера
+    /// могла не тронуться ни разу — «Атлас», открытый и убранный в карман,
+    /// это обычное дело, и ждать от него движения пальца значит показать
+    /// человеку голую карту Apple.
+    ///
+    /// Зовётся по `willEnterForeground`, а не по `didBecomeActive`: к этому
+    /// моменту состояние приложения уже `.inactive`, то есть проверка фона в
+    /// `draw(_:)` кадр пропустит, а лишнего кадра на каждый Центр управления
+    /// мы не платим.
+    @objc private func handleWillEnterForeground() {
+        meshDirty = true
+        forgetFrame()
+        redrawIfNeeded()
+    }
+
+    /// Памяти не хватает: текстуру покрытия отдаём. Заказывать под нехватку
+    /// памяти новый кадр не надо — надо только не считать нарисованным тот,
+    /// что на экране: без этого следующий кадр не пришёл бы до первого
+    /// движения камеры, и «Атлас» остался бы без тумана.
+    @objc private func handleMemoryWarning() {
+        coverage = nil
+        forgetFrame()
+    }
+
+    /// Держим ли мы сейчас текстуру покрытия — для теста: отдача её по
+    /// нехватке памяти иначе не наблюдаема ничем.
+    var hasCoverageTexture: Bool { coverage != nil }
+
+    /// Кадра на экране больше нет — ни нарисованного, ни «того же самого».
+    ///
+    /// Зовётся отовсюду, где кадр НЕ СОСТОЯЛСЯ: приложение в фоне, drawable не
+    /// выдан, текстуру покрытия отобрали. Обе половины памяти снимаются
+    /// вместе, и это не симметрия ради симметрии: `lastRect` — иначе
+    /// `redrawIfNeeded` посчитает эту камеру уже нарисованной, `restFrameDrawn`
+    /// — иначе смена темы или съехавшее окно атрибуции на СТОЯЩЕЙ карте
+    /// пропадут насовсем, до первого движения пальца.
+    private func forgetFrame() {
+        lastRect = nil
+        restFrameDrawn = false
+    }
 
     // MARK: Данные
 
@@ -291,18 +370,30 @@ final class FogMetalVeil: MTKView {
     }
 
     /// Кадр целиком. Считается он ЗДЕСЬ и до первой проверки: «взялись
-    /// рисовать» и есть то, что меряет `frames`, — иначе вид без окна, где
-    /// `currentDrawable` пуст, выглядел бы для тестов покоя вечно спящим.
+    /// рисовать» и есть то, что меряет `frames`, — иначе вид, которому не
+    /// выдали drawable, выглядел бы для тестов покоя вечно спящим.
     override func draw(_ rect: CGRect) {
+        // В ФОНЕ GPU НЕ ТРОГАЕМ ВОВСЕ, и это про жизнь процесса, а не про
+        // экономию: `present`/`commit` из фонового приложения — это IOAF
+        // «Insufficient Permission (to submit GPU work from background)» и
+        // убитое системой приложение. TripTrack живёт в фоне часами на
+        // геолокации, и дорога сюда короткая: поездка финишировала в кармане
+        // → `.revealedLayerChanged` → перезагрузка вью-модели →
+        // `updateUIViewController` → `setLayer` → кадр. Взяться за него мы
+        // даже не взялись, поэтому `frames` не растёт, — а сам кадр
+        // ЗАБЫВАЕТСЯ: вернувшись, экран обязан нарисовать его заново.
+        guard !isBackgrounded() else { forgetFrame(); return }
         frames += 1
         drawnPaletteIsDark = FogVeilPainter.palette.isDark
         drawnCarve = carve
-        // Слоя ещё нет (вид только что встал в дерево) — кадр пропускаем, но
-        // ПАМЯТЬ о нём стираем: иначе `redrawIfNeeded` посчитал бы кадр
-        // нарисованным и молчал бы до первого движения камеры.
+        // Рисовать нечем (вид только что встал в дерево, drawable не выдан) —
+        // кадр пропускаем, но ПАМЯТЬ о нём стираем целиком: иначе
+        // `redrawIfNeeded` посчитал бы камеру нарисованной, а `invalidate()`
+        // — заказ выполненным, и смена темы на стоящей карте пропала бы
+        // насовсем.
         guard let map, let device, let drawable = currentDrawable,
               let pass = currentRenderPassDescriptor,
-              let buffer = queue.makeCommandBuffer() else { lastRect = nil; return }
+              let buffer = queue.makeCommandBuffer() else { forgetFrame(); return }
         let started = CACurrentMediaTime()
 
         // Прямоугольник и углы берутся ТЕ ЖЕ, что посчитал `redrawIfNeeded`:

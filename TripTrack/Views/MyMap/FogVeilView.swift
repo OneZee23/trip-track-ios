@@ -441,7 +441,12 @@ final class FogVeilView: UIView {
             if layer.mask !== revealMask.layer { layer.mask = revealMask.layer }
             return
         }
-        guard let carveRect, bounds.width > 1 else {
+        // На «Атласе» (`vectorOnly`) окно под подписью Apple вырезает себе сам
+        // Metal-слой, а на этой вуали от тумана не осталось ничего — только
+        // жилка сети и выбранный маршрут. Маска приглушила бы ИХ: линия сети
+        // в углу с логотипом выцветала бы наполовину без единой причины —
+        // мгла там уже приглушена, и приглушать её второй раз нечем.
+        guard !vectorOnly, let carveRect, bounds.width > 1 else {
             if layer.mask != nil { layer.mask = nil }
             return
         }
