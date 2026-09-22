@@ -78,8 +78,8 @@ rendering, tracks stay sharp and change thickness seamlessly at any zoom») —
   - `invalidate()` — один кадр по требованию (смена темы, вырез, слой,
     раскладка).
   - `setAttributionCarve(_ rect: CGRect?)` — окно под подписью Apple (§5).
-  - `static func renderImage(layer:rect:sizePoints:scale:palette:) ->
-    CGImage?` — офскрин тем же кодом (§6).
+  - офскрин тем же кодом — `FogOffscreen.render(layer:rect:sizePoints:
+    scale:palette:carve:)` через общий `FogFrameEncoder` (§6).
   - Диагностика: `frames`, `encodeSeconds`, `isTracking`,
     `lastDrawnRect` — для тестов и `os_log` раз в 120 кадров.
 - **`FogMesh`** — как в спайке: куски по `32768` map points на каждый LOD,
@@ -139,7 +139,7 @@ sdfRoundedRect(p, carve))` (внутри 1, за пером 0), множител
 ## 6. Постер «Поделиться»
 
 `AtlasSharePoster` рисует туман ТЕМ ЖЕ кодом, что экран, — это правило
-0.7.0, и Metal его не отменяет. `FogMetalVeil.renderImage(layer:rect:
+0.7.0, и Metal его не отменяет. `FogOffscreen.render(layer:rect:
 sizePoints:scale:palette:)` собирает `FogMesh`, рисует покрытие и композит
 в офскрин-текстуры (`bgra8Unorm`, `.shared`/blit в CPU-буфер) и отдаёт
 `CGImage` с премультиплицированной альфой; матрица кадра — прямоугольник
@@ -152,7 +152,7 @@ Metal недоступен → прежний `FogVeilBitmap.render` (карти
 
 ## 7. Проверки
 
-Все пиксельные тесты — на офскрин-рендере (`renderImage` или внутренний
+Все пиксельные тесты — на офскрин-рендере (`FogOffscreen.render` или внутренний
 `renderCoverage`), Metal на симуляторе есть; при `make() == nil` тест
 пропускается через `XCTSkip`, а не падает.
 
@@ -186,7 +186,7 @@ Metal недоступен → прежний `FogVeilBitmap.render` (карти
 - **Откат.** `isEnabledOverride = false` → хост «Атласа» не создаёт
   Metal-слой, `vectorOnly == false`, растровая вуаль строит растры
   (существующие `FogVeilViewTests`/`VeilSeatTests` проходят как есть).
-- **Постер.** `renderImage` на слое с одним коридором: пиксель коридора
+- **Постер.** `FogOffscreen.render` на слое с одним коридором: пиксель коридора
   светлее пикселя тумана; размер картинки = `sizePoints × scale`.
 - **Бюджет.** Стресс-сид `-seed-hang-stress` (400 поездок × 2 000 точек):
   сборка `FogMesh` ≤ 300 мс вне main (main не блокируется дольше 50 мс —
