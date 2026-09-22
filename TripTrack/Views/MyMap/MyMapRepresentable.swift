@@ -44,16 +44,52 @@ final class MapHostController: UIViewController {
     /// Встала ли вуаль в дерево. `false` — иерархия `MKMapView` незнакомая,
     /// и туман рисует плиточный `FogVeilRenderer`, как до 0.7.0.
     var screenVeilAttached: Bool { veilSeat.isAttached }
+    /// СПАЙК «метал-туман» (`FogMetalSpike`): вторая вуаль, рисующая мглу на
+    /// GPU каждый кадр. Садится ПОД растровую — той остаются только векторные
+    /// слои (жилка сети и выбранный маршрут), а сама мгла у неё выключена.
+    /// `nil` — Metal недоступен или спайк выключен: всё как было.
+    private let fogMetal: FogMetalView? = FogMetalSpike.isEnabled ? FogMetalView.make() : nil
+
+    private var veilAttachedHandler: (() -> Void)?
+    private var veilDetachedHandler: (() -> Void)?
+
     /// Зовётся, когда вуаль встала в дерево: оверлеи тумана с карты надо
     /// снять, иначе одно и то же рисуется дважды.
     var onVeilAttached: (() -> Void)? {
-        get { veilSeat.onAttached }
-        set { veilSeat.onAttached = newValue }
+        get { veilAttachedHandler }
+        set {
+            veilAttachedHandler = newValue
+            veilSeat.onAttached = { [weak self] in
+                newValue?()
+                self?.seatFogMetal()
+            }
+        }
     }
     /// Зовётся, когда вуаль ушла с экрана: оверлеи надо вернуть.
     var onVeilDetached: (() -> Void)? {
-        get { veilSeat.onDetached }
-        set { veilSeat.onDetached = newValue }
+        get { veilDetachedHandler }
+        set {
+            veilDetachedHandler = newValue
+            veilSeat.onDetached = { [weak self] in
+                self?.unseatFogMetal()
+                newValue?()
+            }
+        }
+    }
+
+    /// Метал-вуаль садится в то же гнездо, что растровая, но НИЖЕ её: сверху
+    /// остаются жилка и выбранный маршрут, которые вуаль ведёт вектором.
+    private func seatFogMetal() {
+        guard let fogMetal, let parent = screenVeil.superview else { return }
+        fogMetal.frame = parent.bounds
+        fogMetal.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        parent.insertSubview(fogMetal, belowSubview: screenVeil)
+        fogMetal.attach(map: map)
+    }
+
+    private func unseatFogMetal() {
+        fogMetal?.detach()
+        fogMetal?.removeFromSuperview()
     }
 
     /// Сколько нижней части экрана занимает постоянный лист. Логотип и
@@ -80,6 +116,14 @@ final class MapHostController: UIViewController {
         map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(map)
         applyBottomInset()
+        if let fogMetal {
+            // Мглу рисует GPU, вуали остаётся её вектор; тот же открытый слой
+            // уезжает в метал-туман одной дверью, а не четырьмя вызовами.
+            veilSeat.veil.suppressesFogForSpike = true
+            veilSeat.veil.onLayerForSpike = { [weak fogMetal] layer in
+                fogMetal?.setLayer(layer)
+            }
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
