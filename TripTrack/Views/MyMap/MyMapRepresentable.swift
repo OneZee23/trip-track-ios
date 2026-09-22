@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import os
 
 /// The zoom hierarchy from the canon note: «далеко = страны/регионы —
 /// заливка открытых, чипы стран, кластеры; средний = граница региона,
@@ -44,11 +45,30 @@ final class MapHostController: UIViewController {
     /// Встала ли вуаль в дерево. `false` — иерархия `MKMapView` незнакомая,
     /// и туман рисует плиточный `FogVeilRenderer`, как до 0.7.0.
     var screenVeilAttached: Bool { veilSeat.isAttached }
-    /// СПАЙК «метал-туман» (`FogMetalSpike`): вторая вуаль, рисующая мглу на
-    /// GPU каждый кадр. Садится ПОД растровую — той остаются только векторные
-    /// слои (жилка сети и выбранный маршрут), а сама мгла у неё выключена.
-    /// `nil` — Metal недоступен или спайк выключен: всё как было.
-    private let fogMetal: FogMetalView? = FogMetalSpike.isEnabled ? FogMetalView.make() : nil
+    /// Metal-туман: вторая вуаль, рисующая мглу на GPU каждый кадр. Садится
+    /// ПОД растровую — той остаются только векторные слои (жилка сети и
+    /// выбранный маршрут), а сама мгла у неё выключена (`vectorOnly`).
+    ///
+    /// `nil` — Metal на этом устройстве недоступен или выключатель снят:
+    /// «Атлас» целиком возвращается на растровую вуаль 0.7.0. Обе дороги
+    /// ведут в одно место нарочно, второго пути отката не заводится.
+    private let fogMetal: FogMetalVeil?
+
+    private static let log = Logger(subsystem: "com.onezee.TripTrack", category: "fogmetal")
+
+    init() {
+        fogMetal = FogMetalAvailability.isActive ? FogMetalVeil.make() : nil
+        super.init(nibName: nil, bundle: nil)
+        if FogMetalAvailability.isActive, fogMetal == nil {
+            Self.log.notice("metal-туман недоступен, «Атлас» на растре")
+        }
+        // Мглу рисует GPU — вуали остаётся её вектор. Ставится ЗДЕСЬ, а не в
+        // `viewDidLoad`: слой может доехать до вуали раньше, чем встанет
+        // разметка, и растр, заказанный в эту щель, был бы нарисован зря.
+        screenVeil.vectorOnly = (fogMetal != nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
 
     private var veilAttachedHandler: (() -> Void)?
     private var veilDetachedHandler: (() -> Void)?
@@ -87,9 +107,24 @@ final class MapHostController: UIViewController {
         fogMetal.attach(map: map)
     }
 
+    /// Только снимает. Ничего, что относится к настройке вуалей, здесь быть
+    /// не должно: гнездо теряется и возвращается по нескольку раз за жизнь
+    /// экрана, а настраиваются они один раз, в `init`.
     private func unseatFogMetal() {
         fogMetal?.detach()
         fogMetal?.removeFromSuperview()
+    }
+
+    /// Открытый мир — в ОБЕ вуали сразу, и это единственная дверь.
+    ///
+    /// Раньше слой доезжал до Metal замыканием, которое дёргала сама
+    /// растровая вуаль: тогда «кто кому отдаёт данные» решала вуаль, а не
+    /// хост, и вторая вуаль молча зависела от того, вышла ли первая рано по
+    /// своей подписи слоя. Теперь обе получают одно и то же от того, кто ими
+    /// владеет.
+    func setRevealedLayer(_ layer: RevealedLayer) {
+        screenVeil.setLayer(layer)
+        fogMetal?.setLayer(layer)
     }
 
     /// Сколько нижней части экрана занимает постоянный лист. Логотип и
@@ -116,14 +151,6 @@ final class MapHostController: UIViewController {
         map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(map)
         applyBottomInset()
-        if let fogMetal {
-            // Мглу рисует GPU, вуали остаётся её вектор; тот же открытый слой
-            // уезжает в метал-туман одной дверью, а не четырьмя вызовами.
-            veilSeat.veil.suppressesFogForSpike = true
-            veilSeat.veil.onLayerForSpike = { [weak fogMetal] layer in
-                fogMetal?.setLayer(layer)
-            }
-        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -503,7 +530,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// готовит.
         private func refreshRouteLineColour() {
             if let host, host.screenVeilAttached {
-                host.screenVeil.setLayer(lastRevealed)
+                host.setRevealedLayer(lastRevealed)
                 return
             }
             guard let map = mapView else { return }
@@ -621,7 +648,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 // плиточный рендерер — откат, и картинку он обязан рисовать
                 // ту же самую.
                 veil?.hints = veilHints(lastHints, selectedId: selectedHintId)
-                if screenVeil { host?.screenVeil.setLayer(revealed) }
+                if screenVeil { host?.setRevealedLayer(revealed) }
             }
 
             if installedVein !== vein {
@@ -1127,7 +1154,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             map.removeOverlays(map.overlays.filter {
                 $0 is FogVeilOverlay || ($0 as? RouteVeinOverlay)?.style == .network
             })
-            host.screenVeil.setLayer(lastRevealed)
+            host.setRevealedLayer(lastRevealed)
             host.screenVeil.setHints(lastHints, selectedId: selectedHintId)
             if let route = installedRoute, let line = route.polylines(for: .fine).first {
                 map.removeOverlays(map.overlays.compactMap {

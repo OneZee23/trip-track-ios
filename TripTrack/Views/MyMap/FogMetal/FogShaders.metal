@@ -3,7 +3,7 @@ using namespace metal;
 
 // Спайк «метал-туман». Два прохода: покрытие открытого в r8Unorm и композит
 // мглы на экран. Формы должны совпадать байт в байт с `FogUniforms` и
-// `FogComposite` в `FogMetalView.swift`.
+// `FogComposite` в `FogMetalVeil.swift`.
 
 struct FogSegment {
     float2 p0;

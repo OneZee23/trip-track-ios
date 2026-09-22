@@ -210,15 +210,18 @@ final class FogVeilView: UIView {
     /// вернуть на карту `FogVeilOverlay`.
     var onLostFromHierarchy: (() -> Void)?
 
-    /// СПАЙК «метал-туман» (`FogMetalSpike`): мглу рисует не вуаль, а
-    /// `FogMetalView` под ней. Вуаль при этом остаётся на месте и продолжает
-    /// вести свои ВЕКТОРНЫЕ слои — жилку сети и выбранный маршрут, — а растр и
-    /// ровный туман за его краем не заказываются вовсе: платить за картинку,
-    /// которую никто не увидит, незачем.
-    var suppressesFogForSpike = false
-    /// Тот же открытый слой уезжает в метал-туман. Одна дверь вместо четырёх
-    /// мест, где координатор зовёт `setLayer`.
-    var onLayerForSpike: ((RevealedLayer) -> Void)?
+    /// На «Атласе» туман рисует `FogMetalVeil`; эта вуаль остаётся хостом
+    /// ВЕКТОРНЫХ слоёв — жилки сети и выбранного маршрута. Растр не
+    /// заказывается, летербокс скрыт: платить за картинку, которую никто не
+    /// увидит, незачем.
+    ///
+    /// А вот `MapPathIndex` продолжает строиться, и это не недосмотр.
+    /// Бакеты индекса — ЕДИНСТВЕННЫЙ источник жилки (`FogVeilVein.strokes`
+    /// принимает `MapPathChunks`), и без него «Атлас» потерял бы сеть всех
+    /// поездок, то есть картинка разошлась бы с эталоном 0.8.0. Индекс
+    /// уйдёт отсюда тогда же, когда жилка научится читать слой напрямую, —
+    /// не раньше.
+    var vectorOnly = false
 
     /// Поколение отрисовки: заказ, который успели обогнать, свою картинку не
     /// показывает и на фоне не досчитывается.
@@ -275,7 +278,6 @@ final class FogVeilView: UIView {
     /// по той же причине, что у `FogVeilRenderer`.
     func setLayer(_ incoming: RevealedLayer) {
         layerHandoffs += 1
-        onLayerForSpike?(incoming)
         // Тот же слой — тот же индекс. `screenVeilTookOver` зовёт это на
         // КАЖДОМ появлении «Атласа», а сборка индекса стоит 10–13 мс на
         // главном потоке ожидания и вспышку «всё закрыто» на экране: до
@@ -754,7 +756,7 @@ final class FogVeilView: UIView {
     }
 
     private func layoutLetterbox() {
-        letterbox.isHidden = suppressesFogForSpike
+        letterbox.isHidden = vectorOnly
         letterbox.frame = bounds
         letterboxMask.frame = bounds
         letterboxMask.path = Self.letterboxPath(bounds: bounds, quad: coveredQuadPoints)
@@ -874,11 +876,11 @@ final class FogVeilView: UIView {
         rendering = true
         gate.raster = rect
 
-        // В спайке полос не будет ни одной, и растр обязан считаться полным
-        // сразу: иначе `rendering` остался бы взведённым навсегда и жилка
-        // перестала бы обновляться после первого же кадра.
+        // При `vectorOnly` полос не будет ни одной, и растр обязан считаться
+        // полным сразу: иначе `rendering` остался бы взведённым навсегда и
+        // жилка перестала бы обновляться после первого же кадра.
         let incoming = Raster(rect: rect, sizePoints: sizePoints, scale: scale,
-                              expected: suppressesFogForSpike ? 0 : bands.count)
+                              expected: vectorOnly ? 0 : bands.count)
         // Больше двух растров не живёт никогда: старый уходит сразу, не
         // дожидаясь кроссфейда, — восемь мегабайт на каждый.
         while rasters.count >= 2 { rasters.removeFirst().container.removeFromSuperlayer() }
@@ -909,8 +911,8 @@ final class FogVeilView: UIView {
             }
         }
 
-        // Спайк: туман рисует GPU, вуали остаётся только жилка.
-        guard !suppressesFogForSpike else { finish(token: token); return }
+        // «Атлас»: туман рисует GPU, вуали остаётся только жилка.
+        guard !vectorOnly else { finish(token: token); return }
 
         for band in bands {
             if let ready = reusable?.band(for: band, scale: scale, sizePoints: sizePoints) {

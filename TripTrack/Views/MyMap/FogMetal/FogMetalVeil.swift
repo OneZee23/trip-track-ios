@@ -4,7 +4,7 @@ import UIKit
 import simd
 import os
 
-/// Метал-туман «Атласа» — спайк.
+/// Метал-туман «Атласа».
 ///
 /// Растровая вуаль (`FogVeilView`) рисует мглу раз в двести миллисекунд и
 /// везёт готовую картинку за картой аффинным преобразованием слоя: на жесте
@@ -18,9 +18,11 @@ import os
 ///
 /// Чего здесь нарочно НЕТ: облаков, рампы глубины, подписей регионов,
 /// гравировки подсказок, выреза под атрибуцией, живой прорези у машины и
-/// постера. Спайк отвечает на один вопрос — как туман ведёт себя под пальцем.
+/// постера. Картинка, которую эта вуаль показывает, — эталон 0.8.0 и менять
+/// её не имеет права ни одна задача: числа перечислены в спеке
+/// `docs/superpowers/specs/2026-09-22-080-fog-metal-design.md` §3.
 @MainActor
-final class FogMetalView: MTKView {
+final class FogMetalVeil: MTKView {
     private static let log = Logger(subsystem: "com.onezee.TripTrack", category: "fogmetal")
 
     /// Ширина пера — доля полуширины коридора. Та же мягкость, что у кисти
@@ -69,11 +71,11 @@ final class FogMetalView: MTKView {
     }
 
     /// `nil` — на этом устройстве Metal недоступен или шейдеры не собрались:
-    /// зовущий остаётся на растровой вуали, как будто спайка нет.
+    /// зовущий остаётся на растровой вуали, как до 0.8.0.
     ///
     /// Фабрикой, а не `init?()`: у `UIView` свой непроваливающийся `init()`,
     /// и переопределить его провальным Swift не даёт.
-    static func make() -> FogMetalView? {
+    static func make() -> FogMetalVeil? {
         guard let device = MTLCreateSystemDefaultDevice(),
               let queue = device.makeCommandQueue(),
               let library = device.makeDefaultLibrary() else { return nil }
@@ -100,7 +102,7 @@ final class FogMetalView: MTKView {
         guard let first = try? device.makeRenderPipelineState(descriptor: coverage),
               let second = try? device.makeRenderPipelineState(descriptor: composite)
         else { return nil }
-        return FogMetalView(device: device, queue: queue, coverage: first, composite: second)
+        return FogMetalVeil(device: device, queue: queue, coverage: first, composite: second)
     }
 
     private init(device: MTLDevice, queue: MTLCommandQueue,
@@ -225,7 +227,7 @@ final class FogMetalView: MTKView {
         else { return }
 
         // Метры на экранную точку и полуширина ореола — те же функции, что у
-        // растровой вуали: спайк обязан показывать ТУ ЖЕ ширину открытого, а
+        // растровой вуали: метал обязан показывать ТУ ЖЕ ширину открытого, а
         // не свою.
         let pointsPerMapPoint = Double(map.bounds.width) / visible.width
         let centreLat = MKMapPoint(x: visible.midX, y: visible.midY).coordinate.latitude
@@ -249,7 +251,7 @@ final class FogMetalView: MTKView {
         frames += 1
         encodeSeconds += CACurrentMediaTime() - started
         // Цена кодирования на процессоре — то единственное число, ради
-        // которого спайк вообще меряется. Раз в сто двадцать кадров, чтобы
+        // которого кадр и меряется. Раз в сто двадцать кадров, чтобы
         // сам замер не стоил дороже.
         if frames % 120 == 0 {
             let perFrame = String(format: "%.2f", encodeSeconds / Double(frames) * 1000)
@@ -306,7 +308,7 @@ final class FogMetalView: MTKView {
         encoder.endEncoding()
     }
 
-    /// Цвет и сила мглы — из палитры кисти, чтобы спайк шёл за темой так же,
+    /// Цвет и сила мглы — из палитры кисти, чтобы метал шёл за темой так же,
     /// как растровая вуаль.
     private static func composite(palette: FogVeilPainter.Palette) -> Composite {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
