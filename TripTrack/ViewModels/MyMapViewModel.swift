@@ -323,6 +323,18 @@ final class MyMapViewModel: ObservableObject {
         // Чужая карта своих печатей не показывает и чужих не знает: находки
         // живут только на телефоне владельца.
         guard remoteSource == nil else { return }
+        // Владелец 22 сен 2026 отложил находки до после 1.0.0
+        // (`DiscoveriesAvailability`): выключенный флаг — пустые печати и
+        // подсказки, журнал без них, а отложенная печать («покажи мне вот
+        // эту») забывается — ждать ей больше нечего. Стор при этом не
+        // трогаем: пул продолжает класть в него строки.
+        guard DiscoveriesAvailability.isActive else {
+            seals = []
+            riddleHints = []
+            rebuildJournal()
+            pendingDiscovery = nil
+            return
+        }
         discoveryGeneration += 1
         let generation = discoveryGeneration
         let found = await discoveryStore.all()

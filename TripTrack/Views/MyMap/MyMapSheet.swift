@@ -181,7 +181,12 @@ struct MyMapSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     openedGroup(c)
-                    findsGroup(c)
+                    // Находки отложены до после 1.0.0 (`DiscoveriesAvailability`)
+                    // — вся группа (шапка, пустая строка, сетка печатей) не
+                    // рисуется вовсе, а не показывается пустой.
+                    if DiscoveriesAvailability.isActive {
+                        findsGroup(c)
+                    }
                     riddlesGroup(c)
                 }
                 .padding(.bottom, 20 + safeBottom)

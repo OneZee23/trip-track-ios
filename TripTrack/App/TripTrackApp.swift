@@ -137,8 +137,13 @@ struct TripTrackApp: App {
                         // раза в сутки и ВНЕ главного актёра: на старте здесь
                         // рисуется первый экран, а разбор ответа и запись кэша
                         // на диск — работа, которой там не место.
-                        Task.detached(priority: .utility) {
-                            await CachedSecretCatalog.shared.refreshIfNeeded()
+                        // Находки отложены до после 1.0.0
+                        // (`DiscoveriesAvailability`) — скрытой фиче сеть не
+                        // положена.
+                        if DiscoveriesAvailability.isActive {
+                            Task.detached(priority: .utility) {
+                                await CachedSecretCatalog.shared.refreshIfNeeded()
+                            }
                         }
                         // Keep the on-device journal alive across relaunches:
                         // the system store only holds THIS process, so sweep

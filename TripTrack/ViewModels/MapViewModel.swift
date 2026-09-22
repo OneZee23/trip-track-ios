@@ -909,8 +909,20 @@ final class MapViewModel: ObservableObject {
                 // окончательный, места сверены, туман дорисован, а запись
                 // кончилась. Километры и регионы берутся из дельты тумана —
                 // второго счёта открытого в приложении нет.
-                let found = await DiscoveryProcessor.shared.process(
-                    tripId: trip.id, delta: delta)
+                //
+                // Владелец 22 сен 2026 отложил находки до после 1.0.0
+                // (`DiscoveriesAvailability`): выключенный флаг значит разбор
+                // трека на секреты/загадки/вехи не идёт вовсе, но строка
+                // «открыто N км нового пути» и выгорание героя на итогах — про
+                // туман, не про находки, и обязаны остаться живыми.
+                let found: TripDiscoveries
+                if DiscoveriesAvailability.isActive {
+                    found = await DiscoveryProcessor.shared.process(
+                        tripId: trip.id, delta: delta)
+                } else {
+                    found = .empty(
+                        tripId: trip.id, newKm: delta.openedKm, newRegionIds: delta.newRegionIds)
+                }
                 self.attachDiscoveries(found)
             }
         }
@@ -1040,6 +1052,9 @@ final class MapViewModel: ObservableObject {
     /// `RevealedLayerStore` на финише, и звать её ради отладочного экрана
     /// значило бы записать открытое, которого не было.
     private func debugAttachSampleDiscoveries(to trip: Trip) {
+        // Находки отложены (`DiscoveriesAvailability`) — отладочный вход
+        // показывает ровно то, что видит живой финиш: ничего.
+        guard DiscoveriesAvailability.isActive else { return }
         Task { @MainActor in
             var found = await DiscoveryStore.shared.all()
             if found.isEmpty, trip.trackPoints.count > 4 {

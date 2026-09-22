@@ -177,7 +177,20 @@ final class SocialProfileFindsTests: XCTestCase {
         let find = SocialFind(
             secretId: "s1", kind: "secret", symbol: "mountain.2",
             rarity: "few", foundAt: Date(), first: true)
-        XCTAssertTrue(socialFindsAreVisible([find]))
+        // Прод-флаг `DiscoveriesAvailability` в 0.8.0 выключен (владелец, 22
+        // сен 2026, до после 1.0.0) — здесь проверяется правило непустого
+        // списка, а не флаг, поэтому гейт передаётся включённым явно.
+        XCTAssertTrue(socialFindsAreVisible([find], enabled: true))
+    }
+
+    /// Выключенный флаг (0.8.0) прячет секцию даже у непустого списка — та же
+    /// проверка, что у `DiscoveriesAvailabilityTests`, но рядом с остальными
+    /// тестами видимости.
+    func testSectionHiddenWhenDisabledEvenIfFindsIsNonEmpty() {
+        let find = SocialFind(
+            secretId: "s1", kind: "secret", symbol: "mountain.2",
+            rarity: "few", foundAt: Date(), first: true)
+        XCTAssertFalse(socialFindsAreVisible([find], enabled: false))
     }
 
     // MARK: - Rarity strings (LocalizationTests covers table parity)

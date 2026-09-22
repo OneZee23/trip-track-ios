@@ -26,6 +26,10 @@ final class MyMapViewModelSealsTests: XCTestCase {
         // (`RiddleHints.isEnabled == false`); этот класс проверяет сам план
         // подсказок, а не то, включён ли флаг видимости.
         RiddleHints.isEnabledOverride = true
+        // Находки отложены владельцем 22 сен 2026 до после 1.0.0
+        // (`DiscoveriesAvailability.isEnabled == false`); этот класс проверяет
+        // сами печати и подсказки, а не то, скрыта ли фича целиком.
+        DiscoveriesAvailability.isEnabledOverride = true
     }
 
     /// Каждое поле обнуляется: XCTest держит экземпляры до конца прогона, и
@@ -36,6 +40,7 @@ final class MyMapViewModelSealsTests: XCTestCase {
         store = nil
         pc = nil
         RiddleHints.isEnabledOverride = nil
+        DiscoveriesAvailability.isEnabledOverride = nil
         super.tearDown()
     }
 
@@ -100,6 +105,21 @@ final class MyMapViewModelSealsTests: XCTestCase {
         await vm.reloadDiscoveries()
 
         XCTAssertEqual(Set(vm.seals.map(\.key)), ["lighthouse:one", "firstRegion:RU-KDA"])
+    }
+
+    /// Владелец 22 сен 2026: отложить находки до после 1.0.0.
+    /// `DiscoveriesAvailability.isEnabled` (прод-константа, а не тестовый шов
+    /// из `setUp`) обязана опустошить и печати, и журнал.
+    @MainActor
+    func testSealsAreHiddenWhenTheFlagIsOff() async throws {
+        _ = try await store.upsert([discovery(key: "lighthouse:six")])
+        DiscoveriesAvailability.isEnabledOverride = nil
+        let vm = makeViewModel([])
+
+        await vm.reloadDiscoveries()
+
+        XCTAssertTrue(vm.seals.isEmpty, "печатей на журнале быть не должно")
+        XCTAssertTrue(vm.journal.finds.isEmpty, "секции «Находки» в журнале быть не должно")
     }
 
     // MARK: - Подсказки

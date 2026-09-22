@@ -641,8 +641,15 @@ extension SocialProfile {
 /// «Пусто/отсутствует → секции нет» — правило показа блока «Находки»
 /// (`PublicProfileView.findsSection`), вынесенное чистой функцией, чтобы его
 /// проверял тест DTO, а не снимок экрана.
-func socialFindsAreVisible(_ finds: [SocialFind]?) -> Bool {
-    guard let finds else { return false }
+///
+/// `enabled` — гейт `DiscoveriesAvailability.isActive` (0.8.0, владелец 22 сен
+/// 2026 отложил находки до после 1.0.0): выключенный флаг прячет секцию даже
+/// у непустого списка — чужая находка не должна быть видна там, где своя уже
+/// спрятана.
+func socialFindsAreVisible(
+    _ finds: [SocialFind]?, enabled: Bool = DiscoveriesAvailability.isActive
+) -> Bool {
+    guard enabled, let finds else { return false }
     return !finds.isEmpty
 }
 
