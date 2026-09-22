@@ -112,6 +112,11 @@ final class MapHostController: UIViewController {
         fogMetal.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         parent.insertSubview(fogMetal, belowSubview: screenVeil)
         fogMetal.attach(map: map)
+        // Гнездо теряется и возвращается по нескольку раз за жизнь экрана, а
+        // прохода разметки за этим может и не случиться: окно под подписью
+        // надо отдать только что севшему слою прямо сейчас, иначе мгла
+        // накроет «Legal» до первого поворота телефона.
+        updateAttributionCarve()
     }
 
     /// Только снимает. Ничего, что относится к настройке вуалей, здесь быть
@@ -219,11 +224,18 @@ final class MapHostController: UIViewController {
         // коробкой, наехавшей на верхний край листа.
         guard AttributionCarve.carves(palette: FogVeilPainter.palette) else {
             veil.setAttributionCarve(nil)
+            fogMetal?.setAttributionCarve(nil)
             return
         }
         if let rect = AttributionCarve.carveRect(in: map, space: veil) {
             carvedOnce = true
             veil.setAttributionCarve(rect)
+            // У метал-слоя окно то же самое, но в ЕГО координатах. Сегодня он
+            // сосед вуали с тем же `frame`, то есть числа совпадают, — но это
+            // наблюдение, а не контракт: место в дереве ищет `VeilSeat`, и
+            // спросить UIKit стоит дешевле, чем однажды поймать окно, съехавшее
+            // на высоту статус-бара.
+            if let fogMetal { fogMetal.setAttributionCarve(fogMetal.convert(rect, from: veil)) }
             return
         }
         guard !carvedOnce else { return }

@@ -21,9 +21,22 @@ struct FogUniforms {
     float feather;
 };
 
+// Окно под подписью Apple Maps: коробка в ТОЧКАХ вида, радиус скругления,
+// ширина спада и пол — во сколько раз мгла слабее в его середине. `enabled`
+// нулём значит «окна нет»: композит тогда не трогает альфу вовсе.
+struct FogCarve {
+    float4 rect;
+    float corner;
+    float feather;
+    float floor;
+    float enabled;
+};
+
 struct FogComposite {
     float4 colour;
     float alpha;
+    float2 viewport;
+    FogCarve carve;
 };
 
 struct CoverageVertex {
@@ -97,9 +110,23 @@ vertex FullscreenVertex fog_composite_vertex(uint vid [[vertex_id]])
     return out;
 }
 
+// Расстояние до скруглённого прямоугольника: внутри отрицательное, снаружи —
+// сколько точек до его кромки. `halfExtent` (а не `half`, как просилось по
+// смыслу) — `half` в Metal занято под тип.
+static float fog_sd_rounded_rect(float2 p, float2 centre, float2 halfExtent, float r)
+{
+    float2 q = abs(p - centre) - (halfExtent - r);
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+
 // Мгла с премультиплицированной альфой: открытое вычитается из неё покрытием.
 // Ровный цвет нарочно — спайк отвечает на вопрос про движение, а не про
 // облака и рампу.
+//
+// Единственное, что мгла знает поверх этого, — окно под подписью Apple. Оно
+// не снимает её, а ПРИГЛУШАЕТ до `floor` её силы, и спад наружу непрерывный:
+// ступени давали эффект Маха, то есть вторую кромку вокруг мягкого пятна
+// (задача A, 20 сентября, у растровой маски).
 fragment half4 fog_composite_fragment(FullscreenVertex in [[stage_in]],
                                       texture2d<half> coverage [[texture(0)]],
                                       constant FogComposite &c [[buffer(0)]])
@@ -107,5 +134,15 @@ fragment half4 fog_composite_fragment(FullscreenVertex in [[stage_in]],
     constexpr sampler nearest(filter::nearest, address::clamp_to_edge);
     half cov = coverage.sample(nearest, in.uv).r;
     half a = half(c.alpha) * (1.0h - cov);
+    if (c.carve.enabled > 0.5) {
+        float2 p = in.uv * c.viewport;
+        float2 halfExtent = c.carve.rect.zw * 0.5;
+        float d = fog_sd_rounded_rect(p, c.carve.rect.xy + halfExtent, halfExtent,
+                                      c.carve.corner);
+        // Нулевое перо дало бы деление на ноль; у окна атрибуции оно шесть
+        // точек, но шейдер не обязан верить зовущему на слово.
+        float w = 1.0 - smoothstep(0.0, max(c.carve.feather, 1e-3), d);
+        a *= half(1.0 - (1.0 - c.carve.floor) * w);
+    }
     return half4(half3(c.colour.xyz) * a, a);
 }

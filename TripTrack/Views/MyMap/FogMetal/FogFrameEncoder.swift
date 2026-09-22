@@ -33,6 +33,11 @@ struct FogFrameParams {
     let featherPoints: Double
     let lod: RevealedLayer.LOD
     let palette: FogVeilPainter.Palette
+    /// Окно под подписью Apple. `nil` — выреза нет, и композит выходит байт в
+    /// байт таким же, каким был до 0.8.0: у светлой темы окна не бывает вовсе
+    /// (`AttributionCarve.carves(palette:)`), а решает это ХОСТ, как и у
+    /// растровой вуали.
+    let carve: FogCarveWindow?
 }
 
 /// Два прохода Metal-тумана: покрытие открытого и композит мглы.
@@ -52,10 +57,26 @@ final class FogFrameEncoder {
         var feather: Float
     }
 
+    /// Совпадать с `FogCarve` в шейдере байт в байт: `float4` выравнивается
+    /// на шестнадцать, три хвостовых `float` ложатся за ним подряд.
+    private struct Carve {
+        /// Коробка окна в точках вида: x, y, ширина, высота.
+        var rect: SIMD4<Float>
+        var corner: Float
+        var feather: Float
+        var floor: Float
+        /// Ноль — окна нет; шейдер тогда не трогает альфу вовсе.
+        var enabled: Float
+    }
+
     /// Совпадать с `FogComposite` в шейдере байт в байт.
     private struct Composite {
         var colour: SIMD4<Float>
         var alpha: Float
+        /// Размер вида в ТОЧКАХ — в них же задана коробка окна, и шейдеру
+        /// нечем перевести свои `uv` в точки без этого числа.
+        var viewport: SIMD2<Float>
+        var carve: Carve
     }
 
     private let coveragePipeline: MTLRenderPipelineState
@@ -166,18 +187,36 @@ final class FogFrameEncoder {
         guard let encoder = buffer.makeRenderCommandEncoder(descriptor: target) else { return }
         encoder.setRenderPipelineState(compositePipeline)
         encoder.setFragmentTexture(coverage, index: 0)
-        var composite = Self.composite(palette: params.palette)
+        var composite = Self.composite(params: params)
         encoder.setFragmentBytes(&composite, length: MemoryLayout<Composite>.stride, index: 0)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
     }
 
     /// Цвет и сила мглы — из палитры кисти, чтобы метал шёл за темой так же,
-    /// как растровая вуаль.
-    private static func composite(palette: FogVeilPainter.Palette) -> Composite {
+    /// как растровая вуаль. Плюс окно под подписью, если его дал хост.
+    private static func composite(params: FogFrameParams) -> Composite {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        _ = palette.top.getRed(&r, green: &g, blue: &b, alpha: &a)
+        _ = params.palette.top.getRed(&r, green: &g, blue: &b, alpha: &a)
         return Composite(colour: SIMD4<Float>(Float(r), Float(g), Float(b), 1),
-                         alpha: Float(palette.alpha))
+                         alpha: Float(params.palette.alpha),
+                         viewport: SIMD2<Float>(Float(params.viewportPoints.width),
+                                                Float(params.viewportPoints.height)),
+                         carve: carve(params.carve))
+    }
+
+    /// Окна нет — в буфер уезжают нули с погашенным `enabled`, и композит
+    /// остаётся тем же, каким был до выреза: множителя альфы не появляется.
+    private static func carve(_ window: FogCarveWindow?) -> Carve {
+        guard let window else {
+            return Carve(rect: .zero, corner: 0, feather: 0, floor: 1, enabled: 0)
+        }
+        return Carve(
+            rect: SIMD4<Float>(Float(window.rect.minX), Float(window.rect.minY),
+                               Float(window.rect.width), Float(window.rect.height)),
+            corner: Float(window.corner),
+            feather: Float(window.feather),
+            floor: Float(window.floor),
+            enabled: 1)
     }
 }

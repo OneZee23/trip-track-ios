@@ -20,10 +20,14 @@ import os
 /// два кода, считающих одно и то же, однажды разойдутся молча.
 ///
 /// Чего здесь нарочно НЕТ: облаков, рампы глубины, подписей регионов,
-/// гравировки подсказок, выреза под атрибуцией и живой прорези у машины.
-/// Картинка, которую эта вуаль показывает, — эталон 0.8.0 и менять её не
-/// имеет права ни одна задача: числа перечислены в спеке
+/// гравировки подсказок и живой прорези у машины. Картинка, которую эта
+/// вуаль показывает, — эталон 0.8.0 и менять её не имеет права ни одна
+/// задача: числа перечислены в спеке
 /// `docs/superpowers/specs/2026-09-22-080-fog-metal-design.md` §3.
+///
+/// Единственное, что мгла знает поверх эталона, — окно под подписью Apple
+/// (`setAttributionCarve`): оно не про картинку тумана, а про читаемость
+/// чужой подписи под ней, и без него «Legal» на ночной мгле не виден.
 @MainActor
 final class FogMetalVeil: MTKView {
     private static let log = Logger(subsystem: "com.onezee.TripTrack", category: "fogmetal")
@@ -77,6 +81,17 @@ final class FogMetalVeil: MTKView {
     /// карте дважды она обязана доехать оба раза: сравнение с этим числом и
     /// есть разница между «второй заказ той же картинки» и «второй сменой».
     private var drawnPaletteIsDark: Bool?
+
+    /// Окно под подписью Apple. `nil` — выреза нет: либо тема светлая, либо
+    /// атрибуции не нашлось. Ставит его ХОСТ, ровно там же, где отдаёт окно
+    /// растровой вуали.
+    private var carve: FogCarveWindow?
+    /// Окно, с которым взялись рисовать последний кадр, — вторая половина
+    /// ключа «кадр покоя уже нарисован». Окно ездит вместе с разметкой и
+    /// высотой листа, и сдвинувшееся на СТОЯЩЕЙ карте оно обязано доехать до
+    /// экрана само: ждать движения пальца значило бы держать подпись Apple
+    /// под полной мглой ровно до него.
+    private var drawnCarve: FogCarveWindow?
 
     /// Последний нарисованный кадр: прямоугольник карты и три его угла на
     /// экране. Совпало — GPU не трогаем вовсе, иначе на стоящей карте мы жгли
@@ -215,11 +230,25 @@ final class FogMetalVeil: MTKView {
     /// туда и обратно на стоящей карте, застряла бы до первого движения
     /// пальца.
     func invalidate() {
-        if drawnPaletteIsDark != FogVeilPainter.palette.isDark { restFrameDrawn = false }
+        if drawnPaletteIsDark != FogVeilPainter.palette.isDark || drawnCarve != carve {
+            restFrameDrawn = false
+        }
         guard !restFrameDrawn else { return }
         restFrameDrawn = true
         meshDirty = true
         redrawIfNeeded()
+    }
+
+    /// Окно под подписью Apple Maps — то же, что у растровой вуали, и теми же
+    /// числами (`AttributionCarve`). Мгла под ним ПРИГЛУШАЕТСЯ до половины
+    /// силы, а не снимается: полное снятие вскрывало дневную карту «Атласа» и
+    /// читалось плашкой (задача A2, 21 сентября).
+    ///
+    /// Зовётся на каждом проходе разметки, поэтому тем же окном молчит: кадр
+    /// заказывает `invalidate()`, а тот сверяется с окном последнего кадра.
+    func setAttributionCarve(_ rect: CGRect?) {
+        carve = rect.map(FogCarveWindow.attribution(rect:))
+        invalidate()
     }
 
     override func layoutSubviews() {
@@ -267,6 +296,7 @@ final class FogMetalVeil: MTKView {
     override func draw(_ rect: CGRect) {
         frames += 1
         drawnPaletteIsDark = FogVeilPainter.palette.isDark
+        drawnCarve = carve
         // Слоя ещё нет (вид только что встал в дерево) — кадр пропускаем, но
         // ПАМЯТЬ о нём стираем: иначе `redrawIfNeeded` посчитал бы кадр
         // нарисованным и молчал бы до первого движения камеры.
@@ -300,7 +330,8 @@ final class FogMetalVeil: MTKView {
             halfWidthPoints: halfWidth,
             featherPoints: halfWidth * Self.featherRatio,
             lod: FogVeilRenderer.lod(for: MKZoomScale(pointsPerMapPoint)),
-            palette: FogVeilPainter.palette)
+            palette: FogVeilPainter.palette,
+            carve: carve)
 
         // Текстура покрытия пережила прошлый кадр — её не стало только если
         // сменился размер или память отобрали. Не создалась вовсе — кадр

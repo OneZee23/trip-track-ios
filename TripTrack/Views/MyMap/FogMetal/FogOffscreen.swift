@@ -19,8 +19,13 @@ enum FogOffscreen {
 
     /// Параметры кадра для прямоугольника карты, положенного в картинку без
     /// поворота. Чистая: тест ширины спрашивает её, ничего не рисуя.
+    ///
+    /// `carve` — окно под подписью Apple, и по умолчанию его НЕТ: у постера
+    /// подписи в кадре нет вовсе, а зовут эту функцию ещё и сторожа ширины,
+    /// которым окно только мешало бы.
     static func params(rect: MKMapRect, sizePoints: CGSize, scale: CGFloat,
-                       palette: FogVeilPainter.Palette) -> FogFrameParams? {
+                       palette: FogVeilPainter.Palette,
+                       carve: FogCarveWindow? = nil) -> FogFrameParams? {
         guard rect.width > 0, rect.height > 0, scale > 0,
               let frame = VeilFrame(
                 p00: .zero,
@@ -45,16 +50,18 @@ enum FogOffscreen {
             halfWidthPoints: halfWidth,
             featherPoints: halfWidth * FogMetalVeil.featherRatio,
             lod: FogVeilRenderer.lod(for: MKZoomScale(pointsPerMapPoint)),
-            palette: palette)
+            palette: palette,
+            carve: carve)
     }
 
     /// Картинка с премультиплицированной альфой: открытое прозрачно, мгла
     /// непрозрачна на `palette.alpha`. `nil` — Metal недоступен; зовущий
     /// возвращается к `FogVeilBitmap.render`.
     static func render(layer: RevealedLayer, rect: MKMapRect, sizePoints: CGSize,
-                       scale: CGFloat, palette: FogVeilPainter.Palette) -> CGImage? {
+                       scale: CGFloat, palette: FogVeilPainter.Palette,
+                       carve: FogCarveWindow? = nil) -> CGImage? {
         guard let params = params(rect: rect, sizePoints: sizePoints, scale: scale,
-                                  palette: palette),
+                                  palette: palette, carve: carve),
               let device = MTLCreateSystemDefaultDevice(),
               let queue = device.makeCommandQueue(),
               let encoder = FogFrameEncoder(device: device) else { return nil }
