@@ -33,3 +33,42 @@ final class RegionLabelLODTests: XCTestCase {
         XCTAssertFalse(RegionLabelLOD.level(bboxMinSidePt: 10))
     }
 }
+
+/// Подпись региона уступает синей точке «я здесь».
+///
+/// Столкновениями MapKit это не решается: `MKUserLocationView` в общий счёт
+/// приоритетов не входит, и подпись ложилась прямо под кружком — увидел
+/// владелец на устройстве 22 сентября. Правило чистое, потому что проверить
+/// его на живой карте нечем: точка приезжает от GPS.
+final class RegionLabelUserDotTests: XCTestCase {
+    private let label = CGRect(x: 100, y: 100, width: 120, height: 30)
+
+    func testALabelUnderTheDotYields() {
+        // Центр точки внутри самой подписи — тот самый кадр со скриншота.
+        XCTAssertTrue(RegionLabelLOD.yieldsToUserDot(
+            labelFrame: label, userDotCentre: CGPoint(x: 160, y: 115)))
+    }
+
+    func testALabelTouchingTheDotHaloYields() {
+        // Точка рядом, но её запас (22 pt) накрывает край подписи.
+        XCTAssertTrue(RegionLabelLOD.yieldsToUserDot(
+            labelFrame: label, userDotCentre: CGPoint(x: 232, y: 115)))
+    }
+
+    func testALabelClearOfTheDotStays() {
+        // Дальше запаса — подпись остаётся: прятать её «на всякий случай»
+        // значило бы терять имя края там, где оно ничему не мешает.
+        XCTAssertFalse(RegionLabelLOD.yieldsToUserDot(
+            labelFrame: label, userDotCentre: CGPoint(x: 260, y: 115)))
+    }
+
+    func testWithoutALocationNothingYields() {
+        XCTAssertFalse(RegionLabelLOD.yieldsToUserDot(labelFrame: label, userDotCentre: nil))
+    }
+
+    func testAnUnmeasuredLabelDecidesNothing() {
+        // Рамки ещё нет (вью не разложена) — прятать нечего и не за что.
+        XCTAssertFalse(RegionLabelLOD.yieldsToUserDot(
+            labelFrame: .zero, userDotCentre: CGPoint(x: 160, y: 115)))
+    }
+}

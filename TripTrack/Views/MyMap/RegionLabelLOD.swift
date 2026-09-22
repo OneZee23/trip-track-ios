@@ -20,4 +20,34 @@ enum RegionLabelLOD {
     static func level(bboxMinSidePt: CGFloat) -> Bool {
         bboxMinSidePt >= regionMinSidePt
     }
+
+    /// Радиус, в который подпись не лезет к синей точке «я здесь».
+    ///
+    /// Сама точка — 22 pt в поперечнике, вокруг неё белая обводка и тень, а
+    /// у подписи своя обводка: касаясь, они мешаются друг с другом сильнее,
+    /// чем на два пикселя. 22 pt от ЦЕНТРА точки — это её край плюс ширина
+    /// обводки подписи и ещё немного воздуха.
+    static let userDotClearancePt: CGFloat = 22
+
+    /// Уступает ли подпись региона синей точке.
+    ///
+    /// Столкновениями MapKit это не решается: свои аннотации у нас и правда
+    /// расходятся приоритетами (печать `.required`, значок подсказки
+    /// `.defaultHigh`, подпись `.defaultLow`), но точка «я здесь» —
+    /// `MKUserLocationView`, и в общий счёт столкновений она не входит.
+    /// Владелец увидел результат на устройстве: имя города легло прямо под
+    /// синим кружком.
+    ///
+    /// Прячем ПОДПИСЬ, а не точку: точка отвечает на вопрос «где я сейчас»,
+    /// и он важнее названия края, которое человек и так знает. Скрытая
+    /// подпись возвращается сама, как только точка отъехала: правило
+    /// считается на каждом кадре жеста и на каждом обновлении местоположения.
+    static func yieldsToUserDot(labelFrame: CGRect, userDotCentre: CGPoint?) -> Bool {
+        guard let centre = userDotCentre,
+              labelFrame.width > 0, labelFrame.height > 0 else { return false }
+        let dot = CGRect(
+            x: centre.x - userDotClearancePt, y: centre.y - userDotClearancePt,
+            width: userDotClearancePt * 2, height: userDotClearancePt * 2)
+        return labelFrame.intersects(dot)
+    }
 }

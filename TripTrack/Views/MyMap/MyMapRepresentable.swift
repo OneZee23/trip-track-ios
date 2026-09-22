@@ -993,11 +993,49 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             guard map.bounds.width > 0, map.visibleMapRect.size.width > 0 else { return }
             let zoomScale = MKZoomScale(Double(map.bounds.width) / map.visibleMapRect.size.width)
             guard zoomScale > 0, zoomScale.isFinite else { return }
+            let dot = userDotCentre(map)
             for label in regionLabels {
                 guard let view = map.view(for: label) as? RegionLabelView else { continue }
                 let side = label.bounds.minSidePt(zoomScale: zoomScale)
+                let frame = labelFrame(of: view, at: label.coordinate, on: map)
                 view.visible = RegionLabelLOD.level(bboxMinSidePt: side)
+                    && !RegionLabelLOD.yieldsToUserDot(labelFrame: frame, userDotCentre: dot)
             }
+        }
+
+        /// Синяя точка «я здесь» в точках экрана — или `nil`, если её нет на
+        /// карте вовсе. Местоположения может не быть (не спросили, отказали,
+        /// первый фикс ещё не пришёл), и тогда уступать нечему.
+        private func userDotCentre(_ map: MKMapView) -> CGPoint? {
+            guard map.showsUserLocation, let location = map.userLocation.location else {
+                return nil
+            }
+            return map.convert(location.coordinate, toPointTo: map)
+        }
+
+        /// Рамка подписи в той же системе координат, что и точка выше.
+        ///
+        /// Считается от КООРДИНАТЫ аннотации, а не берётся из `view.frame`:
+        /// та лежит в контейнере аннотаций MapKit, и складывать её с
+        /// `map.convert(_:toPointTo: map)` значило бы сравнивать два разных
+        /// пространства — сегодня они совпадают, а обещания на это нет.
+        private func labelFrame(
+            of view: RegionLabelView, at coordinate: CLLocationCoordinate2D, on map: MKMapView
+        ) -> CGRect {
+            let size = view.bounds.size
+            guard size.width > 0, size.height > 0 else { return .zero }
+            let centre = map.convert(coordinate, toPointTo: map)
+            return CGRect(
+                x: centre.x - size.width / 2 + view.centerOffset.x,
+                y: centre.y - size.height / 2 + view.centerOffset.y,
+                width: size.width, height: size.height)
+        }
+
+        /// Местоположение поехало — подписи пересчитываются, даже если камера
+        /// стоит. Иначе имя края, уступившее синей точке, не вернулось бы, пока
+        /// человек не тронет карту пальцем.
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            updateRegionLabelLOD(mapView)
         }
 
         // MARK: «Печать проступает»
