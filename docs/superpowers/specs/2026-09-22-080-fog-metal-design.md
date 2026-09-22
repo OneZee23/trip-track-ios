@@ -169,8 +169,12 @@ Metal недоступен → прежний `FogVeilBitmap.render` (карти
   профилем того же отрезка у начала координат с точностью 1/255 — Float32
   не дрожит.
 - **Полуширина по правилу.** На двух масштабах (улица 0.3 м/pt, страна
-  300 м/pt) ширина открытого на 50 % альфы равна `2 × haloHalfWidth /
-  metresPerPoint` ± 1 pt — таблица из `HaloWidthTests` держит и Metal.
+  300 м/pt) `params.halfWidthPoints == haloHalfWidth / metresPerPoint`, а
+  ширина открытого на 50 % альфы — `2 × (halfWidth − feather/2)` ± 1 pt:
+  перо срезано ВНУТРЬ полуширины (`1 − smoothstep(hw − feather, hw, d)`),
+  поэтому «50 % альфы» лежит на `hw − feather/2`, а не на `hw` (поправка при
+  задаче 3 — первая редакция считала полную ширину). Таблица
+  `HaloWidthTests` держит и Metal.
 - **Вырез.** С `carve` под подписью: альфа в центре окна = `alpha ×
   windowFloor` ± 1/255, за пером — `alpha`; спад монотонный (нет ступеней).
 - **Покой без тиков.** `attach` → `startTracking` → `stopTracking`: после
