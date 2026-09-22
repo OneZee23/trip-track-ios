@@ -66,6 +66,22 @@ final class CityDotView: MKAnnotationView {
         didSet { configure() }
     }
 
+    /// Не закрыта ли точка города синей точкой «я здесь» — считает карта
+    /// (`updateLabelVisibility`) на каждом кадре жеста и на каждом обновлении
+    /// местоположения. Применяется БЕЗУСЛОВНО: MapKit вправе показать скрытую
+    /// аннотацию заново при пересчёте столкновений.
+    var visible: Bool = true {
+        didSet { isHidden = !visible }
+    }
+
+    /// Что вью занимает на самом деле, в её собственных координатах.
+    ///
+    /// Рамка у неё 8×8 — это только кружок; подпись висит СПРАВА за её
+    /// пределами, и столкновения MapKit (`collisionMode = .circle`) про неё не
+    /// знают вовсе. Поэтому «накрыта ли подпись» считается по этому
+    /// прямоугольнику, а не по `frame`.
+    var contentBounds: CGRect { dot.frame.union(label.frame) }
+
     private func configure() {
         guard let city = annotation as? CityDotAnnotation else { return }
         let size = 6 + CGFloat(min(1, city.coverage)) * 4

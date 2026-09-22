@@ -776,7 +776,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 }
                 // Только посещённые регионы. Подписи стоят на карте ВСЕГДА с
                 // этого момента: масштаб решает не добавление/удаление, а
-                // видимость каждой (`updateRegionLabelLOD`), как у
+                // видимость каждой (`updateLabelVisibility`), как у
                 // `installedHints`. Стран здесь больше нет — их подписи и
                 // контуры убраны 17 сентября вместе с границами.
                 regionLabels = RegionLabelModel.regionLabels(
@@ -789,7 +789,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                     $0 is CityDotAnnotation || $0 is RegionLabelAnnotation
                 })
                 map.addAnnotations(regionLabels)
-                updateRegionLabelLOD(map)
+                updateLabelVisibility(map)
             }
             applyLevel(map, animated: false)
         }
@@ -989,17 +989,29 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// Видна ли подпись региона/страны на этом масштабе — считает карта
         /// (bbox из бандла в точках экрана) и ставит сюда на каждом кадре
         /// жеста, по уже стоящему списку, тем же приёмом, что `updateHintLOD`.
-        func updateRegionLabelLOD(_ map: MKMapView) {
+        func updateLabelVisibility(_ map: MKMapView) {
             guard map.bounds.width > 0, map.visibleMapRect.size.width > 0 else { return }
             let zoomScale = MKZoomScale(Double(map.bounds.width) / map.visibleMapRect.size.width)
             guard zoomScale > 0, zoomScale.isFinite else { return }
             let dot = userDotCentre(map)
+
             for label in regionLabels {
                 guard let view = map.view(for: label) as? RegionLabelView else { continue }
                 let side = label.bounds.minSidePt(zoomScale: zoomScale)
                 let frame = labelFrame(of: view, at: label.coordinate, on: map)
                 view.visible = RegionLabelLOD.level(bboxMinSidePt: side)
                     && !RegionLabelLOD.yieldsToUserDot(labelFrame: frame, userDotCentre: dot)
+            }
+
+            // Города — то же правило и по той же причине: подпись висит справа
+            // от кружка, ЗА рамкой вью, и ни столкновения MapKit, ни тем более
+            // синяя точка про неё не знают. Прячется вся аннотация: под синим
+            // кружком её оранжевую серединку всё равно не видно.
+            for annotation in map.annotations where annotation is CityDotAnnotation {
+                guard let view = map.view(for: annotation) as? CityDotView else { continue }
+                let frame = contentFrame(of: view, at: annotation.coordinate, on: map)
+                view.visible = !RegionLabelLOD.yieldsToUserDot(
+                    labelFrame: frame, userDotCentre: dot)
             }
         }
 
@@ -1019,6 +1031,20 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// та лежит в контейнере аннотаций MapKit, и складывать её с
         /// `map.convert(_:toPointTo: map)` значило бы сравнивать два разных
         /// пространства — сегодня они совпадают, а обещания на это нет.
+        /// Рамка ВСЕГО, что рисует точка города, в координатах карты: сам
+        /// кружок плюс подпись справа от него.
+        private func contentFrame(
+            of view: CityDotView, at coordinate: CLLocationCoordinate2D, on map: MKMapView
+        ) -> CGRect {
+            let content = view.contentBounds
+            guard content.width > 0, content.height > 0 else { return .zero }
+            let centre = map.convert(coordinate, toPointTo: map)
+            let origin = CGPoint(
+                x: centre.x - view.bounds.width / 2 + view.centerOffset.x,
+                y: centre.y - view.bounds.height / 2 + view.centerOffset.y)
+            return content.offsetBy(dx: origin.x, dy: origin.y)
+        }
+
         private func labelFrame(
             of view: RegionLabelView, at coordinate: CLLocationCoordinate2D, on map: MKMapView
         ) -> CGRect {
@@ -1035,7 +1061,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         /// стоит. Иначе имя края, уступившее синей точке, не вернулось бы, пока
         /// человек не тронет карту пальцем.
         func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
-            updateRegionLabelLOD(mapView)
+            updateLabelVisibility(mapView)
         }
 
         // MARK: «Печать проступает»
@@ -1103,12 +1129,16 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             let hasCities = map.annotations.contains { $0 is CityDotAnnotation }
             if wantCities && !hasCities {
                 map.addAnnotations(cityAnnotations)
+                // Только что приехавшие города ещё не знают, стоит ли на них
+                // синяя точка: свою видимость каждая аннотация получает не при
+                // рождении, а этим проходом.
+                updateLabelVisibility(map)
             } else if !wantCities && hasCities {
                 map.removeAnnotations(map.annotations.filter { $0 is CityDotAnnotation })
             }
 
             // Имена регионов и стран стоят на карте всегда с первой сборки;
-            // масштаб решает `updateRegionLabelLOD` — каждая подпись сама, по
+            // масштаб решает `updateLabelVisibility` — каждая подпись сама, по
             // своему bbox, а не общий переключатель уровня, как у городов.
 
             syncTripPins(map)
@@ -1306,7 +1336,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             // экрана тем же приёмом — bbox из бандла, а не сама карта, растёт
             // и сжимается вместе с ней.
             updateHintLOD(mapView)
-            updateRegionLabelLOD(mapView)
+            updateLabelVisibility(mapView)
             guard let host, host.screenVeilAttached else { return }
             // Ловит движения, начавшиеся без `regionWillChange` (программный
             // полёт камеры): `startTracking` заводит `CADisplayLink`, если его
@@ -1328,7 +1358,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 host.metalVeil?.extendTracking(tail: 0.6)
             }
             updateHintLOD(mapView)
-            updateRegionLabelLOD(mapView)
+            updateLabelVisibility(mapView)
             let newLevel = MapZoomLevel.of(mapView.region.span.latitudeDelta)
             guard newLevel != level else { return }
             level = newLevel
