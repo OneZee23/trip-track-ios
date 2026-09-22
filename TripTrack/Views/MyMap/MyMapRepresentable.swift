@@ -53,6 +53,13 @@ final class MapHostController: UIViewController {
     /// «Атлас» целиком возвращается на растровую вуаль 0.7.0. Обе дороги
     /// ведут в одно место нарочно, второго пути отката не заводится.
     private let fogMetal: FogMetalVeil?
+    /// Метал-вуаль для делегата карты. `nil` — «Атлас» на растре, и тогда
+    /// делегату нечего гнать: у растровой вуали свой `VeilSeat`.
+    ///
+    /// Тики у обеих вуалей заводит ОДИН и тот же делегат в тех же трёх
+    /// местах: разойдись они, одна бы ехала за картой, а вторая стояла —
+    /// и мгла разъехалась бы с жилкой ровно на движение пальца.
+    var metalVeil: FogMetalVeil? { fogMetal }
 
     private static let log = Logger(subsystem: "com.onezee.TripTrack", category: "fogmetal")
 
@@ -191,6 +198,10 @@ final class MapHostController: UIViewController {
         // палитрой — и то и другое пересобирается.
         CloudTexture.shared.forget()
         veilSeat.veil.invalidate()
+        // Метал берёт цвет и силу мглы из той же палитры, но читает её в
+        // кадре: на стоящей карте кадра нет, и без этого зова тема сменилась
+        // бы только с первым движением пальца.
+        fogMetal?.invalidate()
     }
 
     /// Приглушает мглу под логотипом Apple и «Legal» — до половины её силы, а
@@ -1187,6 +1198,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
             guard let host, host.screenVeilAttached else { return }
             host.screenVeil.startTracking()
+            host.metalVeil?.startTracking()
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
@@ -1205,6 +1217,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             // привязку в том же кадре сделает тот же `CADisplayLink`, а два
             // вызова подряд считают одно и то же дважды.
             host.screenVeil.startTracking()
+            host.metalVeil?.startTracking()
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
@@ -1213,6 +1226,9 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 host.screenVeil.extendTracking(tail: 0.6)
                 host.screenVeil.sync(map: mapView)
                 host.screenVeil.maybeRender(map: mapView, settled: true)
+                // Металу заказывать нечего: он и так рисует каждый кадр, ему
+                // нужен только хвост — доехать инерцию и погаснуть.
+                host.metalVeil?.extendTracking(tail: 0.6)
             }
             updateHintLOD(mapView)
             updateRegionLabelLOD(mapView)

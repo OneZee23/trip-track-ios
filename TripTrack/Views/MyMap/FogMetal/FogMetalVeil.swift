@@ -29,6 +29,16 @@ final class FogMetalVeil: MTKView {
     /// растра, только считается на GPU в каждом кадре.
     static let featherRatio: Double = 0.4
 
+    /// Сколько ещё тикаем после последнего движения карты.
+    ///
+    /// То же число и тот же смысл, что у растровой вуали
+    /// (`FogVeilView.trackingTail`): палец отпущен, а карта ещё доезжает
+    /// инерцией, и гасить `CADisplayLink` на каждой паузе между двумя
+    /// уведомлениями значило бы заводить его заново по десять раз за жест.
+    /// Своё число, а не чужое, нарочно: растровая вуаль эту карту однажды
+    /// покинет, а хвост останется.
+    nonisolated static let trackingTail: TimeInterval = 0.4
+
     private let queue: MTLCommandQueue
     private let coveragePipeline: MTLRenderPipelineState
     private let compositePipeline: MTLRenderPipelineState
@@ -44,6 +54,22 @@ final class FogMetalVeil: MTKView {
 
     private weak var map: MKMapView?
     private var link: CADisplayLink?
+    /// Когда `CADisplayLink` пора снять. Живёт вместе с ним и продлевается
+    /// каждым движением карты.
+    private var linkStopAt = Date.distantPast
+
+    /// Кадр «вне камеры» уже заказан: тема или раскладка попросили
+    /// перерисовку на СТОЯЩЕЙ карте. Пока камера не тронулась и данные те же,
+    /// второй такой заказ нарисовал бы ровно ту же картинку, поэтому он
+    /// молчит. Снимается всем, что меняет кадр само: движением
+    /// (`startTracking`), разметкой, новым слоем и привязкой к карте.
+    private var restFrameDrawn = false
+
+    /// Палитра, с которой взялись рисовать последний кадр. Тема — то
+    /// единственное, что зовёт `invalidate()`, и перещёлкнутая на СТОЯЩЕЙ
+    /// карте дважды она обязана доехать оба раза: сравнение с этим числом и
+    /// есть разница между «второй заказ той же картинки» и «второй сменой».
+    private var drawnPaletteIsDark: Bool?
 
     /// Последний нарисованный кадр: прямоугольник карты и три его угла на
     /// экране. Совпало — GPU не трогаем вовсе, иначе на стоящей карте мы жгли
@@ -51,8 +77,13 @@ final class FogMetalVeil: MTKView {
     private var lastRect: MKMapRect?
     private var lastCorners: [CGPoint] = []
 
-    /// Сколько кадров нарисовано и сколько времени ушло на кодирование — для
-    /// замера «сколько это стоит процессору».
+    /// Сколько раз мы взялись рисовать кадр и сколько времени ушло на
+    /// кодирование — для замера «сколько это стоит процессору».
+    ///
+    /// `frames` считается ПО ВЫЗОВУ `draw(_:)`, а не по доехавшему до экрана
+    /// кадру: вид без окна `currentDrawable` не даёт вовсе, и счёт «только
+    /// нарисованного» молчал бы в тестах, ради которых число и открыто
+    /// наружу. Вопрос у него один — «тикаем мы в покое или нет».
     private(set) var frames = 0
     private(set) var encodeSeconds: Double = 0
 
@@ -144,6 +175,7 @@ final class FogMetalVeil: MTKView {
                 guard let self, token == self.meshToken else { return }
                 self.mesh = built
                 self.meshDirty = true
+                self.restFrameDrawn = false
                 self.redrawIfNeeded()
             }
         }
@@ -151,8 +183,34 @@ final class FogMetalVeil: MTKView {
 
     // MARK: Жизнь
 
+    /// Запоминает карту и рисует ОДИН кадр. `CADisplayLink` здесь не
+    /// заводится: пока карта стоит, каждый его тик спрашивал бы у неё три
+    /// `convert` и выбрасывал ответ — сто двадцать раз в секунду всё время,
+    /// что открыт «Атлас». Тиками командует хост из делегата карты, теми же
+    /// вызовами, что и растровой вуалью.
     func attach(map: MKMapView) {
         self.map = map
+        meshDirty = true
+        restFrameDrawn = false
+        redrawIfNeeded()
+    }
+
+    func detach() {
+        stopTracking()
+        map = nil
+        coverage = nil
+    }
+
+    // MARK: Жест
+
+    /// Карта тронулась: заводим `CADisplayLink` и назначаем ему хвост. Второй
+    /// вызов подряд хвост продлевает, а второй ссылки не заводит — ровно как
+    /// у `FogVeilView`, откуда эта модель и взята.
+    func startTracking(tail: TimeInterval = trackingTail) {
+        linkStopAt = Date().addingTimeInterval(tail)
+        // Кадр покоя больше ни про что: камера едет, и рисовать её будет сам
+        // `CADisplayLink`.
+        restFrameDrawn = false
         guard link == nil else { return }
         let link = CADisplayLink(target: self, selector: #selector(tick))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 120)
@@ -160,18 +218,46 @@ final class FogMetalVeil: MTKView {
         self.link = link
     }
 
-    func detach() {
-        link?.invalidate()
-        link = nil
-        map = nil
-        coverage = nil
+    /// Камера встала: досматриваем хвост и гаснем сами, в `tick`.
+    func extendTracking(tail: TimeInterval = trackingTail) {
+        linkStopAt = Date().addingTimeInterval(tail)
     }
 
-    @objc private func tick() { redrawIfNeeded() }
+    func stopTracking() {
+        link?.invalidate()
+        link = nil
+    }
+
+    /// Идёт ли жест. `true` с `startTracking` и до тика, на котором вышел
+    /// хвост, — именно до него, а не до самого дедлайна: снимает ссылку `tick`.
+    var isTracking: Bool { link != nil }
+
+    @objc private func tick() {
+        guard map != nil else { return stopTracking() }
+        redrawIfNeeded()
+        if Date() > linkStopAt { stopTracking() }
+    }
+
+    /// Всё, что на экране, устарело не по камере: хост сменил тему. Рисуем
+    /// один кадр сейчас.
+    ///
+    /// Ровно один: мгла собирается заново КАЖДЫЙ кадр, и второй зов подряд на
+    /// той же камере, тех же данных и той же палитре дал бы ту же картинку.
+    /// А сменившаяся палитра этот запрет снимает — иначе тема, перещёлкнутая
+    /// туда и обратно на стоящей карте, застряла бы до первого движения
+    /// пальца.
+    func invalidate() {
+        if drawnPaletteIsDark != FogVeilPainter.palette.isDark { restFrameDrawn = false }
+        guard !restFrameDrawn else { return }
+        restFrameDrawn = true
+        meshDirty = true
+        redrawIfNeeded()
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         meshDirty = true
+        restFrameDrawn = false
         redrawIfNeeded()
     }
 
@@ -207,7 +293,12 @@ final class FogMetalVeil: MTKView {
         ].map { map.convert($0.coordinate, toPointTo: space) }
     }
 
+    /// Кадр целиком. Считается он ЗДЕСЬ и до первой проверки: «взялись
+    /// рисовать» и есть то, что меряет `frames`, — иначе вид без окна, где
+    /// `currentDrawable` пуст, выглядел бы для тестов покоя вечно спящим.
     override func draw(_ rect: CGRect) {
+        frames += 1
+        drawnPaletteIsDark = FogVeilPainter.palette.isDark
         // Слоя ещё нет (вид только что встал в дерево) — кадр пропускаем, но
         // ПАМЯТЬ о нём стираем: иначе `redrawIfNeeded` посчитал бы кадр
         // нарисованным и молчал бы до первого движения камеры.
@@ -248,7 +339,6 @@ final class FogMetalVeil: MTKView {
 
         buffer.present(drawable)
         buffer.commit()
-        frames += 1
         encodeSeconds += CACurrentMediaTime() - started
         // Цена кодирования на процессоре — то единственное число, ради
         // которого кадр и меряется. Раз в сто двадцать кадров, чтобы
