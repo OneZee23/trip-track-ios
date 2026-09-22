@@ -2,23 +2,34 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>API_BASE_URL</key>
+	<string>$(API_BASE_URL)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.onezee.TripTrack</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>triptrack</string>
 			</array>
-			<key>CFBundleURLName</key>
-			<string>com.onezee.TripTrack</string>
 		</dict>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>TripTrack uses the local network to discover services on your Wi-Fi when you opt into developer or beta builds.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>TripTrack saves your trip story image to Photos so you can share it as a story or post.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
 	<true/>
-	<key>API_BASE_URL</key>
-	<string>$(API_BASE_URL)</string>
 	<!--
 		Ключ Sentry. Подставляется из `Local.xcconfig` (`SENTRY_DSN[config=…]`)
 		и читается `AppConfig.sentryDSN`.
@@ -31,35 +42,6 @@
 	-->
 	<key>SENTRY_DSN</key>
 	<string>$(SENTRY_DSN)</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>TripTrack использует локальную сеть для связи с dev-сервером синхронизации.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>TripTrack сохраняет картинку поездки в Фото, чтобы Вы могли опубликовать её в сторис.</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-		<key>NSExceptionDomains</key>
-		<dict>
-			<key>localhost</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
-			<!--
-			  For real-device dev testing, add your Mac LAN IP below and do NOT commit.
-			  Example:
-			  <key>192.168.1.50</key>
-			  <dict>
-			      <key>NSExceptionAllowsInsecureHTTPLoads</key>
-			      <true/>
-			  </dict>
-			-->
-
-		</dict>
-	</dict>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
