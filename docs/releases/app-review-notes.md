@@ -4,7 +4,77 @@ Paste the relevant section into App Store Connect → **App Review Information**
 
 ---
 
-## v0.8.0 — Plus: subscription, cosmetics, manual trips (current submission)
+## v0.8.0 — the Atlas on Metal, place suggestions, export (current submission)
+
+### Короткая версия — вставить в App Store Connect
+
+```
+TripTrack 0.8.0 is a quality release: the Atlas is redrawn from scratch, the
+Places tab starts being useful on the first trip, and a user can take their
+own trip out of the app as a file.
+
+NO IN-APP PURCHASES IN THIS BUILD. There is no subscription, no tip jar and
+no paywall anywhere in the app, and nothing is submitted under In-App
+Purchase for this version. The app is free and complete as shipped.
+
+THE ATLAS. The fourth tab shows the world under fog, with only the roads the
+user has actually driven open in it. In this release the fog is rendered on
+the GPU, rebuilt every frame from the opened path, so pinching, zooming and
+panning stay smooth at any scale — the previous version redrew a bitmap and
+showed seams and reload flashes. Everything drawn there comes from trips
+recorded on this phone; nothing is downloaded or uploaded to draw it.
+
+PLACES. The fifth tab now suggests spots the user seems to visit, inferred
+from where their own trips start and end. A suggestion is a name from the
+reverse-geocoding cache and a pin — no coordinate is shown as a number — and
+tapping "Save" turns it into a place. Nothing is created automatically, and
+suggestions are computed on the phone from data it already holds.
+
+EXPORT. A user's own trip can be exported as GPX or CSV from its "..." menu
+and shared through the standard share sheet. Someone else's trip has no such
+option.
+
+STABILITY. The first launch after updating no longer freezes while the app
+reconciles places and territory: that work moved off the main thread.
+
+HOW TO TEST
+1. Open the fourth tab, "Atlas". On a fresh install it is solid fog, and that
+   is correct: nothing has been driven yet.
+2. Record a trip. In the Simulator use Features > Location > Freeway Drive
+   (not City Run: anything that never exceeds 15 km/h is discarded as a
+   walking misfire). Pinch and pan the Atlas afterwards — the fog follows the
+   map without stutter, and the driven corridor is open in it.
+3. Open any recorded trip, tap the expand button on its map, then close it —
+   the map returns to its place in the same frame it left.
+4. On a recorded trip, "..." > "Export GPX" — the standard share sheet opens
+   with a .gpx file.
+
+SIGN-IN. Authentication is Sign in with Apple only, and no special account is
+needed: the reviewer's own Apple ID works. The Atlas, Places and export all
+work fully signed out and with Cloud Sync off, which is the default.
+
+No new permissions are requested. Location usage is unchanged from 0.7.0.
+```
+
+### Если спросят, почему в коде есть подписка, а товаров нет
+
+```
+The subscription code ships in the binary but is disabled by a single
+build-time switch, and no purchase UI can be reached from any screen: there
+is no paywall, no locked row and no tip jar in this version. We finished the
+feature and decided to hold monetisation for a later release rather than cut
+the code out and re-add it. Nothing in the app mentions a price, a
+subscription or a purchase, and no In-App Purchase products are submitted
+with this build.
+```
+
+---
+
+## v0.8.x — Plus: subscription, cosmetics, manual trips (DEFERRED, not submitted)
+
+**Этот блок в App Store Connect для 0.8.0 НЕ вставляется.** «Плюс» спрятан
+выключателем `PlusAvailability.isEnabled = false`, товаров в сабмите нет.
+Текст оставлен готовым к той версии, где монетизацию включат.
 
 ### Короткая версия — вставить в App Store Connect
 
