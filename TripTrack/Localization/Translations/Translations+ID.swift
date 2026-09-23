@@ -242,7 +242,7 @@ extension Translations {
         "cardSolvedByDriving": "terpecahkan dengan berkendara melewatinya",
         "cardOnMap": "Lihat di peta",
         "cardStoryPending": "Ceritanya akan hadir dengan pembaruan",
-        "posterCaption": "{distance} terbuka",
+        "posterCaption": "Terbuka: {distance}",
         "shareRendering": "Menyiapkan gambar…",
         "mapTripsSectionHead": "PERJALANAN DI SINI",
         "mapOpenTrip": "Buka perjalanan",

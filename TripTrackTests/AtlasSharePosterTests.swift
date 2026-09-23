@@ -322,6 +322,48 @@ final class AtlasSharePosterTests: XCTestCase {
         XCTAssertEqual(empty, 0, "без подписи в плашке не должно быть текста")
     }
 
+    /// Подпись читается при ЛЮБОЙ палитре — в том числе светлой.
+    ///
+    /// Рампа под ней брала цвет у тумана (`veilColorBottom`), и под светлой
+    /// «дымкой» подпись была бледной, а слово «TripTrack» пропадало совсем:
+    /// владелец прислал такой постер 23 сентября. Подпись — хром поверх
+    /// картинки, а не продолжение тумана; проверяется это контрастом белого
+    /// текста к тому, что под ним, на самой светлой карте, какая бывает.
+    func testCaptionReadsOnALightPaletteToo() {
+        let layer = straightLayer()
+        guard let rect = AtlasSharePoster.frame(for: layer) else {
+            return XCTFail("окно обязано посчитаться")
+        }
+        let region = AtlasSharePoster.region(for: rect)
+
+        for (name, palette) in [("ночь", FogVeilPainter.Palette.night), ("дымка", .mist)] {
+            FogVeilPainter.palette = palette
+            let poster = AtlasSharePoster.render(
+                snapshot: fakeSnapshot(), region: region, layer: layer,
+                seals: [], caption: "Атлас · Открыто: 181 миля", scale: 1)
+            guard let raster = raster(of: poster) else { return XCTFail("растр не собрался") }
+
+            // Полоса вокруг слова «TripTrack»: самая нижняя и самая бледная
+            // часть рампы — если читается она, читается и строка выше.
+            let bottom = raster.height - 1
+            let band = max(0, bottom - 40)...bottom
+            var sum = 0.0, count = 0.0
+            for y in band {
+                for x in 0..<raster.width {
+                    let p = raster.pixel(x: x, y: y)
+                    sum += 0.299 * Double(p.r) + 0.587 * Double(p.g) + 0.114 * Double(p.b)
+                    count += 1
+                }
+            }
+            let mean = sum / count
+            print("[poster] яркость под подписью (\(name)): \(Int(mean))")
+            // Белый текст на 0.72 альфы: контраст к чистому белому — больше
+            // 4.5:1, порог читаемости. Выше 110 это уже не выполняется.
+            XCTAssertLessThan(mean, 110,
+                              "под подписью обязано быть темно при любой палитре (\(name))")
+        }
+    }
+
     /// Строка подписи собирается из тех же слов, что шапка «Атласа», а ноль
     /// знаков не печатается вовсе.
     func testCaptionCopySkipsAZeroSealCount() {

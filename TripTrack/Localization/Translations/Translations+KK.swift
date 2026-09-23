@@ -242,7 +242,7 @@ extension Translations {
         "cardSolvedByDriving": "жанынан өткенде шешіледі",
         "cardOnMap": "Картадан көрсету",
         "cardStoryPending": "Тарих жаңартумен бірге келеді",
-        "posterCaption": "{distance} ашылды",
+        "posterCaption": "Ашылды: {distance}",
         "shareRendering": "Сурет дайындалуда…",
         "mapTripsSectionHead": "МҰНДАҒЫ САПАРЛАР",
         "mapOpenTrip": "Сапарды ашу",

@@ -1299,8 +1299,11 @@ enum AppStrings {
     static func posterCaption(
         _ lang: LanguageManager.Language, distance: String, seals: Int
     ) -> String {
+        // Слово ПЕРЕД числом, подписью через двоеточие — по той же причине,
+        // что и у `mapOpenedSummary`: «181 миля открыто» на постере, которым
+        // делятся, живёт дольше, чем на экране.
         let opened = tr(lang, "posterCaption",
-                        ru: "{distance} открыто", en: "{distance} opened")
+                        ru: "Открыто: {distance}", en: "Opened: {distance}")
             .replacingOccurrences(of: "{distance}", with: distance)
         var line = "\(myMapTitle(lang)) · \(opened)"
         if seals > 0 { line += " · " + mapSealsCount(lang, count: seals) }

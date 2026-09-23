@@ -242,7 +242,7 @@ extension Translations {
         "cardSolvedByDriving": "wird durch Vorbeifahren gelöst",
         "cardOnMap": "Auf der Karte",
         "cardStoryPending": "Die Geschichte kommt mit einem Update",
-        "posterCaption": "{distance} erkundet",
+        "posterCaption": "Erkundet: {distance}",
         "shareRendering": "Bild wird vorbereitet…",
         "mapTripsSectionHead": "FAHRTEN HIER",
         "mapOpenTrip": "Fahrt öffnen",

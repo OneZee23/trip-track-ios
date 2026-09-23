@@ -32,15 +32,21 @@ enum AtlasSharePoster {
 
     // MARK: - Размеры
 
-    /// Портрет 540×960 точек при `renderScale` = 2, то есть 1080×1920
-    /// пикселей — рабочий размер картинки для мессенджеров и «Историй».
+    /// Портрет 540×960 точек при `renderScale` = 3, то есть 1620×2880
+    /// пикселей — «История» в полтора раза плотнее рабочих 1080×1920.
     ///
-    /// Точки + 2×, а не 1080 точек при 1×: MapKit растеризует свои подписи и
-    /// обводки дорог под масштаб трейта, и на 1× снимок выходит заметно мягче
-    /// при том же итоговом разрешении (то же решение, что у
+    /// Точки + масштаб, а не 1620 точек при 1×: MapKit растеризует свои
+    /// подписи и обводки дорог под масштаб трейта, и на 1× снимок выходит
+    /// заметно мягче при том же итоговом разрешении (то же решение, что у
     /// `SharePosterRenderer`).
+    ///
+    /// Масштаб 3, а не 2, с 23 сентября: владелец увидел мягкую картинку на
+    /// телефоне с экраном 3×, и это ровно оно — снимок карты приходил вдвое
+    /// плотнее точки, а смотрят его втрое. Цена — вчетверо больше памяти на
+    /// время сборки (снимок, холст и офскрин тумана, каждый ≈ 19 МБ вместо
+    /// 8), и платится она один раз по нажатию, а не в фоне.
     static let renderPointSize = CGSize(width: 540, height: 960)
-    static let renderScale: CGFloat = 2
+    static let renderScale: CGFloat = 3
 
     /// Высота нижней плашки с подписью, в точках постера.
     static let captionHeight: CGFloat = 148
@@ -195,17 +201,24 @@ enum AtlasSharePoster {
     /// Плашка внизу: рампа в цвет вуали, подпись и марка.
     ///
     /// Рампа, а не сплошная полоса: постер обязан читаться как одна картинка,
-    /// а не как карта с приклеенной подписью. Цвет — `veilColorBottom`, то
-    /// есть тот же, которым туман кончается на нижнем крае экрана.
+    /// а не как карта с приклеенной подписью.
+    ///
+    /// **Цвет рампы ЧЁРНЫЙ, а не цвет тумана.** До 23 сентября бралcя
+    /// `veilColorBottom` — тот, которым мгла кончается на нижнем крае экрана,
+    /// — и под ночной палитрой белая подпись читалась. Под светлой
+    /// («дымка», `mist`) она бледная: на постере владельца строка «Атлас ·
+    /// 181 миля открыто» едва проступала, а слово «TripTrack» исчезло вовсе.
+    /// Подпись — это ХРОМ поверх картинки, а не продолжение тумана, и
+    /// читаться она обязана при любой палитре и на любой карте под ней.
     private static func drawCaption(in cg: CGContext, size: CGSize, caption: String) {
         let strip = CGRect(x: 0, y: size.height - captionHeight,
                            width: size.width, height: captionHeight)
         if let gradient = CGGradient(
             colorsSpace: CGColorSpaceCreateDeviceRGB(),
             colors: [
-                FogVeilPainter.veilColorBottom.withAlphaComponent(0).cgColor,
-                FogVeilPainter.veilColorBottom.withAlphaComponent(0.88).cgColor,
-                FogVeilPainter.veilColorBottom.withAlphaComponent(0.97).cgColor,
+                UIColor.black.withAlphaComponent(0).cgColor,
+                UIColor.black.withAlphaComponent(0.72).cgColor,
+                UIColor.black.withAlphaComponent(0.88).cgColor,
             ] as CFArray,
             locations: [0, 0.55, 1]
         ) {
@@ -229,7 +242,7 @@ enum AtlasSharePoster {
 
         let mark = NSAttributedString(string: "TripTrack", attributes: [
             .font: font("Inter-SemiBold", size: 15, weight: .semibold),
-            .foregroundColor: UIColor.white.withAlphaComponent(0.45),
+            .foregroundColor: UIColor.white.withAlphaComponent(0.72),
             .kern: 0.6,
         ])
         mark.draw(at: CGPoint(x: inset, y: size.height - 46))

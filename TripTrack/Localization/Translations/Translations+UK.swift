@@ -242,7 +242,7 @@ extension Translations {
         "cardSolvedByDriving": "розв’язується проїздом",
         "cardOnMap": "На карті",
         "cardStoryPending": "Історія з'явиться з оновленням",
-        "posterCaption": "{distance} відкрито",
+        "posterCaption": "Відкрито: {distance}",
         "shareRendering": "Готуємо знімок…",
         "mapTripsSectionHead": "ПОЇЗДКИ ТУТ",
         "mapOpenTrip": "Відкрити поїздку",

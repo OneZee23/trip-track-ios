@@ -242,7 +242,7 @@ extension Translations {
         "cardSolvedByDriving": "yanından geçerek çözülür",
         "cardOnMap": "Haritada göster",
         "cardStoryPending": "Hikâye bir güncellemeyle gelecek",
-        "posterCaption": "{distance} keşfedildi",
+        "posterCaption": "Keşfedildi: {distance}",
         "shareRendering": "Görsel hazırlanıyor…",
         "mapTripsSectionHead": "BURADAKİ GEZİLER",
         "mapOpenTrip": "Geziyi aç",

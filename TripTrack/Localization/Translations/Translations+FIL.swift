@@ -242,7 +242,7 @@ extension Translations {
         "cardSolvedByDriving": "nalulutas sa pagdaan",
         "cardOnMap": "Ipakita sa mapa",
         "cardStoryPending": "Darating ang kuwento sa isang update",
-        "posterCaption": "{distance} ang nabuksan",
+        "posterCaption": "Nabuksan: {distance}",
         "shareRendering": "Inihahanda ang larawan…",
         "mapTripsSectionHead": "MGA BIYAHE RITO",
         "mapOpenTrip": "Buksan ang biyahe",
