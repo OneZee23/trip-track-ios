@@ -2069,6 +2069,12 @@ isOwn
                         fogCutoffDate: trip.endDate,
                         showsFog: isOwn,
                         treatAsPreview: isPreviewRoute,
+                        // Слот героя — единственная карта, которая обязана
+                        // ПЕРЕсчитывать кадр на каждую смену размера: она
+                        // всегда показывает маршрут целиком, а свой размер
+                        // получает последней, уже после того как экран
+                        // заказал подгонку.
+                        refitsOnResize: true,
                         host: mapHost,
                         fitTick: mapFitTick
                     )

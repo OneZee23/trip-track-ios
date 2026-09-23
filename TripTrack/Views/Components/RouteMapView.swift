@@ -274,6 +274,22 @@ struct RouteMapView: UIViewRepresentable {
     /// bottom margin than the previews do — its transport controls sit there.
     var fitInsets: UIEdgeInsets?
 
+    /// «Эта карта всегда показывает маршрут целиком» — слот героя на экране
+    /// поездки, и больше пока никто.
+    ///
+    /// Смена размера у такой карты САМА заказывает подгонку, и без этого
+    /// возврат с полного экрана не починить: заказ из завершения анимации
+    /// успевает отработать, пока карта ещё в гнезде полного экрана, а рамку
+    /// героя она получает последней.
+    ///
+    /// Признак приходит параметром, а НЕ выводится из `isInteractive`. Вывод
+    /// и был ошибкой: на время перехода пальцы сняты у обеих карт
+    /// (`mapExpansion.isInteractive`), полноэкранная попадала под то же
+    /// правило — и раскрытие превращалось в десятки анимированных переездов
+    /// камеры за одно нажатие («я подпрыгиваю на карте к своему маршруту»,
+    /// владелец 23 сен).
+    var refitsOnResize: Bool = false
+
     /// Поля кадрирования, когда экран своих не назвал.
     static let defaultFitInsets = UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
     /// Карта, пережившая своё представление. Непустой хост означает: не
@@ -530,7 +546,7 @@ struct RouteMapView: UIViewRepresentable {
                                             fitInsets: insets)
         }
         slot.onResize = { [weak coordinator, weak mapView,
-                          refits = !isInteractive, insets = fitInsets] in
+                          refits = refitsOnResize, insets = fitInsets] in
             guard let coordinator, let mapView else { return }
             coordinator.mapResized(mapView, refits: refits, insets: insets)
         }
@@ -1043,6 +1059,13 @@ struct RouteMapView: UIViewRepresentable {
         private var lastFitTick: Int = 0
         /// Подгонка заказана, но карта ещё не своего размера — см. `applyFit`.
         private var fitPending = false
+        /// Вести ли камеру анимацией. Заказ от экрана — да: там переход,
+        /// который человек начал сам. Заказ от смены размера — НЕТ: карта
+        /// просто получила новую рамку, и «переезд» в ней нечего показывать;
+        /// а двух анимаций подряд (промежуточный размер, потом конечный)
+        /// хватает, чтобы вторая перебила первую на полпути и камера встала
+        /// между ними.
+        private var fitAnimated = true
 
         /// Вписать весь маршрут в НЫНЕШНИЕ границы карты.
         ///
@@ -1064,20 +1087,18 @@ struct RouteMapView: UIViewRepresentable {
             guard !overviewRect.isNull else { return }
             overviewInsets = insets ?? RouteMapView.defaultFitInsets
             fitPending = true
+            fitAnimated = true
             fitIfSized(mapView)
         }
 
         /// Карта сменила размер.
         ///
-        /// `refits` — «эта карта всегда показывает маршрут целиком», то есть
-        /// герой: пальцев он не принимает, и другой камеры у него не бывает.
-        /// Такой карте новый размер САМ по себе повод вписать маршрут заново,
-        /// и это единственное правило, которое переживает возврат с полного
-        /// экрана: заказ из завершения анимации успевает отработать на
-        /// размере ПОЛНОГО ЭКРАНА (карта в тот момент ещё в его гнезде), а
-        /// рамку героя она получает последней. Полноэкранной карте такого
-        /// правила не положено — там поворот экрана выбрасывал бы то, куда
-        /// человек сам доехал пальцем.
+        /// `refits` — только карта-герой (`RouteMapView.refitsOnResize`): она
+        /// всегда показывает маршрут целиком, и новый размер для неё сам по
+        /// себе повод вписать его заново. Всем остальным подгонку заказывает
+        /// экран, когда переход КОНЧИЛСЯ (`mapFitTick`), — иначе пружина
+        /// раскрытия, меняющая размер каждый кадр, дала бы десятки
+        /// анимированных переездов камеры за одно нажатие.
         ///
         /// Реплей исключён отдельно: пока камера едет за машиной, маршрут
         /// целиком не показывают вовсе.
@@ -1085,11 +1106,12 @@ struct RouteMapView: UIViewRepresentable {
             if refits, !following {
                 // Поля кадрирования — ТОГО, кто карту сейчас держит. Они
                 // лежат в координаторе, а координатор общий: полноэкранная
-                // раскладка оставляет в нём свои (сверху 103, снизу больше
-                // трёхсот — под хром и карточку), и вписанный по ним маршрут
-                // не помещается в рамку героя вовсе.
+                // раскладка оставляет в нём свои (сверху 115, снизу 224 — под
+                // хром и карточку), и вписанный по ним маршрут не помещается
+                // в рамку героя вовсе.
                 overviewInsets = insets ?? RouteMapView.defaultFitInsets
                 fitPending = true
+                fitAnimated = false
             }
             fitIfSized(mapView)
         }
@@ -1102,7 +1124,8 @@ struct RouteMapView: UIViewRepresentable {
             if let slot = mapView.superview, slot.bounds.size != mapView.bounds.size { return }
             fitPending = false
             mapView.setVisibleMapRect(
-                RouteMapView.floored(overviewRect), edgePadding: overviewInsets, animated: true)
+                RouteMapView.floored(overviewRect), edgePadding: overviewInsets,
+                animated: fitAnimated)
         }
 
         /// The whole-route rect the map opened on, so «обзор» can return to it.
