@@ -33,6 +33,9 @@ struct MyMapView: View {
     @State private var openedHint: RiddleHintCardModel?
     /// Карточка «Атлас в бете», открытая тапом по `AtlasBetaChip`.
     @State private var showBetaSheet = false
+    /// Единственное, о чём «Атлас» говорит всплывающей строкой, — несобравшийся
+    /// постер: остальное он показывает самой картой.
+    @State private var toast: ToastItem?
 
     /// «Есть туман или нет» is not a question a screenshot can settle by eye —
     /// a night map is dark either way. `-no-fog-veil` draws the same map
@@ -105,6 +108,7 @@ struct MyMapView: View {
             posterProgress
         }
         .animation(.easeOut(duration: 0.2), value: isRenderingPoster)
+        .toast(item: $toast)
         // Canon frames 2–5 have no tab bar: a selected card owns the bottom
         // of the screen, and the bar sitting on top of it clipped the
         // progress row clean off.
@@ -286,6 +290,12 @@ struct MyMapView: View {
         Task {
             let poster = await AtlasSharePoster.make(vm: vm, caption: caption)
             isRenderingPoster = false
+            // Картинки нет — говорим об этом. Лист всё равно откроется, в нём
+            // останется одна строка про открытые километры, и молчание здесь
+            // читается как «кнопка только это и умеет».
+            if poster == nil {
+                toast = ToastItem(type: .error, message: AppStrings.posterFailed(lang.language))
+            }
             await AtlasSharePoster.present(image: poster, text: text, title: title)
         }
     }

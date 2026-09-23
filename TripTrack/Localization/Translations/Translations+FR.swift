@@ -228,7 +228,7 @@ extension Translations {
         "atlasBetaChip": "Bêta",
         "atlasBetaTitle": "L'Atlas est en bêta",
         "atlasBetaBody": "Cet écran sera encore retravaillé avant la version finale. Ne faites pas attention aux bugs ni au design provisoire pour l'instant — dites-nous plutôt ce que vous avez remarqué et ce que vous proposeriez.",
-        "mapOpenedSummary": "ouverts",
+        "mapOpenedSummary": "Parcouru : {distance}",
         "mapRegionSince": "depuis {date}",
         "mapPullHint": "Tirez vers le haut — trajets",
         "journalOpenedSection": "DÉCOUVERT",
@@ -1417,6 +1417,7 @@ extension Translations {
         "exportGPX": "Exporter en GPX",
         "exportCSV": "Exporter en CSV",
         "exportFailed": "Échec de l'export",
+        "posterFailed": "L'image n'a pas abouti — seul le texte part",
     ]
 
 }

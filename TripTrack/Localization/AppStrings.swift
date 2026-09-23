@@ -1111,12 +1111,23 @@ enum AppStrings {
     /// - Parameter distance: уже собранное `Measure` расстояние ВМЕСТЕ с
     ///   подписью. Строка, а не число: единицу выбирает человек, и склонять
     ///   милю приходится по этому самому числу.
+    ///
+    /// **Слово стоит ПЕРЕД числом, подписью через двоеточие.** До 23 сентября
+    /// оно стояло после («{distance} открыто»), и с километрами это читалось:
+    /// «км» — несклоняемое сокращение. С милями вышло «181 миля открыто» —
+    /// увидел владелец на устройстве. Согласовать причастие с числом нельзя
+    /// одной строкой: у мили три формы («1 миля», «2 мили», «5 миль»), и у
+    /// половины языков своя беда — «181 milla abiertos», «181 mila odkryte».
+    /// Подпись с двоеточием ни с чем не согласуется вовсе, и это единственная
+    /// форма, верная во всех тринадцати.
     static func mapOpenedSummary(
         _ lang: LanguageManager.Language, distance: String, regions: Int
     ) -> String {
-        let opened = tr(lang, "mapOpenedSummary", ru: "открыто", en: "opened")
+        let pattern = tr(lang, "mapOpenedSummary",
+                         ru: "Открыто: {distance}", en: "Opened: {distance}")
+        let opened = pattern.replacingOccurrences(of: "{distance}", with: distance)
         let r = "\(groupedNumber(regions, lang)) \(nounRegions(lang, regions))"
-        return "\(distance) \(opened) · \(r)"
+        return "\(opened) · \(r)"
     }
 
     // MARK: - Печати и загадки на «Атласе» (0.7.0)
@@ -7541,5 +7552,16 @@ enum AppStrings {
     /// оба пути роняются одинаково, и различать причину человеку незачем.
     static func exportFailed(_ lang: LanguageManager.Language) -> String {
         tr(lang, "exportFailed", ru: "Не удалось экспортировать", en: "Export failed")
+    }
+
+    /// Постер «Атласа» не собрался: снимок карты не приехал.
+    ///
+    /// Молчать здесь нельзя. Лист «Поделиться» всё равно откроется — в нём
+    /// останется одна строка про открытые километры, — и человек решит, что
+    /// кнопка ровно это и делает. Ровно так и решил владелец 23 сентября.
+    static func posterFailed(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "posterFailed",
+           ru: "Картинка не собралась — уходит только текст",
+           en: "The picture didn't come together — sharing text only")
     }
 }

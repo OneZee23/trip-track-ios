@@ -228,7 +228,7 @@ extension Translations {
         "atlasBetaChip": "Beta",
         "atlasBetaTitle": "L'Atlante è in beta",
         "atlasBetaBody": "Questa schermata verrà ancora modificata prima della versione definitiva. Per ora non badare a bug o design grezzo: dicci piuttosto cosa hai notato e cosa suggeriresti.",
-        "mapOpenedSummary": "aperti",
+        "mapOpenedSummary": "Aperto: {distance}",
         "mapRegionSince": "da {date}",
         "mapPullHint": "Trascina in alto — viaggi",
         "journalOpenedSection": "SCOPERTO",
@@ -1417,6 +1417,7 @@ extension Translations {
         "exportGPX": "Esporta GPX",
         "exportCSV": "Esporta CSV",
         "exportFailed": "Impossibile esportare",
+        "posterFailed": "L'immagine non è venuta: si condivide solo il testo",
     ]
 
 }

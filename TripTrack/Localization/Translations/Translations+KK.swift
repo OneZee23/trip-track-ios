@@ -228,7 +228,7 @@ extension Translations {
         "atlasBetaChip": "Бета",
         "atlasBetaTitle": "Атлас бета нұсқасында",
         "atlasBetaBody": "Бұл экран шығарылым нұсқасына дейін әлі де өзгеретін болады. Қателер мен шикі дизайнға әзірше назар аудармаңыз — оның орнына не байқағаныңызды және не ұсынатыныңызды айтыңыз.",
-        "mapOpenedSummary": "ашылды",
+        "mapOpenedSummary": "Ашылды: {distance}",
         "mapRegionSince": "Алғаш рет: {date}",
         "mapPullHint": "Жоғары тартыңыз — сапарлар",
         "journalOpenedSection": "АШЫЛҒАН",
@@ -1417,6 +1417,7 @@ extension Translations {
         "exportGPX": "GPX экспорттау",
         "exportCSV": "CSV экспорттау",
         "exportFailed": "Экспорттау мүмкін болмады",
+        "posterFailed": "Сурет жиналмады — тек мәтін жіберіледі",
     ]
 
 }

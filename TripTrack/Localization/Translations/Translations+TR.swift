@@ -228,7 +228,7 @@ extension Translations {
         "atlasBetaChip": "Beta",
         "atlasBetaTitle": "Atlas beta sürümünde",
         "atlasBetaBody": "Bu ekran, sürüm çıkana kadar değişmeye devam edecek. Şimdilik hatalara ve ham tasarıma takılmayın — bunun yerine fark ettiklerinizi ve önerilerinizi bize bildirin.",
-        "mapOpenedSummary": "açıldı",
+        "mapOpenedSummary": "Açıldı: {distance}",
         "mapRegionSince": "{date} tarihinden beri",
         "mapPullHint": "Yukarı çek — geziler",
         "journalOpenedSection": "KEŞFEDİLEN",
@@ -1417,6 +1417,7 @@ extension Translations {
         "exportGPX": "GPX olarak dışa aktar",
         "exportCSV": "CSV olarak dışa aktar",
         "exportFailed": "Dışa aktarılamadı",
+        "posterFailed": "Görsel oluşmadı — yalnızca metin gönderiliyor",
     ]
 
 }

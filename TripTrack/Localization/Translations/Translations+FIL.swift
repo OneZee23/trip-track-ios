@@ -228,7 +228,7 @@ extension Translations {
         "atlasBetaChip": "Beta",
         "atlasBetaTitle": "Nasa beta pa ang Atlas",
         "atlasBetaBody": "Patuloy pang babaguhin ang screen na ito bago ang bersyong ilalabas. Sa ngayon, huwag munang pansinin ang mga bug o hilaw na disenyo — sa halip, sabihin sa amin kung ano ang napansin mo at ano ang imumungkahi mo.",
-        "mapOpenedSummary": "nabuksan",
+        "mapOpenedSummary": "Nabuksan: {distance}",
         "mapRegionSince": "mula {date}",
         "mapPullHint": "Hilahin pataas — mga biyahe",
         "journalOpenedSection": "NABUKSAN",
@@ -1417,6 +1417,7 @@ extension Translations {
         "exportGPX": "I-export ang GPX",
         "exportCSV": "I-export ang CSV",
         "exportFailed": "Hindi na-export",
+        "posterFailed": "Hindi nabuo ang larawan — teksto lang ang ibabahagi",
     ]
 
 }

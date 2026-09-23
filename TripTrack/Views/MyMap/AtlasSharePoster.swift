@@ -1,5 +1,6 @@
 import UIKit
 import MapKit
+import os
 
 /// Постер «Атласа»: снимок карты, накрытый ТЕМ ЖЕ туманом, что на экране, с
 /// прожжёнными коридорами, печатями найденного и одной подписью внизу.
@@ -22,6 +23,12 @@ import MapKit
 /// завёл бы вторые километры — ту же поломку, из-за которой одометр собрали в
 /// `TripDistanceGate`.
 enum AtlasSharePoster {
+    /// Почему постер не собрался — в системный лог. Отказ здесь молчаливый по
+    /// природе: лист «Поделиться» всё равно откроется с текстом, и без этой
+    /// строки «картинки нет» отличить от «картинка есть, но человек выбрал
+    /// „Скопировать“» нечем.
+    private static let log = Logger(subsystem: "com.onezee.TripTrack", category: "atlas-share")
+
 
     // MARK: - Размеры
 
@@ -351,18 +358,34 @@ enum AtlasSharePoster {
     static func make(vm: MyMapViewModel, caption: String) async -> UIImage? {
         let layer = vm.revealed
         let seals = vm.seals
-        guard let rect = frame(for: layer) else { return nil }
+        guard let rect = frame(for: layer) else {
+            log.notice("постер: открытого нет, картинки не будет")
+            return nil
+        }
         let window = region(for: rect)
-        guard let snapshot = await snapshot(region: window),
-              !looksUnrendered(snapshot) else { return nil }
+        guard let snapshot = await snapshot(region: window) else {
+            log.notice("постер: снимок карты не приехал")
+            return nil
+        }
+        guard !looksUnrendered(snapshot) else {
+            log.notice("постер: вместо карты пустая сетка")
+            return nil
+        }
         return await Task.detached(priority: .userInitiated) {
             render(snapshot: snapshot, region: window, layer: layer, seals: seals,
                    caption: caption, scale: renderScale)
         }.value
     }
 
-    /// Тёмная карта без точек интереса — та же подложка, что под туманом на
-    /// экране. Лесенка повторов — от `SharePosterRenderer`: холодная выборка
+    /// СВЕТЛАЯ карта без точек интереса — та же подложка, что под туманом на
+    /// экране.
+    ///
+    /// Светлая, а не тёмная, с 23 сентября: карта «Атласа» —
+    /// единственная дневная в приложении (`MyMapRepresentable`,
+    /// `overrideUserInterfaceStyle = .light`), и это про полярность, а не про
+    /// тему: сквозь тёмную мглу должна просвечивать светлая карта. Постер
+    /// оставался ночным с 17 сентября и показывал не то, что на экране, — а
+    /// правило у него одно: та же картинка теми же числами. Лесенка повторов — от `SharePosterRenderer`: холодная выборка
     /// плиток регулярно приходит пустой с первого раза.
     static func snapshot(region: MKCoordinateRegion) async -> UIImage? {
         await Task.detached(priority: .userInitiated) { () -> UIImage? in
@@ -374,7 +397,7 @@ enum AtlasSharePoster {
             let config = MKStandardMapConfiguration(elevationStyle: .flat)
             config.pointOfInterestFilter = .excludingAll
             options.preferredConfiguration = config
-            options.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
+            options.traitCollection = UITraitCollection(userInterfaceStyle: .light)
 
             for delay in [UInt64(0), 700_000_000, 2_000_000_000] {
                 if delay > 0 { try? await Task.sleep(nanoseconds: delay) }
