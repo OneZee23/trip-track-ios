@@ -205,6 +205,86 @@ final class VeilSeatTests: XCTestCase {
     func testForeignTripCreatesNoVeilAtAll() {
         let coordinator = RouteMapView(coordinates: [], showsFog: false).makeCoordinator()
         XCTAssertNil(coordinator.veilSeat)
+        XCTAssertNil(coordinator.fogMetal,
+                     "и Metal-слоя тоже: второй MTKView за чужой поездкой не живёт")
+    }
+
+    /// Все три карты просят СВОЙ Metal-слой, и все три переводят растровую
+    /// вуаль в вектор.
+    ///
+    /// Вторая половина не менее важна первой: не сними мы растр, туман
+    /// рисовался бы дважды — раз на GPU и раз восьмимегабайтной картинкой, —
+    /// и человек видел бы двойную плотность там, где коридор прочищен только
+    /// у одного из двух.
+    func testEachMapAsksForItsOwnMetalSeatAndTurnsTheRasterIntoVector() throws {
+        let atlas = MapHostController()
+        try XCTSkipIf(atlas.metalVeil == nil, "Metal недоступен")
+        XCTAssertTrue(atlas.screenVeil.vectorOnly)
+
+        let trip = RouteMapView(coordinates: [], isInteractive: true, showsFog: true)
+            .makeCoordinator()
+        XCTAssertNotNil(trip.fogMetal?.veil, "карта поездки рисует «мир на ту дату» металом")
+        XCTAssertEqual(trip.veilSeat?.veil.vectorOnly, true)
+
+        let recording = MapViewRepresentable(
+            userTrackingMode: .constant(.none), zoomDelta: .constant(0)
+        ).makeCoordinator()
+        XCTAssertNotNil(recording.fogMetal.veil)
+        XCTAssertTrue(recording.veilSeat.veil.vectorOnly)
+    }
+
+    /// Metal-слой садится ПОД растровую вуаль — то есть на экране поездки и
+    /// записи ниже контейнера оверлеев вместе с ней.
+    ///
+    /// Место здесь решает, видно ли саму поездку: маршрут рисует
+    /// `MKOverlayRenderer` — отрезки по скорости, обводка, гашение
+    /// непройденного на реплее, светящаяся голова на записи, — и мгла выше
+    /// него спрятала бы под собой то, ради чего экран открыт.
+    func testTripAndRecordingSeatTheMetalVeilUnderTheirRasterOne() throws {
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let coordinator = RouteMapView(coordinates: [], showsFog: true).makeCoordinator()
+        let metal = try XCTUnwrap(coordinator.fogMetal?.veil, "Metal недоступен")
+        coordinator.adoptMap(map)
+        try XCTSkipUnless(coordinator.veilSeat?.isAttached == true,
+                          "MapKit не собрал дерево у карты без окна — проверять нечего")
+        let veil = try XCTUnwrap(coordinator.veilSeat?.veil)
+        let parent = try XCTUnwrap(veil.superview)
+        try assertMetalSitsUnderTheVeil(metal, veil: veil, parent: parent)
+
+        let container = try XCTUnwrap(FogVeilView.overlayContainer(among: parent.subviews),
+                                      "у карты поездки вуаль сидит под контейнером оверлеев")
+        let mine = try XCTUnwrap(parent.subviews.firstIndex(of: metal))
+        let theirs = try XCTUnwrap(parent.subviews.firstIndex(of: container))
+        XCTAssertLessThan(mine, theirs,
+                          "маршрут рисуется оверлеем и обязан остаться ВЫШЕ мглы")
+
+        // MapKit пересобрал сабвью: вернуть слой обязана ближайшая посадка
+        // карты, а её зовёт каждый `updateUIView` (то есть каждый кадр реплея).
+        metal.removeFromSuperview()
+        coordinator.adoptMap(map)
+        try assertMetalSitsUnderTheVeil(metal, veil: veil, parent: parent)
+    }
+
+    /// Контейнера оверлеев в дереве нет — не садится НИКТО, ни растр, ни
+    /// метал, и туман рисует плиточный рендерер, как до 0.7.0.
+    ///
+    /// Это откат, а не «сядем куда придётся»: Metal-слой, севший выше
+    /// оверлеев, нарисовал бы точно такой же туман и молча спрятал бы под ним
+    /// поездку — заметить подмену было бы нечем.
+    func testMetalStaysOutOfTheTreeWhenTheOverlayContainerIsMissing() throws {
+        let root = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let content = UIView(frame: root.bounds)
+        root.addSubview(content)
+        content.addSubview(AnnotationContainerStub(frame: content.bounds))
+
+        let seat = VeilSeat(margin: FogVeilView.rotatingMargin, seat: .aboveBaseMap)
+        XCTAssertFalse(seat.veil.attach(inside: root, seat: .aboveBaseMap))
+
+        let metal = FogMetalSeat()
+        let veil = try XCTUnwrap(metal.veil, "Metal недоступен")
+        metal.follow(seat, on: MKMapView())
+        XCTAssertNil(veil.superview, "вуаль не села — Metal-слою садиться не подо что")
+        XCTAssertFalse(metal.isSeated)
     }
 
     // MARK: Временной слой доезжает до вуали
@@ -232,6 +312,30 @@ final class VeilSeatTests: XCTestCase {
         XCTAssertTrue(live.overlays.compactMap { $0 as? FogVeilOverlay }.isEmpty,
                       "туман на вуали и оверлеем сразу — это двойная плотность")
         XCTAssertTrue(seated.veilSeat?.veil.hasInstalledLayer ?? false)
+    }
+
+    /// Срез на дату доезжает до Metal-слоя — до ТОГО САМОГО, который лежит
+    /// под вуалью на этом экране.
+    ///
+    /// Проводка, а не картинка: `TemporalFogCache` считает слой «как мир
+    /// выглядел до этой поездки» и отдаёт его `installFogLayer` — дальше
+    /// вопрос ровно один, дошёл ли он до GPU или остался у растровой вуали,
+    /// которая на этом экране мглы больше не рисует. Не дошёл бы — экран
+    /// поездки показывал бы маршрут поверх ГОЛОЙ карты Apple.
+    func testTheTemporalSliceReachesTheMetalVeil() throws {
+        let layer = revealedLayer()
+        let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let coordinator = RouteMapView(coordinates: [], showsFog: true).makeCoordinator()
+        let metal = try XCTUnwrap(coordinator.fogMetal?.veil, "Metal недоступен")
+        coordinator.adoptMap(map)
+        try XCTSkipUnless(coordinator.veilSeat?.isAttached == true,
+                          "MapKit не собрал дерево у карты без окна — проверять нечего")
+
+        coordinator.installFogLayer(layer, on: map)
+        XCTAssertEqual(metal.installedSignature, FogMesh.signature(of: layer),
+                       "на GPU обязан уехать ИМЕННО этот срез, а не какой-нибудь")
+        XCTAssertTrue(map.overlays.compactMap { $0 as? FogVeilOverlay }.isEmpty,
+                      "и плиточным оверлеем он при этом не ложится — это двойная плотность")
     }
 
     /// Вуаль потеряла место в дереве — плиточный туман обязан ВЕРНУТЬСЯ на
