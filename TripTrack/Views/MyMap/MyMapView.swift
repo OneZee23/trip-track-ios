@@ -188,15 +188,10 @@ struct MyMapView: View {
                     AtlasBetaChip { showBetaSheet = true }
                 }
 
-                if !vm.isEmpty {
-                    Text(openedSummary)
-                        .font(.inter(12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.75))
-                        .shadow(color: .black.opacity(0.5), radius: 6, y: 1)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .allowsHitTesting(false)
-                }
+                // Строки итога здесь БОЛЬШЕ НЕТ: ровно то же самое стоит на
+                // свёрнутой карточке внизу, крупно и с кнопкой «Поделиться».
+                // Два одинаковых предложения на одном экране — это не два
+                // ответа, а один, набранный дважды (23 сен 2026).
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)

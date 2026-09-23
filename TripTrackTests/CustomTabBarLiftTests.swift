@@ -34,8 +34,14 @@ final class CustomTabBarLiftTests: XCTestCase {
     /// непрозрачным туманом логотип Apple и ссылка «Legal» иначе остаются под
     /// листом навсегда, а прятать «Legal» нельзя.
     func testAtlasCollapsedSheetLeavesRoomForTheLegalLink() {
-        XCTAssertEqual(MyMapSheet.collapsedHeight(bottomInset: 34), 64 + 106 + 6)
-        XCTAssertEqual(MyMapSheet.collapsedHeight(bottomInset: 0), 64 + 96 + 6)
+        // Высота карточки — из её же константы, а не числом: она выросла с 64
+        // до 86, когда число стало героем («дизайн этой плашки не нравится» —
+        // владелец, 23 сен), и ЛЮБАЯ её правка обязана доехать до инсета
+        // карты. Переписанное здесь число это правило и проверяет.
+        XCTAssertEqual(MyMapSheet.collapsedHeight(bottomInset: 34),
+                       MyMapSheet.collapsedCardHeight + 106 + 6)
+        XCTAssertEqual(MyMapSheet.collapsedHeight(bottomInset: 0),
+                       MyMapSheet.collapsedCardHeight + 96 + 6)
         XCTAssertGreaterThan(
             MyMapSheet.collapsedHeight(bottomInset: 34), 34,
             "инсет обязан быть больше безопасной зоны, иначе поднимать нечего")

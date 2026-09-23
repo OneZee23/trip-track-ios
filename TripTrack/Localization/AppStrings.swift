@@ -1130,6 +1130,19 @@ enum AppStrings {
         return "\(opened) · \(r)"
     }
 
+    /// «Открыто» — то же слово, что в строке итога, только без числа.
+    ///
+    /// Читается из ТОЙ ЖЕ строки таблицы, а не заводится своей: два написания
+    /// одного слова на одном экране однажды разъедутся, и никто этого не
+    /// заметит. Все тринадцать написаны одинаково — «Слово: {distance}», —
+    /// поэтому голову строки можно просто отрезать по токену.
+    static func mapOpenedLabel(_ lang: LanguageManager.Language) -> String {
+        let pattern = tr(lang, "mapOpenedSummary",
+                         ru: "Открыто: {distance}", en: "Opened: {distance}")
+        let head = pattern.components(separatedBy: "{distance}").first ?? ""
+        return head.trimmingCharacters(in: CharacterSet(charactersIn: " :\u{00A0}\u{202F}"))
+    }
+
     // MARK: - Печати и загадки на «Атласе» (0.7.0)
 
     /// «4 знака» — хвост подписи под «Атласом».

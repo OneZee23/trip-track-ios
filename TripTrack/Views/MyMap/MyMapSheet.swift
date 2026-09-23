@@ -28,7 +28,7 @@ struct MyMapSheet: View {
     static let summaryMaxWidth: CGFloat = 370
 
     /// Высота самой карточки: ручка (4 + 8 сверху), строка 32, отступы 8 и 12.
-    static let collapsedCardHeight: CGFloat = 64
+    static let collapsedCardHeight: CGFloat = 86
 
     /// Сколько низа экрана занимает свёрнутый лист вместе с зазором до
     /// плавающего таб-бара.
@@ -382,6 +382,18 @@ struct MyMapSheet: View {
 
     /// Одна строка итога, та же на карточке и над списком: «1 910 км открыто ·
     /// 4 региона». Километры — из слоя открытого, а не из суммы поездок.
+    /// Одно расстояние, уже с единицей: число-герой свёрнутой карточки.
+    private var openedDistance: String {
+        Measure.distance(km: vm.revealed.openedKm, unit: distanceUnit, lang: lang.language)
+    }
+
+    /// «2 региона» — хвост под числом.
+    private var openedRegions: String {
+        let count = vm.exploration.regionCount
+        return "\(AppStrings.groupedNumber(count, lang.language)) "
+            + AppStrings.regionsGenitive(lang.language, count: count)
+    }
+
     private var openedSummary: String {
         AppStrings.mapOpenedSummary(
             lang.language,
@@ -406,26 +418,49 @@ struct MyMapSheet: View {
     private var summaryCard: some View {
         let c = AppTheme.colors(for: scheme)
         return VStack(spacing: 0) {
-            Capsule()
-                .fill(c.textTertiary.opacity(0.4))
-                .frame(width: 36, height: 4)
-                .padding(.top, 8)
-
-            HStack(spacing: 6) {
-                Text(openedSummary)
-                .font(.inter(13, weight: .semibold))
-                .foregroundStyle(vm.isEmpty ? c.textTertiary : c.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .layoutPriority(1)
-
-                // A grabber alone was not saying «there is more up here» —
-                // «совсем не очевидно, что эту панель надо тянуть наверх».
+            // Ручка и шеврон — ОДИН знак «тяни вверх», собранный в одном
+            // месте. До 23 сентября шеврон стоял в середине фразы, между
+            // числом и кнопкой, и читался как знак препинания, а не как
+            // управление: «дизайн этой плашки не нравится» — владелец.
+            VStack(spacing: 3) {
+                Capsule()
+                    .fill(c.textTertiary.opacity(0.4))
+                    .frame(width: 36, height: 4)
                 if !vm.isEmpty {
                     Image(systemName: "chevron.up")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(c.textTertiary)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(c.textTertiary.opacity(0.6))
                 }
+            }
+            .padding(.top, 8)
+
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 1) {
+                    // Подпись над числом, а не вокруг него: «Открыто» — это
+                    // заголовок величины, и в нём нет ни склонения, ни
+                    // согласования с числом ни на одном из тринадцати языков.
+                    Text(AppStrings.mapOpenedLabel(lang.language).uppercased(lang.language))
+                        .font(.inter(10, weight: .bold))
+                        .kerning(0.6)
+                        .foregroundStyle(c.textTertiary)
+
+                    // Число — герой карточки: за ним сюда и приходят, а до
+                    // 23 сентября оно было набрано тем же кеглем, что слово
+                    // «Открыто» и счёт регионов.
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(openedDistance)
+                            .font(.inter(20, weight: .heavy))
+                            .foregroundStyle(vm.isEmpty ? c.textTertiary : c.text)
+                        if !vm.isEmpty {
+                            Text("· " + openedRegions)
+                                .font(.inter(13, weight: .semibold))
+                                .foregroundStyle(c.textSecondary)
+                        }
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                }
+                .layoutPriority(1)
 
                 Spacer(minLength: 8)
 
@@ -437,9 +472,9 @@ struct MyMapSheet: View {
                         // The iOS share glyph, not a bare arrow: nothing about
                         // «↑» said what the button did until you pressed it.
                         Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(AppTheme.accent)
-                            .frame(width: 32, height: 32)
+                            .frame(width: 38, height: 38)
                             .background(AppTheme.accent.opacity(0.12), in: Circle())
                     }
                     .buttonStyle(.plain)
@@ -447,9 +482,8 @@ struct MyMapSheet: View {
                     .accessibilityIdentifier("mymap_share")
                 }
             }
-            .frame(height: 32)
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, 6)
             .padding(.bottom, 12)
         }
         .frame(maxWidth: Self.summaryMaxWidth)
