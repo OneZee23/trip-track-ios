@@ -96,7 +96,7 @@ final class AttributionClearTests: XCTestCase {
     /// силы, а не снята совсем — задача A2), по краю — непрозрачна, а между
     /// ними растушёвка, а не ступенька.
     func testWindowIsDimmedInsideAndSolidOutside() throws {
-        let size = CGSize(width: 120, height: 48)
+        let size = Self.windowSize
         let image = try XCTUnwrap(VeilCarveMask.windowImage(size: size))
         let w = image.width, h = image.height
         var data = [UInt8](repeating: 0, count: w * h * 4)
@@ -132,12 +132,29 @@ final class AttributionClearTests: XCTestCase {
         return (w, h, { x, y in Int(data[(y * w + x) * 4 + 3]) })
     }
 
+    /// Размер окна считается ТАК ЖЕ, как в бою: рамка подписи плюс поле, и
+    /// сверху растушёвка с каждой стороны (`VeilCarveMask.layout`).
+    ///
+    /// Раньше здесь стояло 120×48 числом, и при растушёвке в шесть точек оно
+    /// работало. На тридцати двух (23 сен, чтобы окно перестало читаться
+    /// плашкой) такой картинки ФИЗИЧЕСКИ не хватает: спад не успевает дойти
+    /// до края, и тест ловил не поломку, а свой собственный размер. Считать
+    /// его от тех же чисел — единственный способ, при котором он остаётся
+    /// верным на любой растушёвке.
+    private static var windowSize: CGSize {
+        let attribution = CGRect(x: 0, y: 0, width: 96, height: 20)
+        let carve = attribution.insetBy(dx: -AttributionCarve.padding,
+                                        dy: -AttributionCarve.padding)
+        return carve.insetBy(dx: -AttributionCarve.feather,
+                             dy: -AttributionCarve.feather).size
+    }
+
     /// На САМОЙ границе картинки альфа обязана совпасть с полосами вокруг —
     /// то есть быть полной, а не почти полной. Второй прямоугольник с жёсткой
     /// кромкой (владелец на устройстве, задача A) — это шов там, где край
     /// окна не дотягивает до alpha=1 и полосы обрывают его резко.
     func testWindowEdgeIsFullyOpaqueLikeTheBars() throws {
-        let size = CGSize(width: 120, height: 48)
+        let size = Self.windowSize
         let image = try XCTUnwrap(VeilCarveMask.windowImage(size: size))
         let (w, h, alpha) = alphaGrid(image)
         // Крайний пиксель сэмплится в своём ЦЕНТРЕ, на полпикселя внутрь от
@@ -153,7 +170,7 @@ final class AttributionClearTests: XCTestCase {
     /// быть не должно: именно они читались на устройстве отдельной рамкой —
     /// эффектом Маха на границе между кольцами.
     func testWindowRampHasNoDiscreteSteps() throws {
-        let size = CGSize(width: 120, height: 48)
+        let size = Self.windowSize
         let image = try XCTUnwrap(VeilCarveMask.windowImage(size: size))
         let (w, h, alpha) = alphaGrid(image)
         // Индекс 0 — у самого края картинки, конец диапазона — у центра

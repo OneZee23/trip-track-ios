@@ -140,10 +140,30 @@ final class MapHostController: UIViewController {
         didSet { applyAttributionLeading() }
     }
 
-    /// Собственное поле MapKit слева от логотипа. Меряется ОДИН раз, при
-    /// нулевом левом инсете: числа в API нет, а выравнивать подпись по левому
-    /// краю листа без него нечем — инсет сдвинул бы её на своё поле плюс это.
-    private var attributionPadding: CGFloat?
+    /// Собственное поле MapKit слева от логотипа. Числа в API нет, поэтому
+    /// оно МЕРЯЕТСЯ — один раз, при нулевом левом инсете.
+    ///
+    /// Но не с нуля на каждом запуске: измеренное значение ложится в
+    /// `UserDefaults` и читается оттуда следующим, а до первого замера
+    /// берётся `MapBottomInset.defaultMapPadding`. Без этого первый кадр
+    /// экрана всегда рисовался с нулевым левым инсетом — подпись стояла на
+    /// своём поле и уезжала вправо, когда замер приезжал. Прыжок видно
+    /// глазами, и увидел его владелец.
+    private static let paddingKey = "atlas.attributionPadding"
+
+    private var attributionPadding: CGFloat? {
+        didSet {
+            guard let attributionPadding else { return }
+            UserDefaults.standard.set(Double(attributionPadding), forKey: Self.paddingKey)
+        }
+    }
+
+    /// Последнее измеренное поле — или разумное умолчание, если не мерили ни
+    /// разу.
+    private static var rememberedPadding: CGFloat {
+        let stored = UserDefaults.standard.double(forKey: paddingKey)
+        return stored > 0 ? CGFloat(stored) : MapBottomInset.defaultMapPadding
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -293,7 +313,9 @@ final class MapHostController: UIViewController {
             attributionPadding = max(0, rect.minX + AttributionCarve.padding
                                      - view.safeAreaInsets.left)
         }
-        guard let padding = attributionPadding else { return }
+        // Пока не померили — берём запомненное с прошлого запуска: подпись
+        // обязана встать на место с ПЕРВОГО кадра, а не после замера.
+        let padding = attributionPadding ?? Self.rememberedPadding
         let wanted = MapBottomInset.leftInset(
             width: view.bounds.width, cardMaxWidth: bottomOverlayMaxWidth,
             mapPadding: padding)
@@ -330,6 +352,15 @@ enum MapBottomInset {
     /// карточки. До правки подпись поднимали ровно на высоту листа, и она
     /// садилась на его край: «Эппл-мапс стоит неровно с другими элементами».
     static let attributionGap: CGFloat = 12
+
+    /// Собственное поле MapKit слева от логотипа — ДО того, как его померили.
+    ///
+    /// Числа для него в API нет, и меряется оно по живой вью; но замер
+    /// приходит после первой разметки, а подпись стоять на месте обязана
+    /// сразу. Десять — то, что MapKit даёт на iPhone (и то же число, которым
+    /// считает `AttributionClearTests.testAttributionLeftEdgeLinesUpWithTheSheet`);
+    /// первый же замер уточняет его и запоминает на все следующие запуски.
+    static let defaultMapPadding: CGFloat = 10
 
     /// Добавочный инсет карты: `MKMapView` уже уважает безопасную зону окна,
     /// поэтому доплачивать надо только за то, что панель выше неё.
@@ -416,6 +447,14 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         StartupTrace.mark("MapHostController.init begin")
         let controller = MapHostController()
         StartupTrace.mark("MapHostController.init end")
+        // Размеры листа известны ЗДЕСЬ, до первой разметки, — и отдать их
+        // надо здесь же. Раньше их ставил только `updateUIViewController`,
+        // то есть после первого кадра: подпись Apple успевала нарисоваться у
+        // самого низа и со своим левым полем, а потом прыгала на место.
+        // Владелец прислал ровно эту пару кадров 23 сентября («сначала вот
+        // так… чуть попозже встало в правильное место»).
+        controller.bottomOverlayHeight = bottomOverlayHeight
+        controller.bottomOverlayMaxWidth = bottomOverlayMaxWidth
         let map = controller.map
         let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
         map.preferredConfiguration = config
