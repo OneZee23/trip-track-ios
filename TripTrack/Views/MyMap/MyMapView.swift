@@ -31,6 +31,8 @@ struct MyMapView: View {
     /// этой подсказки горит ярче (`selectedHintId`). Закрытие листа обнуляет
     /// её само — второго места, где снимается выбор, нет.
     @State private var openedHint: RiddleHintCardModel?
+    /// Карточка «Атлас в бете», открытая тапом по `AtlasBetaChip`.
+    @State private var showBetaSheet = false
     /// Единственное, о чём «Атлас» говорит всплывающей строкой, — несобравшийся
     /// постер: остальное он показывает самой картой.
     @State private var toast: ToastItem?
@@ -146,6 +148,10 @@ struct MyMapView: View {
                 .padding(.bottom, 20)
                 .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
         }
+        .sheet(isPresented: $showBetaSheet) {
+            AtlasBetaSheet(model: .make(), onDismiss: { showBetaSheet = false })
+                .contentSizedSheet(background: AppTheme.colors(for: scheme).bg)
+        }
         .fullScreenCover(item: $openedTrip) { opened in
             NavigationStack {
                 TripDetailView(
@@ -189,6 +195,7 @@ struct MyMapView: View {
                         .shadow(color: .black.opacity(0.5), radius: 8, y: 1)
                         .allowsHitTesting(false)
 
+                    AtlasBetaChip { showBetaSheet = true }
                 }
 
                 // Строки итога здесь БОЛЬШЕ НЕТ: ровно то же самое стоит на
