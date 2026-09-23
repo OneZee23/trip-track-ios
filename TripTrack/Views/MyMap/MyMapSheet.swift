@@ -517,7 +517,11 @@ struct MyMapSheet: View {
 
     private func detailPanel(maxHeight: CGFloat, safeBottom: CGFloat) -> some View {
         let c = AppTheme.colors(for: scheme)
-        let target = (isExpanded ? min(expandedHeight, maxHeight * 0.86) : baseHeight) + safeBottom
+        // Высота считается ВМЕСТЕ с местом под таб-бар: содержимое карточки
+        // прижато к её верху, и без этого запаса последняя строка ложилась в
+        // семи точках от пилюли — «сливается всё» (владелец, 23 сен).
+        let target = (isExpanded ? min(expandedHeight, maxHeight * 0.86) : baseHeight)
+            + CustomTabBar.clearance(bottomInset: safeBottom)
         return VStack(spacing: 0) {
             grabber(c).gesture(dragGesture)
 
@@ -533,7 +537,7 @@ struct MyMapSheet: View {
                         regionCard(region, c)
                     }
                 }
-                .padding(.bottom, 20 + safeBottom)
+                .padding(.bottom, 20 + CustomTabBar.clearance(bottomInset: safeBottom))
             }
             .scrollDisabled(!isExpanded)
         }

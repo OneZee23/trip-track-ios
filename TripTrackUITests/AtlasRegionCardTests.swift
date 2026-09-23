@@ -1,13 +1,14 @@
 import XCTest
 
-/// Карточка региона владеет низом экрана целиком.
+/// Карточка региона ложится ВЫШЕ таб-бара, а не под него.
 ///
-/// Правило 0.7.0: у выбранной карточки таб-бар спрятан — «a selected card owns
-/// the bottom of the screen, and the bar sitting on top of it clipped the
-/// progress row clean off» (`MyMapView.hideAppTabBar`). Владелец прислал кадр
-/// 23 сентября, где пилюля стоит прямо на карточке края: либо правило
-/// перестало работать, либо кадр снят посреди перехода. Отличить одно от
-/// другого можно только настоящим касанием, отсюда UI-тест.
+/// Канон 0.7.0 прятал бар под выбранной карточкой. На симуляторе он и правда
+/// уезжал, а на устройстве владельца оставался — два кадра подряд, 23
+/// сентября, с пилюлей поверх карточки: «сливается всё, некрасиво». Правило,
+/// которое работает через раз, заменено на одно состояние: бар под карточкой
+/// ОСТАЁТСЯ, а карточка считает свою высоту вместе с местом под него
+/// (`MyMapSheet.detailPanel`). Проверяется это настоящим касанием — хит-тест
+/// и раскладку иначе не спросить.
 ///
 /// Гонять ТОЛЬКО этот класс: полный UI-таргет виснет (CLAUDE.md).
 final class AtlasRegionCardTests: XCTestCase {
@@ -24,7 +25,7 @@ final class AtlasRegionCardTests: XCTestCase {
         app = nil
     }
 
-    func testTheRegionCardHidesTheTabBar() {
+    func testTheRegionCardSitsAboveTheTabBar() {
         let tab = app.buttons.matching(identifier: "tab_maps").firstMatch
         XCTAssertTrue(tab.waitForExistence(timeout: 20), "вкладка «Атлас» на месте")
         tab.tap()
@@ -50,8 +51,13 @@ final class AtlasRegionCardTests: XCTestCase {
         shot.lifetime = .keepAlways
         add(shot)
 
-        XCTAssertFalse(tab.isHittable,
-                       "у открытой карточки региона таб-бар обязан быть убран")
+        XCTAssertTrue(tab.isHittable, "бар под карточкой остаётся на месте")
+        let card = app.otherElements["mymap_region_card"].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "карточка региона на экране")
+        // Содержимое карточки кончается ВЫШЕ пилюли: «сливается» — это когда
+        // между последней строкой и баром семь точек.
+        XCTAssertLessThan(tab.frame.minY, card.frame.maxY,
+                          "бар стоит поверх нижнего края карточки — так и задумано")
 
         // Второй вход в ту же карточку — палец по карте, а не строка журнала.
         // Владелец открывает её именно так, и путь там другой: `selectRegion`
@@ -75,7 +81,6 @@ final class AtlasRegionCardTests: XCTestCase {
 
         XCTAssertTrue(app.buttons.matching(identifier: "mymap_close").firstMatch.exists,
                       "тап по карте открыл карточку региона")
-        XCTAssertFalse(tab.isHittable,
-                       "карточка, открытая тапом по карте, тоже убирает бар")
+        XCTAssertTrue(tab.isHittable, "и здесь бар на месте, карточка над ним")
     }
 }

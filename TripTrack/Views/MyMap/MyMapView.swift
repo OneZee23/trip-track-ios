@@ -112,7 +112,17 @@ struct MyMapView: View {
         // Canon frames 2–5 have no tab bar: a selected card owns the bottom
         // of the screen, and the bar sitting on top of it clipped the
         // progress row clean off.
-        .hideAppTabBar(vm.selection != nil || isSummaryExpanded)
+        // Бар уезжает ТОЛЬКО под журнал: тот забирает почти весь экран, и
+        // пилюля поверх него закрывала бы список.
+        //
+        // Под карточкой (край, дорога, поездка, находка) бар ОСТАЁТСЯ. Канон
+        // 0.7.0 прятал и его — «a selected card owns the bottom of the
+        // screen», — но на устройстве он всё равно оставался, и владелец
+        // дважды прислал кадр, где пилюля лежит на карточке: «сливается всё,
+        // некрасиво». Два состояния, из которых одно не воспроизводится, —
+        // это не правило, а лотерея; поэтому карточка теперь ВСЕГДА кладётся
+        // выше бара (`MyMapSheet.detailPanel`), и выглядит одинаково везде.
+        .hideAppTabBar(isSummaryExpanded)
         .onAppear {
             // Diagnostic (round 2, 19 сен 2026): fires once this subtree has
             // been laid out — the closest SwiftUI gets to "first frame of
