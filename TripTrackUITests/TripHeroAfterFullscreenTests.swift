@@ -55,7 +55,8 @@ final class TripHeroAfterFullscreenTests: XCTestCase {
         // одинаково, и первая редакция этого теста именно поэтому прошла на
         // сломанном экране. Разброс различает их сразу: у карты есть маршрут,
         // подписи и подпись Apple, у плашки нет ничего.
-        let before = Self.heroContrast(XCUIScreen.main.screenshot())
+        let beforeGrid = Self.heroGrid(XCUIScreen.main.screenshot())
+        let before = Self.contrast(beforeGrid)
         snap("hero_before")
         XCTAssertGreaterThan(before, Self.flat,
                              "герой пустой ещё ДО полного экрана — сломано раньше")
@@ -72,12 +73,23 @@ final class TripHeroAfterFullscreenTests: XCTestCase {
         // который карта обязана нарисовать, вернувшись в слот.
         usleep(2_000_000)
 
-        let after = Self.heroContrast(XCUIScreen.main.screenshot())
+        let afterGrid = Self.heroGrid(XCUIScreen.main.screenshot())
+        let after = Self.contrast(afterGrid)
         snap("hero_after")
         XCTAssertGreaterThan(after, Self.flat,
                              "на месте карты пустой прямоугольник: разброс \(after)")
         XCTAssertGreaterThan(after, before * 0.5,
                              "герой обеднел вдвое после возврата: было \(before), стало \(after)")
+
+        // И камера обязана вернуться ТУДА ЖЕ. Это не придирка к пикселям:
+        // маршрут, вписанный в размер полного экрана, а показанный в рамке
+        // героя, уезжает узкой полоской под верхний край — карта на месте, а
+        // поездки на ней не видно. Один и тот же маршрут при одной и той же
+        // камере даёт почти один и тот же кадр, и разойтись этим двум нечем.
+        let drift = Self.difference(beforeGrid, afterGrid)
+        print("HERO_DRIFT \(drift)")
+        XCTAssertLessThan(drift, Self.maxDrift,
+                          "камера не вернулась в рамку героя: расхождение \(drift)")
     }
 
     // MARK: Кадр
@@ -86,23 +98,39 @@ final class TripHeroAfterFullscreenTests: XCTestCase {
     /// Замер на исправном экране — около 0.05, на сломанном — 0.002.
     private static let flat = 0.012
 
-    /// Разброс света по полосе, в которой живёт карта-герой. Границы взяты с
+    /// Насколько кадр героя вправе отличаться от себя же до похода. Замер на
+    /// исправном экране — около 0.01, на съехавшей камере — 0.1 и выше.
+    private static let maxDrift = 0.02
+
+    /// Свет по клеткам полосы, в которой живёт карта-герой. Границы взяты с
     /// запасом внутрь: сверху вуаль статус-бара, снизу — карточка с деталями.
-    private static func heroContrast(_ shot: XCUIScreenshot) -> Double {
-        contrast(of: shot, from: 0.12, to: 0.38)
+    private static func heroGrid(_ shot: XCUIScreenshot) -> [Double] {
+        grid(of: shot, from: 0.12, to: 0.38)
     }
 
-    /// Среднеквадратичное отклонение света по сетке 16×8.
-    ///
-    /// Полоса сжимается в такую сетку одним `draw` — это и усреднение внутри
+    /// Среднеквадратичное отклонение света по клеткам.
+    private static func contrast(_ lums: [Double]) -> Double {
+        guard !lums.isEmpty else { return 0 }
+        let mean = lums.reduce(0, +) / Double(lums.count)
+        let variance = lums.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(lums.count)
+        return variance.squareRoot()
+    }
+
+    /// Среднее расхождение двух кадров по клеткам.
+    private static func difference(_ a: [Double], _ b: [Double]) -> Double {
+        guard a.count == b.count, !a.isEmpty else { return .infinity }
+        return zip(a, b).reduce(0) { $0 + abs($1.0 - $1.1) } / Double(a.count)
+    }
+
+    /// Полоса, сжатая в сетку 16×8 одним `draw`: это и усреднение внутри
     /// каждой клетки, и дешёвый способ прочитать их все разом.
-    private static func contrast(
+    private static func grid(
         of screenshot: XCUIScreenshot, from: CGFloat, to: CGFloat
-    ) -> Double {
-        guard let full = screenshot.image.cgImage else { return 0 }
+    ) -> [Double] {
+        guard let full = screenshot.image.cgImage else { return [] }
         let height = CGFloat(full.height), width = CGFloat(full.width)
         let band = CGRect(x: 0, y: height * from, width: width, height: height * (to - from))
-        guard let crop = full.cropping(to: band) else { return 0 }
+        guard let crop = full.cropping(to: band) else { return [] }
 
         let cols = 16, rows = 8
         var pixels = [UInt8](repeating: 0, count: cols * rows * 4)
@@ -121,10 +149,7 @@ final class TripHeroAfterFullscreenTests: XCTestCase {
             lums.append((0.2126 * Double(pixels[i]) + 0.7152 * Double(pixels[i + 1])
                          + 0.0722 * Double(pixels[i + 2])) / 255)
         }
-        guard !lums.isEmpty else { return 0 }
-        let mean = lums.reduce(0, +) / Double(lums.count)
-        let variance = lums.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(lums.count)
-        return variance.squareRoot()
+        return lums
     }
 
     private func snap(_ name: String) {

@@ -273,6 +273,9 @@ struct RouteMapView: UIViewRepresentable {
     /// Padding used when framing the whole route. The replay needs a wider
     /// bottom margin than the previews do — its transport controls sit there.
     var fitInsets: UIEdgeInsets?
+
+    /// Поля кадрирования, когда экран своих не назвал.
+    static let defaultFitInsets = UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
     /// Карта, пережившая своё представление. Непустой хост означает: не
     /// создавать `MKMapView` заново, а забрать готовую — см. `TripMapHost`.
     var host: TripMapHost? = nil
@@ -470,7 +473,7 @@ struct RouteMapView: UIViewRepresentable {
             context.coordinator.speedRun = speedRun
 
             if !unionRect.isNull {
-                let insets = fitInsets ?? UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
+                let insets = fitInsets ?? Self.defaultFitInsets
                 // Remembered so the replay can come back to the whole route
                 // after following the car around.
                 context.coordinator.overviewRect = unionRect
@@ -517,9 +520,19 @@ struct RouteMapView: UIViewRepresentable {
         let slot = TripMapSlotView()
         // Карта переехала в другое гнездо — вуаль обязана пересчитать своё
         // место: её ищут внутри карты, но проверяют по дереву целиком.
-        slot.onAdopt = { [weak coordinator, weak mapView] in
+        slot.onAdopt = { [weak coordinator, weak mapView,
+                         interactive = isInteractive, fog = showsFog, insets = fitInsets] in
             guard let coordinator, let mapView else { return }
             coordinator.adoptMap(mapView)
+            // Гнездо забрало карту — значит рамку задаёт ЕГО экран.
+            RouteMapView.applyInteractivity(to: mapView, interactive: interactive, showsFog: fog)
+            RouteMapView.applyLayoutMargins(to: mapView, coordinator: coordinator,
+                                            fitInsets: insets)
+        }
+        slot.onResize = { [weak coordinator, weak mapView,
+                          refits = !isInteractive, insets = fitInsets] in
+            guard let coordinator, let mapView else { return }
+            coordinator.mapResized(mapView, refits: refits, insets: insets)
         }
         slot.adopt(mapView)
         return slot
@@ -532,11 +545,15 @@ struct RouteMapView: UIViewRepresentable {
         // Обратный порядок: гнездо создали раньше, чем карту у него забрали.
         if mapView.superview !== slot { slot.adopt(mapView) }
         context.coordinator.adoptMap(mapView)
-        // Одна и та же карта живёт и в слоте героя (пальцев не принимает), и
-        // на полном экране (принимает все). Эти четыре свойства ставились
-        // один раз при сборке — с общей картой их приходится держать здесь.
-        applyInteractivity(to: mapView)
-        applyLayoutMargins(to: mapView, coordinator: context.coordinator)
+        // Всё, что ниже, — общее знание о поездке, и его несёт любое
+        // представление. А вот рамка (пальцы, поля разметки, кадрирование)
+        // принадлежит ТОМУ, кто карту сейчас держит: представлений два, и
+        // обновление приходит в оба.
+        let owns = mapView.superview === slot
+        if owns {
+            applyInteractivity(to: mapView)
+            applyLayoutMargins(to: mapView, coordinator: context.coordinator)
+        }
         context.coordinator.onRouteTap = onRouteTap
         context.coordinator.installTapRecognizerIfNeeded(on: mapView, wanted: onRouteTap != nil)
         context.coordinator.syncCheckpoints(checkpointMarkers, style: checkpointMarkerStyle, on: mapView)
@@ -547,7 +564,9 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.syncFocus(focusCoordinate, on: mapView)
         context.coordinator.syncPhotoPins(photoPins, on: mapView)
         context.coordinator.applyZoom(tick: zoomTick, mapView: mapView)
-        context.coordinator.applyFit(tick: fitTick, insets: fitInsets, mapView: mapView)
+        if owns {
+            context.coordinator.applyFit(tick: fitTick, insets: fitInsets, mapView: mapView)
+        }
         context.coordinator.applyCarColor(carColorName, on: mapView)
         context.coordinator.applyPlayback(
             carCoord: playbackCarCoord,
@@ -590,14 +609,18 @@ struct RouteMapView: UIViewRepresentable {
     /// Пальцы карты. Вынесено: с общей картой (см. `host`) эти свойства
     /// меняются при каждом раскрытии, а не ставятся раз при сборке.
     private func applyInteractivity(to mapView: MKMapView) {
-        if mapView.isScrollEnabled != isInteractive { mapView.isScrollEnabled = isInteractive }
-        if mapView.isZoomEnabled != isInteractive { mapView.isZoomEnabled = isInteractive }
-        if mapView.isRotateEnabled != isInteractive { mapView.isRotateEnabled = isInteractive }
+        Self.applyInteractivity(to: mapView, interactive: isInteractive, showsFog: showsFog)
+    }
+
+    static func applyInteractivity(to mapView: MKMapView, interactive: Bool, showsFog: Bool) {
+        if mapView.isScrollEnabled != interactive { mapView.isScrollEnabled = interactive }
+        if mapView.isZoomEnabled != interactive { mapView.isZoomEnabled = interactive }
+        if mapView.isRotateEnabled != interactive { mapView.isRotateEnabled = interactive }
         // Наклон под экранной вуалью запрещён: перспективу аффинной матрицей
         // не выразить, и коридор уехал бы от дороги под ним
         // (`VeilFrame.residual`). Поворот при этом остаётся — он выражается
         // точно.
-        let pitch = isInteractive && !showsFog
+        let pitch = interactive && !showsFog
         if mapView.isPitchEnabled != pitch { mapView.isPitchEnabled = pitch }
     }
 
@@ -605,6 +628,20 @@ struct RouteMapView: UIViewRepresentable {
     /// out against these margins. Without this the replay's transport row
     /// sits right on top of it.
     private func applyLayoutMargins(to mapView: MKMapView, coordinator: Coordinator) {
+        Self.applyLayoutMargins(to: mapView, coordinator: coordinator, fitInsets: fitInsets)
+    }
+
+    /// Поля разметки — это НЕ только место для подписи Apple: от них MapKit
+    /// кадрирует и саму камеру. Поэтому ставит их тот, кто карту держит, и
+    /// ставит В МОМЕНТ ЗАХВАТА.
+    ///
+    /// Раньше их ставило то представление, чьё обновление пришло последним, а
+    /// последним на возврате с полного экрана приходит ПОЛНОЭКРАННОЕ — оно
+    /// ещё в дереве, пока герой уже забрал карту. В рамке высотой 383 pt
+    /// оставалось поле снизу в 200, и маршрут уезжал узкой полоской под
+    /// верхний край (репорт владельца 23 сен).
+    static func applyLayoutMargins(to mapView: MKMapView, coordinator: Coordinator,
+                                   fitInsets: UIEdgeInsets?) {
         // Исходные поля запоминаются при первой встрече: без `fitInsets`
         // карта их не трогала НИКОГДА, и «поставить ноль» сдвинуло бы
         // логотип Apple у каждой карты-героя. Возврат с полного экрана
@@ -1004,6 +1041,8 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         private var lastFitTick: Int = 0
+        /// Подгонка заказана, но карта ещё не своего размера — см. `applyFit`.
+        private var fitPending = false
 
         /// Вписать весь маршрут в НЫНЕШНИЕ границы карты.
         ///
@@ -1011,19 +1050,64 @@ struct RouteMapView: UIViewRepresentable {
         /// считает подгонку по текущим границам вида, и та же подгонка,
         /// заказанная посреди пружины, вписала бы маршрут в промежуточный
         /// кадр — и на полном экране он остался бы в четверть экрана.
+        ///
+        /// Но «пружина доиграла» и «карта уже нужного размера» — РАЗНЫЕ
+        /// секунды. На возврате с полного экрана заказ приходит из завершения
+        /// анимации, а размер слота героя карта получает своей разметкой,
+        /// позже; вписанный в тот промежуток маршрут уезжал узкой полоской
+        /// под самый верх (репорт владельца 23 сен). Поэтому заказ
+        /// ЗАПОМИНАЕТСЯ, а исполняется на том кадре, где размер у карты уже
+        /// свой — сразу, если он свой и так.
         func applyFit(tick: Int, insets: UIEdgeInsets?, mapView: MKMapView) {
             guard tick != lastFitTick else { return }
             lastFitTick = tick
             guard !overviewRect.isNull else { return }
-            let use = insets ?? UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
-            overviewInsets = use
+            overviewInsets = insets ?? RouteMapView.defaultFitInsets
+            fitPending = true
+            fitIfSized(mapView)
+        }
+
+        /// Карта сменила размер.
+        ///
+        /// `refits` — «эта карта всегда показывает маршрут целиком», то есть
+        /// герой: пальцев он не принимает, и другой камеры у него не бывает.
+        /// Такой карте новый размер САМ по себе повод вписать маршрут заново,
+        /// и это единственное правило, которое переживает возврат с полного
+        /// экрана: заказ из завершения анимации успевает отработать на
+        /// размере ПОЛНОГО ЭКРАНА (карта в тот момент ещё в его гнезде), а
+        /// рамку героя она получает последней. Полноэкранной карте такого
+        /// правила не положено — там поворот экрана выбрасывал бы то, куда
+        /// человек сам доехал пальцем.
+        ///
+        /// Реплей исключён отдельно: пока камера едет за машиной, маршрут
+        /// целиком не показывают вовсе.
+        func mapResized(_ mapView: MKMapView, refits: Bool, insets: UIEdgeInsets?) {
+            if refits, !following {
+                // Поля кадрирования — ТОГО, кто карту сейчас держит. Они
+                // лежат в координаторе, а координатор общий: полноэкранная
+                // раскладка оставляет в нём свои (сверху 103, снизу больше
+                // трёхсот — под хром и карточку), и вписанный по ним маршрут
+                // не помещается в рамку героя вовсе.
+                overviewInsets = insets ?? RouteMapView.defaultFitInsets
+                fitPending = true
+            }
+            fitIfSized(mapView)
+        }
+
+        /// Отложенная подгонка ждёт кадра, в котором карта занимает своё
+        /// гнездо целиком: до него её `bounds` — размер ПРЕЖНЕГО гнезда.
+        private func fitIfSized(_ mapView: MKMapView) {
+            guard fitPending, !overviewRect.isNull else { return }
+            guard mapView.bounds.width > 1, mapView.bounds.height > 1 else { return }
+            if let slot = mapView.superview, slot.bounds.size != mapView.bounds.size { return }
+            fitPending = false
             mapView.setVisibleMapRect(
-                RouteMapView.floored(overviewRect), edgePadding: use, animated: true)
+                RouteMapView.floored(overviewRect), edgePadding: overviewInsets, animated: true)
         }
 
         /// The whole-route rect the map opened on, so «обзор» can return to it.
         var overviewRect: MKMapRect = .null
-        var overviewInsets = UIEdgeInsets(top: 30, left: 30, bottom: 30, right: 30)
+        var overviewInsets = RouteMapView.defaultFitInsets
         /// Whether the camera is currently riding with the car.
         private var following = false
 

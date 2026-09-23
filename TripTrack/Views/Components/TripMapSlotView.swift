@@ -36,16 +36,23 @@ final class TripMapSlotView: UIView {
     func adopt(_ map: MKMapView) {
         self.map = map
         guard map.superview !== self else { return }
+        let resized = map.bounds.size != bounds.size
         map.removeFromSuperview()
         map.frame = bounds
         map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(map)
         onAdopt?()
+        if resized { onResize?() }
     }
 
     /// Гнездо забрало карту себе. Повод перечитать то, что считается от места
     /// карты в дереве (посадка вуали), — но только повод: решает зовущий.
     var onAdopt: (() -> Void)?
+
+    /// Карта получила новый размер. Единственный честный сигнал «вписывать
+    /// маршрут можно»: MapKit считает подгонку по НЫНЕШНИМ границам вида, а
+    /// до этой секунды у карты границы прежнего гнезда.
+    var onResize: (() -> Void)?
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -53,6 +60,9 @@ final class TripMapSlotView: UIView {
         guard map.superview === self else { return adopt(map) }
         // Автомаска ведёт карту сама, но первый кадр после переезда она
         // считает от размера, который был у карты ДО него.
-        if map.frame != bounds { map.frame = bounds }
+        guard map.frame != bounds else { return }
+        let resized = map.bounds.size != bounds.size
+        map.frame = bounds
+        if resized { onResize?() }
     }
 }
