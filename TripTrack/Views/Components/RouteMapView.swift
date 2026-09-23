@@ -313,7 +313,9 @@ struct RouteMapView: UIViewRepresentable {
                          width: width, height: height)
     }
 
-    func makeUIView(context: Context) -> MKMapView {
+    /// Гнездо, а не сама карта: владеет результатом SwiftUI, а карту поездки
+    /// держит `TripMapHost` — см. `TripMapSlotView`.
+    func makeUIView(context: Context) -> TripMapSlotView {
         // Зеркало «Плюс активен» для рендереров: они спрашивают цвет с
         // потоков отрисовки MapKit, а `PlusAccess` главноактёрный. Здесь мы
         // на главном и до первого кадра — единственное место, где карта
@@ -328,7 +330,7 @@ struct RouteMapView: UIViewRepresentable {
             context.coordinator.adoptMap(existing)
             applyInteractivity(to: existing)
             applyLayoutMargins(to: existing, coordinator: context.coordinator)
-            return existing
+            return slot(for: existing, coordinator: context.coordinator)
         }
         // Своя карта только под туманом: ей нужен сигнал об уходе экрана, а у
         // `UIViewRepresentable` вью-контроллера нет. Чужой поездке и
@@ -505,10 +507,30 @@ struct RouteMapView: UIViewRepresentable {
             mapView.addAnnotation(pin)
         }
 
-        return mapView
+        return slot(for: mapView, coordinator: context.coordinator)
     }
 
-    func updateUIView(_ mapView: MKMapView, context: Context) {
+    /// Положить карту в новое гнездо. Место в дереве карта занимает сама, в
+    /// `layoutSubviews` гнезда: до первой разметки его границы ещё нулевые.
+    private func slot(for mapView: MKMapView,
+                      coordinator: Coordinator) -> TripMapSlotView {
+        let slot = TripMapSlotView()
+        // Карта переехала в другое гнездо — вуаль обязана пересчитать своё
+        // место: её ищут внутри карты, но проверяют по дереву целиком.
+        slot.onAdopt = { [weak coordinator, weak mapView] in
+            guard let coordinator, let mapView else { return }
+            coordinator.adoptMap(mapView)
+        }
+        slot.adopt(mapView)
+        return slot
+    }
+
+    func updateUIView(_ slot: TripMapSlotView, context: Context) {
+        // Гнездо могло только что смениться (возврат с полного экрана), и
+        // тогда разметка ещё не прошла — карту забираем здесь же.
+        guard let mapView = slot.map else { return }
+        // Обратный порядок: гнездо создали раньше, чем карту у него забрали.
+        if mapView.superview !== slot { slot.adopt(mapView) }
         context.coordinator.adoptMap(mapView)
         // Одна и та же карта живёт и в слоте героя (пальцев не принимает), и
         // на полном экране (принимает все). Эти четыре свойства ставились
@@ -627,7 +649,7 @@ struct RouteMapView: UIViewRepresentable {
     /// У карты с хостом это НЕ конец экрана, а переезд между слотом героя и
     /// полноэкранной раскладкой: снимать там нечего, и снимает по-настоящему
     /// `TripMapHost.tearDown`.
-    static func dismantleUIView(_ mapView: MKMapView, coordinator: Coordinator) {
+    static func dismantleUIView(_ slot: TripMapSlotView, coordinator: Coordinator) {
         guard !coordinator.isHosted else {
             // Одно представление ушло — это либо переезд между слотом героя и
             // полноэкранным слоем, либо уход самого экрана. Различает их
