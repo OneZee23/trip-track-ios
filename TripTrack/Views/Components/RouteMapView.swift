@@ -774,6 +774,15 @@ struct RouteMapView: UIViewRepresentable {
         /// `MKOverlayRenderer`-ом (отрезки по скорости, обводка, гашение
         /// непройденного на реплее), и вуаль выше неё спрятала бы поездку.
         let veilSeat: VeilSeat?
+        /// Metal-туман: он и рисует мглу, а растровой вуали остаётся её вектор
+        /// (`vectorOnly`). `nil` у чужой поездки и у путешествия — там тумана
+        /// нет вовсе, и второй `MTKView` за экраном не живёт.
+        ///
+        /// Слой садится ПОД растровую вуаль, то есть тоже ниже контейнера
+        /// оверлеев: маршрут этого экрана рисует `MKOverlayRenderer` — отрезки
+        /// по скорости, обводка, гашение непройденного на реплее, — и мгла
+        /// выше него спрятала бы саму поездку.
+        let fogMetal: FogMetalSeat?
         /// Карта, на которой мы сидим, — чтобы вернуть ей плиточный оверлей,
         /// когда вуаль уйдёт с экрана.
         private weak var mapRef: MKMapView?
@@ -791,7 +800,13 @@ struct RouteMapView: UIViewRepresentable {
                     margin: rotatable ? FogVeilView.rotatingMargin : FogVeilView.defaultMargin,
                     seat: .aboveBaseMap)
                 : nil
+            fogMetal = showsFog ? FogMetalSeat() : nil
             super.init()
+            // Мглу рисует GPU — вуали остаётся её вектор. Ставится ЗДЕСЬ, а не
+            // при посадке: срез на дату может доехать до вуали раньше, чем она
+            // встанет в дерево, и растр, заказанный в эту щель, был бы
+            // нарисован зря.
+            veilSeat?.veil.vectorOnly = fogMetal?.isActive ?? false
             veilSeat?.onAttached = { [weak self] in self?.screenVeilTookOver() }
             veilSeat?.onDetached = { [weak self] in self?.screenVeilStoodDown() }
         }
@@ -807,13 +822,19 @@ struct RouteMapView: UIViewRepresentable {
         private func screenVeilTookOver() {
             guard let veil = veilSeat?.veil else { return }
             if let old = installedVeil { mapRef?.removeOverlay(old) }
-            if let layer = loadedLayer { veil.setLayer(layer) }
+            seatFogMetal()
+            if let layer = loadedLayer {
+                veil.setLayer(layer)
+                fogMetal?.setLayer(layer)
+            }
             veilSeat?.startTracking(tail: 1.5)
+            fogMetal?.startTracking(tail: 1.5)
         }
 
         /// Вуаль ушла — туман возвращается плиточному рендереру, иначе карта
         /// осталась бы голой.
         private func screenVeilStoodDown() {
+            fogMetal?.unseat()
             guard let veil = installedVeil, let map = mapRef,
                   !map.overlays.contains(where: { $0 is FogVeilOverlay }) else { return }
             map.insertOverlay(veil, at: 0, level: .aboveLabels)
@@ -825,6 +846,22 @@ struct RouteMapView: UIViewRepresentable {
         func adoptMap(_ mapView: MKMapView) {
             mapRef = mapView
             veilSeat?.attach(to: mapView)
+            seatFogMetal()
+        }
+
+        /// Metal-слой садится под растровую вуаль — и ТЕМ ЖЕ зовом
+        /// возвращается, если потерял место.
+        ///
+        /// Зовётся с посадки вуали и с каждой посадки карты (то есть с каждого
+        /// `updateUIView`, а тот приходит на каждом кадре реплея — проверка
+        /// стоит двух `firstIndex`). Отдельной двери «пересесть» нет нарочно:
+        /// `FogVeilView.verifySeating` возвращает в дерево СЕБЯ и, вернувшись
+        /// удачно, молчит — о пересборке сабвью MapKit Metal-слою не сказал бы
+        /// никто, и экран поездки остался бы с маршрутом поверх ГОЛОЙ карты
+        /// Apple: растра у вуали нет (`vectorOnly`), плиточный оверлей снят.
+        private func seatFogMetal() {
+            guard let seat = veilSeat, let map = mapRef else { return }
+            fogMetal?.follow(seat, on: map)
         }
 
         /// Куда ложится готовый слой: в экранную вуаль или плиточным оверлеем.
@@ -847,7 +884,10 @@ struct RouteMapView: UIViewRepresentable {
             let overlay = FogVeilOverlay(layer: layer)
             installedVeil = overlay
             if let seat = veilSeat, seat.isAttached {
+                // Обоим сразу и в одной строке: мглу рисует метал, жилку —
+                // вуаль, и разъехаться этим двум слоям нельзя.
                 seat.veil.setLayer(layer)
+                fogMetal?.setLayer(layer)
                 return
             }
             mapView.insertOverlay(overlay, at: 0, level: .aboveLabels)
@@ -1435,11 +1475,15 @@ struct RouteMapView: UIViewRepresentable {
         /// отвязывается от дороги под собой.
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
             veilSeat?.startTracking()
+            fogMetal?.startTracking()
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             // Камера встала — один ЧЁТКИЙ кадр под новый масштаб.
             veilSeat?.settle(on: mapView)
+            // Металу заказывать нечего: он и так рисует каждый кадр, ему нужен
+            // только хвост — доехать инерцию и погаснуть.
+            fogMetal?.extendTracking(tail: 0.6)
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
@@ -1447,6 +1491,7 @@ struct RouteMapView: UIViewRepresentable {
             // без `regionWillChange`): `startTracking` заводит `CADisplayLink`,
             // если его нет, и продлевает хвост, если есть.
             veilSeat?.startTracking()
+            fogMetal?.startTracking()
             guard let annotation = playbackCar,
                   let view = mapView.view(for: annotation) as? MapCarAnnotationView else { return }
             view.applyScreenAngle(cameraHeading: mapView.camera.heading)

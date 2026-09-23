@@ -174,6 +174,13 @@ final class MapViewModel: ObservableObject {
     /// (`fogRenderer`) прорезь так и остаётся отрисовкой коробки вокруг точки —
     /// два пути, потому что и рисуют они по-разному.
     weak var fogVeilView: FogVeilView?
+    /// Metal-туман, когда он встал в дерево карты. Прорезь на нём — КРУГ В
+    /// ШЕЙДЕРЕ (`FogRevealCircle`): кадр там и так собирается заново, поэтому
+    /// дыра стоит двух чисел в буфере, а не маски и не растра. Третий путь для
+    /// той же прорези — цена того, что все три рисуют туман по-разному; числа
+    /// у них общие (`VeilRevealMask.solidFraction`,
+    /// `FogVeilRenderer.revealMetres`), иначе дыра прыгала бы на откате.
+    weak var fogMetalVeil: FogMetalVeil?
     private var fogAnimationLink: CADisplayLink?
     private var fogAnimationStart: Date?
     /// Где сейчас растёт прорезь. Одна на всю запись: она едет с машиной, а не
@@ -1292,6 +1299,7 @@ final class MapViewModel: ObservableObject {
             // Коридор по пройденному теперь в самом слое — прорезь свою работу
             // сделала, и держать её поверх нового растра больше не за чем.
             self.fogVeilView?.setLiveReveal(coordinate: nil, progress: 0)
+            self.fogMetalVeil?.setLiveReveal(coordinate: nil, progress: 0)
             self.updateTrackOverlays()
         }
     }
@@ -1323,6 +1331,8 @@ final class MapViewModel: ObservableObject {
         )
         // Экранная вуаль: прорезь — маска на её слое, никакой отрисовки.
         fogVeilView?.setLiveReveal(coordinate: coordinate, progress: progress)
+        // Metal: тот же круг, но в шейдере — два числа в буфере кадра.
+        fogMetalVeil?.setLiveReveal(coordinate: coordinate, progress: progress)
         // Плиточный рендерер (откат): по коробке вокруг точки, а не по всему
         // миру — вуаль накрывает мир по определению, и голый
         // `setNeedsDisplay()` пересобирал бы каждый видимый тайл шестьдесят раз

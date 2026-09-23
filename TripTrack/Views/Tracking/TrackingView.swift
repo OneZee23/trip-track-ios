@@ -54,6 +54,7 @@ struct TrackingView: View {
                 onVisibleRectChanged: { viewModel.handleVisibleRectChange($0) },
                 onFogRendererCreated: { viewModel.fogRenderer = $0 },
                 onScreenVeilChanged: { viewModel.fogVeilView = $0 },
+                onFogMetalChanged: { viewModel.fogMetalVeil = $0 },
                 onMapReady: { markMapReady() },
                 carColorName: viewModel.activeCarColorName,
                 isPaused: viewModel.isPaused,

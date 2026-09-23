@@ -23,6 +23,12 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// модель ведёт прорезь у машины: растущая дыра — это маска на слое вуали,
     /// а не перерисовка тумана.
     var onScreenVeilChanged: ((FogVeilView?) -> Void)?
+    /// Metal-туман встал в дерево карты (или ушёл из него). Через него модель
+    /// ведёт ту же прорезь, что и через растровую вуаль: у той дыра — маска на
+    /// слое, здесь — круг в шейдере. Два получателя одного и того же, и стоят
+    /// они в соседних строках нарочно: разойдись они, прорезь на одном экране
+    /// была бы в одном месте, а на откате — в другом.
+    var onFogMetalChanged: ((FogMetalVeil?) -> Void)?
     /// Fires once when the map first finishes rendering. Lets the host clear its
     /// loading spinner from a real signal instead of a fragile timed Task.
     var onMapReady: (() -> Void)?
@@ -263,11 +269,20 @@ struct MapViewRepresentable: UIViewRepresentable {
         /// ВРАЩАЕТСЯ («по курсу»), а с поворотом меняет форму и та коробка, по
         /// которой считается растр.
         let veilSeat = VeilSeat(margin: FogVeilView.rotatingMargin, seat: .aboveBaseMap)
+        /// Metal-туман: мглу рисует он, растровой вуали остаётся её вектор
+        /// (`vectorOnly`). Садится ПОД вуаль, то есть тоже ниже контейнера
+        /// оверлеев: трек, светящаяся голова и линия маршрута рисуются
+        /// `MKOverlayRenderer`-ом, и мгла выше них спрятала бы саму запись.
+        let fogMetal = FogMetalSeat()
         private weak var mapRef: MKMapView?
 
         init(_ parent: MapViewRepresentable) {
             self.parent = parent
             super.init()
+            // Мглу рисует GPU — вуали остаётся её вектор. Ставится ЗДЕСЬ, а не
+            // при посадке: слой доезжает до вуали оверлеем модели, и растр,
+            // заказанный раньше посадки, был бы нарисован зря.
+            veilSeat.veil.vectorOnly = fogMetal.isActive
             veilSeat.onAttached = { [weak self] in self?.screenVeilTookOver() }
             veilSeat.onDetached = { [weak self] in self?.screenVeilStoodDown() }
         }
@@ -276,6 +291,17 @@ struct MapViewRepresentable: UIViewRepresentable {
         func adoptMap(_ mapView: MKMapView) {
             mapRef = mapView
             veilSeat.attach(to: mapView)
+            seatFogMetal()
+        }
+
+        /// Metal-слой садится под растровую вуаль — и ТЕМ ЖЕ зовом
+        /// возвращается, если потерял место: `FogVeilView.verifySeating`
+        /// возвращает в дерево СЕБЯ и, вернувшись удачно, молчит, — то есть о
+        /// пересборке сабвью MapKit Metal-слою не сказал бы никто, и запись
+        /// осталась бы поверх ГОЛОЙ карты Apple.
+        private func seatFogMetal() {
+            guard let map = mapRef else { return }
+            fogMetal.follow(veilSeat, on: map)
         }
 
         /// Какой оверлей тумана уже отдан вуали.
@@ -293,7 +319,9 @@ struct MapViewRepresentable: UIViewRepresentable {
         func handOverFog(_ fog: FogVeilOverlay) {
             guard handedFog !== fog else { return }
             handedFog = fog
+            // Обоим сразу и в одной строке: мглу рисует метал, жилку — вуаль.
             veilSeat.veil.setLayer(fog.layer)
+            fogMetal.setLayer(fog.layer)
         }
 
         /// Вуаль встала: снимаем плиточный оверлей и отдаём ей тот же слой.
@@ -301,11 +329,14 @@ struct MapViewRepresentable: UIViewRepresentable {
             if let map = mapRef {
                 map.removeOverlays(map.overlays.filter { $0 is FogVeilOverlay })
             }
+            seatFogMetal()
             if let fog = parent.overlays.compactMap({ $0 as? FogVeilOverlay }).first {
                 handOverFog(fog)
             }
             veilSeat.startTracking(tail: 1.5)
+            fogMetal.startTracking(tail: 1.5)
             parent.onScreenVeilChanged?(veilSeat.veil)
+            parent.onFogMetalChanged?(fogMetal.veil)
         }
 
         /// Вуаль ушла: туман возвращается плиточному рендереру, иначе карта
@@ -314,7 +345,9 @@ struct MapViewRepresentable: UIViewRepresentable {
             // Вуаль ушла — отданное ей забыто: сядет заново, слой надо отдать
             // снова.
             handedFog = nil
+            fogMetal.unseat()
             parent.onScreenVeilChanged?(nil)
+            parent.onFogMetalChanged?(nil)
             guard let map = mapRef,
                   !map.overlays.contains(where: { $0 is FogVeilOverlay }),
                   let fog = parent.overlays.compactMap({ $0 as? FogVeilOverlay }).first
@@ -439,6 +472,7 @@ struct MapViewRepresentable: UIViewRepresentable {
         /// отвязывается от дороги под собой.
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
             veilSeat.startTracking()
+            fogMetal.startTracking()
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
@@ -446,6 +480,7 @@ struct MapViewRepresentable: UIViewRepresentable {
             // тянет её за собой каждым фиксом, а в режиме «по курсу» ещё и
             // крутит. Здесь и заводится привязка растра.
             veilSeat.startTracking()
+            fogMetal.startTracking()
             guard let view = carView(on: mapView) else { return }
             view.applyScreenAngle(cameraHeading: mapView.camera.heading)
             // Тем же жестом меняется масштаб — отсюда круг точности, конус и
@@ -491,6 +526,9 @@ struct MapViewRepresentable: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             // Камера встала — один ЧЁТКИЙ кадр под новый масштаб.
             veilSeat.settle(on: mapView)
+            // Металу заказывать нечего: он и так рисует каждый кадр, ему нужен
+            // только хвост — доехать инерцию и погаснуть.
+            fogMetal.extendTracking(tail: 0.6)
             let distance = mapView.camera.centerCoordinateDistance
             let cameraCallback = parent.onCameraDistanceChanged
             let rectCallback = parent.onVisibleRectChanged
