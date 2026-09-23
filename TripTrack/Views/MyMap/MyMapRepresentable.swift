@@ -235,15 +235,18 @@ final class MapHostController: UIViewController {
         updateAttributionCarve()
     }
 
-    /// Палитра мглы идёт за темой ЭКРАНА, а карта под ней дневная в обоих
-    /// случаях: от карты зависит полярность, а не тема.
+    /// Мгла НОЧНАЯ всегда — и в светлой теме тоже.
     ///
-    /// Читается стиль СВОЕЙ вью, а не карты: у карты он принудительно
-    /// дневной. Тема живёт на окне (`ThemeManager` красит его), и трейт — это
-    /// то же значение, только уже доехавшее до UIKit.
+    /// Тема больше не решает ничего: карта «Атласа» дневная в обоих случаях
+    /// (полярность, а не тема), а бледная «дымка» на ней давала белое по
+    /// белому — разницы между открытым и закрытым почти не было видно.
+    /// Владелец смотрел на такой атлас всю дорогу 22–23 сентября и назвал его
+    /// «дешёвым»; тёмная мгла поверх светлой карты — это и есть тот кадр,
+    /// который он принял словами «вообще бомба». Палитра `.mist` осталась в
+    /// коде: ею по-прежнему живут карта поездки и карта записи, пока их не
+    /// перевели.
     private func applyPalette() {
-        let wanted: FogVeilPainter.Palette =
-            view.traitCollection.userInterfaceStyle == .light ? .mist : .night
+        let wanted: FogVeilPainter.Palette = .night
         guard wanted.isDark != FogVeilPainter.palette.isDark else { return }
         FogVeilPainter.palette = wanted
         // Тон облаков запечён в их картинках, а растр нарисован прежней
@@ -466,7 +469,14 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         // То же зеркало, что у `RouteMapView.makeUIView`: жилка «Атласа»
         // считается на фоновой очереди и спросить `PlusAccess` не может.
         RouteLineStyle.rememberPlus(PlusAccess.shared.isPlus)
+        // Metal-конвейеры собираются внутри: устройство, очередь, библиотека и
+        // два состояния. Отдельная марка, потому что до 23 сентября цена
+        // первого захода на «Атлас» была известна только для самой
+        // `MKMapView` (62–85 мс), а эта работа приехала рядом и не мерилась
+        // вовсе.
+        StartupTrace.mark("MapHostController.init begin")
         let controller = MapHostController()
+        StartupTrace.mark("MapHostController.init end")
         let map = controller.map
         let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
         map.preferredConfiguration = config

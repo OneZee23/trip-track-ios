@@ -472,7 +472,9 @@ struct ProfileSettingsSheet: View {
     /// day there is a dedicated feedback inbox — the row's copy already
     /// promises «отзывы и идеи», not a legal channel.
     ///
-    /// Internal, not `private`: `AtlasBetaSheetModel` reuses this SAME address
+    /// Internal, not `private`: карточка «Атлас в бете» переиспользовала этот
+    /// ЖЕ адрес, пока жила (снята 23 сентября вместе с чипом); адрес остаётся
+    /// один на всё приложение — он же в политике приватности.
     /// for its feedback button rather than hardcoding a second copy of it —
     /// one inbox, one place that knows it exists.
     static let authorEmail = "privacy@trip-track.app"

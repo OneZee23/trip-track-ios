@@ -1074,32 +1074,6 @@ enum AppStrings {
     // note on the Карта page reads «Слоёв-переключателей нет» — territory and
     // trips share one layer, and depth comes from zoom instead.
 
-    // MARK: - Бета «Атласа» (0.7.0)
-
-    /// Значок рядом с заголовком. Тот же повод, что был у убранного 15
-    /// сентября — «карта ещё дорабатывается», — но теперь про карту, которая
-    /// ЗДЕСЬ и есть: редизайн 0.7.0 позади, а доработка нет. См. «Журнал и
-    /// карточки» в CLAUDE.md — значок живёт до релизной версии, которая
-    /// закроет переделку атласа, и уходит вместе с ней.
-    static func atlasBetaChip(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "atlasBetaChip", ru: "Бета", en: "Beta")
-    }
-    /// Заголовок карточки, открытой тапом по значку.
-    static func atlasBetaTitle(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "atlasBetaTitle", ru: "Атлас в бете", en: "Atlas is in beta")
-    }
-    /// Тело карточки: не «извините за баги», а просьба рассказать, что
-    /// заметили. На числа и единицы в этом тексте правило CLAUDE.md не
-    /// распространяется — их тут нет ни одного.
-    static func atlasBetaBody(_ lang: LanguageManager.Language) -> String {
-        tr(lang, "atlasBetaBody",
-           ru: "Этот экран ещё будет переделываться до релизной версии. На "
-           + "ошибки и сырой дизайн пока не обращайте внимания — лучше "
-           + "расскажите, что заметили и что предложили бы.",
-           en: "This screen will keep changing before the release version. "
-           + "Don't mind bugs or rough design for now — tell us what you "
-           + "noticed and what you'd suggest instead.")
-    }
 
     /// Свёрнутый лист «Атласа»: «1 910 км открыто · 4 региона».
     ///
