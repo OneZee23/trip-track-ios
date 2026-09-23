@@ -3,7 +3,7 @@ import MetalKit
 import UIKit
 import os
 
-/// Метал-туман «Атласа».
+/// Метал-туман: «Атлас», карта поездки и карта записи.
 ///
 /// Растровая вуаль (`FogVeilView`) рисует мглу раз в двести миллисекунд и
 /// везёт готовую картинку за картой аффинным преобразованием слоя: на жесте
@@ -19,15 +19,18 @@ import os
 /// `FogOffscreen`: картинка постера обязана совпасть с картинкой экрана, а
 /// два кода, считающих одно и то же, однажды разойдутся молча.
 ///
-/// Чего здесь нарочно НЕТ: облаков, рампы глубины, подписей регионов,
-/// гравировки подсказок и живой прорези у машины. Картинка, которую эта
-/// вуаль показывает, — эталон 0.8.0 и менять её не имеет права ни одна
-/// задача: числа перечислены в спеке
+/// Чего здесь нарочно НЕТ: облаков, рампы глубины, подписей регионов и
+/// гравировки подсказок. Картинка, которую эта вуаль показывает, — эталон
+/// 0.8.0 и менять её не имеет права ни одна задача: числа перечислены в спеке
 /// `docs/superpowers/specs/2026-09-22-080-fog-metal-design.md` §3.
 ///
-/// Единственное, что мгла знает поверх эталона, — окно под подписью Apple
-/// (`setAttributionCarve`): оно не про картинку тумана, а про читаемость
-/// чужой подписи под ней, и без него «Legal» на ночной мгле не виден.
+/// Поверх эталона мгла знает ровно две вещи, и обе не про картинку тумана.
+/// Окно под подписью Apple (`setAttributionCarve`) — про читаемость чужой
+/// подписи под мглой, без него «Legal» на ночной мгле не виден. И прорезь у
+/// машины на живой записи (`setLiveReveal`) — состояние одной секунды на
+/// одном экране; у растровой вуали она маска на слое, потому что перерисовать
+/// растр шестьдесят раз в секунду нельзя, а здесь кадр и так собирается
+/// заново и дыра стоит двух чисел в буфере.
 @MainActor
 final class FogMetalVeil: MTKView {
     private static let log = Logger(subsystem: "com.onezee.TripTrack", category: "fogmetal")
@@ -65,9 +68,24 @@ final class FogMetalVeil: MTKView {
     private let encoder: FogFrameEncoder
 
     private var mesh = FogMesh.empty
-    private var meshDirty = true
-    /// Слой, который уже собран. `nil` — не собирали ни разу.
-    private var installedSignature: [ObjectIdentifier]?
+    /// Кадр надо нарисовать, даже если камера та же: сменились данные,
+    /// разметка, тема или прорезь у машины.
+    ///
+    /// Имя про КАДР, а не про буферы: сборку `FogMesh` этот флаг не заказывает
+    /// никогда — её заказывает только новый слой. До перевода двух карт он
+    /// звался `meshDirty`, и третьим его пользователем стала живая прорезь,
+    /// которая к буферам не имеет отношения вовсе.
+    private var frameDirty = true
+    /// Слой, который уже собран. `nil` — не собирали ни разу. Открыто ради
+    /// сторожа проводки: вопрос «дошёл ли до GPU срез ИМЕННО ЭТОЙ даты» иначе
+    /// не задаётся ничем.
+    private(set) var installedSignature: [ObjectIdentifier]?
+    /// Сколько раз буферы открытого мира собирались заново.
+    ///
+    /// Читает это сторож живой прорези: она растёт шестьдесят раз в секунду, и
+    /// пересборка буферов на каждый её кадр была бы записью, у которой карта
+    /// стоит.
+    private(set) var meshBuilds = 0
     /// Поколение сборки: слой, который успели обогнать, свои буферы не ставит.
     private var meshToken = 0
 
@@ -208,7 +226,7 @@ final class FogMetalVeil: MTKView {
     /// движения пальцем. Поймано ревью 22 сентября, доккомментарий здесь до
     /// того утверждал обратное.
     @objc private func handleWillEnterForeground() {
-        meshDirty = true
+        frameDirty = true
         forgetFrame()
     }
 
@@ -263,11 +281,78 @@ final class FogMetalVeil: MTKView {
             await MainActor.run { [weak self] in
                 guard let self, token == self.meshToken else { return }
                 self.mesh = built
-                self.meshDirty = true
+                self.meshBuilds += 1
+                self.frameDirty = true
                 self.restFrameDrawn = false
                 self.redrawIfNeeded()
             }
         }
+    }
+
+    // MARK: Прорезь у машины на живой записи
+
+    /// Где и насколько раскрыт туман вокруг машины прямо сейчас — в ЗЕМНЫХ
+    /// координатах: карта на записи едет сама, и точка экрана устарела бы к
+    /// следующему кадру.
+    private var liveReveal: (coordinate: CLLocationCoordinate2D,
+                             progress: Double, metres: Double)?
+
+    /// Прорезь у машины: «туман выгорает по новому пути».
+    ///
+    /// Стоит она двух чисел в буфере кадра и НИ ОДНОЙ пересборки буферов
+    /// открытого мира: дыру считает сам фрагментный шейдер по расстоянию до
+    /// середины (`FogRevealCircle`). У растровой вуали здесь маска на слое, и
+    /// не от хорошей жизни — там «перерисовать» значит собрать
+    /// восьмимегабайтную картинку, а прорезь растёт шестьдесят раз в секунду
+    /// (`FogRevealAnimation`, 0.7 с).
+    ///
+    /// Кадр она заказывает КАЖДЫЙ — камера при этом может стоять, и без
+    /// `frameDirty` дыра осталась бы того же размера, каким её застало
+    /// последнее движение карты.
+    ///
+    /// После финиша коридор по-настоящему прожигает слой открытого
+    /// (`RevealedLayerStore`), новый слой приходит с ним, и прорезь снимается
+    /// тем же `nil`, которым её завёл `MapViewModel.rebuildFog`.
+    /// - Parameter metres: радиус на полном раскрытии. Параметром, а не
+    ///   константой внутри, по той же причине, что у `FogVeilView.setReveal`:
+    ///   у машины он свой, и сведённые в одно число они разъехались бы при
+    ///   первой правке любого из двух.
+    func setLiveReveal(coordinate: CLLocationCoordinate2D?, progress: Double,
+                       metres: Double = FogVeilRenderer.revealMetres) {
+        guard let coordinate, progress > 0 else {
+            guard liveReveal != nil else { return }
+            liveReveal = nil
+            orderRevealFrame()
+            return
+        }
+        liveReveal = (coordinate, progress, metres)
+        orderRevealFrame()
+    }
+
+    /// Стоит ли сейчас прорезь — для теста.
+    var hasLiveReveal: Bool { liveReveal != nil }
+
+    /// Кадр под новую прорезь. Латч покоя снимается вместе с заказом: на
+    /// экране лежит картинка, которой там уже нет, и следующая смена темы
+    /// обязана доехать.
+    private func orderRevealFrame() {
+        frameDirty = true
+        restFrameDrawn = false
+        redrawIfNeeded()
+    }
+
+    /// Прорезь в ТОЧКАХ экрана на этом кадре. `nil` — прорези нет.
+    ///
+    /// Считается на каждом кадре и по той же арифметике, что у растровой маски
+    /// (`FogVeilView.positionLiveReveal`): карта под прорезью едет, а сама
+    /// прорезь привязана к земле.
+    private func revealCircle(map: MKMapView) -> FogRevealCircle? {
+        guard let live = liveReveal else { return nil }
+        let metresPerPoint = map.metersPerScreenPoint
+        guard metresPerPoint > 0, metresPerPoint.isFinite else { return nil }
+        let radius = CGFloat(live.metres * live.progress / metresPerPoint)
+        return FogRevealCircle(centre: map.convert(live.coordinate, toPointTo: self),
+                               radius: max(radius, 1))
     }
 
     // MARK: Жизнь
@@ -279,7 +364,7 @@ final class FogMetalVeil: MTKView {
     /// вызовами, что и растровой вуалью.
     func attach(map: MKMapView) {
         self.map = map
-        meshDirty = true
+        frameDirty = true
         restFrameDrawn = false
         redrawIfNeeded()
     }
@@ -288,6 +373,10 @@ final class FogMetalVeil: MTKView {
         stopTracking()
         map = nil
         coverage = nil
+        // Прорезь — состояние одной секунды записи, и пережить уход экрана она
+        // не имеет права: вернувшись, карта нарисовала бы дыру там, где машины
+        // давно нет. Сам кадр здесь не заказывается — рисовать некуда.
+        liveReveal = nil
     }
 
     // MARK: Жест
@@ -341,7 +430,7 @@ final class FogMetalVeil: MTKView {
         }
         guard !restFrameDrawn else { return }
         restFrameDrawn = true
-        meshDirty = true
+        frameDirty = true
         redrawIfNeeded()
     }
 
@@ -359,7 +448,7 @@ final class FogMetalVeil: MTKView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        meshDirty = true
+        frameDirty = true
         restFrameDrawn = false
         redrawIfNeeded()
     }
@@ -371,12 +460,12 @@ final class FogMetalVeil: MTKView {
         guard let map, bounds.width > 1, bounds.height > 1 else { return }
         let rect = map.visibleMapRect
         let corners = Self.corners(of: rect, map: map, in: self)
-        if !meshDirty, let last = lastRect, Self.sameRect(last, rect), corners == lastCorners {
+        if !frameDirty, let last = lastRect, Self.sameRect(last, rect), corners == lastCorners {
             return
         }
         lastRect = rect
         lastCorners = corners
-        meshDirty = false
+        frameDirty = false
         draw()
     }
 
@@ -449,7 +538,8 @@ final class FogMetalVeil: MTKView {
             featherPoints: halfWidth * Self.featherRatio,
             lod: FogVeilRenderer.lod(for: MKZoomScale(pointsPerMapPoint)),
             palette: FogVeilPainter.palette,
-            carve: carve)
+            carve: carve,
+            reveal: revealCircle(map: map))
 
         // Текстура покрытия пережила прошлый кадр — её не стало только если
         // сменился размер или память отобрали. Не создалась вовсе — кадр

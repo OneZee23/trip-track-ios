@@ -32,11 +32,21 @@ struct FogCarve {
     float enabled;
 };
 
+// Прорезь у машины на живой записи: середина в ТОЧКАХ вида, радиус в них же и
+// доля радиуса, открытая полностью. Нулевой радиус значит «прорези нет»:
+// композит тогда не трогает альфу вовсе.
+struct FogReveal {
+    float2 centre;
+    float radius;
+    float solid;
+};
+
 struct FogComposite {
     float4 colour;
     float alpha;
     float2 viewport;
     FogCarve carve;
+    FogReveal reveal;
 };
 
 struct CoverageVertex {
@@ -124,10 +134,13 @@ static float fog_sd_rounded_rect(float2 p, float2 centre, float2 halfExtent, flo
 // однотонная, без облаков и рампы глубины. Те остались в растровой кисти
 // ради карты поездки и экрана записи.
 //
-// Единственное, что мгла знает поверх этого, — окно под подписью Apple. Оно
-// не снимает её, а ПРИГЛУШАЕТ до `floor` её силы, и спад наружу непрерывный:
-// ступени давали эффект Маха, то есть вторую кромку вокруг мягкого пятна
-// (задача A, 20 сентября, у растровой маски).
+// Сверх этого мгла знает ровно две вещи, и обе не про картинку тумана. Окно
+// под подписью Apple: оно не снимает мглу, а ПРИГЛУШАЕТ до `floor` её силы, и
+// спад наружу непрерывный — ступени давали эффект Маха, то есть вторую кромку
+// вокруг мягкого пятна (задача A, 20 сентября, у растровой маски). И прорезь у
+// машины на живой записи: у растра она маска на слое, потому что перерисовать
+// его шестьдесят раз в секунду нельзя, — здесь же кадр и так рисуется заново,
+// и дыра стоит двух умножений.
 fragment half4 fog_composite_fragment(FullscreenVertex in [[stage_in]],
                                       texture2d<half> coverage [[texture(0)]],
                                       constant FogComposite &c [[buffer(0)]])
@@ -135,8 +148,8 @@ fragment half4 fog_composite_fragment(FullscreenVertex in [[stage_in]],
     constexpr sampler nearest(filter::nearest, address::clamp_to_edge);
     half cov = coverage.sample(nearest, in.uv).r;
     half a = half(c.alpha) * (1.0h - cov);
+    float2 p = in.uv * c.viewport;
     if (c.carve.enabled > 0.5) {
-        float2 p = in.uv * c.viewport;
         float2 halfExtent = c.carve.rect.zw * 0.5;
         float d = fog_sd_rounded_rect(p, c.carve.rect.xy + halfExtent, halfExtent,
                                       c.carve.corner);
@@ -144,6 +157,16 @@ fragment half4 fog_composite_fragment(FullscreenVertex in [[stage_in]],
         // точек, но шейдер не обязан верить зовущему на слово.
         float w = 1.0 - smoothstep(0.0, max(c.carve.feather, 1e-3), d);
         a *= half(1.0 - (1.0 - c.carve.floor) * w);
+    }
+    if (c.reveal.radius > 0.0) {
+        // Спад ЛИНЕЙНЫЙ, а не `smoothstep`: у кисти растра это радиальный
+        // градиент с остановками 0, `solid`, 1 (`FogVeilPainter.punchReveal`),
+        // а у маски вуали — тот же `CAGradientLayer`. Три прорези обязаны
+        // выглядеть одинаково: человек видит их в одну и ту же секунду, когда
+        // карта откатывается на растр.
+        float d = distance(p, c.reveal.centre) / c.reveal.radius;
+        float keep = clamp((d - c.reveal.solid) / max(1.0 - c.reveal.solid, 1e-3), 0.0, 1.0);
+        a *= half(keep);
     }
     return half4(half3(c.colour.xyz) * a, a);
 }

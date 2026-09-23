@@ -22,10 +22,14 @@ enum FogOffscreen {
     ///
     /// `carve` — окно под подписью Apple, и по умолчанию его НЕТ: у постера
     /// подписи в кадре нет вовсе, а зовут эту функцию ещё и сторожа ширины,
-    /// которым окно только мешало бы.
+    /// которым окно только мешало бы. То же и с `reveal`: прорезь у машины
+    /// живёт ровно одну секунду записи, и делиться ею нечем — параметр здесь
+    /// только затем, чтобы пиксельный сторож проверял ТУ ЖЕ дыру, что видит
+    /// человек на экране.
     static func params(rect: MKMapRect, sizePoints: CGSize, scale: CGFloat,
                        palette: FogVeilPainter.Palette,
-                       carve: FogCarveWindow? = nil) -> FogFrameParams? {
+                       carve: FogCarveWindow? = nil,
+                       reveal: FogRevealCircle? = nil) -> FogFrameParams? {
         guard rect.width > 0, rect.height > 0, scale > 0,
               let frame = VeilFrame(
                 p00: .zero,
@@ -51,7 +55,8 @@ enum FogOffscreen {
             featherPoints: halfWidth * FogMetalVeil.featherRatio,
             lod: FogVeilRenderer.lod(for: MKZoomScale(pointsPerMapPoint)),
             palette: palette,
-            carve: carve)
+            carve: carve,
+            reveal: reveal)
     }
 
     /// Картинка с премультиплицированной альфой: открытое прозрачно, мгла
@@ -59,9 +64,10 @@ enum FogOffscreen {
     /// возвращается к `FogVeilBitmap.render`.
     static func render(layer: RevealedLayer, rect: MKMapRect, sizePoints: CGSize,
                        scale: CGFloat, palette: FogVeilPainter.Palette,
-                       carve: FogCarveWindow? = nil) -> CGImage? {
+                       carve: FogCarveWindow? = nil,
+                       reveal: FogRevealCircle? = nil) -> CGImage? {
         guard let params = params(rect: rect, sizePoints: sizePoints, scale: scale,
-                                  palette: palette, carve: carve),
+                                  palette: palette, carve: carve, reveal: reveal),
               let device = MTLCreateSystemDefaultDevice(),
               let queue = device.makeCommandQueue(),
               let encoder = FogFrameEncoder(device: device) else { return nil }

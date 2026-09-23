@@ -38,6 +38,10 @@ struct FogFrameParams {
     /// (`AttributionCarve.carves(palette:)`), а решает это ХОСТ, как и у
     /// растровой вуали.
     let carve: FogCarveWindow?
+    /// Прорезь у машины на живой записи. `nil` у всех, кроме экрана записи, —
+    /// и у постера тоже: дыра в тумане это состояние одной секунды, а не то,
+    /// чем делятся.
+    let reveal: FogRevealCircle?
 }
 
 /// Два прохода Metal-тумана: покрытие открытого и композит мглы.
@@ -69,14 +73,25 @@ final class FogFrameEncoder {
         var enabled: Float
     }
 
+    /// Совпадать с `FogReveal` в шейдере байт в байт: две `float` за `float2`,
+    /// выравнивание восемь.
+    private struct Reveal {
+        var centre: SIMD2<Float>
+        /// Ноль — прорези нет; шейдер тогда не трогает альфу вовсе.
+        var radius: Float
+        var solid: Float
+    }
+
     /// Совпадать с `FogComposite` в шейдере байт в байт.
     private struct Composite {
         var colour: SIMD4<Float>
         var alpha: Float
-        /// Размер вида в ТОЧКАХ — в них же задана коробка окна, и шейдеру
-        /// нечем перевести свои `uv` в точки без этого числа.
+        /// Размер вида в ТОЧКАХ — в них же заданы и коробка окна, и середина
+        /// прорези, а шейдеру нечем перевести свои `uv` в точки без этого
+        /// числа.
         var viewport: SIMD2<Float>
         var carve: Carve
+        var reveal: Reveal
     }
 
     private let coveragePipeline: MTLRenderPipelineState
@@ -202,7 +217,20 @@ final class FogFrameEncoder {
                          alpha: Float(params.palette.alpha),
                          viewport: SIMD2<Float>(Float(params.viewportPoints.width),
                                                 Float(params.viewportPoints.height)),
-                         carve: carve(params.carve))
+                         carve: carve(params.carve),
+                         reveal: reveal(params.reveal))
+    }
+
+    /// Прорези нет — в буфер уезжает нулевой радиус, и композит остаётся тем
+    /// же, каким был до неё: множителя альфы не появляется.
+    private static func reveal(_ circle: FogRevealCircle?) -> Reveal {
+        guard let circle, circle.radius > 0 else {
+            return Reveal(centre: .zero, radius: 0, solid: 0)
+        }
+        return Reveal(
+            centre: SIMD2<Float>(Float(circle.centre.x), Float(circle.centre.y)),
+            radius: Float(circle.radius),
+            solid: Float(circle.solid))
     }
 
     /// Окна нет — в буфер уезжают нули с погашенным `enabled`, и композит

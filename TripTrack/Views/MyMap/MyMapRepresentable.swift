@@ -1,6 +1,5 @@
 import SwiftUI
 import MapKit
-import os
 
 /// The zoom hierarchy from the canon note: «далеко = страны/регионы —
 /// заливка открытых, чипы стран, кластеры; средний = граница региона,
@@ -39,8 +38,6 @@ final class MapHostController: UIViewController {
     let veilSeat = VeilSeat(margin: FogVeilView.atlasMargin, seat: .belowAnnotations)
     var screenVeil: FogVeilView { veilSeat.veil }
 
-    /// Пересадка Metal-слоя идёт прямо сейчас — см. `verifyFogMetalSeating`.
-    private var reseatingFogMetal = false
     /// Сколько раз уже искали атрибуцию, чтобы вырезать под ней мглу.
     private var carveTries = 0
     private var carvedOnce = false
@@ -51,30 +48,30 @@ final class MapHostController: UIViewController {
     /// ПОД растровую — той остаются только векторные слои (жилка сети и
     /// выбранный маршрут), а сама мгла у неё выключена (`vectorOnly`).
     ///
-    /// `nil` — Metal на этом устройстве недоступен или выключатель снят:
+    /// Посадка Metal-слоя — общая на три карты (`FogMetalSeat`), как и у
+    /// растровой вуали. Слой недоступен (Metal выключен или не собрался) —
     /// «Атлас» целиком возвращается на растровую вуаль 0.7.0. Обе дороги
     /// ведут в одно место нарочно, второго пути отката не заводится.
-    private let fogMetal: FogMetalVeil?
+    let fogMetal = FogMetalSeat()
     /// Метал-вуаль для делегата карты. `nil` — «Атлас» на растре, и тогда
     /// делегату нечего гнать: у растровой вуали свой `VeilSeat`.
     ///
     /// Тики у обеих вуалей заводит ОДИН и тот же делегат в тех же трёх
     /// местах: разойдись они, одна бы ехала за картой, а вторая стояла —
     /// и мгла разъехалась бы с жилкой ровно на движение пальца.
-    var metalVeil: FogMetalVeil? { fogMetal }
-
-    private static let log = Logger(subsystem: "com.onezee.TripTrack", category: "fogmetal")
+    var metalVeil: FogMetalVeil? { fogMetal.veil }
 
     init() {
-        fogMetal = FogMetalAvailability.isActive ? FogMetalVeil.make() : nil
         super.init(nibName: nil, bundle: nil)
-        if FogMetalAvailability.isActive, fogMetal == nil {
-            Self.log.notice("metal-туман недоступен, «Атлас» на растре")
-        }
         // Мглу рисует GPU — вуали остаётся её вектор. Ставится ЗДЕСЬ, а не в
         // `viewDidLoad`: слой может доехать до вуали раньше, чем встанет
         // разметка, и растр, заказанный в эту щель, был бы нарисован зря.
-        screenVeil.vectorOnly = (fogMetal != nil)
+        screenVeil.vectorOnly = fogMetal.isActive
+        // Гнездо теряется и возвращается по нескольку раз за жизнь экрана, а
+        // прохода разметки за этим может и не случиться: окно под подписью
+        // надо отдать только что севшему слою прямо сейчас, иначе мгла
+        // накроет «Legal» до первого поворота телефона.
+        fogMetal.onSeated = { [weak self] in self?.updateAttributionCarve() }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) не используется") }
@@ -100,77 +97,22 @@ final class MapHostController: UIViewController {
         set {
             veilDetachedHandler = newValue
             veilSeat.onDetached = { [weak self] in
-                self?.unseatFogMetal()
+                self?.fogMetal.unseat()
                 newValue?()
             }
         }
     }
 
-    /// Метал-вуаль садится в то же гнездо, что растровая, но НИЖЕ её: сверху
-    /// остаются жилка и выбранный маршрут, которые вуаль ведёт вектором.
+    /// Metal-слой садится под растровую вуаль — и ТЕМ ЖЕ зовом возвращается,
+    /// если потерял место. Зовётся с посадки вуали и с КАЖДОГО прохода
+    /// разметки, и это не перестраховка: `FogVeilView.verifySeating`
+    /// возвращает в дерево СЕБЯ и, вернувшись удачно, молчит — о пересборке
+    /// сабвью MapKit (восстановление после нехватки памяти, будущая iOS)
+    /// Metal-слою не сказал бы никто, и «Атлас» показывал бы ГОЛУЮ карту
+    /// Apple: растра у вуали нет (`vectorOnly`), плиточные оверлеи сняты, и
+    /// заметить это можно было бы, только уйдя с экрана и вернувшись.
     private func seatFogMetal() {
-        guard let fogMetal, let parent = screenVeil.superview else { return }
-        fogMetal.frame = parent.bounds
-        fogMetal.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        parent.insertSubview(fogMetal, belowSubview: screenVeil)
-        fogMetal.attach(map: map)
-        // Гнездо теряется и возвращается по нескольку раз за жизнь экрана, а
-        // прохода разметки за этим может и не случиться: окно под подписью
-        // надо отдать только что севшему слою прямо сейчас, иначе мгла
-        // накроет «Legal» до первого поворота телефона.
-        updateAttributionCarve()
-    }
-
-    /// Только снимает. Ничего, что относится к настройке вуалей, здесь быть
-    /// не должно: гнездо теряется и возвращается по нескольку раз за жизнь
-    /// экрана, а настраиваются они один раз, в `init`.
-    private func unseatFogMetal() {
-        fogMetal?.detach()
-        fogMetal?.removeFromSuperview()
-    }
-
-    /// Сидит ли Metal-слой на своём месте: в том же родителе, что растровая
-    /// вуаль, и НИЖЕ её.
-    ///
-    /// Чистая — потому что живое дерево MapKit в тесте не построить, а вопрос
-    /// здесь арифметический: два `firstIndex` и сравнение родителей.
-    ///
-    /// Вуаль без родителя — это «не сейчас», а не «пересадить». Место в
-    /// дереве ищет она (`FogVeilView.verifySeating`), и пока она сама не
-    /// вернулась, Metal-слою садиться не подо что; спросят снова следующим
-    /// проходом разметки.
-    static func fogMetalNeedsReseating(metal: UIView?, veil: UIView) -> Bool {
-        guard let metal, let parent = veil.superview else { return false }
-        guard metal.superview === parent,
-              let mine = parent.subviews.firstIndex(of: metal),
-              let theirs = parent.subviews.firstIndex(of: veil),
-              mine < theirs else { return true }
-        return false
-    }
-
-    /// Место Metal-слоя проверяется на КАЖДОМ проходе разметки, и это не
-    /// перестраховка.
-    ///
-    /// `FogVeilView.verifySeating` возвращает в дерево СЕБЯ и, вернувшись
-    /// удачно, молчит: `onLostFromHierarchy` тогда не зовётся вовсе, а
-    /// `seatFogMetal` висит на `onAttached`. То есть пересборка сабвью MapKit
-    /// (восстановление после нехватки памяти, будущая iOS) вернула бы
-    /// растровую вуаль на место, а Metal-слой остался бы снаружи — и «Атлас»
-    /// показывал бы ГОЛУЮ карту Apple: растра у вуали нет (`vectorOnly`),
-    /// плиточные оверлеи сняты, и заметить это можно было бы, только уйдя с
-    /// экрана и вернувшись.
-    private func verifyFogMetalSeating() {
-        guard veilSeat.isAttached, !reseatingFogMetal,
-              Self.fogMetalNeedsReseating(metal: fogMetal, veil: screenVeil) else { return }
-        // Пересадка трогает дерево, а дерево зовёт разметку — то есть эту же
-        // проверку изнутри неё самой. Тот же приём, что у `FogVeilView`.
-        reseatingFogMetal = true
-        defer { reseatingFogMetal = false }
-        // `insertSubview` и сам переставил бы слой, но снятие делает «сядем
-        // заново» одинаковым для обоих случаев — и вылетевшего из дерева, и
-        // просто всплывшего поверх вуали.
-        fogMetal?.removeFromSuperview()
-        seatFogMetal()
+        fogMetal.follow(veilSeat, on: map)
     }
 
     /// Открытый мир — в ОБЕ вуали сразу, и это единственная дверь.
@@ -182,7 +124,7 @@ final class MapHostController: UIViewController {
     /// владеет.
     func setRevealedLayer(_ layer: RevealedLayer) {
         screenVeil.setLayer(layer)
-        fogMetal?.setLayer(layer)
+        fogMetal.setLayer(layer)
     }
 
     /// Сколько нижней части экрана занимает постоянный лист. Логотип и
@@ -223,7 +165,7 @@ final class MapHostController: UIViewController {
         super.viewDidLayoutSubviews()
         applyPalette()
         applyAttributionLeading()
-        verifyFogMetalSeating()
+        seatFogMetal()
         updateAttributionCarve()
     }
 
@@ -256,7 +198,7 @@ final class MapHostController: UIViewController {
         // Метал берёт цвет и силу мглы из той же палитры, но читает её в
         // кадре: на стоящей карте кадра нет, и без этого зова тема сменилась
         // бы только с первым движением пальца.
-        fogMetal?.invalidate()
+        fogMetal.invalidate()
     }
 
     /// Приглушает мглу под логотипом Apple и «Legal» — до половины её силы, а
@@ -274,18 +216,15 @@ final class MapHostController: UIViewController {
         // коробкой, наехавшей на верхний край листа.
         guard AttributionCarve.carves(palette: FogVeilPainter.palette) else {
             veil.setAttributionCarve(nil)
-            fogMetal?.setAttributionCarve(nil)
+            fogMetal.setAttributionCarve(nil, from: veil)
             return
         }
         if let rect = AttributionCarve.carveRect(in: map, space: veil) {
             carvedOnce = true
             veil.setAttributionCarve(rect)
-            // У метал-слоя окно то же самое, но в ЕГО координатах. Сегодня он
-            // сосед вуали с тем же `frame`, то есть числа совпадают, — но это
-            // наблюдение, а не контракт: место в дереве ищет `VeilSeat`, и
-            // спросить UIKit стоит дешевле, чем однажды поймать окно, съехавшее
-            // на высоту статус-бара.
-            if let fogMetal { fogMetal.setAttributionCarve(fogMetal.convert(rect, from: veil)) }
+            // У метал-слоя окно то же самое, но в ЕГО координатах — перевод
+            // внутри посадки.
+            fogMetal.setAttributionCarve(rect, from: veil)
             return
         }
         guard !carvedOnce else { return }
@@ -1335,7 +1274,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
             guard let host, host.screenVeilAttached else { return }
             host.screenVeil.startTracking()
-            host.metalVeil?.startTracking()
+            host.fogMetal.startTracking()
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
@@ -1354,7 +1293,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
             // привязку в том же кадре сделает тот же `CADisplayLink`, а два
             // вызова подряд считают одно и то же дважды.
             host.screenVeil.startTracking()
-            host.metalVeil?.startTracking()
+            host.fogMetal.startTracking()
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
@@ -1365,7 +1304,7 @@ struct MyMapRepresentable: UIViewControllerRepresentable {
                 host.screenVeil.maybeRender(map: mapView, settled: true)
                 // Металу заказывать нечего: он и так рисует каждый кадр, ему
                 // нужен только хвост — доехать инерцию и погаснуть.
-                host.metalVeil?.extendTracking(tail: 0.6)
+                host.fogMetal.extendTracking(tail: 0.6)
             }
             updateHintLOD(mapView)
             updateLabelVisibility(mapView)

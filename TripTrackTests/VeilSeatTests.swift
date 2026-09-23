@@ -111,20 +111,20 @@ final class VeilSeatTests: XCTestCase {
         let veil = UIView()
         parent.addSubview(metal)
         parent.addSubview(veil)
-        XCTAssertFalse(MapHostController.fogMetalNeedsReseating(metal: metal, veil: veil),
+        XCTAssertFalse(FogMetalSeat.needsReseating(metal: metal, veil: veil),
                        "в том же родителе и ниже вуали — это и есть своё место")
 
         parent.bringSubviewToFront(metal)
-        XCTAssertTrue(MapHostController.fogMetalNeedsReseating(metal: metal, veil: veil),
+        XCTAssertTrue(FogMetalSeat.needsReseating(metal: metal, veil: veil),
                       "поверх вуали мгла накрыла бы жилку и выбранный маршрут")
 
         metal.removeFromSuperview()
-        XCTAssertTrue(MapHostController.fogMetalNeedsReseating(metal: metal, veil: veil),
+        XCTAssertTrue(FogMetalSeat.needsReseating(metal: metal, veil: veil),
                       "вылетел из дерева — тумана на «Атласе» не осталось вовсе")
 
-        XCTAssertFalse(MapHostController.fogMetalNeedsReseating(metal: metal, veil: UIView()),
+        XCTAssertFalse(FogMetalSeat.needsReseating(metal: metal, veil: UIView()),
                        "вуаль сама вне дерева — садиться не подо что, спросят снова")
-        XCTAssertFalse(MapHostController.fogMetalNeedsReseating(metal: nil, veil: veil),
+        XCTAssertFalse(FogMetalSeat.needsReseating(metal: nil, veil: veil),
                        "Metal недоступен — пересаживать нечего")
     }
 
