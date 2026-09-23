@@ -633,19 +633,27 @@ struct MyMapSheet: View {
     private func regionCard(_ region: MapRegionStat, _ c: AppTheme.Colors) -> some View {
         regionHeader(region, c)
 
-        HStack(spacing: 0) {
+        // Крайние плитки прижаты к полям карточки, средняя по центру: до
+        // 23 сентября все три стояли по центрам равных третей, и числа висели
+        // сами по себе — левое в двух сантиметрах от флага с названием, правое
+        // не доходя до края. «Вёрстка кривая» — владелец про этот экран.
+        HStack(spacing: 8) {
             statColumn(Measure.distanceValue(km: region.km, unit: distanceUnit,
                                              lang: lang.language, style: .grouped),
-                       AppStrings.mapKmDriven(lang.language, unit: distanceUnit), c)
+                       AppStrings.mapKmDriven(lang.language, unit: distanceUnit), c,
+                       alignment: .leading)
             statColumn("\(region.tripCount)",
-                       AppStrings.tripsGenitive(lang.language, count: region.tripCount), c)
+                       AppStrings.tripsGenitive(lang.language, count: region.tripCount), c,
+                       alignment: .center)
             statColumn(region.totalCities > 0
                        ? AppStrings.mapCitiesOfTotal(lang.language,
                                                      opened: region.visitedCityCount,
                                                      total: region.totalCities)
                        : "—",
-                       AppStrings.citiesGenitive(lang.language, count: region.totalCities), c)
+                       AppStrings.citiesGenitive(lang.language, count: region.totalCities), c,
+                       alignment: .trailing)
         }
+        .padding(.horizontal, 16)
         .padding(.top, 16)
 
         if isExpanded {
@@ -680,8 +688,11 @@ struct MyMapSheet: View {
     /// The value drew in SF while the label right under it drew in Inter — two
     /// typefaces stacked inside one card, and at heavy weight the digits gave
     /// it away. Canon: 18 ExtraBold over 10 SemiBold (1117:230/231).
-    private func statColumn(_ value: String, _ label: String, _ c: AppTheme.Colors) -> some View {
-        VStack(spacing: 3) {
+    private func statColumn(
+        _ value: String, _ label: String, _ c: AppTheme.Colors,
+        alignment: HorizontalAlignment = .center
+    ) -> some View {
+        VStack(alignment: alignment, spacing: 3) {
             Text(value)
                 .font(.inter(18, weight: .heavy))
                 .foregroundStyle(c.text)
@@ -692,7 +703,7 @@ struct MyMapSheet: View {
                 .foregroundStyle(c.textTertiary)
                 .lineLimit(1)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
     }
 
     // MARK: - Region · expanded
