@@ -372,6 +372,12 @@ final class MapViewModel: ObservableObject {
             // Туман (0.7.0): открытое из всей библиотеки — один раз после
             // обновления. Пустая выборка флаг не взводит.
             await RevealedLayerStore.shared.rebuildIfNeeded()
+            // Дыры старых поездок (0.8.1): прямая сразу, дорога — очередью.
+            // Последним: проход трогает каждую поездку библиотеки один раз,
+            // на своём фоновом контексте, и ничего из сказанного выше не ждёт.
+            RoadGapFiller.shared.startObserving()
+            await RoadGapFiller.shared.scanLibrary()
+            await RoadGapFiller.shared.drainIfPossible()
             gamificationManager.backfillBadgesIfNeeded(trips: allTrips)
             StartupTrace.mark("migrations+backfill done")
         }
@@ -904,6 +910,8 @@ final class MapViewModel: ObservableObject {
             let processor = PostTripTrackProcessor()
             Task {
                 await processor.processTrip(trip.id)
+                // Дорогу для дыр этой поездки спросит очередь (спека §2.3).
+                Task { await RoadGapFiller.shared.drainIfPossible() }
                 // На ОКОНЧАТЕЛЬНОМ треке — с заполненными разрывами и без
                 // выбросов; мусорная поездка к этому моменту уже удалена, и
                 // `process` для неё ничего не найдёт.
