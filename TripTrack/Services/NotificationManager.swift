@@ -14,12 +14,16 @@ final class NotificationManager: NSObject, ObservableObject {
     /// сервер его не записывает, — поэтому нажатие просто открывает
     /// приложение: вести некуда, и притворяться, что есть, не надо.
     static let newAccountCategory = "NEW_ACCOUNT"
+    /// 0.8.1. «Твоя?» после черновика, начатого приложением в «Напоминаниях».
+    static let tripDraftConfirmCategory = "TRIP_DRAFT_CONFIRM"
 
     // Action identifiers
     static let startRecordingAction = "START_RECORDING"
     static let skipAction = "SKIP"
     static let stopNowAction = "STOP_NOW"
     static let continueAction = "CONTINUE_RECORDING"
+    static let confirmDraftAction = "CONFIRM_DRAFT"
+    static let discardDraftAction = "DISCARD_DRAFT"
 
     // Request identifiers
     static let autoStopDeadlineId = "trip-auto-stop-deadline"
@@ -108,8 +112,27 @@ final class NotificationManager: NSObject, ObservableObject {
             intentIdentifiers: []
         )
 
+        // «Моя» работает без открытия приложения; «Удалить» — только с
+        // разблокированного телефона: стирать поездку с экрана блокировки
+        // может кто угодно.
+        let confirmDraft = UNNotificationAction(
+            identifier: Self.confirmDraftAction,
+            title: AppStrings.draftConfirm(lang),
+            options: []
+        )
+        let discardDraft = UNNotificationAction(
+            identifier: Self.discardDraftAction,
+            title: AppStrings.draftDiscard(lang),
+            options: [.destructive, .authenticationRequired]
+        )
+        let draftCategory = UNNotificationCategory(
+            identifier: Self.tripDraftConfirmCategory,
+            actions: [confirmDraft, discardDraft],
+            intentIdentifiers: []
+        )
+
         UNUserNotificationCenter.current().setNotificationCategories([
-            startCategory, stopCategory, autoStartCategory
+            startCategory, stopCategory, autoStartCategory, draftCategory
         ])
     }
 
@@ -209,6 +232,47 @@ final class NotificationManager: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
+    /// Черновик начат: только в Центре уведомлений, без звука и баннера
+    /// (спека §3.1).
+    static func draftStartedContent(lang: LanguageManager.Language) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = AppStrings.notifDraftStartedTitle(lang)
+        content.body = AppStrings.notifDraftStartedBody(lang)
+        content.interruptionLevel = .passive
+        return content
+    }
+
+    /// «Поездка записана: 7.4 км. Твоя?» — с действиями «Моя» и «Удалить».
+    static func draftConfirmContent(tripId: UUID, metres: Double,
+                                    lang: LanguageManager.Language,
+                                    unit: DistanceUnit) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = AppStrings.notifDraftConfirmTitle(lang)
+        content.body = AppStrings.notifDraftConfirmBody(
+            lang, distance: Measure.distance(metres: metres, unit: unit, lang: lang, style: .tenths))
+        content.sound = .default
+        content.categoryIdentifier = tripDraftConfirmCategory
+        content.userInfo = ["tripId": tripId.uuidString]
+        return content
+    }
+
+    func sendDraftStartedNotification() {
+        let request = UNNotificationRequest(identifier: "trip-draft-started",
+                                            content: Self.draftStartedContent(lang: currentLang()),
+                                            trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Единица читается свежо — как у `sendAutoStopNotification`.
+    func sendDraftConfirmPrompt(tripId: UUID, metres: Double) {
+        let request = UNNotificationRequest(
+            identifier: "trip-draft-\(tripId.uuidString)",
+            content: Self.draftConfirmContent(tripId: tripId, metres: metres,
+                                              lang: currentLang(), unit: DistanceUnit.current),
+            trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+
     func cancelTripStopPrompt() {
         UNUserNotificationCenter.current().removePendingNotificationRequests(
             withIdentifiers: ["trip-stop-prompt"]
@@ -243,6 +307,12 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             NotificationCenter.default.post(name: .autoTripStopRequested, object: nil)
         case Self.continueAction:
             NotificationCenter.default.post(name: .autoTripContinueRequested, object: nil)
+        case Self.confirmDraftAction, Self.discardDraftAction:
+            if let raw = userInfo["tripId"] as? String, let id = UUID(uuidString: raw) {
+                DraftDecisionQueue.shared.enqueue(
+                    id, response.actionIdentifier == Self.confirmDraftAction ? .confirm : .discard)
+                NotificationCenter.default.post(name: .draftTripDecisionQueued, object: nil)
+            }
         case UNNotificationDefaultActionIdentifier:
             // Tapped the notification body — route by category. Local trip-
             // start prompt opens the recording tab; remote pushes deep-link
@@ -251,6 +321,13 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             if category == Self.tripStartPromptCategory {
                 NotificationCenter.default.post(name: .autoTripStartRequested, object: nil)
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
+            } else if category == Self.tripDraftConfirmCategory,
+                      let raw = userInfo["tripId"] as? String, let id = UUID(uuidString: raw) {
+                // Тап по телу вопроса открывает поездку: плашка «Это твоя
+                // поездка?» там же.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(name: .openTripDetail, object: id)
+                }
             } else if category == "REACTION" || category == "COMMENT" || category == "COMPANION_ACCEPTED" {
                 // `COMPANION_ACCEPTED` only ever notifies the trip's OWNER
                 // (`dispatchAcceptedSideEffects` on the backend) — the

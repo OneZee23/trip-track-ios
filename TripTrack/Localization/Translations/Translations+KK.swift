@@ -1418,6 +1418,12 @@ extension Translations {
         "exportCSV": "CSV экспорттау",
         "exportFailed": "Экспорттау мүмкін болмады",
         "posterFailed": "Сурет жиналмады — тек мәтін жіберіледі",
+        "notifDraftStartedTitle": "Сапар жазылып жатыр",
+        "notifDraftStartedBody": "Соңында сенікі ме деп сұраймын",
+        "notifDraftConfirmTitle": "Сапар жазылды",
+        "notifDraftConfirmBody": "{distance}. Сенікі ме?",
+        "draftConfirm": "Менікі",
+        "draftDiscard": "Жою",
     ]
 
 }

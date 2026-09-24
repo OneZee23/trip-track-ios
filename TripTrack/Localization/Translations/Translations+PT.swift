@@ -1418,6 +1418,12 @@ extension Translations {
         "exportCSV": "Exportar CSV",
         "exportFailed": "Não foi possível exportar",
         "posterFailed": "A imagem não saiu — vai só o texto",
+        "notifDraftStartedTitle": "Gravando uma viagem",
+        "notifDraftStartedBody": "No fim, vou perguntar se é sua",
+        "notifDraftConfirmTitle": "Viagem gravada",
+        "notifDraftConfirmBody": "{distance}. Sua?",
+        "draftConfirm": "Minha",
+        "draftDiscard": "Excluir",
     ]
 
 }

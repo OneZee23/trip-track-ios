@@ -1418,6 +1418,12 @@ extension Translations {
         "exportCSV": "Ekspor CSV",
         "exportFailed": "Gagal diekspor",
         "posterFailed": "Gambarnya tidak jadi — hanya teks yang dibagikan",
+        "notifDraftStartedTitle": "Merekam perjalanan",
+        "notifDraftStartedBody": "Di akhir aku akan tanya apakah ini milikmu",
+        "notifDraftConfirmTitle": "Perjalanan direkam",
+        "notifDraftConfirmBody": "{distance}. Milikmu?",
+        "draftConfirm": "Milikku",
+        "draftDiscard": "Hapus",
     ]
 
 }

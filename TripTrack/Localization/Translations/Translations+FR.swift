@@ -1418,6 +1418,12 @@ extension Translations {
         "exportCSV": "Exporter en CSV",
         "exportFailed": "Échec de l'export",
         "posterFailed": "L'image n'a pas abouti — seul le texte part",
+        "notifDraftStartedTitle": "Trajet en cours d'enregistrement",
+        "notifDraftStartedBody": "À la fin, je te demanderai si c'est le tien",
+        "notifDraftConfirmTitle": "Trajet enregistré",
+        "notifDraftConfirmBody": "{distance}. Le tien ?",
+        "draftConfirm": "Le mien",
+        "draftDiscard": "Supprimer",
     ]
 
 }

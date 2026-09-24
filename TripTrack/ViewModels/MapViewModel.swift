@@ -268,6 +268,16 @@ final class MapViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Решения по черновикам (0.8.1): кнопка уведомления, экран поездки,
+        // итоги. И один проход сразу — решение могло лечь, пока нас не было.
+        NotificationCenter.default.publisher(for: .draftTripDecisionQueued)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { await self?.applyDraftDecisions() }
+            }
+            .store(in: &cancellables)
+        Task { [weak self] in await self?.applyDraftDecisions() }
+
         // Cloud-Sync pull can restore a whole library onto a fresh device
         // without touching stopRecording/TrackingView.onAppear — the only
         // other writers of the cached trip stats. Without this the Я tab
@@ -716,7 +726,7 @@ final class MapViewModel: ObservableObject {
         )
     }
 
-    func startRecording(vehicleId overrideId: UUID? = nil) {
+    func startRecording(vehicleId overrideId: UUID? = nil, confirmation: TripConfirmation = .confirmed) {
         // Re-entry guard — BT auto-trigger + notification action + manual tap
         // can all reach this method on the same MainActor tick. Without the
         // guard each call would create its own TripEntity, leaving orphans.
@@ -778,7 +788,7 @@ final class MapViewModel: ObservableObject {
         let vid = transfer
             ? nil
             : SettingsManager.shared.recordableVehicleId(overrideId ?? selectedVehicleId)
-        tripManager.startTrip(vehicleId: vid, isTransfer: transfer)
+        tripManager.startTrip(vehicleId: vid, isTransfer: transfer, confirmation: confirmation)
         pendingTransfer = false
         isRecording = true
         // This trip's inactivity window starts now, from this trip's odometer.
@@ -919,14 +929,13 @@ final class MapViewModel: ObservableObject {
                 await processor.processTrip(trip.id)
                 // Дорогу для дыр этой поездки спросит очередь (спека §2.3).
                 Task { await RoadGapFiller.shared.drainIfPossible() }
+                // Черновик в мир не выходит (спека §3.2): ни мест, ни тумана,
+                // ни находок до «Моя». Войдёт он той же дверью.
+                guard !trip.isDraft else { return }
                 // На ОКОНЧАТЕЛЬНОМ треке — с заполненными разрывами и без
                 // выбросов; мусорная поездка к этому моменту уже удалена, и
                 // `process` для неё ничего не найдёт.
-                await PlaceManager.shared.process(tripId: trip.id)
-                // Туман (0.7.0): что поездка открыла НОВОГО — на том же
-                // окончательном треке, из превью. Копится инкрементально,
-                // поэтому открытие «Атласа» ничего не пересчитывает.
-                let delta = await RevealedLayerStore.shared.ingest(tripId: trip.id)
+                let delta = await TripWorldEntry.placesAndReveal(trip: trip)
                 // Находки (0.7.0) — ПОСЛЕДНИМИ в цепочке и только здесь: трек
                 // окончательный, места сверены, туман дорисован, а запись
                 // кончилась. Километры и регионы берутся из дельты тумана —
@@ -949,7 +958,8 @@ final class MapViewModel: ObservableObject {
             }
         }
 
-        if let trip = completedTrip, trip.isJunk {
+        let route = completedTrip.map(TripWorldEntry.route(for:))
+        if let trip = completedTrip, route == .discardJunk {
             LiveActivityManager.shared.endActivity()
             tripManager.deleteTrip(id: trip.id)
             discardedJunkTrip = true
@@ -973,53 +983,75 @@ final class MapViewModel: ObservableObject {
             LiveActivityManager.shared.endActivity()
         }
 
-        // Process gamification — use lightweight fetch (no track points for historical trips).
-        // The completedTrip already has track points from the recording session.
-        if let trip = completedTrip {
-            var allTrips = tripManager.fetchTrips()
-            // Replace the lightweight version with the full trip (has track points)
-            if let idx = allTrips.firstIndex(where: { $0.id == trip.id }) {
-                allTrips[idx] = trip
-            }
-            let settingsEntity = gamificationManager.fetchSettingsEntity()
-            let vehicleEntity = gamificationManager.fetchVehicleEntity(id: trip.vehicleId)
-
-            let completionData = gamificationManager.processCompletedTrip(
-                trip: trip,
-                allTrips: allTrips,
-                settingsEntity: settingsEntity,
-                vehicleEntity: vehicleEntity
-            )
-
-            // Save earned badge IDs to trip entity
-            let earnedIds = completionData.newBadges.map(\.id)
-            tripManager.saveBadgesJSON(tripId: trip.id, badgeIds: earnedIds)
-
-            // Process road collection
-            var finalData = completionData
-            finalData.roadCard = roadCollectionManager.processTrip(trip)
-
-            // Collect badges for celebration
-            pendingBadges = completionData.newBadges.map { badge in
-                let count = completionData.repeatedBadgeCounts[badge.id] ?? 1
-                return (badge: badge, count: count)
-            }
-
-            if !pendingBadges.isEmpty {
-                // Badges earned → show celebration FIRST, then summary after dismiss
-                pendingCompletedTrip = completedTrip
-                pendingCompletionData = finalData
-                showBadgeCelebration = true
-            } else {
-                // No badges → show summary directly
-                lastCompletionData = finalData
-                lastCompletedTrip = completedTrip
-            }
-        } else {
+        guard let trip = completedTrip else {
             // No trip data — shouldn't happen, but safe fallback
             lastCompletedTrip = completedTrip
+            return
         }
 
+        if route == .awaitConfirmation {
+            // Черновик: итог без наград и вопрос «Твоя?» на самом экране итогов
+            // (спека §3.3). Уведомление уходит всегда: на переднем плане его
+            // глушит `NotificationManager.presentationOptions`, и спрашивает
+            // экран; в кармане спрашивает оно.
+            lastCompletionData = nil
+            lastCompletedTrip = trip
+            NotificationManager.shared.sendDraftConfirmPrompt(tripId: trip.id, metres: trip.distance)
+            return
+        }
+
+        let finalData = TripWorldEntry.rewards(for: trip, tripManager: tripManager,
+                                               gamification: gamificationManager,
+                                               roads: roadCollectionManager)
+        // Collect badges for celebration
+        pendingBadges = finalData.newBadges.map { badge in
+            (badge: badge, count: finalData.repeatedBadgeCounts[badge.id] ?? 1)
+        }
+        if !pendingBadges.isEmpty {
+            // Badges earned → show celebration FIRST, then summary after dismiss
+            pendingCompletedTrip = completedTrip
+            pendingCompletionData = finalData
+            showBadgeCelebration = true
+        } else {
+            // No badges → show summary directly
+            lastCompletionData = finalData
+            lastCompletedTrip = completedTrip
+        }
+    }
+
+    /// Решения по черновикам — из уведомления, с экрана поездки, с итогов. Все
+    /// идут через `DraftDecisionQueue`: кнопку уведомления нажимают и тогда,
+    /// когда этого объекта ещё нет в памяти (Review Focus 3).
+    func applyDraftDecisions() async {
+        for (id, decision) in DraftDecisionQueue.shared.drain() {
+            switch decision {
+            case .confirm:
+                // `false` — не черновик или уже подтверждён: вход в мир дважды
+                // недопустим.
+                guard tripManager.setConfirmation(.confirmed, tripId: id),
+                      let trip = tripManager.tripDetail(id: id) else { continue }
+                let data = TripWorldEntry.rewards(for: trip, tripManager: tripManager,
+                                                  gamification: gamificationManager,
+                                                  roads: roadCollectionManager)
+                // Снимки черновика в очередь не попадали — гейт синка их отбил.
+                for photo in trip.photos {
+                    SyncEnqueuer.enqueue(SyncOperation(entityType: .photo, entityId: photo.id, action: .upload))
+                }
+                if lastCompletedTrip?.id == id {
+                    // Итоги этой поездки ещё на экране и «Моя» нажато там же:
+                    // вопрос уходит, награды встают на его место.
+                    lastCompletedTrip = tripManager.tripDetail(id: id)
+                    lastCompletionData = data
+                }
+                await TripWorldEntry.placesAndReveal(trip: trip)
+                territoryManager.rebuildFromTrips()
+            case .discard:
+                guard tripManager.discardDraft(id: id) else { continue }
+                NotificationCenter.default.post(name: .tripDeleted, object: id)
+            }
+            refreshTripStats()
+            NotificationCenter.default.post(name: .draftTripResolved, object: id)
+        }
     }
 
     /// Called after badge celebration is dismissed to show the trip summary

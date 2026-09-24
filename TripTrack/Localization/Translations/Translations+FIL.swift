@@ -1418,6 +1418,12 @@ extension Translations {
         "exportCSV": "I-export ang CSV",
         "exportFailed": "Hindi na-export",
         "posterFailed": "Hindi nabuo ang larawan — teksto lang ang ibabahagi",
+        "notifDraftStartedTitle": "Nire-record ang biyahe",
+        "notifDraftStartedBody": "Sa dulo, itatanong ko kung sa iyo ito",
+        "notifDraftConfirmTitle": "Na-record ang biyahe",
+        "notifDraftConfirmBody": "{distance}. Sa iyo?",
+        "draftConfirm": "Akin",
+        "draftDiscard": "Burahin",
     ]
 
 }

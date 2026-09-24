@@ -2881,6 +2881,29 @@ enum AppStrings {
     static func notifAutoStopBody(_ lang: LanguageManager.Language) -> String {
         tr(lang, "notifAutoStopBody", ru: "Автозавершение поездки", en: "Auto-stopping trip")
     }
+    /// Черновик начат — тихо, без звука (спека §3.1): человек за рулём.
+    static func notifDraftStartedTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "notifDraftStartedTitle", ru: "Пишу поездку", en: "Recording a trip")
+    }
+    static func notifDraftStartedBody(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "notifDraftStartedBody", ru: "В конце спрошу, твоя ли она", en: "I'll ask at the end if it's yours")
+    }
+    static func notifDraftConfirmTitle(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "notifDraftConfirmTitle", ru: "Поездка записана", en: "Trip recorded")
+    }
+    /// `{distance}` — уже напечатанное `Measure` расстояние с единицей.
+    static func notifDraftConfirmBody(_ lang: LanguageManager.Language, distance: String) -> String {
+        tr(lang, "notifDraftConfirmBody", ru: "{distance}. Твоя?", en: "{distance}. Yours?")
+            .replacingOccurrences(of: "{distance}", with: distance)
+    }
+    /// «Моя» — и в уведомлении, и на плашке черновика: одно слово на одно
+    /// решение.
+    static func draftConfirm(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftConfirm", ru: "Моя", en: "Mine")
+    }
+    static func draftDiscard(_ lang: LanguageManager.Language) -> String {
+        tr(lang, "draftDiscard", ru: "Удалить", en: "Delete")
+    }
     static func bluetoothAudio(_ lang: LanguageManager.Language) -> String {
         tr(lang, "bluetoothAudio", ru: "Bluetooth-аудио", en: "Bluetooth Audio")
     }

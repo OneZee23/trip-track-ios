@@ -187,7 +187,7 @@ final class AutoTripService: ObservableObject {
         // (consistent with `recoverStaleTripIfNeeded`).
         if vm.isRecording {
             let stale = isStaleByMovement
-            guard settings.autoRecordMode == .auto, stale else {
+            guard effectiveStopMode == .auto, stale else {
                 autoLog.notice("[auto.detected.skip] reason=already_recording mode=\(self.settings.autoRecordMode.rawValue, privacy: .public) stale_15min=\(stale, privacy: .public)")
                 return
             }
@@ -260,7 +260,7 @@ final class AutoTripService: ObservableObject {
         // manually they expect to stop manually. The tracker still stays
         // populated for `recoverStaleTripIfNeeded`, which IS active in all
         // modes since a 15+ min frozen trip is junk regardless.
-        guard settings.autoRecordMode == .auto,
+        guard effectiveStopMode == .auto,
               movementTracker.isStale(threshold: AutoTripPolicy.inactivityTimeout) else { return }
         let timeout = settings.autoStopTimeout
         notificationManager.sendTripStopPrompt(minutes: timeout, reason: .inactivity)
@@ -279,7 +279,7 @@ final class AutoTripService: ObservableObject {
         // the user opted out of automatic management — silently ending their
         // trip on foreground entry would feel like the app stole their data.
         // They'll see the trip is still recording and can stop it manually.
-        guard settings.autoRecordMode == .auto else {
+        guard effectiveStopMode == .auto else {
             autoLog.notice("[auto.recover_stale.skip] reason=mode=\(self.settings.autoRecordMode.rawValue, privacy: .public)")
             return
         }
@@ -349,11 +349,24 @@ final class AutoTripService: ObservableObject {
                 notificationManager.sendAutoStartNotification()
             }
         case .remind:
+            // С 0.8.1 «Напоминания» не ждут ответа, чтобы начать: запись идёт
+            // сразу, а поездка — черновик до «Моя» (спека §3.1). Ждать ответа
+            // значило терять поездку целиком — 18 сентября так и вышло.
             hasRemindedForCurrentTrip = true
+            vm.startRecording(confirmation: .draft)
+            guard vm.isRecording else {
+                autoLog.error("[auto.trip_start.refused] reason=\(String(describing: vm.startRefusal), privacy: .public) device=\"\(deviceName, privacy: .public)\"")
+                notificationManager.sendAutoStartFailedNotification(reason: vm.startRefusal)
+                return
+            }
+            if let realStart = estimatedStartDate {
+                vm.tripManager.backdateTrip(to: realStart)
+            }
             if isInForeground {
                 NotificationCenter.default.post(name: .switchToTrackingTab, object: nil)
             } else {
-                notificationManager.sendTripStartPrompt(deviceName: deviceName)
+                scheduleLiveActivityRetry(vm: vm)
+                notificationManager.sendDraftStartedNotification()
             }
         case .off:
             break
@@ -481,7 +494,7 @@ final class AutoTripService: ObservableObject {
         // функцией, которую можно проверить тестом. Здесь остаётся только его
         // исполнение.
         let decision = AutoTripPolicy.onBluetoothDisconnect(
-            mode: settings.autoRecordMode,
+            mode: effectiveStopMode,
             isRecording: vm.isRecording,
             isPaused: vm.isPaused,
             isIdleBeyondFastStop: stale5,
@@ -518,6 +531,12 @@ final class AutoTripService: ObservableObject {
     func handleManualPause() {
         autoLog.notice("[auto.manual_pause] cancel_pending_stop")
         cancelAutoStopTimer()
+    }
+
+    /// Режим завершения активной поездки — «кто начал, тот и заканчивает».
+    private var effectiveStopMode: AutoRecordMode {
+        AutoTripPolicy.stopMode(settings: settings.autoRecordMode,
+                                tripIsDraft: mapViewModel?.tripManager.activeTrip?.isDraft == true)
     }
 
     /// Has the active trip's distance been frozen long enough that the next
@@ -635,8 +654,11 @@ final class AutoTripService: ObservableObject {
         let lastChange = movementTracker.lastChangeTime
         let lastChangeAgo = lastChange.map { Int(Date().timeIntervalSince($0)) }
         if let trip = vm.tripManager.activeTrip {
-            autoLog.notice("[auto.trip_stop] dist_m=\(Int(trip.distance), privacy: .public) dur_s=\(Int(trip.duration), privacy: .public) last_change_s_ago=\(lastChangeAgo.map(String.init) ?? "nil", privacy: .public)")
-            notificationManager.sendAutoStopNotification(metres: trip.distance, duration: trip.formattedDuration)
+            autoLog.notice("[auto.trip_stop] dist_m=\(Int(trip.distance), privacy: .public) dur_s=\(Int(trip.duration), privacy: .public) last_change_s_ago=\(lastChangeAgo.map(String.init) ?? "nil", privacy: .public) draft=\(trip.isDraft, privacy: .public)")
+            // У черновика своё уведомление — вопрос «Твоя?», его шлёт финиш.
+            if !trip.isDraft {
+                notificationManager.sendAutoStopNotification(metres: trip.distance, duration: trip.formattedDuration)
+            }
         } else {
             autoLog.notice("[auto.trip_stop] active_trip=nil")
         }

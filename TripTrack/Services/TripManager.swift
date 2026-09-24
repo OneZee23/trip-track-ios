@@ -238,12 +238,6 @@ final class TripManager: ObservableObject {
         geocodeAndNameTrip(entity: entity)
         deleteDemoTripIfNeeded()
 
-        if let tripId = completedTrip?.id {
-            Task { @MainActor in
-                SyncEnqueuer.enqueue(SyncOperation(entityType: .trip, entityId: tripId, action: .upload))
-            }
-        }
-
         activeTrip = nil
         activeTripEntity = nil
         lastLocation = nil
@@ -351,6 +345,29 @@ final class TripManager: ObservableObject {
             PlaceManager.shared.forget(tripId: id)
         }
         repository.deleteTrip(id: id)
+    }
+
+    /// Перевести черновик в подтверждённые. `false` — поездки нет или она уже
+    /// подтверждена: вход в мир дважды недопустим.
+    @discardableResult
+    func setConfirmation(_ confirmation: TripConfirmation, tripId: UUID) -> Bool {
+        guard confirmation == .confirmed,
+              let entity = repository.fetchEntity(id: tripId),
+              entity.confirmation == TripConfirmation.draft.rawValue else { return false }
+        entity.confirmation = confirmation.rawValue
+        entity.lastModifiedAt = Date()
+        persistenceController.save()
+        return true
+    }
+
+    /// Удалить черновик без следа. На сервере его не было никогда
+    /// (`serverCreatedAt == nil`), поэтому `deleteTrip` удаляет строку сразу,
+    /// без надгробия. Подтверждённую поездку не трогает.
+    @discardableResult
+    func discardDraft(id: UUID) -> Bool {
+        guard repository.fetchEntity(id: id)?.confirmation == TripConfirmation.draft.rawValue else { return false }
+        deleteTrip(id: id)
+        return true
     }
 
     func purgeSoftDeletedTrips() {

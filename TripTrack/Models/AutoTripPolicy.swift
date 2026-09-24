@@ -76,6 +76,18 @@ enum AutoTripPolicy {
         }
     }
 
+    // MARK: - Кто начал, тот и заканчивает
+
+    /// Режим, по которому ЗАВЕРШАЕТСЯ поездка (спека §3.4). Черновик начало
+    /// приложение — значит, и завершает его приложение, по правилам полной
+    /// автоматики, какой бы режим ни стоял: `remind` на отключение магнитолы
+    /// отвечает `.promptOnly`, и черновик в кармане писался бы до вечера.
+    /// Поездку, начатую человеком, — по его режиму. Паузу обе ветки уважают
+    /// сами: она проверяется раньше режима.
+    static func stopMode(settings: AutoRecordMode, tripIsDraft: Bool) -> AutoRecordMode {
+        tripIsDraft ? .auto : settings
+    }
+
     // MARK: - Trigger debounce
 
     /// Window in which a duplicate BT/audio event with the same `(type, name)`

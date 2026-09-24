@@ -1418,6 +1418,12 @@ extension Translations {
         "exportCSV": "CSV olarak dışa aktar",
         "exportFailed": "Dışa aktarılamadı",
         "posterFailed": "Görsel oluşmadı — yalnızca metin gönderiliyor",
+        "notifDraftStartedTitle": "Yolculuk kaydediliyor",
+        "notifDraftStartedBody": "Sonunda senin mi diye soracağım",
+        "notifDraftConfirmTitle": "Yolculuk kaydedildi",
+        "notifDraftConfirmBody": "{distance}. Senin mi?",
+        "draftConfirm": "Benim",
+        "draftDiscard": "Sil",
     ]
 
 }
