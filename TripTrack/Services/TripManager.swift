@@ -286,6 +286,10 @@ final class TripManager: ObservableObject {
         repository.fetchAllTrips()
     }
 
+    func fetchDraftTrips() -> [Trip] {
+        repository.fetchDraftTrips()
+    }
+
     /// Async variant of `fetchTrips()` for callers that can wait — like the
     /// Feed view's pull-to-refresh handler. Off-loads the CoreData read from
     /// the main thread so the refresh spinner doesn't freeze on iPhone 12+

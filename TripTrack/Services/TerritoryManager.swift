@@ -225,7 +225,10 @@ final class TerritoryManager: ObservableObject {
             }
 
             let request = NSFetchRequest<NSFetchRequestResult>(entityName: "TrackPointEntity")
-            request.predicate = NSPredicate(format: "trip.endDate != nil AND trip.syncStatus != %d", SyncStatus.pendingDelete.rawValue)
+            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                NSPredicate(format: "trip.endDate != nil AND trip.syncStatus != %d", SyncStatus.pendingDelete.rawValue),
+                TripConfirmation.tripNotDraftPredicate,
+            ])
             request.resultType = .dictionaryResultType
             request.propertiesToFetch = ["latitude", "longitude"]
             request.fetchBatchSize = 500
@@ -274,6 +277,9 @@ final class TerritoryManager: ObservableObject {
         let newHashes: [(String, Date)]? = await bgContext.perform {
             let request: NSFetchRequest<TrackPointEntity> = TrackPointEntity.fetchRequest()
             request.fetchBatchSize = 500
+            // Черновик — это «Напоминания», трек, который человек ещё не
+            // подтвердил: территория остаётся раскрашенной только его словом.
+            request.predicate = TripConfirmation.tripNotDraftPredicate
             request.propertiesToFetch = ["latitude", "longitude", "timestamp"]
 
             // No points is not "nothing to do" — on the launch that lost a

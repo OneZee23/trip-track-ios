@@ -1209,11 +1209,14 @@ final class MapViewModel: ObservableObject {
 
                 if self.isRecording && !self.isPaused {
                     self.trackManager.addPoint(update.coordinate)
-                    let isNewTile = self.territoryManager.recordVisit(coordinate: update.coordinate)
-
-                    // Animate fog reveal when a new tile is discovered
-                    if isNewTile {
-                        self.revealFog(at: update.coordinate)
+                    // Территория — это «города и регионы» статистики: черновик
+                    // её не красит (спека §3.2). «Моя» перестроит её целиком.
+                    if self.tripManager.activeTrip?.isDraft != true {
+                        let isNewTile = self.territoryManager.recordVisit(coordinate: update.coordinate)
+                        // Animate fog reveal when a new tile is discovered
+                        if isNewTile {
+                            self.revealFog(at: update.coordinate)
+                        }
                     }
 
                     // Update Live Activity with current tracking data

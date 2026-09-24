@@ -81,6 +81,10 @@ final class PlaceManager: ObservableObject {
     /// `recording` — отметка поставлена на ходу, кнопкой: тогда история нового
     /// места откладывается (см. `deferHistory`).
     func registerCheckpoint(_ checkpoint: TripCheckpoint, tripId: UUID, recording: Bool = false) {
+        // Отметка черновика места не заводит (спека §3.2): у слоя мест нет
+        // отката, а «Удалить» обязано стирать без следа. Место появится, когда
+        // поездка войдёт в мир (`TripWorldEntry.placesAndReveal`).
+        guard repository.fetchEntity(id: tripId)?.confirmation != TripConfirmation.draft.rawValue else { return }
         let cell = Place.cell(latitude: checkpoint.latitude, longitude: checkpoint.longitude)
         let (place, isNew) = store.upsertPlace(cell: cell, coordinate: checkpoint.coordinate, name: checkpoint.name)
         repository.setPlaceId(forCheckpoint: checkpoint.id, placeId: place.id)

@@ -219,10 +219,11 @@ final class RevealedLayerStore: @unchecked Sendable {
     func ingest(tripId: UUID) async -> IngestDelta {
         let delta = await context.perform { () -> IngestDelta in
             let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-            request.predicate = NSPredicate(
-                format: "id == %@ AND endDate != nil AND syncStatus != %d",
-                tripId as CVarArg, SyncStatus.pendingDelete.rawValue
-            )
+            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                NSPredicate(format: "id == %@ AND endDate != nil AND syncStatus != %d",
+                            tripId as CVarArg, SyncStatus.pendingDelete.rawValue),
+                TripConfirmation.notDraftPredicate,
+            ])
             request.fetchLimit = 1
             guard let entity = try? self.context.fetch(request).first,
                   let polyline = entity.previewPolyline else { return .none }
@@ -661,9 +662,11 @@ final class RevealedLayerStore: @unchecked Sendable {
         let request = NSFetchRequest<NSDictionary>(entityName: "TripEntity")
         request.resultType = .dictionaryResultType
         request.propertiesToFetch = ["id", "previewPolyline"]
-        var predicates = [NSPredicate(
-            format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue
-        )]
+        var predicates = [
+            NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue),
+            // Черновик туман не открывает — ни сборкой, ни «миром на дату».
+            TripConfirmation.notDraftPredicate,
+        ]
         if let date { predicates.append(NSPredicate(format: "endDate <= %@", date as NSDate)) }
         if let ids { predicates.append(NSPredicate(format: "id IN %@", ids as NSSet)) }
         request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)

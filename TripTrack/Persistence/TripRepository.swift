@@ -19,6 +19,8 @@ struct TripPreviewRef: Identifiable, Equatable {
 protocol TripRepository {
     func fetchTrips(limit: Int, offset: Int) -> [Trip]
     func fetchAllTrips() -> [Trip]
+    /// Черновики — для секции «Ждут подтверждения» в «Я» (спека §3.3).
+    func fetchDraftTrips() -> [Trip]
     /// Свои поездки, стартовавшие внутри окна дат. См. реализацию: окно режет
     /// база, а не фильтр в памяти.
     func fetchTrips(from start: Date, to end: Date) -> [Trip]
@@ -210,6 +212,18 @@ final class CoreDataTripRepository: TripRepository {
         request.predicate = completedTripPredicate
         request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
         request.fetchBatchSize = 25
+        guard let entities = try? context.fetch(request) else { return [] }
+        return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
+    }
+
+    /// Черновики, новые первыми. Экран поездки читает по id
+    /// (`fetchTripDetail`) и черновик видит и без этого.
+    func fetchDraftTrips() -> [Trip] {
+        let request: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "endDate != nil AND syncStatus != %d AND confirmation == %@",
+            SyncStatus.pendingDelete.rawValue, TripConfirmation.draft.rawValue)
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \TripEntity.startDate, ascending: false)]
         guard let entities = try? context.fetch(request) else { return [] }
         return entities.compactMap { tripFromEntity($0, includeTrackPoints: false) }
     }
@@ -1057,8 +1071,12 @@ final class CoreDataTripRepository: TripRepository {
 
     func checkpointsWithoutPlace() -> [(checkpoint: TripCheckpoint, tripId: UUID)] {
         let request: NSFetchRequest<TripCheckpointEntity> = TripCheckpointEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "placeId == nil AND trip != nil AND trip.endDate != nil AND trip.syncStatus != %d",
-                                        SyncStatus.pendingDelete.rawValue)
+        request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate(format: "placeId == nil AND trip != nil AND trip.endDate != nil AND trip.syncStatus != %d",
+                        SyncStatus.pendingDelete.rawValue),
+            // Отметка черновика ждёт «Моя»: место у неё заведёт вход в мир.
+            TripConfirmation.tripNotDraftPredicate,
+        ])
         request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
         return ((try? context.fetch(request)) ?? []).compactMap { ce in
             guard let id = ce.id, let ts = ce.timestamp, let tripId = ce.trip?.id else { return nil }
@@ -1184,7 +1202,13 @@ final class CoreDataTripRepository: TripRepository {
     // MARK: - Private
 
     private var completedTripPredicate: NSPredicate {
-        NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue)
+        NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate(format: "endDate != nil AND syncStatus != %d", SyncStatus.pendingDelete.rawValue),
+            // Черновик в мир не выходит (спека §3.2): на этом предикате стоят
+            // все «мировые» выборки репозитория — статистика, путешествия,
+            // места, одометры, лента «Мои».
+            TripConfirmation.notDraftPredicate,
+        ])
     }
 
     func fetchEntity(id: UUID) -> TripEntity? {
@@ -1873,7 +1897,12 @@ final class CoreDataTripRepository: TripRepository {
     /// start healing the device against itself.
     func countLiveTrips() -> Int {
         let req: NSFetchRequest<TripEntity> = TripEntity.fetchRequest()
-        req.predicate = NSPredicate(format: "endDate != nil")
+        req.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate(format: "endDate != nil"),
+            // Черновика на сервере не бывает, и размер библиотеки против
+            // сервера считается без него.
+            TripConfirmation.notDraftPredicate,
+        ])
         return (try? context.count(for: req)) ?? 0
     }
 

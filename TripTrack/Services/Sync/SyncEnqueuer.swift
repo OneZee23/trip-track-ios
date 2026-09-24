@@ -18,6 +18,9 @@ enum SyncEnqueuer {
     @MainActor
     static func enqueue(_ op: SyncOperation, hasServerCopy: Bool? = nil) {
         guard isAuthorizedToEnqueue() else { return }
+        // Черновик не уходит на сервер ни при каком облаке (спека §3.2) —
+        // поэтому проверка стоит РАНЬШЕ облачного гейта.
+        guard !isDraftTrip(op) else { return }
         guard shouldEnqueue(op, hasServerCopy: hasServerCopy) else { return }
         SyncQueue.shared.enqueue(op)
         // Kick the queue immediately so the operation is pushed to the server as
@@ -46,6 +49,22 @@ enum SyncEnqueuer {
         if cloudSyncEnabled { return true }
         if let hasServerCopy { return hasServerCopy }
         return lookup() ?? false
+    }
+
+    /// Поездка — черновик, или снимок черновика. Удаление не блокируется:
+    /// черновика на сервере не бывает, и отказ в `.delete` ничего не бережёт.
+    @MainActor
+    static func isDraftTrip(_ op: SyncOperation) -> Bool {
+        guard op.action != .delete else { return false }
+        let draft = TripConfirmation.draft.rawValue
+        switch op.entityType {
+        case .trip:
+            return fetchTripEntity(id: op.entityId)?.confirmation == draft
+        case .photo:
+            return fetchPhotoEntity(id: op.entityId)?.trip?.confirmation == draft
+        default:
+            return false
+        }
     }
 
     @MainActor

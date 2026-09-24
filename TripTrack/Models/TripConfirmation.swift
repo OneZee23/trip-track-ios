@@ -22,3 +22,15 @@ enum RoadFillState: String, Codable {
     case pending
     case done
 }
+
+extension TripConfirmation {
+    /// Черновик в мир не выходит (спека §3.2). Один предикат для всех
+    /// «мировых» выборок поездок: `completedTripPredicate` репозитория и сырые
+    /// выборки вне его. Пустая колонка — подтверждённая поездка: так читаются
+    /// все поездки до 0.8.1.
+    static let notDraftPredicate = NSPredicate(
+        format: "confirmation == nil OR confirmation != %@", TripConfirmation.draft.rawValue)
+    /// То же для выборок точек и отметок — через связь с поездкой.
+    static let tripNotDraftPredicate = NSPredicate(
+        format: "trip.confirmation == nil OR trip.confirmation != %@", TripConfirmation.draft.rawValue)
+}
