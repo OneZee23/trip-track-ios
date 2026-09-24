@@ -26,6 +26,12 @@ final class ApplyDraftDecisionsTests: XCTestCase {
     private var savedBestStreak: Int32 = 0
     private var savedLastTripDate: Date?
 
+    // Раунд 1 фикса №1: подменяет `UNUserNotificationCenter.current()` тем же
+    // приёмом, что `KeychainHelper.ops` — записью, а не настоящим Центром
+    // уведомлений, который в тесте недоступен для проверки.
+    private var savedRemoveNotificationIds: (([String]) -> Void)!
+    private var removedNotificationIds: [[String]] = []
+
     override func setUp() {
         super.setUp()
         cloudSyncBefore = SettingsManager.shared.cloudSyncEnabled
@@ -34,6 +40,11 @@ final class ApplyDraftDecisionsTests: XCTestCase {
         // Реального входа в аккаунт в юнит-тесте не поставить — гейт
         // авторизации подменяется, как в `JourneyPublishTests`.
         SyncEnqueuer.isAuthorizedToEnqueue = { true }
+        savedRemoveNotificationIds = NotificationManager.shared.removeNotificationIds
+        removedNotificationIds = []
+        NotificationManager.shared.removeNotificationIds = { [weak self] ids in
+            self?.removedNotificationIds.append(ids)
+        }
         vm = MapViewModel()
         if let settings = vm.gamificationManager.fetchSettingsEntity() {
             savedProfileXP = settings.profileXP
@@ -65,6 +76,8 @@ final class ApplyDraftDecisionsTests: XCTestCase {
         SyncQueue.shared.clearAll()
         SettingsManager.shared.cloudSyncEnabled = cloudSyncBefore
         SyncEnqueuer.isAuthorizedToEnqueue = { AuthService.shared.isSignedIn }
+        NotificationManager.shared.removeNotificationIds = savedRemoveNotificationIds
+        removedNotificationIds = []
         vm = nil
         super.tearDown()
     }
@@ -156,5 +169,80 @@ final class ApplyDraftDecisionsTests: XCTestCase {
 
         XCTAssertEqual(vm.tripManager.activeTrip?.confirmation, .draft, "решение не тронуло пишущуюся поездку")
         XCTAssertEqual(DraftDecisionQueue.shared.peek()?.0, id, "решение осталось — придёт снова, когда запись кончится")
+    }
+
+    // MARK: - Уведомления (раунд 1, фикс №1)
+
+    /// «Удалить» с экрана поездки шёл мимо очереди, звал `tripManager
+    /// .deleteTrip` напрямую и не снимал «Твоя?» этой поездки: доставленное
+    /// уведомление оставалось с мёртвыми кнопками и тапом в удалённую
+    /// поездку. Теперь `deleteTrip` — общая дверь, и её проверяем НАПРЯМУЮ,
+    /// в обход очереди — ровно тем путём, которым идёт баннер.
+    func testDeleteTripClearsTheDraftPromptId() {
+        let id = trip(confirmation: .draft)
+
+        vm.tripManager.deleteTrip(id: id)
+
+        let expected = NotificationManager.draftConfirmId(id)
+        XCTAssertTrue(removedNotificationIds.contains { $0.contains(expected) },
+                      "прямое удаление черновика обязано снять его «Твоя?»")
+        XCTAssertNil(confirmationOf(id), "строка удалена без следа")
+    }
+
+    /// Ничего не пишется — общее «Пишу поездку» тоже можно снять: оно не
+    /// может относиться ни к какой ЕДУЩЕЙ сейчас записи.
+    func testDeleteTripClearsTheStartedNoticeWhenNothingRecords() {
+        let id = trip(confirmation: .draft)
+
+        vm.tripManager.deleteTrip(id: id)
+
+        XCTAssertTrue(removedNotificationIds.contains { $0.contains(NotificationManager.draftStartedId) })
+    }
+
+    /// Черновик X удалён с экрана, пока поездка Y пишется прямо сейчас:
+    /// «Пишу поездку» относится к Y, и удаление X не имеет права его снять.
+    func testDeleteTripDoesNotClearTheStartedNoticeWhileAnotherTripRecords() throws {
+        vm.tripManager.startTrip(vehicleId: nil, confirmation: .draft)
+        let recordingId = try XCTUnwrap(vm.tripManager.activeTrip?.id)
+        insertedTripIds.append(recordingId)
+        let oldDraft = trip(confirmation: .draft)
+
+        vm.tripManager.deleteTrip(id: oldDraft)
+
+        XCTAssertFalse(removedNotificationIds.contains { $0.contains(NotificationManager.draftStartedId) },
+                       "«Пишу поездку» — про поездку Y, старый черновик X его не гасит")
+        XCTAssertTrue(removedNotificationIds.contains { $0.contains(NotificationManager.draftConfirmId(oldDraft)) },
+                     "«Твоя?» самого X всё равно снимается")
+    }
+
+    /// Тот же гейт через очередь: «Удалить» на итогах и «Моя» на итогах/
+    /// экране поездки идут через `DraftDecisionQueue`, и результат обязан
+    /// совпасть с прямым `deleteTrip` — оба сходятся в одной двери.
+    func testDiscardThroughTheQueueDoesNotClearTheStartedNoticeWhileAnotherTripRecords() async throws {
+        let oldDraft = trip(confirmation: .draft)
+        vm.tripManager.startTrip(vehicleId: nil, confirmation: .draft)
+        let recordingId = try XCTUnwrap(vm.tripManager.activeTrip?.id)
+        insertedTripIds.append(recordingId)
+
+        DraftDecisionQueue.shared.enqueue(oldDraft, .discard)
+        await vm.applyDraftDecisions()
+
+        XCTAssertFalse(removedNotificationIds.contains { $0.contains(NotificationManager.draftStartedId) })
+        XCTAssertTrue(removedNotificationIds.contains { $0.contains(NotificationManager.draftConfirmId(oldDraft)) })
+    }
+
+    /// «Моя» тоже снимает «Твоя?» этой поездки, и тоже щадит «Пишу поездку»,
+    /// пока едет другая запись.
+    func testConfirmClearsItsPromptButNotTheStartedNoticeWhileAnotherTripRecords() async throws {
+        let oldDraft = trip(confirmation: .draft)
+        vm.tripManager.startTrip(vehicleId: nil, confirmation: .draft)
+        let recordingId = try XCTUnwrap(vm.tripManager.activeTrip?.id)
+        insertedTripIds.append(recordingId)
+
+        DraftDecisionQueue.shared.enqueue(oldDraft, .confirm)
+        await vm.applyDraftDecisions()
+
+        XCTAssertTrue(removedNotificationIds.contains { $0.contains(NotificationManager.draftConfirmId(oldDraft)) })
+        XCTAssertFalse(removedNotificationIds.contains { $0.contains(NotificationManager.draftStartedId) })
     }
 }

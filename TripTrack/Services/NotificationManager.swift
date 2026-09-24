@@ -251,8 +251,12 @@ final class NotificationManager: NSObject, ObservableObject {
     /// «Пишу поездку» не про КОНКРЕТНУЮ поездку — одновременно пишется не
     /// больше одной (`startRecording`'s re-entry guard), поэтому один
     /// идентификатор на все черновики. «Твоя?» — про эту поездку и только её.
-    private static let draftStartedId = "trip-draft-started"
-    private static func draftConfirmId(_ tripId: UUID) -> String { "trip-draft-\(tripId.uuidString)" }
+    ///
+    /// Не `private` НАРОЧНО (раунд 1 фикса №1): единственный источник для
+    /// send И clear — тест вычисляет тот же id этой же функцией, а не
+    /// повторяет строковый формат у себя, где он мог бы разойтись молча.
+    static let draftStartedId = "trip-draft-started"
+    static func draftConfirmId(_ tripId: UUID) -> String { "trip-draft-\(tripId.uuidString)" }
 
     func sendDraftStartedNotification() {
         let request = UNNotificationRequest(identifier: Self.draftStartedId,
@@ -271,16 +275,31 @@ final class NotificationManager: NSObject, ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
-    /// Вопрос решён («Моя» или «Удалить») — ни «Пишу поездку», ни «Твоя?» этой
-    /// поездки не остаётся в Центре уведомлений (спека §3.2: без следа).
-    /// Действие над уведомлением обычно убирает его само, но тап по телу
-    /// «Твоя?» (открывает поездку, не решение) этого не делает, а «Пишу
-    /// поездку» — отдельное, более раннее уведомление, которое действие над
-    /// «Твоя?» никогда не трогает.
-    func clearDraftNotifications(tripId: UUID) {
-        let ids = [Self.draftStartedId, Self.draftConfirmId(tripId)]
+    /// Снятие уведомлений по id — вынесено за seam (раунд 1 фикса №1): тест
+    /// подставляет запись id вместо настоящего `UNUserNotificationCenter
+    /// .current()`, который без хоста/прав в тесте ненадёжен, тем же приёмом,
+    /// что `KeychainHelper.ops`.
+    var removeNotificationIds: (_ ids: [String]) -> Void = { ids in
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+    }
+
+    /// «Твоя?» ЭТОЙ поездки решена — «Моя» или «Удалить», с экрана или из
+    /// уведомления, ЛЮБЫМ путём удаления (`TripManager.deleteTrip` — общая
+    /// дверь). Снимается всегда (спека §3.2: без следа); нет такого
+    /// уведомления — вызов no-op. Тап по телу «Твоя?» (открывает поездку, не
+    /// решение) сам её не убирает — здесь единственная дверь.
+    func clearDraftPrompt(tripId: UUID) {
+        removeNotificationIds([Self.draftConfirmId(tripId)])
+    }
+
+    /// «Пишу поездку» — ОДИН идентификатор на ВСЕ черновики (см.
+    /// `draftStartedId`): снимать его можно только когда СЕЙЧАС ничего не
+    /// пишется, иначе решение по старому черновику погасило бы уведомление о
+    /// поездке, которая едет прямо сейчас (ревью раунда 1 фикса №1). Проверка
+    /// `activeTrip == nil` — на вызывающем, здесь этого знания нет.
+    func clearDraftStartedNotice() {
+        removeNotificationIds([Self.draftStartedId])
     }
 
     func cancelTripStopPrompt() {

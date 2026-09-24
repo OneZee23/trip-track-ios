@@ -19,7 +19,7 @@ struct ProfileDraftsSection: View {
                 .padding(.top, 4)
                 .padding(.bottom, 8)
                 .accessibilityIdentifier("profile_drafts_header")
-            LazyVStack(spacing: 12) {
+            VStack(spacing: 12) {
                 ForEach(drafts) { trip in
                     ProfileTripCardView(
                         trip: trip,

@@ -1079,11 +1079,25 @@ final class MapViewModel: ObservableObject {
                 }
                 await enterWorld(trip: trip)
                 territoryManager.rebuildFromTrips()
+                // «Твоя?» этой поездки решена. «Пишу поездку» — один
+                // идентификатор на ВСЕ черновики, снимаем только если сейчас
+                // ничего не пишется: иначе решение по СТАРОМУ черновику
+                // погасило бы уведомление о поездке, которая едет прямо
+                // сейчас (ревью раунда 1 фикса №1 — тот же приём, что у
+                // Live Activity в `.discard` ниже).
+                NotificationManager.shared.clearDraftPrompt(tripId: id)
+                if tripManager.activeTrip == nil {
+                    NotificationManager.shared.clearDraftStartedNotice()
+                }
             case .discard:
                 guard tripManager.discardDraft(id: id) else {
                     recLog.notice("[draft.decision.dropped] reason=already_resolved action=discard id=\(id.uuidString, privacy: .public)")
                     continue
                 }
+                // `deleteTrip` внутри `discardDraft` уже снял «Твоя?» этой
+                // поездки и — если ничего не пишется — общее «Пишу поездку»:
+                // ОДНА дверь на любой путь удаления черновика (баннер на
+                // экране поездки, «…», эта очередь), повторять здесь нечего.
                 if lastCompletedTrip?.id == id {
                     // Итоги этой поездки на экране — вопрос был про неё, и от
                     // удалённой поездки не должно остаться НИЧЕГО (спека
@@ -1102,9 +1116,6 @@ final class MapViewModel: ObservableObject {
                 }
                 NotificationCenter.default.post(name: .tripDeleted, object: id)
             }
-            // «Пишу поездку» и «Твоя?» своё дело сделали — решение принято, и
-            // следа не остаётся ни в базе, ни в Центре уведомлений.
-            NotificationManager.shared.clearDraftNotifications(tripId: id)
             refreshTripStats()
             NotificationCenter.default.post(name: .draftTripResolved, object: id)
         }
