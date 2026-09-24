@@ -615,10 +615,6 @@ final class TripManager: ObservableObject {
 
     // MARK: - Private
 
-    // Raised 30→65m so heavy-canopy / remote (taiga) fixes still record instead of
-    // every point being dropped (the "0 km after 8h" bug). Jitter from low-accuracy
-    // fixes is contained by the accuracy-scaled minimum distance in handleNewLocation.
-    private let maxRecordAccuracy: Double = 65.0  // reject points with accuracy > 65m
     private let minRecordDistance: Double = 5.0   // ignore points closer than 5m to last
     private let driftSpeedThreshold: Double = 1.0  // m/s — GPS reports "stationary"
     private let driftCalcSpeedLimit: Double = 5.0  // m/s — but distance says "moving"
@@ -684,9 +680,17 @@ final class TripManager: ObservableObject {
     func handleNewLocation(_ location: CLLocation) {
         guard isRecording, !isPaused, let entity = activeTripEntity else { return }
 
-        // Filter: reject poor accuracy (check raw GPS before Kalman)
+        // Мусор отсеял шлюз провайдера (`FixGate`); здесь та же граница для
+        // иных источников (симулятор, стенд), чтобы запись не приняла больше,
+        // чем пропускает шлюз.
         guard location.horizontalAccuracy >= 0,
-              location.horizontalAccuracy <= maxRecordAccuracy else { return }
+              location.horizontalAccuracy <= FixGate.recordingAccuracyLimit else { return }
+
+        // Грубый фикс (хуже 65 м) рисует форму, но в километры не идёт
+        // (спека §2.2). Фильтр Калмана его видит: дисперсия измерения у него
+        // `accuracy²`, и такой фикс сдвигает оценку во много раз слабее
+        // хорошего.
+        let countsForDistance = location.horizontalAccuracy <= TripDistanceGate.odometerAccuracyLimit
 
         // Smooth through Kalman filter
         let filtered = kalmanFilter.processGPSUpdate(location)
@@ -695,45 +699,51 @@ final class TripManager: ObservableObject {
         // Свой якорь и прежние правила: пять метров, защита от дрейфа, проверка
         // правдоподобия. Считается ДО решения о записи точки, потому что путь
         // пройден независимо от того, попала точка в трек или нет.
-        if let anchor = lastDistanceLocation {
-            let delta = filtered.distance(from: anchor)
-            // Flat 5m floor. We deliberately do NOT scale this by accuracy: a higher
-            // floor on poor (taiga) fixes silently DROPS real slow-movement segments
-            // AND their incremental distance, under-counting the odometer exactly
-            // where this release is trying to capture more. Jitter is rejected by the
-            // drift filter below, not by inflating the distance floor.
-            if delta >= minRecordDistance {
-                // Filter: GPS drift — the Kalman velocity says near-stationary but the
-                // point-to-point calculated speed is high (parked-but-jittering). Applied
-                // UNCONDITIONALLY: `filtered.speed` is the Kalman velocity estimate derived
-                // from position (raw GPS speed only refines it when known), so this keeps
-                // genuine movement and drops stationary jitter at any accuracy — including
-                // 35–65m taiga fixes, where leaving it off would let jitter inflate distance.
-                let timeDelta = filtered.timestamp.timeIntervalSince(anchor.timestamp)
-                if timeDelta > 0 {
-                    let calculatedSpeed = delta / timeDelta
-                    if filtered.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
-                        // Как и до 0.6.5, дрейф отменяет фикс целиком: ни в
-                        // километры, ни в форму. Якорь остаётся на месте.
-                        return
+        if countsForDistance {
+            if let anchor = lastDistanceLocation {
+                let delta = filtered.distance(from: anchor)
+                // Flat 5m floor. We deliberately do NOT scale this by accuracy: a higher
+                // floor on poor (taiga) fixes silently DROPS real slow-movement segments
+                // AND their incremental distance, under-counting the odometer exactly
+                // where this release is trying to capture more. Jitter is rejected by the
+                // drift filter below, not by inflating the distance floor.
+                if delta >= minRecordDistance {
+                    // Filter: GPS drift — the Kalman velocity says near-stationary but the
+                    // point-to-point calculated speed is high (parked-but-jittering). Applied
+                    // UNCONDITIONALLY: `filtered.speed` is the Kalman velocity estimate derived
+                    // from position (raw GPS speed only refines it when known), so this keeps
+                    // genuine movement and drops stationary jitter at any accuracy — including
+                    // 35–65m taiga fixes, where leaving it off would let jitter inflate distance.
+                    let timeDelta = filtered.timestamp.timeIntervalSince(anchor.timestamp)
+                    if timeDelta > 0 {
+                        let calculatedSpeed = delta / timeDelta
+                        if filtered.speed < driftSpeedThreshold && calculatedSpeed > driftCalcSpeedLimit {
+                            // Как и до 0.6.5, дрейф отменяет фикс целиком: ни в
+                            // километры, ни в форму. Якорь остаётся на месте.
+                            return
+                        }
                     }
-                }
 
-                // Update distance (use filtered position, not raw GPS). Accept the segment
-                // when the IMPLIED speed is plausible — a sparse-GPS / dead-zone bridge
-                // (minutes apart in the taiga) can exceed 1km yet be real. A genuine GPS
-                // teleport has a tiny dt → impossible implied speed → rejected. Only fall
-                // back to the absolute cap when there's no usable time delta.
-                if TripDistanceGate.isPlausibleSegment(meters: delta, dt: timeDelta) {
-                    entity.distance += delta
+                    // Update distance (use filtered position, not raw GPS). Accept the segment
+                    // when the IMPLIED speed is plausible — a sparse-GPS / dead-zone bridge
+                    // (minutes apart in the taiga) can exceed 1km yet be real. A genuine GPS
+                    // teleport has a tiny dt → impossible implied speed → rejected. Only fall
+                    // back to the absolute cap when there's no usable time delta.
+                    if TripDistanceGate.isPlausibleSegment(meters: delta, dt: timeDelta) {
+                        entity.distance += delta
+                    }
+                    lastDistanceLocation = filtered
                 }
+            } else {
                 lastDistanceLocation = filtered
             }
-        } else {
-            lastDistanceLocation = filtered
         }
 
         // --- Форма ---
+        // Грубая точка пишется только на ходу — по СЫРОЙ скорости и тем же
+        // порогом, что частые точки формы: стоящая машина под плохим небом
+        // иначе рисовала бы клубок из точек, которые фильтр растаскивает шумом.
+        if !countsForDistance, location.speed < shapeMinSpeed { return }
         if let last = lastLocation,
            !shouldStoreShapePoint(filtered, since: last, rawSpeed: location.speed) { return }
 
@@ -745,15 +755,17 @@ final class TripManager: ObservableObject {
         point.altitude = filtered.altitude
         point.speed = max(0, filtered.speed)
         point.course = filtered.course
-        point.horizontalAccuracy = filtered.horizontalAccuracy
+        // Сырая точность GPS, а не оценка фильтра (спека §2.2): по ней одометр
+        // отличает грубые точки, её же честно показывает экспорт.
+        point.horizontalAccuracy = location.horizontalAccuracy
         point.timestamp = filtered.timestamp
         point.trip = entity
 
         lastLocation = filtered
 
-        // Update speeds
+        // Update speeds — рекорд только по точкам, которым можно верить.
         let speed = max(0, filtered.speed)
-        if speed > entity.maxSpeed {
+        if countsForDistance, speed > entity.maxSpeed {
             entity.maxSpeed = speed
         }
 

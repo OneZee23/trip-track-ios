@@ -40,10 +40,6 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
         locationSubject.eraseToAnyPublisher()
     }
 
-    private let maxAccuracy: Double = 100.0 // meters
-    private let maxSpeedMs: Double = 83.3 // ~300 km/h
-    private let maxLocationAge: TimeInterval = 10.0 // seconds
-
     /// Whether we're actively recording a trip (used to force-resume if iOS pauses updates)
     var isRecording = false
 
@@ -179,25 +175,15 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
 
     // MARK: - Validity + diagnostics
 
-    private enum FixDecision: Equatable { case accept; case reject(String) }
-
-    /// Single place that decides whether a raw CL fix is usable, returning the
-    /// reject REASON so diagnostics can attribute drops (esp. the taiga case).
-    private func evaluate(_ location: CLLocation) -> FixDecision {
-        guard location.horizontalAccuracy >= 0 else { return .reject("invalid") }
-        // Accuracy ceiling during recording (65m; idle 100m). Both this gate and
-        // TripManager's must move together. This is where heavy-canopy / remote
-        // fixes get dropped — the summary below makes that visible.
-        let accuracyLimit = isRecording ? 65.0 : maxAccuracy
-        guard location.horizontalAccuracy <= accuracyLimit else { return .reject("accuracy") }
-        // Reject stale cached positions.
-        let age = -location.timestamp.timeIntervalSinceNow
-        guard age < maxLocationAge else { return .reject("stale") }
-        // We intentionally KEEP fixes with unknown speed (speed < 0) — valid in
-        // the taiga; speed only feeds the drift filter, which ignores unknowns.
-        let speed = max(0, location.speed)
-        if speed > maxSpeedMs { return .reject("speed") }
-        return .accept
+    /// Единственное место, где решается судьба сырого фикса; само правило —
+    /// `FixGate`, его же зовёт стенд.
+    private func evaluate(_ location: CLLocation) -> FixGate.Decision {
+        FixGate.decide(
+            horizontalAccuracy: location.horizontalAccuracy,
+            ageSeconds: -location.timestamp.timeIntervalSinceNow,
+            speedMS: location.speed,
+            isRecording: isRecording
+        )
     }
 
     private func isValidLocation(_ location: CLLocation) -> Bool { evaluate(location) == .accept }
@@ -215,7 +201,7 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
     /// how many were accepted vs gated out and why, the accuracy distribution,
     /// and the largest gap between accepted fixes. Per-fix lines are `.debug`
     /// (live Console only) to avoid drowning the exported log.
-    private func recordDiagnostics(_ location: CLLocation, _ decision: FixDecision) {
+    private func recordDiagnostics(_ location: CLLocation, _ decision: FixGate.Decision) {
         let now = Date()
         diagFixes += 1
         let acc = location.horizontalAccuracy
@@ -237,12 +223,12 @@ class RealGPSProvider: NSObject, LocationProviding, CLLocationManagerDelegate {
             gpsLog.debug("fix ACCEPT acc=\(Int(acc))m spd=\(String(format: "%.1f", max(0, location.speed)))m/s")
         case .reject(let reason):
             switch reason {
-            case "accuracy": diagRejAccuracy += 1
-            case "stale": diagRejStale += 1
-            case "speed": diagRejSpeed += 1
-            default: diagRejInvalid += 1
+            case .accuracy: diagRejAccuracy += 1
+            case .stale: diagRejStale += 1
+            case .speed: diagRejSpeed += 1
+            case .invalid: diagRejInvalid += 1
             }
-            gpsLog.debug("fix REJECT(\(reason, privacy: .public)) acc=\(Int(acc))m age=\(String(format: "%.1f", -location.timestamp.timeIntervalSinceNow))s")
+            gpsLog.debug("fix REJECT(\(reason.rawValue, privacy: .public)) acc=\(Int(acc))m age=\(String(format: "%.1f", -location.timestamp.timeIntervalSinceNow))s")
         }
 
         if now.timeIntervalSince(diagWindowStart) >= diagSummaryInterval {
