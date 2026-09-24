@@ -275,7 +275,9 @@ struct Badge: Identifiable {
             guard trip.elevation > 0 else { return nil }
             return Measure.elevation(metres: trip.elevation, unit: unit, lang: language)
         case .tripMaxAltitude:
-            let peak = trip.trackPoints.map(\.altitude).max() ?? 0
+            // Пик — по точкам, которым можно верить, тем же, по которым
+            // значок и выдан (`BadgeManager`): высота грубой точки — шум.
+            let peak = trip.measuredPoints.map(\.altitude).max() ?? 0
             guard peak > 0 else { return nil }
             return Measure.elevation(metres: peak, unit: unit, lang: language)
         }

@@ -21,9 +21,9 @@ final class DistanceDoorTests: XCTestCase {
     }
 
     private func point(_ east: Double, _ north: Double, _ seconds: Double,
-                       accuracy: Double = 8, filled: Bool = false) -> TrackPoint {
+                       accuracy: Double = 8, altitude: Double = 0, filled: Bool = false) -> TrackPoint {
         let c = TrackTestKit.coordinate(east: east, north: north)
-        return TrackPoint(latitude: c.latitude, longitude: c.longitude,
+        return TrackPoint(latitude: c.latitude, longitude: c.longitude, altitude: altitude,
                           speed: filled ? -1 : 10, horizontalAccuracy: filled ? -1 : accuracy,
                           timestamp: TrackTestKit.epoch.addingTimeInterval(seconds), isInterpolated: filled)
     }
@@ -121,5 +121,18 @@ final class DistanceDoorTests: XCTestCase {
         let payload = TripSyncPayload(trip: trip, entity: entity)
         XCTAssertEqual(payload.stoppedTime, 0)
         XCTAssertEqual(payload.drivingTime, 20)
+    }
+
+    /// Личное число значка «выше облаков» — по той же двери, что и его
+    /// статистика (`BadgeManager`): без неё грубая точка (900 м, accuracy 140)
+    /// напечатала бы пик выше того, что реально заработало значок.
+    func testBadgeMaxAltitudeIgnoresCoarsePoints() throws {
+        let clouds = try XCTUnwrap(Badge.all.first { $0.recordMetric == .tripMaxAltitude })
+        let trip = Trip(trackPoints: [
+            point(0, 0, 0, altitude: 100),
+            point(0, 10, 1, accuracy: 140, altitude: 900),
+            point(0, 20, 2, altitude: 100),
+        ])
+        XCTAssertEqual(clouds.recordValue(for: trip, unit: .km, language: .ru), "100 м")
     }
 }
