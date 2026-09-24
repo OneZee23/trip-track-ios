@@ -8,9 +8,15 @@ import CoreLocation
 final class PostTripTrackProcessor {
 
     private let persistenceController: PersistenceController
+    /// Инъекция ради детерминизма в тестах (раунд 1 ревью): `SettingsManager`
+    /// не MainActor, и живое значение `cloudSyncEnabled` в тесте — тот же
+    /// подводный камень, что у `SyncEnqueuer.isAuthorizedToEnqueue`.
+    private let cloudSyncEnabled: () -> Bool
 
-    init(persistenceController: PersistenceController = .shared) {
+    init(persistenceController: PersistenceController = .shared,
+         cloudSyncEnabled: @escaping () -> Bool = { SettingsManager.shared.cloudSyncEnabled }) {
         self.persistenceController = persistenceController
+        self.cloudSyncEnabled = cloudSyncEnabled
     }
 
     /// Process a single trip: fill gaps, regenerate polyline, recalculate stats.
@@ -86,8 +92,15 @@ final class PostTripTrackProcessor {
         entity.lastModifiedAt = Date()
         if filled > 0 {
             // Правка трека = правка поездки: иначе пул вернул бы трек без
-            // достройки и заменил бы его целиком.
-            entity.syncStatus = SyncStatus.pendingUpload.rawValue
+            // достройки и заменил бы его целиком. Но только если апдейт
+            // способен доехать (то же правило, что у правки отметки,
+            // `CoreDataTripRepository.flipsPendingUpload`) — иначе приватная
+            // поездка без облака стынет «pendingUpload» без единого шанса
+            // когда-либо уйти (спека §2.3, ревью раунд 1).
+            if CoreDataTripRepository.flipsPendingUpload(isPrivate: entity.isPrivate,
+                                                          cloudSyncEnabled: cloudSyncEnabled()) {
+                entity.syncStatus = SyncStatus.pendingUpload.rawValue
+            }
         }
         persistenceController.save()
         if filled > 0 {

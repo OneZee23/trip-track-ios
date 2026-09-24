@@ -598,8 +598,18 @@ final class CoreDataTripRepository: TripRepository {
     /// safe to read from any thread; `entity.isPrivate` access matches the
     /// caller's current isolation.
     private static func shouldFlipPendingUpload(for entity: TripEntity) -> Bool {
-        if SettingsManager.shared.cloudSyncEnabled { return true }
-        return entity.isPrivate == false
+        flipsPendingUpload(isPrivate: entity.isPrivate, cloudSyncEnabled: SettingsManager.shared.cloudSyncEnabled)
+    }
+
+    /// Тот же вопрос, чистой функцией: достройка дыр (`RoadGapFiller`,
+    /// `PostTripTrackProcessor`) встаёт в очередь синка ТЕМ ЖЕ правилом, что
+    /// правка отметки (`markCheckpointsChanged`, спека §2.3) — одно место на
+    /// оба правила, а не одна и та же мысль, переписанная в третий раз.
+    /// Фоновые писатели читают `SettingsManager` (он не MainActor) ДО входа
+    /// в `context.perform` и приносят готовый `Bool` — отсюда параметр, а не
+    /// чтение изнутри.
+    static func flipsPendingUpload(isPrivate: Bool, cloudSyncEnabled: Bool) -> Bool {
+        cloudSyncEnabled || !isPrivate
     }
 
     func updatePrivacy(for tripId: UUID, isPrivate: Bool) {

@@ -372,14 +372,21 @@ final class MapViewModel: ObservableObject {
             // Туман (0.7.0): открытое из всей библиотеки — один раз после
             // обновления. Пустая выборка флаг не взводит.
             await RevealedLayerStore.shared.rebuildIfNeeded()
-            // Дыры старых поездок (0.8.1): прямая сразу, дорога — очередью.
-            // Последним: проход трогает каждую поездку библиотеки один раз,
-            // на своём фоновом контексте, и ничего из сказанного выше не ждёт.
+            // Дыры старых поездок (0.8.1): очередь начинает слушать
+            // возвращение в приложение прямо здесь, а сам проход по
+            // библиотеке — ниже, ПОСЛЕ марки «готово».
             RoadGapFiller.shared.startObserving()
-            await RoadGapFiller.shared.scanLibrary()
-            await RoadGapFiller.shared.drainIfPossible()
             gamificationManager.backfillBadgesIfNeeded(trips: allTrips)
             StartupTrace.mark("migrations+backfill done")
+            // Намеренно ПОСЛЕ марки: `scanLibrary` трогает каждую поездку
+            // библиотеки, а `drainIfPossible` вдобавок платит сетевой паузой
+            // в две секунды за дыру — на первом запуске 0.8.1 у зрелой
+            // истории это не секунды, а минуты. Ничего из сказанного выше не
+            // имеет права ждать этого хвоста: он всё ещё часть ТОЙ ЖЕ
+            // задачи (чтобы дренаж не стартовал раньше, чем `startObserving`
+            // встанет на подписку), но марка «готово» уже отмечена без него.
+            await RoadGapFiller.shared.scanLibrary()
+            await RoadGapFiller.shared.drainIfPossible()
         }
     }
 

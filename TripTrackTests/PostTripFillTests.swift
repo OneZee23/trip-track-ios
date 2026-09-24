@@ -36,7 +36,12 @@ final class PostTripFillTests: XCTestCase {
         // ничего бы не проверяла.
         entity.syncStatus = SyncStatus.synced.rawValue
         try pc.container.viewContext.save()
-        await PostTripTrackProcessor(persistenceController: pc).processTrip(try XCTUnwrap(entity.id))
+        // Флаг синка теперь зависит от приватности и облака (правило E,
+        // ревью раунд 1) — без инъекции тест зависел бы от живого
+        // `SettingsManager.shared`, той же ловушки, что у
+        // `SyncEnqueuer.isAuthorizedToEnqueue`.
+        await PostTripTrackProcessor(persistenceController: pc, cloudSyncEnabled: { true })
+            .processTrip(try XCTUnwrap(entity.id))
 
         let all = points(entity)
         let fills = all.filter(\.isInterpolated)
@@ -61,6 +66,24 @@ final class PostTripFillTests: XCTestCase {
         // проверка, что превью пересобралось и не осталось пустым/битым после
         // достройки, а не что RDP обязана сохранить лишние точки на прямой.
         XCTAssertGreaterThanOrEqual(Trip.decodePolyline(try XCTUnwrap(entity.previewPolyline)).count, 2)
+    }
+
+    /// Правило E (ревью раунд 1): приватная поездка без облака получает
+    /// достройку как обычно — дорога синка это не касается, — но флаг синка
+    /// остаётся прежним: апдейт всё равно не смог бы доехать (гейт
+    /// `SyncEnqueuer`), и вечный `pendingUpload` без единого шанса на синк
+    /// был бы враньём в «Статусе».
+    func testGapFillDoesNotFlipPrivateTripWithCloudOff() async throws {
+        let entity = tunnelTrip()
+        entity.syncStatus = SyncStatus.synced.rawValue
+        // isPrivate по умолчанию true — helper ничего не выставляет явно.
+        try pc.container.viewContext.save()
+        await PostTripTrackProcessor(persistenceController: pc, cloudSyncEnabled: { false })
+            .processTrip(try XCTUnwrap(entity.id))
+
+        XCTAssertEqual(entity.roadFillState, RoadFillState.pending.rawValue)
+        XCTAssertFalse(points(entity).filter(\.isInterpolated).isEmpty, "достройка всё равно случилась")
+        XCTAssertEqual(entity.syncStatus, SyncStatus.synced.rawValue, "синк недостижим — трогать нечего")
     }
 
     func testTripWithoutGapsIsDone() async throws {
