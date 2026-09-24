@@ -135,7 +135,8 @@ final class TripManager: ObservableObject {
     /// тот обнуляет `vehicleId` и пересчитывает одометры, а делать это на
     /// поездке нулевой длины незачем — и один из двух вызовов обязательно
     /// оказался бы не в том порядке.
-    func startTrip(vehicleId: UUID? = nil, isTransfer: Bool = false) {
+    func startTrip(vehicleId: UUID? = nil, isTransfer: Bool = false,
+                   confirmation: TripConfirmation = .confirmed) {
         let context = persistenceController.container.viewContext
         let entity = TripEntity(context: context)
         entity.id = UUID()
@@ -150,6 +151,7 @@ final class TripManager: ObservableObject {
         entity.userId = SettingsManager.shared.localUserId
         // New trips are private by default; owner can toggle visibility from the trip detail.
         entity.isPrivate = true
+        entity.confirmation = confirmation.rawValue
         persistenceController.save()
 
         activeTripEntity = entity
@@ -161,7 +163,8 @@ final class TripManager: ObservableObject {
             id: tripId,
             startDate: startDate,
             isTransfer: isTransfer,
-            vehicleId: vehicleId
+            vehicleId: vehicleId,
+            confirmation: confirmation
         )
         isRecording = true
         lastLocation = nil
@@ -417,7 +420,8 @@ final class TripManager: ObservableObject {
                     distance: entity.distance,
                     maxSpeed: entity.maxSpeed,
                     averageSpeed: entity.averageSpeed,
-                    vehicleId: entity.vehicleId
+                    vehicleId: entity.vehicleId,
+                    confirmation: CoreDataTripRepository.confirmation(of: entity)
                 )
                 recoverableOrphanDuration = lastTimestamp.timeIntervalSince(startDate)
                 recoverableOrphanIsFresh = age < Self.silentResumeWindow
@@ -780,7 +784,12 @@ final class TripManager: ObservableObject {
             // поездка получала И метку трансфера, И машину, и пассажирские
             // километры наматывались на её одометр.
             isTransfer: entity.isTransfer,
-            vehicleId: entity.vehicleId
+            vehicleId: entity.vehicleId,
+            // Черновик переносим так же, как машину и «ехал пассажиром»: без
+            // него поездка в памяти через секунду после старта переставала бы
+            // быть черновиком, и её завершали бы по правилам человека, а не
+            // приложения.
+            confirmation: CoreDataTripRepository.confirmation(of: entity)
         )
 
         // Batch saves: persist every N points or every M seconds

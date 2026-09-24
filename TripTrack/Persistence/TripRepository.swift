@@ -1268,7 +1268,9 @@ final class CoreDataTripRepository: TripRepository {
             previewPolyline: entity.previewPolyline, earnedBadgeIds: badgeIds,
             xpEarned: Int(entity.xpEarned),
             companions: companions, isOnServer: entity.serverCreatedAt != nil,
-            source: Self.origin(of: entity)
+            source: Self.origin(of: entity),
+            confirmation: Self.confirmation(of: entity),
+            roadFillState: Self.roadFillState(of: entity)
         )
     }
 
@@ -1780,6 +1782,16 @@ final class CoreDataTripRepository: TripRepository {
     /// — «записана», а не отказ (см. `TripOrigin`).
     static func origin(of entity: TripEntity) -> TripOrigin {
         TripOrigin(rawValue: entity.source ?? "") ?? .recorded
+    }
+
+    /// Незнакомая строка — подтверждённая поездка: черновиком бывает только
+    /// то, что эта сборка сама так пометила.
+    static func confirmation(of entity: TripEntity) -> TripConfirmation {
+        TripConfirmation(rawValue: entity.confirmation ?? "") ?? .confirmed
+    }
+
+    static func roadFillState(of entity: TripEntity) -> RoadFillState {
+        RoadFillState(rawValue: entity.roadFillState ?? "") ?? .unchecked
     }
 
     func rewardKmByVehicle() -> [UUID: Double] {

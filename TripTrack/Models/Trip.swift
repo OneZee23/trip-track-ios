@@ -84,6 +84,14 @@ struct Trip: Identifiable, Codable {
     /// такой, и незнакомая строка с сервера читается так же.
     var source: TripOrigin = .recorded
 
+    /// Подтверждена ли поездка — см. `TripConfirmation`.
+    var confirmation: TripConfirmation = .confirmed
+    /// Где поездка в достройке дыр — см. `RoadFillState`.
+    var roadFillState: RoadFillState = .unchecked
+
+    /// Черновик в мир не выходит (спека §3.2).
+    var isDraft: Bool { confirmation == .draft }
+
     /// Decoded simplified coordinates for feed card route previews.
     /// Hits an `NSCache` keyed by trip id so a feed scroll past 30 cards
     /// doesn't redecode 30 polylines × 60Hz. Cache is bounded so memory
@@ -339,7 +347,9 @@ struct Trip: Identifiable, Codable {
          previewPolyline: Data? = nil, earnedBadgeIds: [String] = [],
          xpEarned: Int = 0,
          companions: [TripCompanion] = [], isOnServer: Bool = false,
-         source: TripOrigin = .recorded) {
+         source: TripOrigin = .recorded,
+         confirmation: TripConfirmation = .confirmed,
+         roadFillState: RoadFillState = .unchecked) {
         self.id = id
         self.startDate = startDate
         self.endDate = endDate
@@ -366,6 +376,8 @@ struct Trip: Identifiable, Codable {
         self.companions = companions
         self.isOnServer = isOnServer
         self.source = source
+        self.confirmation = confirmation
+        self.roadFillState = roadFillState
     }
 
     var earnedBadges: [Badge] {
