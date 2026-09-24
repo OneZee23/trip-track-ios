@@ -79,4 +79,35 @@ final class RawFixLogTests: XCTestCase {
         // Заголовок ровно один — восстановление дописывает, а не начинает файл заново.
         XCTAssertEqual(text.components(separatedBy: RawFixLog.header).count, 2)
     }
+
+    /// «Удалить» не оставляет следа (спека §3.2, ревью раунда 1, пункт 4):
+    /// файл пропадает с диска, а открытый лог закрывается — запись ПОСЛЕ
+    /// `remove` не должна тихо воскресить файл под тем же именем.
+    func testRemoveDeletesTheFileAndClosesIfItWasOpen() async throws {
+        let log = RawFixLog(directory: dir)
+        let id = UUID()
+        await log.begin(tripId: id)
+        await log.record(line: "before-delete")
+        let url = dir.appendingPathComponent("\(id.uuidString).csv")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+
+        await log.remove(tripId: id)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        await log.record(line: "after-delete")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path),
+                       "лог закрыт — запись после удаления не должна воскресить файл")
+    }
+
+    /// Удаление ЧУЖОЙ поездки (не той, что сейчас открыта) не трогает текущий
+    /// открытый лог.
+    func testRemoveOfAnotherTripLeavesTheOpenLogRecording() async throws {
+        let log = RawFixLog(directory: dir)
+        let open = UUID()
+        await log.begin(tripId: open)
+        await log.remove(tripId: UUID())
+        await log.record(line: "still-open")
+        let text = try String(contentsOf: dir.appendingPathComponent("\(open.uuidString).csv"), encoding: .utf8)
+        XCTAssertTrue(text.contains("still-open"))
+    }
 }

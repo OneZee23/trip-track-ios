@@ -57,6 +57,19 @@ actor RawFixLog {
         currentURL = nil
     }
 
+    /// «Удалить» не оставляет следа нигде (спека §3.2) — черновик мог быть не
+    /// твоей поездкой, и его сырой лог с координатами это чей-то чужой путь.
+    /// Если это лог ОТКРЫТОЙ сейчас записи, закрываем СНАЧАЛА: `record`,
+    /// вызванный между удалением файла и этим присвоением, воскресил бы файл
+    /// тем же `FileHandle(forWritingTo:)`.
+    func remove(tripId: UUID) {
+        let url = directory.appendingPathComponent("\(tripId.uuidString).csv")
+        if currentURL == url {
+            currentURL = nil
+        }
+        try? FileManager.default.removeItem(at: url)
+    }
+
     func record(line: String) {
         guard let url = currentURL, bytesWritten < Self.maxBytesPerTrip,
               let handle = try? FileHandle(forWritingTo: url) else { return }

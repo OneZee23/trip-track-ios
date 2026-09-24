@@ -36,4 +36,28 @@ final class DraftDecisionQueueTests: XCTestCase {
         q.enqueue(id, .discard)
         XCTAssertEqual(q.drain().map(\.1), [.discard])
     }
+
+    /// Ревью раунда 1, пункт 5: `applyDraftDecisions` разбирает очередь по
+    /// одной записи — подсмотрел, применил, убрал, — а не всю разом.
+    func testPeekDoesNotRemoveAndOrderIsPreserved() {
+        let q = DraftDecisionQueue(defaults: defaults)
+        let first = UUID(), second = UUID()
+        q.enqueue(first, .confirm)
+        q.enqueue(second, .discard)
+        XCTAssertEqual(q.peek()?.0, first, "голова очереди — самая старая запись")
+        XCTAssertEqual(q.peek()?.0, first, "peek ничего не убирает")
+        q.remove(first)
+        XCTAssertEqual(q.peek()?.0, second)
+        q.remove(second)
+        XCTAssertNil(q.peek())
+    }
+
+    /// Убрать запись, которой нет, — не ошибка и не трогает соседей.
+    func testRemoveIsANoOpForAnUnknownIdAndLeavesOthersAlone() {
+        let q = DraftDecisionQueue(defaults: defaults)
+        let known = UUID()
+        q.enqueue(known, .confirm)
+        q.remove(UUID())
+        XCTAssertEqual(q.peek()?.0, known)
+    }
 }

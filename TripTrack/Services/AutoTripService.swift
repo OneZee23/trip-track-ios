@@ -173,7 +173,7 @@ final class AutoTripService: ObservableObject {
         }
 
         let lastEndAgo = lastAutomotiveEndTime.map { Int(Date().timeIntervalSince($0)) }
-        autoLog.notice("[auto.detected] mode=\(self.settings.autoRecordMode.rawValue, privacy: .public) isRecording=\(vm.isRecording, privacy: .public) hasReminded=\(self.hasRemindedForCurrentTrip, privacy: .public) lastAutomotiveEnd_s_ago=\(lastEndAgo.map(String.init) ?? "nil", privacy: .public)")
+        autoLog.notice("[auto.detected] mode=\(self.effectiveStopMode.rawValue, privacy: .public) isRecording=\(vm.isRecording, privacy: .public) hasReminded=\(self.hasRemindedForCurrentTrip, privacy: .public) lastAutomotiveEnd_s_ago=\(lastEndAgo.map(String.init) ?? "nil", privacy: .public)")
 
         // If a trip is already recording but it's been parked > staleTripTimeout,
         // this automotive event is the start of a *new* session — finish the
@@ -181,17 +181,20 @@ final class AutoTripService: ObservableObject {
         // background auto-stop never fired (Timer.scheduledTimer doesn't run
         // while the app is suspended) silently absorbs the next drive.
         //
-        // Only auto-split in `.auto` mode. In `.remind`/`.off` silently ending
-        // the current recording would violate "ask first"; the user will see
-        // the stale trip still active in the UI and can finalize it manually
-        // (consistent with `recoverStaleTripIfNeeded`).
+        // Only auto-split when the EFFECTIVE stop mode is `.auto` — either the
+        // person chose it, or the recording trip is a draft the app itself
+        // started (0.8.1 «кто начал, тот и заканчивает»: `effectiveStopMode`).
+        // A person-started trip under genuine `.remind`/`.off` silently
+        // ending would violate "ask first"; the user will see the stale trip
+        // still active in the UI and can finalize it manually (consistent
+        // with `recoverStaleTripIfNeeded`).
         if vm.isRecording {
             let stale = isStaleByMovement
             guard effectiveStopMode == .auto, stale else {
-                autoLog.notice("[auto.detected.skip] reason=already_recording mode=\(self.settings.autoRecordMode.rawValue, privacy: .public) stale_15min=\(stale, privacy: .public)")
+                autoLog.notice("[auto.detected.skip] reason=already_recording mode=\(self.effectiveStopMode.rawValue, privacy: .public) stale_15min=\(stale, privacy: .public)")
                 return
             }
-            autoLog.notice("[auto.detected.split_session] reason=stale_recording_in_auto_mode")
+            autoLog.notice("[auto.detected.split_session] reason=stale_recording_split")
             cancelAutoStopTimer()
             autoStopTrip()
         }
@@ -255,11 +258,13 @@ final class AutoTripService: ObservableObject {
         // same idle window — check whether it's overstayed.
         if movementTracker.record(currentDistance: distance) { return }
 
-        // Inactivity prompts only fire in `.auto` mode. In `.remind` and
-        // `.off` the user opted out of automatic management; if they started
-        // manually they expect to stop manually. The tracker still stays
-        // populated for `recoverStaleTripIfNeeded`, which IS active in all
-        // modes since a 15+ min frozen trip is junk regardless.
+        // Inactivity prompts fire when the EFFECTIVE stop mode is `.auto` —
+        // the person's setting, unless the recording trip is a draft the app
+        // itself started (0.8.1: `effectiveStopMode`). A person-started trip
+        // under genuine `.remind`/`.off` opted out of automatic management;
+        // if they started manually they expect to stop manually. The tracker
+        // still stays populated for `recoverStaleTripIfNeeded`, which IS
+        // active in all modes since a 15+ min frozen trip is junk regardless.
         guard effectiveStopMode == .auto,
               movementTracker.isStale(threshold: AutoTripPolicy.inactivityTimeout) else { return }
         let timeout = settings.autoStopTimeout
@@ -275,12 +280,15 @@ final class AutoTripService: ObservableObject {
     /// doesn't fire while suspended, so a trip that idled 30+ minutes in
     /// background ends up still recording when the user re-opens the app.
     private func recoverStaleTripIfNeeded() {
-        // Only auto-end stale trips in `.auto` mode. In `.remind` and `.off`
-        // the user opted out of automatic management — silently ending their
-        // trip on foreground entry would feel like the app stole their data.
-        // They'll see the trip is still recording and can stop it manually.
+        // Only auto-end a stale trip when the EFFECTIVE stop mode is `.auto`
+        // — the person's setting, unless the recording trip is a draft the
+        // app itself started (0.8.1: `effectiveStopMode`). A person-started
+        // trip under genuine `.remind`/`.off` opted out of automatic
+        // management — silently ending it on foreground entry would feel
+        // like the app stole their data. They'll see the trip is still
+        // recording and can stop it manually.
         guard effectiveStopMode == .auto else {
-            autoLog.notice("[auto.recover_stale.skip] reason=mode=\(self.settings.autoRecordMode.rawValue, privacy: .public)")
+            autoLog.notice("[auto.recover_stale.skip] reason=mode=\(self.effectiveStopMode.rawValue, privacy: .public)")
             return
         }
         guard let vm = mapViewModel, vm.isRecording, !vm.isPaused else { return }
@@ -352,13 +360,18 @@ final class AutoTripService: ObservableObject {
             // С 0.8.1 «Напоминания» не ждут ответа, чтобы начать: запись идёт
             // сразу, а поездка — черновик до «Моя» (спека §3.1). Ждать ответа
             // значило терять поездку целиком — 18 сентября так и вышло.
-            hasRemindedForCurrentTrip = true
             vm.startRecording(confirmation: .draft)
             guard vm.isRecording else {
                 autoLog.error("[auto.trip_start.refused] reason=\(String(describing: vm.startRefusal), privacy: .public) device=\"\(deviceName, privacy: .public)\"")
                 notificationManager.sendAutoStartFailedNotification(reason: vm.startRefusal)
+                // Флаг остаётся снят: отказ — не «уже спросили», а «пока не
+                // получилось». Следующее обнаружение обязано попробовать
+                // снова, как у `.auto` (ревью раунда 1, пункт 7) — иначе
+                // отказ на первой попытке (нет фикса GPS, идёт восстановление)
+                // молчал бы всю оставшуюся поездку.
                 return
             }
+            hasRemindedForCurrentTrip = true
             if let realStart = estimatedStartDate {
                 vm.tripManager.backdateTrip(to: realStart)
             }
@@ -488,7 +501,7 @@ final class AutoTripService: ObservableObject {
         let stale5 = isStaleByMovement(threshold: AutoTripPolicy.bluetoothDisconnectFastStopIdleThreshold)
         let tripDist = vm.tripManager.activeTrip?.distance ?? 0
         let tripDur = vm.tripManager.activeTrip?.duration ?? 0
-        autoLog.notice("[auto.bt_disconnect] device=\"\(name, privacy: .public)\" mode=\(self.settings.autoRecordMode.rawValue, privacy: .public) isRecording=\(vm.isRecording, privacy: .public) stale_5min=\(stale5, privacy: .public) dist_m=\(Int(tripDist), privacy: .public) dur_s=\(Int(tripDur), privacy: .public)")
+        autoLog.notice("[auto.bt_disconnect] device=\"\(name, privacy: .public)\" mode=\(self.effectiveStopMode.rawValue, privacy: .public) isRecording=\(vm.isRecording, privacy: .public) stale_5min=\(stale5, privacy: .public) dist_m=\(Int(tripDist), privacy: .public) dur_s=\(Int(tripDur), privacy: .public)")
 
         // Само правило живёт в `AutoTripPolicy.onBluetoothDisconnect` — чистой
         // функцией, которую можно проверить тестом. Здесь остаётся только его

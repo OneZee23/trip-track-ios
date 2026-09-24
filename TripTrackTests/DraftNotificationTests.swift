@@ -19,4 +19,11 @@ final class DraftNotificationTests: XCTestCase {
         XCTAssertTrue(content.body.contains("7.4"), "расстояние — через Measure, с точкой")
         XCTAssertFalse(content.body.contains("{distance}"))
     }
+
+    /// Экран спрашивает «Твоя?» на переднем плане (`NotificationManager
+    /// .presentationOptions`), уведомление — в кармане. Тот же контракт, что у
+    /// `tripStartPromptCategory`.
+    func testDraftConfirmPresentsSilentlyInForeground() {
+        XCTAssertEqual(NotificationManager.presentationOptions(for: NotificationManager.tripDraftConfirmCategory), [])
+    }
 }

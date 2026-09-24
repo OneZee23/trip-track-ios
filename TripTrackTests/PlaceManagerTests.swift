@@ -35,12 +35,14 @@ final class PlaceManagerTests: XCTestCase {
     /// Прямая на север (`reverse` — обратно, курс 180), 120 точек по 50 м / 10 с,
     /// со старта `start`. Превью не пишем: пустое превью — кандидат.
     @discardableResult
-    private func trip(start: Date, reverse: Bool = false, offsetLon: Double = 0, count: Int = 120) -> UUID {
+    private func trip(start: Date, reverse: Bool = false, offsetLon: Double = 0, count: Int = 120,
+                      confirmation: TripConfirmation = .confirmed) -> UUID {
         let ctx = pc.container.viewContext
         let e = TripEntity(context: ctx)
         let id = UUID()
         e.id = id; e.startDate = start; e.endDate = start.addingTimeInterval(Double(count) * 10)
         e.distance = Double(count) * 50; e.isPrivate = true
+        e.confirmation = confirmation.rawValue
         for k in 0..<count {
             let i = reverse ? count - 1 - k : k
             let p = TrackPointEntity(context: ctx)
@@ -193,6 +195,33 @@ final class PlaceManagerTests: XCTestCase {
         XCTAssertEqual(Set(store.passes(placeId: place.id).map(\.tripId)), [earlier, today],
                        "на финише история досчитана")
         XCTAssertTrue(manager.pendingHistoryIds.isEmpty)
+    }
+
+    /// Important 3, ревью раунда 1: `adoptName` — тот же путь геокодера, что
+    /// и `registerCheckpoint`, — молчал без гейта черновика, и место
+    /// заводилось раньше «Моя»; «Удалить» такое место не убирало. «Моя»
+    /// заводит место ТОЙ ЖЕ дверью, что и обычный финиш — повторным
+    /// `registerCheckpoint`, а не отдельным походом к `adoptName`.
+    func testDraftCheckpointMintsNoPlaceUntilConfirmedThenNamesItFromTheCheckpoint() async throws {
+        let draft = trip(start: t0, confirmation: .draft)
+        let cp = checkpoint(on: draft, atIndex: 30, name: "Джубга")
+
+        manager.registerCheckpoint(cp, tripId: draft)
+        manager.adoptName("Другое", forCheckpoint: cp.id, tripId: draft)
+        await manager.settle()
+        XCTAssertTrue(manager.places.isEmpty, "черновик не заводит место ни одной из двух дверей")
+        XCTAssertNil(repo.fetchTripDetail(id: draft)?.checkpoints.first?.placeId)
+
+        let tm = TripManager(locationManager: LocationManager(), persistenceController: pc)
+        XCTAssertTrue(tm.setConfirmation(.confirmed, tripId: draft))
+
+        // «Моя»: `TripWorldEntry.placesAndReveal` перебирает отметки без
+        // места и зовёт `registerCheckpoint` — тем же способом здесь.
+        manager.registerCheckpoint(cp, tripId: draft)
+        await manager.settle()
+        XCTAssertEqual(manager.places.count, 1)
+        XCTAssertEqual(manager.places.first?.name, "Джубга", "имя — с отметки, а не с отброшенного adoptName")
+        XCTAssertNotNil(repo.fetchTripDetail(id: draft)?.checkpoints.first?.placeId)
     }
 
     func testDeletingAPlaceKeepsCheckpointTombstoneSoItIsNotReborn() async {

@@ -344,6 +344,10 @@ final class TripManager: ObservableObject {
         Task { @MainActor in
             PlaceManager.shared.forget(tripId: id)
         }
+        // Сырой лог фиксов уезжает вместе с поездкой (спека §3.2): «Удалить»
+        // черновика — это, возможно, чей-то чужой путь, и координаты не
+        // должны остаться на диске оттого, что их нашли в CSV, а не в базе.
+        Task { await RawFixLog.shared.remove(tripId: id) }
         repository.deleteTrip(id: id)
     }
 

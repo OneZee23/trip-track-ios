@@ -27,8 +27,8 @@ enum TripWorldEntry {
     static func rewards(for trip: Trip, tripManager: TripManager,
                         gamification: GamificationManager,
                         roads: RoadCollectionManager) -> TripCompletionData {
-        // Use lightweight fetch (no track points for historical trips); the
-        // finished trip itself carries its points.
+        // Лёгкая выборка — без точек трека, старым поездкам они здесь не
+        // нужны; у только что законченной свои точки уже при себе.
         var allTrips = tripManager.fetchTrips()
         if let idx = allTrips.firstIndex(where: { $0.id == trip.id }) {
             allTrips[idx] = trip

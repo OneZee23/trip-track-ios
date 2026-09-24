@@ -935,26 +935,7 @@ final class MapViewModel: ObservableObject {
                 // На ОКОНЧАТЕЛЬНОМ треке — с заполненными разрывами и без
                 // выбросов; мусорная поездка к этому моменту уже удалена, и
                 // `process` для неё ничего не найдёт.
-                let delta = await TripWorldEntry.placesAndReveal(trip: trip)
-                // Находки (0.7.0) — ПОСЛЕДНИМИ в цепочке и только здесь: трек
-                // окончательный, места сверены, туман дорисован, а запись
-                // кончилась. Километры и регионы берутся из дельты тумана —
-                // второго счёта открытого в приложении нет.
-                //
-                // Владелец 22 сен 2026 отложил находки до после 1.0.0
-                // (`DiscoveriesAvailability`): выключенный флаг значит разбор
-                // трека на секреты/загадки/вехи не идёт вовсе, но строка
-                // «открыто N км нового пути» и выгорание героя на итогах — про
-                // туман, не про находки, и обязаны остаться живыми.
-                let found: TripDiscoveries
-                if DiscoveriesAvailability.isActive {
-                    found = await DiscoveryProcessor.shared.process(
-                        tripId: trip.id, delta: delta)
-                } else {
-                    found = .empty(
-                        tripId: trip.id, newKm: delta.openedKm, newRegionIds: delta.newRegionIds)
-                }
-                self.attachDiscoveries(found)
+                await self.enterWorld(trip: trip)
             }
         }
 
@@ -1019,17 +1000,69 @@ final class MapViewModel: ObservableObject {
         }
     }
 
+    /// Хвост «поездка входит в мир» — места, туман, находки, — общий для
+    /// финиша подтверждённой поездки и для «Моя» у черновика (Important 2,
+    /// ревью раунда 1): без него черновик, подтверждённый неделю спустя,
+    /// навсегда остался бы без находок и без прожжённого тумана задним
+    /// числом. `DiscoveryProcessor` зовётся ЗДЕСЬ, а не переезжает в
+    /// `TripWorldEntry`: `MapViewModel.swift` уже единственная дверь разбора
+    /// в allowlist `NoLiveSecretPromptsTests`, и вынос в другой файл потребовал
+    /// бы новую строку в нём же — лишнее нарушение ради переезда кода.
+    private func enterWorld(trip: Trip) async {
+        let delta = await TripWorldEntry.placesAndReveal(trip: trip)
+        // Находки (0.7.0) — ПОСЛЕДНИМИ в цепочке и только здесь: трек
+        // окончательный, места сверены, туман дорисован, а запись
+        // кончилась. Километры и регионы берутся из дельты тумана —
+        // второго счёта открытого в приложении нет.
+        //
+        // Владелец 22 сен 2026 отложил находки до после 1.0.0
+        // (`DiscoveriesAvailability`): выключенный флаг значит разбор
+        // трека на секреты/загадки/вехи не идёт вовсе, но строка
+        // «открыто N км нового пути» и выгорание героя на итогах — про
+        // туман, не про находки, и обязаны остаться живыми.
+        let found: TripDiscoveries
+        if DiscoveriesAvailability.isActive {
+            found = await DiscoveryProcessor.shared.process(
+                tripId: trip.id, delta: delta)
+        } else {
+            found = .empty(
+                tripId: trip.id, newKm: delta.openedKm, newRegionIds: delta.newRegionIds)
+        }
+        attachDiscoveries(found)
+    }
+
     /// Решения по черновикам — из уведомления, с экрана поездки, с итогов. Все
     /// идут через `DraftDecisionQueue`: кнопку уведомления нажимают и тогда,
     /// когда этого объекта ещё нет в памяти (Review Focus 3).
+    ///
+    /// Раунд 1 ревью, пункт 5: очередь разбирается ПО ОДНОЙ записи —
+    /// подсмотрели голову (`peek`), применили, убрали (`remove`), — а не всю
+    /// разом. Процесс, убитый посреди разбора нескольких решений, не должен
+    /// терять оставшиеся: гварды внутри `setConfirmation`/`discardDraft`
+    /// делают повторное применение безопасным, а полный `drain()` стёр бы всю
+    /// очередь раньше, чем хоть одно решение применилось.
     func applyDraftDecisions() async {
-        for (id, decision) in DraftDecisionQueue.shared.drain() {
+        while let (id, decision) = DraftDecisionQueue.shared.peek() {
+            // Решение никогда не трогает поездку, которая ещё пишется — даже
+            // если оно как-то оказалось в очереди (её там сегодня быть не
+            // может: уведомление «Твоя?» уходит только ПОСЛЕ `stopRecording`).
+            // Запись НЕ убираем: запись кончится, и то же решение сработает
+            // при следующем вызове.
+            guard id != tripManager.activeTrip?.id else {
+                recLog.notice("[draft.decision.deferred] reason=trip_recording id=\(id.uuidString, privacy: .public)")
+                break
+            }
+            defer { DraftDecisionQueue.shared.remove(id) }
             switch decision {
             case .confirm:
                 // `false` — не черновик или уже подтверждён: вход в мир дважды
-                // недопустим.
+                // недопустим, а решение для уже решённой поездки — не ошибка,
+                // просто больше нечего делать.
                 guard tripManager.setConfirmation(.confirmed, tripId: id),
-                      let trip = tripManager.tripDetail(id: id) else { continue }
+                      let trip = tripManager.tripDetail(id: id) else {
+                    recLog.notice("[draft.decision.dropped] reason=already_resolved action=confirm id=\(id.uuidString, privacy: .public)")
+                    continue
+                }
                 let data = TripWorldEntry.rewards(for: trip, tripManager: tripManager,
                                                   gamification: gamificationManager,
                                                   roads: roadCollectionManager)
@@ -1039,16 +1072,32 @@ final class MapViewModel: ObservableObject {
                 }
                 if lastCompletedTrip?.id == id {
                     // Итоги этой поездки ещё на экране и «Моя» нажато там же:
-                    // вопрос уходит, награды встают на его место.
-                    lastCompletedTrip = tripManager.tripDetail(id: id)
+                    // вопрос уходит, награды встают на его место. `trip` уже
+                    // загружен строкой выше — второй раз весь трек не поднимаем.
+                    lastCompletedTrip = trip
                     lastCompletionData = data
                 }
-                await TripWorldEntry.placesAndReveal(trip: trip)
+                await enterWorld(trip: trip)
                 territoryManager.rebuildFromTrips()
             case .discard:
-                guard tripManager.discardDraft(id: id) else { continue }
+                guard tripManager.discardDraft(id: id) else {
+                    recLog.notice("[draft.decision.dropped] reason=already_resolved action=discard id=\(id.uuidString, privacy: .public)")
+                    continue
+                }
+                if lastCompletedTrip?.id == id {
+                    // Итоги этой поездки на экране — вопрос был про неё, и от
+                    // удалённой поездки не должно остаться НИЧЕГО (спека
+                    // §3.2): ни карточки на экране, ни карточки на экране
+                    // блокировки.
+                    lastCompletedTrip = nil
+                    lastCompletionData = nil
+                    LiveActivityManager.shared.endActivity()
+                }
                 NotificationCenter.default.post(name: .tripDeleted, object: id)
             }
+            // «Пишу поездку» и «Твоя?» своё дело сделали — решение принято, и
+            // следа не остаётся ни в базе, ни в Центре уведомлений.
+            NotificationManager.shared.clearDraftNotifications(tripId: id)
             refreshTripStats()
             NotificationCenter.default.post(name: .draftTripResolved, object: id)
         }

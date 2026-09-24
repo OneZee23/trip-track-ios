@@ -138,21 +138,13 @@ final class NotificationManager: NSObject, ObservableObject {
 
     // MARK: - Send Notifications
 
-    func sendTripStartPrompt(deviceName: String) {
-        let lang = currentLang()
-        let content = UNMutableNotificationContent()
-        content.title = AppStrings.notifTripStartTitle(lang)
-        content.body = AppStrings.notifTripStartBody(lang, deviceName: deviceName)
-        content.sound = .default
-        content.categoryIdentifier = Self.tripStartPromptCategory
-
-        let request = UNNotificationRequest(
-            identifier: "trip-start-prompt",
-            content: content,
-            trigger: nil
-        )
-        UNUserNotificationCenter.current().add(request)
-    }
+    // `sendTripStartPrompt` (0.8.0, «Напоминания» ждали ответа) удалена в
+    // 0.8.1 — раунд 1 ревью, пункт 9: с этой версии «Напоминания» пишут
+    // черновик сразу (`sendDraftStartedNotification`), и звать её больше
+    // некому. Категория `tripStartPromptCategory`, её действия и разбор
+    // нажатий в `didReceive` ОСТАЮТСЯ: уведомление, доставленное ЕЩЁ 0.8.0,
+    // может дождаться обновления в Центре уведомлений, и нажатие на него
+    // обязано сработать так же, как раньше.
 
     /// `minutes == nil` — режим «напоминания»: спрашиваем и ничего не делаем
     /// сами, поэтому и обещать автозавершение в тексте нельзя.
@@ -256,8 +248,14 @@ final class NotificationManager: NSObject, ObservableObject {
         return content
     }
 
+    /// «Пишу поездку» не про КОНКРЕТНУЮ поездку — одновременно пишется не
+    /// больше одной (`startRecording`'s re-entry guard), поэтому один
+    /// идентификатор на все черновики. «Твоя?» — про эту поездку и только её.
+    private static let draftStartedId = "trip-draft-started"
+    private static func draftConfirmId(_ tripId: UUID) -> String { "trip-draft-\(tripId.uuidString)" }
+
     func sendDraftStartedNotification() {
-        let request = UNNotificationRequest(identifier: "trip-draft-started",
+        let request = UNNotificationRequest(identifier: Self.draftStartedId,
                                             content: Self.draftStartedContent(lang: currentLang()),
                                             trigger: nil)
         UNUserNotificationCenter.current().add(request)
@@ -266,11 +264,23 @@ final class NotificationManager: NSObject, ObservableObject {
     /// Единица читается свежо — как у `sendAutoStopNotification`.
     func sendDraftConfirmPrompt(tripId: UUID, metres: Double) {
         let request = UNNotificationRequest(
-            identifier: "trip-draft-\(tripId.uuidString)",
+            identifier: Self.draftConfirmId(tripId),
             content: Self.draftConfirmContent(tripId: tripId, metres: metres,
                                               lang: currentLang(), unit: DistanceUnit.current),
             trigger: nil)
         UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Вопрос решён («Моя» или «Удалить») — ни «Пишу поездку», ни «Твоя?» этой
+    /// поездки не остаётся в Центре уведомлений (спека §3.2: без следа).
+    /// Действие над уведомлением обычно убирает его само, но тап по телу
+    /// «Твоя?» (открывает поездку, не решение) этого не делает, а «Пишу
+    /// поездку» — отдельное, более раннее уведомление, которое действие над
+    /// «Твоя?» никогда не трогает.
+    func clearDraftNotifications(tripId: UUID) {
+        let ids = [Self.draftStartedId, Self.draftConfirmId(tripId)]
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 
     func cancelTripStopPrompt() {

@@ -142,6 +142,12 @@ final class PlaceManager: ObservableObject {
     /// безымянным навсегда. Поэтому место берём по ЯЧЕЙКЕ отметки: она даёт
     /// тот же id (`Place.id(forCell:)`), и гонки больше нет.
     func adoptName(_ name: String, forCheckpoint id: UUID, tripId: UUID) {
+        // Тот же гейт, что у `registerCheckpoint` (спека §3.2): без него
+        // геокодер заводил место черновику раньше «Моя», а «Удалить» такое
+        // место не убирало — Task 8 гейта здесь не поставил (ревью раунда 1,
+        // Important 3). Регистрация на «Моя» всё равно назовёт место именем
+        // отметки — своего похода к геокодеру здесь не нужно.
+        guard repository.fetchEntity(id: tripId)?.confirmation != TripConfirmation.draft.rawValue else { return }
         guard let checkpoint = repository.fetchTripDetail(id: tripId)?
                 .checkpoints.first(where: { $0.id == id }) else { return }
         let changed: Bool
