@@ -12,6 +12,17 @@ final class TrackReplayTests: XCTestCase {
         XCTAssertEqual(new.openGaps, 0)
         XCTAssertGreaterThan(new.coarsePoints, 0)
         XCTAssertEqual(new.distance, old.distance, accuracy: old.distance * 0.01, "одометр — в пределах 1 %")
+
+        // На кварталах 400 м угол чаще целиком тонет в плохом окне — расхождение
+        // с `old` растёт (до ~1.5 %, порог выше не держим на этой стороне), но
+        // важно НАПРАВЛЕНИЕ: `new` обязан читать БЛИЖЕ к настоящему пройденному
+        // пути, а не дальше от него (решение владельца по спеке §2.2).
+        let truth = SyntheticDrives.trueDistance()
+        let old400 = await TrackReplay.run(SyntheticDrives.cityEvening(side: 400), recordingLimit: 65)
+        let new400 = await TrackReplay.run(SyntheticDrives.cityEvening(side: 400))
+        XCTAssertLessThanOrEqual(
+            abs(new400.distance - truth), abs(old400.distance - truth),
+            "грубые фиксы в фильтре не должны уводить одометр от настоящего пути дальше, чем уводил старый конвейер")
     }
 
     func testTunnelIsFilledAndNotCounted() async {

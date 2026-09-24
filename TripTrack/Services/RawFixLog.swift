@@ -35,6 +35,24 @@ actor RawFixLog {
         bytesWritten = head.utf8.count
     }
 
+    /// Восстановление осиротевшей записи (0.8.1): `TripManager.adoptRecoverableOrphan`
+    /// поднимает запись заново БЕЗ `startTrip`, то есть без `begin` — тот
+    /// truncates файл через `createFile`, а фиксы ДО убийства процесса на
+    /// диске уже есть и терять их нельзя. Актор после гибели процесса свежий
+    /// и своего `bytesWritten` не помнит, поэтому размер читается с диска;
+    /// файла нет вовсе (переустановка, файл стёрли руками) — заводим его, как
+    /// обычный `begin`.
+    func resume(tripId: UUID) {
+        prepareDirectory()
+        let url = directory.appendingPathComponent("\(tripId.uuidString).csv")
+        guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int else {
+            begin(tripId: tripId)
+            return
+        }
+        currentURL = url
+        bytesWritten = size
+    }
+
     func end() {
         currentURL = nil
     }

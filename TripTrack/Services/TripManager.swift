@@ -84,6 +84,11 @@ final class TripManager: ObservableObject {
         lastSaveTime = Date()
         kalmanFilter.reset()
         locationManager.startTracking()
+        // Журнал сырых фиксов переживает процесс на диске, а актор — нет:
+        // после убийства это НОВЫЙ `RawFixLog`, который своего файла не
+        // помнит. `resume` дописывает в существующий файл поездки, а не
+        // затирает его, как сделал бы `begin`.
+        Task { await RawFixLog.shared.resume(tripId: trip.id) }
         recoverableOrphan = nil
         recoverableOrphanEntity = nil
         return trip

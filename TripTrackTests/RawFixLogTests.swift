@@ -57,4 +57,26 @@ final class RawFixLogTests: XCTestCase {
         let left = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
         XCTAssertTrue(left.isEmpty)
     }
+
+    /// Осиротевшая запись: процесс убит без `end()`, восстановление зовёт
+    /// `resume`, а не `begin` — второй экземпляр актора имитирует то, что
+    /// новый процесс о старом `bytesWritten` ничего не знает и обязан читать
+    /// размер файла с диска, а не затирать его.
+    func testResumeAppendsAfterSimulatedRecovery() async throws {
+        let id = UUID()
+        let beforeKill = RawFixLog(directory: dir)
+        await beforeKill.begin(tripId: id)
+        await beforeKill.record(line: "before-kill")
+
+        let afterRecovery = RawFixLog(directory: dir)
+        await afterRecovery.resume(tripId: id)
+        await afterRecovery.record(line: "after-recovery")
+
+        let text = try String(contentsOf: dir.appendingPathComponent("\(id.uuidString).csv"), encoding: .utf8)
+        XCTAssertTrue(text.hasPrefix(RawFixLog.header))
+        XCTAssertTrue(text.contains("before-kill"))
+        XCTAssertTrue(text.contains("after-recovery"))
+        // Заголовок ровно один — восстановление дописывает, а не начинает файл заново.
+        XCTAssertEqual(text.components(separatedBy: RawFixLog.header).count, 2)
+    }
 }
